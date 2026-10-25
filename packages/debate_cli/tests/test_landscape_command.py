@@ -24,13 +24,22 @@ from moto import mock_aws
 from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from typer.testing import CliRunner, Result
 
+import debate_cli.commands.landscape as landscape_module
 import debate_cli.container as container_module
 from debate_cli.app import create_app
 from debate_cli.exit_codes import ExitCode
-from debate_core.application.landscape_run import LandscapeRunService, PositionClassifier
+from debate_core.application.landscape_report import CIRCUIT_WIDE_FILES, SCHOOL_VIEW_FILES
+from debate_core.application.landscape_run import BUNDLE_FILES, LandscapeRunService, PositionClassifier
 from debate_core.application.landscape_seeding import SeedReading
 from debate_core.application.ports.classification_store import ClassificationStore
 from debate_core.application.position_classification import ClassificationRun, PositionClassificationService
+from debate_core.application.sync_runs import (
+    SYNC_RUN_LOG_FILENAME,
+    StageEntry,
+    SyncRunLog,
+    SyncRunOutcome,
+    SyncRunRecord,
+)
 from debate_core.integrations.landscape.classification_store import review_queue_path
 from debate_core.integrations.landscape.yaml_taxonomy_repository import YamlTaxonomyRepository
 from debate_core.testing.landscape_run import (
@@ -195,6 +204,7 @@ def test_report_writes_the_bundle_and_json_names_paths_counts_methods_and_model_
         0,
     )
     assert data["staleness"]["stale"] is False
+    assert data["staleness"]["failed_run"] is None
     assert data["publish"] is None
     assert data["scan"] == {
         "hits": [],
@@ -238,6 +248,247 @@ def test_out_inside_a_checkout_is_refused(world: SyntheticRun) -> None:
 
     assert result.exit_code == ExitCode.USAGE_ERROR
     assert not inside.exists()
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e32-t12: the seven files, the trends and the school view
+#
+# Worked by hand from the fixture table in `debate_core.testing.landscape_run`. The 2026-09-15
+# window's rounds are `neg-two` and `aff-two`, both Harrowgate Prep's; the 2026-09-08 window's are
+# `aff-one` and `neg-one`. So each window has one team disclosing on each side, and:
+#
+# * single payer: aff-one's placed card before, aff-two's plan text now: 1 of 1 both weeks, STEADY;
+# * costs advantage: aff-one before, aff-two now: 1 of 1 both weeks, STEADY;
+# * spending DA: neg-one before, neg-two now: 1 of 1 both weeks, STEADY;
+# * states CP: neg-one before, nobody now: down 100 points, but one team is under the floor of
+#   three, so STEADY and held back.
+#
+# The school view is a row per team, side and position: Quillmere's aff single payer and costs
+# advantage, Brindle Valley's neg spending DA and states CP, Harrowgate's aff single payer and costs
+# advantage and neg spending DA. Seven rows, three schools, three team codes.
+# ------------------------------------------------------------------------------------------------
+
+SEVEN_FILES = [
+    ("positions.csv", "circuit_wide"),
+    ("top_cards.csv", "circuit_wide"),
+    ("impact_cards.csv", "circuit_wide"),
+    ("trends.csv", "circuit_wide"),
+    ("schools.csv", "school_view"),
+    ("schools.md", "school_view"),
+    ("report.md", "circuit_wide"),
+]
+FICTIONAL_IDENTITIES = (
+    "Quillmere",
+    "Brindle",
+    "Harrowgate",
+    "Lantern Classic",
+    "Thistle Open",
+    '"QW"',
+    '"PX"',
+)
+
+
+def _flat(text: str) -> str:
+    """`text` with Rich's panel borders gone and its whitespace run together, as a person reads it."""
+    return " ".join(text.replace("│", " ").split())
+
+
+def test_json_marks_each_of_the_seven_files_circuit_wide_or_school_view(world: SyntheticRun) -> None:
+    result = landscape(world, "--caselist", CASELIST)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    directory = world.data_dir / "reports" / "landscape" / CASELIST / "2026-09-15"
+    assert _data(result)["bundle"] == [
+        {"name": name, "path": str(directory / name), "view": view} for name, view in SEVEN_FILES
+    ]
+
+
+def test_the_seven_files_are_t04s_constants_not_a_copy() -> None:
+    """The hand-written list above is the bundle t04 made, split as t04 splits it."""
+    assert [name for name, _ in SEVEN_FILES] == list(BUNDLE_FILES)
+    assert {name for name, view in SEVEN_FILES if view == "circuit_wide"} == set(CIRCUIT_WIDE_FILES)
+    assert {name for name, view in SEVEN_FILES if view == "school_view"} == set(SCHOOL_VIEW_FILES)
+
+
+def test_json_counts_the_trend_rows_by_label_and_the_rows_the_team_floor_held_back(
+    world: SyntheticRun,
+) -> None:
+    result = landscape(world, "--caselist", CASELIST)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert _data(result)["trends"] == {
+        "rows_by_label": {"NEW": 0, "RISING": 0, "FALLING": 0, "STEADY": 4},
+        "held_back_by_team_floor": 1,
+    }
+
+
+def test_json_counts_the_school_view_and_names_no_school(world: SyntheticRun) -> None:
+    result = landscape(world, "--caselist", CASELIST)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert _data(result)["school_view"] == {"schools": 3, "team_codes": 3, "rows": 7}
+    for identity in FICTIONAL_IDENTITIES:
+        assert identity not in result.stdout, identity
+
+
+def test_the_first_window_on_a_topic_is_all_new_and_holds_nothing_back(world: SyntheticRun) -> None:
+    """At 2026-09-08 there is no earlier window: its four positions are NEW (single payer, costs
+    advantage, spending DA, states CP), and the school view is Quillmere's two rows and Brindle
+    Valley's two."""
+    result = landscape(world, "--caselist", CASELIST, "--snapshot", "2026-09-08")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    data = _data(result)
+    assert data["trends"] == {
+        "rows_by_label": {"NEW": 4, "RISING": 0, "FALLING": 0, "STEADY": 0},
+        "held_back_by_team_floor": 0,
+    }
+    assert data["school_view"] == {"schools": 2, "team_codes": 2, "rows": 4}
+
+
+def test_report_tells_a_person_which_files_name_schools_and_counts_trends_and_schools(
+    world: SyntheticRun,
+) -> None:
+    result = landscape(world, "--caselist", CASELIST, json_output=False)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    directory = world.data_dir / "reports" / "landscape" / CASELIST / "2026-09-15"
+    lines = result.stdout.splitlines()
+    assert "Trends: NEW 0, RISING 0, FALLING 0, STEADY 4; 1 held back by the team floor." in lines
+    assert "School view: 3 school(s), 3 team code(s), 7 row(s)." in lines
+    wrote = lines.index(f"Wrote 7 files to {directory}:")
+    assert lines[wrote + 1 : wrote + 3] == [
+        "  circuit-wide: positions.csv, top_cards.csv, impact_cards.csv, trends.csv, report.md",
+        "  school view, naming schools and team codes: schools.csv, schools.md",
+    ]
+    for identity in ("Quillmere", "Brindle", "Harrowgate"):
+        assert identity not in result.stdout, identity
+
+
+def test_a_dry_run_tells_a_person_the_seven_files_it_would_write(world: SyntheticRun) -> None:
+    result = landscape(world, "--caselist", CASELIST, "--dry-run", json_output=False)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    directory = world.data_dir / "reports" / "landscape" / CASELIST / "2026-09-15"
+    lines = result.stdout.splitlines()
+    would = lines.index(f"Dry run: nothing written; the bundle's 7 files would go to {directory}:")
+    assert lines[would + 1 : would + 3] == [
+        "  circuit-wide: positions.csv, top_cards.csv, impact_cards.csv, trends.csv, report.md",
+        "  school view, naming schools and team codes: schools.csv, schools.md",
+    ]
+    assert not (world.data_dir / "reports").exists()
+
+
+def test_help_names_the_seven_files_and_which_name_schools() -> None:
+    result = runner.invoke(create_app(), ["landscape", "report", "--help"])
+
+    assert result.exit_code == ExitCode.OK, result.output
+    shown = _flat(result.stdout)
+    assert (
+        "Circuit-wide: report.md, positions.csv, top_cards.csv, impact_cards.csv, trends.csv. "
+        "School view, naming schools and team codes: schools.csv, schools.md."
+    ) in shown
+
+
+def test_the_module_docstring_names_the_seven_files() -> None:
+    documented = _flat(landscape_module.__doc__ or "")
+
+    assert "seven files" in documented
+    for name in BUNDLE_FILES:
+        assert f"`{name}`" in documented, name
+    assert "`report.md`, `positions.csv`, `top_cards.csv` and `impact_cards.csv`, under" not in documented
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e32-t12 ac3 (the PM's amendment from v1-e34-t32's ruling 4): a failed latest run
+#
+# Synthetic run logs in the installation's data directory, as `caselist pull` writes them. Each
+# record's reason or message names the fixture's fictional school and a disclosure path, which must
+# not reach the output; the hook's sentence, which the command prints as it is, holds neither.
+# ------------------------------------------------------------------------------------------------
+
+FAILED_RUN_ID = "20260916T060000Z"
+LEAKY = "HTTP 403 for Harrowgate Prep/PX/Harrowgate Prep-PX-Neg-Thistle Open-Round 2.docx"
+
+
+def _logged(world: SyntheticRun, record: SyncRunRecord) -> None:
+    SyncRunLog(world.data_dir / SYNC_RUN_LOG_FILENAME).append(record)
+
+
+def _failed_run(**fields: Any) -> SyncRunRecord:
+    started = datetime(2026, 9, 16, 6, tzinfo=UTC)
+    return SyncRunRecord(
+        run_id=FAILED_RUN_ID,
+        environment="dev",
+        mode="run",
+        started_at=started,
+        finished_at=started,
+        outcome=SyncRunOutcome.FAILED,
+        caselists=(CASELIST,),
+        **fields,
+    )
+
+
+def test_a_run_that_failed_at_a_stage_prints_the_hooks_sentence_on_the_status_line(
+    world: SyntheticRun,
+) -> None:
+    _logged(
+        world,
+        _failed_run(
+            deferred_by_caselist={CASELIST: 0},
+            stages=(
+                StageEntry(stage="download", outcome="failed", reason=LEAKY),
+                StageEntry(stage="import", outcome="skipped"),
+            ),
+        ),
+    )
+
+    shown = landscape(world, "--caselist", CASELIST, json_output=False)
+    machine = landscape(world, "--caselist", CASELIST)
+
+    assert shown.exit_code == ExitCode.OK, shown.output
+    assert (
+        "STALE: newest snapshot 2026-09-15, 2 day(s) old, 0 archive(s) awaiting download. "
+        "The latest sync run of this caselist, 20260916T060000Z, failed at its download stage."
+    ) in shown.stdout.splitlines()
+    assert machine.exit_code == ExitCode.OK, machine.output
+    staleness = _data(machine)["staleness"]
+    assert staleness["stale"] is True
+    assert staleness["failed_run"] == {
+        "run_id": FAILED_RUN_ID,
+        "stages": ["download"],
+        "stopped_before_stages": False,
+        "error_class": None,
+    }
+    for result in (shown, machine):
+        for part in ("Harrowgate", ".docx", "HTTP 403"):
+            assert part not in result.stdout, part
+
+
+def test_a_run_that_stopped_before_its_stages_names_its_error_class_and_never_its_message(
+    world: SyntheticRun,
+) -> None:
+    _logged(world, _failed_run(error_class="CaselistAuthExpired", error_message=LEAKY))
+
+    shown = landscape(world, "--caselist", CASELIST, json_output=False)
+    machine = landscape(world, "--caselist", CASELIST)
+
+    assert shown.exit_code == ExitCode.OK, shown.output
+    assert (
+        "STALE: newest snapshot 2026-09-15, 2 day(s) old, 0 archive(s) awaiting download. "
+        "The latest sync run of this caselist, 20260916T060000Z, stopped before its stages "
+        "(CaselistAuthExpired)."
+    ) in shown.stdout.splitlines()
+    assert machine.exit_code == ExitCode.OK, machine.output
+    assert _data(machine)["staleness"]["failed_run"] == {
+        "run_id": FAILED_RUN_ID,
+        "stages": [],
+        "stopped_before_stages": True,
+        "error_class": "CaselistAuthExpired",
+    }
+    for result in (shown, machine):
+        for part in ("Harrowgate", ".docx", "HTTP 403"):
+            assert part not in result.stdout, part
 
 
 # ------------------------------------------------------------------------------------------------

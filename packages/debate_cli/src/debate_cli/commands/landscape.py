@@ -8,10 +8,32 @@
     debate-research landscape report --caselist hspolicy26 --publish --accept-scan-hits 3f9a0c1d2e4b
 
 Every decision is :class:`~debate_core.application.landscape_run.LandscapeRunService`'s
-(`v1-e32-t05-landscape-cli`); this is the guards and the rendering. The bundle is `v1-e32-t03`'s
-with `v1-e32-t10`'s impact cards: `report.md`, `positions.csv`, `top_cards.csv` and
-`impact_cards.csv`, under
-`<data dir>/reports/landscape/<caselist>/<snapshot>/` unless `--out` names a directory.
+(`v1-e32-t05-landscape-cli`); this is the guards and the rendering.
+
+## The bundle
+
+The run writes seven files, under `<data dir>/reports/landscape/<caselist>/<snapshot>/` unless
+`--out` names a directory (`v1-e32-t12-landscape-cli-seven-files`):
+
+* **circuit-wide**, naming no school, team or debater: `v1-e32-t03`'s `report.md`, `positions.csv`
+  and `top_cards.csv`, `v1-e32-t10`'s `impact_cards.csv`, and `v1-e32-t04`'s `trends.csv`;
+* **school view**, naming each disclosing school and team code as disclosed: `v1-e32-t04`'s
+  `schools.csv` and `schools.md`.
+
+`--help`, the human output and `--json`'s `bundle` mark each file one or the other, read from
+:data:`~debate_core.application.landscape_report.CIRCUIT_WIDE_FILES` and
+:data:`~debate_core.application.landscape_report.SCHOOL_VIEW_FILES`, so an operator sees which files
+name schools before publishing. `--json` also counts the trends (`trends.rows_by_label`, NEW, RISING,
+FALLING and STEADY, and `trends.held_back_by_team_floor`) and the school view (`school_view.schools`,
+`team_codes` and `rows`), all from the run's result and as numbers only.
+
+## A stale report
+
+The status line starts `STALE:` when `v1-e34-t03`'s hook says the report is. When the latest sync run
+of the caselist failed or stopped on an error (`v1-e34-t32`), the line ends with the hook's own
+sentence, :meth:`~debate_core.application.landscape_staleness.FailedSyncRun.sentence`, and `--json`'s
+`staleness.failed_run` holds the run id and the failed stages' names or the error's class, as the hook
+holds them: never a stage's reason or the error's message, which can name a school or a path.
 
 ## `--publish`
 
@@ -62,6 +84,7 @@ from debate_cli.context import CliContext, cli_context, command_name
 from debate_cli.exit_codes import ExitCode
 from debate_cli.output import CliOutput, CommandFailure, JsonValue, OutputMode
 from debate_core.application.errors import error_code_of
+from debate_core.application.landscape_report import CIRCUIT_WIDE_FILES, SCHOOL_VIEW_FILES
 from debate_core.application.landscape_run import (
     LandscapeModelMode,
     LandscapeRequestRefused,
@@ -69,9 +92,11 @@ from debate_core.application.landscape_run import (
     LandscapeRunResult,
     PublishRefusal,
 )
+from debate_core.application.landscape_staleness import FailedSyncRun
 from debate_core.application.settings import Environment, Settings, find_repository_root
+from debate_core.domain.landscape_trends import LandscapeTrends, TrendLabel
 
-__all__ = ["SCAN_NOTICE", "report", "run_summary"]
+__all__ = ["CIRCUIT_WIDE", "REPORT_HELP", "SCAN_NOTICE", "SCHOOL_VIEW", "report", "run_summary"]
 
 LANDSCAPE_CONFIG: Final = Path("config") / "landscape"
 
@@ -79,6 +104,21 @@ SCAN_NOTICE: Final = (
     "scan.hits quote report lines that may name a school or a team code. For this terminal only: "
     "never paste them into a report, a document, an issue or a commit (docs/policies/caselist-data-use.md)."
 )
+
+CIRCUIT_WIDE: Final = "circuit_wide"
+SCHOOL_VIEW: Final = "school_view"
+_VIEWS: Final = {
+    **dict.fromkeys(CIRCUIT_WIDE_FILES, CIRCUIT_WIDE),
+    **dict.fromkeys(SCHOOL_VIEW_FILES, SCHOOL_VIEW),
+}
+"""Each bundle file's view, by name. A file in neither of t04's lists is a KeyError, not a guess."""
+
+REPORT_HELP: Final = (
+    "Build a caselist's argument landscape report, write it here and, with --publish, to the bucket.\n\n"
+    f"Circuit-wide: {', '.join(CIRCUIT_WIDE_FILES)}. "
+    f"School view, naming schools and team codes: {', '.join(SCHOOL_VIEW_FILES)}."
+)
+"""`--help`'s text, from t04's lists; :func:`report`'s docstring is set to it."""
 
 
 def report(
@@ -130,7 +170,6 @@ def report(
         bool, typer.Option("--json", help="Write one machine-readable JSON object to stdout.")
     ] = False,
 ) -> None:
-    """Build a caselist's argument landscape report, write it here and, with --publish, to the bucket."""
     cli = cli_context(ctx)
     if json_output and not cli.output.is_json:
         cli.output = CliOutput(OutputMode.JSON, verbose=cli.output.verbose)
@@ -160,6 +199,9 @@ def report(
         cli.output.success(command_name(ctx), payload, display=_display(result, settings))
     if failure is not None:
         _end(cli, ctx, failure)
+
+
+report.__doc__ = REPORT_HELP
 
 
 def _end(cli: CliContext, ctx: typer.Context, failure: CommandFailure) -> NoReturn:
@@ -290,6 +332,9 @@ def run_summary(result: LandscapeRunResult, settings: Settings) -> dict[str, Jso
         "dry_run": result.dry_run,
         "written": result.written,
         "paths": {"directory": str(result.directory), "files": [str(path) for path in result.files]},
+        "bundle": [
+            {"name": path.name, "path": str(path), "view": _VIEWS[path.name]} for path in result.files
+        ],
         "counts": {
             "sources": counts.sources,
             "sections": counts.sections,
@@ -306,6 +351,15 @@ def run_summary(result: LandscapeRunResult, settings: Settings) -> dict[str, Jso
             "neg_rounds": unclassified.neg_rounds,
             "neg_rounds_unplaced": unclassified.neg_rounds_unplaced,
             "other_side_position_rounds": unclassified.other_side_position_rounds,
+        },
+        "trends": {
+            "rows_by_label": dict(_trend_counts(result.trends)),
+            "held_back_by_team_floor": result.trends.held_back,
+        },
+        "school_view": {
+            "schools": result.schools.schools,
+            "team_codes": result.schools.teams,
+            "rows": len(result.schools.rows),
         },
         "classification": {
             "cards_by_method": dict(counts.cards_by_method),
@@ -329,6 +383,7 @@ def run_summary(result: LandscapeRunResult, settings: Settings) -> dict[str, Jso
             "newest_snapshot": _iso(result.staleness.newest_snapshot),
             "age_days": result.staleness.age_days,
             "archives_awaiting_download": result.staleness.archives_awaiting_download,
+            "failed_run": _failed_run(result.staleness.failed_run),
         },
         "scan": {
             "hits": [
@@ -386,12 +441,11 @@ def _display(result: LandscapeRunResult, settings: Settings) -> str:
         f"{unclassified.aff_rounds}; aff assignments {result.aff_assignments}.",
         f"Review queue: {result.classification.review_queue.counts.rows} rows "
         f"({result.classification.review_queue_location}).",
+        _trends_line(result.trends),
+        f"School view: {result.schools.schools} school(s), {result.schools.teams} team code(s), "
+        f"{len(result.schools.rows)} row(s).",
         _staleness_line(result),
-        (
-            f"Wrote {', '.join(path.name for path in result.files)} to {result.directory}."
-            if result.written
-            else f"Dry run: nothing written; the bundle would go to {result.directory}."
-        ),
+        *_bundle_lines(result),
     ]
     scan = result.scan
     lines.append(
@@ -434,7 +488,49 @@ def _staleness_line(result: LandscapeRunResult) -> str:
         f"newest snapshot {_iso(staleness.newest_snapshot)}, {staleness.age_days} day(s) old, "
         f"{staleness.archives_awaiting_download} archive(s) awaiting download"
     )
-    return f"STALE: {said}." if staleness.stale else f"Current: {said}."
+    line = f"STALE: {said}." if staleness.stale else f"Current: {said}."
+    return line if staleness.failed_run is None else f"{line} {staleness.failed_run.sentence()}"
+
+
+def _failed_run(failed: FailedSyncRun | None) -> dict[str, JsonValue] | None:
+    """The hook's failed run as it holds it: the run id, and the stage names or the error's class."""
+    if failed is None:
+        return None
+    return {
+        "run_id": failed.run_id,
+        "stages": list(failed.stages),
+        "stopped_before_stages": failed.stopped_before_stages,
+        "error_class": failed.error_class,
+    }
+
+
+def _trend_counts(trends: LandscapeTrends) -> dict[str, int]:
+    """The trend rows under each label, in report order."""
+    return {label.value: len(trends.labelled(label)) for label in TrendLabel}
+
+
+def _trends_line(trends: LandscapeTrends) -> str:
+    labels = ", ".join(f"{label} {count}" for label, count in _trend_counts(trends).items())
+    return f"Trends: {labels}; {trends.held_back} held back by the team floor."
+
+
+def _bundle_lines(result: LandscapeRunResult) -> list[str]:
+    """Where the bundle went, or would go, and which of its files are circuit-wide or name schools."""
+    files = len(result.files)
+    head = (
+        f"Wrote {files} files to {result.directory}:"
+        if result.written
+        else f"Dry run: nothing written; the bundle's {files} files would go to {result.directory}:"
+    )
+    return [
+        head,
+        f"  circuit-wide: {_names_in(result, CIRCUIT_WIDE)}",
+        f"  school view, naming schools and team codes: {_names_in(result, SCHOOL_VIEW)}",
+    ]
+
+
+def _names_in(result: LandscapeRunResult, view: str) -> str:
+    return ", ".join(path.name for path in result.files if _VIEWS[path.name] == view)
 
 
 def _iso(day: date | None) -> str | None:

@@ -44,8 +44,20 @@ spec:
     - id: ac2
       description: >-
         The landscape smoke check passes in the validate-dev recorded tier.
+    # PM amendment (2026-10-24, from v1-e34-t32's ruling 4): the failed run. When the staleness
+    # hook reports a failed or stopped latest run, the status line prints the hook's own sentence
+    # (FailedSyncRun.sentence()), never one of the command's own, and --json gains a failed_run
+    # object holding the run id and the failed stage names or the error class, as the hook holds
+    # them. A school, path or error message never appears.
+    - id: ac3
+      description: >-
+        With a synthetic run log whose latest run of the caselist failed at a stage, or stopped
+        before its stages on an error, the human status line carries
+        `FailedSyncRun.sentence()` and `--json`'s `staleness.failed_run` holds the run id and
+        the stage names or the error class; no school, path or error message from the record
+        appears; tests shown failing first.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -3,12 +3,12 @@
 
 | | |
 |---|---|
-| Policy version | 1.16 |
-| Status | **Approved**, version 1.16, on the merge of its pull request (decided 2026-10-25). See [Approval](#approval). |
+| Policy version | 1.17 |
+| Status | **Approved**, version 1.17, on the merge of its pull request (decided 2026-10-25). See [Approval](#approval). |
 | Owner | Charlie Clark (product owner and head coach) |
 | Written by | v1-e30-t01-caselist-data-use-policy implementation session, 2026-09-19 |
 | Applies to | Everything the platform collects from OpenCaselist and OpenEv, and everything derived from it, in every environment |
-| Approved by | Charlie Clark, product owner and head coach, 2026-09-19 (versions 1.0 and 1.1), 2026-10-01 (versions 1.3 and 1.4), 2026-10-10 (versions 1.5 and 1.6), 2026-10-11 (version 1.7), 2026-10-13 (version 1.8), 2026-10-15 (version 1.9), 2026-10-19 (version 1.10), 2026-10-22 (versions 1.11 and 1.12) and 2026-10-24 (versions 1.13, 1.14 and 1.15) and 2026-10-25 (version 1.16) |
+| Approved by | Charlie Clark, product owner and head coach, 2026-09-19 (versions 1.0 and 1.1), 2026-10-01 (versions 1.3 and 1.4), 2026-10-10 (versions 1.5 and 1.6), 2026-10-11 (version 1.7), 2026-10-13 (version 1.8), 2026-10-15 (version 1.9), 2026-10-19 (version 1.10), 2026-10-22 (versions 1.11 and 1.12) and 2026-10-24 (versions 1.13, 1.14 and 1.15) and 2026-10-25 (versions 1.16 and 1.17) |
 | Next review | Start of the 2027-28 season, or sooner if a source's terms change |
 
 This is the policy that governs how the Debate Intelligence Platform collects, stores, uses and
@@ -153,6 +153,7 @@ The corpus may be used for the following, and only these:
 | 5 | **Parser and classifier evaluation** — measuring how well the platform reads real debate documents | Evaluation runs against the corpus in place; evaluation *fixtures* committed to the repository are synthetic (see [Personal data](#personal-data)). |
 | 6 | **Operator reporting** — recording import, dedupe and publish results (e.g. `docs/data/caselist-backfill-2026-09.md`) | Aggregate counts only; no school, team code, filename or name in anything committed. |
 | 7 | **Model-assisted classification** of disclosed text | Only under [Model provider use](#model-provider-use). |
+| 8 | **Backfiles** — earlier seasons' disclosures, from 2021-22 on, kept as a reservoir of evidence for research (1) and team files (3) on later topics and events (version 1.17) | Imported from OpenCaselist's complete archives under the same terms, rate limit and removal rules as the current season. Parsed, fingerprinted and indexed (4), and searchable on the student search pilot with the same provenance line as any disclosed card. Never classified into positions (2, 7) or given a per-school view. See [Retention](#retention). |
 
 ## Prohibited uses
 
@@ -295,10 +296,11 @@ A **season** runs 1 August to 31 July and is labelled like `2026-27`.
 
 | Data | Kept for | Deleted by |
 |---|---|---|
-| Weekly caselist snapshots (source blobs and manifests) | The season they belong to, plus the following season | 31 August after the following season ends — 2026-27 data by **31 August 2028** |
+| Weekly caselist snapshots (source blobs and manifests) | The season they belong to, plus the following season; then, for seasons from 2021-22 on, as backfiles (next row) | Seasons before 2021-22: 31 August after the following season ends. From 2021-22 on, they become backfiles instead (version 1.17) |
+| Backfiles: the disclosures of seasons from 2021-22 on, once outside the two-season window, and complete archives imported for those seasons (version 1.17) | Indefinitely, reviewed each September at the annual purge | By removal, or by a later policy version |
 | Parsed cards, fingerprints and classifications derived from them | Same clock as their sources | With their sources |
 | OpenEv camp files | The topic year they were cut for, plus the following season | Same rule |
-| Per-school landscape views | Same clock as their sources | With their sources |
+| Per-school landscape views | Same clock as their sources, never as backfiles | With their sources, or when their season leaves the two-season window (version 1.17) |
 | Circuit-wide landscape reports (no personal data) | Indefinitely | — |
 | Team files built from disclosed cards | Indefinitely (team work product), but subject to [Removal](#removal) flagging | — |
 | The student search pilot's index (E39) | Until the next build replaces it | Superseded index versions, noncurrent versions included, deleted within 30 days, and at once after a removal (v1-e39-t07) |
@@ -314,8 +316,13 @@ A **season** runs 1 August to 31 July and is labelled like `2026-27`.
   out, in dev and prod, with the resulting counts recorded in `docs/data/`.
 - **Local copies follow the same clock.** The operator's local evidence store is purged in the
   same run as the buckets.
-- Keeping a season longer for year-over-year trend analysis is
-  [open question 7](#open-questions) and needs a policy revision, not an exception.
+- **Backfiles** (version 1.17). Seasons from 2021-22 on are kept indefinitely once they leave the
+  two-season window, and earlier seasons' complete archives from 2021-22 on may be imported, as a
+  reservoir of evidence ([Permitted uses](#permitted-uses) 8). Backfiles are never classified into
+  positions or reported per school, so they are not a route to year-over-year trend analysis, which
+  [open question 7](#open-questions) still answers no. Each September's annual purge reviews them
+  and deletes per-school views of the season leaving the window. Seasons before 2021-22 are not
+  imported.
 
 ## Attribution
 
@@ -631,7 +638,7 @@ before the thing it gates.
 | 4 | Confirmation that the model provider does not retain or train on our inputs: the **AWS Bedrock data-protection documentation** (Bedrock does not store prompts or completions and does not use them to train models), recorded here by URL and date read, **plus** a check that no model-invocation logging to a third-party destination is enabled in the account | **Open** | Operator, from the AWS documentation and the account's Bedrock settings | [E32 gate](#e32--model-classification-of-the-corpus). Not a blocker for this approval; it blocks the first full-corpus classification run |
 | 5 | The removal contact address to publish in [Removal](#removal) | **Resolved** 2026-09-19 — `ctcb57@gmail.com` | Charlie | — |
 | 6 | Whether school or district review is needed before students (who may be minors) get accounts on the V2 tub. This policy does not answer it and is not legal advice | **Resolved for the E39 pilot** 2026-10-19 — Charlie reports that the school's activities director and IT approved the tool for students; IT's one condition is allowing the pilot's hostname through the school web filter, since students' Chromebooks can run little else. No district review is needed for the pilot. Asked again before the V2 tub, if its scope goes beyond the pilot's (uploads, sharing, other organizations) | Charlie, with the school | [E39 gate](#e39--student-evidence-search-pilot-v17) item 10; [v2-e35 gate](#v2-e35--debate-tub-v21) item 9 |
-| 7 | Whether a season's corpus may be kept beyond two seasons for year-over-year trend analysis | **Resolved** 2026-09-19 — no; the two-season clock in [Retention](#retention) stands | Charlie | — |
+| 7 | Whether a season's corpus may be kept beyond two seasons for year-over-year trend analysis | **Resolved** 2026-09-19 — no, for trend analysis. **Revised** 2026-10-25 (version 1.17): seasons from 2021-22 on are kept as backfiles for research and team files, never classified or reported, so trend analysis over them is still not a permitted use | Charlie | — |
 | 8 | Whether the `EvidenceOperator` permission set needs scoped delete rights for `caselist remove`, or whether removal runs under a separate elevated role | **Resolved by a spec change to v1-e29-t03 / v1-e30-t07 (PM)** | PM, in a separate specs pull request | Executing a real removal — see the [runbook](../runbooks/caselist-removal.md#manual-procedure-until-v1-e30-t07-ships) |
 
 ## Review and change control
@@ -646,7 +653,7 @@ before the thing it gates.
 
 ## Approval
 
-**Version 1.16 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
+**Version 1.17 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
 real corpus into dev, model classification over real disclosed text, and automated download (E34)
 are unblocked, each still subject to its own conditions in [Gates](#gates). Version 1.1 recorded
 the maintainer's confirmation of scheduled API downloads and the 10-per-minute rate limit.
@@ -797,16 +804,29 @@ paragraph, and the E39 gate. It loosens the policy, since the reports were the o
 before, so under [Review and change control](#review-and-change-control) it needs the coach's
 approval, and merging its pull request records the approval below. Nothing else changes.
 
+Version 1.17 keeps earlier seasons' disclosures, from 2021-22 on, as backfiles: a reservoir of
+evidence the team can search and build files from on later topics and events. Charlie decided it on
+2026-10-25: cards from earlier topics are used on current ones and on future LD and PF topics, and
+OpenCaselist still publishes those seasons. The two-season window was this policy's own choice, not
+a term of the source (the clause register holds no term on retention). Backfiles keep every other
+rule: the terms, the rate limit, removal at once and in full, the suppression list, and the same
+provenance line on the pilot. They are never classified into positions or reported per school, and
+per-school views still end with their season's window. Seasons before 2021-22 are not imported. It
+changes [Permitted uses](#permitted-uses) (a new use 8), [Retention](#retention) and
+[open question 7](#open-questions). It loosens the policy, since nothing was kept past two seasons
+before, so under [Review and change control](#review-and-change-control) it needs the coach's
+approval, and merging its pull request records the approval below. Nothing else changes.
+
 The standing rule for every future version: until this table records an approval of that version,
 nothing this policy governs may happen under it.
 
 | Field | Value |
 |---|---|
-| Policy version | 1.16 (2026-10-25); 1.15, 1.14 and 1.13 (2026-10-24); 1.12 and 1.11 (2026-10-22); 1.10 (2026-10-19); 1.9 (2026-10-15); 1.8 (2026-10-13); 1.7 (2026-10-11); 1.6 and 1.5 (2026-10-10); 1.4 and 1.3 approved 2026-10-01, 1.3 including version 1.2's correction to rule 3; 1.0 and 1.1 approved 2026-09-19 |
+| Policy version | 1.17 and 1.16 (2026-10-25); 1.15, 1.14 and 1.13 (2026-10-24); 1.12 and 1.11 (2026-10-22); 1.10 (2026-10-19); 1.9 (2026-10-15); 1.8 (2026-10-13); 1.7 (2026-10-11); 1.6 and 1.5 (2026-10-10); 1.4 and 1.3 approved 2026-10-01, 1.3 including version 1.2's correction to rule 3; 1.0 and 1.1 approved 2026-09-19 |
 | Approved by | Charlie Clark |
 | Role | Product owner and head coach |
-| Approval date | 2026-10-25 (version 1.16; 1.15, 1.14 and 1.13: 2026-10-24; 1.12 and 1.11: 2026-10-22; 1.10: 2026-10-19; 1.9: 2026-10-15; 1.8: 2026-10-13; 1.7: 2026-10-11; 1.5 and 1.6: 2026-10-10; 1.3 and 1.4: 2026-10-01; 1.0 and 1.1: 2026-09-19) |
-| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.16, including the [clause register](#clause-register) read 2026-09-19 and the [community disclosure norms](#community-disclosure-norms), both confirmed by Charlie |
+| Approval date | 2026-10-25 (versions 1.17 and 1.16; 1.15, 1.14 and 1.13: 2026-10-24; 1.12 and 1.11: 2026-10-22; 1.10: 2026-10-19; 1.9: 2026-10-15; 1.8: 2026-10-13; 1.7: 2026-10-11; 1.5 and 1.6: 2026-10-10; 1.3 and 1.4: 2026-10-01; 1.0 and 1.1: 2026-09-19) |
+| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.17, including the [clause register](#clause-register) read 2026-09-19 and the [community disclosure norms](#community-disclosure-norms), both confirmed by Charlie |
 | Open questions resolved at approval | **5** — removal contact address is `ctcb57@gmail.com`. **7** — two-season retention stands. **8** — resolved by a PM spec change to v1-e29-t03 / v1-e30-t07. **2** (version 1.1) — maintainer confirmed scheduled API downloads at 10 file downloads per minute. **6** (version 1.10) — the school's activities director and IT approved the tool for students; no district review for the E39 pilot |
 | Open questions accepted as known gaps | **1** — OpenCaselist privacy page unread. **3** — OpenEv distribution and per-camp terms unread |
 | Open questions left open | **4** — Bedrock data-protection terms, an E32 gate. **6** — for the V2 tub only, if its scope goes beyond the pilot's |

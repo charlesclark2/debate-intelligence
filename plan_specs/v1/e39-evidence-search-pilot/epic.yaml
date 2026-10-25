@@ -403,5 +403,24 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e39-t17-landscape-pages
+    - id: t18
+      kind: Task
+      name: 'Backfile seasons searchable on the pilot, without slowing its cold start'
+      description: >-
+        Backfile seasons searchable on the pilot, without slowing its cold start.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t18-backfiles-in-the-pilot-index.yaml
+        goalRef: v1-e39-t18-backfiles-in-the-pilot-index
+      dependsOn:
+      - t14
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t18-backfiles-in-the-pilot-index reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t18-backfiles-in-the-pilot-index
 status:
   phase: Pending

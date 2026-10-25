@@ -1,0 +1,92 @@
+# TASK v1-e32-t21-local-classifier-comparison - A local text classifier for the cards headings cannot place, compared before anything is wired
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t21-local-classifier-comparison
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "A local text classifier for the cards headings cannot place, compared before anything is wired"
+spec:
+  # Filed by the PM, 2026-10-25, from Charlie's game plan of 2026-10-25 (45% of cards unplaced) and the PM's proposal.
+  description: >-
+    Headings and tags place about half of hspolicy26's cards (63,494 of 126,681); the rest wait
+    on v1-e32-t07's model stage, which waits on data-use policy's E32 gate. A local classifier
+    keeps every card on the operator's machine and needs no gate. Count and compare, nothing
+    wired into the report: train a light model (word and short-phrase weights with a linear
+    classifier; propose any other in the report first) on the cards the deterministic stage
+    already places (ALIAS, INHERITED, OVERRIDE, TAG_KEYWORD), from their tag and normalized
+    headings, never the team's names or the caselist's schools. Measure it (1) on a held-out
+    tenth of those placed cards, by position and kind, with precision at each confidence; (2) on
+    the coach-labelled sample: v1-e32-t07's 60 items if they exist, otherwise a 60-item sample
+    of unplaced cards this task proposes and the coach labels (operator); and (3) how many
+    unplaced cards it would place above a confidence where precision on (1) is at least 90%.
+    Send the counts to the PM with a recommendation: wire it as a stage (a later task, method
+    `LOCAL_MODEL`, behind review-queue rules), keep it for the review queue's ordering only, or
+    drop it. The trained model and its features are derived from the corpus: they live under the
+    data directory, follow its retention and removal, and are never committed.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.arguments, packages/debate_core/tests, scripts, tests/scripts, tests/fixtures/landscape, pyproject.toml, uv.lock]
+    forbidden:
+      - Any network call, model provider or download of a pretrained model
+      - A trained model, feature table or card text committed to the repository
+      - A school, team code or debater name as a feature
+      - A change to the landscape report's placements in this task
+  context:
+    - kind: TaskRef
+      name: v1-e32-t02-position-classification
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        On synthetic fixtures, training and scoring are deterministic for a fixed seed, use
+        no school, team code or name as a feature, and write nothing outside the data
+        directory; tests shown failing first.
+    - id: ac2
+      description: >-
+        On hspolicy26 (read-only), held-out precision by position and confidence, the
+        coach-labelled sample's accuracy, and the unplaced cards it would place at 90%
+        held-out precision, sent to the PM with a recommendation (the coach's labels are an
+        operator step).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t21-local-classifier-comparison-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    Train and score a local classifier on the deterministic placements, measure it three ways,
+    and recommend.
+  goalRef:
+    name: v1-e32-t21-local-classifier-comparison
+  graph:
+    nodes:
+      - id: local-classifier
+        kind: Task
+        name: Local classifier comparison
+        description: >-
+          Train and score a local classifier on the deterministic placements, measure it
+          three ways, and recommend.
+        estimatedEffort: 5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Landscape tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/landscape]
+status:
+  phase: Pending

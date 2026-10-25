@@ -1,0 +1,96 @@
+# TASK v1-e34-t34-backfile-seasons-import - Earlier seasons' complete archives, from 2021-22 on, imported and parsed as backfiles
+# Epic: E34 Caselist Sync | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e34-t34-backfile-seasons-import
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+  annotations:
+    debate/title: "Earlier seasons' complete archives, from 2021-22 on, imported and parsed as backfiles"
+spec:
+  # Filed by the PM, 2026-10-25, from data-use policy version 1.17 (Charlie, 2026-10-25).
+  description: >-
+    Policy 1.17 keeps earlier seasons' disclosures from 2021-22 on as backfiles, a reservoir of
+    evidence for research and team files, never classified or reported per school. Count first,
+    read-only, through the documented API under the rate limit (8 per minute, never above 10):
+    which high-school caselists the API serves for each season from 2021-22 through 2025-26
+    (Policy, LD and PF at least), each one's complete archive and its size, and from a sample
+    the parse time per source, so the operator knows the downloads' and parses' wall-clock
+    before starting. Send the counts to the PM with a proposed order (newest first) before any
+    import. Then make it one operator command per caselist (or the existing complete-archive
+    refresh, v1-e34-t04, if it already fits): download within the rate limit, import, parse and
+    publish, marked as a backfile season so the weekly run never pulls it, the landscape never
+    reads it, and no per-school view is built from it. Removal, the suppression list and holds
+    reach backfiles exactly as they reach the current season, by test. The imports themselves
+    are operator runs, one caselist at a time, guarded against a running weekly pull, with
+    counts recorded in docs/data. Whether backfiles enter the student search pilot's index is
+    v1-e39-t18's.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, config/profiles, docs/runbooks, docs/data]
+    forbidden:
+      - A download above the rate limit, or through anything but the documented API
+      - A season before 2021-22
+      - A backfile season read by the landscape or given a per-school view
+      - A school, team code or file name in anything committed beyond aggregate counts
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e34-t04-full-archive-refresh
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Counts before any import: the caselists the API serves per season from 2021-22,
+        their complete archives' sizes, and the expected download and parse times, sent to
+        the PM with a proposed order.
+    - id: ac2
+      description: >-
+        With stand-in API and bucket, a backfile caselist imports, parses and publishes; the
+        weekly run's caselists and the landscape never include it; a removal and a hold
+        reach its sources; tests shown failing first.
+    - id: ac3
+      description: >-
+        The operator imports the first backfile caselist in dev and records its counts in
+        docs/data (operator).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e34-t34-backfile-seasons-import-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+spec:
+  description: >-
+    Count what the API serves for earlier seasons, then mark backfile seasons and give the
+    operator one guarded import per caselist.
+  goalRef:
+    name: v1-e34-t34-backfile-seasons-import
+  graph:
+    nodes:
+      - id: backfile-import
+        kind: Task
+        name: Backfile seasons import
+        description: >-
+          Count what the API serves for earlier seasons, then mark backfile seasons and
+          give the operator one guarded import per caselist.
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Caselist sync tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, caselist]
+status:
+  phase: Pending

@@ -845,5 +845,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e34-t33-keychain-errors-named
+    - id: t34
+      kind: Task
+      name: 'Earlier seasons'' complete archives, from 2021-22 on, imported and parsed as backfiles'
+      description: >-
+        Earlier seasons' complete archives, from 2021-22 on, imported and parsed as
+        backfiles.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t34-backfile-seasons-import.yaml
+        goalRef: v1-e34-t34-backfile-seasons-import
+      dependsOn:
+      - t04
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t34-backfile-seasons-import reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t34-backfile-seasons-import
 status:
   phase: Pending

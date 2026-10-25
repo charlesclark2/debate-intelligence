@@ -364,7 +364,10 @@ reading the shown planks in report.md, or the operator reading the dry run's.
 
 * **`debate_core.domain`:** `landscape_texts.py`.
 * **`debate_core.arguments.landscape`:** `analytic_texts.py`, `render.py`.
-* **`debate_core.application`:** `analytic_texts.py`, `landscape_report.py`, `ports/analytic_text_store.py`.
+* **`debate_core.application`:**
+  * `analytic_texts.py`, `landscape_report.py`, `ports/analytic_text_store.py`;
+  * `landscape_scan.py`: `hits_by_section`, the dry run's hits by section;
+  * `landscape_run.py`: the result keeps its rendered files in memory.
 * **`debate_core.testing`:** `landscape_report.py`, the fixture's loader ([Deviations](#deviations-from-the-spec)).
 * **Tests:**
   * `packages/debate_core/tests`: `arguments/landscape/test_cp_planks.py` (new); `test_analytic_texts.py`
@@ -373,16 +376,17 @@ reading the shown planks in report.md, or the operator reading the dry run's.
   * `tests/scripts/test_read_landscape_texts.py`.
 * **`tests/fixtures/landscape`:** `synthetic_caselist/analytic_texts.json` and its README, by hand;
   `golden/report.md`, by hand.
-* **`scripts/read_landscape_texts.py`.**
+* **`scripts/read_landscape_texts.py`**, and **`scripts/landscape_dry_run_by_section.py`** (new) with
+  `tests/scripts/test_landscape_dry_run_by_section.py`; `application/test_landscape_scan.py` and
+  `test_landscape_run.py`.
 * **`docs/guides/landscape-taxonomy.md`:** "A CP's planks".
-* **The spec:** the PM's rulings as a comment above `acceptanceCriteria`.
+* **The spec:** the PM's rulings as a comment above `acceptanceCriteria`, and the `packages` amendment.
 * **This report.**
 
 ## Deviations from the spec
 
-1. **`debate_core.testing` is outside `constraints.packages`.** The fixture's loader,
-   `read_synthetic_analytic_texts`, has to read a plank's fields for the golden. t11's PM amended its
-   own list the same way (question 1).
+None open. **`debate_core.testing`**, the fixture's loader, was outside `constraints.packages`; the PM
+ruled on 2026-10-25 to add it. The amendment is a PM-ruling comment above `packages` in the spec.
 
 ## Decisions and assumptions
 
@@ -430,6 +434,18 @@ From the build:
 15. **The fixture keeps t11's golden lines.** `b6`'s second text gained a colon, which leaves its
     digest unchanged, and the list hangs off it. The only t11 line that moved is the new labelled
     text's.
+16. **The dry run that reports the scan by section is a script, not the CLI command.** The CLI's dry run
+    prints each hit's line, which may name a team, for the terminal only, and a dry run writes no
+    report.md to map lines to sections. t11 counted its sections with a scratch script. The script
+    runs the CLI's own service, and the run's result now keeps the rendered files, in memory only, for
+    `hits_by_section`. Only report.md is counted by section: the school view's headings are schools.
+    A hit inside a CP's plank table is counted apart. Its tests: `test_landscape_scan.py` (2, red then
+    green), `test_landscape_run.py`'s in-memory files (red on the missing field), and the script's (2,
+    red against a stub).
+17. **The refill counts planks grouped and withheld, under a CP, in negative files,** with `--quote`.
+    Withholding needs the words read again. The groups count only planks that could be read again and
+    are not withheld, as the report shows them. Its test gained a list plank naming a school of the
+    caselist, and ran red against the committed script.
 
 ## Operator follow-ups
 
@@ -461,25 +477,34 @@ if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset i
    * each kind's found and placed counts, `CP_PLANK` above zero, then the `CP texts by place` and
      `CP planks:` lines;
    * the `Quoted:` line with `0 not` and `0 unread`;
+   * the `Planks under a CP in negative files:` line, planks and groups above zero, with a line per CP;
    * the `Planks naming an advantage alias in their own words:` line;
    * the `Runtime` line.
 
    Paste every line back. A `STOP:` line means nothing ran.
 2. **Then the dry run, without `--publish`, on the warm cache** (expected about 75 s; t11's took 74 s).
-   It writes nothing. Run it after the refill, never before: without the refill, the dry run would read
-   every file again and write no cache. From the same worktree:
+   * **What it runs:** `scripts/landscape_dry_run_by_section.py`, the CLI's own landscape service,
+     built by its container, as `landscape report --dry-run` runs it.
+   * **What it prints:** counts only. That is the planks shown, grouped and withheld, and the scan's
+     hits by file, report.md section and kind. It never prints a hit's term or line, or a text.
+   * **What it writes:** nothing. Run it after the refill, never before: without the refill, the dry run
+     would read every file again and write no cache.
+
+   From the same worktree:
 
 ```bash
-if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; else uv run debate-research landscape report --caselist hspolicy26 --dry-run; fi
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; else uv run python scripts/landscape_dry_run_by_section.py --caselist hspolicy26; fi
 ```
 
    **Success looks like:**
-   * exit 0, with the planned files listed and nothing written;
-   * the scan's line of hits and its digest. t11's dry run had 8 hits, all in `top_cards.csv`, digest
-     `81374e646621`.
+   * a `Dry run of hspolicy26 through ...: nothing written; 7 files planned.` line;
+   * a `Planks:` line with planks and groups above zero, a line per CP, and the `Planks found:` line;
+   * the `Scan:` line with its digest, a line per file, section and kind, and the `Hits in report.md's
+     plank tables:` line. t11's dry run had 8 hits, all in `top_cards.csv`, digest `81374e646621`;
+   * the `Runtime` line.
 
-   Paste the whole output back. The session then records the scan's hits by section, as t11 did, with
-   a counts-only read of the dry run in memory that writes nothing.
+   Paste every line back. The CLI's own `--dry-run` shows each hit's line, for the terminal only, if a
+   hit needs reading.
 3. **The first publish with the planks** is the PM's to coordinate, after the review.
 
 ## Follow-up work

@@ -22,9 +22,9 @@ the adapter would change the use case.
 :class:`ProviderResponse`) now live in :mod:`debate_core.domain.discovery`, which callers import
 them from, and the timeout, circuit breaker and registry every adapter is wrapped in live in
 :mod:`debate_core.integrations.discovery`. v1-e04-t02-http-fetcher and
-v1-e04-t04-content-extraction fill out :class:`FetchResult` and :class:`ExtractedContent`. What is
-here is the shape the application layer codes against in the meantime, and those tasks extend it
-rather than replace it. The model router began here too and now has its own module,
+v1-e04-t04-content-extraction filled out :class:`FetchResult` and :class:`ExtractedContent`, which
+now live in :mod:`debate_core.retrieval.fetch_types` and :mod:`debate_core.retrieval.extraction`.
+The model router began here too and now has its own module,
 :mod:`debate_core.application.ports.model_router` (v1-e05-t01-model-router-port).
 
 **Async where the work is I/O.** Searching and fetching are network calls and
@@ -38,15 +38,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Protocol, runtime_checkable
 
-from pydantic import Field
-
-from debate_core.domain import (
-    DomainModel,
-    HttpUrlStr,
-    NonEmptyText,
-    Ulid,
-)
+from debate_core.domain import HttpUrlStr, Ulid
 from debate_core.domain.discovery import ProviderHealth, ProviderQuery, ProviderResponse
+from debate_core.retrieval.extraction import ExtractedContent
 from debate_core.retrieval.fetch_types import FetchResult
 
 __all__ = [
@@ -54,11 +48,8 @@ __all__ = [
     "Clock",
     "ContentExtractor",
     "DiscoveryProviders",
-    "ExtractedContent",
-    "ExtractionQuality",
     "IdGenerator",
     "SearchProvider",
-    "SourceMetadataHints",
 ]
 
 
@@ -125,8 +116,10 @@ class DiscoveryProviders(Protocol):
 # --------------------------------------------------------------------------------------------
 
 # FetchResult and the errors it carries live in debate_core.retrieval.fetch_types since
-# v1-e04-t02-http-fetcher, beside the access classifier that reads them. The port's signature names
-# it; callers import it from there (v1-e01-t30).
+# v1-e04-t02-http-fetcher, beside the access classifier that reads them. ExtractedContent, its
+# metadata hints, quality signals, line joins and removed lines, and the extraction refusals live in
+# debate_core.retrieval.extraction since v1-e04-t04-content-extraction. The ports' signatures name
+# them; callers import them from there (v1-e01-t30).
 
 
 @runtime_checkable
@@ -153,62 +146,6 @@ class ArticleFetcher(Protocol):
         ...
 
 
-class SourceMetadataHints(DomainModel):
-    """Unverified metadata an extractor noticed on the page.
-
-    Deliberately separate from :class:`~debate_core.domain.Citation`, and deliberately all
-    strings: these are raw, unparsed hints. CitationService (E06) is what turns a hint into a
-    citation field with a recorded source, and a hint that cannot be confirmed leaves the cite
-    field missing rather than filled in (architecture proposal §8).
-    """
-
-    title: str | None = Field(default=None, description="Title as the document states it.")
-    authors: tuple[str, ...] = Field(default=(), description="Byline text, unparsed, in page order.")
-    published_at: str | None = Field(default=None, description="Date string exactly as found.")
-    site_name: str | None = Field(default=None, description="Site or publication name as stated.")
-    canonical_url: str | None = Field(default=None, description="`rel=canonical` target, if declared.")
-
-
-class ExtractionQuality(DomainModel):
-    """Signals about how well extraction went, used to decide whether to trust the text."""
-
-    character_count: int = Field(ge=0, description="Characters of readable text extracted.")
-    paragraph_count: int = Field(ge=0, description="Paragraphs extracted.")
-    fallback_used: bool = Field(
-        default=False, description="True when the primary extractor fell short and a fallback ran."
-    )
-    boilerplate_ratio: float | None = Field(
-        default=None, ge=0, le=1, description="Share of the document discarded as navigation or ads."
-    )
-
-
-class ExtractedContent(DomainModel):
-    """Readable text pulled out of a fetched document.
-
-    Paragraphs are kept as a sequence in reading order rather than as one string, because the
-    paragraph is the unit a card's offsets are anchored to and the unit a model is allowed to
-    refer to when it selects a passage.
-
-    Extraction never changes words. No spelling fixes, no summarizing, no model cleanup: the text
-    that reaches a card has to be the publisher's.
-    """
-
-    paragraphs: tuple[str, ...] = Field(default=(), description="Body paragraphs in reading order.")
-    extractor_name: NonEmptyText = Field(description="Extractor that produced this text.")
-    extractor_version: NonEmptyText = Field(
-        description="Its version; recorded on the snapshot so extraction stays reproducible."
-    )
-    metadata_hints: SourceMetadataHints = Field(
-        default_factory=SourceMetadataHints, description="Unverified metadata seen on the page."
-    )
-    quality: ExtractionQuality = Field(description="Signals about the extraction itself.")
-
-    @property
-    def text(self) -> str:
-        """The paragraphs joined by blank lines, the form the normalizer (E03-t01) takes."""
-        return "\n\n".join(self.paragraphs)
-
-
 @runtime_checkable
 class ContentExtractor(Protocol):
     """Turns fetched bytes into readable paragraphs.
@@ -229,8 +166,10 @@ class ContentExtractor(Protocol):
         Takes the whole :class:`FetchResult` rather than loose bytes, because an extractor needs
         the content type to choose a strategy and the final URL to resolve relative links.
 
-        Raises `ValueError` when the content type is one this extractor does not handle; the
-        caller chooses the extractor, so being handed a PDF by an HTML extractor is a caller bug.
+        Raises :class:`~debate_core.retrieval.extraction.UnsupportedContentType` (a `ValueError`)
+        when the document is one this extractor does not read, and another
+        :class:`~debate_core.retrieval.extraction.ExtractionError` when it refuses the document
+        (encrypted, declared paywalled, past a size limit). A refusal never returns part of the text.
         """
         ...
 

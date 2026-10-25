@@ -14,19 +14,26 @@ v1-e34-t03's staleness hook (`LandscapeStalenessCheck`) has a third rule. When t
 listed the caselist ended in failure, the caselist reads stale and the banner names the run's id
 and its failed stage. A later run that listed the caselist and did not fail clears it. This is the
 record v1-e32-t05's cap-bound rule already reads (`SyncRunLog.latest_listing`), so the two rules
-can never disagree about which run is "latest", and both are found with one read of the log. The
+can never disagree about which listing run is "latest". (Since ruling 1 the failed-run rule also
+weighs a later run that stopped naming the caselist, and the log is read once for each rule.) The
 snapshot-age and cap-bound rules are unchanged. The report's banner, `stale=true` in the CSV
 header and the "Data freshness" row all read the hook, so none of them gained code.
-**Look at Question 1 first.** The PM's rule ("the latest run that listed the caselist", reason
-"run id and failed stage") does not cover a run that *raised*: an expired caselist_token, a provider
-error while listing, a refused start. Such a run lists no archive and records no stage. The code
-follows the rule as written, a test pins that behaviour, and the question gives the options.
+**The PM's condition is closed (ruling 1, (b)).** A run that *raised* before listing anything (an
+expired caselist_token, a provider error while listing, a refused start) also counts, when its
+record's `caselists` names the caselist and it is later than the latest listing run. The banner
+says "`<run id>`, stopped before its stages (`<error class>`)". The class is named only when it is
+an identifier, and the error's message is never read. A run the run lock refused
+(`SyncRunInProgress`) changes nothing. A later run that listed the caselist and did not fail clears
+it. Shown red first; the PM's four mutants and four more are all caught. Nothing came out
+differently from the ruling. One test was added beyond the condition's list: a mutant reading the
+cap-bound count from the stopped run, rather than the latest listing, survived until it existed.
 
 ## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
 | `failed-run-stale` (Failed run reads stale) | Done | Red then green, 11 mutants all caught; the node's criterion passes. |
+| PM condition: ruling 1 (a run that raised reads stale) | Done | Red at `2c20e43` (8 failed), green at `fa450fd`, one more test at `0d2c148`; the 4 named mutants and 4 more all caught. |
 
 ## Acceptance criteria
 
@@ -34,7 +41,8 @@ follows the rule as written, a test pins that behaviour, and the question gives 
 |---|---|---|
 | ac1: with synthetic run logs, the hook reports stale when the latest run that listed the caselist failed, names the run id and stage, reports current after a later success; another caselist's failed run changes nothing; tests shown failing first | PASS | Red at `626dc70`: `.venv/bin/python -m pytest packages/debate_core/tests/application/test_landscape_staleness.py packages/debate_core/tests/application/test_landscape_run.py -p no:randomly -n 0` → **8 failed, 41 passed**, each red an `AssertionError` (list below). Green at `2d00be0`, same command → **49 passed**. Tests: `test_a_failed_latest_run_makes_a_fresh_snapshot_stale_naming_the_run_and_its_stage`, `test_a_later_successful_run_makes_it_current_again`, `test_a_failed_run_of_another_caselist_does_not_make_this_one_stale`, `test_a_successful_run_of_another_caselist_does_not_make_this_one_current`, plus the seven listed under Decisions. |
 | ac2: a landscape report built over a failed latest run carries the stale banner and `stale=true`, by test through v1-e32-t05's run service | PASS | `test_a_failed_latest_run_makes_the_report_stale_and_a_later_success_clears_it` (in `test_landscape_run.py`, on `synthetic26`): the run service's `report.header.stale` is true, `report.md` starts with the banner and names `20260916T060000Z` and the download stage, and `positions.csv` has `# stale=true`. After a later successful run is appended: not stale, no banner, `# stale=false`. Red at `626dc70`, green at `2d00be0`. |
-| Node `failed-run-stale`: Staleness tests pass (`uv run pytest packages/debate_core/tests -k stale`) | PASS | `.venv/bin/python -m pytest packages/debate_core/tests -k stale -q` → **44 passed in 22.42s**. A `--co` count confirms all 12 new tests are in the selection. |
+| Node `failed-run-stale`: Staleness tests pass (`uv run pytest packages/debate_core/tests -k stale`) | PASS | `.venv/bin/python -m pytest packages/debate_core/tests -k stale -q` → **44 passed in 22.42s**. A `--co` count confirms all 12 new tests are in the selection. After the condition, at `0d2c148`: **54 passed in 6.52s**. |
+| PM condition (ruling 1): a raised run naming the caselist reads stale with the class name; a later listing that did not fail clears it; a `SyncRunInProgress` refusal changes nothing; a raised run naming another caselist changes nothing; an error class that is not an identifier is left out | PASS | Red at `2c20e43`, same two-file command as ac1 → **8 failed, 50 passed**, all `AssertionError` (list below). Green at `fa450fd` → **58 passed**; at `0d2c148` → **59 passed**. Tests in order: `test_a_run_that_stopped_on_an_error_naming_the_caselist_makes_it_stale`, `test_a_later_run_that_listed_the_caselist_clears_a_run_that_stopped`, `test_a_run_the_lock_refused_changes_nothing`, `test_a_run_that_stopped_naming_another_caselist_changes_nothing`, `test_an_error_class_that_is_not_an_identifier_is_left_out` (five classes: the fictional school, the disclosure path, `Expired-Token`, empty, `1Expired`), plus `test_the_class_is_named_and_the_message_is_not` and `test_a_run_that_stopped_after_a_cap_bound_run_leaves_the_backlog_counted`. |
 
 **The red run, by test** (each an `AssertionError` or a false `assert`, against a skeleton with the
 new field and type, where `latest_run_failed` is always `False` and `check()` never sets the field):
@@ -50,7 +58,8 @@ new field and type, where `latest_run_failed` is always `False` and `check()` ne
 
 The other four new tests passed at red by design. Each is a case that must change nothing: a later
 success, another caselist's failed run, an `incomplete` run, and a run that raised before listing.
-The mutants below are what show those four bite.
+The mutants below are what show those four bite. (The PM's ruling 1 replaced the last of these;
+see the condition's red run below.)
 
 **Mutants** (11, each against the two test files, `-n 0 -p no:randomly`, no Hypothesis in these
 tests; the file was restored from the commit after each):
@@ -64,10 +73,40 @@ tests; the file was restored from the commit after each):
 | `incomplete` counts as failed | caught (1) | `test_a_run_that_failed_only_after_publishing_is_not_a_failed_run` |
 | Every stage is named, failed or not | caught (7) | the stage-naming assertions |
 | The hook reads the newest record, whether it listed the caselist or not | caught (5) | the other-caselist tests, publish-pending, the raised run, redaction |
-| The hook reads the newest record naming the caselist in `caselists` | caught (1) | `test_a_run_that_stopped_on_an_error_before_listing_changes_nothing` |
+| The hook reads the newest record naming the caselist in `caselists` | caught (1) | `test_a_run_that_stopped_on_an_error_before_listing_changes_nothing` (since replaced: ruling 1 makes most of this the rule) |
 | The hook reads the first failed listing ever, not the latest | caught (4) | the cap-bound tests (t05's and t03's) and ac2's clearing half |
 | Two stages joined with a comma alone | caught (1) | the all-rules test |
 | The cap-bound count is zeroed when the run failed | caught (1) | the all-rules test |
+
+**The condition's red run** (`2c20e43`), a skeleton with `FailedSyncRun`'s two new fields and no
+behaviour. Each failure is an `AssertionError`:
+
+* `test_a_run_that_stopped_on_an_error_naming_the_caselist_makes_it_stale`: `stale` false
+* `test_a_run_that_stopped_naming_another_caselist_changes_nothing`: the other caselist's `failed_run` is `None`
+* `test_an_error_class_that_is_not_an_identifier_is_left_out`, all five: `failed_run` is `None`
+* `test_the_class_is_named_and_the_message_is_not`: no banner
+
+Passing at red by design, because the old code ignores every raised run:
+`test_a_later_run_that_listed_the_caselist_clears_a_run_that_stopped` and
+`test_a_run_the_lock_refused_changes_nothing`. The mutants show both bite.
+
+**The condition's mutants** (each against the same two test files, `-n 0 -p no:randomly`, file
+restored after each, `git status` clean afterwards). The PM's four come first:
+
+| Mutant | Result | Caught by |
+|---|---|---|
+| The lock refusal counted | caught (1) | `test_a_run_the_lock_refused_changes_nothing` |
+| The error message used in place of the class | caught (8) | the stopped-run tests, all five non-identifier cases, `test_the_class_is_named_and_the_message_is_not` |
+| `caselists` ignored | caught (1) | `test_a_run_that_stopped_naming_another_caselist_changes_nothing` |
+| The raised rule winning over a later success (latest stopped run first, listing runs after) | caught (1) | `test_a_later_run_that_listed_the_caselist_clears_a_run_that_stopped` |
+| The identifier filter removed | caught (5) | the five non-identifier cases |
+| The hook reads the newest record, listed or not (re-aimed at the new lookup) | caught (6) | the other-caselist tests and others |
+| The hook reads the first failed listing ever (re-aimed) | caught (3) | the clearing tests |
+| The cap-bound count is zeroed when the run failed (re-aimed) | caught (2) | the all-rules test and the backlog test |
+| The cap-bound count read from the deciding record, not the latest listing | **survived at `fa450fd`**, caught (1) at `0d2c148` | `test_a_run_that_stopped_after_a_cap_bound_run_leaves_the_backlog_counted`, added for it |
+
+The first session's other seven mutants were run again on the new code, and all were caught. Their
+anchor text still matched.
 
 **Before the report** (agreement 10):
 
@@ -84,14 +123,29 @@ tests; the file was restored from the commit after each):
 * `uv run --frozen lint-imports` → Contracts: 16 kept, 0 broken. `scripts/check_thin_handlers.py` → OK (no handler touched).
 * `uv run --frozen python scripts/validate_specs.py` → OK: 437 files, 40 epics, 375 tasks, 22 releases (after setting the phase to Succeeded).
 
+**Again after the condition** (at `0d2c148`):
+
+* The affected set is still 156 files. Load had dropped to about 4, so I tried it once:
+  `perl -e 'alarm 115; exec @ARGV' .venv/bin/python -m pytest $(cat affected.txt) -n auto -m "not slow and not live" -q`
+  hit the alarm at 1:55, unfinished, and left no workers behind (`pgrep` found none). So it is over
+  two minutes even on a quiet machine, and it stays with the PR's `ci` check.
+* The module's test directory → **3467 passed in 91.90s**. The always-run list plus the hook's
+  readers (same command as above) → **810 passed in 22.48s**.
+* ruff check: all checks passed. ruff format --check: 1247 files already formatted. pyright on
+  `packages/debate_core`: 0 errors. lint-imports: 16 kept, 0 broken. validate_specs: OK, 437 files.
+
 ## Files changed
 
 * `packages/debate_core/src/debate_core/application/landscape_staleness.py`: the third rule.
   `FailedSyncRun` (run id and failed stage names) and its one sentence, `_failed_run_of`, the
   `failed_run` field, `latest_run_failed`, and `stale` and the banner reading it. `check()` reads
-  `latest_listing` once for both run-log rules, where t05's `_awaiting` read it itself. The module
-  docstring states the rule and what changes nothing.
-* `packages/debate_core/tests/application/test_landscape_staleness.py`: ac1's eleven tests.
+  `latest_listing` itself and hands it to `_awaiting`, which had read it on its own in t05. The module
+  docstring states the rule and what changes nothing. For ruling 1: `FailedSyncRun` gains
+  `stopped_before_stages` and `error_class`, and `_stopped_naming` and `_latest_run_of` choose
+  between the latest listing run and a later run that stopped naming the caselist. `check()` gives
+  the cap-bound count `latest_listing` and the failed-run rule `_latest_run_of`.
+* `packages/debate_core/tests/application/test_landscape_staleness.py`: ac1's tests (the pinned
+  "changes nothing" test replaced by ruling 1's), and the condition's seven test functions.
 * `packages/debate_core/tests/application/test_landscape_run.py`: ac2's test through the run service.
 * `plan_specs/v1/e34-caselist-sync/t32-failed-run-reads-stale.yaml`: phase Succeeded.
 
@@ -118,7 +172,7 @@ tests; the file was restored from the commit after each):
 | `publish_pending` | a summary: publish, parse, search index or report pending a login | yes for a pull; never for `--publish-pending` (`caselists=()`) | clears when listed |
 | `incomplete` | a summary: a required stage succeeded, and parse, search_index, landscape, report or retention failed | yes | clears (Question 2) |
 | `failed`, from a summary | a download, import or publish stage failed. Select never records FAILED: it completes, is skipped when rate limited, or raises | yes for a pull (select had listed the archives); never for `--publish-pending` | **stale**, naming the failed stages |
-| `failed`, raised | `record_for_failure`: the pull raised. An expired caselist_token, a provider error while listing, the run lock (`SyncRunInProgress`), `NoCaselistsConfigured`, `FullArchiveRefused`, a store refused (`LocalStoreAccessDenied`, `ManifestsNotWritable`), the API not turned on, a bucket that cannot be built (v1-e34-t22), or any bug. `stages=()`, `deferred_by_caselist={}`, `error_class` set | no | changes nothing (Question 1) |
+| `failed`, raised | `record_for_failure`: the pull raised. An expired caselist_token, a provider error while listing, the run lock (`SyncRunInProgress`), `NoCaselistsConfigured`, `FullArchiveRefused`, a store refused (`LocalStoreAccessDenied`, `ManifestsNotWritable`), the API not turned on, a bucket that cannot be built (v1-e34-t22), or any bug. `stages=()`, `deferred_by_caselist={}`, `error_class` set | no, but its `caselists` names the slugs it was asked for (`[]` for `--publish-pending`, `caselist_pull.py:192`) | **stale** when `caselists` names it and it is later than the latest listing, "stopped before its stages (`<class>`)"; a `SyncRunInProgress` refusal changes nothing (ruling 1) |
 
 **What a killed run leaves behind.** `SyncRunMonitor.watch` writes a record only when the pull
 returns or raises an `Exception`. A run killed by SIGKILL or by launchd's SIGTERM (no handler is
@@ -147,6 +201,17 @@ record. A failed run is a run-level failure: the record does not say which casel
 failed, so a failed run over two caselists makes both stale
 (`test_a_failed_run_of_both_caselists_makes_each_stale`).
 
+**A run that stopped on an error (ruling 1).** The rule reads the latest record that either listed
+the caselist or stopped naming it. "Stopped naming it" means outcome `failed`, `error_class` set,
+not `SyncRunInProgress`, and the caselist among `caselists`. A raised record lists no archive, so
+the two kinds never overlap. When that record is a stopped run, the banner says "The latest sync
+run of this caselist, `<run id>`, stopped before its stages (`<class>`)." It ends at "stages."
+when the class is not an identifier (`str.isidentifier()`). `error_message` is never read, even
+though a `DomainError`'s message is already redacted. The cap-bound count still comes from
+`latest_listing` alone, so a stopped run after a cap-bound run leaves the backlog in the banner
+beside the stopped run. A `--publish-pending` run that raises passes no caselists, so it never
+counts, as before.
+
 **The reason text.** The banner gains one sentence: "The latest sync run of this caselist,
 `<run id>`, failed at its `<stage>` stage." With two stages it says "at its download and publish
 stages", and with no failed stage recorded just "failed". The run id is held by the schema to
@@ -169,50 +234,16 @@ same, and its tests (`test_a_cap_bound_run_makes_a_fresh_snapshot_stale`,
 
 ## Questions for the PM
 
-```text
-PM questions from v1-e34-t32-failed-run-reads-stale (failed run reads stale). Code is committed;
-these do not block the criteria, which pass as written.
+Answered by the PM, 2026-10-24 (see PM review):
 
-1. A run that RAISED is not covered by the rule as written.
-   Facts: SyncRunMonitor.watch records a pull that raised with record_for_failure: outcome
-   "failed", stages=(), deferred_by_caselist={}, caselists = the requested slugs, error_class set.
-   Causes: expired caselist_token (policy E34 gate 5), a provider error while listing (anything
-   but rate limiting), the run lock (SyncRunInProgress), a refused start (API not turned on,
-   bucket adapter unbuildable), a store refused, FullArchiveRefused, or a bug. Such a run listed
-   no archive and has no stage, so "the latest run that listed the caselist" passes over it and
-   the reason "run id and failed stage" has no stage to name. Today an expired-token weekly run
-   still reads Current until the snapshot ages out (pinned by
-   test_a_run_that_stopped_on_an_error_before_listing_changes_nothing).
-   Options:
-   (a) Keep the rule as written. Notifications already announce these runs.
-   (b) Also count a raised run whose `caselists` names the caselist, except a SyncRunInProgress
-       refusal (the run holding the lock is the one that counts). Reason: "<run id> stopped
-       before its stages (<error class>)". The error class is a class name, never a message.
-       About 15 lines and 3 tests, in this module only.
-   (c) As (b), with the lock refusal counting too.
-   Recommendation: (b). An expired token is the likeliest way a weekly run "fails outright", which
-   is the case the spec's description opens with. The class name is safe (no message is read), and
-   excluding the lock keeps a harmless second launch from flipping the report.
+1. A run that raised: **(b)**, implemented as the condition (above).
+2. `incomplete` runs: **keep**. They do not read stale.
+3. The E39 freshness line: the PM amends the description in the next batch.
+4. The CLI's status line and JSON: folded into `v1-e32-t12-landscape-cli-seven-files`, with no new
+   task. It prints `FailedSyncRun.sentence()`, and the JSON gains the run id and stages, or the error
+   class (`FailedSyncRun.error_class`).
 
-2. An "incomplete" run (required stages fine; parse, search index, landscape, report or retention
-   failed) does not count as failed. That is the run log's own definition of failure. A landscape
-   report built after a failed parse can trail the newest manifest, but that is about which
-   snapshot the report reads, not this hook's rule.
-   Recommendation: keep it so; reply only if incomplete should read stale.
-
-3. FYI, a Deviation: the spec names "the E39 pilot's freshness line" as a reader of the hook.
-   Nothing in the repo reads LandscapeStalenessCheck except the landscape report, its run service
-   and two scripts. I added no reader. Recommendation: amend the description, or file the reader
-   with E39 when it is wanted.
-
-4. FYI, follow-up: `debate-research landscape report` prints its own status line from the hook's
-   fields (debate_cli/commands/landscape.py:434), "STALE: newest snapshot ..., N day(s) old, 0
-   archive(s) awaiting download.", and its JSON has no failed-run field. For a failed run it says
-   STALE without the reason. debate_cli is outside this task's packages. Recommendation: a small
-   E34 or E32 task to print FailedSyncRun.sentence() there.
-
-Reply with: 1 (a|b|c), 2 (keep|stale), and whether 3 and 4 become spec edits or tasks.
-```
+No open questions.
 
 ## Operator follow-ups
 
@@ -220,10 +251,8 @@ None. The affected set (156 files) runs in the PR's `ci` check (agreement 10).
 
 ## Follow-up work
 
-* The CLI's `landscape report` status line and JSON should name the failed run (Question 4;
-  `packages/debate_cli`, E32 or E34).
-* If Question 1 is answered (b) or (c), a run that raised before listing gets a rule of its own,
-  in `landscape_staleness.py` only.
+* The CLI's `landscape report` status line and JSON name the failed run: folded by the PM into
+  `v1-e32-t12-landscape-cli-seven-files` (ruling 4).
 
 ## PM review
 

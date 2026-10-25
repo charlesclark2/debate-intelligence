@@ -7,9 +7,11 @@ first time, or after a taxonomy, overrides or actor-list edit, without the rest 
 the caselist's parsed sources on the topic through the snapshot (the newest weekly one unless `--snapshot`
 names one), as `v1-e32-t02`'s classifier does, and reads every one from its own bytes in this machine's blob
 store, parsing only what the cache does not hold. It writes the cache and nothing else, and prints counts
-only: sources, cache hits, sources parsed, refused and unread, each kind's texts found and placed, and the
-CP texts the actor guard kept and refused in negative files. With `--quote` it also reads again the texts a
-report would quote, in memory, and counts them; it never prints one.
+only: sources, cache hits, sources parsed, refused and unread, each kind's texts found and placed, the
+CP texts the actor guard kept and refused in negative files, and the planks' counts (`v1-e32-t16`). With
+`--quote` it also reads again the texts a report would quote, in memory, and counts them: the planks under
+a CP in negative files, the groups they make by the advantage they solve and those withheld for naming a
+school, and the planks naming each advantage alias in their own words. It never prints a text.
 
 It exits 1 when it read no source, so an empty store never looks like a run. The first run over hspolicy26
 parses every on-topic file: about 0.25 s of a worker's time each, so about 2 minutes over 8 idle workers;
@@ -25,6 +27,7 @@ import asyncio
 import os
 import sys
 import time
+from collections import Counter
 from collections.abc import Sequence
 from datetime import date
 from pathlib import Path
@@ -41,8 +44,17 @@ from debate_core.application.caselist.suppression import RecordedSuppressionList
 from debate_core.application.errors import DomainError
 from debate_core.application.landscape_seeding import read_seed_sources
 from debate_core.application.landscape_staleness import LandscapeStalenessCheck
-from debate_core.arguments.landscape.analytic_texts import AnalyticTextRules
+from debate_core.arguments.landscape.analytic_texts import (
+    AnalyticTextRules,
+    advantage_aliases_in,
+    commonest_text,
+    names_a_school,
+)
+from debate_core.arguments.landscape.matcher import tag_words
+from debate_core.arguments.landscape.source_headings import CaselistNames
 from debate_core.domain.caselist import Side
+from debate_core.domain.landscape import PositionKind
+from debate_core.domain.landscape_classification import PositionRole
 from debate_core.domain.landscape_texts import AnalyticTextKind, TextForm
 from debate_core.integrations.docx_parser import DebateDocxParser
 from debate_core.integrations.landscape.analytic_text_store import LocalAnalyticTextStore
@@ -119,10 +131,11 @@ async def _read(arguments: argparse.Namespace) -> int:
         if one.sha256 in on_topic
     ]
     taxonomy = repository.taxonomy(topic)
+    rules = AnalyticTextRules(taxonomy, repository.overrides(topic), repository.cp_text_actors(topic))
     run = await service.read(
         arguments.caselist,
         documents,
-        AnalyticTextRules(taxonomy, repository.overrides(topic), repository.cp_text_actors(topic)),
+        rules,
         own_names={
             sha: tuple(name for team in source.teams for name in team.names if name.strip())
             for sha, source in on_topic.items()
@@ -149,12 +162,69 @@ async def _read(arguments: argparse.Namespace) -> int:
     )
     refused = sum(count for sha, count in run.refused_by_guard.items() if sha in negative)
     print(f"CP texts by place in negative files: {kept} kept by the actor guard, {refused} refused.")
+    planks = {
+        (sha, one.element_index): one
+        for sha, found in run.readings.items()
+        for one in found
+        if one.kind is AnalyticTextKind.CP_PLANK
+    }
+    other = sum(one.solves_other_words for one in planks.values())
+    print(
+        f"CP planks: {counts.plank_labels} alias-only labels, {counts.planks_refused_by_guard} list planks "
+        f"refused with their CP text, {other} cards under a plank saying solves with other words."
+    )
     if arguments.quote:
         quoted = await service.quote(arguments.caselist, documents, run, taxonomy)
         sources = "source" if quoted.sources == 1 else "sources"
         print(
             f"Quoted: {quoted.sources} {sources} read again for {quoted.wanted} texts; "
             f"{len(quoted.texts)} read as they were read, {quoted.mismatched} not, {quoted.unread} unread."
+        )
+        schools = CaselistNames(reading.caselist_names)
+        by_cp: dict[str, dict[str, tuple[set[str], list[tuple[str, int, str]]]]] = {}
+        for (sha, index), one in planks.items():
+            if sha not in negative or one.position_id is None or one.role is not PositionRole.READS:
+                continue
+            if taxonomy.resolve(one.position_id).kind is not PositionKind.CP or one.digest is None:
+                continue
+            solves, copies = by_cp.setdefault(one.position_id, {}).setdefault(one.digest, (set(), []))
+            solves.update(one.solves)
+            if (text := quoted.texts.get((sha, index))) is not None:
+                copies.append((sha, index, text))
+        per_cp: list[tuple[str, int, int, int]] = []
+        for position_id, by_digest in sorted(by_cp.items()):
+            withheld = {
+                digest
+                for digest, (_, copies) in by_digest.items()
+                if copies and names_a_school(commonest_text(copies), schools)
+            }
+            groups = {
+                group
+                for digest, (solves, copies) in by_digest.items()
+                if copies and digest not in withheld
+                for group in sorted(solves) or [None]
+            }
+            per_cp.append((position_id, len(by_digest), len(groups), len(withheld)))
+        print(
+            f"Planks under a CP in negative files: {sum(one[1] for one in per_cp)} under {len(per_cp)} CPs, "
+            f"in {sum(one[2] for one in per_cp)} groups by what they solve, "
+            f"{sum(one[3] for one in per_cp)} withheld for naming a school."
+        )
+        for position_id, count, groups, withheld in per_cp:
+            print(f"  {position_id}: {count} planks, {groups} groups, {withheld} withheld")
+        by_alias = Counter(
+            alias
+            for key, text in quoted.texts.items()
+            if key in planks
+            for alias in advantage_aliases_in(
+                schools.without_schools(tag_words(text)), rules.advantage_aliases
+            )
+        )
+        ranked = sorted(by_alias.items(), key=lambda item: (-item[1], item[0]))
+        print(
+            "Planks naming an advantage alias in their own words: "
+            + (", ".join(f"{alias} {count}" for alias, count in ranked) or "none")
+            + "."
         )
     print(f"Runtime {time.perf_counter() - started:.1f} s.")
     return 0

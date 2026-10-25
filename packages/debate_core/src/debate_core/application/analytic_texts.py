@@ -16,9 +16,9 @@ under a placeholder path. One run:
    placed under its position, never the text, and writes the cache back when anything changed.
 
 Then, for the report, :meth:`AnalyticTextService.quote` reads again, in memory, only the sources holding a
-CP text, alternative or role of the ballot placed under a position of its kind, and returns each such text
-word for word when its paragraph still hashes to the digest kept for it. Nothing it reads is written.
-Overviews are never read again: they are counted only.
+CP text, plank, alternative or role of the ballot placed under a position of its kind, and returns each
+such text word for word when its paragraph still hashes to the digest kept for it. Nothing it reads is
+written. Overviews are never read again: they are counted only.
 
 A source the parser refused is cached as unreadable; one whose bytes could not be read, or whose worker
 failed, is not cached, so the next run tries it again.
@@ -82,6 +82,10 @@ class AnalyticTextCounts:
     """Of those, the readings placed under a position, by kind."""
     refused_by_guard: int
     cache_written: bool
+    planks_refused_by_guard: int = 0
+    """List planks left out because their CP text fails the actor guard (`v1-e32-t16`)."""
+    plank_labels: int = 0
+    """List paragraphs that are only an advantage's alias, naming the plank after them."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,6 +96,8 @@ class AnalyticTextRun:
     """What was read of each readable source, by digest."""
     refused_by_guard: dict[str, int] = field(repr=False)
     counts: AnalyticTextCounts
+    planks_refused_by_guard: dict[str, int] = field(default_factory=dict[str, int], repr=False)
+    plank_labels: dict[str, int] = field(default_factory=dict[str, int], repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -186,6 +192,8 @@ class AnalyticTextService:
                     readable=True,
                     readings=found.readings,
                     refused_by_guard=found.refused_by_guard,
+                    planks_refused_by_guard=found.planks_refused_by_guard,
+                    plank_labels=found.plank_labels,
                 )
             elif isinstance(result, ParseFailure):
                 written[sha] = CachedAnalyticTexts(
@@ -203,12 +211,20 @@ class AnalyticTextService:
         readable = {sha: held[sha] for sha in sorted(wanted) if sha in held and held[sha].readable}
         readings = {sha: entry.readings for sha, entry in readable.items()}
         refused = {sha: entry.refused_by_guard for sha, entry in readable.items() if entry.refused_by_guard}
+        planks_refused = {
+            sha: entry.planks_refused_by_guard
+            for sha, entry in readable.items()
+            if entry.planks_refused_by_guard
+        }
+        labels = {sha: entry.plank_labels for sha, entry in readable.items() if entry.plank_labels}
         every = [one for found in readings.values() for one in found]
         return AnalyticTextRun(
             parser_version=parser_version,
             rules_digest=rules.digest,
             readings=readings,
             refused_by_guard=refused,
+            planks_refused_by_guard=planks_refused,
+            plank_labels=labels,
             counts=AnalyticTextCounts(
                 sources=len(wanted),
                 hits=sum(1 for sha in wanted if sha in cached),
@@ -225,6 +241,8 @@ class AnalyticTextService:
                 ),
                 refused_by_guard=sum(refused.values()),
                 cache_written=changed and self._writes,
+                planks_refused_by_guard=sum(planks_refused.values()),
+                plank_labels=sum(labels.values()),
             ),
         )
 
@@ -233,9 +251,9 @@ class AnalyticTextService:
     ) -> QuotedTextsRun:
         """Each text the report may quote, word for word, read again from its source and never written.
 
-        Only a CP text, alternative or role of the ballot placed under a position of its kind, READS, is
-        read again; an overview never is. A text is returned only when its paragraph still hashes to the
-        digest kept for it.
+        Only a CP text, a plank, an alternative or a role of the ballot placed under a position of its kind,
+        READS, is read again; an overview never is. A text is returned only when its paragraph still hashes
+        to the digest kept for it.
         """
         wanted = {
             sha: shown
@@ -303,6 +321,8 @@ class AnalyticTextService:
                 texts=quoted.texts,
                 caselist_names=reading.caselist_names,
                 refused_by_guard=run.refused_by_guard,
+                planks_refused_by_guard=run.planks_refused_by_guard,
+                plank_labels=run.plank_labels,
             ),
             read=run.counts,
             quoted=quoted,

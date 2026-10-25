@@ -7,9 +7,10 @@ were filed under, and finds none in the circuit-wide files; the school view name
 codes and nothing more, but the link to each team's openCaselist page (`v1-e32-t18`), which no
 circuit-wide file carries.
 
-report.md's affirmative sections, then its negative ones, then those of neither side (`v1-e32-t20`):
-`report_before_sides_together.md` is the golden report.md as it was before the reorder, byte for byte,
-and every section of the reordered report, golden and rendered, is held to its section there.
+report.md's affirmative sections, then its negative ones, then those of neither side (`v1-e32-t20`).
+The fixture of the report before that reorder, and the test that held every section of the reordered
+report to it, were removed by `v1-e32-t16` on the PM's ruling of 2026-10-25: the reorder was proven, and
+the golden report.md still pins every byte.
 """
 
 from __future__ import annotations
@@ -18,7 +19,6 @@ import csv
 import dataclasses
 import random
 import re
-from collections import Counter
 from datetime import date
 from pathlib import Path
 
@@ -58,7 +58,6 @@ REPO = Path(__file__).resolve().parents[5]
 FIXTURE = REPO / "tests" / "fixtures" / "landscape" / "synthetic_caselist"
 GOLDEN = REPO / "tests" / "fixtures" / "landscape" / "golden"
 TOPIC_CHANGE = REPO / "tests" / "fixtures" / "landscape" / "topic_change_caselist"
-BEFORE_SIDES_TOGETHER = REPO / "tests" / "fixtures" / "landscape" / "report_before_sides_together.md"
 FILES = (
     "report.md",
     "positions.csv",
@@ -524,33 +523,9 @@ def _heading(section: str) -> str:
     return section.split("\n", 1)[0]
 
 
-def _by_heading(sections: list[str]) -> dict[tuple[str, int], str]:
-    """Each section by its heading line, and which of the sections with that heading it is."""
-    seen: Counter[str] = Counter()
-    keyed: dict[tuple[str, int], str] = {}
-    for section in sections:
-        seen[_heading(section)] += 1
-        keyed[(_heading(section), seen[_heading(section)])] = section
-    return keyed
-
-
 def _anchor(heading: str) -> str:
     """A heading's link target as GitHub writes it: lower case, punctuation dropped, spaces as hyphens."""
     return re.sub(r"[^a-z0-9 _-]", "", heading.lower()).replace(" ", "-")
-
-
-@pytest.mark.parametrize("source", ["hand-written golden", "rendered"])
-def test_every_section_of_report_md_is_byte_identical_to_its_section_before_the_reorder(source: str) -> None:
-    """ac1: the reorder adds the contents list and the three parts' headings, and changes nothing else."""
-    before = _by_heading(_sections(BEFORE_SIDES_TOGETHER.read_text(encoding="utf-8")))
-    golden = (GOLDEN / "report.md").read_text(encoding="utf-8")
-    after = _sections(_bundle().files["report.md"] if source == "rendered" else golden)
-    added = [section for section in after if section in PARTS or _heading(section) == "## Contents"]
-    assert [_heading(section) for section in added] == ["## Contents", *PARTS]
-    kept = _by_heading([section for section in after if section not in added])
-    assert sorted(kept) == sorted(before)
-    for key, section in before.items():
-        assert kept[key] == section, f"{key[0]} (occurrence {key[1]}) changed"
 
 
 def test_report_md_reads_header_contents_affirmative_negative_then_neither_side() -> None:
@@ -565,6 +540,7 @@ def test_report_md_reads_header_contents_affirmative_negative_then_neither_side(
         "# Negative",
         "## Negative positions",
         "## Counterplan texts, alternatives and roles of the ballot",
+        "## Counterplan planks",
         "# Neither side",
         "## Overviews",
         "## New this week",

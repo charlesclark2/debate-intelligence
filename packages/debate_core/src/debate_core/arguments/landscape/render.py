@@ -81,7 +81,7 @@ from debate_core.domain.landscape_report import (
     TopCard,
 )
 from debate_core.domain.landscape_schools import SchoolRow, SchoolView
-from debate_core.domain.landscape_texts import QUOTED_KINDS, AnalyticTextKind, TextCoverage
+from debate_core.domain.landscape_texts import QUOTED_KINDS, AnalyticTextKind, CpPlanks, TextCoverage
 from debate_core.domain.landscape_trends import (
     WINDOW_DAYS,
     LandscapeTrends,
@@ -94,6 +94,7 @@ from debate_core.domain.search_source_links import NoTeamPage
 
 __all__ = [
     "IMPACT_CARD_COLUMNS",
+    "PLANK_TABLE_HEADER",
     "POSITION_COLUMNS",
     "SCHOOL_COLUMNS",
     "TOP_CARD_COLUMNS",
@@ -203,6 +204,8 @@ _METHOD_LABELS: Final = {
     PLAN_TEXT_METHOD: "The round's plan text names the aff",
     TEAM_CARRY_METHOD: "The team's other rounds name the aff",
 }
+PLANK_TABLE_HEADER: Final = "| Solves | Rank | Teams | Plank |"
+"""The header of a CP's plank table in report.md (`v1-e32-t16`), which the scan's section counts look for."""
 _TEXT_KINDS: Final = {
     AnalyticTextKind.CP_TEXT: (
         "Counterplan texts",
@@ -344,7 +347,11 @@ def render_markdown(report: LandscapeReport, trends: LandscapeTrends | None = No
     """
     parts = {
         "Affirmative": [*_positions_section(report, PositionSide.AFF), *_advantages_section(report)],
-        "Negative": [*_positions_section(report, PositionSide.NEG), *_texts_sections(report)],
+        "Negative": [
+            *_positions_section(report, PositionSide.NEG),
+            *_texts_sections(report),
+            *_planks_section(report),
+        ],
         "Neither side": [
             *_no_positions_section(report),
             *_positions_section(report, PositionSide.BOTH),
@@ -711,6 +718,47 @@ def _texts_sections(report: LandscapeReport) -> list[str]:
     return lines
 
 
+def _planks_section(report: LandscapeReport) -> list[str]:
+    """`v1-e32-t16`'s negative section, after the CP texts: each CP's planks by the advantage they solve."""
+    texts = report.texts
+    if texts is None:
+        return []
+    one = next(found for found in texts.coverage if found.kind is AnalyticTextKind.CP_PLANK)
+    lines = [
+        "## Counterplan planks",
+        "",
+        "A CP's planks, quoted as its texts above are (data-use policy 1.13), never beside a school or team "
+        "code. A CP text ending in a colon lists them in the paragraphs after it, up to the first card or "
+        "heading, and a later `should` analytic past the actor guard, or a paragraph opening `Plank 2:`, "
+        "`2.` or `Second,`, is one too. A plank solves each advantage its own words, a label just above it "
+        'or a card under it name by an alias; one naming none is "solves: not named", never a guess. Each '
+        f"CP shows, per advantage, the {texts.texts_per_position:,} planks the most teams read, and how many "
+        "more there are. A plank naming a school of the caselist is withheld.",
+        "",
+        f"Found: {one.labels:,} in {one.documents:,} files.",
+        "",
+        f"* Placed under a CP the team reads, and counted: {one.counted:,}.",
+        _not_placed(one),
+        "* Placed under another kind of position, as an answer, or in a round on the other side: "
+        f"{one.elsewhere:,}.",
+        f"* Left out because their CP text fails the actor guard: {one.refused_by_guard:,}.",
+        "* Labels naming the plank after them (a list paragraph that is only an advantage's alias): "
+        f"{one.plank_labels:,}.",
+        "* Cards under a plank saying `solves` with words no advantage's alias holds, counted and never "
+        f"shown: {one.solves_other_words:,}.",
+    ]
+    if one.withheld_texts:
+        lines.append(f"* Withheld for naming a school: {_count(one.withheld_texts, 'plank')}.")
+    if one.unread:
+        lines.append(f"* Could not be read again as they were read: {one.unread:,}.")
+    lines.append("")
+    if not texts.planks:
+        return [*lines, "No plank was placed under a CP the team reads.", ""]
+    for planks in texts.planks:
+        lines += [f"**{_cell(planks.label)}** (`{planks.position_id}`)", "", *_planks_table(planks)]
+    return lines
+
+
 def _overviews_section(report: LandscapeReport) -> list[str]:
     """`v1-e32-t11`'s overviews: counted on each side, never quoted."""
     texts = report.texts
@@ -740,6 +788,32 @@ def _overviews_section(report: LandscapeReport) -> list[str]:
         for one in texts.overviews
     ]
     return [*lines, ""]
+
+
+def _planks_table(planks: CpPlanks) -> list[str]:
+    """One CP's planks under its texts: a row per plank shown, by the advantage it solves."""
+    teams = _count(planks.teams, "team")
+    summary = (
+        f"Its planks: {planks.planks:,}, read by {teams}, by the advantage each solves. "
+        "A plank naming two advantages is under each and counted once."
+    )
+    if planks.withheld:
+        verb = "is" if planks.withheld == 1 else "are"
+        summary += f" {planks.withheld:,} {verb} withheld for naming a school."
+    lines = [summary, ""]
+    if not planks.groups:
+        return [*lines, "None of them can be shown.", ""]
+    lines += [PLANK_TABLE_HEADER, "|---|---|---|---|"]
+    rest: list[str] = []
+    for group in planks.groups:
+        solves = _cell(group.label) if group.label is not None else "not named"
+        lines += [f"| {solves} | {row.rank} | {row.teams:,} | {_cell(row.text)} |" for row in group.planks]
+        if group.more is not None:
+            noun = "plank" if group.more.texts == 1 else "planks"
+            more_teams = _count(group.more.teams, "team")
+            rest.append(f"* {solves}: and {group.more.texts:,} more {noun}, read by {more_teams}.")
+    lines.append("")
+    return [*lines, *rest, ""] if rest else lines
 
 
 def _not_placed(coverage: TextCoverage) -> str:

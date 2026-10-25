@@ -58,6 +58,7 @@ from pathlib import Path
 from typing import Final, cast
 
 from debate_core.application.caselist.path_parser import UNKNOWN_SCHOOL, UNKNOWN_TEAM_CODE
+from debate_core.arguments.landscape.render import PLANK_TABLE_HEADER
 from debate_core.domain.caselist import Disclosure
 
 __all__ = [
@@ -67,6 +68,8 @@ __all__ = [
     "ScanAcceptanceLog",
     "ScanHit",
     "ScanKind",
+    "SectionHits",
+    "hits_by_section",
     "hits_digest",
     "pending_hits",
     "scan_report",
@@ -147,6 +150,63 @@ def _terms(disclosures: Iterable[Disclosure]) -> list[_Term]:
     ]
     terms += [_Term(ScanKind.PATH, path, None, path.casefold()) for path in sorted(paths)]
     return terms
+
+
+_SECTIONED_FILE: Final = "report.md"
+"""The one file counted by section: the others are counted whole; the school view's headings are schools."""
+
+
+@dataclass(frozen=True, slots=True)
+class SectionHits:
+    """How many of the scan's hits of one kind are in one section of one file: a count, never a term."""
+
+    file: str
+    section: str
+    """report.md's nearest heading over the hits, `: plank table` added inside a CP's plank table
+    (`(top)` above every heading); `(whole file)` in every other file."""
+    kind: ScanKind
+    hits: int
+    not_yet_accepted: int
+
+
+def hits_by_section(
+    hits: Sequence[ScanHit], pending: Collection[ScanHit], files: Mapping[str, str]
+) -> tuple[SectionHits, ...]:
+    """The hits counted by file, report.md's section and kind, in that order (`v1-e32-t16`).
+
+    What the dry run reports of its scan: where the hits are, never what they name.
+    """
+    counted: dict[tuple[str, tuple[int, int], str, ScanKind], list[int]] = {}
+    lines = {name: text.splitlines() for name, text in files.items() if name == _SECTIONED_FILE}
+    for hit in hits:
+        place, section = (
+            _section(lines[hit.file], hit.line_number) if hit.file in lines else ((0, 0), "(whole file)")
+        )
+        found = counted.setdefault((hit.file, place, section, hit.kind), [0, 0])
+        found[0] += 1
+        found[1] += hit in pending
+    kinds = list(ScanKind)
+    return tuple(
+        SectionHits(file=file, section=section, kind=kind, hits=total, not_yet_accepted=waiting)
+        for (file, _, section, kind), (total, waiting) in sorted(
+            counted.items(), key=lambda item: (item[0][0], item[0][1], kinds.index(item[0][3]))
+        )
+    )
+
+
+def _section(lines: Sequence[str], number: int) -> tuple[tuple[int, int], str]:
+    """The place and name of the section holding line `number` (counted from 1) of report.md."""
+    heading, name = 0, "(top)"
+    for index in range(min(number, len(lines)) - 1, -1, -1):
+        if lines[index].startswith("#"):
+            heading, name = index + 1, lines[index].lstrip("#").strip()
+            break
+    index = number - 1
+    while 0 <= index < len(lines) and lines[index].startswith("|"):
+        if lines[index] == PLANK_TABLE_HEADER:
+            return (heading, index + 1), f"{name}: plank table"
+        index -= 1
+    return (heading, 0), name
 
 
 def scan_report(

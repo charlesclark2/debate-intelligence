@@ -35,7 +35,10 @@ spec:
     operator block.
   priority: 2
   constraints:
-    packages: [debate_core.application, debate_core.arguments, debate_core.domain, tests/fixtures/landscape, packages/debate_core/tests, docs/guides, debate_core.integrations, config/landscape, tests/config, scripts, tests/scripts]
+    # PM ruling 2026-10-25, from the session's question after the build: the fixture's loader
+    # (read_synthetic_analytic_texts) reads a plank's stem, solves and counts for the golden, as for
+    # v1-e32-t11.
+    packages: [debate_core.application, debate_core.arguments, debate_core.domain, debate_core.testing, tests/fixtures/landscape, packages/debate_core/tests, docs/guides, debate_core.integrations, config/landscape, tests/config, scripts, tests/scripts]
     forbidden:
       - A school, team code or debater's name in a circuit-wide file, log or commit
       - Card text, plan or counterplan text in a committed file or fixture (synthetic values only)
@@ -45,6 +48,28 @@ spec:
     - kind: TaskRef
       name: v1-e32-t11-negative-analytic-texts
       relation: dependsOn
+  # PM rulings on ac1's counts, 2026-10-25 (session report, "The PM's rulings, applied"):
+  # 1. The rule as written, lists included. A list is a CP text ending in a colon; its planks are the
+  #    paragraphs that follow in its block up to the first card or heading: analytic, undertag or
+  #    unstyled, not kept, at most 60 words. Separate planks are further should analytics past the
+  #    guard, or paragraphs opening "Plank 2:", "2." or "Second,". (a): a list paragraph that is only
+  #    an advantage's alias is a label naming the plank after it, not a plank; counted.
+  # 2. (a): a list plank passes the actor guard through its stem, which must pass it itself; a
+  #    separate plank on its own words or its label. A mutant where a list plank under a stem that
+  #    fails the guard still shows.
+  # 3. (a): advantages only, by any alias, one-word aliases included, as whole phrases; every
+  #    advantage a plank names is listed. Plans are not named. "solves <other words>" is never shown
+  #    (it would quote a team's heading) and is counted. The report gives the counts by alias.
+  # 4. (b): within each CP, planks grouped by the advantage they solve, the top 3 distinct planks per
+  #    advantage, then "and N more planks, read by M teams" (M distinct teams, as in v1-e32-t15), with
+  #    "solves: not named" as one more group under the same cap. A plank naming two advantages appears
+  #    under each and counts once per CP in the totals. The same rule for states-cp and the other
+  #    multi-plank CPs.
+  # Also: planks are CP texts under policy 1.13 (report.md only, never beside a school or team code, a
+  # plank naming a school withheld and counted); the stem shown once above its CP's plank groups, as
+  # t11 shows it; hand-written goldens shown failing first; mutants on the list boundary (past the first
+  # card, the 60-word cap), the alias-only label read as a plank, a partial-word alias match, and a
+  # plank double-counted in the totals; the cache refill as a guarded operator block in the report.
   acceptanceCriteria:
     - id: ac1
       description: >-
@@ -62,7 +87,7 @@ spec:
         The operator's refill of the analytic-text cache and a dry run without --publish on
         hspolicy26 are recorded, with the scan's hits by section (operator).
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

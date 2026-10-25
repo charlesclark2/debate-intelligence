@@ -1,0 +1,131 @@
+#!/usr/bin/env python3
+"""A landscape report's dry run, printing its scan's hits by section and counts only (`v1-e32-t16`).
+
+`debate-research landscape report --caselist <caselist> --dry-run` prints each scan hit with its line,
+for the operator's terminal only, and writes nothing, so its report.md is not on disk for anyone to say
+which section a hit is in. This runs the same landscape service, built by the CLI's own container, as a
+dry run without `--publish`, and prints only counts:
+
+* that nothing was written, and how many files a publish would upload;
+* the CPs' planks: how many, under how many CPs, in how many groups by the advantage they solve, how many
+  withheld for naming a school, and where every plank found went;
+* the scan's hits by file, report.md's section (its nearest heading, and each CP's plank table apart) and
+  kind, with how many are not yet accepted, and the digest a publish would ask for.
+
+It never prints a hit's term or line, a text or a plank. Read the CLI's dry run in the terminal for those.
+
+    uv run python scripts/landscape_dry_run_by_section.py --caselist hspolicy26
+"""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import sys
+import time
+from collections.abc import Sequence
+from datetime import date
+from pathlib import Path
+
+from debate_core.application.errors import DomainError
+from debate_core.application.landscape_run import LandscapeRunRequest, LandscapeRunResult
+from debate_core.application.landscape_scan import hits_by_section
+from debate_core.domain.landscape_texts import AnalyticTextKind
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_CONFIG_DIR = REPO_ROOT / "config" / "landscape"
+PLANK_TABLE: str = ": plank table"
+
+
+def report_lines(result: LandscapeRunResult) -> list[str]:
+    """What the dry run prints: counts only."""
+    planned = len(result.publish.planned) if result.publish is not None else 0
+    lines = [
+        f"Dry run of {result.caselist} through {result.snapshot.isoformat()}, taxonomy "
+        f"{result.taxonomy_version}: {'files written' if result.written else 'nothing written'}; "
+        f"{planned} files planned.",
+    ]
+    texts = result.report.texts
+    if texts is None:
+        lines.append("Planks: no analytic texts were read.")
+    else:
+        planks = texts.planks
+        groups = sum(len(one.groups) for one in planks)
+        shown = sum(len(group.planks) for one in planks for group in one.groups)
+        total = sum(one.planks for one in planks)
+        withheld = sum(one.withheld for one in planks)
+        lines.append(
+            f"Planks: {total} under {len(planks)} CPs, in {groups} groups by what they solve, {shown} rows "
+            f"shown, {withheld} withheld for naming a school."
+        )
+        lines += [
+            f"  {one.position_id}: {one.planks} planks, {one.teams} teams, {len(one.groups)} groups, "
+            f"{one.withheld} withheld"
+            for one in planks
+        ]
+        found = next(one for one in texts.coverage if one.kind is AnalyticTextKind.CP_PLANK)
+        lines.append(
+            f"Planks found: {found.labels} in {found.documents} files; {found.counted} counted, "
+            f"{found.elsewhere} elsewhere, {found.headings_place_nothing} under headings that place nothing, "
+            f"{found.no_heading} under no heading; {found.refused_by_guard} refused with their CP text, "
+            f"{found.plank_labels} alias-only labels, {found.solves_other_words} cards saying solves with "
+            f"other words, {found.unread} not read again."
+        )
+    scan = result.scan
+    lines.append(
+        f"Scan: {len(scan.hits)} hits, {len(scan.pending)} not yet accepted"
+        + (f" (digest {scan.digest})." if scan.pending else ".")
+    )
+    sections = hits_by_section(scan.hits, scan.pending, result.bundle_files)
+    lines += [
+        f"  {one.file} | {one.section} | {one.kind.value}: {one.hits} "
+        f"({one.not_yet_accepted} not yet accepted)"
+        for one in sections
+    ]
+    in_planks = sum(one.hits for one in sections if one.section.endswith(PLANK_TABLE))
+    lines.append(f"Hits in report.md's plank tables: {in_planks}.")
+    return lines
+
+
+async def _run(arguments: argparse.Namespace) -> int:
+    started = time.perf_counter()
+    # Imported here: the CLI's container is the one place the landscape service is wired.
+    from debate_cli.build_info import settings_loader
+    from debate_cli.container import ServiceContainer, validating_routing
+
+    services = ServiceContainer(settings_loader=validating_routing(settings_loader()))
+    service = services.landscape_run(config_dir=arguments.config_dir, with_bucket=False)
+    result = await service.run(
+        LandscapeRunRequest(caselist=arguments.caselist, snapshot=arguments.snapshot, dry_run=True)
+    )
+    if result.written:
+        print("FAILED: the dry run wrote its files.", file=sys.stderr)
+        return 1
+    for line in report_lines(result):
+        print(line)
+    print(f"Runtime {time.perf_counter() - started:.1f} s.")
+    return 0
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
+    parser.add_argument("--caselist", required=True, help="The caselist slug.")
+    parser.add_argument(
+        "--snapshot", type=date.fromisoformat, help="YYYY-MM-DD. Default: the newest weekly snapshot."
+    )
+    parser.add_argument(
+        "--config-dir",
+        type=Path,
+        default=DEFAULT_CONFIG_DIR,
+        help="The directory holding topics.yaml. Default: config/landscape.",
+    )
+    arguments = parser.parse_args(argv)
+    try:
+        return asyncio.run(_run(arguments))
+    except (DomainError, ValueError, OSError) as error:
+        print(f"Refused: {type(error).__name__}: {error}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

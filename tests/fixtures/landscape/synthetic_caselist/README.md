@@ -186,7 +186,8 @@ by hand from it. Through 2026-09-15:
   caselist: it is counted and not shown.
 * **A CP no card counts still shows its text.** `b3`'s Courts CP text, though `courts-cp` has no row.
 * **Placed elsewhere:** `b2`'s text under the Midterms DA, and `a6`'s copy of the first text, in a
-  round on the other side. **Not placed:** `b4`'s under headings that place nothing, `b8`'s under none.
+  round on the other side. **Not placed:** `b4`'s under headings that place nothing, `b8`'s and `b6`'s
+  labelled text with no actor (paragraph 50, whose list the guard refuses, below) under none.
   **The actor guard** left out 2 paragraphs of `b6` (and 5 of `b9`, out of range).
 * **The alternatives.** The first is in `b2` (QQ), `b8` (KK) and `b7` (VV), whose round has no side
   and so is not the other side: 3 teams. `a1`'s copy answers the K. `b4`'s two are under no heading and
@@ -196,3 +197,36 @@ by hand from it. Through 2026-09-15:
   `a6` (JJ) on the affirmative, so 2 teams, 1 aff and 2 neg; the Costs advantage's in `a3` (VV); the
   States CP's in `b5` (ZZ). `a1`'s answers the Spending DA; `b3`'s and `b8`'s are not placed.
 
+## Planks (`v1-e32-t16`)
+
+`analytic_texts.json` also holds what `v1-e32-t16`'s reader would keep of the States CP's planks: each
+plank's CP text (`stem`) and the advantages it solves. The golden report's planks under the States CP
+were worked out by hand from it, through 2026-09-15. The planks, by their words, with the files and teams
+holding each where they count:
+
+| Plank | Files (teams) | Teams | Solves |
+|---|---|---|---|
+| `Expand sample clinics to cut costs.` | `b1` (YY, JJ), `b6` (WW), `b8` (KK, its copy not read again) | 4 | Costs |
+| `Cap sample drug prices to cut costs and spur innovation.` | `b2` (QQ), `b5` (ZZ, in lower case after `Second,`), `b6` (WW) | 3 | Costs, Innovation |
+| `The fifty states should also cap sample premiums.` | `b3` (WW), `b4` (YY) | 2 | Costs |
+| `The fifty states should cap sample hospital costs.` | `b2` (QQ) | 1 | Costs |
+| `Fund a sample research prize.` | `b6` (WW), after the label `Innovation` | 1 | Innovation |
+| `Publish a sample price list.` | `b1` (YY, JJ), `b6` (WW) | 3 | not named |
+| `Hire sample navigators.` | `b4` (YY) | 1 | not named |
+| `Ashgrove Fictional should host a sample pilot to cut costs and spur innovation.` | `b5` (ZZ) | 1 | Costs, Innovation; withheld |
+
+* **`b6`'s second CP text ends in a colon** and lists four planks (paragraphs 20 to 24), one of them
+  after a paragraph that is only an advantage's alias (21). The others are separate planks, labelled
+  (`Plank 2:`, `2.`, `Second,`) or `should` analytics past the guard.
+* **Grouped by what they solve,** the top 3 per advantage: Costs shows the first three by teams (4, 3
+  and 2), then 1 more plank read by 1 team (QQ). Innovation shows 3 and 1. "not named" shows 3 and 1.
+  `b5`'s plank naming a school names both advantages, and is withheld from both and counted once.
+  Costs comes first, with 6 teams (YY, JJ, WW, KK, QQ, ZZ)
+  against Innovation's 3 (QQ, ZZ, WW); "not named" is always last.
+* **The totals count a plank once:** 8 distinct planks, the one naming both advantages once, read by 6
+  teams, 1 of the planks withheld.
+* **Where the 16 planks in range went:** 14 counted. `b8`'s plank under its text under no heading is
+  not placed. `a6`'s copy of the first plank, in a round on the other side, is placed elsewhere, and so
+  its card saying `solves` with other words is not counted. `b2`'s second plank has such a card: 1.
+* **The guard and the labels:** `b6`'s labelled text with no actor (paragraph 50) has 2 list planks the
+  guard refuses, and `b6` 1 alias-only label. `b9`'s plank, label and refusals are out of range.

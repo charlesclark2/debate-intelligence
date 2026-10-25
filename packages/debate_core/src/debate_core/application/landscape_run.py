@@ -49,7 +49,7 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import os
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from enum import StrEnum
@@ -333,6 +333,9 @@ class LandscapeRunResult:
     """The taxonomy the report counted under, for a reader of :attr:`report` (`files suggest`)."""
     cards: tuple[LandscapeCard, ...] = field(default=(), repr=False)
     """Every card the report ranked from, with its cluster and its headings as the matcher reads them."""
+    bundle_files: Mapping[str, str] = field(default_factory=dict[str, str], repr=False)
+    """The bundle's files as rendered, by name: what the scan read, in memory, written or not. A dry run's
+    scan is counted by section from them (`v1-e32-t16`); they are never logged."""
 
     @property
     def model_calls(self) -> int:
@@ -538,6 +541,7 @@ class LandscapeRunService:
             analytic_texts=texts,
             taxonomy=taxonomy,
             cards=cards,
+            bundle_files={name: bundle.files[name] for name in BUNDLE_FILES},
         )
 
     async def _snapshot(self, caselist: str, asked: date | None) -> date:

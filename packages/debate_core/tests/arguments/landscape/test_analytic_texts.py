@@ -181,10 +181,16 @@ def test_the_first_should_analytic_of_a_block_under_a_placed_cp_is_its_text_by_p
         p(4, BLOCK, "Solvency", "States CP"),
         p(5, ANALYTIC, CONGRESS, "States CP", "Solvency"),
     )
-    assert found.readings == (
+    # The block's second `should` analytic, past the guard, is the first text's plank (v1-e32-t16).
+    assert [one for one in found.readings if one.kind is CP] == [
         reading(CP, TextForm.BY_PLACE, 2, 2, ANALYTIC, FIFTY_STATES, "states-cp"),
         reading(CP, TextForm.BY_PLACE, 5, 5, ANALYTIC, CONGRESS, "states-cp"),
-    )
+    ]
+    assert [
+        (one.form, one.element_index, one.stem_element_index)
+        for one in found.readings
+        if one.kind is AnalyticTextKind.CP_PLANK
+    ] == [(TextForm.SEPARATE, 3, 2)]
     assert found.refused_by_guard == 0
 
 

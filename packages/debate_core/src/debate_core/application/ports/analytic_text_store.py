@@ -46,6 +46,12 @@ class CachedAnalyticTexts(DomainModel):
     readable: bool = Field(description="False when the parser refused the source.")
     readings: tuple[AnalyticTextReading, ...] = ()
     refused_by_guard: int = Field(default=0, ge=0)
+    planks_refused_by_guard: int = Field(
+        default=0, ge=0, description="List planks left out because their CP text fails the actor guard."
+    )
+    plank_labels: int = Field(
+        default=0, ge=0, description="List paragraphs that are only an advantage's alias (`v1-e32-t16`)."
+    )
 
     @property
     def key(self) -> AnalyticTextKey:

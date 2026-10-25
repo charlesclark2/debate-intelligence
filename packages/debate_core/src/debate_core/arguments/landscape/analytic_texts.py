@@ -93,9 +93,13 @@ __all__ = [
     "MAX_WORDS_BEFORE_SHOULD",
     "OVERVIEW_WORDS",
     "ROLE_OF_THE_BALLOT_LABELS",
+    "MAX_PLANK_WORDS",
     "AnalyticTextRules",
     "CounterplanActors",
     "Placement",
+    "advantage_aliases_in",
+    "commonest_text",
+    "plank_words",
     "SectionParagraph",
     "SourceParagraphs",
     "SourceTexts",
@@ -136,7 +140,9 @@ MAX_LABEL_WORDS: Final = 8
 MAX_WORDS_BEFORE_SHOULD: Final = 12
 """The actor guard (the PM's ruling 1 of 2026-10-24)."""
 MAX_BY_PLACE_WORDS: Final = 120
-_RULE_VERSION: Final = "analytic-texts-1"
+MAX_PLANK_WORDS: Final = 60
+"""A list plank's limit (the PM's ruling 1 of 2026-10-25)."""
+_RULE_VERSION: Final = "analytic-texts-2"
 """Bumped when how a text is found, read or placed changes, so a cached reading is read again."""
 
 _SEPARATOR: Final = r"\s*[:\-\u2013\u2014]\s*(?=\S)"
@@ -161,11 +167,21 @@ _ALTERNATIVE_SENTENCE: Final = re.compile(
 _ROLE_SENTENCE: Final = re.compile(
     r"^\s*(?:the|our)\s+role\s+of\s+the\s+(?:ballot|judge)\s+(?:is|should)\b", re.IGNORECASE
 )
+_PLANK_NUMBER: Final = r"(?:\d{1,2}|one|two|three|four|five|six|i{1,3}|iv|vi?)"
+_PLANK_LABEL: Final = re.compile(
+    rf"^\s*(?:plank\s*#?\s*{_PLANK_NUMBER}\b\s*[:.)\-\u2013\u2014]?"
+    r"|\(?\d{1,2}[.)](?=\s)"
+    r"|(?:first|second|third|fourth|fifth|sixth|finally|lastly)\s*[,:])\s*(?=\S)",
+    re.IGNORECASE,
+)
+"""A plank label opening a paragraph, up to the plank's words (`Plank 2:`, `2.`, `Second,`)."""
+_SOLVES_VERBS: Final = ("solves", "solve", "solving")
 _HEADING_UNITS: Final = frozenset({StructuralUnit.POCKET, StructuralUnit.HAT, StructuralUnit.BLOCK})
 _NOT_TEXT_UNITS: Final = frozenset({StructuralUnit.EVIDENCE, StructuralUnit.CITE})
 _TEXT_UNITS: Final = frozenset(
     {StructuralUnit.TAG, StructuralUnit.ANALYTIC, StructuralUnit.UNDERTAG, StructuralUnit.OTHER}
 )
+_LIST_UNITS: Final = frozenset({StructuralUnit.ANALYTIC, StructuralUnit.UNDERTAG, StructuralUnit.OTHER})
 
 Phrase = Annotated[str, StringConstraints(pattern=r"^[0-9a-z]+(?: [0-9a-z]+)*$")]
 
@@ -215,6 +231,10 @@ class SourceTexts:
     readings: tuple[AnalyticTextReading, ...]
     refused_by_guard: int = 0
     """First `should` analytics placed under a CP that the actor guard left out."""
+    planks_refused_by_guard: int = 0
+    """List planks left out because their CP text fails the actor guard."""
+    plank_labels: int = 0
+    """List paragraphs that are only an advantage's alias: labels naming the plank after them."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -238,6 +258,10 @@ class AnalyticTextInputs:
     """Every school of the caselist with its codes: a text naming one is withheld."""
     refused_by_guard: Mapping[str, int] = field(default_factory=dict[str, int], repr=False)
     """Each source's first `should` analytics under a CP the actor guard left out."""
+    planks_refused_by_guard: Mapping[str, int] = field(default_factory=dict[str, int], repr=False)
+    """Each source's list planks left out because their CP text fails the actor guard (`v1-e32-t16`)."""
+    plank_labels: Mapping[str, int] = field(default_factory=dict[str, int], repr=False)
+    """Each source's list paragraphs that are only an advantage's alias, naming the plank after them."""
 
 
 class AnalyticTextRules:
@@ -250,6 +274,8 @@ class AnalyticTextRules:
         self.overrides = overrides
         self.actors: tuple[str, ...] = actors.cp_text_actors if actors is not None else ()
         self.matcher = PositionMatcher(taxonomy, overrides)
+        self.advantage_aliases: dict[str, str] = _advantage_aliases(taxonomy)
+        """Every alias of an active advantage, with the advantage it names: what a plank is read for."""
         self._digest = hashlib.sha256(
             json.dumps(
                 [
@@ -258,7 +284,7 @@ class AnalyticTextRules:
                     sorted(ALTERNATIVE_LABELS),
                     sorted(ROLE_OF_THE_BALLOT_LABELS),
                     sorted(OVERVIEW_WORDS),
-                    [MAX_LABEL_WORDS, MAX_WORDS_BEFORE_SHOULD, MAX_BY_PLACE_WORDS],
+                    [MAX_LABEL_WORDS, MAX_WORDS_BEFORE_SHOULD, MAX_BY_PLACE_WORDS, MAX_PLANK_WORDS],
                     sorted(self.actors),
                     taxonomy.model_dump(mode="json"),
                     overrides.model_dump(mode="json"),
@@ -280,6 +306,18 @@ class AnalyticTextRules:
 def text_digest(text: str) -> str:
     """SHA-256 of `text`'s lowercase words, one space apart: equal for two texts worded alike."""
     return hashlib.sha256(tag_words(text).encode()).hexdigest()
+
+
+def advantage_aliases_in(words: str, aliases: Mapping[str, str]) -> tuple[str, ...]:
+    """The advantage aliases `words` (lowercase words, one space apart) hold as whole phrases, sorted."""
+    spaced = f" {words} "
+    return tuple(sorted(alias for alias in aliases if f" {alias} " in spaced))
+
+
+def plank_words(text: str) -> str:
+    """A plank's words: `text` without the plank label (`Plank 2:`, `2.`, `Second,`) that opens it."""
+    found = _PLANK_LABEL.match(text)
+    return text[found.end() :] if found is not None else text
 
 
 def section_paragraphs_of(document: ParsedDocument) -> SourceParagraphs:
@@ -431,10 +469,142 @@ def read_analytic_texts(
             refused += 1
             continue
         keep(AnalyticTextKind.CP_TEXT, TextForm.BY_PLACE, one, one)
+    planks = _Planks(source, rules, written, own_names, names)
+    for stem in sorted(
+        (one for one in found if one.kind is AnalyticTextKind.CP_TEXT), key=lambda one: one.element_index
+    ):
+        found += planks.of(stem, cp_paragraphs)
     return SourceTexts(
         readings=tuple(sorted(found, key=lambda one: (one.label_element_index, one.element_index, one.kind))),
         refused_by_guard=refused,
+        planks_refused_by_guard=planks.refused_by_guard,
+        plank_labels=planks.labels,
     )
+
+
+class _Planks:
+    """The planks of a source's CP texts (`v1-e32-t16`, the PM's rulings of 2026-10-25).
+
+    A CP text ending in a colon lists its planks in the paragraphs after it, up to the block's first card
+    or heading: analytics, undertags and unstyled paragraphs the store does not keep, of at most
+    :data:`MAX_PLANK_WORDS` words. Their actor is the CP text's, so they are read only when it passes the
+    actor guard itself, and counted as refused otherwise. A list paragraph that is only an advantage's
+    alias is a label naming the plank after it. Later in the block, up to its next heading or CP text,
+    each `should` analytic past the guard and each paragraph opening with a plank label is a separate
+    plank, named also by the cards under it. A plank is placed where its CP text is.
+    """
+
+    def __init__(
+        self,
+        source: SourceParagraphs,
+        rules: AnalyticTextRules,
+        written: Sequence[SectionParagraph],
+        own_names: Sequence[str],
+        caselist: CaselistNames,
+    ) -> None:
+        self._source = source
+        self._rules = rules
+        self._written = written
+        self._at = {one.element_index: position for position, one in enumerate(written)}
+        self._names = [name for name in own_names if name.strip()]
+        self._caselist = caselist
+        self.refused_by_guard = 0
+        self.labels = 0
+
+    def of(self, stem: AnalyticTextReading, cp_paragraphs: Collection[int]) -> list[AnalyticTextReading]:
+        text = self._written[self._at[stem.element_index]].text
+        words = (
+            _without_inline_label(AnalyticTextKind.CP_TEXT, text) if stem.form is TextForm.INLINE else text
+        )
+        listing = words.rstrip().endswith(":")
+        guarded = passes_actor_guard(words, self._rules.actors)
+        listed: list[tuple[SectionParagraph, SectionParagraph | None]] = []
+        separate: list[tuple[SectionParagraph, list[str]]] = []
+        label: SectionParagraph | None = None
+        for one in self._written[self._at[stem.element_index] + 1 :]:
+            if one.unit in _HEADING_UNITS or one.element_index in cp_paragraphs:
+                break
+            if one.element_index in self._source.in_cards or one.unit is StructuralUnit.TAG:
+                listing = False
+                if separate and one.unit is StructuralUnit.TAG:
+                    separate[-1][1].append(one.text)
+                continue
+            if listing:
+                if one.unit not in _LIST_UNITS:
+                    continue
+                if self._is_alias_label(one):
+                    self.labels += 1
+                    label = one
+                elif len(tag_words(one.text).split()) <= MAX_PLANK_WORDS:
+                    listed.append((one, label))
+                    label = None
+                continue
+            if self._is_separate(one):
+                separate.append((one, []))
+        if not guarded:
+            self.refused_by_guard += len(listed)
+            listed = []
+        found = [self._reading(stem, one, TextForm.LIST, label, ()) for one, label in listed]
+        found += [self._reading(stem, one, TextForm.SEPARATE, None, tags) for one, tags in separate]
+        return found
+
+    def _is_alias_label(self, one: SectionParagraph) -> bool:
+        form = normalize_source_heading(one.text, self._names, self._caselist).text
+        return form in self._rules.advantage_aliases
+
+    def _is_separate(self, one: SectionParagraph) -> bool:
+        if one.unit not in _TEXT_UNITS:
+            return False
+        if _PLANK_LABEL.match(one.text):
+            return True
+        return (
+            one.unit is StructuralUnit.ANALYTIC
+            and len(tag_words(one.text).split()) <= MAX_BY_PLACE_WORDS
+            and passes_actor_guard(one.text, self._rules.actors)
+        )
+
+    def _reading(
+        self,
+        stem: AnalyticTextReading,
+        one: SectionParagraph,
+        form: TextForm,
+        label: SectionParagraph | None,
+        tags: Sequence[str],
+    ) -> AnalyticTextReading:
+        aliases = self._rules.advantage_aliases
+        words = plank_words(one.text)
+        named = set(advantage_aliases_in(self._caselist.without_schools(tag_words(words)), aliases))
+        if label is not None:
+            named.add(normalize_source_heading(label.text, self._names, self._caselist).text)
+        other = 0
+        for tag in tags:
+            in_tag = self._card_names(tag_words(tag))
+            named |= in_tag
+            if not in_tag and any(f" {verb} " in f" {tag_words(tag)} " for verb in _SOLVES_VERBS):
+                other += 1
+        return AnalyticTextReading(
+            kind=AnalyticTextKind.CP_PLANK,
+            form=form,
+            label_element_index=label.element_index if label is not None else one.element_index,
+            element_index=one.element_index,
+            unit=one.unit,
+            kept=False,
+            digest=text_digest(words),
+            placement=stem.placement,
+            position_id=stem.position_id,
+            role=stem.role,
+            stem_element_index=stem.element_index,
+            solves=tuple(sorted({aliases[alias] for alias in named})),
+            solves_other_words=other,
+        )
+
+    def _card_names(self, words: str) -> set[str]:
+        """The aliases a card's tag names: `solves <alias>` in it, or the whole tag an alias."""
+        aliases = self._rules.advantage_aliases
+        if words in aliases:
+            return {words}
+        spaced = f" {words} "
+        return {alias for alias in aliases if any(f" {verb} {alias} " in spaced for verb in _SOLVES_VERBS)}
 
 
 def read_back_texts(
@@ -451,9 +621,12 @@ def read_back_texts(
         paragraph = by_index.get(one.element_index)
         if one.digest is None or paragraph is None:
             continue
-        text = (
-            _without_inline_label(one.kind, paragraph.text) if one.form is TextForm.INLINE else paragraph.text
-        )
+        if one.kind is AnalyticTextKind.CP_PLANK:
+            text = plank_words(paragraph.text)
+        elif one.form is TextForm.INLINE:
+            text = _without_inline_label(one.kind, paragraph.text)
+        else:
+            text = paragraph.text
         if text_digest(text) == one.digest:
             texts[one.element_index] = text
     return texts
@@ -482,7 +655,7 @@ def top_texts(
     for digest, group in groups.items():
         if not group.texts:
             continue
-        text = _commonest(group.texts)
+        text = commonest_text(group.texts)
         if names_a_school(text, caselist):
             withheld += 1
             continue
@@ -506,6 +679,15 @@ def top_texts(
     return quoted, more, withheld
 
 
+def _advantage_aliases(taxonomy: Taxonomy) -> dict[str, str]:
+    aliases: dict[str, str] = {}
+    for position in taxonomy.positions:
+        resolved = taxonomy.resolve(position.id)
+        if not resolved.deprecated and resolved.kind is PositionKind.ADVANTAGE:
+            aliases.update(dict.fromkeys(position.aliases, resolved.id))
+    return aliases
+
+
 def _without_inline_label(kind: AnalyticTextKind, text: str) -> str:
     """`text` without the inline label that opens it, when one does."""
     label = _INLINE_LABELS.get(kind)
@@ -513,8 +695,8 @@ def _without_inline_label(kind: AnalyticTextKind, text: str) -> str:
     return text[found.end() :] if found is not None else text
 
 
-def _commonest(texts: Sequence[tuple[str, int, str]]) -> str:
-    """The wording most copies hold, then the first copy's by source digest and paragraph."""
+def commonest_text(texts: Sequence[tuple[str, int, str]]) -> str:
+    """What a group shows: the wording most copies hold, then the first copy's by source and paragraph."""
     counts = Counter(text for _, _, text in texts)
     best = max(counts.values())
     return min((sha, index, text) for sha, index, text in texts if counts[text] == best)[2]

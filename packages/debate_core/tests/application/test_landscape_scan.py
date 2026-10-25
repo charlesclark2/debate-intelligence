@@ -13,6 +13,7 @@ from debate_core.application.landscape_scan import (
     ScanAcceptanceLog,
     ScanHit,
     ScanKind,
+    hits_by_section,
     hits_digest,
     pending_hits,
     scan_report,
@@ -140,3 +141,67 @@ def test_the_school_view_is_scanned_for_paths_only() -> None:
     with_a_path = {"schools.csv": f"{line} {disclosure.source_path}"}
     hits = scan_report(with_a_path, (disclosure,), school_view_files=("schools.csv",))
     assert [(hit.file, hit.kind) for hit in hits] == [("schools.csv", ScanKind.PATH)]
+
+
+# -- the hits by section (v1-e32-t16) --------------------------------------------------------------
+
+REPORT = """\
+# Sample landscape
+
+Intro line.
+
+## Counterplan texts, alternatives and roles of the ballot
+
+### Counterplan texts
+
+| Rank | Teams | Text |
+|---|---|---|
+| 1 | 2 | As QW argued, sample text. |
+
+Its planks: 2, read by 2 teams.
+
+| Solves | Rank | Teams | Plank |
+|---|---|---|---|
+| Costs advantage | 1 | 2 | As QW argued, sample plank. |
+| not named | 1 | 1 | Quillmere Academy sample plank. |
+
+* Costs advantage: and 1 more plank, read by 1 team.
+
+## Overviews
+
+Sample QW line.
+"""
+
+
+def test_hits_are_counted_by_file_section_and_kind_with_the_plank_tables_apart() -> None:
+    lines = REPORT.splitlines()
+
+    def hit(number: int, kind: ScanKind, term: str, file: str = "report.md") -> ScanHit:
+        line = lines[number - 1] if file == "report.md" else "x,As QW argued"
+        return ScanHit(file, number, kind, term, line)
+
+    text_hit = hit(11, ScanKind.TEAM_CODE, "QW")
+    plank_hit = hit(17, ScanKind.TEAM_CODE, "QW")
+    school_hit = hit(18, ScanKind.SCHOOL, "Quillmere Academy")
+    more_hit = hit(20, ScanKind.TEAM_CODE, "QW")
+    overview_hit = hit(24, ScanKind.TEAM_CODE, "QW")
+    csv_hit = hit(2, ScanKind.TEAM_CODE, "QW", file="top_cards.csv")
+    found = hits_by_section(
+        [text_hit, plank_hit, school_hit, more_hit, overview_hit, csv_hit],
+        [plank_hit, csv_hit],
+        {"report.md": REPORT, "top_cards.csv": "a\nx,As QW argued\n"},
+    )
+    assert [(one.file, one.section, one.kind, one.hits, one.not_yet_accepted) for one in found] == [
+        ("report.md", "Counterplan texts", ScanKind.TEAM_CODE, 2, 0),
+        ("report.md", "Counterplan texts: plank table", ScanKind.TEAM_CODE, 1, 1),
+        ("report.md", "Counterplan texts: plank table", ScanKind.SCHOOL, 1, 0),
+        ("report.md", "Overviews", ScanKind.TEAM_CODE, 1, 0),
+        ("top_cards.csv", "(whole file)", ScanKind.TEAM_CODE, 1, 1),
+    ]
+
+
+def test_a_hit_above_every_heading_is_at_the_top_and_no_hit_counts_nothing() -> None:
+    hit = ScanHit("report.md", 1, ScanKind.TEAM_CODE, "QW", "QW at the top")
+    found = hits_by_section([hit], [], {"report.md": "QW at the top\n## Later\n"})
+    assert [(one.section, one.hits) for one in found] == [("(top)", 1)]
+    assert hits_by_section([], [], {"report.md": REPORT}) == ()

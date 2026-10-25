@@ -60,11 +60,12 @@ def _rows[ModelT](path: Path, read: Callable[[object], ModelT]) -> tuple[ModelT,
 
 
 def read_synthetic_analytic_texts(directory: Path) -> AnalyticTextInputs | None:
-    """`analytic_texts.json`'s readings, texts and guard counts; None when the directory has no such file.
+    """`analytic_texts.json`'s readings, texts, guard and plank counts; None when there is no such file.
 
     A source is named as the fixture names it (`b1`, the digest `b1b1…b1`). A reading's digest is computed
     from its `words`, as the reader computes one, and its `quoted` text, when not null, is what reading the
-    source again returns. The caselist's schools, a text naming one of which is withheld, are the fixture's.
+    source again returns. A plank (`v1-e32-t16`) names its CP text's paragraph (`stem`) and the advantages it
+    solves. The caselist's schools, a text naming one of which is withheld, are the fixture's.
     """
     path = directory / ANALYTIC_TEXTS_FILE
     if not path.is_file():
@@ -73,6 +74,8 @@ def read_synthetic_analytic_texts(directory: Path) -> AnalyticTextInputs | None:
     readings: dict[str, tuple[AnalyticTextReading, ...]] = {}
     texts: dict[tuple[str, int], str] = {}
     refused: dict[str, int] = {}
+    planks_refused: dict[str, int] = {}
+    plank_labels: dict[str, int] = {}
     for name, held in document["sources"].items():
         sha = name * 32
         found: list[AnalyticTextReading] = []
@@ -89,6 +92,9 @@ def read_synthetic_analytic_texts(directory: Path) -> AnalyticTextInputs | None:
                     placement=row["placement"],
                     position_id=row.get("position"),
                     role=row.get("role"),
+                    stem_element_index=row.get("stem"),
+                    solves=tuple(row.get("solves", ())),
+                    solves_other_words=row.get("solves_other_words", 0),
                 )
             )
             if row.get("quoted") is not None:
@@ -96,6 +102,10 @@ def read_synthetic_analytic_texts(directory: Path) -> AnalyticTextInputs | None:
         readings[sha] = tuple(found)
         if held.get("refused_by_guard"):
             refused[sha] = held["refused_by_guard"]
+        if held.get("planks_refused_by_guard"):
+            planks_refused[sha] = held["planks_refused_by_guard"]
+        if held.get("plank_labels"):
+            plank_labels[sha] = held["plank_labels"]
     names: dict[str, set[str]] = {}
     for one in _rows(directory / "disclosures.jsonl", Disclosure.model_validate):
         names.setdefault(one.school, set()).add(one.team_code)
@@ -104,6 +114,8 @@ def read_synthetic_analytic_texts(directory: Path) -> AnalyticTextInputs | None:
         texts=texts,
         caselist_names={school: tuple(sorted(codes)) for school, codes in sorted(names.items())},
         refused_by_guard=refused,
+        planks_refused_by_guard=planks_refused,
+        plank_labels=plank_labels,
     )
 
 

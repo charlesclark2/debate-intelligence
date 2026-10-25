@@ -407,3 +407,84 @@ async def test_the_seam_in_a_dry_run_writes_no_cache(tmp_path: Path) -> None:
     )
     assert found.read.cache_written is False
     assert sorted(path for path in tmp_path.rglob("*") if path.is_file()) == before
+
+
+# ------------------------------------------------------------------------------------------------
+# A CP's planks (v1-e32-t16): read, cached with their counts, and read again to quote
+# ------------------------------------------------------------------------------------------------
+
+PLANK_TAXONOMY = Taxonomy.model_validate(
+    {
+        "topic_id": "policy-sample-topic",
+        "taxonomy_version": "1.0.0",
+        "event": "POLICY",
+        "positions": [
+            _position("states-cp", "cp", "neg", ["states cp"]),
+            _position("advantage-cp", "cp", "neg", ["advantage cp"]),
+            _position("costs-advantage", "advantage", "aff", ["costs"]),
+        ],
+    }
+)
+PLANK = AnalyticTextKind.CP_PLANK
+
+
+def with_planks() -> bytes:
+    """An advantage CP listing two planks after a label, and a States CP whose labelled text has no actor."""
+    return build_docx(
+        "".join(
+            [
+                paragraph_xml(run_xml("Advantage CP"), style="Heading2"),
+                paragraph_xml(run_xml("The fifty states should:"), style="Analytic"),
+                paragraph_xml(run_xml("Costs"), style="Analytic"),
+                paragraph_xml(run_xml("Expand sample clinics."), style="Analytic"),
+                paragraph_xml(run_xml("Fund a sample prize."), style="Analytic"),
+                _card("Sample clinics work"),
+                paragraph_xml(run_xml("States CP"), style="Heading2"),
+                paragraph_xml(run_xml("Text: The sample panel should:"), style="Analytic"),
+                paragraph_xml(run_xml("Ban sample surprise bills."), style="Analytic"),
+            ]
+        )
+    )
+
+
+@pytest.mark.anyio
+async def test_a_sources_planks_and_their_counts_are_read_and_cached(world: World) -> None:
+    source = world.plant(with_planks())
+    service = world.service()
+    plank_rules = AnalyticTextRules(PLANK_TAXONOMY, OVERRIDES, ACTORS)
+    run = await service.read(CASELIST, [source], plank_rules)
+    planks = [
+        (one.form, one.position_id, one.solves) for one in run.readings[source.sha256] if one.kind is PLANK
+    ]
+    assert planks == [
+        (TextForm.LIST, "advantage-cp", ("costs-advantage",)),
+        (TextForm.LIST, "advantage-cp", ()),
+    ]
+    assert (run.plank_labels, run.planks_refused_by_guard) == ({source.sha256: 1}, {source.sha256: 1})
+    assert (run.counts.plank_labels, run.counts.planks_refused_by_guard) == (1, 1)
+    again = await service.read(CASELIST, [source], plank_rules)
+    assert again.counts.parsed == 0
+    assert (again.readings, again.plank_labels, again.planks_refused_by_guard) == (
+        run.readings,
+        run.plank_labels,
+        run.planks_refused_by_guard,
+    )
+    quoted = await service.quote(CASELIST, [source], run, PLANK_TAXONOMY)
+    assert sorted(quoted.texts.values()) == [
+        "Expand sample clinics.",
+        "Fund a sample prize.",
+        "The fifty states should:",
+        "The sample panel should:",
+    ]
+    # Words and counts only: no plank's words in the cache.
+    held = world.cache_file.read_text(encoding="utf-8")
+    assert "clinics" not in held and "prize" not in held and "surprise" not in held
+
+
+@pytest.mark.anyio
+async def test_the_seam_gives_the_report_the_plank_counts(tmp_path: Path) -> None:
+    reading, local = await _seam_reading(tmp_path)
+    found = await _seam_service(tmp_path, local, CountingParser()).report_inputs(
+        reading=reading, taxonomy=TAXONOMY, overrides=OVERRIDES, actors=ACTORS, writes=True
+    )
+    assert (dict(found.inputs.plank_labels), dict(found.inputs.planks_refused_by_guard)) == ({}, {})

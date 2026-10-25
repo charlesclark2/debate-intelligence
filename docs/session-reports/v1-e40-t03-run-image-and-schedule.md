@@ -59,7 +59,7 @@ Four things to look at first:
 |---|---|---|
 | Node `image-schedule`: Terraform checks pass (`bash scripts/terraform_checks.sh`) | PASS | Run as written, with the registry replaced by the provider already unpacked in the main checkout (`TF_CLI_CONFIG_FILE` naming a `filesystem_mirror`; every directory needs only `hashicorp/aws`): `All Terraform checks passed.`, exit 0, 27.5 s (after the sync below). fmt, validate, tflint and `terraform test` of every root and module. No lock file changed, and the `.terraform` directories it left were removed |
 | ac1 — Terraform's tests show the run role's grants and the schedule | PASS | `terraform -chdir=infrastructure/modules/caselist_run test` → `Success! 26 passed, 0 failed.` t02's 14 runs pass (its first 13 on the new inputs, and the break-glass run its pull request #465 added); 12 are new (below). Mutation: 22 of 22 caught (below) |
-| ac1 — the image builds from a tag and runs `debate-research caselist pull` against stubbed services in CI | NOT RUN | It runs in validate-dev's new `image` job, which runs only after a merge into `dev`. What can run before the merge did. `tests/scripts/test_caselist_run_deploy.py` → `20 passed` (the build's arguments, the offline check, the push and registration, the prod guard; 7 of 7 mutants caught). `tests/smoke/test_caselist_pull.py` against the workspace's build → `9 passed`, now asserting stage times. A local dry-run build of a real tag is operator follow-up A. The first validate-dev run after the merge closes this, and gives the CI build's time |
+| ac1 — the image builds from a tag and runs `debate-research caselist pull` against stubbed services in CI | NOT RUN | It runs in validate-dev's new `image` job, which runs only after a merge into `dev`. What can run before the merge did. `tests/scripts/test_caselist_run_deploy.py` → `20 passed` (the build's arguments, the offline check, the push and registration, the prod guard; 7 of 7 mutants caught). `tests/smoke/test_caselist_pull.py` against the workspace's build → `9 passed`, now asserting stage times. Operator follow-up A built a real tag locally: `scripts/caselist_run_deploy.sh dev v1.1.0-dev.134 --dry-run` printed all six `ok:` lines (linux/arm64, user 10001:10001, entrypoint `debate-research`; no credential name in the environment; no credential file; `debate-research` and `timeout` on `PATH`; `v1.1.0-dev.134`; SQLite 3.50.4 with FTS5), then `Dry run complete`, in 26 s. That build ran the release's installer but not the pull against stubbed services, which only the CI job does. The first validate-dev run after the merge closes this, and gives the CI build's time |
 | ac2 — the operator applies dev and starts one run by hand; its record matches a Mac run's shape | NOT RUN | Operator, after the merge, and the hand run only after `v1-e40-t04` (question 1). Runbook [caselist-cloud-run.md](../runbooks/caselist-cloud-run.md), steps 1 to 6 |
 | ac3 — each stage's start and end in the run's details, a 70% volume warning in the summary by test with a stubbed volume, the record's fields unchanged | PASS | `test_caselist_sync_stage_times_and_volume.py` → `11 passed`: every stage timed in order, a stage's 7 minutes read from a stub that moves the clock, dry runs and `--publish-pending` timed for what they carry out, a 75% stub warning with its text, exactly 70% not warning and one byte more warning, the fullest reading kept, no reading without the setting, a failed reading costing no stage. Against a skeleton that times and reads nothing, 10 of them fail. The record: the test lists its 23 fields by hand, and `test_pull_run_record_is_read_by_every_build.py`'s schema checks against the two older builds pass unchanged (83 passed with the refusal suite). The CLI shows the warning in its caption (`test_caselist_pull.py`, 3 new) |
 
@@ -191,8 +191,11 @@ minutes, each under `perl -e 'alarm 115'` on `.venv/bin/python -m pytest -m "not
   repositories. **How long it takes is an estimate until the first run: about 8 to 12 minutes.** The
   build installs every dependency twice, once for the rehearsal and once for real, with uv's cache
   serving the second. Then the smoke check's own environment is synced and the pull's 9 checks run.
-  The job has a 30-minute timeout. Operator follow-up A measures the build on the Mac; the first
-  validate-dev run gives CI's figure.
+  The job has a 30-minute timeout. On the operator's Mac (Apple silicon, so arm64 with no
+  emulation) the dry-run build of `v1.1.0-dev.134` took 26 s, download and offline check included.
+  I can't tell whether Docker already had the base images cached there. A fresh runner pulls
+  everything and then runs the smoke check, so the estimate stands until the first validate-dev run
+  gives CI's figure.
 * **The schedule is Wednesday 06:00 America/Chicago**, from ADR-0020 (2): "three hours before the run"
   and "the run at 06:00". It is in the login's zone, so daylight saving moves both together. A test
   compares the two expressions field by field: same zone, same day, later hour.
@@ -237,27 +240,13 @@ minutes, each under `perl -e 'alarm 115'` on `.venv/bin/python -m pytest -m "not
 
 ## Operator follow-ups
 
-**A. Before the PR, if you can: the image builds from a real tag, and how long it takes** (~6 min the
-first time). Run from this task's worktree. It downloads a release with `gh`, pulls the base
-images, builds for arm64 and checks the image offline. It makes no AWS call and pushes nothing. The
-newest dev pre-release predates this task's code, which does not matter to the build. Docker
-Desktop must be running.
-
-```bash
-cd "$HOME/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e40-t03-run-image-and-schedule"
-gh release list --repo charlesclark2/debate-intelligence --limit 1 --json tagName --jq '.[0].tagName'
-```
-
-Then, with that tag:
-
-```bash
-cd "$HOME/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e40-t03-run-image-and-schedule"
-TAG='the-tag-printed-above'
-time scripts/caselist_run_deploy.sh dev "$TAG" --dry-run 2>&1 | tail -12
-```
-Success looks like six `ok:` lines ending `ok: SQLite 3.x.y with FTS5`, then `Dry run complete`, and
-a `real` time. Paste the last 12 lines and the time back. A `check image:` line, or a build error,
-is a defect for me to fix before the PR.
+**A. Done before the PR: the image builds from a real tag.** On 2026-10-24 the operator ran
+`scripts/caselist_run_deploy.sh dev v1.1.0-dev.134 --dry-run` from this worktree. It printed all six
+`ok:` lines, the last `ok: SQLite 3.50.4 with FTS5`, then `Dry run complete. debate-dev-caselist-run:v1.1.0-dev.134
+built and checked; nothing was pushed and no AWS call was made.`, in 26 s. The first attempt passed
+the block's placeholder tag word for word, and the script refused it as an unrecognised argument
+before building anything. So the runbook's step 4 now sets `TAG` from `gh` itself and stops if it is
+empty.
 
 **After the merge, in this order.** These are the runbook's blocks
 ([caselist-cloud-run.md](../runbooks/caselist-cloud-run.md)), from the `caselist-credentials-dev`
@@ -330,7 +319,7 @@ Success looks like `Apply complete! Resources: 23 added, 1 changed, 0 destroyed.
 `"DebateDevCaselistRunDeployer"`.
 
 **B5. The deployer's profile, then the first image**: the runbook's steps 3 and 4. First the profile
-block. Then the dry run, which builds and checks with no AWS call (~6 min). Then the push, which
+block. Then the dry run, which builds and checks with no AWS call (~1 min; 26 s in follow-up A). Then the push, which
 prints `pushed: ...@sha256:<digest>` and the `caselist_image_digest = "sha256:..."` line, and
 registers nothing before apply B. The tag to use is the newest dev pre-release containing this merge
 whose validate-dev run, image job included, is green.

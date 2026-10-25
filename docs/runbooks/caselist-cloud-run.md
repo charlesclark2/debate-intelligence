@@ -169,24 +169,28 @@ a minute and run it again.
 
 The image is the installed CLI from one release, built for arm64 on this Mac (no emulation). Use a
 dev pre-release that contains `v1-e40-t03`'s merge and whose validate-dev run, image job included,
-is green. List the newest:
+is green. List the newest three, and set `TAG` in this shell to the newest:
 
 ```bash
 cd "$WT"
 gh release list --repo charlesclark2/debate-intelligence --limit 3 --json tagName,createdAt --jq '.[] | .tagName + " " + .createdAt'
+TAG="$(gh release list --repo charlesclark2/debate-intelligence --limit 1 --json tagName --jq '.[0].tagName')"
+echo "TAG=$TAG"
 ```
+If the newest is not the one to use, set the one that is in the same shell, for example
+`TAG='v1.1.0-dev.140'`. The next two blocks read `TAG` and stop if it is empty.
 
 **The dry run first**: it downloads the release's wheels, builds the image and checks it offline
 (arm64, an unprivileged user, no credential in its environment or files, `debate-research` and
 `timeout` on `PATH`, the tag, SQLite with FTS5 at 3.40.0 or later). It makes no AWS call. Docker
 Desktop must be running.
 
-**Operator command** (expected runtime ~6 min the first time, ~1 min once Docker has its layers)
-Where: `$WT`
+**Operator command** (expected runtime ~1 min: 26 s on the operator's Mac for `v1.1.0-dev.134`,
+2026-10-24)
+Where: `$WT`, in the shell that set `TAG`
 ```bash
 cd "$WT"
-TAG='vX.Y.Z-dev.N'
-if env | grep -qE '^(CASELIST_RUN_DEPLOY_PROFILE|DEBATE_RELEASE_REPO)='; then echo "STOP: a deploy override is set in this shell"; else time scripts/caselist_run_deploy.sh dev "$TAG" --dry-run; fi
+if [ -z "$TAG" ]; then echo "STOP: TAG is not set; run the listing block first"; elif env | grep -qE '^(CASELIST_RUN_DEPLOY_PROFILE|DEBATE_RELEASE_REPO)='; then echo "STOP: a deploy override is set in this shell"; else time scripts/caselist_run_deploy.sh dev "$TAG" --dry-run; fi
 ```
 Success looks like six `ok:` lines, the last `ok: SQLite 3.x.y with FTS5`, then `Dry run complete.
 debate-dev-caselist-run:<tag> built and checked`. Any `check image:` line says what is wrong, and
@@ -200,7 +204,7 @@ Where: `$WT`
 ```bash
 cd "$WT"
 aws sso login --sso-session debate
-if env | grep -qE '^(CASELIST_RUN_DEPLOY_PROFILE|DEBATE_RELEASE_REPO)='; then echo "STOP: a deploy override is set in this shell"; else scripts/caselist_run_deploy.sh dev "$TAG" 2>&1 | tee /tmp/caselist-run-deploy.txt | tail -8; fi
+if [ -z "$TAG" ]; then echo "STOP: TAG is not set; run the listing block first"; elif env | grep -qE '^(CASELIST_RUN_DEPLOY_PROFILE|DEBATE_RELEASE_REPO)='; then echo "STOP: a deploy override is set in this shell"; else scripts/caselist_run_deploy.sh dev "$TAG" 2>&1 | tee /tmp/caselist-run-deploy.txt | tail -8; fi
 grep -E '^pushed: |caselist_image_digest = ' /tmp/caselist-run-deploy.txt
 ```
 Success looks like `pushed: <account>.dkr.ecr.us-east-1.amazonaws.com/debate-dev-caselist-run@sha256:<64

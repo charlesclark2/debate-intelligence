@@ -63,7 +63,7 @@ spec:
         else new, by Terraform test; the removal runbook's manual landscape section is
         replaced, and the annual purge's steps cover school views.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

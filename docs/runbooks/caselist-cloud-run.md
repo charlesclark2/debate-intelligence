@@ -553,6 +553,13 @@ Success looks like the newest runs being the Mac's, none started at the rehearsa
 
 ## Step 8 — The seed, bucket mode, and one run by hand (at the cutover, after `v1-e40-t04`)
 
+**At the cutover, run this step through [caselist-cutover.md](caselist-cutover.md)**, steps 2 to 5.
+It orders these parts with the Mac's agent, installs the build with the lock first, and checks the
+image apply's plan with `IMAGEPLAN`. Since `v1-e40-t05`'s alerts apply carried bucket mode into the
+run's task definition early (the PM's ruling (a)), the apply below is an image change only, with the
+same counts, and since `v1-e40-t06` the dev profile sets bucket mode itself. What follows is kept as
+the record of what each part does.
+
 **Not before `v1-e40-t04` has merged and been released, and not before `v1-e40-t06`'s cutover has
 unloaded the Mac's agent** (ADR-0020 (4), cutover steps 3 to 5; the PM's ruling 3(b) on t04's plan).
 Without bucket mode a cloud run starts from an empty data directory: it would select every week as

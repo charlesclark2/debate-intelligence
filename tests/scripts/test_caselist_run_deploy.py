@@ -154,7 +154,9 @@ class World:
     branch: str = "main"
     porcelain: str = ""
     docker_installed: bool = True
-    image_environment: list[str] = field(default_factory=lambda: ["PATH=/usr/local/bin:/usr/bin", "HOME=/var/lib/debate-research"])
+    image_environment: list[str] = field(
+        default_factory=lambda: ["PATH=/usr/local/bin:/usr/bin", "HOME=/var/lib/debate-research"]
+    )
     image_user: str = "10001:10001"
     sqlite_version: str = "3.40.1"
     task_definition: dict[str, object] | None = field(default_factory=run_task_definition)
@@ -165,7 +167,9 @@ class World:
         state.mkdir(exist_ok=True)
         (state / "branch").write_text(f"{self.branch}\n", encoding="utf-8")
         (state / "porcelain").write_text(self.porcelain, encoding="utf-8")
-        (state / "environment").write_text("".join(f"{line}\n" for line in self.image_environment), encoding="utf-8")
+        (state / "environment").write_text(
+            "".join(f"{line}\n" for line in self.image_environment), encoding="utf-8"
+        )
         if self.task_definition is not None:
             (state / "task-definition.json").write_text(json.dumps(self.task_definition), encoding="utf-8")
         else:
@@ -277,16 +281,26 @@ exit 0
             "STUB_CALL_LOG": str(self.call_log),
         }
         completed = subprocess.run(
-            [str(self.root / ".sandbox-bin" / "bash"), str(self.root / "scripts" / "caselist_run_deploy.sh"), *arguments],
+            [
+                str(self.root / ".sandbox-bin" / "bash"),
+                str(self.root / "scripts" / "caselist_run_deploy.sh"),
+                *arguments,
+            ],
             capture_output=True,
             text=True,
             env=environment,
             cwd=self.root,
             timeout=60,
         )
-        calls = [line.split("\t") for line in self.call_log.read_text(encoding="utf-8").splitlines() if line.strip()]
+        calls = [
+            line.split("\t")
+            for line in self.call_log.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
         registered = (
-            json.loads(self.registered_file.read_text(encoding="utf-8")) if self.registered_file.exists() else None
+            json.loads(self.registered_file.read_text(encoding="utf-8"))
+            if self.registered_file.exists()
+            else None
         )
         return DeployRun(completed.returncode, completed.stdout, completed.stderr, calls, registered)
 
@@ -315,7 +329,12 @@ def world(tmp_path: Path) -> Iterator[World]:
 
     stub_dir = tmp_path / "stub-bin"
     stub_dir.mkdir()
-    yield World(root=root, stub_dir=stub_dir, call_log=tmp_path / "calls.log", registered_file=tmp_path / "registered.json")
+    yield World(
+        root=root,
+        stub_dir=stub_dir,
+        call_log=tmp_path / "calls.log",
+        registered_file=tmp_path / "registered.json",
+    )
 
 
 # --------------------------------------------------------------------------------------
@@ -385,7 +404,10 @@ def test_a_dry_run_builds_the_releases_image_for_arm64_checks_it_and_calls_no_aw
     assert build[build.index("--file") + 1].endswith("ops/caselist_run/Dockerfile")
     assert build[build.index("--tag") + 1] == f"debate-dev-caselist-run:{DEV_TAG}"
     assert len(run.calls_starting("docker", "run")) == 4, "the check's four offline containers"
-    assert all("--network" in call and call[call.index("--network") + 1] == "none" for call in run.calls_starting("docker", "run"))
+    assert all(
+        "--network" in call and call[call.index("--network") + 1] == "none"
+        for call in run.calls_starting("docker", "run")
+    )
     assert "ok: SQLite 3.40.1 with FTS5" in run.stdout
     assert run.calls_to("aws") == []
     assert run.calls_starting("docker", "push") == []
@@ -442,7 +464,15 @@ def test_a_push_registers_the_current_run_definition_with_only_its_image_changed
     assert run.returncode == 0, run.output
     assert run.calls_starting("docker", "push") == [["push", f"{REPOSITORY}:{DEV_TAG}"]]
     expected = run_task_definition()
-    for added_by_ecs in ("taskDefinitionArn", "revision", "status", "registeredAt", "registeredBy", "compatibilities", "requiresAttributes"):
+    for added_by_ecs in (
+        "taskDefinitionArn",
+        "revision",
+        "status",
+        "registeredAt",
+        "registeredBy",
+        "compatibilities",
+        "requiresAttributes",
+    ):
         expected.pop(added_by_ecs)
     expected["containerDefinitions"][0]["image"] = f"{REPOSITORY}@{DIGEST}"  # type: ignore[index]
     assert run.registered == expected
@@ -504,7 +534,9 @@ def final_stage(dockerfile: str) -> str:
 def test_the_image_installs_the_release_with_install_channel_on_the_slim_python_of_requires_python() -> None:
     dockerfile = DOCKERFILE.read_text(encoding="utf-8")
 
-    assert re.findall(r"^FROM python:\$\{PYTHON_VERSION\}-slim-bookworm AS (\w+)$", dockerfile, re.MULTILINE) == ["install", "run"]
+    assert re.findall(
+        r"^FROM python:\$\{PYTHON_VERSION\}-slim-bookworm AS (\w+)$", dockerfile, re.MULTILINE
+    ) == ["install", "run"]
     assert 'sh /build/install_channel.sh --no-path-warning --dir /build/assets "${RELEASE_TAG}"' in dockerfile
     assert "ARG PYTHON_VERSION\n" in dockerfile, "no default: the version comes from requires-python"
 

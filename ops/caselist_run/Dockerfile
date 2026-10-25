@@ -50,15 +50,16 @@ RUN apt-get update \
 # interpreter by absolute path, and that interpreter is uv's Python under UV_PYTHON_INSTALL_DIR.
 ENV UV_TOOL_DIR=/opt/debate-research/tools \
     UV_TOOL_BIN_DIR=/opt/debate-research/bin \
-    UV_PYTHON_INSTALL_DIR=/opt/debate-research/python \
-    UV_NO_CACHE=1
+    UV_PYTHON_INSTALL_DIR=/opt/debate-research/python
 
 COPY install_channel.sh /build/install_channel.sh
 COPY assets/ /build/assets/
 
+# The rehearsal and the real install resolve the same packages; uv's cache serves the second, and
+# goes with this stage.
 RUN test -n "${RELEASE_TAG}" \
  && sh /build/install_channel.sh --no-path-warning --dir /build/assets "${RELEASE_TAG}" \
- && rm -rf /build
+ && rm -rf /build "$(uv cache dir)"
 
 FROM python:${PYTHON_VERSION}-slim-bookworm AS run
 

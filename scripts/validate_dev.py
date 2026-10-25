@@ -619,6 +619,10 @@ class Conclusion:
 
 REQUIRED_JOBS = ("resolve", "smoke", "slow")
 
+#: What a success says of a job the workflow reports beyond the required three: the run image's,
+#: built from the same pre-release and pulled against the stand-ins inside it (v1-e40-t03).
+REPORTED_JOB_WORDS = {"image": "the run image built and checked"}
+
 
 def conclude(
     requested_sha: str,
@@ -635,8 +639,13 @@ def conclude(
     `success` goes on the commit the installed build reported, and only when that is the requested
     one and both test trees were too. Anything less goes on the requested commit as `failure`, or as
     `error` when the run was cancelled.
+
+    Every job reported in `jobs` has to succeed, not only the required ones: the workflow reports
+    its image job as well (v1-e40-t03), and a red image is no validated build.
     """
     require_sha(requested_sha)
+    reported_beyond = [job for job in jobs if job not in required]
+    required = (*required, *reported_beyond)
     if any(jobs.get(job) == "cancelled" for job in required):
         return Conclusion(requested_sha, "error", "validation was cancelled before it finished")
     unfinished = [f"{job} {jobs.get(job) or 'did not run'}" for job in required if jobs.get(job) != "success"]
@@ -650,10 +659,11 @@ def conclude(
         if commit != requested_sha:
             return Conclusion(requested_sha, "failure", f"{label} {commit or 'nothing'}, not this commit")
     assert installed_sha is not None
+    also = "".join(f", {REPORTED_JOB_WORDS.get(job, f'{job} green')}" for job in reported_beyond)
     return Conclusion(
         installed_sha,
         "success",
-        f"{tag} installed from its pre-release and validated: recorded and slow tiers green",
+        f"{tag} installed from its pre-release and validated: recorded and slow tiers green{also}",
     )
 
 
@@ -803,6 +813,13 @@ def build_parser() -> argparse.ArgumentParser:
     conclude_parser.add_argument("--github-output", default=os.environ.get("GITHUB_OUTPUT"))
     status_options(conclude_parser)
 
+    report_parser = sub.add_parser(
+        "tier-report",
+        help="judge a JUnit report by a tier's rules (a skip fails it); for the image job's smoke check",
+    )
+    report_parser.add_argument("--name", required=True, help="the tier's name in what is printed")
+    report_parser.add_argument("junit", type=Path)
+
     issue_parser = sub.add_parser(
         "issue", help="open or update the validate-dev issue on a failure, close it on a success"
     )
@@ -854,6 +871,9 @@ def main(argv: list[str] | None = None, *, github: GitHub | None = None) -> int:
             write_report(args.report, slow_report)
             write_outputs(args.github_output, {"tests_commit": slow_report.tests_commit})
             return finish("slow", slow_report.problems)
+        if args.command == "tier-report":
+            # pytest's exit status was the step's own; this judges what the report holds.
+            return finish(args.name, TierResult(args.name, 0, read_junit(args.junit)).problems)
         if args.command == "conclude":
             conclusion = conclude(
                 args.sha,

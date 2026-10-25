@@ -133,7 +133,7 @@ def test_a_failed_pull_fails_the_step(checkout: Path, tmp_path: Path) -> None:
     ]
 
 
-@pytest.mark.parametrize("job", ["resolve", "smoke", "slow"])
+@pytest.mark.parametrize("job", ["resolve", "smoke", "slow", "image"])
 def test_the_jobs_that_run_the_validated_commits_code_hold_no_write_permission(job: str) -> None:
     permissions = jobs()[job]["permissions"]
 
@@ -321,3 +321,52 @@ def test_the_slow_tier_leaves_the_operator_only_timing_test_out_by_marker() -> N
         "test_search_p95_on_a_synthetic_index_of_250000_documents"
     ]
     assert expression == "slow and not live and not eval and not operator_data"
+
+
+# --------------------------------------------------------------------------------------------
+# image: the weekly cloud run's image, built from the pre-release and pulled against stand-ins
+# --------------------------------------------------------------------------------------------
+
+
+def test_the_image_job_builds_natively_on_arm64_from_the_pre_release_the_resolve_job_found() -> None:
+    """v1-e40-t03: an arm64 runner, not QEMU, and the operator's own dry run: CI builds what a push does."""
+    image = jobs()["image"]
+    _, build = step_named(image, "Build and check the run image")
+
+    assert image["runs-on"] == "ubuntu-24.04-arm"
+    assert image["needs"] == "resolve"
+    assert build["run"] == 'scripts/caselist_run_deploy.sh dev "$TAG" --dry-run'
+    assert build["env"]["TAG"] == "${{ needs.resolve.outputs.tag }}"
+
+
+def test_the_token_reaches_only_the_download_and_never_the_image_or_the_tests() -> None:
+    image = jobs()["image"]
+    _, build = step_named(image, "Build and check the run image")
+    _, pull = step_named(image, "Run caselist pull in the image")
+
+    assert set(build["env"]) == {"GH_TOKEN", "TAG"}
+    assert "GH_TOKEN" not in pull.get("env", {}) and "GH_TOKEN" not in pull["run"]
+    assert "--build-arg" not in build["run"]
+
+
+def test_the_image_job_runs_the_pull_smoke_check_against_the_images_own_build_and_a_skip_fails_it() -> None:
+    _, pull = step_named(jobs()["image"], "Run caselist pull in the image")
+    script = pull["run"]
+
+    assert '"debate-dev-caselist-run:$TAG"' in script
+    assert "--env DEBATE_SMOKE_BIN=/opt/debate-research/bin/debate-research" in script
+    assert '--env DEBATE_SMOKE_EXPECT_SHA="$REQUESTED_SHA"' in script
+    assert '--env DEBATE_SMOKE_EXPECT_TAG="$TAG"' in script
+    assert 'pytest tests/smoke/test_caselist_pull.py -m "not live and not in_process"' in script
+    assert script.rstrip().endswith(
+        'python3 scripts/validate_dev.py tier-report --name "image smoke" image-smoke.xml'
+    )
+
+
+def test_conclude_waits_for_the_image_job_and_reports_its_result() -> None:
+    conclude = jobs()["conclude"]
+    _, post = step_named(conclude, "Post success on the installed commit")
+
+    assert conclude["needs"] == ["resolve", "smoke", "slow", "image"]
+    assert post["env"]["IMAGE_RESULT"] == "${{ needs.image.result }}"
+    assert 'set -- "$@" --job "image=$IMAGE_RESULT"' in post["run"]

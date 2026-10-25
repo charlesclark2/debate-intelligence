@@ -796,9 +796,47 @@ Then the rehearsal (the runbook's step 7) as the second review ordered it. ac2's
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-24 (third review)
 
 **Notes:**
+
+The fix is right, and narrow. I read `login_task.tf`'s diff at `f6a8d48`, and I read the AWS page
+myself.
+
+1. **The cause and the fix.**
+   * EventBridge Scheduler assumes the role with `aws:SourceArn` set to the schedule group's ARN,
+     and AWS says to scope it to a group, never to a schedule.
+   * Each schedule now sits alone in its own group (`debate-<env>-caselist-login` and `-run`), and
+     each role's trust is `StringEquals` on `aws:SourceAccount` and its own group's ARN, with no
+     wildcard and no `default` group.
+   * So the login's scheduler role is still assumable only by the login's schedule. Another
+     schedule would need `iam:PassRole` on that role to join the group, and only break-glass holds
+     it.
+2. **The tests now pin the shape that works.**
+   * Each `Condition` is compared as one value, so a wrong shape fails rather than errors.
+   * 10 of 10 mutants were caught by false assertions. The first pass misread stderr, which the
+     session found and fixed before counting.
+   * The red run is the configuration dev applied.
+   * The search for anything else naming a schedule's ARN found only the four places changed.
+3. **The re-plan check:** `4 to add, 2 to change, 0 to destroy`, with the two scheduler roles'
+   trust updated in place. The JSON check prints `PLAN OK` only for that shape, tested on 11
+   synthetic plans. Prod's fresh apply B becomes 19 to add.
+4. **The PM's choice: accepted as built.** The check takes the login's expected state from
+   `owner.auto.tfvars`. In dev the token check passed and the file does not pause the login, so the
+   line must say `ENABLED`, and the PM reads it.
+5. **Recorded by the PM, from the operator's runs after the first merge:**
+   * **ac1's CI part: PASS.** validate-dev's run on `v1.1.0-dev.137` (2026-10-25 01:35 UTC)
+     concluded `success`, and its new job "build the run image from the pre-release and pull against
+     stand-ins inside it" passed in 1 min 9 s (01:35:39 to 01:36:48), against the 8 to 12 minutes
+     estimated.
+   * **The applies so far:** the run's apply (23 added, 1 changed) and the token check (the Mac's
+     token survived a new login). The image is `v1.1.0-dev.137`, built in 21 s and pushed. Apply B
+     created 15 of 17 resources.
+6. **What remains for ac2:** the re-plan and apply after this merges (the PM reads the plan), the
+   rehearsal (step 7), and the hand run (step 8) at `v1-e40-t06`'s cutover, after `v1-e40-t04`'s
+   seed (ADR-0020, amended 2026-10-24).
+
+The PR merges `--partial`, with the phase `InProgress`.

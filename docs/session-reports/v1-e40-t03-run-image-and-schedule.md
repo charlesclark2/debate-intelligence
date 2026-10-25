@@ -575,3 +575,17 @@ report gives them.
 Nothing else changes from the first review. The PR merges `--partial`, with the phase
 `InProgress`. After the merge: B1 to B4 (the PM reads B3's plan), the token check (its output to
 the PM), B5, B6 (the PM reads apply B's plan), then the rehearsal. ac2 follows `v1-e40-t04`.
+
+## Criteria open at the partial merge
+
+This restates the open criteria already recorded above and in both PM reviews. It adds nothing new.
+`scripts/task pr --partial` reads open criteria only after the last-but-one PM review ends. In this
+report that point falls after the first review, because the second review was in the same session.
+
+| Criterion | Result | What closes it |
+|---|---|---|
+| ac1 — the image builds from a tag and runs `debate-research caselist pull` against stubbed services in CI | NOT RUN | The first validate-dev run on `dev` after the merge: its `image` job green, and its time recorded |
+| ac2 — the operator applies dev and starts one run by hand; its record matches a Mac run's shape | NOT RUN | The runbook's steps 1 to 7 after the merge, then step 8 after `v1-e40-t04` |
+
+ac1's Terraform part and ac3 passed, as the table in "Acceptance criteria" shows. The phase stays
+`InProgress`.

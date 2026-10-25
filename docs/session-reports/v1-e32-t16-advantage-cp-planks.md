@@ -755,9 +755,46 @@ report.md only; a plank naming a school withheld and counted.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-25
 
 **Notes:**
+
+The counts found what the spec missed, and the build follows the four rulings.
+1. **ac1 earned its keep.** The spec assumed planks were further `should` analytics. The counts
+   found they are lists after a colon stem, so t11 had been showing the stem and dropping every
+   plank. Decision 1, looking past the spec's three shapes when one block could not explain 14
+   teams, is the right instinct.
+2. **ac2 and ac3 pass.**
+   * The golden was hand-written from the fixture's table and matched on the first run. Red runs
+     are shown for every suite.
+   * The refill's t11 lines are unchanged, with 151 kept and 5 refused by the guard. The report's
+     planks agree with the refill's (158, 5 CPs, 17 groups, 0 withheld), and every plank found is
+     accounted for: 422 + 25 + 21 + 7 = 475.
+3. **Mutants:** 15 of 15 caught. Both survivors on the way were settled the right way: a redundant
+   skip was removed so withholding rests on one tested rule, and the fixture was strengthened. A
+   refinement that couldn't be told apart was reverted rather than kept untested.
+4. **The scan hit is ruled (a)** (2026-10-25). The operator reads the line at the first publish
+   with planks.
+5. **Accepted as made:**
+   * decisions 1 to 17, including the reader's 92 planks under advantage-cp replacing the counts'
+     approximate 152;
+   * a plank placed with its CP text, and the union of advantages over copies;
+   * the new `landscape_dry_run_by_section.py`, which prints hits by section and never a term or
+     line, with the run's result keeping its rendered files in memory only;
+   * the guard's shell-process exclusion (decision 4), since a real pull still stops it;
+   * "Counterplan planks" as its own section after t20, and t20's before-file and identity test
+     removed, as the PM noted;
+   * `debate_core.testing` in `constraints.packages`.
+6. **The alias counts** are all one-word, 25 plank copies in all. Whether any over-matches is for
+   the coach to judge from the shown planks after the republish.
+7. **The affected set** stopped at about 89%, so it is left to the PR's `ci` under agreement 10.
+   Everything that changed passed within the limit. The bucket-mode kill tests, which import nothing
+   changed here, are left to `ci` too.
+8. **Follow-ups:** the CLI's JSON carrying text counts stays with t05's command. A card after a whole
+   list stays unpaired unless the coach asks, and then it's a ruling first.
+
+**After the merge:** the PM coordinates the republish with t14, t15, t18, t20 and this, from
+`dev-preview`, on the cache this task's refill wrote. No re-review is needed.

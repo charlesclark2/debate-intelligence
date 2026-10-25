@@ -488,6 +488,14 @@ class RunState:
             version_id=stored.version_id,
         )
 
+    async def local_manifests(self) -> tuple[ObjectInfo, ...]:
+        """This machine's manifests, which the bundle holds."""
+        return await self._local.objects.list_objects(f"{MANIFEST_DIRECTORY}/")
+
+    async def refuse_withheld(self) -> None:
+        """Raise :class:`RunStateWithheld` when a local manifest is one the publisher withholds."""
+        await self._refuse_withheld(self._local, saving=True)
+
     async def unconfirmed_manifests(self) -> tuple[ObjectKey, ...]:
         """The local manifests the bucket does not hold with the same SHA-256, by key."""
         local = await self._local.objects.list_objects(f"{MANIFEST_DIRECTORY}/")

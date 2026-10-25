@@ -157,6 +157,7 @@ from debate_core.application.caselist.run_lock import (
     HolderKind,
 )
 from debate_core.application.caselist.run_state import RunState
+from debate_core.application.caselist.run_state_seed import RunStateSeed
 from debate_core.application.caselist.status_service import CaselistStatusService
 from debate_core.application.caselist.suppression import (
     REMOVAL_LOG_KEY,
@@ -1193,6 +1194,18 @@ class ServiceContainer:
             suppression=self.suppression_list(),
             data_dir=data_dir,
             clock=self.clock(),
+        )
+
+    def run_state_seed(self) -> RunStateSeed:
+        """`caselist seed-run-state` over this environment's bucket (`v1-e40-t04`)."""
+        return self.singleton(
+            "run_state_seed",
+            lambda: RunStateSeed(
+                lock=self.bucket_run_lock,
+                state=self.run_state,
+                bucket=self._evidence_bucket(),
+                data_dir=self.settings.storage.data_dir,
+            ),
         )
 
     def bucket_run(self) -> BucketRun:

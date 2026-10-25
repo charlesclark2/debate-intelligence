@@ -97,7 +97,7 @@ spec:
         The report states, per kind, how many documents carry no scenario heading and no
         role label.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

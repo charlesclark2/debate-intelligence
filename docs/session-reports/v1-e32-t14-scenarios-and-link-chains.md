@@ -6,34 +6,59 @@
 | Spec | [`plan_specs/v1/e32-argument-landscape/t14-scenarios-and-link-chains.yaml`](../../plan_specs/v1/e32-argument-landscape/t14-scenarios-and-link-chains.yaml) |
 | Epic / release | `v1-e32-argument-landscape` / `v1.2` |
 | Branch | `task/v1-e32-t14-scenarios-and-link-chains` |
-| Session status | IN PROGRESS: counts sent, waiting for the PM's ruling <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
-**Counts first (ac1). Nothing is built yet.** The counts are below, read-only, over hspolicy26
-through 2026-10-20 under taxonomy 1.2.0. The proposed role labels and the scenario-naming options
-are in [the question block](#questions-for-the-pm).
+**Under each DA's and advantage's impact cards, the report now shows what each impact runs through,
+and beside them the position's link chain.** The rules are the PM's rulings of 2026-10-25 on the
+counts below, recorded as a comment above the spec's acceptance criteria.
 
-**What the counts say:**
+* **What a row shows:**
+  * its **scenario**, from heading words two or more teams use under the position, withheld when a
+    word is a caselist school's, team code's or tournament's;
+  * its **labelled internal link**, the nearest card above it under the same position heading that a
+    heading or tag labels one;
+  * failing that, report.md alone shows the **card above it in the file**, never called an internal
+    link and counted apart.
+* **The link chain:** each role's most-read card, ranked as t10's ruling 3 ranks impact cards:
+  uniqueness, link, internal link and impact, and for advantages harms, inherency and solvency.
+* **Per kind,** report.md says how many documents carry no scenario heading and no role label (ac3),
+  how many rows show each lead-in, how many names were withheld, and how many positions lack a card
+  for each role.
+* **impact_cards.csv** gains `scenario` and `internal_link_tag` only. There is no new file and no
+  chain row.
 
-* **DAs carry structure; advantages almost none.**
-  * Of 662 DA documents, 302 (45.6%) label a chain role under the DA's heading.
-  * Of 1,164 advantage documents, 76 (6.5%) do. In 19,596 of 21,157 counted advantage cards, the
-    heading that places the card is the deepest one, so nothing sits below it.
-* **Numbered scenario headings barely exist.** `Scenario 1` or `Sc 2` appears in 0 DA documents and
-  6 advantage documents.
-* **A DA's scenario is mostly in the words beside its impact label** (`Dome impact`,
-  `Terrorism impact`). That covers 359 of 959 DA impact cards, against 11 under a scenario heading.
-* **A labelled internal link above an impact card is rare.**
-  * The card directly above, in the same block, carries an internal-link label for 2 of 959 DA
-    impact cards. IL cards sit in their own block, so the card above is usually another impact.
-  * Searching every block under the same position heading finds one for 75 of the 959 DA impact
-    cards and 2 of the 598 advantage impact cards.
-* **In the rows the report would show** (t10's top three, 87 rows over 31 positions):
-  * 23 of 44 DA rows and 5 of 43 advantage rows get a scenario under option (a);
-  * 7 DA rows and 0 advantage rows get a labelled internal link.
-* **ac3's line today:** 328 of 662 DA documents (49.5%) and 1,005 of 1,164 advantage documents
-  (86.3%) carry no scenario heading and no role label.
+**Checks:**
+* The hand-written goldens (`78cc4bc`, before any code) matched byte for byte on the first run.
+* The rule's tests failed against two opposite skeletons, with no case passing both. The service's
+  tests failed against a skeleton that fills nothing; one passed only vacuously and was tightened.
+* All 20 mutants were caught, the nine aimed at the PM's cases among them.
+
+**On hspolicy26 the build reproduces the ruled counts** (read-only, 53.7 s, no worker pool, store
+unchanged):
+* 44 DA and 43 advantage rows;
+* labelled internal links on 7 and 0 of them;
+* the card above on 11 and 30;
+* the same names used by two or more teams, and the same 4 withheld.
+
+Three figures differ from what was sent, each traced to a ruled rule, not a defect:
+* **rows with a scenario,** DA 13 and advantage 0 (sent: 23 and 5): the two-team threshold and one
+  withheld name;
+* **advantage positions with a link card,** 8 (sent: 9): the ruled `link turn` exclusion applies to
+  tags;
+* **ac3,** DA 251 of 662 and advantage 676 of 1,164 (sent: 328 and 1,005): ruling 1 makes tag
+  openings and t10's impact label role labels.
+
+The Goal is `Succeeded`: every criterion passed.
+
+**Look first at Deviation 1** (`no link`, `no impact`, `lt` and `l t` added to the not-a-scenario
+list) **and question 1** (ac3's definition).
+
+**The sync:** `scripts/task sync` rebased the branch onto `e39bbed`, after v1-e32-t15 and v1-e32-t18
+merged. Five files conflicted: the domain module and the service (both `landscape_report.py`),
+`render.py`, a test docstring and the guide. Each kept both sides. All 819 landscape tests pass
+after it, goldens included.
 
 ## The counts on the real store
 
@@ -266,28 +291,214 @@ Under DAs the 2+ names are mostly scenarios, with two caveats: `dome` and `golde
 scenario named two ways, and `too early`, `trump steals` and `other issues` are answers without a
 marker. Under advantages most are the aff's answers to DAs and Ks (`clog`, `dedev`), not scenarios.
 
+## The build on the real store
+
+**How it ran.** Read-only, hspolicy26 through 2026-10-20, taxonomy 1.2.0, the build as committed
+(`2ea5c6a`, before the sync, which changed no rule or service line).
+* **Guards:** no `DEBATE_*` variable was set and no `caselist pull` was running; the script checks
+  both and stops otherwise.
+* **Time limit:** `perl -e 'alarm 115'` on the interpreter.
+* **How:** `landscape_cards` and `LandscapeReportService.bundle` over t10's read-only inputs
+  (Deviation 2). No pool, and `multiprocessing.active_children()` was empty at the end.
+* **Runtime:** 53.7 s at load average 6.5.
+* **It wrote nothing:** all 15 files under `landscape/` and `reports/` had the same SHA-256 after it.
+* **Coverage as t10's:** 63,494 of 126,681 cards; impact coverage advantage 411 of 1,164, DA 296 of
+  662.
+* **Printing:** counts, and the scenario names, each line screened as before.
+
+| Count | Sent with the counts | The build | Why they differ |
+|---|---|---|---|
+| Impact rows, DA / advantage | 44 / 43 | 44 / 43 | |
+| Rows with a labelled internal link | 7 / 0 | 7 / 0 | |
+| Rows showing the card above it in the file | 11 / 30 | 11 / 30 | |
+| Rows with a scenario | 23 / 5 | **13 / 0** | The sent figure had no threshold. Two teams leave 13 / 1, and the advantage's one is withheld |
+| Scenario names withheld | 4 lines | 2 / 2 | |
+| Names used by two or more teams | | identical to [the counts' list](#scenario-names-grouped-by-normalized-words-with-teams) | |
+| DA positions (of 20) with a card for uniqueness, link, IL, impact | 15, 13, 10, 16 | 15, 13, 10, 16 | |
+| Advantage positions (of 16): uniqueness, link, IL, impact, harms, inherency, solvency | 6, 9, 3, 15, 1, 2, 7 | 6, **8**, 3, 15, 1, 2, 7 | The Pandemics advantage's only link-like tag opens `link turn`, which the ruled exclusions keep out of tags too |
+| ac3: documents with no scenario heading and no role label | 328 / 1,005 | **251 / 676** | Question 1, below |
+| The scan before sharing, report.md and impact_cards.csv | | no hit | |
+
+**ac3, step by step.** Each step adds one change, on the same documents.
+
+| Step | DA (of 662) | Advantage (of 1,164) |
+|---|---|---|
+| As sent: sub-heading labels only, t10's impact heading among them | 328 | 1,005 |
+| With Deviation 1's not-a-scenario additions | 328 | 1,005 |
+| With ruling 1's tag openings and t10's impact card (the build) | **251** | **676** |
+
+**The coach's seed for option (b)** is the table of names used by two or more teams under [the
+counts](#scenario-names-grouped-by-normalized-words-with-teams). The build finds exactly those names,
+with the same teams. Midterms DA has 14 shown and 2 withheld. Under the advantages, Disease has 2
+shown and 1 withheld, and Stagnation 0 shown and 1 withheld. The names that hold a caselist word stay
+counted and unprinted, here as in the report.
+
 ## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
-| scenarios-and-chains | In progress | Counts taken and sent (ac1). Waiting for the PM's ruling before the goldens, the rule and the build |
+| scenarios-and-chains | Done | Counts sent (ac1) and ruled on, then, in order:<br>1. the rulings in the spec (`48ddfe1`);<br>2. the fixture's headings, the domain values and the goldens by hand (`78cc4bc`);<br>3. the rule's tests, red against two skeletons, then the rule;<br>4. the service and renderer, then the service tests, red against a skeleton (`d587d99`, `28aef3a`, `9615025`);<br>5. 20 mutants;<br>6. a read-only re-count with the build;<br>7. the coach's guide (`70f4208`);<br>8. the sync |
 
 ## Acceptance criteria
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| ac1: counts before any rule, per DA and advantage, of documents with scenario headings, chain-role labels or neither, and of t10's impact cards under a scenario heading or below another card, sent to the PM with the proposed role labels and scenario-naming options | PASS (sent; awaiting the ruling) | [The counts on the real store](#the-counts-on-the-real-store) and [the question block](#questions-for-the-pm) |
-| ac2: after the ruling, goldens, the never-fills-a-role rules, tests shown failing first | NOT RUN | Waits for the ruling |
-| ac3: the report states, per kind, how many documents carry no scenario heading and no role label | NOT RUN | Waits for the ruling. Today's values: DA 328 of 662, advantage 1,005 of 1,164 |
-| scenarios-and-chains: `uv run pytest packages/debate_core/tests/application/test_landscape_report.py` | NOT RUN | Waits for the build |
+| ac1: counts before any rule, per DA and advantage, of documents with scenario headings, chain-role labels or neither, and of t10's impact cards under a scenario heading or below another card, sent to the PM with the proposed role labels and scenario-naming options | PASS | [The counts on the real store](#the-counts-on-the-real-store) and the first question block. The PM ruled on 2026-10-25: role labels (a); scenario names (c), building (a) now; the internal link (a) plus the card-above line; the chain as proposed; scope yes |
+| ac2: after the ruling, on the synthetic fixture, report.md shows under each impact card its scenario and its internal link's tag, and per DA and advantage its most-read card per chain role, matching hand-written golden files; an ANSWERS card or a card on the other side never fills a role; a role or scenario no heading or label gives is counted, not guessed; tests shown failing first | PASS | `test_rendering_the_fixture_matches_the_golden_file[report.md]` and `[impact_cards.csv]` pass against goldens committed in `78cc4bc` before any rule or service code. ANSWERS: `test_chain_an_answers_card_never_fills_a_role` (a3's cluster 36 fills the IL once made READS) and `test_lead_in_an_answers_card_is_never_the_internal_link`. Other side: `test_chain_a_card_in_a_round_on_the_other_side_never_fills_a_role` (a6's cluster 45, once its round has no side). Counted, not guessed: `test_coverage_counts_what_no_heading_or_label_gives_per_kind` and every "no labelled card" and "no labelled internal link" line of the golden. Red runs [below](#checks-shown-failing-for-their-reason) |
+| ac3: the report states, per kind, how many documents carry no scenario heading and no role label | PASS | report.md: "Advantage documents with no scenario heading and no role label: 1 of 6 (16.7%)." and "DA documents with no scenario heading and no role label: 2 of 6 (33.3%)." On hspolicy26: DA 251 of 662, advantage 676 of 1,164 (question 1) |
+| scenarios-and-chains: `uv run pytest packages/debate_core/tests/application/test_landscape_report.py` | PASS | Run as `.venv/bin/python -m pytest …` under a 110 s alarm, with the landscape tests: **819 passed in 3.23s** after the sync (`test_landscape_report.py` alone: 80 before the sync) |
+
+### Checks shown failing for their reason
+
+* **The goldens against today's code**, before any t14 code (`76847fd`, before the sync): **12
+  failed, 85 passed**.
+  * Failing: `report.md`, `impact_cards.csv` and t10's coverage-line test.
+  * Also failing: nine hand counts of t03 and t10, which the eleven new fixture cards shift. I
+    re-counted them by hand from the fixture table (cards 45 → 56, placed 34 → 45, the other-side
+    rounds 1 → 2, Costs and Spending top cards, the impact rows and coverage). After that only
+    t14's three failed.
+  * `top_cards.csv`, `positions.csv`, `trends.csv` and `schools.csv` passed on that run. Their hand
+    edits (new top-card rows, coverage `45/56`) agree with t03's existing code, which is a check on
+    those edits.
+* **The rule, `test_link_chains.py`** (137 cases):
+  * against a skeleton that labels nothing: **62 failed, 75 passed**;
+  * against one that labels and withholds everything: **122 failed, 15 passed**;
+  * no case passes under both (`comm -12` of the two pass lists is empty);
+  * the real rule: 137 passed, with t10's 80 `test_impacts.py` cases unchanged after `tag_opening`
+    was factored out.
+* **The service:** a scratch pytest plugin replaced `_LinkChains` with one that fills nothing (no
+  source edit). **14 failed, 98 passed.** Two of this task's tests passed under it:
+  * `test_lead_in_the_card_above_is_never_an_impact_card_or_in_another_block` guards the other
+    direction, and the card-above mutants catch it;
+  * `test_chain_the_impact_role_is_the_impact_sections_first_row` passed vacuously, looping over no
+    chain cards. It now names the three positions first: red under the skeleton (1 failed), green on
+    the build (`28aef3a`).
+* **20 mutants, all caught.**
+  * Each ran in a fresh process with bytecode writing off and `__pycache__` cleared, and each file
+    was restored and checked by SHA-256.
+  * The test files were `test_link_chains.py`, `test_impacts.py`, `test_landscape_report.py` and
+    `test_render.py` (329 tests, 330 with the card-above test).
+  * No Hypothesis is used, so working agreement 8's database rule does not arise.
+  * The runs were on `2ea5c6a`, before the sync, which rewrote no rule or service line.
+  * "t14 tests" counts this task's tests and the two goldens that hold its sections.
+
+  | Mutant | Failed | Of them, t14 tests |
+  |---|---|---|
+  | Role: a `u` in a tag labels uniqueness (the PM's) | 6 | 6 |
+  | Role: `no link` labels a link (the PM's) | 5 | 5 |
+  | Role: an answer sub-heading fills a role (the PM's) | 5 | 5 |
+  | Role: a heading holding two roles fills both | 2 | 2 (the rule's unit tests; no fixture heading holds two) |
+  | Role: `u s` (U.S.) labels uniqueness in a heading | 2 | 2 (unit tests) |
+  | Role: harms, inherency and solvency label a DA's cards | 7 | 7 |
+  | Threshold: one team shows a name (the PM's) | 4 | 4 |
+  | Threshold: three teams are needed | 5 | 5 |
+  | Withheld: no name is withheld (the PM's) | 6 | 5 |
+  | Withheld: a withheld name is shown, only counted | 5 | 4 |
+  | Withheld: team codes are not caselist words | 3 | 3 (unit tests; the fixture's withheld name holds a school word) |
+  | Withheld: school and tournament words of any length | 1 | 1 |
+  | ANSWERS: an uncounted card above can be the internal link (the PM's) | 4 | 4 |
+  | ANSWERS count as reads (shared with t03; the PM's) | 21 | 7 |
+  | Other side counts (shared with t03; the PM's) | 22 | 6 |
+  | Card above: the line calls itself an internal link (the PM's) | 1, then **2** | 1, then 2 |
+  | Card above: it fills `internal_link_tag`, and so the CSV | 4, then 5 | 4 |
+  | Card above: shown beside a labelled internal link | 1 | 1 |
+  | Card above: an impact card above counts | 1 | 1 |
+  | Card above: any card directly above, whatever its block | 3 | 3 |
+
+  The PM's card-above mutant was first caught by the report.md golden alone. I added
+  `test_the_card_above_an_impact_is_never_called_its_internal_link` (`9615025`) and re-ran the five
+  card-above mutants: 2 and 5 tests now.
+
+## Before the report (working agreement 10)
+
+All of these ran after the sync, on `fddd459`.
+
+* **The affected set is over two minutes.** `uv run scripts/affected_tests.py` chose 196 of 477 files
+  (41.1%) from 24 changed files. I ran them as `.venv/bin/python -m pytest -q -n 6 -m "not slow and
+  not live" -p no:randomly <files>` under a 115 s alarm, at load average 4.3.
+  * The alarm stopped it at 77%. Its progress lines up to then hold 4,248 passes and no failure or
+    error.
+  * No process outlived it.
+  * So it is left to the pull request's `ci`, which runs the whole selection.
+* **Within the two minutes, the tests of what changed and the always-run list:**
+  * the landscape, analytic-text, plan-text, aff-assignment, classification and file-suggest tests in
+    `packages/debate_core/tests/application`, plus `packages/debate_core/tests/arguments/landscape`,
+    `packages/debate_core/tests/domain` and `packages/debate_core/tests/integrations/landscape`;
+  * the two landscape removal tests in `application/caselist`;
+  * `packages/debate_cli/tests/test_landscape_command.py` and `tests/smoke/test_landscape_smoke.py`;
+  * `tests/config`, `tests/architecture`, `tests/specs` and `tests/scripts`;
+  * result: **3,949 passed in 70.06s**, under a 115 s alarm at load average 9.7.
+* **The fixture generator reproduces the committed inputs byte for byte** after the sync (`git
+  status` clean after `scripts/make_landscape_fixture.py`).
+* `uv run --frozen ruff format --check .` → 1320 files already formatted. `uv run --frozen ruff
+  check .` → all checks passed.
+* `uv run --frozen pyright`, bare as CI runs it → 0 errors, 0 warnings.
+* `uv run --frozen lint-imports` → 16 kept, 0 broken. `scripts/check_thin_handlers.py` → 54 handlers
+  within 25 statements.
+* `uv run scripts/validate_specs.py` → OK, 451 files. `--require-succeeded
+  v1-e32-t14-scenarios-and-link-chains` → Succeeded. The ruling comment parses as a comment: the
+  parsed description does not contain it.
+* `scripts/check_command_blocks.py --base origin/dev` → no `#` comments, this report included.
+* No `pyproject.toml`, `uv.lock`, conftest or pytest-plugin change, so no whole-selection hand-off.
 
 ## Files changed
 
-* This report only, so far.
+* **`debate_core.arguments.landscape.link_chains`** (new): the rule.
+  * Contents: `heading_roles`, `tag_role`, `card_roles`, `card_scenario`, `caselist_words`,
+    `is_withheld`, `NOT_A_LINK` and `NOT_A_SCENARIO`.
+  * Its tests are `tests/arguments/landscape/test_link_chains.py` (new, 137).
+* **`arguments/landscape/impacts.py`:** `tag_opening`, t10's enumerator-skipping, factored out so both
+  rules read a tag's opening alike.
+* **`arguments/landscape/matcher.py`:** `PositionMatcher.placing_index`, the index of the heading
+  `place` already finds, made public so the report reads sub-headings by the matcher's own rule.
+* **`domain/landscape_report.py`:**
+  * `LandscapeCard.heading_answers`;
+  * `ImpactCard.scenario`, `.internal_link_tag` and `.card_above_tag`;
+  * `ChainRole`, `CHAIN_ROLES`, `ChainCard`, `RoleGap` and `ChainCoverage`;
+  * `LandscapeReport.chain_cards` and `.chain_coverage`.
+* **`application/landscape_report.py`:** `landscape_cards` records each heading's answer flag;
+  `_LinkChains` reads roles, scenarios and lead-ins from the counted cards; the docstring's new
+  section.
+* **`arguments/landscape/render.py`:** `IMPACT_CARD_COLUMNS` gains the two columns, and report.md
+  gains the impact table's Scenario column, the lead-in bullets, the chain table, the per-kind lines
+  and two "How to read" bullets.
+* **Tests:**
+  * `test_landscape_report.py`: 17 new tests (chain, lead-in, scenario, coverage, answer flags),
+    and the hand counts the fixture's new cards shift, edited by hand;
+  * `test_render.py`: the card-above test, the column pin, t10's coverage line, and "report.md lists
+    impact and chain cards only".
+* **`tests/fixtures/landscape/`:**
+  * the inputs: six cards re-headed, eleven added, the taxonomy's aliases, written by
+    `scripts/make_landscape_fixture.py`;
+  * the README's new section;
+  * the goldens, by hand: report.md, impact_cards.csv, top_cards.csv, and every header's coverage.
+* **`scripts/make_landscape_fixture.py`:** the cards, `answers` and `ALIASES`, in scope by the PM's
+  ruling.
+* **`docs/guides/landscape-taxonomy.md`:** a "Scenarios and link chains" section, and a `none`
+  decision still labelling a role.
+* **The spec:** the rulings as a comment above `acceptanceCriteria`, `scripts` in
+  `constraints.packages` with its comment, and the phase.
 
 ## Deviations from the spec
 
-None yet. Question 5 asks for the one scope amendment the build would need.
+1. **Four phrases added to the not-a-scenario list:** `no link`, `no impact`, `lt` and `l t`, beside
+   `link defense`, which `defense` already covered.
+   * **Why:** ruling 2 took my list as sent. But these phrases are the role rules' own exclusions
+     (ruling 1 and t10's). Without them, `no impact` under the Midterms DA would name a scenario
+     "no impact" as soon as two teams used it.
+   * **On hspolicy26,** 24 DA cards (19 under `lt`, 5 under a heading holding `no impact`) and 1
+     advantage card (`no link`) stop counting as under a scenario heading.
+     No document's ac3 count moves, since each of those files carries a role label anyway, and the
+     list of names two or more teams use is unchanged.
+   * In the fixture, `b3`'s `no impact` is the case.
+   * Remove the four from `NOT_A_SCENARIO` to undo it. Question 2.
+2. **The re-count used the report service directly, not the run's dry run.**
+   * The dry run reads t09's and t11's caches through a spawned worker pool, re-parsing what they
+     lack. That put it near the two-minute line, where an alarm that kills the parent orphans its
+     workers.
+   * t09's aff assignments and t11's texts touch neither section, so the script fed the built
+     `landscape_cards` and `LandscapeReportService.bundle` the same read-only inputs t10's count used.
+   * It started no pool.
 
 ## Decisions and assumptions
 
@@ -303,21 +514,60 @@ None yet. Question 5 asks for the one scope amendment the build would need.
    first pass skipped them, and every role count came out low (DA 243 documents, not 302). I caught
    it because `solvency` showed in 22 advantage documents and the rule counted 7. Only the corrected
    counts are reported here.
+5. **Sub-headings in the build** are found by `PositionMatcher.placing_index` over the card's
+   normalized headings (`LandscapeCard.headings`), the same rule the counts recomputed. The fixture's
+   taxonomy gained the aliases its headings name so this works there as on the real taxonomy.
+6. **The same block** is equal normalized headings and answer flags. **The same position heading**
+   is equal headings and flags down to the placing one. The walk for an internal link stops at the
+   first card of another position heading, and passes over a card not counted for the position.
+7. **A row's scenario, internal link and card above** each come from its labelled copies. Each copy
+   adds its teams, and the value with the most teams shows, ties to the first in text order. A copy's
+   scenario name counts only if it is shown for the position (two or more teams, not withheld). The
+   card above is looked for only when no copy has a labelled internal link.
+8. **ac3 counts every role label the chain reads:** a sub-heading's, a tag opening's, and t10's
+   impact card. A document has neither when none of its counted cards for a position of the kind is
+   under a scenario heading or carries one. Question 1.
+9. **A withheld name** is one two or more teams use that holds a word of a caselist school or
+   tournament of four letters or more, or any team code, from every disclosure the report reads.
+   Only names that would otherwise show are counted as withheld.
+10. **The chain's impact role** is t10's impact card, whatever else its heading holds, so it is the
+    impact section's first row. An answer sub-heading that holds `impact` therefore still makes t10's
+    impact card, as t10's rule always did; it fills none of the other six roles.
 
 ## Operator follow-ups
 
-None yet.
+1. **The pull request,** from the worktree:
+
+```bash
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t14-scenarios-and-link-chains
+```
+
+```bash
+scripts/task pr v1-e32-t14-scenarios-and-link-chains
+```
+
+2. **After the merge,** the next `landscape report` run adds the scenario, internal-link, card-above
+   and link-chain sections to report.md and the two columns to impact_cards.csv. Republishing is the
+   PM's to coordinate. On today's store the scan before sharing found no hit in report.md or
+   impact_cards.csv.
 
 ## Follow-up work
 
+* **The coach's scenario vocabulary (option b, after Nov 1):**
+  * the names below, used by two or more teams, are its seed;
+  * a taxonomy version bump under v1-e32-t08's lock, for the PM to file;
+  * "dome" and "golden dome" stay apart until the coach merges them.
 * **v3 E21's chain completeness** is the long-term version, in the debate tub. Nothing here builds
   toward it, as briefed.
-* **Unlabelled advantage structure** (1,005 of 1,164 documents) is a model-stage question, like
-  t10's unlabelled impacts: v1-e32-t07's, not this task's.
+* **Unlabelled structure** is a model-stage question, like t10's unlabelled impacts: v1-e32-t07's,
+  not this task's. On hspolicy26 that is 676 of 1,164 advantage documents and 251 of 662 DA
+  documents.
+* **The source heading normalizer still leaves some school first words in headings** (t10's
+  follow-up). Withholding by word catches them in scenario names.
 
 ## Questions for the PM
 
-Sent 2026-10-25, before anything is built:
+The first block was answered on 2026-10-25 (see the spec's ruling comment). Kept as sent:
 
 ```text
 v1-e32-t14 questions (session, 2026-10-25): counts first, nothing built
@@ -447,6 +697,40 @@ The counts, per kind:
    (that file only)? Nothing else outside it is needed: the CLI and smoke
    tests pin the bundle's file names, not impact_cards.csv's columns.
    Recommendation: yes.
+```
+
+Second block, after the build (2026-10-25):
+
+```text
+v1-e32-t14 questions after the build (session, 2026-10-25)
+
+Built as ruled: hand-written goldens matched byte for byte on the first run;
+the rule's tests red against two opposite skeletons, the service's against a
+fill-nothing one; 20 mutants caught (the nine on the PM's cases among them). A read-only
+re-count on hspolicy26 with the build (53.7 s, no pool, store unchanged)
+matches the ruled counts: 44 / 43 rows, labelled IL 7 / 0, card above
+11 / 30, the same names used by 2+ teams, the same 4 withheld, no scan hit.
+Rows with a scenario are 13 / 0 (sent 23 / 5, before the two-team threshold
+and withholding). Goal Succeeded. Synced onto dev after t15 and t18; both
+sides kept; 819 landscape tests pass.
+
+1. ac3's measure. A document has neither when none of its counted cards is
+   under a scenario heading or carries a role label, a label being what the
+   chain reads: a sub-heading's, a tag opening's (ruling 1), or t10's impact
+   card. On hspolicy26: DA 251 of 662, advantage 676 of 1,164. The counts I
+   sent used sub-heading labels only: 328 and 1,005.
+   (a) As built: every label the chain reads.
+   (b) Sub-heading labels only, as sent.
+   Recommendation: (a). The line then says exactly what the chain and the
+   scenarios could not see, as t10's ac3 line does for impacts; under (b),
+   an advantage whose impact the report lists by its tag would still count
+   as carrying no label.
+
+2. Deviation 1. I added `no link`, `no impact`, `lt` and `l t` to the
+   not-a-scenario list; they are the role rules' own exclusions. On
+   hspolicy26 it moves 25 cards and no document or shown name. Keep them?
+   Recommendation: yes. Without them, "no impact" names a scenario as soon
+   as two teams file defense under it.
 ```
 
 ## PM review

@@ -1224,9 +1224,50 @@ The Goal stays **Succeeded**: every criterion passes with the rulings applied.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-24
 
 **Notes:**
+
+ac3 is done, and done carefully. The Policy landscape now says what affs teams read.
+
+1. **The numbers.**
+   * **Rounds:** 1,483 of 2,192 affirmative rounds are identified (67.7%), against the first
+     report's 1,252 (57.1%).
+   * **Teams:** 360 of 552 (65.2%).
+   * **Plan texts:** UNNAMED fell from 192 to 2, the two the coach left unplaced. `nhi-aff` takes 56
+     rounds.
+   * **Cards:** 86 cards move from single payer to a child, none holds two children's keywords, and
+     the counted cards are unchanged at 63,494.
+2. **What I checked in the branch.** `config/landscape/plan_texts/policy-2026-27-nhi.yaml` holds
+   two lists of single words and a comment, with no plan text, team or school. The children's
+   labels carry the PM-ruling comment, and the ids follow the rule. The coach's CSV was read where
+   it is, and nothing from it but his keywords and labels is committed.
+3. **The rulings are applied as given.**
+   * Sentence case for the labels.
+   * `tests/config` added to the packages.
+   * `nhi-aff` as the least specific aff, in `narrowest`, at all three levels, with its red run and
+     6 mutants. The indigenous document now names indigenous, and the incarceration and single payer
+     document stays CONFLICTING.
+4. **Accepted as made:**
+   * deviation 3 (the frame fixed in config, so a weekly frame cannot move assignments without an
+     edit);
+   * the federal-actor rule read before the last `should`. It removes only C59's counterplan
+     paragraph and changes no verdict;
+   * two children of single payer conflicting for a plan text (C74), while the matcher keeps the
+     parent for cards;
+   * not running `assign`, because it would rewrite the coach's review queue.
+5. **The keyword-only candidates.** 1,371 cards that nothing placed now carry a keyword-only
+   candidate (0.5) and stay out of the counts, as t02's rule 4 intends. The largest group, 356 cards
+   for `indigenous`, are mostly in negative K files. That is the expected effect of a single-word
+   keyword, and the coach can see it in the queue. No change is needed now.
+6. **`test_task_restart.py`'s one failure** reads PENDING until this verdict. It passes on
+   ACCEPTED.
+
+**After the merge, coordinated by the PM:** the first publish under 1.2.0. That is a dry run, the
+two new scan hits read and accepted (the word in "Medicare for All", as in the first report), the
+publish, then `scripts/release_landscape_taxonomy.py --topic policy-2026-27-nhi --version 1.2.0`.
+The PM commits `released.yaml` in a PM batch. The Goal is `Succeeded`, so the PR goes without
+`--partial`. `v1-e32-t11` becomes ready once this merges.

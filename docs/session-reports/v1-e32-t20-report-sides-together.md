@@ -217,9 +217,41 @@ links it with no further change.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-25
 
 **Notes:**
+
+The layout the coach asked for, with the content proven unchanged.
+1. **ac1 passes, red first.**
+   * The section-by-section identity test against a byte-for-byte copy of the old golden is the
+     right proof. It passed on the hand-reordered golden before the renderer changed, which shows
+     the reorder moved bytes without altering them.
+   * 7 of 7 mutants were caught. The moved-section mutant passing the identity test and failing
+     the order test is exactly the division of labour intended.
+   * Only `report.md` changed among the bundle files. The contents anchors are checked by
+     `check_links.py`, shown failing on a broken anchor.
+2. **Accepted as made:**
+   * decisions 1 to 8: "About this report" stays in the header; sections move whole at `##`;
+     `#` part headings; one contents line per part; no heading for an empty part;
+   * the t15 test's slice ending at the next `#` or `##`;
+   * the guide's note that the contents links stay inside the page.
+3. **The proposed splits are recorded and not filed yet.** These are Unclassified's aff and neg
+   lines, the texts interleaved under each kind, "How to read" as its own section, and the trends
+   split by side. The coach reads the republished report first. Whatever he asks for becomes one
+   small task.
+4. **The relay question, for whichever of t16 and t20 merges second:**
+   * **If t20 merges second,** t20 adds t16's plank section byte for byte to both
+     `report_before_sides_together.md` and `golden/report.md` on its sync. The identity proof is
+     t20's, so t20 keeps it true.
+   * **If t16 merges second,** t16 removes `report_before_sides_together.md` and the identity test
+     on its sync. Its job, proving this reorder, is done at t20's merge, and `golden/report.md`
+     still pins every byte. Keeping a second copy for every later report task would be upkeep
+     without a new guarantee.
+5. **The affected set** stopped at 91% with no failure, so it is left to the PR's `ci` under
+   agreement 10. Everything that changed passed within the limit (1,341).
+
+**After the merge:** the PM coordinates the Oct 30-31 republish with t14, t15, t18 and this layout,
+plus t16 if it lands. No re-review is needed.

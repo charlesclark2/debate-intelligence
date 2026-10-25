@@ -15,10 +15,12 @@ could not contradict it.
     uv run python scripts/make_landscape_fixture.py
 
 The fixture is small enough to count on paper: 20 sources, 24 disclosure rows, 16 rounds in range
-by 8 teams through the second snapshot, 47 cards of the first 15 sources (45 of them in range). Its
+by 8 teams through the second snapshot, 58 cards of the first 15 sources (56 of them in range). Its
 README says what each part exercises. Owned by `v1-e32-t03`; `v1-e32-t10` gave the DA and advantage
-cards their headings for the impact rule, and `v1-e32-t04` the third weekly window that its trends
-are tested on (a rising, a falling and a new position, and a file carried into it under a new path).
+cards their headings for the impact rule, `v1-e32-t14` the scenario and chain-role headings and the
+cards that test them (and the aliases its sub-headings are read below), and `v1-e32-t04` the third
+weekly window that its trends are tested on (a rising, a falling and a new position, and a file
+carried into it under a new path).
 
 `v1-e32-t04` also writes `tests/fixtures/landscape/topic_change_caselist/`: a separate two-snapshot
 Lincoln-Douglas caselist whose topic changes between its snapshots, with the `topics.yaml` that says
@@ -60,6 +62,18 @@ SECOND: Final = date(2026, 9, 15)
 LATER: Final = date(2026, 9, 22)
 """The third snapshot, after the t03 report's date: its disclosures are out of that report's range."""
 _PARAGRAPHS_PER_CARD: Final = 3
+
+ALIASES: Final = {
+    "costs-advantage": ("costs advantage",),
+    "innovation-advantage": ("innovation advantage",),
+    "spending-da": ("spending da",),
+    "election-da": ("midterms da",),
+    "hospital-closures-da": ("hospital closures da",),
+    "provider-strikes-da": ("provider strikes da",),
+    "cap-k": ("capitalism k",),
+}
+"""The headings the cards' paths name each position by: `v1-e32-t14` reads a card's sub-headings below
+the one that placed it, which the matcher's rule finds by these."""
 
 POSITIONS: Final = (
     ("single-payer-aff", "Single payer", "aff", "aff", None),
@@ -163,6 +177,8 @@ class FixtureCard:
     method: ClassificationMethod | None = ClassificationMethod.ALIAS
     headings: tuple[str, ...] = ()
     """The normalized headings over the card, which `v1-e32-t10`'s impact rule reads."""
+    answers: tuple[bool, ...] = ()
+    """Beside each heading, whether it answers (`AT:`); empty when none does (`v1-e32-t14`)."""
 
 
 def _unplaced(cluster: int, tag: str, cite: str) -> FixtureCard:
@@ -177,13 +193,16 @@ _COSTS: Final = ("costs advantage",)
 _INNOVATION: Final = ("innovation advantage",)
 _SPENDING: Final = ("spending da",)
 _MIDTERMS: Final = ("midterms da",)
+_COSTS_SCENARIO: Final = (*_COSTS, "scenario 1 economic collapse")
 
 CARDS: Final = {
     "a1": (
         FixtureCard(
             1, "a", "Single payer is the only path to universal coverage", "Brandt 24", "single-payer-aff"
         ),
-        FixtureCard(2, "a", _COSTS_TAG, "Okafor 25", "costs-advantage", method=_INHERITED, headings=_COSTS),
+        FixtureCard(
+            2, "a", _COSTS_TAG, "Okafor 25", "costs-advantage", method=_INHERITED, headings=_COSTS_SCENARIO
+        ),
         FixtureCard(
             2,
             "d",
@@ -191,15 +210,21 @@ CARDS: Final = {
             "Okafor 25",
             "costs-advantage",
             method=_INHERITED,
-            headings=_COSTS,
+            headings=_COSTS_SCENARIO,
         ),
         FixtureCard(
-            4, "a", "Spending DA non-unique", "Grant 26", "spending-da", role=_ANSWERS, headings=_SPENDING
+            4,
+            "a",
+            "Spending DA non-unique",
+            "Grant 26",
+            "spending-da",
+            role=_ANSWERS,
+            headings=(*_SPENDING, "uq"),
         ),
         _unplaced(5, "Coverage gaps kill", "Patel 25"),
     ),
     "a2": (
-        FixtureCard(2, "b", _COSTS_TAG, "Okafor 25", "costs-advantage", headings=_COSTS),
+        FixtureCard(2, "b", _COSTS_TAG, "Okafor 25", "costs-advantage", headings=(*_COSTS, "no link")),
         FixtureCard(
             6,
             "a",
@@ -215,6 +240,31 @@ CARDS: Final = {
         FixtureCard(9, "a", "A public option competes prices down", "Liang 26", "public-option-aff"),
         FixtureCard(2, "a", _COSTS_TAG, "Okafor '25", "costs-advantage", method=_INHERITED, headings=_COSTS),
         _unplaced(10, "Solvency is immediate", "Reyes 24"),
+        FixtureCard(
+            35,
+            "a",
+            "Single payer solves within a year",
+            "Reyes 25",
+            "costs-advantage",
+            headings=(*_COSTS, "solvency"),
+        ),
+        FixtureCard(
+            36,
+            "a",
+            "Drug prices drive the deficit",
+            "Haddad 24",
+            "costs-advantage",
+            role=_ANSWERS,
+            headings=(*_COSTS, "internal link"),
+        ),
+        FixtureCard(
+            37,
+            "a",
+            "Extinction from a debt crisis",
+            "Okafor 26",
+            "costs-advantage",
+            headings=(*_COSTS, "debt crisis impact"),
+        ),
     ),
     "a4": (
         FixtureCard(
@@ -231,14 +281,17 @@ CARDS: Final = {
             "Bulk purchasing lowers drug prices",
             "Haddad 23",
             "costs-advantage",
-            headings=(*_COSTS, "impact"),
+            headings=(*_COSTS, "drug prices impact"),
         ),
         _unplaced(11, "Inherency: the status quo fails", "Nguyen 26"),
     ),
     "a5": (
-        FixtureCard(2, "c", _COSTS_TAG, "Okafor 25", "costs-advantage", headings=_COSTS),
+        FixtureCard(
+            2, "c", _COSTS_TAG, "Okafor 25", "costs-advantage", headings=(*_COSTS, "economic collapse")
+        ),
         FixtureCard(27, "a", "Conditionality is a voting issue", "Feldman 22", "condo-bad"),
         FixtureCard(12, "a", "Extra evidence", "Ito 19", None, None, ClassificationMethod.OVERRIDE),
+        FixtureCard(38, "a", "U: premiums are rising now", "Vance 26", "costs-advantage", headings=_COSTS),
     ),
     "a6": (
         FixtureCard(
@@ -257,6 +310,14 @@ CARDS: Final = {
         FixtureCard(
             31, "a", "Spending is already high", "Mori 25", "spending-da", headings=(*_SPENDING, "impact")
         ),
+        FixtureCard(
+            45,
+            "a",
+            "Reform energizes the base",
+            "Ward 25",
+            "election-da",
+            headings=(*_MIDTERMS, "internal link"),
+        ),
     ),
     "b1": (
         FixtureCard(
@@ -269,7 +330,7 @@ CARDS: Final = {
             "Ruiz 26",
             "spending-da",
             method=_INHERITED,
-            headings=(*_SPENDING, "turns case"),
+            headings=(*_SPENDING, "cedarvale crash", "turns case"),
         ),
         FixtureCard(16, "a", "States can implement single payer", "Kowal 24", "states-cp"),
         FixtureCard(
@@ -301,6 +362,14 @@ CARDS: Final = {
             headings=("capitalism k", "impact"),
         ),
         _unplaced(19, "Uniqueness overwhelms the link", "Cole 26"),
+        FixtureCard(
+            39,
+            "a",
+            "Recession spreads worldwide",
+            "Park 25",
+            "spending-da",
+            headings=(*_SPENDING, "recession"),
+        ),
     ),
     "b3": (
         FixtureCard(
@@ -315,6 +384,15 @@ CARDS: Final = {
             21, "a", "National health insurance means a single government insurer", "Ostrova 20", "nhi-t"
         ),
         FixtureCard(22, "a", "Courts can mandate coverage", "Bell 23", "courts-cp", method=_KEYWORD),
+        FixtureCard(
+            43,
+            "a",
+            "Incumbents already trail",
+            "Abara 25",
+            "election-da",
+            headings=(*_MIDTERMS, "uniqueness"),
+            answers=(False, True),
+        ),
     ),
     "b4": (
         FixtureCard(
@@ -334,6 +412,7 @@ CARDS: Final = {
             "hospital-closures-da",
             headings=("hospital closures da", "impact"),
         ),
+        FixtureCard(44, "a", "The link: reform polls badly", "Ward 26", "election-da", headings=_MIDTERMS),
     ),
     "b5": (
         FixtureCard(16, "a", "States can implement single payer", "Kowal 24", "states-cp"),
@@ -345,6 +424,25 @@ CARDS: Final = {
             "spending-da",
             method=_INHERITED,
             headings=_SPENDING,
+        ),
+        FixtureCard(
+            40, "a", "Spending is at a record high now", "Ito 25", "spending-da", headings=(*_SPENDING, "u")
+        ),
+        FixtureCard(
+            41,
+            "a",
+            "Deficits spike interest rates",
+            "Lee 26",
+            "spending-da",
+            headings=(*_SPENDING, "internal link"),
+        ),
+        FixtureCard(
+            42,
+            "a",
+            "Rate spikes cause a recession",
+            "Park 26",
+            "spending-da",
+            headings=(*_SPENDING, "recession impact"),
         ),
     ),
     "b6": (
@@ -450,6 +548,7 @@ def taxonomy() -> Taxonomy:
                     "kind": kind,
                     "side": side,
                     **({"parent": parent} if parent else {}),
+                    **({"aliases": list(ALIASES[one])} if one in ALIASES else {}),
                 }
                 for one, label, kind, side, parent in POSITIONS
             ],
@@ -505,6 +604,7 @@ def cards(planted_cards: dict[str, tuple[FixtureCard, ...]] = CARDS) -> list[Lan
             tag=card.tag,
             short_cite=card.cite,
             headings=card.headings,
+            heading_answers=card.answers,
         )
         for source, planted in planted_cards.items()
         for index, card in enumerate(planted)

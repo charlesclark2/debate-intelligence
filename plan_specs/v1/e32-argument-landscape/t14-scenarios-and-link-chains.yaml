@@ -39,7 +39,9 @@ spec:
     show them; no school or team code in report.md or impact_cards.csv.
   priority: 1
   constraints:
-    packages: [debate_core.application, debate_core.arguments, debate_core.domain, tests/fixtures/landscape, packages/debate_core/tests, docs/guides, config/landscape, tests/config]
+    # PM ruling 2026-10-25 (v1-e32-t14 counts, question 5): scripts, for scripts/make_landscape_fixture.py
+    # only, the synthetic fixture's one writer.
+    packages: [debate_core.application, debate_core.arguments, debate_core.domain, tests/fixtures/landscape, packages/debate_core/tests, docs/guides, config/landscape, tests/config, scripts]
     forbidden:
       - A school, team code or debater's name in a circuit-wide file, log or commit
       - Card text, plan or counterplan text in a committed file or fixture (synthetic values only)
@@ -49,6 +51,37 @@ spec:
     - kind: TaskRef
       name: v1-e32-t10-impact-cards-per-position
       relation: dependsOn
+  # PM rulings on ac1's counts, 2026-10-25 (session report, questions 1-5):
+  # 1. Role labels (a), as proposed: a sub-heading below the placing heading, or a tag's opening after
+  #    t10's enumerator. Uniqueness: uniqueness, uq, or u as a heading's first word (never u s, never u
+  #    in a tag). Link: link, links, or l as a heading's first word; not link turn(s), no link, link
+  #    defense, lt, l t, internal link; tags: link, links, the link. Internal link: internal link(s),
+  #    internal, internals, il, i l. Impact: t10's rule, reused. Advantages only: harms/harm,
+  #    inherency/inh, solvency/solv. An answer sub-heading, or a heading holding two roles' labels,
+  #    fills nothing. The coach's no-position rulings still label roles.
+  # 2. Scenario names (c): build (a) now. Normalized heading words (a numbered heading's after
+  #    "scenario N (is)", a named sub-heading, or the words beside an impact or IL label), shown only
+  #    when two or more teams use them, with the session's not-a-scenario list. A name holding a word
+  #    of a caselist school, team code or tournament is withheld and counted. The full list of names
+  #    used by 2+ teams goes in the session report as the coach's seed for (b) after Nov 1; "dome" and
+  #    "golden dome" stay apart until he merges them.
+  # 3. The internal link (a), labelled only: the nearest card above under the same position heading in
+  #    its file whose heading or tag labels it internal link; "no labelled internal link" counted. Plus,
+  #    report.md only: with no labelled internal link, when the card directly above in the same block
+  #    is not itself an impact card, its most common tag across the row's copies as "Card above it in
+  #    the file:", never called an internal link, counted separately. impact_cards.csv gains scenario
+  #    and internal_link_tag only.
+  # 4. The link chain as proposed: each role's most-read card per position, ranked as t10's ruling 3
+  #    ranks them, in report.md beside the impact block, "no labelled card" counted; no chain rows in
+  #    the CSV and no new file.
+  # 5. Scope: scripts/make_landscape_fixture.py only.
+  # PM rulings after the build, 2026-10-25 (session report, second block):
+  # 6. ac3 (a), as built: a document has neither when it has no scenario heading and no label the chain
+  #    reads (a sub-heading's, a tag opening's or t10's impact card); sent 328 and 1,005, built 251 and 676.
+  # 7. Deviation 1 kept: no link, no impact, lt and l t are not scenarios (the role rules' own exclusions).
+  # Also: hand-written goldens shown failing first; mutants on the role labels (a u in a tag, no link
+  # as a link, an answer heading filling a role), the two-team threshold, the withheld names, an
+  # ANSWERS or other-side card filling a role, and the card-above line calling itself an internal link.
   acceptanceCriteria:
     - id: ac1
       description: >-
@@ -68,7 +101,7 @@ spec:
         The report states, per kind, how many documents carry no scenario heading and no
         role label.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

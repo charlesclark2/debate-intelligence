@@ -64,8 +64,12 @@ from typing import Final
 from debate_core.arguments.landscape.aff_assignment import PLAN_TEXT_METHOD, TEAM_CARRY_METHOD
 from debate_core.domain.landscape import PositionKind, PositionSide
 from debate_core.domain.landscape_report import (
+    CHAIN_ROLES,
     IMPACT_KINDS,
     PLACED_CARD_METHOD,
+    ChainCoverage,
+    ChainRole,
+    ImpactCard,
     ImpactCoverage,
     LandscapeReport,
     PositionStats,
@@ -128,8 +132,9 @@ TOP_CARD_COLUMNS: Final = (
 )
 """top_cards.csv's columns, in order (ac2)."""
 
-IMPACT_CARD_COLUMNS: Final = TOP_CARD_COLUMNS
-"""impact_cards.csv's columns: a top card's, of the cluster's labelled copies (`v1-e32-t10`)."""
+IMPACT_CARD_COLUMNS: Final = (*TOP_CARD_COLUMNS, "scenario", "internal_link_tag")
+"""impact_cards.csv's columns: a top card's, of the cluster's labelled copies (`v1-e32-t10`), then its
+scenario and its labelled internal link's tag (`v1-e32-t14`). The card above it is report.md's only."""
 
 TREND_COLUMNS: Final = (
     "position_id",
@@ -286,7 +291,13 @@ def render_impact_cards_csv(report: LandscapeReport, metadata: Mapping[str, str]
         },
     }
     return _csv(
-        {**metadata, **impacts}, "impact_cards", IMPACT_CARD_COLUMNS, map(_card_row, report.impact_cards)
+        {**metadata, **impacts},
+        "impact_cards",
+        IMPACT_CARD_COLUMNS,
+        (
+            (*_card_row(card), card.scenario or "", card.internal_link_tag or "")
+            for card in report.impact_cards
+        ),
     )
 
 
@@ -400,6 +411,19 @@ def _header_section(report: LandscapeReport, trends: LandscapeTrends | None = No
         "tag opens with an impact word such as `extinction`, `existential` or `the impact`. Only the "
         "labelled copies of a card count. An impact nobody labelled is not found, so each kind says how "
         "many of its documents carry no labelled impact. They are also in `impact_cards.csv`.",
+        "* **What each impact runs through**, under its impact cards: a row's **scenario** is heading words "
+        "two or more teams use under the position (a `Scenario 1` heading's name, a named heading, or the "
+        "words beside an impact or internal-link label, such as `Dome impact`), and its **internal link** is "
+        "the nearest card above it under the same position heading that a heading or its tag labels an "
+        "internal link. Neither is guessed. With no labelled internal link, the card directly above the "
+        "impact card in its block is shown as the card above it in the file when it is not an impact card "
+        "itself: where it sits, not what it does. A scenario name holding a word of a caselist school, team "
+        "code or tournament is withheld.",
+        "* **The link chain** of each advantage and DA is its most-read card for each role a team labelled, "
+        "by a heading under the position or the tag's first words: uniqueness (`U`, `UQ`), link, internal "
+        "link (`IL`) and impact, and for an advantage harms, inherency and solvency. An `AT:` heading, a "
+        "heading naming two roles, and a card that answers the position or is read on the other side fill "
+        "no role. A role no team labelled says so.",
         *([_trends_bullet(trends)] if trends is not None else []),
         "",
     ]
@@ -447,19 +471,26 @@ def _impact_block(
         f"{_of(coverage.unlabelled_documents, coverage.documents)}.",
         "",
     ]
+    chains = next((one for one in report.chain_coverage if one.kind is kind), None)
+    if chains is not None:
+        lines += _chain_coverage_lines(kind, chains)
     for stats in positions:
         cards = [card for card in report.impact_cards if card.position_id == stats.position_id]
         named = f"**{_cell(stats.label)}** (`{stats.position_id}`)"
         if not cards:
             lines += [f"{named}: no labelled impact card.", ""]
-            continue
-        lines += [named, "", "| Rank | Teams | Tag | Cite |", "|---|---|---|---|"]
-        lines += [
-            f"| {card.rank} | {card.teams_reading:,} | {_cell(card.tag or '')} | "
-            f"{_cell(card.short_cite or '')} |"
-            for card in cards
-        ]
-        lines.append("")
+        else:
+            lines += [named, "", "| Rank | Teams | Tag | Cite | Scenario |", "|---|---|---|---|---|"]
+            lines += [
+                f"| {card.rank} | {card.teams_reading:,} | {_cell(card.tag or '')} | "
+                f"{_cell(card.short_cite or '')} | {_cell(card.scenario or '')} |"
+                for card in cards
+            ]
+            lines += ["", "What each impact runs through:", ""]
+            lines += [_lead_in(card) for card in cards]
+            lines.append("")
+        if chains is not None:
+            lines += _chain_table(report, kind, stats.position_id)
     return lines
 
 
@@ -521,6 +552,67 @@ def _advantages_section(report: LandscapeReport) -> list[str]:
             f"A placed card identifies the aff of {unassigned.placed_card_rounds:,} of those rounds, and "
             "their advantages are not counted under it."
         )
+    return [*lines, ""]
+
+
+_ROLE_LABELS: Final = {
+    ChainRole.UNIQUENESS: "Uniqueness",
+    ChainRole.LINK: "Link",
+    ChainRole.INTERNAL_LINK: "Internal link",
+    ChainRole.IMPACT: "Impact",
+    ChainRole.HARMS: "Harms",
+    ChainRole.INHERENCY: "Inherency",
+    ChainRole.SOLVENCY: "Solvency",
+}
+"""How report.md names each chain role (`v1-e32-t14`)."""
+
+
+def _chain_coverage_lines(kind: PositionKind, chains: ChainCoverage) -> list[str]:
+    """What a kind's scenarios, lead-ins and link chains could not see (`v1-e32-t14` ac3)."""
+    rows = chains.impact_rows
+    without = rows - chains.rows_with_internal_link
+    shows = "shows" if chains.rows_with_card_above == 1 else "show"
+    gaps = ", ".join(
+        f"{_ROLE_LABELS[gap.role].lower()} {gap.positions:,} of {chains.positions:,}"
+        for gap in chains.roles_without_card
+    )
+    return [
+        f"{_IMPACT_NOUNS[kind]} documents with no scenario heading and no role label: "
+        f"{_of(chains.unstructured_documents, chains.documents)}.",
+        "",
+        f"* Impact rows: {rows:,}; with a scenario two or more teams name: {chains.rows_with_scenario:,}.",
+        f"* With a labelled internal link: {chains.rows_with_internal_link:,} of {rows:,} rows; with none: "
+        f"{without:,}, of which {chains.rows_with_card_above:,} {shows} the card above it in the file.",
+        "* Scenario names withheld for holding a word of a caselist school, team code or tournament: "
+        f"{chains.withheld_names:,}.",
+        f"* Positions with no labelled card, by role: {gaps}.",
+        "",
+    ]
+
+
+def _lead_in(card: ImpactCard) -> str:
+    """What one impact row runs through: its labelled internal link, or else the card above it."""
+    if card.internal_link_tag is not None:
+        return f"* Rank {card.rank}: Internal link: {_cell(card.internal_link_tag)}"
+    line = f"* Rank {card.rank}: no labelled internal link."
+    if card.card_above_tag is not None:
+        line += f" Card above it in the file: {_cell(card.card_above_tag)}"
+    return line
+
+
+def _chain_table(report: LandscapeReport, kind: PositionKind, position_id: str) -> list[str]:
+    """A position's most-read card per chain role, or `no labelled card`, in role order."""
+    found = {card.role: card for card in report.chain_cards if card.position_id == position_id}
+    lines = ["Link chain:", "", "| Role | Teams | Tag | Cite |", "|---|---|---|---|"]
+    for role in CHAIN_ROLES[kind]:
+        card = found.get(role)
+        if card is None:
+            lines.append(f"| {_ROLE_LABELS[role]} |  | no labelled card |  |")
+        else:
+            lines.append(
+                f"| {_ROLE_LABELS[role]} | {card.teams_reading:,} | {_cell(card.tag or '')} | "
+                f"{_cell(card.short_cite or '')} |"
+            )
     return [*lines, ""]
 
 

@@ -1,7 +1,7 @@
 # The synthetic three-snapshot caselist
 
-The inputs `v1-e32-t03-landscape-report`, `v1-e32-t10-impact-cards-per-position` and
-`v1-e32-t04-trend-and-school-views` are tested against: one invented Policy caselist,
+The inputs `v1-e32-t03-landscape-report`, `v1-e32-t10-impact-cards-per-position`,
+`v1-e32-t14-scenarios-and-link-chains` and `v1-e32-t04-trend-and-school-views` are tested against: one invented Policy caselist,
 `synthpolicy26`, written by `scripts/make_landscape_fixture.py`. Every school, team code,
 tournament, tag and cite here is synthetic. Team codes are doubled letters (`XX`, `YY`, `ZZ`,
 `QQ`, `VV`, `WW`, `JJ`, `KK`) at four fictional schools, so a scan of a report for them means
@@ -17,10 +17,10 @@ the same: the trends of the third window, worked out by hand below.
 
 | File | What it holds |
 |---|---|
-| `taxonomy.yaml` | 14 positions: 2 affs, 2 advantages, 4 DAs, 2 CPs, a K, a T and 2 theory positions read by the aff |
+| `taxonomy.yaml` | 14 positions: 2 affs, 2 advantages, 4 DAs, 2 CPs, a K, a T and 2 theory positions read by the aff; the DAs, advantages and K carry the heading the cards name them by as an alias |
 | `overrides.yaml` | One coach decision: the heading `extra` names no position |
 | `disclosures.jsonl` | 24 E30 disclosure rows over three weekly snapshots, 2026-09-08, 2026-09-15 and 2026-09-22 |
-| `cards.jsonl` | 54 cards of 20 sources, each with its exact fingerprint and E31 cluster, and the DA and advantage cards with the normalized headings over them |
+| `cards.jsonl` | 65 cards of 20 sources, each with its exact fingerprint and E31 cluster, and the DA and advantage cards with the normalized headings over them and which of them answer |
 | `classifications.jsonl` | The `v1-e32-t02` classification of each card |
 | `expected_trends.csv` | The trend rows of a report through 2026-09-22, by hand (`v1-e32-t04` ac1) |
 | `analytic_texts.json` | `v1-e32-t11`'s readings of CP texts, alternatives, roles of the ballot and overviews, written by hand (below) |
@@ -48,7 +48,7 @@ The report is built through 2026-09-15, with 2026-09-08 as the previous snapshot
   `AT:` marker, which `v1-e32-t02` records as a read. It is the 2AC answering the DA, so the report
   counts it apart and not as a read.
 * **Below the threshold.** `a2`'s `public-option-aff` and `b3`'s `courts-cp`, placed by tag keyword
-  at 0.5; `courts-cp` has no row. With 8 unplaced cards they make the 10 Unclassified cards of the 45 in range.
+  at 0.5; `courts-cp` has no row. With 8 unplaced cards they make the 10 Unclassified cards of the 56 in range.
 * **The coach's decision.** `a5`'s third card is under a heading ruled to name no position: neither
   counted nor Unclassified.
 * **Near-duplicates.** Cluster 2 has four exact fingerprints; one team (`a1`) reads two copies of
@@ -82,8 +82,49 @@ enumerator. Only DAs and advantages are listed.
   outweighs`, is in a round on no readable side, so only its ANSWERS role keeps it out. `b1`'s
   answer to the Costs advantage is both. `b9`'s is out of range. `b2`'s `cap-k` card under `impact`
   is a K's.
-* **No labelled impact.** Advantage documents: 4 of 6 (`a1` and `a4` carry one). DA documents: 3 of
-  6 (`b1`, `b2` and `b4` do).
+* **No labelled impact.** Advantage documents: 3 of 6 (`a1`, `a3` and `a4` carry one). DA documents: 2
+  of 6 (`b1`, `b2`, `b4` and `b5` do). `a3`'s and `b5`'s are `v1-e32-t14`'s cards below.
+
+## Scenarios and link chains (`v1-e32-t14`)
+
+A card's sub-headings are the headings below the alias that placed it. A role label is a sub-heading's
+or a tag opening's (`u` only as a heading's first word, never in a tag); the impact role is t10's
+impact card. A scenario name is a numbered heading's words after `scenario N`, a named sub-heading, or
+the words beside an impact or internal-link label, and shows only when two or more teams of the
+position use it. Through 2026-09-15:
+
+* **Costs advantage, rank 1 (cluster 2, `a1` copy `d`, `XX`).** Its scenario is `economic collapse`:
+  `a1` files it under `Scenario 1 economic collapse` and `a5` (`QQ`) under `economic collapse`, two
+  teams. No card above it is labelled an internal link, so the card directly above it in its block,
+  `a1`'s copy `a`, is shown as the card above it in the file.
+* **Costs advantage, rank 2 (cluster 3, `a4`, `KK`).** `drug prices impact` names `drug prices`, but
+  only `KK` uses it, so no scenario shows. The card above it in `a4` is in another block.
+* **Costs advantage, rank 3 (cluster 37, `a3`, `VV`).** The card above it under the position is
+  `a3`'s cluster 36, under `internal link`, but it ANSWERS the advantage, so it fills no role and the
+  row has no labelled internal link. `debt crisis impact` names `debt crisis`, one team.
+* **Spending DA, rank 1 (cluster 15, `b1`, `YY` and `JJ`).** `cedarvale crash` is used by two teams,
+  but it holds `cedarvale`, a word of a caselist school, so it is withheld and counted. `b1`'s card
+  above it under the position is labelled a link, not an internal link.
+* **Spending DA, rank 3 (cluster 42, `b5`, `ZZ`).** Its internal link is `b5`'s cluster 41, under
+  `internal link` above it. Its scenario `recession` is the words beside `recession impact`, and
+  `b2` (`QQ`) files cluster 39 under `recession`: two teams.
+* **The link chains.** Spending DA: uniqueness `b5`'s cluster 40 (`u`), link cluster 14 (`b1`'s copy
+  `a`, `link`, two teams), internal link cluster 41, impact its rank 1. Costs advantage: impact its
+  rank 1 and solvency `a3`'s cluster 35; nothing else. Innovation advantage: internal link cluster 6
+  (`a2`'s `i l`). Midterms DA: link `b4`'s cluster 44, by its tag `The link: ...`.
+* **What fills no role.** `a1`'s `uq` card ANSWERS the Spending DA, in a round on the other side.
+  `a2`'s copy `b` of cluster 2 is under `no link`. `a5`'s cluster 38 is tagged `U: ...`: `u` never
+  labels in a tag. `b3`'s cluster 43 is under `AT: Uniqueness`, an answer sub-heading. `a6`'s cluster
+  45, under `internal link` of the Midterms DA, is in a round on the other side. Not scenarios either:
+  `b3`'s `no impact`, `b4`'s `impact defense`, `b6`'s `impact turns`.
+* **Per kind.** Advantage documents with no scenario heading and no role label: 1 of 6 (`a6`). DA
+  documents: 2 of 6 (`b3` and `b6`). Rows with a scenario: advantage 1 of 3, DA 1 of 4. With a labelled
+  internal link: advantage 0, DA 1; the card above shown instead: advantage 1, DA 0. Names withheld:
+  advantage 0, DA 1.
+* **The rest of the report.** The 11 new cards are in files that already read their positions, so no
+  round, team, trend or school-view row changes. Coverage is 45 of 56 cards; `top_cards.csv` gains the
+  new clusters (Costs advantage 35, 37 and 38, Spending DA 39 to 41, Midterms DA 43 and 44); `a6`'s
+  Midterms card is a second round placing a card under a position of the other side.
 
 ## Trends (`v1-e32-t04`)
 

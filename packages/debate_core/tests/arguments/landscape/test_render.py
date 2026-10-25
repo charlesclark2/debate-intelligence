@@ -146,7 +146,8 @@ def test_the_csv_columns_are_the_specs() -> None:
         "element_index",
         "provenance_mode",
     } <= set(TOP_CARD_COLUMNS)
-    assert IMPACT_CARD_COLUMNS == TOP_CARD_COLUMNS
+    # v1-e32-t14, the PM's ruling of 2026-10-25: scenario and internal_link_tag only, no card-above column.
+    assert (*TOP_CARD_COLUMNS, "scenario", "internal_link_tag") == IMPACT_CARD_COLUMNS
 
 
 def test_a_stale_report_starts_with_the_banner_and_its_csvs_say_stale_true() -> None:
@@ -179,14 +180,17 @@ def _with_tag(report: LandscapeReport, tag: str) -> LandscapeReport:
     )
 
 
-def test_report_md_lists_impact_cards_only_and_points_to_top_cards_csv() -> None:
-    """The coach's review of 2026-10-24: no most-read cards in report.md, the impact cards instead."""
+def test_report_md_lists_impact_and_chain_cards_only_and_points_to_top_cards_csv() -> None:
+    """The coach's reviews of 2026-10-24: no most-read cards in report.md, the impact cards instead, and
+    (`v1-e32-t14`) each position's link chain and what leads into each impact."""
     files = _bundle().files
     report = _bundle().report
-    impact_tags = {card.tag for card in report.impact_cards}
-    for card in (*report.top_cards, *report.impact_cards):
+    shown = {card.tag for card in (*report.impact_cards, *report.chain_cards)}
+    shown |= {card.internal_link_tag for card in report.impact_cards}
+    shown |= {card.card_above_tag for card in report.impact_cards}
+    for card in (*report.top_cards, *report.impact_cards, *report.chain_cards):
         assert card.source_object_key not in files["report.md"]
-        assert card.tag is None or card.tag in impact_tags or card.tag not in files["report.md"]
+        assert card.tag is None or card.tag in shown or card.tag not in files["report.md"]
     for card in report.top_cards:
         assert card.source_object_key in files["top_cards.csv"]
     for card in report.impact_cards:
@@ -199,9 +203,27 @@ def test_report_md_lists_impact_cards_only_and_points_to_top_cards_csv() -> None
 
 def test_each_kind_says_how_many_of_its_documents_carry_no_labelled_impact() -> None:
     files = _bundle().files
-    assert "Advantage documents with no labelled impact: 4 of 6 (66.7%)." in files["report.md"]
-    assert "DA documents with no labelled impact: 3 of 6 (50.0%)." in files["report.md"]
-    assert "# no_labelled_impact_advantage=4/6\n# no_labelled_impact_da=3/6\n" in files["impact_cards.csv"]
+    # a3 and b5 carry v1-e32-t14's impact cards (README, "Scenarios and link chains").
+    assert "Advantage documents with no labelled impact: 3 of 6 (50.0%)." in files["report.md"]
+    assert "DA documents with no labelled impact: 2 of 6 (33.3%)." in files["report.md"]
+    assert "# no_labelled_impact_advantage=3/6\n# no_labelled_impact_da=2/6\n" in files["impact_cards.csv"]
+
+
+def test_the_card_above_an_impact_is_never_called_its_internal_link() -> None:
+    """`v1-e32-t14`, the PM's ruling: a fact about the file, in report.md only, counted apart."""
+    files = _bundle().files
+    above = "Single payer cuts administrative costs"
+    assert f"* Rank 1: no labelled internal link. Card above it in the file: {above}\n" in files["report.md"]
+    assert f"Internal link: {above}" not in files["report.md"]
+    rows = list(
+        csv.DictReader(line for line in files["impact_cards.csv"].splitlines() if not line.startswith("#"))
+    )
+    costs = next(row for row in rows if row["position_id"] == "costs-advantage" and row["rank"] == "1")
+    assert costs["internal_link_tag"] == ""
+    assert above not in files["impact_cards.csv"]
+    labelled = next(row for row in rows if row["position_id"] == "spending-da" and row["rank"] == "3")
+    assert labelled["internal_link_tag"] == "Deficits spike interest rates"
+    assert "* Rank 3: Internal link: Deficits spike interest rates\n" in files["report.md"]
 
 
 def test_a_tag_in_an_impact_row_is_escaped_in_markdown_and_exact_in_the_csv() -> None:

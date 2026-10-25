@@ -3,7 +3,9 @@
 Every expected number here was counted by hand from the fixture's table
 (`tests/fixtures/landscape/synthetic_caselist/README.md`, `scripts/make_landscape_fixture.py`),
 never read off the service. Tests named `aggregate` are the aggregation node's; `top_cards` the
-top-card node's; `impact` `v1-e32-t10`'s impact cards; `advantages` `v1-e32-t15`'s advantages by aff.
+top-card node's; `impact` `v1-e32-t10`'s impact cards; `advantages` `v1-e32-t15`'s advantages by aff;
+`chain`, `lead_in`, `scenario` and `coverage` `v1-e32-t14`'s link chains, what each impact runs
+through, and what no heading or label gives.
 """
 
 from __future__ import annotations
@@ -143,7 +145,8 @@ def test_aggregate_a_placement_in_a_round_on_the_other_side_answers_the_position
     # a6, JJ's affirmative file, has a `Spending DA` block with no AT: marker: the 2AC answering it.
     spending = _position(report, "spending-da")
     assert (spending.rounds, spending.aff_rounds, spending.neg_rounds, spending.teams) == (4, 0, 4, 4)
-    assert report.unclassified.other_side_position_rounds == 1
+    # a6's Midterms card under `internal link` (v1-e32-t14's) is a second such placement, by the same round.
+    assert report.unclassified.other_side_position_rounds == 2
     assert "31" not in {fingerprint for fingerprint, _ in _top(report, "spending-da")}
     # A round on no readable side is not the other side: b7 still reads cap-k.
     assert _position(report, "cap-k").rounds == 3
@@ -157,18 +160,19 @@ def test_aggregate_below_threshold_and_queued_items_are_unclassified_not_counted
         1,
     )
     summary = report.unclassified
-    assert (summary.cards, summary.unplaced_cards, summary.below_threshold_cards) == (45, 8, 2)
+    assert (summary.cards, summary.unplaced_cards, summary.below_threshold_cards) == (56, 8, 2)
     assert (summary.unclassified_cards, summary.decided_no_position_cards) == (10, 1)
     # b7's answer to the midterms DA (v1-e32-t10's fixture card) is placed, and counts nowhere.
-    assert (report.header.cards, report.header.cards_placed) == (45, 34)
+    # v1-e32-t14's eleven cards (a3 three, a5, a6, b2, b3, b4, b5 three) are all placed by alias.
+    assert (report.header.cards, report.header.cards_placed) == (56, 45)
 
 
-@pytest.mark.parametrize(("threshold", "unplaced", "below", "placed"), [(0.95, 8, 10, 26), (0.4, 8, 0, 36)])
+@pytest.mark.parametrize(("threshold", "unplaced", "below", "placed"), [(0.95, 8, 10, 37), (0.4, 8, 0, 47)])
 def test_aggregate_the_report_threshold_decides_what_is_unclassified(
     threshold: float, unplaced: int, below: int, placed: int
 ) -> None:
     # At 0.95 the eight INHERITED cards in range (0.9: a1 two, a3, a6, b1 two, b5, b6) fall below it
-    # too; at 0.4 the two TAG_KEYWORD cards (0.5) are counted.
+    # too; at 0.4 the two TAG_KEYWORD cards (0.5) are counted. v1-e32-t14's eleven are ALIAS (1.0).
     report = LandscapeReportService(review_threshold=threshold).build(_inputs(), synthetic_staleness())
     assert (report.unclassified.unplaced_cards, report.unclassified.below_threshold_cards) == (
         unplaced,
@@ -186,9 +190,9 @@ def test_aggregate_unclassified_rounds_are_counted_by_side() -> None:
 
 def test_aggregate_disclosures_after_the_snapshot_are_out_of_range() -> None:
     report = _report()
-    # b9 (2026-09-22) reads cap-k and spending-da, and its cards would make 47.
+    # b9 (2026-09-22) reads cap-k and spending-da, and its cards would make 58.
     assert (_position(report, "cap-k").rounds, _position(report, "spending-da").rounds) == (3, 4)
-    assert (report.header.snapshot, report.header.rounds, report.unclassified.cards) == (SECOND, 16, 45)
+    assert (report.header.snapshot, report.header.rounds, report.unclassified.cards) == (SECOND, 16, 56)
 
 
 def test_aggregate_a_round_carried_into_the_next_window_is_one_round_first_seen_in_the_first() -> None:
@@ -490,10 +494,11 @@ def _top(report: LandscapeReport, position_id: str) -> list[tuple[str, int]]:
 
 def test_top_cards_rank_clusters_by_distinct_teams_and_count_near_duplicates_once() -> None:
     report = _report()
-    # Cluster 2: XX (two copies, once), ZZ, VV and QQ. Cluster 3: KK.
-    assert _top(report, "costs-advantage") == [("02", 4), ("03", 1)]
-    # Cluster 14: YY and JJ (one file), QQ, ZZ. Cluster 15: YY and JJ.
-    assert _top(report, "spending-da") == [("14", 4), ("15", 2)]
+    # Cluster 2: XX (two copies, once), ZZ, VV and QQ. Cluster 3: KK; 35 and 37: VV; 38: QQ.
+    # Cluster 36 (a3's) only answers the advantage.
+    assert _top(report, "costs-advantage") == [("02", 4), ("03", 1), ("35", 1), ("37", 1), ("38", 1)]
+    # Cluster 14: YY and JJ (one file), QQ, ZZ. Cluster 15: YY and JJ. 39: QQ; 40, 41 (and 42, cut): ZZ.
+    assert _top(report, "spending-da") == [("14", 4), ("15", 2), ("39", 1), ("40", 1), ("41", 1)]
 
 
 def test_top_cards_ties_are_broken_by_fingerprint() -> None:
@@ -586,10 +591,11 @@ def _with_card(
 def test_impact_cards_count_only_the_labelled_copies_of_a_cluster() -> None:
     report = _report()
     # Cluster 2 is read by XX, ZZ, VV and QQ, but only a1's copy d (XX) is labelled, by its tag.
-    # Cluster 3: a4 (KK), under an impact heading.
-    assert _impacts(report, "costs-advantage") == [("02", 1), ("03", 1)]
+    # Cluster 3: a4 (KK), under an impact heading. Cluster 37: a3 (VV), heading and tag.
+    assert _impacts(report, "costs-advantage") == [("02", 1), ("03", 1), ("37", 1)]
     # Cluster 14 is read by four teams; only b2's copy (QQ) is labelled. Cluster 15 (turns case): YY, JJ.
-    assert _impacts(report, "spending-da") == [("15", 2), ("14", 1)]
+    # Cluster 42: b5 (ZZ), under `recession impact`.
+    assert _impacts(report, "spending-da") == [("15", 2), ("14", 1), ("42", 1)]
     assert _impacts(report, "hospital-closures-da") == [("23", 1)]
 
 
@@ -598,12 +604,13 @@ def test_impact_cards_rank_by_teams_then_by_cluster_id() -> None:
     # Spending: 15 before 14, against their ids. Costs: 2 and 3 tie at one team, so the id orders them.
     assert [
         (card.rank, card.fingerprint[:2]) for card in report.impact_cards if card.position_id == "spending-da"
-    ] == [(1, "15"), (2, "14")]
+    ] == [(1, "15"), (2, "14"), (3, "42")]
     assert [
         card.fingerprint[:2] for card in report.impact_cards if card.position_id == "costs-advantage"
     ] == [
         "02",
         "03",
+        "37",
     ]
 
 
@@ -682,14 +689,14 @@ def test_impact_out_of_range_and_below_threshold_cards_are_not_impact_cards() ->
 
 def test_impact_coverage_counts_documents_with_no_labelled_impact_per_kind() -> None:
     coverage = {one.kind.value: one for one in _report().impact_coverage}
-    # Advantages: a1 to a6 (b1 only answers); a1 and a4 carry an impact card.
-    # DAs: b1, b2, b3, b4, b5, b6 (a6 is the other side, b9 out of range); b1, b2 and b4 carry one.
+    # Advantages: a1 to a6 (b1 only answers); a1, a3 and a4 carry an impact card.
+    # DAs: b1, b2, b3, b4, b5, b6 (a6 is the other side, b9 out of range); b1, b2, b4 and b5 carry one.
     assert {
         kind: (one.documents, one.labelled_documents, one.unlabelled_documents)
         for kind, one in coverage.items()
     } == {
-        "advantage": (6, 2, 4),
-        "da": (6, 3, 3),
+        "advantage": (6, 3, 3),
+        "da": (6, 4, 2),
     }
     assert [one.kind.value for one in _report().impact_coverage] == ["advantage", "da"]
 
@@ -767,6 +774,245 @@ def test_landscape_cards_carry_the_normalized_headings_without_an_open_tag_or_a_
     ]
 
 
+def test_landscape_cards_carry_whether_each_heading_answers() -> None:
+    source = SeedSource(
+        sha256="a1" * 32,
+        teams=(SeedTeam(identity="one", side=Side.NEG, names=("Ashgrove Fictional", "XX")),),
+        cards=(
+            SeedCard(tag="Polls", section_path=("Midterms DA", "AT: Uniqueness"), first_element_index=0),
+            SeedCard(tag="Polls", section_path=("Midterms DA", "Uniqueness"), first_element_index=3),
+        ),
+    )
+    rows = [_occurrence("a1" * 32, element, "01" * 32, "d1" * 32) for element in (0, 3)]
+    cards = landscape_cards([source], rows)
+    assert [(card.headings, card.heading_answers) for card in cards] == [
+        (("midterms da", "uniqueness"), (False, True)),
+        (("midterms da", "uniqueness"), ()),
+    ]
+
+
+# ------------------------------------------------------------------------------------------------
+# Scenarios and link chains (v1-e32-t14)
+# ------------------------------------------------------------------------------------------------
+#
+# Counted by hand from the fixture's README, "Scenarios and link chains".
+
+
+def _with_fixture_card(
+    inputs: LandscapeReportInputs, source: str, element: int, **changes: object
+) -> LandscapeReportInputs:
+    """`inputs` with `source`'s card at `element` changed: its headings or its tag."""
+    return dataclasses.replace(
+        inputs,
+        cards=tuple(
+            one.model_copy(update=changes)
+            if (one.source_sha256, one.element_index) == (source * 32, element)
+            else one
+            for one in inputs.cards
+        ),
+    )
+
+
+def _row(report: LandscapeReport, position_id: str, cluster: str):  # noqa: ANN202 - the report's own row
+    return next(
+        card
+        for card in report.impact_cards
+        if card.position_id == position_id and card.fingerprint[:2] == cluster
+    )
+
+
+def _chain(report: LandscapeReport, position_id: str) -> dict[str, tuple[str, int]]:
+    return {
+        card.role.value: (card.fingerprint[:2], card.teams_reading)
+        for card in report.chain_cards
+        if card.position_id == position_id
+    }
+
+
+def test_chain_each_role_shows_its_most_read_labelled_cluster() -> None:
+    report = _report()
+    assert _chain(report, "spending-da") == {
+        "uniqueness": ("40", 1),
+        "link": ("14", 2),
+        "internal_link": ("41", 1),
+        "impact": ("15", 2),
+    }
+    assert _chain(report, "costs-advantage") == {"impact": ("02", 1), "solvency": ("35", 1)}
+    assert _chain(report, "innovation-advantage") == {"internal_link": ("06", 1)}
+    assert _chain(report, "election-da") == {"link": ("44", 1)}
+    assert _chain(report, "hospital-closures-da") == {"impact": ("23", 1)}
+    assert _chain(report, "provider-strikes-da") == {}
+    assert {card.rank for card in report.chain_cards} == {1}
+
+
+def test_chain_the_impact_role_is_the_impact_sections_first_row() -> None:
+    report = _report()
+    impacts = [card for card in report.chain_cards if card.role.value == "impact"]
+    # The Costs advantage and the Spending and Hospital closures DAs have impact cards.
+    assert [card.position_id for card in impacts] == [
+        "costs-advantage",
+        "spending-da",
+        "hospital-closures-da",
+    ]
+    for card in impacts:
+        if card.role.value == "impact":
+            first = next(one for one in report.impact_cards if one.position_id == card.position_id)
+            assert (card.fingerprint, card.teams_reading, card.tag) == (
+                first.fingerprint,
+                first.teams_reading,
+                first.tag,
+            )
+
+
+def test_chain_an_answers_card_never_fills_a_role() -> None:
+    # a1's `uq` card answers the Spending DA; b5's cluster 40 is its uniqueness. a3's cluster 36, under
+    # `internal link` of the Costs advantage, answers it, so the advantage has no internal link.
+    assert _chain(_report(), "costs-advantage").get("internal_link") is None
+    as_read = _with_card(read_synthetic_caselist(FIXTURE), "a3", 12, role=PositionRole.READS)
+    assert _chain(_report(as_read), "costs-advantage")["internal_link"] == ("36", 1)
+
+
+def test_chain_a_card_in_a_round_on_the_other_side_never_fills_a_role() -> None:
+    # a6, JJ's affirmative file, has a Midterms DA card under `internal link`.
+    assert _chain(_report(), "election-da").get("internal_link") is None
+    inputs = read_synthetic_caselist(FIXTURE)
+    sideless = tuple(
+        one.evolve(side=Side.UNKNOWN) if one.source_sha256 == "a6" * 32 else one for one in inputs.disclosures
+    )
+    assert _chain(_report(dataclasses.replace(inputs, disclosures=sideless)), "election-da")[
+        "internal_link"
+    ] == ("45", 1)
+
+
+def test_chain_an_answer_sub_heading_fills_no_role() -> None:
+    # b3's cluster 43 is under `AT: Uniqueness`; without the answer flag it is the DA's uniqueness.
+    assert _chain(_report(), "election-da").get("uniqueness") is None
+    plain = _with_fixture_card(read_synthetic_caselist(FIXTURE), "b3", 9, heading_answers=())
+    assert _chain(_report(plain), "election-da")["uniqueness"] == ("43", 1)
+
+
+def test_chain_no_link_and_a_u_in_a_tag_label_nothing() -> None:
+    # a2's copy of cluster 2 is under `no link`; a5's cluster 38 is tagged `U: premiums are rising now`.
+    chain = _chain(_report(), "costs-advantage")
+    assert "link" not in chain and "uniqueness" not in chain
+    inputs = _with_fixture_card(
+        read_synthetic_caselist(FIXTURE), "a2", 0, headings=("costs advantage", "link")
+    )
+    inputs = _with_fixture_card(inputs, "a5", 9, tag="Uniqueness: premiums are rising now")
+    chain = _chain(_report(inputs), "costs-advantage")
+    assert (chain["link"], chain["uniqueness"]) == (("02", 1), ("38", 1))
+
+
+def test_chain_a_heading_the_coach_ruled_names_no_position_still_labels_its_role() -> None:
+    inputs = read_synthetic_caselist(FIXTURE)
+    ruled = OverrideRules.model_validate(
+        {
+            "topic_id": inputs.overrides.topic_id,
+            "overrides": [
+                *(one.model_dump(mode="json") for one in inputs.overrides.overrides),
+                {"heading": "link", "position_id": None},
+                {"heading": "solvency", "position_id": None},
+            ],
+        }
+    )
+    report = _report(dataclasses.replace(inputs, overrides=ruled))
+    assert _chain(report, "spending-da")["link"] == ("14", 2)
+    assert _chain(report, "costs-advantage")["solvency"] == ("35", 1)
+
+
+def test_lead_in_a_labelled_internal_link_above_the_impact_card() -> None:
+    row = _row(_report(), "spending-da", "42")
+    assert (row.internal_link_tag, row.card_above_tag) == ("Deficits spike interest rates", None)
+
+
+def test_lead_in_an_answers_card_is_never_the_internal_link() -> None:
+    # a3's cluster 36 sits above cluster 37 under the Costs advantage, labelled, but answers it.
+    assert _row(_report(), "costs-advantage", "37").internal_link_tag is None
+    as_read = _with_card(read_synthetic_caselist(FIXTURE), "a3", 12, role=PositionRole.READS)
+    assert (
+        _row(_report(as_read), "costs-advantage", "37").internal_link_tag == "Drug prices drive the deficit"
+    )
+
+
+def test_lead_in_the_card_above_is_shown_only_when_no_internal_link_is_labelled() -> None:
+    row = _row(_report(), "costs-advantage", "02")
+    assert (row.internal_link_tag, row.card_above_tag) == (None, "Single payer cuts administrative costs")
+    labelled = _with_fixture_card(read_synthetic_caselist(FIXTURE), "a1", 3, tag="Internal link: costs fall")
+    row = _row(_report(labelled), "costs-advantage", "02")
+    assert (row.internal_link_tag, row.card_above_tag) == ("Internal link: costs fall", None)
+
+
+def test_lead_in_the_card_above_is_never_an_impact_card_or_in_another_block() -> None:
+    # a4's card above cluster 3 is under the Innovation advantage; b1's above cluster 15 is the `link` block.
+    report = _report()
+    assert _row(report, "costs-advantage", "03").card_above_tag is None
+    assert _row(report, "spending-da", "15").card_above_tag is None
+    impact_above = _with_fixture_card(read_synthetic_caselist(FIXTURE), "a1", 3, tag="Extinction from costs")
+    assert _row(_report(impact_above), "costs-advantage", "02").card_above_tag is None
+
+
+def test_scenario_a_name_shows_only_when_two_or_more_teams_use_it() -> None:
+    report = _report()
+    assert _row(report, "costs-advantage", "02").scenario == "economic collapse"
+    assert _row(report, "costs-advantage", "03").scenario is None
+    # a5 (QQ) filing cluster 2 under `drug prices` instead: each name now has the other's teams.
+    moved = _with_fixture_card(
+        read_synthetic_caselist(FIXTURE), "a5", 0, headings=("costs advantage", "drug prices")
+    )
+    report = _report(moved)
+    assert (
+        _row(report, "costs-advantage", "02").scenario,
+        _row(report, "costs-advantage", "03").scenario,
+    ) == (
+        None,
+        "drug prices",
+    )
+
+
+def test_scenario_a_name_holding_a_caselist_word_is_withheld_and_counted() -> None:
+    report = _report()
+    assert _row(report, "spending-da", "15").scenario is None
+    assert {one.kind.value: one.withheld_names for one in report.chain_coverage} == {"advantage": 0, "da": 1}
+    renamed = _with_fixture_card(
+        read_synthetic_caselist(FIXTURE), "b1", 3, headings=("spending da", "harbor crash", "turns case")
+    )
+    report = _report(renamed)
+    assert _row(report, "spending-da", "15").scenario == "harbor crash"
+    assert {one.kind.value: one.withheld_names for one in report.chain_coverage} == {"advantage": 0, "da": 0}
+
+
+def test_coverage_counts_what_no_heading_or_label_gives_per_kind() -> None:
+    coverage = {one.kind.value: one for one in _report().chain_coverage}
+    # Advantage: a6 alone has no scenario heading and no role label; DA: b3 and b6.
+    assert {
+        kind: (
+            one.documents,
+            one.unstructured_documents,
+            one.positions,
+            one.impact_rows,
+            one.rows_with_scenario,
+            one.rows_with_internal_link,
+            one.rows_with_card_above,
+        )
+        for kind, one in coverage.items()
+    } == {"advantage": (6, 1, 2, 3, 1, 0, 1), "da": (6, 2, 4, 4, 1, 1, 0)}
+    assert [(gap.role.value, gap.positions) for gap in coverage["advantage"].roles_without_card] == [
+        ("uniqueness", 2),
+        ("link", 2),
+        ("internal_link", 1),
+        ("impact", 1),
+        ("harms", 2),
+        ("inherency", 2),
+        ("solvency", 1),
+    ]
+    assert [(gap.role.value, gap.positions) for gap in coverage["da"].roles_without_card] == [
+        ("uniqueness", 3),
+        ("link", 2),
+        ("internal_link", 3),
+        ("impact", 2),
+    ]
+
+
 # ------------------------------------------------------------------------------------------------
 # No model
 # ------------------------------------------------------------------------------------------------
@@ -777,6 +1023,7 @@ def test_no_module_that_builds_or_renders_the_report_imports_a_model_router() ->
         REPO / "packages/debate_core/src/debate_core/application/landscape_report.py",
         REPO / "packages/debate_core/src/debate_core/arguments/landscape/render.py",
         REPO / "packages/debate_core/src/debate_core/arguments/landscape/impacts.py",
+        REPO / "packages/debate_core/src/debate_core/arguments/landscape/link_chains.py",
         REPO / "packages/debate_core/src/debate_core/domain/landscape_report.py",
     ):
         imported = {

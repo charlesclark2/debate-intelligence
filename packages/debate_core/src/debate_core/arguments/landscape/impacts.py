@@ -32,6 +32,7 @@ __all__ = [
     "NOT_IMPACT_HEADING_PHRASES",
     "is_impact_card",
     "is_impact_heading",
+    "tag_opening",
     "tag_opens_with_impact",
 ]
 
@@ -81,11 +82,16 @@ def is_impact_heading(heading: str) -> bool:
     )
 
 
+def tag_opening(tag: str) -> str:
+    """The tag's words past one leading enumerator: what a label at its start is read from."""
+    return _ENUMERATOR.sub("", tag_words(tag), count=1)
+
+
 def tag_opens_with_impact(tag: str | None) -> bool:
     """The tag, past one leading enumerator, opens with one of :data:`IMPACT_TAG_OPENINGS`."""
     if not tag:
         return False
-    words = _ENUMERATOR.sub("", tag_words(tag), count=1)
+    words = tag_opening(tag)
     return any(words == opening or words.startswith(f"{opening} ") for opening in IMPACT_TAG_OPENINGS)
 
 

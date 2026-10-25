@@ -440,6 +440,33 @@ counts them. On hspolicy26 through 2026-10-20, all 475 team codes at 155 schools
 The report itself, `report.md` and its CSVs, names no school or team and carries no link. The view stays
 on this machine and in the private bucket, like the report.
 
+## Scenarios and link chains
+
+Under each DA's and advantage's impact cards, the report shows what each impact runs through, and
+beside them the position's **link chain**: its most-read card for each role. Both come only from what a
+team wrote down, under the heading that places the card (`Midterms DA`), so nothing is guessed:
+
+* **A role** is a heading under the position, or the first words of the card's tag: uniqueness (`U`,
+  `UQ`, `Uniqueness`; `U` only at the start of a heading, never in a tag, where it is nearly always
+  `U.S.`), link (`Link`, `Links`, `L`, a tag opening `The link`; not `Link turn`, `No link` or `Link
+  defense`), internal link (`Internal link`, `Internal`, `IL`, `I/L`), impact (the impact cards'
+  rule), and for an advantage harms, inherency and solvency. An `AT:` heading, or a heading naming two
+  roles, labels none.
+* **A scenario** is a heading under the position: `Scenario 1: Dome`, a named heading such as `Dome`, or
+  the words beside an impact or internal-link label (`Dome impact`). A name is shown only when two or
+  more teams use it under the position, and never when it holds a word of a caselist school, team code
+  or tournament. `Dome` and `Golden dome` are two names until a scenario vocabulary merges them (the
+  PM's plan after 2026-11-01: the session report of v1-e32-t14 lists every name two or more teams use,
+  as the seed).
+* **The internal link** under an impact card is the nearest card above it, under the same position
+  heading, that a heading or its tag labels an internal link. When none is, the card directly above
+  the impact card in its block is shown as "the card above it in the file": where it sits, not a claim
+  about what it does.
+
+Each kind says how many of its documents carry no scenario heading and no role label, and how many
+rows show a scenario, an internal link or the card above. A team that labels its blocks is what fills
+these sections; most 1AC advantages carry no label at all.
+
 ## The review queue and your decisions
 
 Each run writes a review queue: the headings that cards nothing placed sit under, one row each, with
@@ -457,7 +484,7 @@ column, `decision`, for the rows you want to settle:
 | Write in `decision` | When |
 |---|---|
 | A position id, e.g. `pharma-da` | The heading names that position. Every card under it counts there next run |
-| `none` | The heading names no position: a block label such as `link`, `impact` or `solvency`. It stops coming back to the queue, and cards under it still count under a heading above it |
+| `none` | The heading names no position: a block label such as `link`, `impact` or `solvency`. It stops coming back to the queue, and cards under it still count under a heading above it. It still labels their role in the link chain below, and never names a scenario |
 | Nothing | You have not decided. The row comes back next run |
 
 Then the operator applies the file, which writes `config/landscape/overrides/<topic id>.yaml` and

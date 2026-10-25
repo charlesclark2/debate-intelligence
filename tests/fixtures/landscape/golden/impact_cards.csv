@@ -8,7 +8,7 @@
 # parser_version=2026.10.20-docx-6
 # prompt_version=none
 # review_threshold=0.6
-# coverage_cards=34/45
+# coverage_cards=45/56
 # coverage_rounds=15/16
 # share_of_teams_over=teams disclosing on the position's side: aff 6, neg 6, either side 8
 # provenance_mode=FILE_IMPORT
@@ -17,11 +17,13 @@
 # snapshot_age_days=2
 # archives_awaiting_download=0
 # impact_cards_per_position=3
-# no_labelled_impact_advantage=4/6
-# no_labelled_impact_da=3/6
-position_id,rank,fingerprint,teams_reading,tag,short_cite,source_object_key,element_index,source_snapshot,provenance_mode
-costs-advantage,1,0202020202020202020202020202020202020202020202020202020202020202,1,2. Extinction from economic collapse,Okafor 25,raw/caselist/synthpolicy26/sha256/a1/a1/a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1,6,2026-09-08,FILE_IMPORT
-costs-advantage,2,0303030303030303030303030303030303030303030303030303030303030303,1,Bulk purchasing lowers drug prices,Haddad 23,raw/caselist/synthpolicy26/sha256/a4/a4/a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4,3,2026-09-15,FILE_IMPORT
-spending-da,1,1515151515151515151515151515151515151515151515151515151515151515,2,Debt ceiling fights are near,Ruiz 26,raw/caselist/synthpolicy26/sha256/b1/b1/b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1,3,2026-09-08,FILE_IMPORT
-spending-da,2,1414141414141414141414141414141414141414141414141414141414141414,1,Spending triggers a debt spiral,Ito 26,raw/caselist/synthpolicy26/sha256/b2/b2/b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2,0,2026-09-08,FILE_IMPORT
-hospital-closures-da,1,2323232323232323232323232323232323232323232323232323232323232323,1,Rural hospitals close under single payer,Duarte 26,raw/caselist/synthpolicy26/sha256/b4/b4/b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4,6,2026-09-15,FILE_IMPORT
+# no_labelled_impact_advantage=3/6
+# no_labelled_impact_da=2/6
+position_id,rank,fingerprint,teams_reading,tag,short_cite,source_object_key,element_index,source_snapshot,provenance_mode,scenario,internal_link_tag
+costs-advantage,1,0202020202020202020202020202020202020202020202020202020202020202,1,2. Extinction from economic collapse,Okafor 25,raw/caselist/synthpolicy26/sha256/a1/a1/a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1,6,2026-09-08,FILE_IMPORT,economic collapse,
+costs-advantage,2,0303030303030303030303030303030303030303030303030303030303030303,1,Bulk purchasing lowers drug prices,Haddad 23,raw/caselist/synthpolicy26/sha256/a4/a4/a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4,3,2026-09-15,FILE_IMPORT,,
+costs-advantage,3,3737373737373737373737373737373737373737373737373737373737373737,1,Extinction from a debt crisis,Okafor 26,raw/caselist/synthpolicy26/sha256/a3/a3/a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3,15,2026-09-08,FILE_IMPORT,,
+spending-da,1,1515151515151515151515151515151515151515151515151515151515151515,2,Debt ceiling fights are near,Ruiz 26,raw/caselist/synthpolicy26/sha256/b1/b1/b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1,3,2026-09-08,FILE_IMPORT,,
+spending-da,2,1414141414141414141414141414141414141414141414141414141414141414,1,Spending triggers a debt spiral,Ito 26,raw/caselist/synthpolicy26/sha256/b2/b2/b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2,0,2026-09-08,FILE_IMPORT,,
+spending-da,3,4242424242424242424242424242424242424242424242424242424242424242,1,Rate spikes cause a recession,Park 26,raw/caselist/synthpolicy26/sha256/b5/b5/b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5,12,2026-09-15,FILE_IMPORT,recession,Deficits spike interest rates
+hospital-closures-da,1,2323232323232323232323232323232323232323232323232323232323232323,1,Rural hospitals close under single payer,Duarte 26,raw/caselist/synthpolicy26/sha256/b4/b4/b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4,6,2026-09-15,FILE_IMPORT,,

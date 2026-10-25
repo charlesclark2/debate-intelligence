@@ -201,3 +201,13 @@ def test_a_spelling_disclosed_after_the_snapshot_does_not_change_the_view() -> N
         for _ in range(4)
     )
     assert _rows(_view(dataclasses.replace(inputs, disclosures=(*inputs.disclosures, *later)))) == EXPECTED
+
+
+def test_a_spelling_tie_shows_the_first_spelling_in_text_order() -> None:
+    inputs = read_synthetic_caselist(FIXTURE)
+    carried = next(one for one in inputs.disclosures if one.team_code == "XX" and one.tournament == IC)
+    # XX's three disclosures through 2026-09-15 are spelled one way; three more of its round, another.
+    shouted = tuple(carried.evolve(school="ASHGROVE FICTIONAL") for _ in range(3))
+    view = _view(dataclasses.replace(inputs, disclosures=(*inputs.disclosures, *shouted)))
+    expected = [("ASHGROVE FICTIONAL", *row[1:]) if row[1] == "XX" else row for row in EXPECTED]
+    assert _rows(view) == expected

@@ -311,9 +311,9 @@ Success looks like `{"status":"ok"}` through CloudFront and `Deployed <sha> to d
 **5. The check that the landscape page renders** (seconds signed out, then by hand signed in):
 
 ```bash
-for P in /landscape /landscape/hspolicy26 /landscape/hspolicy26/schools; do curl -sS -o /dev/null -w "$P %{http_code} %header{cache-control}\n" "https://tub.dev.wfbdebate.com$P"; done
+for P in /landscape /landscape/hspolicy26 /landscape/hspolicy26/report/negative /landscape/hspolicy26/schools; do curl -sS -o /dev/null -w "$P %{http_code} %header{cache-control}\n" "https://tub.dev.wfbdebate.com$P"; done
 ```
-Success looks like three lines ending `302 private, no-store`. Then, signed in as the coach:
+Success looks like four lines ending `302 private, no-store`. Then, signed in as the coach:
 **Landscape** lists hspolicy26 with its date. The report shows one contents list (Affirmative,
 Negative, Neither side and their sections) whose links jump. There is no Search link or cart. In
 positions by school, one school's page and one position's page each render, and a team page opens
@@ -337,14 +337,127 @@ in the runbook's "What to record" table. This check is ac4's evidence.
   contents list as the index. That is the PM's question now.
 * **`v1-e39-t10`'s pilot review** may want the landscape pages in the coach's beta checklist.
 
+## Changes after the PM's review
+
+The PM's review of 2026-10-26 (CHANGES_REQUESTED) asked for two changes. Both are in `e128fa5`;
+everything the review accepted is unchanged. Where this section and the ones above disagree, this
+one holds: the report is no longer one page, and the header is no longer trimmed on landscape pages.
+
+### The report is one page per `#` part
+
+* **`/landscape/<caselist>`** holds the report's title, its header (everything before the first `#`
+  part, "About this report" among it) and its one contents list. Each part links to its page. Each
+  `##` section links to its anchor on its part's page (`/landscape/hspolicy26/report/negative#negative-positions`).
+  The bundle's own `## Contents` is still left out.
+* **`/landscape/<caselist>/report/<part>`** is one part. A part's path segment is its heading's
+  anchor (`affirmative`, `negative`, `neither-side`), with `-2` for a repeat. It sits under
+  `report/` so a part can never take the `schools` or `positions` segment. A part page has the
+  report's title as its way back, a short list of all parts (the current one marked
+  `aria-current="page"`), the part's heading as its `<h1>`, and its sections, every heading anchored
+  and repeats counted on that page alone.
+* **A same-page link** in a part stays a link only if its heading is on that part's page. A link to
+  another part's heading is text, by the unchanged link rule.
+* **A report with no `#` part** (before `v1-e32-t20`, or a republish without parts) is all front
+  page. The moto republish test now covers that: the planted republish has no parts, the front page
+  shows it within five minutes, and the old part's page answers 404.
+* **Audit:** a part page writes `landscape-viewed` with the new kind `report-part`, the caselist and
+  the snapshot, never which part. `LandscapePage.REPORT_PART`, the schema's `page` enum, and a new
+  drift test hold the code's kinds and the schema's together.
+* **The authorization matrix and the exposure test** have the new route, including a 404 path. Both
+  route checks failed first.
+
+**Sizes, from the republished hspolicy26 bundle** (unchanged since 2026-10-25 02:11, measured
+2026-10-26 through the app with a scratch script printing sizes only):
+
+| Page | Part rendered | Page with `app.js` and `app.css`, of 153,600 B |
+|---|---|---|
+| The report's front page | — | 32,154 B (20.9%) |
+| Affirmative | 45,095 B | 70,658 B (46.0%) |
+| Negative | 56,893 B | 82,450 B (53.7%) |
+| Neither side | 8,720 B | 34,285 B (22.3%) |
+
+The page-weight test builds a synthetic report whose parts render at least those sizes (100, 126
+and 18 rows per section give 45,220, 57,132 and 8,828 B). It asserts every page is under the line
+and **the largest part leaves at least 25% of the line free** (`HEADROOM`, at most 115,200 B). The
+synthetic Negative page weighs 82,707 B (53.8%). The old one-page layout fails it, which is the point:
+the next growth that would cross three quarters of the line fails a test before it reaches a
+Chromebook.
+
+### The header keeps its Search link and cart
+
+`base.html` is again as on every signed-in page: the site name links to `/`, and the Search link and
+the cart are there. The only change from before this task is the **Landscape** link. The forbidden-list
+test now reads the page body (`<main>`) only: no `/`, `/search` or `/download` link, no form, no
+cart, download, copy or search hook, no `download=` attribute and no share link. A new test checks
+that every landscape page has the site's own header, Search link and cart included. A refusal on a
+landscape page still links back to the landscape list, in its body. The Decisions bullet above about
+the header is withdrawn.
+
+### Evidence
+
+| Command | Result |
+|---|---|
+| The new tests against the pre-review source (`git checkout 8032b64 -- packages/debate_api/src packages/debate_core/src docs/data`, the new part template moved aside), over the landscape, audit-schema, matrix and exposure tests | **56 failed, 530 passed**: the header (26), body-only checks and part pages (6 each), the front page and contents links (2 each), the per-part budget, the `report-part` record (3), the two route lists and the schema's kinds; then the committed source restored with `git checkout e128fa5 -- ...` |
+| `.venv/bin/python -m pytest packages/debate_api/tests packages/debate_core/tests/domain/test_landscape_pages.py -q` | `1085 passed in 9.90s` |
+| `.venv/bin/python -m pytest packages/debate_api/tests/test_landscape_pages.py packages/debate_api/tests/test_landscape_bundles.py -q` after the restore | `174 passed in 3.70s` |
+| `uv run --frozen ruff format --check .` / `ruff check` | `1346 files already formatted` / `All checks passed!` |
+| `uv run --frozen pyright packages/debate_api packages/debate_core` | `0 errors, 0 warnings, 0 informations` |
+| `uv run --frozen lint-imports` / `uv run scripts/check_thin_handlers.py` | `Contracts: 16 kept, 0 broken.` / `OK: 60 CLI command and API route handlers within 25 statements` |
+| `uv run scripts/affected_tests.py --run` | The whole selection is affected (`packages/debate_api/pyproject.toml`); left to the PR's `ci` |
+
+No Terraform changed in this round, so the expected dev plan is still `Plan: 0 to add, 1 to change, 0 to
+destroy.` The runbook's landscape section and step 5's check now name the part pages, the
+`report-part` kind and the normal header, and the signed-out check covers four routes.
+
 ## PM review
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** CHANGES_REQUESTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-26
 
 **Notes:**
+
+Most of this is right and stays as built. Two changes, both small.
+
+**Accepted as built:**
+* ac1 to ac3. The moto tests for the five-minute hold, a deleted school view and a republished
+  report; escaping and the link rule over every planted case; one audit record per view, naming no
+  school, team code or position; every route in the authorization matrix and the exposure test.
+  Red against a refuse-nothing skeleton (43 failed).
+* The mutants. Deleting the redundant caselist comparison when its mutant survived is agreement 8
+  applied properly. So is treating the Terraform assertion's error, rather than a failure, as not a
+  catch.
+* **Deviation 2:** `s3:ListBucket` limited by `s3:prefix` to `reports/landscape/*`. There's no
+  pointer file and E32 must not change. The PM amends ADR-0019's role table in a PM batch, and a
+  `current.json` pointer from E32 is a later follow-up.
+* **Deviation 3, closed:** the adapter logs request paths only at `debug`. The dev app log shows 0
+  path events over the debaters' use, and `web_adapter_never_logs_at_debug` holds it. That meets the
+  ruling's condition.
+* **Deviation 1**, the audit schema: `docs/data` is added in a PM batch.
+* Rendering in a worker thread; the shelf's re-read on change; 503 on a failed bucket or audit write;
+  no record for a 404.
+
+**Change 1: the report is one page per `#` part, not one page.** At 92% of the page line after a
+single republish (the report grew 75%), one page is a layout the next feature will break, and
+nothing would fail when it did, because the budget test reads a fixed size.
+* `/landscape/<caselist>` shows the header ("About this report") and the contents list.
+* The contents list links to one page per part (Affirmative, Negative, Neither side), with each
+  `##` section's anchor on its part page.
+* A part's path is its heading's anchor.
+* Size the page-weight test from the republished hspolicy26 bundle per part (about 45, 57 and 9 KB
+  rendered by your figures). Also assert that the largest part leaves at least a quarter of the line
+  free, so the next growth is seen in a test, not on a Chromebook.
+* Audit kinds gain `report-part`, still naming no school, team code or position.
+
+**Change 2: the header keeps its Search link and cart on landscape pages.** Gate item 11's "no
+search, no download and no share link" is about the reports: no search over them, no download of
+them, no link that shares them. It isn't about the site's navigation. Restore the header as on every
+other signed-in page. The landscape pages themselves still offer none of the three, and the
+forbidden-list test should check the page body, not the header.
+
+Re-review after the change. Expect a short one: the part pages, their sizes and headroom, the new
+audit kind and the header.

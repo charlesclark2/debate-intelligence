@@ -1382,14 +1382,16 @@ school view, rendered on the server from the bundle's own `report.md` and `schoo
   removal that deletes a school view (`v1-e32-t13`), a republished report or a newer snapshot shows
   within five minutes, and an older snapshot's view is never shown in place of a deleted one. If the
   bucket does not answer after five minutes, the pages answer `503` rather than an older copy.
-- **The pages.** `/landscape`; `/landscape/<caselist>`, the report on one page with its contents
-  list; `/landscape/<caselist>/schools`, the view's front page listing every school and position;
-  one page per school (by its heading's anchor) and per position (by its id). No page has a search
-  form, a download, a cart or a share link, and the header leaves out the Search link on them. The
-  only links out are the view's team pages on openCaselist, each checked at render.
+- **The pages.** `/landscape`; `/landscape/<caselist>`, the report's header and its contents list;
+  `/landscape/<caselist>/report/<part>`, one page per `#` part (Affirmative, Negative, Neither side),
+  by its heading's anchor; `/landscape/<caselist>/schools`, the view's front page listing every
+  school and position; one page per school (by its heading's anchor) and per position (by its id).
+  The site's header, Search link and cart included, is the same as on every page; the reports
+  themselves offer no search, download or share link. The only links out are the view's team pages
+  on openCaselist, each checked at render.
 - **The audit.** Every page view writes a `landscape-viewed` record to `debate-<env>-tub-audit`
-  with the page's kind (`caselists`, `report`, `school-view`, `school` or `position`) and the
-  bundle's caselist and snapshot, never which school or position. A view whose record is not
+  with the page's kind (`caselists`, `report`, `report-part`, `school-view`, `school` or
+  `position`) and the bundle's caselist and snapshot, never which part, school or position. A view whose record is not
   written answers `503`.
 
 ### Granting the read, then deploying
@@ -1443,17 +1445,17 @@ step 8's: `{"status":"ok"}` from `/healthz` through CloudFront, and `Deployed <s
 **Operator command** (expected runtime seconds)
 Where: your Mac, anywhere
 ```bash
-for P in /landscape /landscape/hspolicy26 /landscape/hspolicy26/schools; do curl -sS -o /dev/null -w "$P %{http_code} %header{cache-control}\n" "https://tub.dev.wfbdebate.com$P"; done
+for P in /landscape /landscape/hspolicy26 /landscape/hspolicy26/report/negative /landscape/hspolicy26/schools; do curl -sS -o /dev/null -w "$P %{http_code} %header{cache-control}\n" "https://tub.dev.wfbdebate.com$P"; done
 ```
-Success looks like three lines ending `302 private, no-store`.
+Success looks like four lines ending `302 private, no-store`.
 
 Then signed in as the coach, in a browser on `https://tub.dev.wfbdebate.com/`:
 
 1. **Landscape** in the header lists `hspolicy26` with its newest snapshot's date, a link to
    the report and one to positions by school.
-2. **The report** shows its title, one contents list (`Affirmative`, `Negative`, `Neither side` with
-   their sections, once the bundle is in `v1-e32-t20`'s shape), and each contents link jumps to its
-   section. The header has no Search link and no download cart.
+2. **The report** shows its title, its header and one contents list (`Affirmative`, `Negative`,
+   `Neither side` with their sections, once the bundle is in `v1-e32-t20`'s shape). Each part's link
+   opens that part's page, and each section's link opens its part at the section.
 3. **Positions by school** lists the schools and the positions by kind. One school's page shows
    its table; one position's page shows its teams, and a team page opens openCaselist in a new tab.
 

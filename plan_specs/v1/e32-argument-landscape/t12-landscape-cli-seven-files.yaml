@@ -45,7 +45,7 @@ spec:
       description: >-
         The landscape smoke check passes in the validate-dev recorded tier.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

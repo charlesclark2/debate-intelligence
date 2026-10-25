@@ -75,7 +75,7 @@ spec:
         as their own group and the rounds still unidentified, matching a hand-written golden
         file; tests shown failing first; a taxonomy change passes the released-ids check.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

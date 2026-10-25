@@ -6,50 +6,199 @@
 | Spec | [`plan_specs/v1/e32-argument-landscape/t17-kritikal-affirmatives.yaml`](../../plan_specs/v1/e32-argument-landscape/t17-kritikal-affirmatives.yaml) |
 | Epic / release | `v1-e32-argument-landscape` / `v1.2` |
 | Branch | `task/v1-e32-t17-kritikal-affirmatives` |
-| Session status | IN PROGRESS: the counts are sent; nothing is built until the PM rules <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE: built and tested after the PM's rulings of 2026-10-25. The real store's cache refill and dry run are the operator's next step, and no criterion waits on them <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
-**The counts are done (ac1). Nothing is built yet:** the build waits on the PM's ruling on the
-[questions](#questions-for-the-pm).
+**Built as ruled on 2026-10-25, and every criterion passes, so the Goal is Succeeded.** A kritikal
+affirmative is now identified rather than left among the unidentified rounds.
 
-**K affs are a small share of the rounds with no identified aff.** On hspolicy26 through 2026-10-20,
-under taxonomy 1.2.0, the report has 709 affirmative rounds with no identified aff. They disclose 565
-files, by 203 teams. 555 of those files hold no `should` plan text.
-* **25 of the 555 files have a K-aff marker:** 28 rounds, 21 teams.
-  * The markers are a role of the ballot, an advocacy-statement label, `The 1AC is`, or a method
-    label.
-  * Carrying the identification to the same teams' other unidentified rounds would raise that to at
-    most 55 rounds.
-* **1 of the 25 has its marker placed under a K by its alias.** 2 have any heading placed under a K.
-* **The K families are scattered.** Only 4 of the 25 files name a family in a heading. 18 files
-  (15 teams) name one in a card tag, across 15 families. The largest is cap, with 5 teams.
+* **The position.** Taxonomy **1.3.0** adds `kritikal-aff`, kind `aff`, side `aff`, with no alias. No
+  new position kind was needed. The released-ids check passes.
+* **The markers,** as approved:
+  * t11's role-of-the-ballot labels, read by t11's own rule;
+  * `Advocacy`, `Advocacy statement`, `Our advocacy (statement) is` and inline `Advocacy:`;
+  * `The 1AC is`;
+  * `Method`, `Our method is` and inline `Method:`.
 
-**Most of the 555 files are not K affs:**
-* 256 files (304 rounds, 93 teams) carry an advantage heading. These are policy affs whose plan text
-  is not under a label;
-* 224 files (312 rounds, 124 teams) have no heading that places anything;
-* 75 files (78 rounds, 22 teams) place only negative positions, mostly read or answered in
-  affirmative answer files.
+  `Methods` is left out. The markers are read beside t09's plan texts, in the same pass and cache, and
+  only their kind, form, place and unit are kept. Never a word.
+* **Two new assignment methods:**
+  * `KRITIKAL_AFF_MARKER`: a round nothing else identifies, with no plan text in any of its files and
+    a marker in one;
+  * `KRITIKAL_AFF_CARRY`: carried by t09's carry rule and guard, and never into a round whose own file
+    reads an advantage (t15's placement). Those refusals are counted.
+* **report.md's Kritikal affirmatives** comes after Advantages by affirmative, in the Affirmative part.
+  It gives:
+  * the K-aff rounds and teams, by own marker and by carry;
+  * the rounds refused for an advantage;
+  * one line of K families named in the K-aff files' headings, with files and teams;
+  * the rounds still unidentified.
 
-**The recommendation is option (a):** one generic K-aff position per topic, of the existing `aff`
-kind. No new position kind is needed. It still adds a position, so the taxonomy goes from 1.2.0 to
-1.3.0 under t08's lock, and that costs an operator refill of three caches
-([question 1](#questions-for-the-pm)).
+  The method table adds the refused rounds and the control. No other bundle file changes beyond the
+  new position's row.
+* **Tests were shown failing first** against skeletons, and the goldens are hand-written from a
+  hand-written fixture.
+  * 14 targeted mutants: 12 caught at once.
+  * One survivor was an equivalent check, now removed.
+  * One survivor needed a test, and is now caught.
+
+**What to look at first:**
+* [the fixture's table](../../tests/fixtures/landscape/kritikal_affs/README.md) and its two goldens;
+* [Decisions](#decisions-and-assumptions) 1 and 2: existing assignments are never moved, and the round
+  rule asks for no plan text in any of the round's files;
+* [the operator's refill](#operator-follow-ups), which the real store needs before a dry run, because
+  1.3.0 re-keys three caches.
+
+**The affected set was too long for a session at load 14 to 38.** The test directories of what
+changed and the always-run list ran instead
+([below](#before-the-report-working-agreement-10)).
 
 ## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
-| kritikal-affs | In progress | The counts are taken and sent (2026-10-25). Waiting for the PM's ruling before any rule, fixture or test |
+| kritikal-affs | Done | The counts (2026-10-25), the PM's rulings (2026-10-25), then the position, the reader, the rule, the cache, the config, the seam, the report's group and goldens, the script and the guide |
 
 ## Acceptance criteria
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| ac1: counts before any rule, over affirmative rounds with no identified aff, of files with K-aff markers and no plan text, by marker and team, sent to the PM with the options | PASS (sent, awaiting ruling) | [The counts](#the-counts-hspolicy26-through-2026-10-20-taxonomy-120) and [the questions](#questions-for-the-pm). Read-only: all 17 files under `landscape/` and `reports/` were checksummed before and after, and none changed. Nothing was built |
-| ac2: after the ruling, the synthetic fixture's report shows kritikal affirmatives as their own group and the rounds still unidentified, matching a hand-written golden file; tests shown failing first; a taxonomy change passes the released-ids check | NOT RUN | Waits on the ruling |
-| kritikal-affs node: `uv run pytest packages/debate_core/tests/application/test_landscape_report.py` | NOT RUN | Waits on the ruling |
+| ac1: counts before any rule, over affirmative rounds with no identified aff, of files with K-aff markers and no plan text, by marker and team, sent to the PM with the options | PASS | [The counts](#the-counts-hspolicy26-through-2026-10-20-taxonomy-120), sent 2026-10-25 with options (a) and (b). The PM ruled the same day ([below](#the-pms-rulings-applied)). Nothing was built before the ruling |
+| ac2: after the ruling, on the synthetic fixture, the report shows kritikal affirmatives as their own group and the rounds still unidentified, matching a hand-written golden file; tests shown failing first; a taxonomy change passes the released-ids check | PASS | `test_kritikal_report_md_section_matches_the_hand_written_golden_file` against [`report_section.md`](../../tests/fixtures/landscape/kritikal_affs/report_section.md), and `test_kritikal_method_table_matches_the_hand_written_golden_file` against [`method_table.md`](../../tests/fixtures/landscape/kritikal_affs/method_table.md), both hand-written from the fixture's [README table](../../tests/fixtures/landscape/kritikal_affs/README.md). Red first: [below](#checks-shown-failing-for-their-reason). Released ids: `.venv/bin/python -m pytest tests/config/test_landscape_released_ids.py` → 25 passed, with 1.3.0 committed and the 1.1.0 and 1.2.0 locks unchanged; `tests/config` → 60 passed |
+| kritikal-affs node: `uv run pytest packages/debate_core/tests/application/test_landscape_report.py` | PASS | `.venv/bin/python -m pytest packages/debate_core/tests/application/test_landscape_report.py -q -p no:randomly` under `perl -e 'alarm 100'` → 105 passed (96 before this task) |
+
+## The PM's rulings, applied
+
+The rulings are a PM-ruling comment above the spec's `acceptanceCriteria` (commit `f20adac`).
+
+| Ruling | Where it is |
+|---|---|
+| 1. One generic `kritikal-aff` position (kind aff, side aff, no aliases), named by a marker in a file with no plan text, a new assignment method; its own group in the Affirmative part, placed as t15's section is | `config/landscape/taxonomies/policy-2026-27-nhi.yaml` (1.3.0) and `topics.yaml`; `KRITIKAL_AFF_MARKER` in `arguments/landscape/aff_assignment.py`; `_kritikal_section` in `render.py`, right after `_advantages_section` |
+| 1. One line of K families named in the K-aff files' headings, with files and teams; counts only, never a placement, nothing from tags | `heading_families` in `arguments/landscape/kritikal_aff.py` (pocket, hat and block headings only); `application/landscape_kritikal.py` counts them over the K-aff rounds' files. The phrases are config, `config/landscape/kritikal_affs/policy-2026-27-nhi.yaml` |
+| 1. 1.2.0 to 1.3.0 under t08's lock; the cache refill as one operator block; the publish waits for the cutover seed, the local dry run does not | [Operator follow-ups](#operator-follow-ups): the refill, then the dry run without `--publish`. No publish is proposed |
+| 2. The markers as proposed, `Methods` left out; the control count kept in the method table | `read_kritikal_markers`, with t11's `role_of_the_ballot_form` made public for it (behaviour unchanged, its own commit `9b49789`). The control is the method table's last row |
+| 3. Carry through t09's rule and guard, never into a round whose own file reads an advantage (t15's placement); the method table counts own marker, carry, and refused | `KRITIKAL_AFF_CARRY`. The advantage rounds come from t02's placements in `build_aff_assignments`: READS, at or above the review threshold, as t03 and t15 count a read. Refused rounds come back as `AssignmentCounts.refused_by_advantage` |
+| 4. The unlabelled-plan policy affs are a follow-up task | Not built here ([Follow-up work](#follow-up-work)) |
+
+## What was built
+
+| Where | What |
+|---|---|
+| `arguments/landscape/kritikal_aff.py` (new) | The pure reader: the markers (kind, form, element index, unit; no words), the K families in headings with the longest phrase first, `KritikalAffConfig` with its checks, the rules for the digest, and `KritikalAffInputs`, what the report is given |
+| `arguments/landscape/analytic_texts.py` | `role_of_the_ballot_form`, `label_form` and `TEXT_UNITS` made public. Behaviour unchanged: t11's 73 reader tests passed on the commit alone |
+| `arguments/landscape/aff_assignment.py` | `KritikalSignals`; `KRITIKAL_AFF_MARKER` and `KRITIKAL_AFF_CARRY` after `PLAN_TEXT` and `TEAM_CARRY`, which they never change; `refused_by_advantage` |
+| `arguments/landscape/plan_text.py` | `PlanTextVocabulary` takes the K-aff config, refuses one naming no active aff, and its digest covers it (rule `plan-text-3`) |
+| `application/ports/plan_text_store.py`, `application/plan_texts.py` | The cache keeps each source's markers and heading families; `PlanTextRun.kritikal` |
+| `application/aff_assignment.py` | `build_aff_assignments` reads the advantage rounds from t02's placements and returns the K-aff inputs; the seam returns `AffAssignmentsForReport` (assignments and K-aff inputs); the service passes the topic's K-aff config |
+| `application/landscape_kritikal.py` (new), `application/landscape_report.py`, `domain/landscape_report.py` | The group's counts (`KritikalAffs`): rounds, teams, by marker, by carry, refused, families, control |
+| `application/landscape_run.py` | Hands the seam's K-aff inputs to the report |
+| `arguments/landscape/render.py` | The section and the method table's two rows |
+| `application/ports/taxonomy_repository.py`, `integrations/landscape/yaml_taxonomy_repository.py` | `kritikal_affs/<topic id>.yaml` loaded and checked with the taxonomies; `kritikal_aff(topic)` |
+| `config/landscape/kritikal_affs/policy-2026-27-nhi.yaml` (new) | The position id and 20 K families with their phrases |
+| `scripts/assign_landscape_affs.py` | Its vocabulary takes the K-aff config, so it fills the same plan-text cache as the run; it prints the markers' and the K-aff rounds' counts |
+| `docs/guides/landscape-taxonomy.md` | "Kritikal affirmatives": the markers, the carry and its guard, what report.md shows, how to edit the families, and the refill after a taxonomy bump |
+
+### Checks shown failing for their reason
+
+Each suite was run red before its code: against a skeleton that found nothing, or with the one line it
+checks taken out and then restored byte for byte. Agreement 8: an attempt that failed at import was not
+counted.
+
+| Suite | Red |
+|---|---|
+| `arguments/landscape/test_kritikal_aff.py` (the reader) | 17 failed, 15 passed. The 15 are not-a-marker cases, the no-config case and the config checks, which a find-nothing skeleton passes by construction |
+| `arguments/landscape/test_aff_assignment.py` (the rule) | 8 failed, 29 passed: t09's 24, and 5 cases where the K aff must not be assigned |
+| `application/test_landscape_report.py -k kritikal` (the group and goldens) | 7 failed, 2 passed (the no-K-aff case and the position's row, which the given assignments decide). A first attempt had 8 failed: my no-K-aff case still handed in K assignments, which a run without the config never makes. I fixed the fixture loader before any code |
+| `application/test_landscape_run.py`, the seam | Written after the wiring, so the seam test failed with the wiring line removed (1 failed) and passed after the line was restored byte for byte |
+| `application/test_aff_assignment.py -k kritikal` (the advantage rounds, the inputs) | 3 failed, 1 passed (the no-config case) |
+| `arguments/landscape/test_plan_text.py -k k_aff` (the vocabulary) | 4 failed |
+| `application/test_plan_texts.py` (markers cached, no words) | 2 failed, 14 passed. The no-words test passes on a skeleton that writes nothing |
+| The producer's K-aff test | 1 failed against the loader skeleton |
+| `integrations/landscape/test_kritikal_aff_files.py` (the loader) | 11 failed, 3 passed (the constant, the no-file case and the no-taxonomy case) against the skeleton, then restored byte for byte |
+| `tests/config`, the directory test | 1 failed, 55 passed, until the new directory was listed |
+| `integrations/landscape/test_plan_text_store.py` | t09's field pin failed on the new cache fields. It now pins them and the marker's own four fields |
+| `tests/scripts/test_assign_landscape_affs.py` | 1 failed, 8 passed against the committed script, swapped back byte for byte after |
+
+**The goldens.** The group's counts matched the fixture table on the first run.
+* The section golden failed once, on its own last line. I had trimmed the blank line that ends a
+  section sliced this way, and t15's golden ends with one too.
+* The method-table golden matched on the first render.
+
+### Mutants
+
+There were 14 mutants on the rules this task adds, one of them run twice. Each:
+* was applied to one file, after a check that its text occurs exactly once;
+* ran the four covering suites (189 or 190 tests) in a fresh process, with bytecode writing off and
+  `__pycache__` cleared;
+* was restored from a copy and compared byte for byte.
+
+No Hypothesis is used, so there is no example database to isolate (agreement 8). Each run took 3.7 to
+9.1 s at load 16 to 18.
+
+| Rule | Mutant | Failed |
+|---|---|---|
+| Advantage guard | the K aff carried into a round reading an advantage | 3 |
+| Advantage guard | the guard applied to a round's own marker too | 2 |
+| Advantage guard | an advantage placed below the review threshold refuses the carry | 2 |
+| Marker | a marker names a round holding a plan text of its own | 1 |
+| Marker | a marker taken before the policy carry, moving `TEAM_CARRY` rounds | 1 |
+| Carry | the carry ignores t09's guard (every document `NONE`) | 1 |
+| Carry | a team that names a policy aff carries the K aff (the identified check removed) | **survived**: equivalent, check removed |
+| Carry | a disagreeing team carries the K aff | **survived**, then 2 |
+| Reader | `Methods` counted as a method label | 1 |
+| Reader | an advocacy label counted with no text under it | 1 |
+| Families | not the longest phrase first | 2 |
+| Families | read from every paragraph, a tag included | 1 |
+| Families | counted over every affirmative file, not only the K-aff rounds' | 8 |
+| Control | K-aff rounds counted as identified another way | 2 |
+
+**The two survivors:**
+1. **Removing the identified check could not be told from keeping it.** A team whose rounds name
+   another aff has already carried it, by `TEAM_CARRY`, into every open round with no plan text before
+   the K-aff step. So it has no marker round to carry from. The check was removed (agreement 8), and a
+   comment says why.
+2. **Removing the disagreeing check survived until a new test.** No test had a team that disagrees only
+   through a conflicting round, which adds nothing to its identified affs. The new test,
+   `test_a_team_with_a_conflicting_round_reads_the_k_aff_by_its_own_marker_and_carries_nothing`,
+   catches it: 2 failed.
+
+### Before the report (working agreement 10)
+
+* **The affected set** (`uv run scripts/affected_tests.py`) is **210 test files**.
+  * I ran it once, with `-n auto -m "not slow and not live"`, under a 115 s limit on the interpreter.
+  * The limit stopped it at 69% (exit 142, load average 16). No test had failed by then.
+  * Its xdist workers ended with their parent, and none was left running.
+  * So the whole affected set is left to the pull request's `ci` check.
+* **Within the limit,** the test directories of what changed and the always-run list:
+
+  | Run | Result |
+  |---|---|
+  | `arguments/landscape`, `integrations/landscape`, `tests/config`, and the landscape scripts' tests (assign, read texts, dry run by section, classify) | 996 passed in 4.1 s |
+  | The application's landscape, run, assignment, plan-text, analytic-text and classification tests, `domain`, `tests/architecture`, `tests/specs` | 1,501 passed in 9.8 s |
+  | All of `packages/debate_core/tests/application` | 3,783 passed in 97.7 s (load 38) |
+  | `debate_cli`'s landscape command, app and help wiring, and the two pinned integration lists (`test_installation.py`, `commands/test_doctor.py`); `tests/smoke/test_landscape_smoke.py` | 135 passed in 18.9 s |
+
+* **All of `packages/debate_cli/tests`** was stopped twice by the limit, at 97%. The second run was
+  verbose and named one failure,
+  `bucket_mode/test_restore_run_state.py::test_the_copy_holds_the_runs_state_and_the_data_directory_and_the_bucket_are_left_as_they_were`.
+  * That is v1-e40-t06's restore test. It imports no landscape code.
+  * Alone, in one process (`-n 0 -p no:randomly`), its file passed: 17 passed in 49.9 s.
+  * I read it as a failure under load, and CI will run it. t06's report already runs this file in one
+    process because of its SQLite state.
+* **The cheap checks:**
+  * `ruff format --check .`: 1365 files already formatted;
+  * `ruff check .`: all checks passed;
+  * `pyright` (the project's configuration): 0 errors, in 63 s;
+  * `lint-imports`: 16 kept, 0 broken;
+  * `check_thin_handlers.py`: 55 handlers within 25 statements;
+  * `docs_index.py --check-descriptions`: OK;
+  * `check_command_blocks.py --base origin/dev`: OK;
+  * `check_links.py`: OK;
+  * `pre-commit run check-merge-conflict --all-files`: passed;
+  * `validate_specs.py`: OK ([below](#files-changed)).
+* **No shared test ground changed:** no `pyproject.toml`, `uv.lock`, conftest or pytest plugin. So no
+  whole-selection hand-off.
 
 ## The counts (hspolicy26, through 2026-10-20, taxonomy 1.2.0)
 
@@ -286,44 +435,183 @@ after it reads everything again. That is an operator block:
 
 ## Files changed
 
-Only this report, after the counts.
+* **`config/landscape`:**
+  * `taxonomies/policy-2026-27-nhi.yaml` (1.3.0, `kritikal-aff`) and `topics.yaml` (1.3.0);
+  * `kritikal_affs/policy-2026-27-nhi.yaml` (new).
+* **`debate_core.arguments.landscape`:**
+  * `kritikal_aff.py` (new);
+  * `aff_assignment.py` (the two methods and the guard), `plan_text.py` (the vocabulary), `render.py`
+    (the section and rows);
+  * `analytic_texts.py` (three names made public, behaviour unchanged).
+* **`debate_core.application`:**
+  * `landscape_kritikal.py` (new);
+  * `aff_assignment.py`, `plan_texts.py`, `landscape_report.py`, `landscape_run.py`;
+  * `ports/plan_text_store.py`, `ports/taxonomy_repository.py`.
+* **`debate_core.domain`:** `landscape_report.py` (`KritikalAffs`, `KritikalFamilyCount`).
+* **`debate_core.integrations.landscape`:** `yaml_taxonomy_repository.py` (the loader).
+* **Tests:**
+  * `packages/debate_core/tests`: `arguments/landscape/test_kritikal_aff.py` and
+    `integrations/landscape/test_kritikal_aff_files.py` (new);
+  * `arguments/landscape/test_aff_assignment.py` and `test_plan_text.py`;
+  * `application/test_landscape_report.py`, `test_aff_assignment.py`, `test_plan_texts.py` and
+    `test_landscape_run.py`;
+  * `integrations/landscape/test_plan_text_store.py`;
+  * `tests/config/test_landscape_taxonomies.py`; `tests/scripts/test_assign_landscape_affs.py`.
+* **`tests/fixtures/landscape/kritikal_affs/`** (new, by hand): `README.md`, `taxonomy.yaml`,
+  `rounds.yaml`, `report_section.md`, `method_table.md`.
+* **`scripts/assign_landscape_affs.py`.**
+* **`docs/guides/landscape-taxonomy.md`:** a section on kritikal affirmatives.
+* **The spec:** the PM's rulings as a comment above `acceptanceCriteria`, and the Goal's phase.
+
+`uv run scripts/validate_specs.py` after the phase was set: OK.
 
 ## Deviations from the spec
 
-None so far.
+1. **Files outside `constraints.packages`,** each needed by a ruling or by the wiring, as for t09 and
+   t11:
+   * `debate_core.integrations` (the K-aff file's loader);
+   * `scripts/assign_landscape_affs.py` and its test in `tests/scripts`. The script must read the same
+     vocabulary as the run, or it would fill a plan-text cache the run never hits.
+
+   Question 1 asks to amend the list.
+2. **The control row counts rounds and names its files.** Ruling 2 asked for "marker files among
+   identified rounds" in the method table, whose column is rounds. So the row gives the rounds, and its
+   label gives the files ("a control: 2 files" in the fixture).
 
 ## Decisions and assumptions
 
-1. **"No plan text" is t09's `NONE` verdict.** The 10 files with `CONFLICTING`, `UNNAMED` or
-   `NAMES` have a `should` plan text and are left out of the marker counts. None of them holds a
-   marker in any case.
-2. **`Methods` is not a method label** ([above](#k-aff-markers)). A rule after the ruling would leave
-   it out, as t11 left out `Ballot` on its own.
-3. **K-aff headings were looked for by their own words,** in pocket, hat and block headings: `k`,
-   `kritik`, `kritikal`, `kritical`, `critical`, `performance` or `method` before `aff`,
-   `affirmative` or `1ac`. None was found in either the unidentified or the control files. The 1AC
-   heading itself normalizes to nothing.
-4. **The family list was mine,** chosen to count only. It takes the 14 Ks of 1.2.0 by their own words
-   (`cap`, `set col`, `antiblackness` and so on) and adds families the K-aff literature uses
-   (`afropessimism`, `feminism`, `neoliberalism`, `deleuze`, `baudrillard`, `nietzsche`, `pessimism`,
-   `trans`, `anthropocentrism`). It is not a proposal for the taxonomy.
-5. **A team** is t03's (school, team code), compared without case, and only ever a salted key here.
+1. **A K aff never moves an existing assignment.** `KRITIKAL_AFF_MARKER` and `KRITIKAL_AFF_CARRY` run
+   after `PLAN_TEXT` and `TEAM_CARRY` and fill only rounds those leave open. A marker round of a team
+   whose other rounds name a policy aff is that aff's `TEAM_CARRY`, as before.
+   * This keeps the 1,483 identified rounds of 1.2.0 where they are.
+   * The control counts how often a marker sits in such a round.
+   * Question 2 asks whether the PM would rather have the marker win.
+2. **"A file with no plan text" is read per round.** Every file of the round must have t09's `NONE`
+   verdict and one of them a marker, as t09's carry guard reads a round. A round whose other file holds
+   an unnamed plan text is a policy round. The counts' 25 marker files were all `NONE`. The real-store
+   count after the refill will say how many rounds this rule leaves out.
+3. **A round t02 placed under an aff** is left to the report's `PLACED_CARD`, whatever its markers, as
+   t09 leaves it.
+4. **The advantage guard reads t15's placement:** a card t02 placed under an advantage, READS, at or
+   above the review threshold, in one of the round's own files. A card below the threshold refuses
+   nothing, and a mutant checks that.
+5. **The guard applies to the carry only,** as ruled. A round with its own marker reads the K aff even
+   when it reads an advantage, and the K aff's advantages then show under it in Advantages by
+   affirmative.
+6. **The families count the files of the K-aff rounds,** own marker and carry alike, and only their
+   pocket, hat and block headings:
+   * ordered by files, then teams, then the config's order;
+   * a longer phrase first, so `racial cap` is not also `cap`.
+
+   The 20 families and their phrases are my proposal for the coach to edit. They are the 14 Ks of 1.2.0
+   by their own words, and afropessimism, neoliberalism, feminism, Baudrillard, Deleuze, Nietzsche and
+   anthropocentrism. `security` reads only `securitization`, because "security" heads health headings.
+7. **A label counts only over a text,** as t11's labels do: `Advocacy` or `Method` over a heading or
+   at the end of a file is no marker.
+8. **No marker's words are kept or shown.** The cache keeps the kind (`ADVOCACY`), the form, the place
+   and the unit. The report says that markers are counted, never quoted (policy 1.13).
+9. **The seam's return type changed** from a sequence of assignments to `AffAssignmentsForReport`,
+   assignments and K-aff inputs. One fake in `test_landscape_run.py` was updated.
 
 ## Operator follow-ups
 
-None yet. After the ruling, a taxonomy bump makes the first run read the three caches again
-([the options](#the-options)). That is an operator block, written with the build.
+1. **Refill the three caches under taxonomy 1.3.0** (ruling 1). Expected runtime: about 6 to 14
+   minutes.
+   * The classifications are read again in process.
+   * The plan texts parse every affirmative file: 204 s on 2026-10-23.
+   * The analytic texts parse every on-topic file: 551 s under load on 2026-10-24, about 2 to 4 minutes
+     idle.
+
+   It writes only under `~/.debate-research/dev/landscape/`: the classification cache and the review
+   queue, the plan-text cache, and the analytic-text cache. Nothing is written to a bucket, and nothing
+   is published. It prints counts only. It refuses to start if a `DEBATE_*` variable is set or a
+   `caselist pull` is running. First, from the task worktree:
+
+```bash
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t17-kritikal-affirmatives
+```
+
+```bash
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; else uv run python scripts/classify_landscape_positions.py classify --caselist hspolicy26 --snapshot 2026-10-20 && uv run python scripts/assign_landscape_affs.py plan-texts --caselist hspolicy26 --snapshot 2026-10-20 && uv run python scripts/read_landscape_texts.py --caselist hspolicy26 --snapshot 2026-10-20; fi
+```
+
+   **Success looks like:**
+   * a `Classified hspolicy26 on policy-2026-27-nhi 1.3.0` line, with `Sources` above zero;
+   * `Plan texts: 1770 sources, 0 cached, 1770 parsed`, then a `K-aff markers:` line whose count is
+     above zero;
+   * `Analytic texts: 3825 sources, 0 cached, 3825 parsed, ... cache written`;
+   * each script's `Runtime` line.
+
+   A `STOP:` line means nothing ran. A failure stops at the script that failed (the `&&`). Paste every
+   line back.
+2. **Then the dry run without `--publish`,** on the warm caches. It is read-only, takes about 75 s, and
+   takes no bucket lock (only `--publish` without `--dry-run` does). The session can run it itself
+   once the refill is done. Or paste:
+
+```bash
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; else uv run debate-research landscape report --caselist hspolicy26 --snapshot 2026-10-20 --dry-run; fi
+```
+
+   **Success looks like:**
+   * exit 0, taxonomy 1.3.0, and nothing written;
+   * the method counts with `KRITIKAL_AFF_MARKER` above zero;
+   * "Affirmative rounds with no identified aff" below 1.2.0's 709.
+3. **The publish with this group** waits for the cloud cutover seed (ruling 1): no dev bucket writes
+   before then.
 
 ## Follow-up work
 
-* **The 256 no-plan files that carry advantage headings** (304 rounds, 93 teams) are policy affs
-  whose plan text is not under a label t09 reads. That is about 43% of the unidentified rounds, far
-  more than K affs. Identifying an aff by its advantages, or from the plan text that sits without a
-  label, belongs to t09's plan-text rule or a new task, not t17. Question 4 asks.
+* **The unlabelled-plan policy affs** (ruling 4): 256 files, 304 rounds, 93 teams in the counts, about
+  43% of the 709. The PM files the task. The advantage guard keeps the K aff out of those rounds until
+  then.
+* **The real-store numbers** come after the refill: K-aff rounds by marker and by carry, the guard's
+  refusals, the families, the control, and the rounds still unidentified. They are measured in the
+  dry run.
+* **The CLI's JSON** does not carry the group's counts yet. The run's report carries them
+  (`LandscapeReport.kritikal_affs`), for `landscape report --json` to print if the PM wants them.
 
 ## Questions for the PM
 
-Four, paste-ready:
+Three, paste-ready:
+
+```text
+v1-e32-t17 questions (session, 2026-10-25, after the build). Built as ruled:
+kritikal-aff in taxonomy 1.3.0 (released-ids check passes), the approved
+markers, KRITIKAL_AFF_MARKER and KRITIKAL_AFF_CARRY with t09's guard and the
+advantage guard, report.md's Kritikal affirmatives group after Advantages by
+affirmative, and the method table's refused and control rows. Tests red
+first; 14 mutants, all caught (one equivalent check removed, one test added).
+The real store needs the operator's cache refill first (one block in the
+report), then the dry run.
+
+1. Files outside constraints.packages: debate_core.integrations (the K-aff
+   file's loader), scripts/assign_landscape_affs.py and its test in
+   tests/scripts. The script's vocabulary must match the run's, or it fills
+   a plan-text cache the run never hits. Amend the list with a PM-ruling
+   comment?
+   Recommendation: yes, as for t09 and t11.
+
+2. Precedence: a K aff never moves an existing assignment. A marker round
+   of a team whose other rounds name a policy aff stays that aff's
+   TEAM_CARRY, and the control row counts such rounds. Options:
+   (a) keep it: 1.2.0's 1,483 identified rounds do not move;
+   (b) let a round's own marker beat the team's carry, and let a team with
+       a K-aff round and a policy aff disagree, carrying neither.
+   Recommendation: (a). The control row shows the size of what (b) would
+   move, measured in the dry run after the refill, before deciding.
+
+3. The 20 K families in config/landscape/kritikal_affs/policy-2026-27-nhi.yaml
+   (the 14 Ks of 1.2.0 by their words, plus afropessimism, neoliberalism,
+   feminism, Baudrillard, Deleuze, Nietzsche, anthropocentrism) are my list.
+   Send it to the coach to edit, as the CP actors were?
+   Recommendation: yes. tests/config checks his edit, and an edit re-reads
+   the affirmative files once.
+```
+
+### The questions of 2026-10-25 on the counts, answered
+
+The PM ruled the same day: (1) option (a); (2) the markers as proposed; (3) carry yes, with the advantage
+guard; (4) a follow-up task. Kept as asked:
 
 ```text
 v1-e32-t17 counts (session, 2026-10-25). Read-only, local store only,

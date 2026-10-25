@@ -654,6 +654,9 @@ NOTHING_LEFT = {
     "files": [],
     "older_versions": [],
     "older_than": COMPLETED_BY_THE_REMOVAL,
+    # The landscape school views a removal left (v1-e32-t13): none, so no cutoff is named.
+    "school_views": [],
+    "school_views_older_than": None,
 }
 
 
@@ -755,6 +758,8 @@ def test_versions_of_a_later_upload_left_under_a_delete_marker_fail_status_by_pr
             ],
             "older_versions": [],
             "older_than": COMPLETED_BY_THE_REMOVAL,
+            "school_views": [],
+            "school_views_older_than": None,
         }
     ]
     assert error["message"] == (
@@ -798,6 +803,8 @@ def test_a_refused_version_listing_says_not_checked_and_never_that_nothing_is_le
             "files": None,
             "older_versions": None,
             "older_than": None,
+            "school_views": None,
+            "school_views_older_than": None,
         }
     ]
     assert f"Removal residue NOT CHECKED for {SYNTHETIC_CASELIST}" in shown

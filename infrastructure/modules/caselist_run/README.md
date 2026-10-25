@@ -3,13 +3,13 @@
 One environment's weekly caselist run in the cloud. Decision:
 [ADR-0020](../../../docs/adr/0020-weekly-caselist-run-in-the-cloud.md). Epic:
 [E40](../../../plan_specs/v1/e40-cloud-caselist-run/epic.yaml). Operator steps:
-[docs/runbooks/caselist-cloud-credentials.md](../../../docs/runbooks/caselist-cloud-credentials.md).
+[caselist-cloud-credentials.md](../../../docs/runbooks/caselist-cloud-credentials.md) (the credentials
+and the login) and [caselist-cloud-run.md](../../../docs/runbooks/caselist-cloud-run.md) (the run).
 
 Called once from [`envs/dev`](../../envs/dev/caselist_run.tf) and once from
 [`envs/prod`](../../envs/prod/caselist_run.tf), with the same arguments. It holds no account id or
 region: both come from the provider. ADR-0020 makes this the one module the run's Terraform lives
-in, so that V2's foundation can lift its pieces out with `moved` blocks; `v1-e40-t03` adds the
-network, the cluster, the image repository and the run's task here.
+in, so that V2's foundation can lift its pieces out with `moved` blocks.
 
 ## What it creates
 
@@ -21,10 +21,38 @@ builds the credentials and the scheduled login, in two applies:
 | `credentials.tf` | The KMS key `alias/debate-<env>-caselist-credentials`; the secrets `debate-<env>-caselist-tabroom-password` and `debate-<env>-caselist-token`, created empty; each secret's resource policy | A |
 | `roles.tf` | The login role `debate-<env>-caselist-login`; the run role `debate-<env>-caselist-run` with its credentials grant; each role's policies held exclusive | A |
 | `credential_writer.tf` | The `Debate<Env>CaselistSecretWriter` permission set, its inline policy and its one assignment | A |
-| `login_task.tf` | The login task definition, pinned by digest; its execution role and log group; the scheduler role; the schedule, Wednesdays at 03:00 America/Chicago, never retried | B, once `login_task` is set |
+| `login_task.tf` | The login task definition, pinned by digest; its execution role and log group; the scheduler role; the schedule, Wednesdays at 03:00 America/Chicago, never retried | B, once `image_digest` is set |
 
-Apply A needs no network. Apply B takes `v1-e40-t03`'s cluster, subnets, security group, repository
-and the digest of a pushed image as `login_task`.
+[`v1-e40-t03-run-image-and-schedule`](../../../plan_specs/v1/e40-cloud-caselist-run/t03-run-image-and-schedule.yaml)
+builds the run, in the apply between those two, and in apply B:
+
+| File | Resources | Apply |
+|---|---|---|
+| `network.tf` | The VPC `debate-<env>-caselist-run`, its default security group held with no rule, two public subnets, the internet gateway and route, the S3 gateway endpoint, and the tasks' security group: no inbound rule, outbound HTTPS only | the run's |
+| `cluster.tf` | The cluster and the image repository `debate-<env>-caselist-run`: immutable tags, a scan on push, KMS, the five newest images kept | the run's |
+| `run_task.tf` | The run's execution role and log group; then the run task definition (Fargate, arm64, 8 vCPU, 16 GB, 100 GiB, `debate-research --json caselist pull` under a 6-hour deadline, pinned by digest), its scheduler role and its schedule, Wednesdays at 06:00 America/Chicago, never retried, **created disabled** | the run's; B for the task and schedule |
+| `roles.tf` | The run role's `everyday-evidence` policy: `module.evidence_store.operator_policy_json` itself | the run's |
+| `deployer.tf` | The `Debate<Env>CaselistRunDeployer` permission set: push to the repository, register a run task definition passing the run's two roles and never the login's, start, watch and stop a run | the run's |
+
+Apply A needs no network. The run's apply needs no image. Apply B takes the digest of an image
+`scripts/caselist_run_deploy.sh` pushed as `image_digest`, and creates both task definitions and both
+schedules. `run_schedule_enabled` stays false until the cutover (`v1-e40-t06`): before `v1-e40-t04`'s
+bucket mode, a cloud run would start from an empty data directory and publish without the bucket's
+lock.
+
+## What the run may do
+
+The run role reads one secret, the token, and holds the everyday evidence permissions, the same JSON
+document as the EvidenceOperator permission set: list the documented prefixes, read, publish, tag a
+retired `parsed/` directory, use the evidence key. Nothing more, and no delete. `evidence_policy_json`
+is refused at plan time if it allows anything else, names another bucket or another key. The task's
+environment names the token's secret and holds no secret; the CLI reads the token itself with the
+task role, through t02's Secrets Manager client, which keeps botocore's wire logs quiet.
+
+The deployer may pass the run role and the run's execution role to ECS tasks, and an explicit deny
+refuses it the login role and the login's execution role. `ecs:RegisterTaskDefinition` takes no
+resource, so the pass-role rule is what holds a registration to the run's roles, and both schedules
+pin the revision Terraform made.
 
 ## Who may read what
 
@@ -69,7 +97,7 @@ runbook, "Before you start").
 ## Tests
 
 `tests/caselist_run.tftest.hcl`, under a mocked provider, with an ARN of its own for every role and
-secret:
+secret: 14 runs for the credentials and the login (`v1-e40-t02`), 12 for the run (`v1-e40-t03`).
 
 ```bash
 terraform -chdir=infrastructure/modules/caselist_run init -backend=false
@@ -78,4 +106,6 @@ terraform -chdir=infrastructure/modules/caselist_run test
 
 The read rules were checked by mutation: 22 mutants that widen or drop one rule each, then 14 more
 on break-glass's key validation (narrowing, widening or dropping each of its statements and the
-split denies), every one caught by a failing assertion (the task's session report lists them).
+split denies), every one caught by a failing assertion (`v1-e40-t02`'s session report lists them).
+The run's pass-role and secret-read rules were checked the same way: 22 more, every one caught
+(`v1-e40-t03`'s report).

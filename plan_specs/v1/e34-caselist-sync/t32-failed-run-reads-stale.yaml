@@ -47,7 +47,7 @@ spec:
         A landscape report built over a failed latest run carries the stale banner and
         `stale=true`, by test through v1-e32-t05's run service.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

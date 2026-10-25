@@ -52,8 +52,10 @@ Three figures differ from what was sent, each traced to a ruled rule, not a defe
 
 The Goal is `Succeeded`: every criterion passed.
 
-**Look first at Deviation 1** (`no link`, `no impact`, `lt` and `l t` added to the not-a-scenario
-list) **and question 1** (ac3's definition).
+**The PM's rulings after the build (2026-10-25):** ac3 stays as built, (a), with the sent counts
+on the record beside the built ones. Deviation 1 is kept: `no link`, `no impact`, `lt` and `l t`
+stay in the not-a-scenario list. Both are under [the rulings after the
+build](#the-pms-rulings-after-the-build).
 
 **The sync:** `scripts/task sync` rebased the branch onto `e39bbed`, after v1-e32-t15 and v1-e32-t18
 merged. Five files conflicted: the domain module and the service (both `landscape_report.py`),
@@ -316,7 +318,7 @@ marker. Under advantages most are the aff's answers to DAs and Ks (`clog`, `dede
 | Names used by two or more teams | | identical to [the counts' list](#scenario-names-grouped-by-normalized-words-with-teams) | |
 | DA positions (of 20) with a card for uniqueness, link, IL, impact | 15, 13, 10, 16 | 15, 13, 10, 16 | |
 | Advantage positions (of 16): uniqueness, link, IL, impact, harms, inherency, solvency | 6, 9, 3, 15, 1, 2, 7 | 6, **8**, 3, 15, 1, 2, 7 | The Pandemics advantage's only link-like tag opens `link turn`, which the ruled exclusions keep out of tags too |
-| ac3: documents with no scenario heading and no role label | 328 / 1,005 | **251 / 676** | Question 1, below |
+| ac3: documents with no scenario heading and no role label | 328 / 1,005 | **251 / 676** | Ruling 1 counts tag openings and t10's impact card as labels; the PM kept it, (a), on 2026-10-25 |
 | The scan before sharing, report.md and impact_cards.csv | | no hit | |
 
 **ac3, step by step.** Each step adds one change, on the same documents.
@@ -333,6 +335,26 @@ with the same teams. Midterms DA has 14 shown and 2 withheld. Under the advantag
 shown and 1 withheld, and Stagnation 0 shown and 1 withheld. The names that hold a caselist word stay
 counted and unprinted, here as in the report.
 
+## The PM's rulings after the build
+
+Ruled on 2026-10-25, on the second question block.
+
+1. **ac3's measure: (a), as built.** "Neither" counts what the chain and the scenarios could not see:
+   no scenario heading, and no label the chain reads, whether a sub-heading's, a tag opening's or
+   t10's impact card. On hspolicy26 through 2026-10-20, beside the counts sent before the ruling:
+
+   | Documents with no scenario heading and no role label | Sent with the counts (sub-heading labels only) | Built and ruled |
+   |---|---|---|
+   | DA, of 662 | 328 | **251** |
+   | Advantage, of 1,164 | 1,005 | **676** |
+
+2. **Deviation 1: keep it.** `no link`, `no impact`, `lt` and `l t` stay in the not-a-scenario list.
+   They are the role rules' own exclusions, and defense filed under `No impact` must never become a
+   scenario name.
+
+Neither ruling changes code, a golden or a count: both confirm what was built. The spec's ruling
+comment records them beside the first five.
+
 ## Plan nodes
 
 | Node | Status | Notes |
@@ -345,7 +367,7 @@ counted and unprinted, here as in the report.
 |---|---|---|
 | ac1: counts before any rule, per DA and advantage, of documents with scenario headings, chain-role labels or neither, and of t10's impact cards under a scenario heading or below another card, sent to the PM with the proposed role labels and scenario-naming options | PASS | [The counts on the real store](#the-counts-on-the-real-store) and the first question block. The PM ruled on 2026-10-25: role labels (a); scenario names (c), building (a) now; the internal link (a) plus the card-above line; the chain as proposed; scope yes |
 | ac2: after the ruling, on the synthetic fixture, report.md shows under each impact card its scenario and its internal link's tag, and per DA and advantage its most-read card per chain role, matching hand-written golden files; an ANSWERS card or a card on the other side never fills a role; a role or scenario no heading or label gives is counted, not guessed; tests shown failing first | PASS | `test_rendering_the_fixture_matches_the_golden_file[report.md]` and `[impact_cards.csv]` pass against goldens committed in `78cc4bc` before any rule or service code. ANSWERS: `test_chain_an_answers_card_never_fills_a_role` (a3's cluster 36 fills the IL once made READS) and `test_lead_in_an_answers_card_is_never_the_internal_link`. Other side: `test_chain_a_card_in_a_round_on_the_other_side_never_fills_a_role` (a6's cluster 45, once its round has no side). Counted, not guessed: `test_coverage_counts_what_no_heading_or_label_gives_per_kind` and every "no labelled card" and "no labelled internal link" line of the golden. Red runs [below](#checks-shown-failing-for-their-reason) |
-| ac3: the report states, per kind, how many documents carry no scenario heading and no role label | PASS | report.md: "Advantage documents with no scenario heading and no role label: 1 of 6 (16.7%)." and "DA documents with no scenario heading and no role label: 2 of 6 (33.3%)." On hspolicy26: DA 251 of 662, advantage 676 of 1,164 (question 1) |
+| ac3: the report states, per kind, how many documents carry no scenario heading and no role label | PASS | report.md: "Advantage documents with no scenario heading and no role label: 1 of 6 (16.7%)." and "DA documents with no scenario heading and no role label: 2 of 6 (33.3%)." On hspolicy26: DA 251 of 662 and advantage 676 of 1,164, as built and ruled (a) on 2026-10-25; the sent counts were 328 and 1,005 |
 | scenarios-and-chains: `uv run pytest packages/debate_core/tests/application/test_landscape_report.py` | PASS | Run as `.venv/bin/python -m pytest …` under a 110 s alarm, with the landscape tests: **819 passed in 3.23s** after the sync (`test_landscape_report.py` alone: 80 before the sync) |
 
 ### Checks shown failing for their reason
@@ -481,7 +503,8 @@ All of these ran after the sync, on `fddd459`.
 
 ## Deviations from the spec
 
-1. **Four phrases added to the not-a-scenario list:** `no link`, `no impact`, `lt` and `l t`, beside
+1. **Four phrases added to the not-a-scenario list,** kept by the PM's ruling of 2026-10-25:
+   `no link`, `no impact`, `lt` and `l t`, beside
    `link defense`, which `defense` already covered.
    * **Why:** ruling 2 took my list as sent. But these phrases are the role rules' own exclusions
      (ruling 1 and t10's). Without them, `no impact` under the Midterms DA would name a scenario
@@ -491,7 +514,8 @@ All of these ran after the sync, on `fddd459`.
      No document's ac3 count moves, since each of those files carries a role label anyway, and the
      list of names two or more teams use is unchanged.
    * In the fixture, `b3`'s `no impact` is the case.
-   * Remove the four from `NOT_A_SCENARIO` to undo it. Question 2.
+   * **Ruled 2026-10-25: keep them.** They are the role rules' own exclusions, and defense filed
+     under `No impact` must never become a scenario name.
 2. **The re-count used the report service directly, not the run's dry run.**
    * The dry run reads t09's and t11's caches through a spawned worker pool, re-parsing what they
      lack. That put it near the two-minute line, where an alarm that kills the parent orphans its
@@ -526,7 +550,7 @@ All of these ran after the sync, on `fddd459`.
    card above is looked for only when no copy has a labelled internal link.
 8. **ac3 counts every role label the chain reads:** a sub-heading's, a tag opening's, and t10's
    impact card. A document has neither when none of its counted cards for a position of the kind is
-   under a scenario heading or carries one. Question 1.
+   under a scenario heading or carries one. Ruled (a), as built, on 2026-10-25.
 9. **A withheld name** is one two or more teams use that holds a word of a caselist school or
    tournament of four letters or more, or any team code, from every disclosure the report reads.
    Only names that would otherwise show are counted as withheld.
@@ -699,7 +723,7 @@ The counts, per kind:
    Recommendation: yes.
 ```
 
-Second block, after the build (2026-10-25):
+Second block, after the build (2026-10-25), answered the same day: (1) (a), (2) yes. Kept as sent:
 
 ```text
 v1-e32-t14 questions after the build (session, 2026-10-25)

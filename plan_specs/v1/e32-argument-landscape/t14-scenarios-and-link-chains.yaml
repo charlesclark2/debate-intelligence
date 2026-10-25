@@ -75,6 +75,10 @@ spec:
   #    ranks them, in report.md beside the impact block, "no labelled card" counted; no chain rows in
   #    the CSV and no new file.
   # 5. Scope: scripts/make_landscape_fixture.py only.
+  # PM rulings after the build, 2026-10-25 (session report, second block):
+  # 6. ac3 (a), as built: a document has neither when it has no scenario heading and no label the chain
+  #    reads (a sub-heading's, a tag opening's or t10's impact card); sent 328 and 1,005, built 251 and 676.
+  # 7. Deviation 1 kept: no link, no impact, lt and l t are not scenarios (the role rules' own exclusions).
   # Also: hand-written goldens shown failing first; mutants on the role labels (a u in a tag, no link
   # as a link, an answer heading filling a role), the two-team threshold, the withheld names, an
   # ANSWERS or other-side card filling a role, and the card-above line calling itself an internal link.

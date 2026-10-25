@@ -469,9 +469,47 @@ Reply with: 1a or 1b; 2 amend or not; and any FYI you want changed.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-25
 
 **Notes:**
+
+Complete on what a session can do, and careful where it matters: what an alert may say, and whose
+reads the password rule ignores.
+1. **ac1's built half and ac2 pass.**
+   * 37 module tests and 25 adapter tests, with red runs recorded.
+   * The sentinel run through the real `SyncRunMonitor` and `ScheduledLogin` to the real
+     `SnsNotifier` is the right proof. P19 shows it catching a non-path-shaped school name that
+     `redact()` would have let through.
+2. **Mutants:** 28 Terraform and 19 Python, all caught, including the PM's four groups.
+   * Treating the Terraform 1.16 panic on a deprecation mark as not a clean catch, rewriting the
+     assertions by literal key and rerunning the whole table is agreement 8 applied exactly.
+3. **Question 1: (a), accept bucket mode carried by the alerts' apply.**
+   * The run schedule stays `DISABLED`, and a bucket-mode run refuses an unseeded bucket.
+   * The login doesn't use bucket mode, and the test alert exits before reading a setting.
+   * The plan check's `NOTE` makes it visible rather than silent, and step 8 becomes an image change.
+   * ADR-0020 (4) step 1 puts t05 before the cutover, and alerts a week sooner is worth more here.
+4. **Question 2: amend.** The PM adds `debate_cli`, `packages/debate_cli/tests` and `pyproject.toml`
+   to `constraints.packages` in a PM batch.
+5. **Accepted as made:**
+   * the FYIs: one alarm over both queues, one undimensioned `RunsRecorded`, the seven-action secrets
+     rule, and the run-stopped test alert;
+   * the decisions: subject rules, bounded delivery inside 120 s, `quiet_wire_log` reused, never-started
+     tasks alerting, five CloudTrail rules, session-prefix exclusions, the metric filter's two envelope
+     shapes, the coach's address from the budget emails, the topic ARN written out, and how t06 turns
+     on the late-run email.
+6. **The unsubscribe link is taken up now, not at t06.** The coach travels from 2026-11-02, and one
+   stray click on an alert email would stop every alert silently. The PM's operator block for step F
+   confirms the subscription through the API with `--authenticate-on-unsubscribe true`, using the
+   token from the confirmation email, instead of following its link.
+7. **The other follow-ups go to v1-e40-t06:** reading the summary line's length in the first cloud
+   run's log, and the Terraform panic note for `infrastructure/README.md` in any task that touches it.
+8. **The affected set** is the whole selection (`pyproject.toml`), so it is left to the PR's `ci`
+   under agreement 10. The always-run list and changed areas passed. One CLI run past two minutes
+   under load was disclosed.
+
+**The PR merges `--partial`,** phase `InProgress`, until the operator's test alert is received (ac1).
+The PM reads the dev plan (expected `25 to add, 5 to change, 2 to destroy`, with no account
+assignment or permission set) before any apply. No re-review is needed.

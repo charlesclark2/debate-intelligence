@@ -20,7 +20,10 @@ module is the report as values; `LandscapeReportService` builds it and the rende
   impact (`v1-e32-t10`), and per kind an :class:`ImpactCoverage`: how many of its documents carry no
   labelled impact;
 * an :class:`UnclassifiedSummary`: what the report could not count, by cards and by rounds;
-* how affirmative rounds were identified, one :class:`AffIdentification` per method.
+* how affirmative rounds were identified, one :class:`AffIdentification` per method;
+* :class:`AdvantagesByAff` (`v1-e32-t15`): under each aff `v1-e32-t09` assigned rounds to, and each
+  mechanism under it, its advantages ranked by distinct teams, and the advantage reads of the
+  affirmative rounds no aff was assigned to.
 
 ## What a report never holds
 
@@ -57,13 +60,18 @@ from debate_core.domain.landscape_texts import LandscapeTexts
 
 __all__ = [
     "AFF_METHOD_PATTERN",
+    "DEFAULT_ADVANTAGES_PER_AFF",
     "DEFAULT_IMPACT_CARDS",
     "DEFAULT_TOP_CARDS",
     "IMPACT_KINDS",
     "PLACED_CARD_METHOD",
     "ROUND_ID_PATTERN",
+    "AdvantagesByAff",
+    "AffAdvantage",
+    "AffAdvantages",
     "AffAssignment",
     "AffIdentification",
+    "AffWithoutAdvantages",
     "ImpactCard",
     "ImpactCoverage",
     "LandscapeCard",
@@ -71,6 +79,7 @@ __all__ = [
     "PositionStats",
     "ReportHeader",
     "TopCard",
+    "UnassignedAdvantageReads",
     "UnclassifiedSummary",
 ]
 
@@ -79,6 +88,9 @@ DEFAULT_TOP_CARDS: Final = 5
 
 DEFAULT_IMPACT_CARDS: Final = 3
 """How many impact clusters a DA or advantage lists by default (`v1-e32-t10`, the PM's brief)."""
+
+DEFAULT_ADVANTAGES_PER_AFF: Final = 5
+"""How many advantages each aff and mechanism lists (`v1-e32-t15`, the PM's ruling of 2026-10-24)."""
 
 IMPACT_KINDS: Final = (PositionKind.ADVANTAGE, PositionKind.DA)
 """The kinds whose impact cards a report lists, in report order (`v1-e32-t10`)."""
@@ -208,6 +220,92 @@ class AffIdentification(DomainModel):
     rounds: int = Field(ge=1)
 
 
+class AffAdvantage(DomainModel):
+    """One advantage read under one aff or mechanism, with the distinct teams that read it there."""
+
+    position_id: PositionId
+    label: NonEmptyText
+    teams: int = Field(ge=0, description="Distinct teams reading it in the aff's assigned rounds.")
+
+
+class AffAdvantages(DomainModel):
+    """One aff's or mechanism's section (`v1-e32-t15`): its top advantages, and how many more there are.
+
+    A mechanism's rounds count under it and once under its top-level aff, so an aff's counts take in
+    its mechanisms' rounds and a team is one team across them.
+    """
+
+    position_id: PositionId
+    label: NonEmptyText
+    mechanism_of: PositionId | None = Field(
+        default=None, description="The top-level aff a mechanism is listed under; None for that aff."
+    )
+    mechanism_of_label: NonEmptyText | None = None
+    rounds: int = Field(ge=1, description="Affirmative rounds assigned to it (or to its mechanisms).")
+    teams: int = Field(ge=0, description="Distinct teams of those rounds.")
+    advantage_teams: int = Field(ge=0, description="Of those teams, the ones reading an advantage in them.")
+    advantages: tuple[AffAdvantage, ...] = Field(
+        min_length=1, description="The top advantages by teams, then id: at most the report's cut-off."
+    )
+    more: int = Field(ge=0, description="Advantages read under it beyond the cut-off.")
+    more_teams: int = Field(
+        ge=0, description="Distinct teams reading any of those: a team is one team, however many it reads."
+    )
+
+    @model_validator(mode="after")
+    def _check_counts(self) -> Self:
+        if (self.mechanism_of is None) != (self.mechanism_of_label is None):
+            raise ValueError("a mechanism names its aff by id and label, and a top-level aff by neither")
+        if self.advantage_teams > self.teams or self.more_teams > self.advantage_teams:
+            raise ValueError("an aff's advantage teams are among its teams, and its hidden ones among those")
+        if self.more == 0 and self.more_teams:
+            raise ValueError("no advantage is hidden, so no team reads one")
+        return self
+
+
+class AffWithoutAdvantages(DomainModel):
+    """An aff or mechanism with assigned rounds and no advantage read in them: one entry of a closing line."""
+
+    position_id: PositionId
+    label: NonEmptyText
+    mechanism_of: PositionId | None = None
+    mechanism_of_label: NonEmptyText | None = None
+    rounds: int = Field(ge=1)
+
+
+class UnassignedAdvantageReads(DomainModel):
+    """The advantage reads of affirmative rounds `v1-e32-t09` assigned no aff (`v1-e32-t15`)."""
+
+    reads: int = Field(
+        ge=0, description="Round-advantage pairs: a round reading two advantages is two reads."
+    )
+    rounds: int = Field(ge=0, description="Affirmative rounds with no assigned aff reading an advantage.")
+    teams: int = Field(ge=0, description="Distinct teams of those rounds.")
+    placed_card_rounds: int = Field(
+        ge=0, description="Of those rounds, the ones whose aff only a placed card identifies (`PLACED_CARD`)."
+    )
+
+    @model_validator(mode="after")
+    def _check_counts(self) -> Self:
+        if self.placed_card_rounds > self.rounds or self.rounds > self.reads:
+            raise ValueError("placed-card rounds are among the rounds, and every round holds a read")
+        return self
+
+
+class AdvantagesByAff(DomainModel):
+    """report.md's advantages by affirmative (`v1-e32-t15`)."""
+
+    advantages_per_aff: int = Field(ge=1, description="The cut-off: advantages shown per aff and mechanism.")
+    affs: tuple[AffAdvantages, ...] = Field(
+        description="Each top-level aff reading an advantage, followed by its mechanisms that read one, by "
+        "teams, then rounds, then id."
+    )
+    without_advantages: tuple[AffWithoutAdvantages, ...] = Field(
+        description="The affs and mechanisms with assigned rounds and no advantage read, in the same order."
+    )
+    unassigned: UnassignedAdvantageReads
+
+
 class UnclassifiedSummary(DomainModel):
     """What the report could not count (ac3): cards, and rounds by side."""
 
@@ -299,4 +397,8 @@ class LandscapeReport(DomainModel):
         default=None,
         description="`v1-e32-t11`'s CP texts, alternatives, roles of the ballot and overview counts; None "
         "when the run read none.",
+    )
+    advantages_by_aff: AdvantagesByAff | None = Field(
+        default=None,
+        description="`v1-e32-t15`'s advantages per assigned aff; None when the taxonomy has no advantage.",
     )

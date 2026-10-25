@@ -319,6 +319,21 @@ what is read is kept beside the classification cache, at
 the aff ids it names. Never its words. Adding an alias or tag keyword to an aff makes the next run
 read every affirmative file again (a few minutes on the Mac that holds the store).
 
+### The advantages under each aff
+
+report.md's **Advantages by affirmative** section lists, under each aff and each mechanism under it,
+the 5 advantages the most teams read in its rounds, then "and N more, read by M teams". M counts each
+team once, however many of the hidden advantages it reads.
+* **Only plan texts and team carries put a round under an aff here.** A round whose aff only a placed
+  card names, or that no signal identifies, is counted in the closing line of advantage reads with no
+  assigned aff.
+* **A round under a mechanism counts under the mechanism and once under single payer.** A team that
+  reads the costs advantage under both counts as one team there.
+* **An advantage's `parent` plays no part.** Neither does its name. An advantage is listed under the
+  aff of the rounds whose files hold its cards, so setting `parent` cannot move it.
+* **An aff or mechanism whose rounds read no advantage** gets no section. It is named in one closing
+  line, with its rounds.
+
 ## The plan-text sheet and your mechanisms
 
 The plan-text sheet lists what plans teams read, grouped by the words that tell one plan text from

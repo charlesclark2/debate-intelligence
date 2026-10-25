@@ -7,6 +7,9 @@ which section a hit is in. This runs the same landscape service, built by the CL
 dry run without `--publish`, and prints only counts:
 
 * that nothing was written, and how many files a publish would upload;
+* the affirmative rounds by identification method, and the kritikal affirmatives (`v1-e32-t17`): rounds
+  by own marker and by carry, those the advantage guard refused, the control (rounds another method
+  identifies whose files hold a marker) and the K families in the K-aff files' headings, by id;
 * the CPs' planks: how many, under how many CPs, in how many groups by the advantage they solve, how many
   withheld for naming a school, and where every plank found went;
 * the scan's hits by file, report.md's section (its nearest heading, and each CP's plank table apart) and
@@ -45,6 +48,28 @@ def report_lines(result: LandscapeRunResult) -> list[str]:
         f"{result.taxonomy_version}: {'files written' if result.written else 'nothing written'}; "
         f"{planned} files planned.",
     ]
+    unclassified = result.report.unclassified
+    methods = "; ".join(f"{one.method} {one.rounds}" for one in result.report.aff_identification)
+    lines.append(
+        f"Affirmative rounds by method: {methods + '; ' if methods else ''}not identified "
+        f"{unclassified.aff_rounds_unidentified} of {unclassified.aff_rounds}."
+    )
+    kritikal = result.report.kritikal_affs
+    if kritikal is None:
+        lines.append("Kritikal affirmatives: no K-aff markers were read.")
+    else:
+        families = ", ".join(
+            f"{one.family_id} {one.files} files ({one.teams} teams)" for one in kritikal.families
+        )
+        lines += [
+            f"Kritikal affirmatives ({kritikal.position_id}): {kritikal.rounds} rounds by "
+            f"{kritikal.teams} teams, {kritikal.by_marker} by their own marker, "
+            f"{kritikal.by_carry} by carry; "
+            f"{kritikal.refused_by_advantage} refused by the advantage guard, still unidentified.",
+            f"Control: {kritikal.control_rounds} rounds identified another way hold a K-aff marker, in "
+            f"{kritikal.control_files} files.",
+            f"K families in the K-aff files' headings: {families or 'none'}.",
+        ]
     texts = result.report.texts
     if texts is None:
         lines.append("Planks: no analytic texts were read.")

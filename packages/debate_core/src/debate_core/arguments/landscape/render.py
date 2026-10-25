@@ -39,8 +39,9 @@ id; cards by rank). Nothing here computes a count; the service did.
   "What a report may show"). They show position ids and counts only: no label, tag, cite or text. The
   circuit-wide files above name nobody, so the view is kept out of them. Since policy 1.14 they also
   link each team's public OpenCaselist page (`v1-e32-t18`), schools.csv in its `team_page` column and
-  schools.md in its **By position** section, which lists under each position, by kind, the teams that
-  read it. No circuit-wide file carries a link.
+  schools.md in a **Team page** column of both its **By school** tables (`v1-e32-t23`) and its
+  **By position** section, which lists under each position, by kind, the teams that read it; a team's
+  cell is the same in both. No circuit-wide file carries a link.
 
 ## What is written exactly, and what is escaped
 
@@ -1110,11 +1111,12 @@ def render_schools_markdown(view: SchoolView, report: LandscapeReport) -> str:
         lines += [
             f"### {_cell(listed[0].school)}",
             "",
-            "| Team code | Side | Position | Rounds |",
-            "|---|---|---|---|",
+            "| Team code | Side | Position | Rounds | Team page |",
+            "|---|---|---|---|---|",
         ]
         lines += [
-            f"| {_cell(row.team_code)} | {row.side.value} | `{row.position_id}` | {row.rounds:,} |"
+            f"| {_cell(row.team_code)} | {row.side.value} | `{row.position_id}` | {row.rounds:,} | "
+            f"{_team_page_cell(view.team_page(row))} |"
             for row in listed
         ]
         lines.append("")

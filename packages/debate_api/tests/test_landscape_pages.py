@@ -215,6 +215,29 @@ def test_a_school_page_shows_that_schools_rows_and_a_repeated_anchor_is_the_othe
     ]
 
 
+def test_a_school_page_links_each_team_page_in_a_new_tab_and_shows_none_as_text(member: Any) -> None:
+    """`v1-e32-t23`: the by-school table's team page column, checked as the position page's is."""
+    ashgrove = main_of(page(member, "/landscape/synthpolicy26/schools/ashgrove"))
+    hollow = main_of(page(member, "/landscape/synthpolicy26/schools/birch-hollow"))
+    hyphenated = main_of(page(member, "/landscape/synthpolicy26/schools/birch-hollow-2"))
+
+    new_tab = 'target="_blank" rel="noopener noreferrer"'
+    team_page = f'<a href="https://opencaselist.com/synthpolicy26/Ashgrove/AB" {new_tab}>'
+    assert re.findall(r"<a [^>]*>", ashgrove) == [
+        '<a href="/landscape/synthpolicy26/schools">',
+        team_page,
+        team_page,
+    ]
+    assert ashgrove.count('openCaselist<span class="new-tab"> (opens in a new tab)</span></a>') == 2
+    assert "<th>Team page</th>" in ashgrove
+    assert re.findall(r"<a [^>]*>", hyphenated) == [
+        '<a href="/landscape/synthpolicy26/schools">',
+        f'<a href="https://opencaselist.com/synthpolicy26/Birch-Hollow/EF" {new_tab}>',
+    ]
+    assert "<td>CD</td>\n<td>neg</td>\n<td><code>invented-da</code></td>\n<td>2</td>\n<td>none</td>" in hollow
+    assert "opencaselist.com" not in hollow
+
+
 def test_a_position_page_links_each_team_page_in_a_new_tab_and_shows_none_as_text(member: Any) -> None:
     position = main_of(page(member, "/landscape/synthpolicy26/positions/invented-da"))
 
@@ -361,10 +384,14 @@ def large_school_view() -> str:
         lines += [
             f"### Invented{school:03d}",
             "",
-            "| Team code | Side | Position | Rounds |",
-            "|---|---|---|---|",
+            "| Team code | Side | Position | Rounds | Team page |",
+            "|---|---|---|---|---|",
         ]
-        lines += [f"| T{row:03d} | neg | `invented-position-{row}` | {row} |" for row in range(rows)]
+        lines += [
+            f"| T{row:03d} | neg | `invented-position-{row}` | {row} | "
+            f"[openCaselist](https://opencaselist.com/synthpolicy26/Invented{school:03d}/T{row:03d}) |"
+            for row in range(rows)
+        ]
         lines.append("")
     lines += ["## By position", "", "### Disadvantages", "", "#### `invented-position-0`", ""]
     lines += ["| School | Team code | Side | Rounds | Team page |", "|---|---|---|---|---|"]
@@ -411,6 +438,9 @@ def test_every_landscape_page_of_a_bundle_as_large_as_hspolicy26s_is_under_the_p
     assert world.browser.get("/landscape/synthpolicy26/positions/invented-position-0").text.count(
         "noopener"
     ) == (HSPOLICY26_LARGEST_POSITION_ROWS)
+    assert world.browser.get("/landscape/synthpolicy26/schools/invented000").text.count("noopener") == (
+        HSPOLICY26_LARGEST_SCHOOL_ROWS
+    )
     assert all(weight < PAGE_BUDGET for weight in others.values()), others
     assert max(part_weights.values()) <= (1 - HEADROOM) * PAGE_BUDGET, part_weights
     world.services.search_index.close()

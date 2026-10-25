@@ -12,22 +12,22 @@ This page names schools and team codes exactly as they were disclosed, and links
 
 ### Ashgrove
 
-| Team code | Side | Position | Rounds |
-|---|---|---|---|
-| AB | aff | `invented-aff` | 2 |
-| AB | neg | `invented-da` | 1 |
+| Team code | Side | Position | Rounds | Team page |
+|---|---|---|---|---|
+| AB | aff | `invented-aff` | 2 | [openCaselist](https://opencaselist.com/synthpolicy26/Ashgrove/AB) |
+| AB | neg | `invented-da` | 1 | [openCaselist](https://opencaselist.com/synthpolicy26/Ashgrove/AB) |
 
 ### Birch Hollow
 
-| Team code | Side | Position | Rounds |
-|---|---|---|---|
-| CD | neg | `invented-da` | 2 |
+| Team code | Side | Position | Rounds | Team page |
+|---|---|---|---|---|
+| CD | neg | `invented-da` | 2 | none |
 
 ### Birch-Hollow
 
-| Team code | Side | Position | Rounds |
-|---|---|---|---|
-| EF | neg | `invented-da` | 1 |
+| Team code | Side | Position | Rounds | Team page |
+|---|---|---|---|---|
+| EF | neg | `invented-da` | 1 | [openCaselist](https://opencaselist.com/synthpolicy26/Birch-Hollow/EF) |
 
 ## By position
 

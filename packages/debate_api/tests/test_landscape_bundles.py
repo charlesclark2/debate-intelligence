@@ -222,9 +222,11 @@ PLANTED_SCHOOL_VIEW: Final = """# Positions by school: synthpolicy26 through 202
 
 ### Ashgrove <script>alert(3)</script>
 
-| Team code | Side | Position | Rounds |
-|---|---|---|---|
-| AB | neg | `invented-da` | 1 |
+| Team code | Side | Position | Rounds | Team page |
+|---|---|---|---|---|
+| AB | neg | `invented-da` | 1 | [another caselist](https://opencaselist.com/otherpolicy26/Ashgrove/AB) |
+| AB | neg | `invented-da` | 1 | [a deeper path](https://opencaselist.com/synthpolicy26/Ashgrove/AB/rounds) |
+| AB | neg | `invented-da` | 1 | [the real one](https://opencaselist.com/synthpolicy26/Ashgrove/AB) |
 
 ## By position
 
@@ -292,6 +294,7 @@ def test_a_team_page_link_the_rule_would_not_build_is_text_in_the_school_view(
 ) -> None:
     world = with_files(make_world, landscape_store, landscape_files, schools_md=PLANTED_SCHOOL_VIEW)
     position = body(world, "/landscape/synthpolicy26/positions/invented-da")[1]
+    school = body(world, "/landscape/synthpolicy26/schools/ashgrove-scriptalert3script")[1]
 
     assert re.findall(r'<a href="([^"]*)"', position) == [
         "/landscape/synthpolicy26/schools",
@@ -300,6 +303,14 @@ def test_a_team_page_link_the_rule_would_not_build_is_text_in_the_school_view(
     for words in ("another caselist", "with a query", "a display name", "a deeper path", "plain http"):
         assert f"<td>{words}</td>" in position, words
     assert "otherpolicy26" not in position and "?x=1" not in position
+    # The by-school table's team page column is checked by the same rule (`v1-e32-t23`).
+    assert re.findall(r'<a href="([^"]*)"', school) == [
+        "/landscape/synthpolicy26/schools",
+        "https://opencaselist.com/synthpolicy26/Ashgrove/AB",
+    ]
+    for words in ("another caselist", "a deeper path"):
+        assert f"<td>{words}</td>" in school, words
+    assert "otherpolicy26" not in school and "/rounds" not in school
     world.services.search_index.close()
 
 

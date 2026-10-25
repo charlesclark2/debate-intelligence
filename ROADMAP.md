@@ -66,7 +66,7 @@ v2.3's extension work.
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 2 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
-| [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 22 | 12 | 154 |
+| [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 22 | 13 | 154 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 16 | 12 | 66 |
 | [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 1 | 6 | 1 | 20 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
@@ -436,7 +436,7 @@ Whitefish Bay Debate has a public, mobile-friendly team website: team informatio
 | [Automatic republish on content changes](plan_specs/v1/e37-calendar-and-announcements/t04-auto-republish.yaml) `v1-e37-t04-auto-republish` | Cancelled | 3 | 11.0 |
 | [Parent email updates](plan_specs/v1/e37-calendar-and-announcements/t05-parent-email-signup.yaml) `v1-e37-t05-parent-email-signup` | InProgress | 2 | 6.0 |
 | [Season results: how the team's students placed at each tournament](plan_specs/v1/e37-calendar-and-announcements/t06-season-results.yaml) `v1-e37-t06-season-results` | InProgress | 2 | 6.0 |
-| [A link to the team's Instagram account, never an embed](plan_specs/v1/e37-calendar-and-announcements/t07-instagram-link.yaml) `v1-e37-t07-instagram-link` | Pending | 1 | 1.0 |
+| [A link to the team's Instagram account, never an embed](plan_specs/v1/e37-calendar-and-announcements/t07-instagram-link.yaml) `v1-e37-t07-instagram-link` | Succeeded | 1 | 1.0 |
 | [The site smoke check reads the home page's results band and the results page](plan_specs/v1/e37-calendar-and-announcements/t08-smoke-results-band.yaml) `v1-e37-t08-smoke-results-band` | Pending | 1 | 1.0 |
 
 #### [E38 — Team Donations](plan_specs/v1/e38-donations/epic.yaml)

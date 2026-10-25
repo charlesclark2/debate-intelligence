@@ -424,3 +424,303 @@ def test_claim_refuses_a_version_that_was_already_released(
 def test_claim_refuses_an_abbreviated_sha(clone: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert rv.main(["claim", "--source", "dev", "--sha", "abc123", "--repository", str(clone)]) == 1
     assert "full 40-character" in capsys.readouterr().err
+
+
+# --------------------------------------------------------------------------------------------
+# A commit dev has moved past with a workflow change (v1-e01-t36)
+# --------------------------------------------------------------------------------------------
+
+# Run 40149948706's claim step, 2026-10-25, as its log printed `last error:` for the third push.
+REFUSAL_OF_RUN_40149948706 = (
+    "To https://github.com/charlesclark2/debate-intelligence\n"
+    " ! [remote rejected] f1f31d9eb1c5f0305ddc8697d4f4600631ad91ed -> v1.1.0-dev.137 "
+    "(refusing to allow a GitHub App to create or update workflow `.github/workflows/validate-dev.yml` "
+    "without `workflows` permission)\n"
+)
+
+OLDER = "a" * 40
+SAME_WORKFLOWS = "b" * 40
+CHANGED_WORKFLOWS = "c" * 40
+OFF_DEV = "d" * 40
+
+
+class StubDevBranch:
+    """Dev as a test scripts it: `commits` is dev's history, oldest first, each mapped to the tree of
+    its workflow files, and `heads` is what each fetch of dev's head returns in turn."""
+
+    def __init__(self, commits: dict[str, str], heads: list[str]) -> None:
+        self.commits = commits
+        self.heads = heads
+        self.fetched: list[str] = []
+
+    def head(self) -> str:
+        head = self.heads[min(len(self.fetched), len(self.heads) - 1)]
+        self.fetched.append(head)
+        return head
+
+    def contains(self, head: str, sha: str) -> bool:
+        order = list(self.commits)
+        return sha in order and order.index(sha) <= order.index(head)
+
+    def workflow_changes(self, sha: str, head: str) -> list[str]:
+        if self.commits.get(sha, "not on dev") == self.commits[head]:
+            return []
+        return [".github/workflows/validate-dev.yml"]
+
+
+def dev_moved_on(*heads: str) -> StubDevBranch:
+    """Dev with OLDER, then a commit with the same workflows, then one that changed them."""
+    return StubDevBranch(
+        {OLDER: "old tree", SAME_WORKFLOWS: "old tree", CHANGED_WORKFLOWS: "new tree"}, list(heads)
+    )
+
+
+def test_a_commit_behind_a_workflow_change_on_dev_is_superseded_and_no_tag_is_attempted() -> None:
+    store = ScriptedStore([(rv.PushResult.WORKFLOW_REFUSED, REFUSAL_OF_RUN_40149948706)])
+    dev = dev_moved_on(CHANGED_WORKFLOWS)
+
+    with pytest.raises(rv.CommitSuperseded) as superseded:
+        rv.claim_dev_tag(store, rv.Release(0, 1, 0), OLDER, dev_branch=dev)
+
+    assert (superseded.value.sha, superseded.value.head) == (OLDER, CHANGED_WORKFLOWS)
+    assert superseded.value.workflows == (".github/workflows/validate-dev.yml",)
+    assert store.pushed == []
+    assert store.tags == {}
+
+
+def test_the_superseded_outputs_and_notice_name_devs_head() -> None:
+    superseded = rv.CommitSuperseded(OLDER, CHANGED_WORKFLOWS, [".github/workflows/validate-dev.yml"])
+
+    assert superseded.as_outputs() == {
+        "superseded": "true",
+        "sha": OLDER,
+        "superseded_by": CHANGED_WORKFLOWS,
+    }
+    assert superseded.notice == (
+        f"::notice title=Dev pre-release superseded::{OLDER} is superseded by dev's head "
+        f"{CHANGED_WORKFLOWS}, which changed .github/workflows/validate-dev.yml after it. Nothing is "
+        "tagged, built or published for it; dev's head gets its own pre-release."
+    )
+
+
+def test_the_next_commits_claim_is_unaffected_and_takes_the_number_the_superseded_one_did_not() -> None:
+    store = ScriptedStore([(rv.PushResult.CREATED, "")])
+    with pytest.raises(rv.CommitSuperseded):
+        rv.claim_dev_tag(store, rv.Release(0, 1, 0), OLDER, dev_branch=dev_moved_on(CHANGED_WORKFLOWS))
+
+    claim = rv.claim_dev_tag(
+        store, rv.Release(0, 1, 0), CHANGED_WORKFLOWS, dev_branch=dev_moved_on(CHANGED_WORKFLOWS)
+    )
+
+    assert (claim.build.tag, claim.reused) == ("v0.1.0-dev.1", False)
+    assert store.tags == {"v0.1.0-dev.1": CHANGED_WORKFLOWS}
+
+
+@pytest.mark.parametrize(
+    ("sha", "head"),
+    [
+        pytest.param(OLDER, OLDER, id="at-devs-head"),
+        pytest.param(OLDER, SAME_WORKFLOWS, id="behind-with-no-workflow-change-after-it"),
+        pytest.param(OFF_DEV, CHANGED_WORKFLOWS, id="not-on-dev"),
+    ],
+)
+def test_a_commit_that_is_not_superseded_claims_as_today(sha: str, head: str) -> None:
+    store = ScriptedStore([(rv.PushResult.CREATED, "")])
+
+    claim = rv.claim_dev_tag(store, rv.Release(0, 1, 0), sha, dev_branch=dev_moved_on(head))
+
+    assert (claim.build.tag, claim.sha, claim.reused) == ("v0.1.0-dev.1", sha, False)
+    assert store.tags == {"v0.1.0-dev.1": sha}
+
+
+def test_a_commit_that_already_has_its_tag_gets_it_back_even_once_superseded() -> None:
+    """A re-run for a commit whose release never appeared publishes under its claimed tag; no push."""
+    store = ScriptedStore([])
+    store.tags = {"v0.1.0-dev.4": OLDER}
+
+    claim = rv.claim_dev_tag(store, rv.Release(0, 1, 0), OLDER, dev_branch=dev_moved_on(CHANGED_WORKFLOWS))
+
+    assert (claim.build.tag, claim.reused) == ("v0.1.0-dev.4", True)
+    assert store.pushed == []
+
+
+def test_a_refusal_after_dev_moved_during_the_claim_is_superseded_by_the_fresh_head() -> None:
+    """The second guard: dev was at the commit when checked, moved past it before the push."""
+    store = ScriptedStore([(rv.PushResult.WORKFLOW_REFUSED, REFUSAL_OF_RUN_40149948706)] * 3)
+    dev = dev_moved_on(OLDER, CHANGED_WORKFLOWS)
+
+    with pytest.raises(rv.CommitSuperseded) as superseded:
+        rv.claim_dev_tag(store, rv.Release(0, 1, 0), OLDER, dev_branch=dev)
+
+    assert superseded.value.head == CHANGED_WORKFLOWS
+    assert store.pushed == ["v0.1.0-dev.1"]
+    assert dev.fetched == [OLDER, CHANGED_WORKFLOWS]
+
+
+def test_the_refusal_text_alone_does_not_make_a_commit_superseded() -> None:
+    """Refused with GitHub's wording while still dev's head: something else is wrong, so it fails."""
+    store = ScriptedStore([(rv.PushResult.WORKFLOW_REFUSED, REFUSAL_OF_RUN_40149948706)] * 5)
+
+    with pytest.raises(rv.ReleaseVersionError, match="failed 3 times") as failed:
+        rv.claim_dev_tag(store, rv.Release(0, 1, 0), OLDER, dev_branch=dev_moved_on(OLDER))
+
+    assert "without `workflows` permission" in str(failed.value)
+    assert len(store.pushed) == rv.MAX_UNEXPLAINED_PUSH_FAILURES
+
+
+def test_any_other_refusal_fails_after_the_retries_even_when_dev_has_moved_past() -> None:
+    other = (
+        " ! [remote rejected] v0.1.0-dev.1 -> v0.1.0-dev.1 (push declined due to repository rule violations)"
+    )
+    store = ScriptedStore([(rv.PushResult.FAILED, other)] * 5)
+    dev = dev_moved_on(OLDER, CHANGED_WORKFLOWS)
+
+    with pytest.raises(rv.ReleaseVersionError, match="repository rule violations"):
+        rv.claim_dev_tag(store, rv.Release(0, 1, 0), OLDER, dev_branch=dev)
+
+    assert len(store.pushed) == rv.MAX_UNEXPLAINED_PUSH_FAILURES
+    assert dev.fetched == [OLDER]
+
+
+def test_githubs_refusal_wording_is_recognised() -> None:
+    assert rv.is_workflow_refusal(REFUSAL_OF_RUN_40149948706)
+
+
+@pytest.mark.parametrize(
+    "stderr",
+    [
+        " ! [remote rejected] v0.1.0-dev.1 -> v0.1.0-dev.1 (push declined due to repository rule violations)",
+        " ! [remote rejected] v0.1.0-dev.1 -> v0.1.0-dev.1 (refusing to allow an OAuth App to create or "
+        "update workflow `.github/workflows/ci.yml` without `workflow` scope)",
+        " ! [remote rejected] v0.1.0-dev.1 -> v0.1.0-dev.1 (cannot lock ref 'refs/tags/v0.1.0-dev.1')",
+        "fatal: could not read from remote repository",
+        "",
+    ],
+)
+def test_other_refusals_are_not_read_as_the_workflow_refusal(stderr: str) -> None:
+    assert not rv.is_workflow_refusal(stderr)
+
+
+def refuse_every_push(remote: Path, message: str) -> None:
+    """A pre-receive hook on the bare remote that prints `message` and declines the push."""
+    hook = remote / "hooks" / "pre-receive"
+    hook.write_text(f"#!/bin/sh\necho '{message}' >&2\nexit 1\n", encoding="utf-8")
+    hook.chmod(0o755)
+
+
+def test_a_pushed_tag_refused_with_githubs_wording_is_classified_as_the_workflow_refusal(
+    clone: Path, remote: Path
+) -> None:
+    sha = merge_to_dev(clone, "merged")
+    refuse_every_push(
+        remote,
+        "refusing to allow a GitHub App to create or update workflow `.github/workflows/ci.yml` "
+        "without `workflows` permission",
+    )
+
+    result, detail = rv.GitTagStore("origin", clone).push_tag("v0.1.0-dev.1", sha)
+
+    assert result is rv.PushResult.WORKFLOW_REFUSED
+    assert "without `workflows` permission" in detail
+
+
+def test_a_pushed_tag_refused_for_another_reason_stays_a_plain_failure(clone: Path, remote: Path) -> None:
+    sha = merge_to_dev(clone, "merged")
+    refuse_every_push(remote, "push declined due to repository rule violations")
+
+    result, _ = rv.GitTagStore("origin", clone).push_tag("v0.1.0-dev.1", sha)
+
+    assert result is rv.PushResult.FAILED
+
+
+def change_workflow(clone: Path, name: str = "validate-dev.yml") -> str:
+    path = clone / ".github" / "workflows" / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"name: {name} changed at {len(list(path.parent.iterdir()))}\n", encoding="utf-8")
+    git(clone, "add", ".github")
+    git(clone, "commit", "-q", "-m", f"Change {name}")
+    git(clone, "push", "-q", "origin", "dev")
+    return git(clone, "rev-parse", "HEAD").strip()
+
+
+def test_devs_head_is_fetched_from_the_remote_not_read_from_the_checkouts_stale_ref(
+    tmp_path: Path, clone: Path, remote: Path
+) -> None:
+    older = merge_to_dev(clone, "older")
+    git(clone, "fetch", "-q", "origin")
+    other = tmp_path / "other"
+    git(tmp_path, "clone", "-q", "-b", "dev", str(remote), str(other))
+    newer = change_workflow(other)
+
+    dev = rv.GitDevBranch("origin", clone)
+
+    assert git(clone, "rev-parse", "refs/remotes/origin/dev").strip() == older
+    assert dev.head() == newer
+    assert dev.contains(newer, older)
+    assert not dev.contains(older, newer)
+    assert dev.workflow_changes(older, newer) == [".github/workflows/validate-dev.yml"]
+
+
+def test_only_workflow_files_count_as_a_workflow_change(clone: Path) -> None:
+    older = change_workflow(clone)
+    newer = merge_to_dev(clone, "not-a-workflow")
+
+    assert rv.GitDevBranch("origin", clone).workflow_changes(older, newer) == []
+
+
+def test_claim_ends_superseded_with_a_notice_outputs_and_exit_zero(
+    clone: Path,
+    remote: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    older = merge_to_dev(clone, "older")
+    head = change_workflow(clone)
+    outputs = tmp_path / "github_output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(outputs))
+
+    code = rv.main(["claim", "--source", "dev", "--sha", older, "--repository", str(clone)])
+
+    assert code == 0
+    assert capsys.readouterr().out.splitlines() == [
+        f"::notice title=Dev pre-release superseded::{older} is superseded by dev's head {head}, which "
+        "changed .github/workflows/validate-dev.yml after it. Nothing is tagged, built or published for "
+        "it; dev's head gets its own pre-release."
+    ]
+    assert outputs.read_text(encoding="utf-8").splitlines() == [
+        "superseded=true",
+        f"sha={older}",
+        f"superseded_by={head}",
+    ]
+    assert remote_tags(remote) == {}
+
+
+def test_a_hotfix_head_is_claimed_as_today_even_when_dev_has_moved_past_it_with_a_workflow_change(
+    clone: Path, remote: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Hotfix pre-releases are unchanged (PM ruling, 2026-10-24): v1.0.1-dev.1 and .2 were tagged at
+    hotfix heads whose workflows differed from dev's head, so a check against dev would wrongly skip
+    a hotfix that has since been back-merged and passed."""
+    released = merge_to_dev(clone, "released")
+    git(clone, "tag", "v0.1.0", released)
+    git(clone, "push", "-q", "origin", "v0.1.0")
+    git(clone, "switch", "-q", "-c", "hotfix/login-crash", released)
+    fix = commit(clone, "fix")
+    git(clone, "push", "-q", "origin", "hotfix/login-crash")
+    git(clone, "switch", "-q", "dev")
+    git(clone, "merge", "-q", "--no-edit", "hotfix/login-crash")
+    change_workflow(clone)
+
+    code = rv.main(["claim", "--source", "hotfix", "--sha", fix, "--repository", str(clone)])
+
+    assert code == 0
+    assert json.loads(capsys.readouterr().out)["tag"] == "v0.1.1-dev.1"
+    assert remote_tags(remote)["v0.1.1-dev.1"] == fix
+
+
+def test_a_commit_git_cannot_read_is_an_error_not_a_commit_off_dev(clone: Path) -> None:
+    head = merge_to_dev(clone, "head")
+
+    with pytest.raises(rv.ReleaseVersionError, match="merge-base --is-ancestor failed"):
+        rv.GitDevBranch("origin", clone).contains(head, "e" * 40)

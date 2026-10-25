@@ -270,6 +270,19 @@ order runs claim it, which is the order their `ci` runs finished. Tags are immut
 published. Pruning deletes the GitHub releases of dev builds older than the newest 30 and keeps
 their tags.
 
+**A commit dev has moved past** (v1-e01-t36). GitHub sometimes refuses the workflow's token a tag
+("refusing to allow a GitHub App to create or update workflow ... without `workflows` permission")
+and does not document when. Observed: both refusals in 374 runs to 2026-10-24 were for a dev commit
+behind dev's head after a later commit changed `.github/workflows/`, while `v1.0.1-dev.1` and `.2`
+were tagged at hotfix heads whose workflows differed from dev's. Reported (GitHub community
+discussion #151442): a tag is refused when no branch head has the commit's workflow files. So the
+claim for a merge to dev first fetches dev's head, and if dev is past the commit with different
+workflow files, the run ends superseded: a notice names dev's head, no tag is pushed, nothing is
+built, published or dispatched, and the run succeeds. Dev's head, which already contains the skipped
+commit, gets its own pre-release. The check is conservative: it may skip a commit GitHub
+would have tagged, never the reverse. Hotfix claims are not checked.
+[`scripts/release_version.py`](../../scripts/release_version.py) has the details.
+
 **What a pre-release contains.** The `debate_core` and `debate_cli` wheels (debate_cli pins
 debate_core to the same version), `SHA256SUMS`, and `build-info.json`: version, tag, channel,
 commit SHA, build time and workflow run id. The same values are stamped into the wheel, and

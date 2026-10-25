@@ -12,7 +12,9 @@ it assigned. Affs are never read from headings here.
 The school and team code are shown exactly as the caselist's paths disclosed them
 (`docs/policies/caselist-data-use.md`: school plus team code, as disclosed, never more). A team is
 told apart without regard to case, as the report tells it; when its disclosures spell it more than one
-way, the row shows the spelling most of them use, ties to the first in text order.
+way, the row shows the spelling most of them use, ties to the first in text order. That spelling is
+what the link to the team's openCaselist page is built from, by the view itself
+(:meth:`~debate_core.domain.landscape_schools.SchoolView.team_page`, `v1-e32-t18`); a row holds none.
 
 ## What is left out
 

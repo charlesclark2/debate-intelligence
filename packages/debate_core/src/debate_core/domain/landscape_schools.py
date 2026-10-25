@@ -19,6 +19,15 @@ a position id and counts:
 * no Tabroom result, rating or anything else beyond the caselist's disclosures, and no prediction of
   what a school will run.
 
+## The team's page (`v1-e32-t18`)
+
+Policy 1.14 adds exactly one thing to the row: a link to the team's public OpenCaselist page, built
+from the caselist, the school and the team code alone. The view does not store it: it is
+:meth:`SchoolView.team_page`, the search pilot's rule
+(:func:`~debate_core.domain.search_source_links.team_page_url`) over the view's own caselist and the
+row's school and team code, so no other link can be in a row. A team whose school or team code is not
+one address word has none, and :attr:`SchoolView.teams_without_team_page` counts them by reason.
+
 The view is written beside the circuit-wide report in its own files, `schools.csv` and `schools.md`,
 so `report.md` and its CSVs still name nobody. It stays on the operator's machine and in the private
 bucket's `reports/` prefix.
@@ -26,6 +35,7 @@ bucket's `reports/` prefix.
 
 from __future__ import annotations
 
+from collections import Counter
 from datetime import date
 from enum import StrEnum
 from typing import Final
@@ -35,6 +45,7 @@ from pydantic import Field
 from debate_core.domain.base import DomainModel, NonEmptyText
 from debate_core.domain.caselist import CaselistSlug, TeamCodeText
 from debate_core.domain.landscape import PositionId
+from debate_core.domain.search_source_links import NoTeamPage, team_page_url, why_no_team_page
 
 __all__ = [
     "SCHOOL_VIEW_SIDES",
@@ -85,3 +96,18 @@ class SchoolView(DomainModel):
     @property
     def teams(self) -> int:
         return len({(row.school.casefold(), row.team_code.casefold()) for row in self.rows})
+
+    def team_page(self, row: SchoolRow) -> str | None:
+        """The row's team's public OpenCaselist page, or `None` when the rule refuses it."""
+        return team_page_url(self.caselist, row.school, row.team_code)
+
+    @property
+    def teams_without_team_page(self) -> Counter[NoTeamPage]:
+        """The teams with no page, by why: each team once, by the spelling its rows show."""
+        teams = {(row.school.casefold(), row.team_code.casefold()): row for row in self.rows}
+        reasons = (why_no_team_page(self.caselist, row.school, row.team_code) for row in teams.values())
+        return Counter(reason for reason in reasons if reason is not None)
+
+    @property
+    def teams_with_team_page(self) -> int:
+        return self.teams - self.teams_without_team_page.total()

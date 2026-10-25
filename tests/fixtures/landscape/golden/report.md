@@ -2,12 +2,15 @@
 
 Every count comes from files teams disclosed to the caselist (FILE_IMPORT), not from evidence the platform has verified. No school, team or debater is named.
 
+**Short history.** The data covers 2 weekly windows on this topic, 2026-09-02 to 2026-09-15, and the topic's dates are not known here, so it may cover less than a full topic cycle. A trend here is one week's change against the week before, not a season's.
+
 ## About this report
 
 | | |
 |---|---|
 | Caselist | synthpolicy26 |
 | Snapshot | 2026-09-15 (previous: 2026-09-08) |
+| Weekly windows | 2 on this topic, the first 2026-09-02 to 2026-09-08; this week's 2026-09-09 to 2026-09-15, compared with 2026-09-02 to 2026-09-08 |
 | Topic | synthetic-policy-topic |
 | Taxonomy version | 1.2.0 |
 | Coach's overrides | 1789afec01f8e1417460965e050263e11df2d4128ca0ed9604d1643f430639a0 |
@@ -27,6 +30,7 @@ How to read the numbers:
 * A card under an `AT:` heading answers a position and never counts as reading it, and so does a card placed under a position in a round on the other side: a `Midterms DA` block in an affirmative file is the 2AC answering it.
 * Each position's 5 most-read cards are in `top_cards.csv`, where near-duplicate copies of a card count as one card.
 * **Impact cards**, under each advantage and DA, are up to 3 of its cards labelled as an impact, ranked by the teams reading them: a heading over the card says `impact` or `impacts` (not `no impact`, `impact defense` or `impact turn`) or `turns case`, or its tag opens with an impact word such as `extinction`, `existential` or `the impact`. Only the labelled copies of a card count. An impact nobody labelled is not found, so each kind says how many of its documents carry no labelled impact. They are also in `impact_cards.csv`.
+* **Trends** compare this week's window with the previous one. A round counts in the week its file was first disclosed, whatever path it was later filed under, and a position's share is the teams that read it that week on its own side over the week's teams disclosing on that side: this week 4 on the affirmative and 4 on the negative, the previous 3 and 4. **NEW** is read for the first time on this topic; **RISING** and **FALLING** moved by at least 5 points with at least 3 teams reading it in one of the two weeks; everything else is **STEADY**. Every position's row is in `trends.csv`.
 
 ## Affirmative positions
 
@@ -115,11 +119,24 @@ DA documents with no labelled impact: 3 of 6 (50.0%).
 
 ## New this week
 
-Positions first disclosed after 2026-09-08:
+Positions first read on this topic in this week's window, 2026-09-09 to 2026-09-15:
 
-* Condo bad (`condo-bad`, theory): 1 round, 1 team
-* Hospital closures DA (`hospital-closures-da`, da): 1 round, 1 team
-* Provider strikes DA (`provider-strikes-da`, da): 1 round, 1 team
+* Condo bad (`condo-bad`, theory): 1 team, 25.0% of the week's affirmative teams
+* Hospital closures DA (`hospital-closures-da`, da): 1 team, 25.0% of the week's negative teams
+* Provider strikes DA (`provider-strikes-da`, da): 1 team, 25.0% of the week's negative teams
+
+## Rising
+
+No position rose by at least 5 points of the week's teams on its side, with at least 3 teams reading it in one of the two weeks.
+
+## Falling
+
+Positions that fell by at least 5 points of the week's teams on its side, with at least 3 teams reading it in one of the two weeks:
+
+* Spending DA (`spending-da`, da): 75.0% to 25.0% of the week's negative teams (-50.0 points), 3 teams to 1
+* Costs advantage (`costs-advantage`, advantage): 100.0% to 75.0% of the week's affirmative teams (-25.0 points), 3 teams to 3
+
+Held back by the team floor: 4 positions moved by 5 points or more, but fewer than 3 teams read them in either week, so they are STEADY. Every position's row is in `trends.csv`.
 
 ## Unclassified
 

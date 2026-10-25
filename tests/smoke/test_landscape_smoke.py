@@ -24,7 +24,15 @@ from tests.smoke.installed_build import InstalledCli
 from debate_cli.exit_codes import ExitCode
 from debate_core.testing.landscape_run import SyntheticRun, plant_synthetic_run
 
-BUNDLE = ("positions.csv", "top_cards.csv", "impact_cards.csv", "report.md")
+BUNDLE = (
+    "positions.csv",
+    "top_cards.csv",
+    "impact_cards.csv",
+    "trends.csv",
+    "schools.csv",
+    "schools.md",
+    "report.md",
+)
 
 
 @pytest.fixture

@@ -66,22 +66,31 @@ report: a round is a count, a team is a count. :func:`round_id` names a round by
 
 from __future__ import annotations
 
-import hashlib
-import json
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
+from decimal import Decimal
 from typing import Final
 
-from debate_core.application.caselist.path_parser import UNKNOWN_SCHOOL, UNKNOWN_TEAM_CODE
 from debate_core.application.caselist.publish_plan import source_key
 from debate_core.application.errors import DomainError
+from debate_core.application.landscape_counts import (
+    AFF_SIDE,
+    LANDSCAPE_SIDE,
+    NEG_SIDE,
+    CountedReads,
+    CountedRound,
+    round_id,
+    team_identity,
+)
+from debate_core.application.landscape_schools import school_view
 from debate_core.application.landscape_staleness import (
     LandscapeStaleness,
     with_stale_banner,
     with_staleness_metadata,
 )
+from debate_core.application.landscape_trends import landscape_trends
 from debate_core.application.ports.parsed_store import OccurrenceRecord
 from debate_core.arguments.landscape.impacts import is_impact_card
 from debate_core.arguments.landscape.render import (
@@ -89,7 +98,10 @@ from debate_core.arguments.landscape.render import (
     render_impact_cards_csv,
     render_markdown,
     render_positions_csv,
+    render_schools_csv,
+    render_schools_markdown,
     render_top_cards_csv,
+    render_trends_csv,
 )
 from debate_core.arguments.landscape.review_queue import DEFAULT_REVIEW_THRESHOLD, needs_review
 from debate_core.arguments.landscape.seeding import SeedSource
@@ -98,7 +110,7 @@ from debate_core.arguments.landscape.source_headings import (
     heading_path,
     normalize_source_heading,
 )
-from debate_core.domain.caselist import Disclosure, Side
+from debate_core.domain.caselist import Disclosure
 from debate_core.domain.landscape import Position, PositionKind, PositionSide, Taxonomy
 from debate_core.domain.landscape_classification import (
     DETERMINISTIC_PROMPT_VERSION,
@@ -123,8 +135,16 @@ from debate_core.domain.landscape_report import (
     TopCard,
     UnclassifiedSummary,
 )
+from debate_core.domain.landscape_schools import SchoolView
+from debate_core.domain.landscape_trends import (
+    DEFAULT_TREND_MINIMUM_TEAMS,
+    DEFAULT_TREND_THRESHOLD_POINTS,
+    LandscapeTrends,
+)
 
 __all__ = [
+    "CIRCUIT_WIDE_FILES",
+    "SCHOOL_VIEW_FILES",
     "LandscapeReportBundle",
     "LandscapeReportInputs",
     "LandscapeReportService",
@@ -134,12 +154,16 @@ __all__ = [
     "round_id",
 ]
 
-_ROUND_ID_DIGITS: Final = 16
+CIRCUIT_WIDE_FILES: Final = ("report.md", "positions.csv", "top_cards.csv", "impact_cards.csv", "trends.csv")
+"""The bundle's files that name no school, team or debater: the circuit-wide report and its trends."""
+
+SCHOOL_VIEW_FILES: Final = ("schools.csv", "schools.md")
+"""The bundle's per-school view (`v1-e32-t04`): school and team code as disclosed, never more."""
+
 _SIDE_ORDER: Final = {PositionSide.AFF: 0, PositionSide.NEG: 1, PositionSide.BOTH: 2}
 _KIND_ORDER: Final = {kind: index for index, kind in enumerate(PositionKind)}
-_AFF: Final = "aff"
-_NEG: Final = "neg"
-_LANDSCAPE_SIDE: Final = {Side.AFF: _AFF, Side.PRO: _AFF, Side.NEG: _NEG, Side.CON: _NEG}
+_AFF: Final = AFF_SIDE
+_NEG: Final = NEG_SIDE
 _OPPOSITE: Final = {PositionSide.AFF: _NEG, PositionSide.NEG: _AFF}
 """The round side on which a placement under a position of this side answers it."""
 
@@ -155,37 +179,6 @@ def overrides_digest(rules: OverrideRules) -> str:
     reports with the same digest counted under the same decisions.
     """
     return rules.digest_for(one.heading for one in rules.overrides)
-
-
-def _team(disclosure: Disclosure) -> tuple[str, str] | None:
-    if disclosure.school == UNKNOWN_SCHOOL or disclosure.team_code == UNKNOWN_TEAM_CODE:
-        return None
-    return (disclosure.school.casefold(), disclosure.team_code.casefold())
-
-
-def _round_identity(disclosure: Disclosure) -> tuple[str, ...]:
-    team = _team(disclosure)
-    tournament = disclosure.tournament.casefold() if disclosure.tournament else ""
-    label = disclosure.round_label
-    played = (label.normalized or label.raw.casefold()) if label is not None else ""
-    labelled = team is not None and bool(tournament) and bool(played)
-    return (
-        disclosure.caselist,
-        *(team or ("", "")),
-        _LANDSCAPE_SIDE.get(disclosure.side, ""),
-        tournament,
-        played,
-        "" if labelled else disclosure.source_sha256,
-    )
-
-
-def round_id(disclosure: Disclosure) -> str:
-    """The round a disclosure belongs to, as 16 hex digits that show none of its fields.
-
-    `v1-e32-t09` names a round by this when it assigns the round its aff.
-    """
-    identity = json.dumps(_round_identity(disclosure), ensure_ascii=False)
-    return hashlib.sha256(identity.encode()).hexdigest()[:_ROUND_ID_DIGITS]
 
 
 def landscape_cards(
@@ -255,15 +248,24 @@ class LandscapeReportInputs:
     cards: Sequence[LandscapeCard] = field(repr=False)
     aff_assignments: Sequence[AffAssignment] = field(default=(), repr=False)
     """`v1-e32-t09`'s per-round affs; empty until it lands."""
+    snapshot_topics: Mapping[date, str] | None = field(default=None, repr=False)
+    """Each weekly snapshot of the caselist through `through` the store holds, with the topic
+    `topics.yaml` puts it on, so the trends stop at a topic change (`v1-e32-t04`); None takes every
+    disclosure's snapshot to be on the taxonomy's topic."""
+    topic_range: tuple[date, date] | None = None
+    """The first and last snapshot date `topics.yaml` gives the topic in this caselist, so the report can
+    say whether its windows span a full topic cycle; None when not known."""
 
 
 @dataclass(frozen=True, slots=True)
 class LandscapeReportBundle:
-    """A report and its four files, the staleness banner and flag already in them."""
+    """A report, its trends and school view, and their files, the staleness banner and flag in them."""
 
     report: LandscapeReport
     files: dict[str, str] = field(repr=False)
-    """`report.md`, `positions.csv`, `top_cards.csv` and `impact_cards.csv`, by name."""
+    """:data:`CIRCUIT_WIDE_FILES` and :data:`SCHOOL_VIEW_FILES`, by name."""
+    trends: LandscapeTrends = field(repr=False)
+    schools: SchoolView = field(repr=False)
 
 
 @dataclass(slots=True)
@@ -299,6 +301,8 @@ class LandscapeReportService:
         review_threshold: float = DEFAULT_REVIEW_THRESHOLD,
         top_cards: int = DEFAULT_TOP_CARDS,
         impact_cards: int = DEFAULT_IMPACT_CARDS,
+        trend_threshold_points: Decimal = DEFAULT_TREND_THRESHOLD_POINTS,
+        trend_minimum_teams: int = DEFAULT_TREND_MINIMUM_TEAMS,
     ) -> None:
         if not 0.0 <= review_threshold <= 1.0:
             raise ValueError(f"the review threshold is between 0 and 1; got {review_threshold}")
@@ -309,23 +313,50 @@ class LandscapeReportService:
         self._threshold = review_threshold
         self._top = top_cards
         self._impact = impact_cards
+        self._trend_threshold = trend_threshold_points
+        self._trend_minimum = trend_minimum_teams
 
     def bundle(self, inputs: LandscapeReportInputs, staleness: LandscapeStaleness) -> LandscapeReportBundle:
-        """The report and its files, with the hook's banner and `stale` flag in them."""
-        report = self.build(inputs, staleness)
+        """The report, its trends and its school view, with the hook's banner and `stale` flag in them."""
+        report, counted = self.count(inputs, staleness)
+        snapshot = report.header.snapshot
+        trends = landscape_trends(
+            caselist=inputs.caselist,
+            taxonomy=inputs.taxonomy,
+            counted=counted,
+            snapshot=snapshot,
+            snapshot_topics=inputs.snapshot_topics,
+            topic_range=inputs.topic_range,
+            threshold_points=self._trend_threshold,
+            minimum_teams=self._trend_minimum,
+        )
+        schools = school_view(
+            caselist=inputs.caselist, snapshot=snapshot, disclosures=inputs.disclosures, counted=counted
+        )
         metadata = with_staleness_metadata(header_metadata(report), staleness)
         return LandscapeReportBundle(
             report=report,
             files={
-                "report.md": with_stale_banner(render_markdown(report), staleness),
+                "report.md": with_stale_banner(render_markdown(report, trends), staleness),
                 "positions.csv": render_positions_csv(report, metadata),
                 "top_cards.csv": render_top_cards_csv(report, metadata),
                 "impact_cards.csv": render_impact_cards_csv(report, metadata),
+                "trends.csv": render_trends_csv(trends, metadata),
+                "schools.csv": render_schools_csv(schools, metadata),
+                "schools.md": with_stale_banner(render_schools_markdown(schools, report), staleness),
             },
+            trends=trends,
+            schools=schools,
         )
 
     def build(self, inputs: LandscapeReportInputs, staleness: LandscapeStaleness) -> LandscapeReport:
         """The report alone. :meth:`bundle` is what writes it out."""
+        return self.count(inputs, staleness)[0]
+
+    def count(
+        self, inputs: LandscapeReportInputs, staleness: LandscapeStaleness
+    ) -> tuple[LandscapeReport, CountedReads]:
+        """The report, and the rounds and reads it was counted from, for the views beside it."""
         if staleness.newest_snapshot is None or staleness.age_days is None:
             raise ReportCannotShip(
                 f"the staleness check found no snapshot of {inputs.caselist}, so the report cannot say "
@@ -443,7 +474,14 @@ class LandscapeReportService:
                 identified[PLACED_CARD_METHOD] += 1
         read_rounds = {one for read in reads.values() for one in read}
         neg_placed = {one for position_id in neg_positions for one in reads.get(position_id, ())}
-        return LandscapeReport(
+        counted = CountedReads(
+            rounds={
+                one: CountedRound(side=stated.side, team=stated.team, first_seen=stated.first_seen)
+                for one, stated in rounds.items()
+            },
+            reads={position_id: frozenset(read) for position_id, read in reads.items()},
+        )
+        report = LandscapeReport(
             header=ReportHeader(
                 caselist=inputs.caselist,
                 snapshot=in_range.snapshots[-1],
@@ -491,6 +529,7 @@ class LandscapeReportService:
                 AffIdentification(method=method, rounds=count) for method, count in sorted(identified.items())
             ),
         )
+        return report, counted
 
 
 def _ranked[RowT: TopCard](
@@ -565,8 +604,8 @@ def _read_range(inputs: LandscapeReportInputs) -> _Range:
         found = rounds.get(one)
         if found is None:
             found = rounds[one] = _Round(
-                side=_LANDSCAPE_SIDE.get(disclosure.side, ""),
-                team=_team(disclosure),
+                side=LANDSCAPE_SIDE.get(disclosure.side, ""),
+                team=team_identity(disclosure),
                 first_seen=disclosure.snapshot,
             )
         found.first_seen = min(found.first_seen, disclosure.snapshot)

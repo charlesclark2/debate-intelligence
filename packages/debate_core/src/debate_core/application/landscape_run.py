@@ -15,11 +15,15 @@ same use case. One run, for one caselist at one weekly snapshot (the newest unle
    model mode is :attr:`LandscapeModelMode.NONE`, so the run's model budget is 0 items; a stage that
    sent more is refused with :class:`ModelBudgetExceeded` after the queue is written and before the
    report is, so nothing is written or published from it.
-4. **Builds** `v1-e32-t03`'s bundle, with `v1-e32-t09`'s per-round aff assignments when a source of
+4. **Builds** `v1-e32-t03`'s bundle, with `v1-e32-t04`'s trends and per-school view (given each of
+   the caselist's weekly snapshots and the topic `topics.yaml` puts it on, so a trend stops at a topic
+   change, and the topic's range, so the report can say whether its history is a full topic cycle),
+   with `v1-e32-t09`'s per-round aff assignments when a source of
    them is wired (until then the report shows the affirmative side's unidentified share), and
    `v1-e34-t03`'s staleness hook given the sync run log, so a run the daily download cap held back
    makes the report stale whatever its snapshot's age (the PM's ruling of 2026-10-24).
-5. **Scans** the bundle (:mod:`debate_core.application.landscape_scan`) and returns every hit.
+5. **Scans** the bundle (:mod:`debate_core.application.landscape_scan`) and returns every hit: the
+   per-school view, which names schools and team codes by design, for paths only.
 6. **Writes** the bundle to `<data dir>/reports/landscape/<caselist>/<snapshot>/`, or `--out`.
 7. **Publishes**, when asked, to `reports/landscape/<caselist>/<snapshot>/` in the environment's
    bucket through the E29 blob-store port, uploading only the files whose SHA-256 differs from the
@@ -54,6 +58,7 @@ from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.publish_plan import manifest_prefix, snapshot_of_manifest_key
 from debate_core.application.errors import DomainError, NotFound
 from debate_core.application.landscape_report import (
+    SCHOOL_VIEW_FILES,
     LandscapeReportInputs,
     LandscapeReportService,
     landscape_cards,
@@ -84,6 +89,8 @@ from debate_core.arguments.landscape.review_queue import DEFAULT_REVIEW_THRESHOL
 from debate_core.domain.landscape import Taxonomy
 from debate_core.domain.landscape_classification import PositionClassification
 from debate_core.domain.landscape_report import AffAssignment, LandscapeReport
+from debate_core.domain.landscape_schools import SchoolView
+from debate_core.domain.landscape_trends import LandscapeTrends
 
 __all__ = [
     "BUNDLE_FILES",
@@ -113,8 +120,19 @@ __all__ = [
 REPORTS_PREFIX: Final = "reports/landscape"
 """Where a landscape bundle goes in the bucket, and under the data directory."""
 
-BUNDLE_FILES: Final = ("positions.csv", "top_cards.csv", "impact_cards.csv", "report.md")
-"""The bundle's files, in the order they are uploaded: the page a person opens goes last."""
+BUNDLE_FILES: Final = (
+    "positions.csv",
+    "top_cards.csv",
+    "impact_cards.csv",
+    "trends.csv",
+    "schools.csv",
+    "schools.md",
+    "report.md",
+)
+"""The bundle's files, in the order they are uploaded: the page a person opens goes last.
+
+`schools.csv` and `schools.md` are `v1-e32-t04`'s per-school view, the only files naming schools and
+team codes: like the rest, they go to the local `reports/` directory and the private bucket only."""
 
 DEFAULT_MAX_MODEL_ITEMS: Final = 0
 """With no model stage, a run may send no item to a model. `v1-e32-t07` sets the real bound."""
@@ -276,6 +294,8 @@ class LandscapeRunResult:
     dry_run: bool
     classification: ClassificationRun = field(repr=False)
     report: LandscapeReport = field(repr=False)
+    trends: LandscapeTrends = field(repr=False)
+    schools: SchoolView = field(repr=False)
     staleness: LandscapeStaleness
     aff_assignments: int
     directory: Path
@@ -404,6 +424,15 @@ class LandscapeRunService:
             objects=self._objects, run_log=self._run_log, stale_after_days=self._stale_after_days
         ).check(request.caselist, report_date=self._today())
         overrides = self._taxonomies.overrides(resolved.topic.id)
+        snapshot_topics = await self._snapshot_topics(request.caselist, snapshot)
+        topic_range = next(
+            (
+                (one.effective_from, one.effective_to)
+                for one in resolved.topic.caselists
+                if one.covers(request.caselist, snapshot)
+            ),
+            None,
+        )
         bundle = LandscapeReportService(review_threshold=self._threshold).bundle(
             LandscapeReportInputs(
                 caselist=request.caselist,
@@ -419,10 +448,12 @@ class LandscapeRunService:
                     reading.caselist_names,
                 ),
                 aff_assignments=assignments,
+                snapshot_topics=snapshot_topics,
+                topic_range=topic_range,
             ),
             staleness,
         )
-        hits = scan_report(bundle.files, reading.disclosures)
+        hits = scan_report(bundle.files, reading.disclosures, school_view_files=SCHOOL_VIEW_FILES)
         pending = pending_hits(hits, self._acceptances.accepted(request.caselist))
         scan = ScanResult(hits=hits, pending=pending, digest=hits_digest(pending))
         directory = request.out or self._reports_dir / request.caselist / snapshot.isoformat()
@@ -446,6 +477,8 @@ class LandscapeRunService:
             dry_run=request.dry_run,
             classification=classified,
             report=bundle.report,
+            trends=bundle.trends,
+            schools=bundle.schools,
             staleness=staleness,
             aff_assignments=len(assignments),
             directory=directory,
@@ -474,6 +507,20 @@ class LandscapeRunService:
                 known=shown,
             )
         return asked
+
+    async def _snapshot_topics(self, caselist: str, through: date) -> dict[date, str]:
+        """Each weekly snapshot of `caselist` through `through`, with the topic `topics.yaml` puts it on.
+
+        A snapshot no range covers is left out: it holds no disclosure the report counts.
+        """
+        topics: dict[date, str] = {}
+        for snapshot in await self._weekly_snapshots(caselist):
+            if snapshot > through:
+                continue
+            resolved = self._taxonomies.resolve(caselist, snapshot)
+            if resolved is not None:
+                topics[snapshot] = resolved.topic.id
+        return topics
 
     async def _known_caselists(self) -> tuple[str, ...]:
         """The caselists with at least one weekly manifest on this machine, by name."""

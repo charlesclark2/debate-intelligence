@@ -1,4 +1,7 @@
-"""The landscape report's files: report.md, positions.csv, top_cards.csv (`v1-e32-t03`) and impact_cards.csv.
+"""The landscape report's files: report.md, positions.csv, top_cards.csv (`v1-e32-t03`), and the rest.
+
+impact_cards.csv is `v1-e32-t10`'s; trends.csv and the school view's schools.csv and schools.md are
+`v1-e32-t04`'s.
 
 Pure and deterministic: the same :class:`~debate_core.domain.landscape_report.LandscapeReport`
 renders to the same bytes, in the report's own order (positions by side, kind, teams, rounds and
@@ -14,9 +17,16 @@ id; cards by rank). Nothing here computes a count; the service did.
   no help in a prep meeting, so they are in top_cards.csv only, and asked for the impacts instead.
 * **positions.csv** has the positions' rows for a spreadsheet, **top_cards.csv** each position's
   most-read cards, and **impact_cards.csv** each advantage's and DA's impact cards, with how many
-  documents of each kind carry no labelled impact in its header block. Each starts with a header
-  block, one `# key=value` line per fact (the staleness hook's `stale=` among them), and then an
-  ordinary CSV with a header row.
+  documents of each kind carry no labelled impact in its header block. **trends.csv** has each
+  position read this week or the week before, with its weekly teams and shares, its delta and its
+  label (`v1-e32-t04`). Each starts with a header block, one `# key=value` line per fact (the
+  staleness hook's `stale=` among them), and then an ordinary CSV with a header row.
+* report.md's **New this week**, **Rising** and **Falling** sections are the trends', and it says on
+  its face when its windows span less than a full topic cycle, or when the topic changed.
+* **schools.csv** and **schools.md** are the per-school view (`v1-e32-t04`): the only files that name
+  a school or a team code, exactly as disclosed, and nothing more (`docs/policies/caselist-data-use.md`,
+  "What a report may show"). They show position ids and counts only: no label, tag, cite or text. The
+  circuit-wide files above name nobody, so the view is kept out of them.
 
 ## What is written exactly, and what is escaped
 
@@ -25,7 +35,9 @@ impact card's tag and cite, in Markdown, where a `|` would split a table cell an
 emphasis, have those characters escaped with a backslash and runs of whitespace made one space, so
 the cell shows the same text. Shares are
 fractions to three places in the CSV and percentages to one place in Markdown, both rounded half up;
-Markdown writes counts with thousands separators, the CSV without.
+a delta is percentage points to one place, rounded half up, in both. Markdown writes counts with
+thousands separators, the CSV without. A school or team code in schools.md is escaped
+as a label is.
 """
 
 from __future__ import annotations
@@ -34,7 +46,9 @@ import csv
 import io
 import re
 from collections.abc import Iterable, Mapping, Sequence
+from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
+from fractions import Fraction
 from itertools import groupby
 from typing import Final
 
@@ -48,16 +62,31 @@ from debate_core.domain.landscape_report import (
     PositionStats,
     TopCard,
 )
+from debate_core.domain.landscape_schools import SchoolView
+from debate_core.domain.landscape_trends import (
+    WINDOW_DAYS,
+    LandscapeTrends,
+    TrendLabel,
+    TrendRow,
+    WeeklyTeams,
+    window_start,
+)
 
 __all__ = [
     "IMPACT_CARD_COLUMNS",
     "POSITION_COLUMNS",
+    "SCHOOL_COLUMNS",
     "TOP_CARD_COLUMNS",
+    "TREND_COLUMNS",
     "header_metadata",
     "render_impact_cards_csv",
     "render_markdown",
     "render_positions_csv",
+    "render_schools_csv",
+    "render_schools_markdown",
     "render_top_cards_csv",
+    "render_trends_csv",
+    "trend_metadata",
 ]
 
 POSITION_COLUMNS: Final = (
@@ -90,6 +119,27 @@ TOP_CARD_COLUMNS: Final = (
 
 IMPACT_CARD_COLUMNS: Final = TOP_CARD_COLUMNS
 """impact_cards.csv's columns: a top card's, of the cluster's labelled copies (`v1-e32-t10`)."""
+
+TREND_COLUMNS: Final = (
+    "position_id",
+    "label",
+    "kind",
+    "weekly_teams",
+    "weekly_share",
+    "previous_teams",
+    "previous_share",
+    "delta_points",
+    "trend_label",
+    "held_back_by_team_floor",
+)
+"""trends.csv's columns, in order (`v1-e32-t04` ac1)."""
+
+SCHOOL_COLUMNS: Final = ("school", "team_code", "side", "position_id", "rounds")
+"""schools.csv's columns, in order (`v1-e32-t04` ac4, as the PM's ruling of 2026-10-24 amended it)."""
+
+_SCHOOL_VIEW_SHOWS: Final = (
+    "school and team code as disclosed, never more (docs/policies/caselist-data-use.md); for the team only"
+)
 
 _SIDE_HEADINGS: Final = {
     PositionSide.AFF: "Affirmative positions",
@@ -218,17 +268,21 @@ def _csv(
     return out.getvalue()
 
 
-def render_markdown(report: LandscapeReport) -> str:
-    """report.md, without the stale-data banner: the service passes it through the hook."""
+def render_markdown(report: LandscapeReport, trends: LandscapeTrends | None = None) -> str:
+    """report.md, without the stale-data banner: the service passes it through the hook.
+
+    With `trends`, its new, rising and falling sections are theirs (`v1-e32-t04`); without, the new
+    section is `v1-e32-t03`'s.
+    """
     lines: list[str] = []
-    lines += _header_section(report)
+    lines += _header_section(report, trends)
     lines += _positions_section(report)
-    lines += _new_section(report)
+    lines += _new_section(report) if trends is None else _trend_sections(trends)
     lines += _unclassified_section(report)
     return "\n".join(lines).rstrip("\n") + "\n"
 
 
-def _header_section(report: LandscapeReport) -> list[str]:
+def _header_section(report: LandscapeReport, trends: LandscapeTrends | None = None) -> list[str]:
     header = report.header
     previous = header.previous_snapshot.isoformat() if header.previous_snapshot else "none (the first)"
     freshness = (
@@ -249,12 +303,14 @@ def _header_section(report: LandscapeReport) -> list[str]:
         "Every count comes from files teams disclosed to the caselist (FILE_IMPORT), not from evidence "
         "the platform has verified. No school, team or debater is named.",
         "",
+        *_short_history(trends),
         "## About this report",
         "",
         "| | |",
         "|---|---|",
         f"| Caselist | {header.caselist} |",
         f"| Snapshot | {header.snapshot.isoformat()} (previous: {previous}) |",
+        *([f"| Weekly windows | {_windows_cell(trends)} |"] if trends is not None else []),
         f"| Topic | {header.topic_id} |",
         f"| Taxonomy version | {header.taxonomy_version} |",
         f"| Coach's overrides | {header.overrides_digest} |",
@@ -292,6 +348,7 @@ def _header_section(report: LandscapeReport) -> list[str]:
         "tag opens with an impact word such as `extinction`, `existential` or `the impact`. Only the "
         "labelled copies of a card count. An impact nobody labelled is not found, so each kind says how "
         "many of its documents carry no labelled impact. They are also in `impact_cards.csv`.",
+        *([_trends_bullet(trends)] if trends is not None else []),
         "",
     ]
 
@@ -371,6 +428,284 @@ def _new_section(report: LandscapeReport) -> list[str]:
     return [*lines, ""]
 
 
+def _short_history(trends: LandscapeTrends | None) -> list[str]:
+    """The notice on the report's face when its windows span less than a full topic cycle (ADR-0016)."""
+    if trends is None or trends.covers_full_topic_cycle:
+        return []
+    count = _count(len(trends.windows), "weekly window")
+    span = f"{window_start(trends.windows[0]).isoformat()} to {trends.snapshot.isoformat()}"
+    if trends.topic_from is None or trends.topic_to is None:
+        cycle = "and the topic's dates are not known here, so it may cover less than a full topic cycle"
+    else:
+        cycle = (
+            f"of a topic that runs {trends.topic_from.isoformat()} to {trends.topic_to.isoformat()}: less "
+            "than a full topic cycle"
+        )
+    return [
+        f"**Short history.** The data covers {count} on this topic, {span}, {cycle}. A trend here is one "
+        "week's change against the week before, not a season's.",
+        "",
+    ]
+
+
+def _windows_cell(trends: LandscapeTrends) -> str:
+    first = _window(trends.windows[0])
+    on_topic = f"{len(trends.windows):,} on this topic, the first {first}"
+    this_week = _window(trends.snapshot)
+    if trends.topic_change is not None:
+        change = trends.topic_change
+        return (
+            f"{on_topic}; this week's {this_week}. The snapshot before, "
+            f"{change.previous_snapshot.isoformat()}, is on {change.previous_topic_id}, so no trend is drawn"
+        )
+    if trends.previous_snapshot is None:
+        return f"{on_topic}; no earlier window to compare with"
+    days = (trends.snapshot - trends.previous_snapshot).days
+    gap = (
+        ""
+        if days == WINDOW_DAYS
+        else f" (not the week before: {days - WINDOW_DAYS:,} day(s) between them are in no window)"
+    )
+    return f"{on_topic}; this week's {this_week}, compared with {_window(trends.previous_snapshot)}{gap}"
+
+
+def _window(snapshot: date) -> str:
+    return f"{window_start(snapshot).isoformat()} to {snapshot.isoformat()}"
+
+
+def _trends_bullet(trends: LandscapeTrends) -> str:
+    previous = trends.previous
+    weekly = (
+        f"this week {trends.weekly.aff_teams:,} on the affirmative and {trends.weekly.neg_teams:,} on the "
+        "negative"
+    )
+    if previous is not None:
+        weekly += f", the previous {previous.aff_teams:,} and {previous.neg_teams:,}"
+    return (
+        "* **Trends** compare this week's window with the previous one. A round counts in the week its file "
+        "was first disclosed, whatever path it was later filed under, and a position's share is the teams "
+        "that read it that week on its own side over the week's teams disclosing on that side: "
+        f"{weekly}. **NEW** is read for the first time on this topic; **RISING** and **FALLING** moved by "
+        f"at least {_points_text(trends.threshold_points)} points with at least "
+        f"{_count(trends.minimum_teams, 'team')} reading it in one of the two weeks; everything else is "
+        "**STEADY**. Every position's row is in `trends.csv`."
+    )
+
+
+def _trend_sections(trends: LandscapeTrends) -> list[str]:
+    lines = ["## New this week", ""]
+    new = trends.labelled(TrendLabel.NEW)
+    if trends.topic_change is not None:
+        change = trends.topic_change
+        lines += [
+            f"The topic changed: the previous snapshot, {change.previous_snapshot.isoformat()}, is on "
+            f"{change.previous_topic_id}. A trend never compares two topics, so this is the first window "
+            f"of {trends.topic_id} here: every position read is NEW and none has a delta.",
+            "",
+        ]
+    elif trends.previous_snapshot is None:
+        lines += [
+            "This is the caselist's first weekly window on this topic: every position read is NEW and none "
+            "has a delta.",
+            "",
+        ]
+    if new:
+        lines += [
+            f"Positions first read on this topic in this week's window, {_window(trends.snapshot)}:",
+            "",
+        ]
+        lines += [
+            f"* {_cell(row.label)} (`{row.position_id}`, {row.kind.value}): "
+            f"{_count(row.weekly_teams, 'team')}, {_percent(row.weekly_teams, row.weekly_disclosing)} of the "
+            f"week's {_side_teams(row)}"
+            for row in new
+        ]
+        lines.append("")
+    else:
+        lines += ["No position was first read on this topic in this week's window.", ""]
+    for heading, label, direction in (
+        ("Rising", TrendLabel.RISING, "rose"),
+        ("Falling", TrendLabel.FALLING, "fell"),
+    ):
+        lines += [f"## {heading}", ""]
+        if trends.previous_snapshot is None:
+            lines += ["No trend is drawn: there is no earlier window on this topic to compare with.", ""]
+            continue
+        rows = sorted(trends.labelled(label), key=lambda row: (-abs(row.delta_points or 0), row.position_id))
+        rule = (
+            f"by at least {_points_text(trends.threshold_points)} points of the week's teams on its side, "
+            f"with at least {_count(trends.minimum_teams, 'team')} reading it in one of the two weeks"
+        )
+        if not rows:
+            lines += [f"No position {direction} {rule}.", ""]
+        else:
+            lines += [f"Positions that {direction} {rule}:", ""]
+            lines += [f"* {_trend_line(row)}" for row in rows]
+            lines.append("")
+    if trends.held_back:
+        lines += [
+            f"Held back by the team floor: {_count(trends.held_back, 'position')} moved by "
+            f"{_points_text(trends.threshold_points)} points or more, but fewer than "
+            f"{_count(trends.minimum_teams, 'team')} read them in either week, so they are STEADY. Every "
+            "position's row is in `trends.csv`.",
+            "",
+        ]
+    return lines
+
+
+def _trend_line(row: TrendRow) -> str:
+    previous_teams = row.previous_teams or 0
+    return (
+        f"{_cell(row.label)} (`{row.position_id}`, {row.kind.value}): "
+        f"{_percent(previous_teams, row.previous_disclosing or 0)} to "
+        f"{_percent(row.weekly_teams, row.weekly_disclosing)} of the week's {_side_teams(row)} "
+        f"({_signed_points(row.delta_points)} points), "
+        f"{_count(previous_teams, 'team')} to {row.weekly_teams:,}"
+    )
+
+
+def _side_teams(row: TrendRow) -> str:
+    if row.side is PositionSide.AFF:
+        return "affirmative teams"
+    if row.side is PositionSide.NEG:
+        return "negative teams"
+    return "teams"
+
+
+def trend_metadata(trends: LandscapeTrends) -> dict[str, str]:
+    """The facts trends.csv's header block adds to the report's, in order."""
+    previous = trends.previous_snapshot
+    full = trends.covers_full_topic_cycle
+    return {
+        "window": f"{window_start(trends.snapshot).isoformat()}/{trends.snapshot.isoformat()}",
+        "previous_window": f"{window_start(previous).isoformat()}/{previous.isoformat()}" if previous else "",
+        "windows_on_topic": str(len(trends.windows)),
+        "first_window": f"{window_start(trends.windows[0]).isoformat()}/{trends.windows[0].isoformat()}",
+        "topic_cycle": (
+            f"{trends.topic_from.isoformat()}/{trends.topic_to.isoformat()}"
+            if trends.topic_from and trends.topic_to
+            else "unknown"
+        ),
+        "full_topic_cycle": "unknown" if full is None else ("true" if full else "false"),
+        "topic_changed_from": (
+            f"{trends.topic_change.previous_topic_id} on {trends.topic_change.previous_snapshot.isoformat()}"
+            if trends.topic_change
+            else ""
+        ),
+        "trend_threshold_points": _points_text(trends.threshold_points),
+        "trend_minimum_teams": str(trends.minimum_teams),
+        "weekly_share_over": _weekly_over(trends.weekly),
+        "previous_share_over": _weekly_over(trends.previous) if trends.previous else "",
+        "held_back_by_team_floor": str(trends.held_back),
+    }
+
+
+def _weekly_over(weekly: WeeklyTeams) -> str:
+    return (
+        "teams with a round first seen in the window, on the position's side: "
+        f"aff {weekly.aff_teams}, neg {weekly.neg_teams}, either side {weekly.teams}"
+    )
+
+
+def render_trends_csv(trends: LandscapeTrends, metadata: Mapping[str, str]) -> str:
+    """trends.csv: the report's header block and the trends', then one row per position (ac1)."""
+    return _csv(
+        {**metadata, **trend_metadata(trends)},
+        "trends",
+        TREND_COLUMNS,
+        (
+            (
+                row.position_id,
+                row.label,
+                row.kind.value,
+                str(row.weekly_teams),
+                _fraction(row.weekly_teams, row.weekly_disclosing),
+                "" if row.previous_teams is None else str(row.previous_teams),
+                ""
+                if row.previous_teams is None
+                else _fraction(row.previous_teams, row.previous_disclosing or 0),
+                _points_csv(row.delta_points),
+                row.trend.value,
+                "true" if row.held_back_by_team_floor else "false",
+            )
+            for row in trends.rows
+        ),
+    )
+
+
+def render_schools_csv(view: SchoolView, metadata: Mapping[str, str]) -> str:
+    """schools.csv: the header block, then one row per team, side and position (ac4)."""
+    extra = {
+        "shows": _SCHOOL_VIEW_SHOWS,
+        "rounds_on_no_side": str(view.rounds_on_no_side),
+        "rounds_with_no_team": str(view.rounds_with_no_team),
+    }
+    return _csv(
+        {**metadata, **extra},
+        "schools",
+        SCHOOL_COLUMNS,
+        (
+            (
+                row.school,
+                row.team_code,
+                row.side.value,
+                row.position_id,
+                str(row.rounds),
+            )
+            for row in view.rows
+        ),
+    )
+
+
+def render_schools_markdown(view: SchoolView, report: LandscapeReport) -> str:
+    """schools.md, without the stale-data banner: the per-school view, by school (ac4)."""
+    header = report.header
+    left_out = (
+        f"{_count(view.rounds_on_no_side, 'round')} on no readable side; "
+        f"{_count(view.rounds_with_no_team, 'round')} whose path named no school or team code"
+    )
+    lines = [
+        f"# Positions by school: {view.caselist} through {view.snapshot.isoformat()}",
+        "",
+        "This page names schools and team codes exactly as they were disclosed, and nothing more: no "
+        "debater, and no text from anyone's files. It is for the team only, and stays on this machine and "
+        "in the private bucket.",
+        "",
+        "Every count comes from files teams disclosed to the caselist (FILE_IMPORT), not from evidence the "
+        "platform has verified. A row is a team's rounds on one side that the landscape report counts as "
+        "reading the position.",
+        "",
+        "| | |",
+        "|---|---|",
+        f"| Caselist | {view.caselist} |",
+        f"| Snapshot | {view.snapshot.isoformat()} |",
+        f"| Topic | {header.topic_id} |",
+        f"| Taxonomy version | {header.taxonomy_version} |",
+        f"| Coach's overrides | {header.overrides_digest} |",
+        f"| Schools | {view.schools:,}, with {_count(view.teams, 'team code')} |",
+        f"| Left out | {left_out} |",
+        "",
+        "## By school",
+        "",
+    ]
+    if not view.rows:
+        return "\n".join([*lines, "No team read a counted position in this range.", ""])
+    for _, rows in groupby(view.rows, key=lambda row: row.school.casefold()):
+        listed = list(rows)
+        lines += [
+            f"### {_cell(listed[0].school)}",
+            "",
+            "| Team code | Side | Position | Rounds |",
+            "|---|---|---|---|",
+        ]
+        lines += [
+            f"| {_cell(row.team_code)} | {row.side.value} | `{row.position_id}` | {row.rounds:,} |"
+            for row in listed
+        ]
+        lines.append("")
+    return "\n".join(lines).rstrip("\n") + "\n"
+
+
 def _unclassified_section(report: LandscapeReport) -> list[str]:
     summary = report.unclassified
     threshold = f"{report.header.review_threshold:g}"
@@ -434,6 +769,28 @@ def _percent(part: int, whole: int) -> str:
     if whole == 0:
         return "n/a"
     return f"{(Decimal(100 * part) / Decimal(whole)).quantize(_TENTH, rounding=ROUND_HALF_UP)}%"
+
+
+def _points(delta: Fraction) -> Decimal:
+    """A delta in points to one place, rounded half up; never `-0.0`."""
+    rounded = (Decimal(delta.numerator) / Decimal(delta.denominator)).quantize(_TENTH, rounding=ROUND_HALF_UP)
+    return rounded if rounded else Decimal("0.0")
+
+
+def _points_csv(delta: Fraction | None) -> str:
+    return "" if delta is None else str(_points(delta))
+
+
+def _signed_points(delta: Fraction | None) -> str:
+    if delta is None:
+        return "n/a"
+    rounded = _points(delta)
+    return f"+{rounded}" if rounded > 0 else str(rounded)
+
+
+def _points_text(points: Decimal) -> str:
+    """A threshold as written: `5`, or `2.5`."""
+    return f"{points.normalize():f}"
 
 
 def _fraction(part: int, whole: int) -> str:

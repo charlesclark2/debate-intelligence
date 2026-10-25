@@ -1,0 +1,12 @@
+topic_id: synthetic-ld-sep-oct
+taxonomy_version: 1.0.0
+event: LD
+positions:
+- id: restored-ecosystems-contention
+  label: Restored ecosystems
+  kind: contention
+  side: aff
+- id: biopower-k
+  label: Biopower K
+  kind: k
+  side: neg

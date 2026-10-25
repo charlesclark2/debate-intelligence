@@ -6,7 +6,7 @@ hspolicy26 were an evidence author who shares a school's name, an ordinary word 
 disclosed team code, and a filename token; none named a team, and a refusal on every hit would
 block every week. So the scan lists, and the operator decides (the PM's rulings of 2026-10-24):
 
-1. :func:`scan_report` lists every hit in the report's three files, with its line;
+1. :func:`scan_report` lists every hit in the report's circuit-wide files, with its line;
 2. a publish with a hit the operator has not accepted is refused, naming :func:`hits_digest` of the
    hits not yet accepted;
 3. the operator reads them and runs again with that digest, which is accepted only while it is the
@@ -23,6 +23,14 @@ filed under, as `v1-e32-t03`'s preview scanned:
 * a **school** or **tournament** without regard to case, as whole words, when it is over three
   characters, since a shorter name is a word in every line;
 * a **path** anywhere, without regard to case.
+
+## The per-school view
+
+`v1-e32-t04`'s `schools.csv` and `schools.md` name schools, team codes and tournaments by design: the
+data-use policy allows school plus team code, as disclosed, in that view and nowhere else. A scan
+that listed them would stop every week on every team until accepting meant nothing, so in the files
+named as `school_view_files` it looks for paths only, which no file of the bundle may hold. Every
+other file is scanned for everything.
 
 ## Which hits are the same hit next week
 
@@ -42,7 +50,7 @@ import hashlib
 import json
 import os
 import re
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from enum import StrEnum
@@ -141,14 +149,21 @@ def _terms(disclosures: Iterable[Disclosure]) -> list[_Term]:
     return terms
 
 
-def scan_report(files: Mapping[str, str], disclosures: Iterable[Disclosure]) -> tuple[ScanHit, ...]:
-    """Every term of `disclosures` found in `files`, one hit per term per line, in file and line order."""
+def scan_report(
+    files: Mapping[str, str], disclosures: Iterable[Disclosure], *, school_view_files: Collection[str] = ()
+) -> tuple[ScanHit, ...]:
+    """Every term of `disclosures` found in `files`, one hit per term per line, in file and line order.
+
+    In `school_view_files`, which may name schools, team codes and tournaments, only paths are hits.
+    """
     terms = _terms(disclosures)
+    paths = [term for term in terms if term.kind is ScanKind.PATH]
     hits: list[ScanHit] = []
     for name in sorted(files):
+        looked_for = paths if name in school_view_files else terms
         for number, line in enumerate(files[name].splitlines(), start=1):
             folded = line.casefold()
-            for term in terms:
+            for term in looked_for:
                 if term.folded not in folded:
                     continue
                 if term.pattern is not None and term.pattern.search(line) is None:

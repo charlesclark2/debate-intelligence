@@ -208,7 +208,7 @@ def test_a_file_host_that_refuses_one_size_leaves_that_size_unknown_and_goes_on(
 
     rows = {one.slug: one for one in result.caselists}
     assert rows["testcl25"].complete_archive_bytes is None
-    assert rows["testcl25"].unanswered == "ARCHIVE_UNAVAILABLE"
+    assert rows["testcl25"].unanswered == "ARCHIVE_UNAVAILABLE (HTTP 403)"
     assert rows["testcl24"].complete_archive_bytes == 2_500_000_000
 
 
@@ -244,3 +244,28 @@ def test_the_survey_closes_its_source() -> None:
 
     asyncio.run(run())
     assert source.closed
+
+
+def test_a_listing_the_api_fails_names_its_http_status_and_the_survey_goes_on() -> None:
+    from debate_core.application.errors import ProviderUnavailable
+
+    class FailingListings(FakeSource):
+        async def list_archives(self, caselist: str) -> list[ArchiveListing]:
+            if caselist == "testcl21":
+                self.asked.append(f"archives {caselist}")
+                raise ProviderUnavailable(
+                    "opencaselist", f"list archives for {caselist} failed with HTTP 500"
+                )
+            return await super().list_archives(caselist)
+
+    plain = a_source()
+    source = FailingListings(
+        current=plain.current, archived=plain.archived, archives=plain.archives, sizes=plain.sizes
+    )
+
+    result = survey(source)
+
+    rows = {one.slug: one for one in result.caselists}
+    assert rows["testcl21"].unanswered == "PROVIDER_UNAVAILABLE (HTTP 500)"
+    assert rows["testcl21"].complete_archives_listed == 0
+    assert rows["testcl25"].complete_archive_bytes == 3_000_000_000

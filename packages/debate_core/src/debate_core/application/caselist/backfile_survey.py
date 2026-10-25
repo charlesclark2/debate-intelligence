@@ -33,6 +33,7 @@ name, URL, school, team or file name is in the result.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date
@@ -120,7 +121,8 @@ class SurveyedCaselist:
     complete_archive_bytes: int | None
     """The newest complete archive's size as its file host declares it, or `None`."""
     unanswered: str | None
-    """Why a count or the size is missing: an error code, `NO_CONTENT_LENGTH`, or `NOT_ASKED`."""
+    """Why a count or the size is missing: an error code, with the HTTP status when the answer gave one
+    (`PROVIDER_UNAVAILABLE (HTTP 500)`), `NO_CONTENT_LENGTH`, or `NOT_ASKED`."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -233,7 +235,7 @@ class BackfileSurvey:
         try:
             archives = await self._source.list_archives(info.slug)
         except _ONE_CASELIST_FAILURES as failure:
-            return _surveyed(info, season, archives=(), size=None, unanswered=error_code_of(failure)), 0
+            return _surveyed(info, season, archives=(), size=None, unanswered=_why(failure)), 0
         complete = sorted(
             (one for one in archives if one.kind is ArchiveKind.FULL and one.archive_date is not None),
             key=lambda one: one.archive_date or date.min,
@@ -245,9 +247,18 @@ class BackfileSurvey:
         try:
             size = await self._source.archive_size(complete[-1])
         except _ONE_CASELIST_FAILURES as failure:
-            return _surveyed(info, season, archives=archives, size=None, unanswered=error_code_of(failure)), 1
+            return _surveyed(info, season, archives=archives, size=None, unanswered=_why(failure)), 1
         unanswered = None if size is not None else "NO_CONTENT_LENGTH"
         return _surveyed(info, season, archives=archives, size=size, unanswered=unanswered), 1
+
+
+_HTTP_STATUS: Final = re.compile(r"\bHTTP ([1-5][0-9]{2})\b")
+
+
+def _why(failure: BaseException) -> str:
+    """The failure's code, and the HTTP status its message names, if it names one."""
+    status = _HTTP_STATUS.search(str(failure))
+    return f"{error_code_of(failure)} (HTTP {status[1]})" if status else error_code_of(failure)
 
 
 def _joined(*listings: Iterable[CaselistInfo]) -> list[CaselistInfo]:

@@ -310,9 +310,55 @@ look.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-24
 
 **Notes:**
+
+A large task, built in the order ruled and tested where it matters.
+1. **ac1 to ac5 and ac7 to ac9 pass, red first.** ac10's first two clauses pass, and its last clause
+   is not applicable, as ruled (the PM's batch l amended ac10 on dev). The check order is load,
+   draft, store versions, git tree, resolve, unattributed, sources, write, quality. It is pinned by
+   mutants V6 and V7. 21 of 21 mutants were caught.
+   * H5 and H6 are behaviourally equivalent and caught only by the recording test. Keeping them, and
+     saying so, is right: the amendment names the rule to ask, `stored_row_hold` for each record.
+2. **ac6 waits on validate-dev after the merge,** as with v1-e32-t05's ac4. It merges with
+   `--partial`, phase `InProgress`. The PM records the run and sets the Goal `Succeeded` in a PM
+   batch.
+3. **The PM question: (a), as built, with one condition.** Narrowing least personal first (side,
+   tournament, round, then school and team code) names a team only for a shared file, which is the
+   least personal data that still pins every card. A draft never overwrites, and its path is refused
+   inside a git working tree.
+   * **The condition:** data-use policy 1.14 lists a built file's sidecar among the places personal
+     data may live, but not a file recipe. The PM adds file recipes under the data directory's
+     `files/` beside the sidecar, as policy 1.15, in a PM batch. Charlie's approval is the merge of
+     that batch.
+   * Until then, the operator's suggest-and-build block waits. The code needs no change.
+4. **Accepted as made:**
+   * Deviation 1: `files_dir` derived from `data_dir`, not a setting;
+   * Deviation 2: t01's examples rewritten onto synthetic sources, as for t02;
+   * Deviation 3: `FILE_BUILDER_VERSION` bumped to `-4` for the draft header;
+   * Deviation 4: the corpus fixture and the guide;
+   * Decision 2, which is stricter than the resolver (any other parser or fingerprint version is
+     refused), since the fix is one `caselist parse`;
+   * an unattributed card named rather than refused;
+   * suggest pinning by the resolver's own AUTO rule, so a suggestion and a build agree;
+   * normalized block headings, so no team's name reaches a draft through a heading;
+   * `check` not refused in a git tree;
+   * the local suppression list only, since a build may not reach S3;
+   * the corrected pinned integration count of 24. The sync merged two edits to 23 without a
+     conflict, and catching that was good work.
+5. **The affected set:** 155 of 201 files ran within the limit and passed. The 46 smoke,
+   integration and evals files are left to the PR's `ci` under agreement 10.
+6. **Follow-ups the PM files in a PM batch:** the style-profile version in the store refusal
+   (follow-up 3); t05's publish gate on PASS, refusing drafts (follow-up 2, into t05's spec); and the
+   lxml contract's name, folded into the next task that edits `pyproject.toml`. Follow-up 4 (suggest's
+   dry run re-reading texts) is not needed: v1-e32-t11's cache makes a warm run about a minute.
+7. **Shared file:** v1-e32-t13 also edits `docs/runbooks/caselist-removal.md`. If the sync conflicts
+   there, keep both sides.
+
+**After the merge:** once policy 1.15 is merged, the operator's two blocks (suggest `states-cp`, then
+build the draft with `--allow-draft`), counts only, before `scripts/task finish --partial`. No
+re-review is needed.

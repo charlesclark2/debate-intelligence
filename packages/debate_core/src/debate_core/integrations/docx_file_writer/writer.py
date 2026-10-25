@@ -3,7 +3,8 @@
 :class:`DocxEvidenceFileWriter` walks a resolved recipe (`v1-e33-t01`) and writes, in order:
 
 1. **One header line**, an analytic naming the source caselists (and OpenEv, for camp cards) and
-   saying the cards are disclosed or camp cards (FILE_IMPORT) and not verified by the platform.
+   saying the cards are disclosed or camp cards (FILE_IMPORT) and not verified by the platform. A
+   file built from a draft recipe starts it with `DRAFT` (`v1-e33-t03`).
 2. **The recipe's headings**: each pocket, hat and block in the profile's `Heading1` to `Heading3`.
 3. **Each card**, copied by :mod:`.run_copier`: its tag (or the coach's override, in the profile's tag
    style), its cite, then its body.
@@ -94,7 +95,14 @@ from debate_core.domain.file_provenance import (
     formatting_sha256,
     text_sha256,
 )
-from debate_core.domain.file_recipe import Analytic, CardRef, FileRecipe, TagAuthor, render_location
+from debate_core.domain.file_recipe import (
+    Analytic,
+    CardRef,
+    FileRecipe,
+    RecipeStatus,
+    TagAuthor,
+    render_location,
+)
 from debate_core.domain.style_profile import StructuralUnit, StyleProfile
 from debate_core.evidence.fingerprints import card_fingerprint
 from debate_core.integrations.docx_file_writer.base_template import (
@@ -128,6 +136,7 @@ from debate_core.integrations.docx_parser.package import (
 from debate_core.integrations.docx_parser.parser import DebateDocxParser
 
 __all__ = [
+    "DRAFT_HEADER",
     "FILE_BUILDER_VERSION",
     "DocxEvidenceFileWriter",
     "header_line",
@@ -135,8 +144,12 @@ __all__ = [
 
 #: Version recorded in every sidecar. Bumped whenever the bytes a recipe builds to change: `-2` adds
 #: camp cards and the sidecar's camp keys (`v1-e33-t06`); `-3` writes no provenance line and drops the
-#: header's last sentence, which pointed to it (`v1-e33-t08`).
-FILE_BUILDER_VERSION: Final = "2026.10.22-file-writer-3"
+#: header's last sentence, which pointed to it (`v1-e33-t08`); `-4` starts a draft recipe's header with
+#: :data:`DRAFT_HEADER`, and builds a ready recipe to the same bytes as `-3` (`v1-e33-t03`).
+FILE_BUILDER_VERSION: Final = "2026.10.24-file-writer-4"
+
+DRAFT_HEADER: Final = "DRAFT: built from a recipe the coach has not marked ready. "
+"""What the header analytic of a file built from a `status: draft` recipe starts with (`v1-e33-t03`)."""
 
 _W15_NAMESPACE: Final = "http://schemas.microsoft.com/office/word/2012/wordml"
 
@@ -233,22 +246,24 @@ def header_line(recipe: ResolvedRecipe) -> str:
     A file with a camp card names OpenEv beside its caselists and calls each card copied from its
     source file, not from the file that disclosed it (`v1-e33-t06`). Neither says where to find who
     disclosed a card: a built file carries no provenance line, and a download of it carries no
-    sidecar (`v1-e33-t08`, PM ruling 2026-10-22).
+    sidecar (`v1-e33-t08`, PM ruling 2026-10-22). A file built from a draft recipe says so first
+    (`v1-e33-t03`).
     """
+    draft = DRAFT_HEADER if recipe.recipe.status is RecipeStatus.DRAFT else ""
     stores = {card.occurrence.caselist for card in recipe.cards}
     if OPENEV_STORE not in stores:
         caselists = sorted(stores | {recipe.recipe.caselist})
         return (
-            f"Disclosed cards (FILE_IMPORT) from {', '.join(caselists)}, each copied from the file that "
-            "disclosed it and not verified by this platform."
+            f"{draft}Disclosed cards (FILE_IMPORT) from {', '.join(caselists)}, each copied from the file "
+            "that disclosed it and not verified by this platform."
         )
     caselists = ", ".join(sorted(stores - {OPENEV_STORE}))
     kinds, origins = (
         ("Disclosed and camp cards", f"{caselists} and OpenEv") if caselists else ("Camp cards", "OpenEv")
     )
     return (
-        f"{kinds} (FILE_IMPORT) from {origins}, each copied from its source file and not verified by this "
-        "platform."
+        f"{draft}{kinds} (FILE_IMPORT) from {origins}, each copied from its source file and not verified by "
+        "this platform."
     )
 
 

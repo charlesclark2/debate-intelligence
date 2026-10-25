@@ -27,14 +27,14 @@ Ashgrove Fictional,YY,neg,election-da,1
 Ashgrove Fictional,YY,neg,hospital-closures-da,1
 Ashgrove Fictional,YY,neg,spending-da,1
 Ashgrove Fictional,YY,neg,states-cp,1
-Birchmoor Fictional,QQ,aff,condo-bad,1
-Birchmoor Fictional,QQ,aff,costs-advantage,1
-Birchmoor Fictional,QQ,neg,cap-k,1
-Birchmoor Fictional,QQ,neg,spending-da,1
-Birchmoor Fictional,ZZ,aff,costs-advantage,1
-Birchmoor Fictional,ZZ,aff,innovation-advantage,1
-Birchmoor Fictional,ZZ,neg,spending-da,1
-Birchmoor Fictional,ZZ,neg,states-cp,1
+Birchmoor,QQ,aff,condo-bad,1
+Birchmoor,QQ,aff,costs-advantage,1
+Birchmoor,QQ,neg,cap-k,1
+Birchmoor,QQ,neg,spending-da,1
+Birchmoor,ZZ,aff,costs-advantage,1
+Birchmoor,ZZ,aff,innovation-advantage,1
+Birchmoor,ZZ,neg,spending-da,1
+Birchmoor,ZZ,neg,states-cp,1
 Cedarvale Fictional,VV,aff,costs-advantage,1
 Cedarvale Fictional,VV,aff,public-option-aff,1
 Cedarvale Fictional,WW,neg,nhi-t,2

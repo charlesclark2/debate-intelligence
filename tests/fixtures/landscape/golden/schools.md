@@ -28,7 +28,7 @@ Every count comes from files teams disclosed to the caselist (FILE_IMPORT), not 
 | YY | neg | `spending-da` | 1 |
 | YY | neg | `states-cp` | 1 |
 
-### Birchmoor Fictional
+### Birchmoor
 
 | Team code | Side | Position | Rounds |
 |---|---|---|---|

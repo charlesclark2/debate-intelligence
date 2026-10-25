@@ -261,3 +261,49 @@ Careful, well-tested work. The one change asked is question 1, which the session
 
 Re-review after the change. Expect a short one: question 1's shape, the flipped mutant, the two
 sentinels and the unique repair fixtures.
+
+## Changes after the PM's review
+
+The one change asked for was question 1, option (B), in the shape the review's item 2 gives. Questions 2 and 4 are follow-ups the PM files, so nothing else changed. Commit `4791019`.
+
+**The repair request now carries the failed call's own prompt.**
+- **Rendered once, before any call.** The guard's registry check now also renders the call's prompt, with the registry's `render`, which is what a real router sends. That happens before any model call, so a call whose variables do not fit its prompt is refused before anything is sent, as a mismatched schema already was. `PromptCatalog` gains `render`.
+- **The rendering goes into the repair unchanged.** `repair_prompt(failed, rendered, schema, problems)` puts it into the repair variables `failed_system` and `failed_user`: same `prompt_id@version`, same variables, not re-authored.
+- **Turn order.** `model.repair` opens its system turn with the call's system turn and its user turn with the call's user turn. Its own instructions, the schema and the filtered problems follow.
+- **Still nothing from the failed answer.** No value, no text, and no invented key beyond the 64-character location cut.
+- **`model.repair` 1.0.0 was edited in place.** Its changelog says what the request carries. `scripts/lock_prompts.py --check` refused the edit ("has changed since it was released"), so the lock was reset to dev's empty lock and re-locked with the script. The body hash went from `62a594ad…` to `62f84d99…`.
+
+**Tests.** The module has 50 tests (48 before): three were replaced and five added. All five new ones failed against the pre-review guard and prompt (from `9aa88d9`), checked out over the new ones and then restored. That run was `.venv/bin/python -m pytest -q -n 0 -p no:randomly packages/debate_core/tests/application/test_structured_output.py` → `18 failed, 32 passed`. The 18 are the five new tests, the replay repair test and the twelve malformed-fixture runs, because their repair keys changed.
+
+| Test | What it pins |
+|---|---|
+| `test_repair_request_carries_the_call_and_the_problems_and_nothing_the_model_said` | The exact variable set. `failed_system` and `failed_user` equal the example prompt's turns, written by hand from `select-passage.md`. No failed-answer text. |
+| `test_repair_request_carries_the_calls_own_rendered_prompt_byte_for_byte` | The registry's rendering of the call opens the repair's rendered system and user turns byte for byte, once each, then the repair instructions. |
+| `test_repair_of_a_prompt_with_no_system_turn_opens_with_the_repair_instructions` | A prompt with no system turn: `failed_system` is `None`, and the repair's system turn is the instructions alone. |
+| `test_repair_requests_of_two_calls_that_fail_alike_differ` | Two calls with the same problems send different repair requests. |
+| `test_repair_sentinels_the_answers_reaches_nothing_and_the_calls_reaches_only_the_repair` | `SENTINEL`, in the model's answer, is in neither the repair request, the rendered repair, the error nor any log record. `CALL_SENTINEL`, in the call's variables, is in the repair request exactly once and in the rendered repair exactly once, and in no error or log record. |
+
+**Fixtures.** Every malformed case has a repair fixture of its own: 6 files in `tests/fixtures/model_outputs/malformed/model.repair/`, up from 5. "wrong types" is `377e9052…` and "coercible values" is `d14add30…`. The six call fixtures are byte-identical to before, and the ac5 replay repair cassette is now `model.repair/715ebbc9…`. The malformed README says why the cases no longer share a file and shows the new `repair_prompt` call.
+
+**Mutants.** The same runner as before (`-x -n 0 -p no:randomly`, a fresh `HYPOTHESIS_STORAGE_DIRECTORY` per run, bytes restored and checked after each) ran 21 mutants, and all 21 were caught. Two rows changed from the first table:
+- **Mutant 8, the registry check after the call:** now two edits, rendering the prompt up front and checking after the call. Caught by `test_a_call_whose_schema_differs_from_its_registry_entry_is_refused_before_any_model_call`.
+- **Mutant 13 flips** to "repair drops the call's rendered prompt" (`failed_system=None`, `failed_user=""`).
+- **Mutant 20 is new:** "repair alters the call's rendered prompt" (`failed_user` lower-cased).
+- The old truncation mutant is now number 21. The other 18 are unchanged and still caught by the same tests.
+
+Mutants 13 and 20 were caught first by the variable-set test. Each was then run again against `test_repair_request_carries_the_calls_own_rendered_prompt_byte_for_byte` alone, and that test caught both.
+
+**Checks this round:**
+- `ruff check .` → `All checks passed!`
+- `ruff format --check .` → `1293 files already formatted`
+- `lint-imports` → `16 kept, 0 broken`
+- `pyright packages/debate_core` → `0 errors`
+- `scripts/lock_prompts.py --check` → exit 0
+- The guard, models, bedrock, contracts, architecture, specs, docs and command-block tests → `1300 passed`.
+- The application tests that reach the guard (`test_structured_output`, `test_fakes`, `test_errors`, `test_port_conformance`) → `152 passed`.
+- The one-process log-state run (contracts, bedrock, then the guard's module) → `429 passed`.
+- **Not completed this round:** the whole `tests/application` directory. It passed in the first round (3608 tests), but this round it hit the 115 s alarm under load average 28. No workers were orphaned. Nothing else in that directory imports the changed modules. It stays with the PR's `ci`, as the affected set does.
+- `scripts/validate_specs.py` → `OK: 439 files, 40 epics, 377 tasks, 22 releases`
+- `scripts/check_command_blocks.py --base origin/dev` → `OK: no # comments in 424 shell code blocks in 153 Markdown files`
+
+The Goal stays `Succeeded`. Stopping for the PM's re-review.

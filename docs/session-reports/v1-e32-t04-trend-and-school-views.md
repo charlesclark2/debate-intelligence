@@ -296,9 +296,66 @@ in the private bucket and the local `reports/` directory, and nowhere else.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED, with conditions to close in this session
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-24
 
 **Notes:**
+
+Strong work.
+* First-seen is keyed on t03's round identity, and the path-keyed mutant fails the explicit
+  rename test.
+* A test that could not tell the two keys apart was deleted rather than kept for its count.
+* The goldens were hand-written before the renderer ran.
+* The one surviving mutant was turned into a test.
+* The dry run wrote nothing, and its SHA-256 check shows it.
+* The bundle keeps t03's three goldens byte for byte.
+
+The PM's brief said hspolicy26 had "a few" windows. It has 15. The short-history notice is still
+right, because the topic runs to 2027-06-30.
+
+**Rulings**
+
+1. **Question 1: A, as built.** The school view goes in its own `schools.csv` and `schools.md`,
+   never in `report.md`. That keeps the circuit-wide row, the E32 gate's item 4, `report.md`'s own
+   "No school, team or debater is named", and t11's placement of quoted texts all true. Amend ac4 and
+   the render node to say `schools.md` (condition 1).
+2. **Question 2: B, drop `last_tournament`.** The data-use policy's row for this view reads "School
+   plus team code, as disclosed. Never more." Its Personal data section names tournament and round
+   labels as what, "combined with a team code, place a specific pair of students at a specific
+   round". The built-file sidecar row allows a tournament explicitly. This row doesn't. The spec's
+   ac4 predates that row, and the policy wins. Showing it would be a policy change for the coach to
+   approve (a version 1.14), not a session's reading. Drop the column, the Markdown cell, decision
+   6's rule and its tests, and amend ac4 (condition 2). `schools.md`'s intro line about "the
+   tournament of the latest of them" goes too.
+3. **Question 3: keep the rows, as built.** After a topic change, the first window's rows are NEW
+   with no previous share and no delta. Nothing is compared across the change, and the report names
+   it. Add a PM-ruling comment to ac3 saying so (condition 1).
+4. **Deviations 1 to 4 and the decisions are accepted.** That covers the files outside the
+   packages (t03's ruling 2 again), `trend_label` and `held_back_by_team_floor`, the two meanings of
+   "new", the inclusive threshold, and the scan checking the school view for paths only.
+
+**Follow-up work, the PM's to file (next PM batch):**
+
+* **Removal and the annual purge reaching `reports/landscape/`** (item 1): a new E30 task. Until
+  it lands, the removal runbook gains the manual step (rebuild and republish the bundle, or delete
+  its school files), and the PM adds it in the same batch. The first publish of a bundle with a
+  school view may go ahead. A removal before the E30 task lands follows the manual step.
+* **The CLI names four files and counts no trends or schools** (item 2): a small new E32 task.
+* **A person's name used as a school directory** (item 3): recorded as a question for E30's import.
+  No task yet.
+
+**Conditions, to close in this session (no re-review needed):**
+
+1. **Amend the spec,** each change with a PM-ruling comment dated 2026-10-24: ac4 and the render
+   node name `schools.csv` and `schools.md`, and not `report.md`; ac4 lists school, team code, side,
+   position_id and rounds; ac3 says how a topic change's first window is written.
+2. **Drop `last_tournament`** from `SchoolRow`, `schools.csv`, `schools.md`, both goldens (by hand)
+   and the tests. Show that the school view's tests and `test_render.py` pass. Re-run the
+   no-debater-name test and the shuffle test. Remove the two school-view mutants that concern the
+   tournament from the table, or mark them moot.
+3. **Set the Goal `Succeeded`** with a PM record, and update this report's summary and status line.
+   Then open the PR with `scripts/task pr`.
+
+If anything comes out differently, stop and ask for another review.

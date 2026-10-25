@@ -80,6 +80,9 @@ dev = [
     "python-docx>=1.1",
     "respx>=0.22",
     "ruff>=0.11",
+    # debate-core's `local-classifier` extra (v1-e32-t21): the landscape's local classifier comparison
+    # and its tests, which train on synthetic fixtures. Never a pretrained model or a download.
+    "scikit-learn>=1.5",
     # ShellCheck as a wheel rather than a brew install, so `uv run shellcheck` works the same way
     # on a laptop and on a CI runner. scripts/site_deploy.sh (v1-e36-t05) is the first shell script
     # with a lint criterion of its own.

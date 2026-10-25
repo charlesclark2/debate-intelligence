@@ -56,7 +56,7 @@ spec:
         held-out precision, sent to the PM with a recommendation (the coach's labels are an
         operator step).
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

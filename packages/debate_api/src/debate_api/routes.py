@@ -31,6 +31,7 @@ from debate_api.landscape_pages import (
     landscape_caselists,
     landscape_position,
     landscape_report,
+    landscape_report_part,
     landscape_school,
     landscape_school_view,
 )
@@ -60,6 +61,7 @@ ROUTE_ACCESS: Final = {
     "/account/email/remove": Access.SIGNED_IN,
     "/landscape": Access.SIGNED_IN,
     "/landscape/{caselist}": Access.SIGNED_IN,
+    "/landscape/{caselist}/report/{part}": Access.SIGNED_IN,
     "/landscape/{caselist}/schools": Access.SIGNED_IN,
     "/landscape/{caselist}/schools/{school}": Access.SIGNED_IN,
     "/landscape/{caselist}/positions/{position_id}": Access.SIGNED_IN,
@@ -101,6 +103,9 @@ def register_routes(app: FastAPI, routes: RouteAccess) -> None:
     app.add_api_route("/account/email/remove", remove_email, methods=["POST"], include_in_schema=False)
     app.add_api_route("/landscape", landscape_caselists, methods=["GET"], include_in_schema=False)
     app.add_api_route("/landscape/{caselist}", landscape_report, methods=["GET"], include_in_schema=False)
+    app.add_api_route(
+        "/landscape/{caselist}/report/{part}", landscape_report_part, methods=["GET"], include_in_schema=False
+    )
     app.add_api_route(
         "/landscape/{caselist}/schools", landscape_school_view, methods=["GET"], include_in_schema=False
     )

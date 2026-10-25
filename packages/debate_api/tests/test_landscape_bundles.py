@@ -37,6 +37,7 @@ if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
 BUCKET: Final = "debate-test-evidence-landscape"
 NEWEST: Final = "reports/landscape/synthpolicy26/2026-10-20"
 SCHOOL_VIEW: Final = "/landscape/synthpolicy26/schools"
+NEITHER_SIDE: Final = "/landscape/synthpolicy26/report/neither-side"
 JUST_UNDER_FIVE_MINUTES: Final = timedelta(minutes=4, seconds=59)
 _STANDARD_RECORD_FIELDS: Final = set(vars(logging.LogRecord("", 0, "", 0, "", None, None)))
 
@@ -118,7 +119,7 @@ def test_a_deleted_school_view_shows_within_five_minutes_and_no_older_view_repla
 
 
 def test_a_republished_report_shows_within_five_minutes(over_moto: Any, bucket: S3Client) -> None:
-    assert "2 of 10 cards were not placed." in body(over_moto, "/landscape/synthpolicy26")[1]
+    assert "2 of 10 cards were not placed." in body(over_moto, NEITHER_SIDE)[1]
 
     republished = (
         "# Argument landscape: synthpolicy26 through 2026-10-20\n\n## Unclassified\n\n"
@@ -126,13 +127,16 @@ def test_a_republished_report_shows_within_five_minutes(over_moto: Any, bucket: 
     )
     bucket.put_object(Bucket=BUCKET, Key=f"{NEWEST}/report.md", Body=republished.encode())
     over_moto.clock.advance(JUST_UNDER_FIVE_MINUTES)
-    held = body(over_moto, "/landscape/synthpolicy26")[1]
+    held = body(over_moto, NEITHER_SIDE)[1]
     over_moto.clock.advance(timedelta(seconds=1))
     fresh = body(over_moto, "/landscape/synthpolicy26")[1]
+    gone_status, gone = body(over_moto, NEITHER_SIDE)
 
     assert "2 of 10 cards were not placed." in held
+    # The republished report has no # parts, so it is all front page, and the old part is gone.
     assert "3 of 11 cards were not placed after the republish." in fresh
     assert "2 of 10" not in fresh
+    assert gone_status == 404 and "2 of 10" not in gone
 
 
 def test_a_newer_snapshot_replaces_the_one_shown_within_five_minutes(
@@ -306,6 +310,10 @@ def test_a_team_page_link_the_rule_would_not_build_is_text_in_the_school_view(
 EXPECTED_RECORDS: Final = [
     ("/landscape", {"page": "caselists"}),
     ("/landscape/synthpolicy26", {"page": "report", "caselist": "synthpolicy26", "snapshot": "2026-10-20"}),
+    (
+        "/landscape/synthpolicy26/report/negative",
+        {"page": "report-part", "caselist": "synthpolicy26", "snapshot": "2026-10-20"},
+    ),
     (SCHOOL_VIEW, {"page": "school-view", "caselist": "synthpolicy26", "snapshot": "2026-10-20"}),
     (
         "/landscape/synthpolicy26/schools/birch-hollow-2",
@@ -351,7 +359,17 @@ def test_no_record_names_a_school_team_code_or_position(student: Any) -> None:
     assert len(lines) == len(EXPECTED_RECORDS)
     for line in lines:
         values = [str(value) for value in json.loads(line).values()]
-        for word in ("ashgrove", "birch", "invented", '"ab"', '"ef"', '"cd"', "schools/", "positions/"):
+        for word in (
+            "ashgrove",
+            "birch",
+            "invented",
+            '"ab"',
+            '"ef"',
+            '"cd"',
+            "schools/",
+            "positions/",
+            "negative",
+        ):
             assert all(word not in value.lower() for value in values), (word, line)
 
 
@@ -361,6 +379,7 @@ def test_no_record_names_a_school_team_code_or_position(student: Any) -> None:
         "/landscape/nocaselist26",
         "/landscape/synthpolicy26/schools/oldfield",
         "/landscape/synthpolicy26/positions/no-such-position",
+        "/landscape/synthpolicy26/report/no-such-part",
     ],
 )
 def test_a_page_not_in_the_newest_bundle_writes_no_record(student: Any, path: str) -> None:

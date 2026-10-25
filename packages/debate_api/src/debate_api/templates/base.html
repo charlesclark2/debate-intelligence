@@ -11,15 +11,13 @@
 <body>
 <a class="skip-link" href="#main">Skip to the page</a>
 <header class="site-header">
-{% if landscape is defined and landscape %}<p class="site-name">Team evidence search</p>
-{% else %}<p class="site-name"><a href="/">Team evidence search</a></p>
-{% endif %}
+<p class="site-name"><a href="/">Team evidence search</a></p>
 {% if username %}
 <nav aria-label="Your account">
 <p>Signed in as <strong>{{ username }}</strong>{% if role == "coach" %} (coach){% endif %}.</p>
 <ul>
-{% if signed_in %}{% if not (landscape is defined and landscape) %}<li><a href="/">Search</a></li>
-{% endif %}<li><a href="/landscape">Landscape</a></li>
+{% if signed_in %}<li><a href="/">Search</a></li>
+<li><a href="/landscape">Landscape</a></li>
 <li><a href="/account">Your account</a></li>
 {% endif %}{% if role == "coach" and signed_in %}<li><a href="/coach">Coach</a></li>
 {% endif %}</ul>
@@ -30,7 +28,7 @@
 </nav>
 {% endif %}
 </header>
-{% if signed_in and not (landscape is defined and landscape) %}<section class="cart" data-tub-cart data-tub-cart-cap="{{ cart_cap }}" aria-label="Download cart" hidden>
+{% if signed_in %}<section class="cart" data-tub-cart data-tub-cart-cap="{{ cart_cap }}" aria-label="Download cart" hidden>
 <p><span data-tub-cart-count>No cards</span> in your download cart, up to {{ cart_cap }}.</p>
 <button type="button" data-tub-cart-download>Download cart</button>
 <button type="button" class="secondary" data-tub-cart-empty>Empty the cart</button>

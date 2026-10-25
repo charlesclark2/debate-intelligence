@@ -61,6 +61,7 @@ ROUTE_REQUESTS: list[RouteRequest] = [
     RouteRequest("POST", "/account/email/remove", "/account/email/remove", {}),
     RouteRequest("GET", "/landscape", "/landscape"),
     RouteRequest("GET", "/landscape/{caselist}", "/landscape/synthpolicy26"),
+    RouteRequest("GET", "/landscape/{caselist}/report/{part}", "/landscape/synthpolicy26/report/negative"),
     RouteRequest("GET", "/landscape/{caselist}/schools", "/landscape/synthpolicy26/schools"),
     RouteRequest(
         "GET", "/landscape/{caselist}/schools/{school}", "/landscape/synthpolicy26/schools/ashgrove"

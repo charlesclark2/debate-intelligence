@@ -3,10 +3,11 @@
 The pilot shows the newest published landscape bundle of each caselist, `report.md` and its per-school
 view `schools.md`, to signed-in members. What is decided here holds whatever renders the pages:
 
-* **Which pages there are** (:class:`LandscapePage`): the caselists, a caselist's report, its school
-  view's front page, and one page per school and per position (the PM's layout ruling of 2026-10-25:
-  `report.md` measured 66 KB rendered, `schools.md` 568 KB, against ADR-0019's page of 150 KB). The
-  page kind is all an audit record says of where a member was, never which school or position.
+* **Which pages there are** (:class:`LandscapePage`): the caselists, a caselist's report front page
+  and one page per `#` part of it, its school view's front page, and one page per school and per
+  position (the PM's layout ruling of 2026-10-25, and the parts from the review of 2026-10-26, when one
+  report page had reached 92% of ADR-0019's 150 KB). The page kind is all an audit record says of
+  where a member was, never which part, school or position.
 * **Which bundle is the newest** (:func:`bundle_file`): a bundle is
   `reports/landscape/<caselist>/<snapshot>/<file>`, and `v1-e32-t03`'s run uploads `report.md` last,
   so a snapshot holding it is complete. The newest such snapshot is the one shown; a school view that
@@ -70,6 +71,7 @@ class LandscapePage(StrEnum):
 
     CASELISTS = "caselists"
     REPORT = "report"
+    REPORT_PART = "report-part"
     SCHOOL_VIEW = "school-view"
     SCHOOL = "school"
     POSITION = "position"

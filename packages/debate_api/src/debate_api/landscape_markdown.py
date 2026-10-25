@@ -1,7 +1,8 @@
 """A landscape bundle's two Markdown files as the landscape pages show them (`v1-e39-t17`).
 
-`report.md` is one page, `schools.md` a front page with one page per school and one per position (the
-PM's layout ruling of 2026-10-25). Each is rendered once per bundle, by
+`report.md` is a front page with one page per `#` part (the PM's review of 2026-10-26: one page was 92%
+of the page line after a single republish), and `schools.md` a front page with one page per school
+and one per position (the PM's layout ruling of 2026-10-25). Each is rendered once per bundle, by
 :class:`~debate_core.application.tub.landscape_pages.LandscapeShelf`'s `prepare`, and served from what
 the shelf holds until it reads the bucket again.
 
@@ -24,9 +25,12 @@ image its alt text.
 ## Pages, contents and anchors
 
 A page is cut from the token stream at top-level headings. Every heading on a page gets an `id`, as
-:class:`~debate_core.domain.landscape_pages.Anchors` writes it. The report's contents list is its `#`
-parts with their `##` sections, from the headings, and the bundle's own `## Contents` (`v1-e32-t20`)
-is left out, so the page has one list (the PM's ruling). The school view's front page lists every
+:class:`~debate_core.domain.landscape_pages.Anchors` writes it, counting repeats on that page alone.
+The report's front page holds its header (everything before the first `#` part, "About this report"
+among it) and its contents list: each `#` part, linking to the part's page at its heading's anchor,
+with each `##` section linking to its anchor on that page. The bundle's own `## Contents`
+(`v1-e32-t20`) is left out, so there is one list (the PM's ruling). A report with no `#` part, as
+before `v1-e32-t20`, is all front page. The school view's front page lists every
 school, addressed by its heading's anchor, and every position under its kind, addressed by its id.
 """
 
@@ -36,6 +40,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Final
+from urllib.parse import quote
 
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
@@ -46,11 +51,13 @@ from debate_core.domain.landscape_pages import Anchors, LandscapeLink, is_positi
 __all__ = [
     "ContentsEntry",
     "LandscapePiece",
+    "ReportPart",
     "RenderedBundle",
     "RenderedReport",
     "RenderedSchoolView",
     "render_bundle",
     "render_markdown",
+    "report_part_href",
 ]
 
 _MARKDOWN: Final = MarkdownIt("commonmark", {"html": False, "linkify": False, "typographer": False}).enable(
@@ -68,15 +75,31 @@ _UNKINDED: Final = "Positions"
 @dataclass(frozen=True, slots=True)
 class ContentsEntry:
     text: str
-    anchor: str
+    href: str
+    """`#<anchor>` on the same page, or a part's page with the section's anchor."""
     sections: tuple[ContentsEntry, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class ReportPart:
+    """One `#` part of the report, on its own page."""
+
+    heading: str
+    path: str
+    """The page's last path segment: the part heading's anchor."""
+    body_html: str
 
 
 @dataclass(frozen=True, slots=True)
 class RenderedReport:
     title: str
+    front_html: str
+    """The report's header: what comes before its first `#` part."""
     contents: tuple[ContentsEntry, ...]
-    body_html: str
+    parts: tuple[ReportPart, ...]
+
+    def part(self, path: str) -> ReportPart | None:
+        return next((one for one in self.parts if one.path == path), None)
 
 
 @dataclass(frozen=True, slots=True)
@@ -168,30 +191,55 @@ def render_markdown(markdown: str, *, caselist: str, team_pages: bool = False) -
 # --------------------------------------------------------------------------------------------
 
 
+def report_part_href(caselist: str, path: str) -> str:
+    """Where a part of `caselist`'s report is: under `report/`, so no part meets `schools`."""
+    return f"/landscape/{caselist}/report/{quote(path)}"
+
+
 def _report(markdown: str, caselist: str) -> RenderedReport:
     preamble, sections = _split(_MARKDOWN.parse(markdown))
     title, sections = _title(sections)
     kept = _without_contents(sections)
-    anchors = Anchors()
-    contents: list[ContentsEntry] = []
-    part: ContentsEntry | None = None
-    for section in kept:
-        if not section.heading:
-            continue
-        anchor = _anchor(section, anchors)
+    first_part = next((index for index, one in enumerate(kept) if one.level == 1), len(kept))
+    front, contents = Anchors(), list[ContentsEntry]()
+    for section in kept[:first_part]:
+        if section.heading:
+            anchor = _anchor(section, front)
+            if section.level == 2:
+                contents.append(ContentsEntry(section.text, f"#{anchor}"))
+    front_tokens = [*preamble, *(token for section in kept[:first_part] for token in section.tokens)]
+    parts: list[ReportPart] = []
+    paths = Anchors()
+    for heading, below in _parts(kept[first_part:]):
+        path, page = paths.add(heading.text), Anchors()
+        href = report_part_href(caselist, path)
+        entries: list[ContentsEntry] = []
+        for section in below:
+            anchor = _anchor(section, page)
+            if section.level == 2:
+                entries.append(ContentsEntry(section.text, f"{href}#{anchor}"))
+        contents.append(ContentsEntry(heading.text, href, tuple(entries)))
+        tokens = [*heading.body, *(token for section in below for token in section.tokens)]
+        parts.append(
+            ReportPart(heading.text, path, _render(tokens, caselist=caselist, team_pages=False, anchors=page))
+        )
+    return RenderedReport(
+        title=title,
+        front_html=_render(front_tokens, caselist=caselist, team_pages=False, anchors=front),
+        contents=tuple(contents),
+        parts=tuple(parts),
+    )
+
+
+def _parts(sections: Sequence[_Section]) -> list[tuple[_Section, list[_Section]]]:
+    """Each `#` part's heading and the sections under it, up to the next part."""
+    parts: list[tuple[_Section, list[_Section]]] = []
+    for section in sections:
         if section.level == 1:
-            part = ContentsEntry(section.text, anchor)
-            contents.append(part)
-        elif section.level == 2 and part is not None:
-            part = ContentsEntry(
-                part.text, part.anchor, (*part.sections, ContentsEntry(section.text, anchor))
-            )
-            contents[-1] = part
-        elif section.level == 2:
-            contents.append(ContentsEntry(section.text, anchor))
-    tokens = [*preamble, *(token for section in kept for token in section.tokens)]
-    body = _render(tokens, caselist=caselist, team_pages=False, anchors=anchors)
-    return RenderedReport(title=title, contents=tuple(contents), body_html=body)
+            parts.append((section, []))
+        elif parts:
+            parts[-1][1].append(section)
+    return parts
 
 
 def _school_view(markdown: str, caselist: str) -> RenderedSchoolView:
@@ -220,8 +268,8 @@ def _school_view(markdown: str, caselist: str) -> RenderedSchoolView:
         title=title,
         header_html=header,
         contents=(
-            ContentsEntry(by_school.text, by_school_anchor),
-            ContentsEntry(by_position.text, by_position_anchor),
+            ContentsEntry(by_school.text, f"#{by_school_anchor}"),
+            ContentsEntry(by_position.text, f"#{by_position_anchor}"),
         ),
         by_school_anchor=by_school_anchor,
         by_school_lead_html=_render(by_school.body, caselist=caselist, team_pages=True, anchors=front),

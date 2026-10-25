@@ -138,6 +138,18 @@ def test_audit_record_has_exactly_the_schemas_fields() -> None:
     assert {"format_version"} | {field.name for field in dataclasses.fields(AuditRecord)} == FIELDS
 
 
+def test_audit_schema_names_every_landscape_page_kind_the_code_has_and_no_other() -> None:
+    assert schema()["properties"]["page"]["enum"] == [
+        "caselists",
+        "report",
+        "report-part",
+        "school-view",
+        "school",
+        "position",
+    ]
+    assert [page.value for page in LandscapePage] == schema()["properties"]["page"]["enum"]
+
+
 def test_audit_schema_names_a_card_as_the_code_does() -> None:
     cards = schema()["properties"]["cards"]
     assert cards["items"]["pattern"] == CARD_REFERENCE_PATTERN == "^(?:[a-z]+[0-9]{2}|openev)/[0-9a-f]{64}$"
@@ -315,6 +327,9 @@ def test_audit_schema_refuses_a_record_with_a_forbidden_field(field: str) -> Non
         pytest.param("searched", {"time": "2026-11-02 15:00"}, id="a time not in UTC seconds"),
         pytest.param("landscape-viewed", {"page": f"school {SCHOOL}"}, id="a landscape page naming a school"),
         pytest.param("landscape-viewed", {"page": "school/maple-grove"}, id="a landscape page with a path"),
+        pytest.param(
+            "landscape-viewed", {"page": "report-part negative"}, id="a report part naming its part"
+        ),
         pytest.param("landscape-viewed", {"caselist": "hspolicy26 Maple Grove"}, id="a caselist with words"),
         pytest.param("landscape-viewed", {"snapshot": "last week"}, id="a snapshot that is no date"),
         pytest.param("landscape-viewed", {"cards": [CARDS[0]]}, id="a landscape page naming a card"),

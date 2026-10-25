@@ -6,7 +6,8 @@ team's signed-in members, students and coach alike, under the E39 gate's item 11
 | Route | What it answers |
 |---|---|
 | `GET /landscape` | the caselists with a published bundle, each with its newest snapshot |
-| `GET /landscape/<caselist>` | the report, one page, with its contents list |
+| `GET /landscape/<caselist>` | the report's front page: its header and its contents list |
+| `GET /landscape/<caselist>/report/<part>` | one `#` part of the report, by its heading's anchor |
 | `GET /landscape/<caselist>/schools` | the school view's front page: its header, its schools, its positions |
 | `GET /landscape/<caselist>/schools/<school>` | one school, by its heading's anchor |
 | `GET /landscape/<caselist>/positions/<position id>` | one position's teams |
@@ -20,9 +21,10 @@ when what it holds is five minutes old, rendered by :mod:`debate_api.landscape_m
 * **The newest snapshot only.** A path names a caselist and never a snapshot, so no older bundle can
   be asked for. A snapshot whose `schools.md` a removal deleted says so on its school view's pages,
   and no older view is shown in its place.
-* **No search, no download and no share link.** These pages carry no search form, no download cart
-  and no Search link in the header (`landscape=True` in `base.html`): the forbidden list names
-  search links, so the pages' header leaves out even the way to the search page.
+* **No search, no download and no share link** for the reports: no search over them, no download of
+  them and no link that shares them. The site's header, with its Search link and cart, is the same
+  as on every other signed-in page (the PM's review of 2026-10-26: gate item 11 is about the reports,
+  not the site's navigation).
 * **One link out**: a school view's team page, checked at render; everything else is text.
 
 ## What is audited
@@ -60,6 +62,7 @@ __all__ = [
     "landscape_caselists",
     "landscape_position",
     "landscape_report",
+    "landscape_report_part",
     "landscape_school",
     "landscape_school_view",
 ]
@@ -153,6 +156,24 @@ async def landscape_report(caselist: str, request: Request) -> HTMLResponse:
     if isinstance(bundle, HTMLResponse):
         return bundle
     return await _shown(request, "landscape_report.html", LandscapePage.REPORT, bundle, report=bundle.report)
+
+
+async def landscape_report_part(caselist: str, part: str, request: Request) -> HTMLResponse:
+    """One `#` part of the newest report, by its heading's anchor."""
+    bundle = await _bundle(request, caselist)
+    if isinstance(bundle, HTMLResponse):
+        return bundle
+    shown = bundle.report.part(part)
+    if shown is None:
+        return _refused(request, 404, _NOT_FOUND_HEADING, _NOT_FOUND)
+    return await _shown(
+        request,
+        "landscape_report_part.html",
+        LandscapePage.REPORT_PART,
+        bundle,
+        report=bundle.report,
+        part=shown,
+    )
 
 
 async def landscape_school_view(caselist: str, request: Request) -> HTMLResponse:

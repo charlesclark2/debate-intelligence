@@ -6,14 +6,14 @@
 {% if report.contents %}<nav class="landscape-contents" aria-labelledby="contents-heading">
 <h2 id="contents-heading">Contents</h2>
 <ul>
-{% for entry in report.contents %}<li><a href="#{{ entry.anchor }}">{{ entry.text }}</a>{% if entry.sections %}
+{% for entry in report.contents %}<li><a href="{{ entry.href }}">{{ entry.text }}</a>{% if entry.sections %}
 <ul>
-{% for section in entry.sections %}<li><a href="#{{ section.anchor }}">{{ section.text }}</a></li>
+{% for section in entry.sections %}<li><a href="{{ section.href }}">{{ section.text }}</a></li>
 {% endfor %}</ul>
 {% endif %}</li>
 {% endfor %}</ul>
 </nav>
 {% endif %}<div class="landscape-body">
-{{ report.body_html | safe }}
+{{ report.front_html | safe }}
 </div>
 {% endblock %}

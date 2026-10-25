@@ -85,11 +85,12 @@
       "enum": [
         "caselists",
         "report",
+        "report-part",
         "school-view",
         "school",
         "position"
       ],
-      "description": "Which kind of landscape page was shown, never which school or position."
+      "description": "Which kind of landscape page was shown, never which part, school or position."
     }
   },
   "allOf": [

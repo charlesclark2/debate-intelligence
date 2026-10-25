@@ -325,3 +325,5 @@ button.secondary { background: #ffffff; color: var(--link); }
 .landscape-index { columns: 16rem; }
 .landscape-body table { display: block; overflow-x: auto; border-collapse: collapse; margin: 0.5rem 0 1rem; }
 .landscape-body th, .landscape-body td { border-bottom: 1px solid var(--line); padding: 0.25rem 0.5rem; text-align: left; vertical-align: top; }
+.landscape-parts ul { display: flex; flex-wrap: wrap; gap: 0 1rem; margin: 0.5rem 0 0; padding: 0; list-style: none; }
+.landscape-parts [aria-current="page"] { font-weight: 700; text-decoration: none; }

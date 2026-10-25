@@ -1,14 +1,16 @@
 """The landscape pages (`v1-e39-t17` ac2): the caselists, the report and the school view, for members.
 
 Over the hand-written bundles in `fixtures/landscape/`, a signed-in student and a coach each see the
-list of caselists, the newest report with one contents list and an anchor on every heading, and the
-school view's front page, school pages and position pages. Every expectation below is written by
+list of caselists; the newest report's front page, its header and one contents list, and one page per
+`#` part with an anchor on every heading (the PM's review of 2026-10-26); and the school view's front
+page, school pages and position pages. Every expectation below is written by
 hand from those files (working agreement 6). The authorization matrix
 (`test_auth_authorization_matrix.py`) refuses every other session on every landscape route.
 
 Each page is private and never cached, loads only the pilot's own script and stylesheet with nothing
-inline, offers no search, download or share link, and weighs under ADR-0019's 150 KB with a bundle
-as large as hspolicy26's, measured on 2026-10-25 (the session report's counts).
+inline, offers no search, download or share link in its body (the header is the site's, Search link
+and cart included), and weighs under ADR-0019's 150 KB with a bundle as large as hspolicy26's, part
+by part, its largest part leaving at least a quarter of the line free.
 """
 
 from __future__ import annotations
@@ -25,10 +27,16 @@ PAGE_BUDGET: Final = 150 * 1024
 its stylesheet."""
 
 REPORT: Final = "/landscape/synthpolicy26"
+PARTS: Final = (
+    "/landscape/synthpolicy26/report/affirmative",
+    "/landscape/synthpolicy26/report/negative",
+    "/landscape/synthpolicy26/report/neither-side",
+)
 SCHOOL_VIEW: Final = "/landscape/synthpolicy26/schools"
 LANDSCAPE_PAGES: Final = (
     "/landscape",
     REPORT,
+    *PARTS,
     SCHOOL_VIEW,
     "/landscape/synthpolicy26/schools/ashgrove",
     "/landscape/synthpolicy26/schools/birch-hollow",
@@ -87,7 +95,9 @@ def test_a_member_sees_each_caselists_newest_bundle_and_no_older_one(member: Any
     assert "2026-10-13" not in listing
 
 
-def test_a_member_reads_the_report_with_one_contents_list_of_its_parts_and_sections(member: Any) -> None:
+def test_the_reports_front_page_holds_its_header_and_one_contents_list_linking_to_its_parts(
+    member: Any,
+) -> None:
     report = main_of(page(member, REPORT))
     contents = report.split('<nav class="landscape-contents"', 1)[1].split("</nav>", 1)[0]
     body = report.split('<div class="landscape-body">', 1)[1]
@@ -95,36 +105,73 @@ def test_a_member_reads_the_report_with_one_contents_list_of_its_parts_and_secti
     assert "<h1>Argument landscape: synthpolicy26 through 2026-10-20</h1>" in report
     assert links_in(contents) == [
         ("#about-this-report", "About this report"),
-        ("#affirmative", "Affirmative"),
-        ("#affirmative-positions", "Affirmative positions"),
-        ("#negative", "Negative"),
-        ("#negative-positions", "Negative positions"),
-        ("#counterplan-texts", "Counterplan texts"),
-        ("#neither-side", "Neither side"),
-        ("#overviews", "Overviews"),
-        ("#unclassified", "Unclassified"),
+        ("/landscape/synthpolicy26/report/affirmative", "Affirmative"),
+        ("/landscape/synthpolicy26/report/affirmative#affirmative-positions", "Affirmative positions"),
+        ("/landscape/synthpolicy26/report/negative", "Negative"),
+        ("/landscape/synthpolicy26/report/negative#negative-positions", "Negative positions"),
+        ("/landscape/synthpolicy26/report/negative#counterplan-texts", "Counterplan texts"),
+        ("/landscape/synthpolicy26/report/neither-side", "Neither side"),
+        ("/landscape/synthpolicy26/report/neither-side#overviews", "Overviews"),
+        ("/landscape/synthpolicy26/report/neither-side#unclassified", "Unclassified"),
     ]
     # The parts nest their sections: one list item per part, About this report on its own.
     assert contents.count("<ul>") == 4
-    # Every heading is anchored, a repeat with -2, and the bundle's own contents list is left out.
-    assert heading_ids(body) == [
-        "about-this-report",
-        "affirmative",
-        "affirmative-positions",
-        "affs",
-        "negative",
-        "negative-positions",
-        "disadvantages",
-        "counterplan-texts",
-        "counterplan-texts-2",
-        "neither-side",
-        "overviews",
-        "unclassified",
-    ]
+    # The header alone: no part's sections, and not the bundle's own contents list.
+    assert heading_ids(body) == ["about-this-report"]
+    assert "<td>Caselist</td>\n<td>synthpolicy26</td>" in body
     assert report.count(">Contents</h2>") == 1
     assert "(#affirmative)" not in body and "[Affirmative]" not in body
-    assert "<td>Invented DA (<code>invented-da</code>)</td>" in body
-    assert '<a href="#overviews">overviews</a>' in body
+    assert "Invented DA" not in body and "Invented aff" not in body
+
+
+@pytest.mark.parametrize(
+    ("path", "heading", "ids", "holds"),
+    [
+        (
+            PARTS[0],
+            "Affirmative",
+            ["affirmative-positions", "affs"],
+            "<td>Invented aff (<code>invented-aff</code>)</td>",
+        ),
+        (
+            PARTS[1],
+            "Negative",
+            ["negative-positions", "disadvantages", "counterplan-texts", "counterplan-texts-2"],
+            "<td>Invented DA (<code>invented-da</code>)</td>",
+        ),
+        (PARTS[2], "Neither side", ["overviews", "unclassified"], '<a href="#overviews">overviews</a>'),
+    ],
+)
+def test_each_part_is_its_own_page_with_every_heading_anchored(
+    member: Any, path: str, heading: str, ids: list[str], holds: str
+) -> None:
+    part = main_of(page(member, path))
+    body = part.split('<div class="landscape-body">', 1)[1]
+
+    assert f"<h1>{heading}</h1>" in part
+    assert heading_ids(body) == ids
+    assert holds in body
+    assert links_in(part)[:4] == [
+        ("/landscape/synthpolicy26", "Argument landscape: synthpolicy26 through 2026-10-20"),
+        ("/landscape/synthpolicy26/report/affirmative", "Affirmative"),
+        ("/landscape/synthpolicy26/report/negative", "Negative"),
+        ("/landscape/synthpolicy26/report/neither-side", "Neither side"),
+    ]
+    assert part.count('aria-current="page"') == 1
+
+
+def test_every_contents_link_lands_on_a_heading_of_its_part(member: Any) -> None:
+    contents = (
+        main_of(page(member, REPORT)).split('<nav class="landscape-contents"', 1)[1].split("</nav>", 1)[0]
+    )
+    landed = []
+    for href, _ in links_in(contents):
+        if "#" in href and not href.startswith("#"):
+            path, anchor = href.split("#", 1)
+            assert f'id="{anchor}"' in page(member, path), href
+            landed.append(href)
+
+    assert len(landed) == 5
 
 
 def test_a_member_sees_the_school_views_front_page_listing_every_school_and_position(member: Any) -> None:
@@ -201,6 +248,9 @@ def test_a_report_with_no_school_view_says_so_and_links_to_none(member: Any) -> 
         "/landscape/synthpolicy26/schools/Ashgrove",
         "/landscape/synthpolicy26/positions/no-such-position",
         "/landscape/synthpolicy26/positions/invented-da%20",
+        "/landscape/synthpolicy26/report/no-such-part",
+        "/landscape/synthpolicy26/report/Negative",
+        "/landscape/synthld26/report/affirmative",
         "/landscape/synthld26/schools/ashgrove",
     ],
 )
@@ -225,19 +275,31 @@ def test_every_landscape_page_is_private_and_never_cached(member: Any, path: str
 
 
 @pytest.mark.parametrize("path", LANDSCAPE_PAGES)
-def test_no_landscape_page_offers_search_download_or_share(member: Any, path: str) -> None:
-    text = member.browser.get(path).text
+def test_no_landscape_page_body_offers_search_download_or_share(member: Any, path: str) -> None:
+    body = main_of(member.browser.get(path).text)
 
-    hrefs = re.findall(r'\shref="([^"]*)"', text)
+    hrefs = re.findall(r'\shref="([^"]*)"', body)
     assert [
         href for href in hrefs if href in ("/", "/search") or href.startswith(("/search?", "/download"))
     ] == []
-    assert re.findall(r"<form\b[^>]*>", text) == ['<form method="post" action="/auth/sign-out">']
-    for hook in ("data-tub-cart", "data-tub-download", "data-tub-copy", 'role="search"'):
-        assert hook not in text, (path, hook)
+    assert re.findall(r"<form\b[^>]*>", body) == []
+    for hook in ("data-tub-cart", "data-tub-download", "data-tub-copy", 'role="search"', "download="):
+        assert hook not in body, (path, hook)
     # "Share of teams" is a report column; a share link would be a link, or a hook for one.
-    assert [words for _, words in links_in(text) if "share" in words.lower()] == []
-    assert "data-tub-share" not in text and "navigator.share" not in text
+    assert [words for _, words in links_in(body) if "share" in words.lower()] == []
+    assert "data-tub-share" not in body and "navigator.share" not in body
+
+
+@pytest.mark.parametrize("path", LANDSCAPE_PAGES)
+def test_every_landscape_page_has_the_sites_own_header_with_its_search_link_and_cart(
+    member: Any, path: str
+) -> None:
+    header = member.browser.get(path).text.split('<main id="main">', 1)[0]
+
+    assert '<p class="site-name"><a href="/">Team evidence search</a></p>' in header
+    assert '<li><a href="/">Search</a></li>' in header
+    assert '<li><a href="/landscape">Landscape</a></li>' in header
+    assert "data-tub-cart " in header
 
 
 @pytest.mark.parametrize("path", LANDSCAPE_PAGES)
@@ -264,9 +326,13 @@ def test_every_landscape_page_loads_only_the_pilots_script_and_stylesheet_with_n
 # Page weight, with a bundle as large as hspolicy26's
 # --------------------------------------------------------------------------------------------
 
-HSPOLICY26_REPORT_HTML: Final = 115_492
-"""report.md's rendered size, measured from the newest hspolicy26 bundle on 2026-10-25 after it was
-republished in `v1-e32-t20`'s shape (66,015 bytes before, at the counts sent to the PM)."""
+HSPOLICY26_PART_HTML: Final = {"Affirmative": 45_095, "Negative": 56_893, "Neither side": 8_720}
+"""Each `#` part's rendered size, from the newest hspolicy26 bundle as republished in `v1-e32-t20`'s
+shape (2026-10-25 02:11), measured on 2026-10-26 through `render_bundle`."""
+PART_ROWS: Final = {"Affirmative": 100, "Negative": 126, "Neither side": 18}
+"""Rows per section that size each synthetic part just above its hspolicy26 figure."""
+HEADROOM: Final = 0.25
+"""The PM's review of 2026-10-26: the largest part leaves at least a quarter of the line free."""
 HSPOLICY26_LARGEST_SCHOOL_ROWS: Final = 117
 HSPOLICY26_LARGEST_POSITION_ROWS: Final = 260
 """Above the largest position's rows in hspolicy26 (Affirmative side: Advantages held 810 over 16)."""
@@ -275,14 +341,14 @@ SCHOOLS: Final = 155
 
 def large_report() -> str:
     lines = ["# Argument landscape: synthpolicy26 through 2026-10-20", "", "## About this report", ""]
-    for part in ("Affirmative", "Negative", "Neither side"):
+    for part, rows in PART_ROWS.items():
         lines += [f"# {part}", ""]
         for section in range(4):
             lines += [f"## {part} section {section}", "", f"### {part} kind {section}", ""]
             lines += ["| Position | Rounds | Teams | Share of teams |", "|---|---|---|---|"]
             lines += [
                 f"| Invented position {section}-{row} (`invented-{section}-{row}`) | {row} | {row} | 12.5% |"
-                for row in range(84)
+                for row in range(rows)
             ]
             lines.append("")
     return "\n".join(lines)
@@ -324,8 +390,11 @@ def test_every_landscape_page_of_a_bundle_as_large_as_hspolicy26s_is_under_the_p
     world.signed_in_student()
     state = world.app.state.pilot
     assets = len(state.app_script.content) + len(state.app_stylesheet.content)
-    report = world.browser.get(REPORT).text
-    weights = {
+    part_paths = {
+        part: f"/landscape/synthpolicy26/report/{part.lower().replace(' ', '-')}" for part in PART_ROWS
+    }
+    parts = {part: world.browser.get(path) for part, path in part_paths.items()}
+    others = {
         path: len(world.browser.get(path).content) + assets
         for path in (
             REPORT,
@@ -334,10 +403,14 @@ def test_every_landscape_page_of_a_bundle_as_large_as_hspolicy26s_is_under_the_p
             "/landscape/synthpolicy26/positions/invented-position-0",
         )
     }
+    part_weights = {part: len(response.content) + assets for part, response in parts.items()}
 
-    assert len(main_of(report).encode()) >= HSPOLICY26_REPORT_HTML
+    for part, response in parts.items():
+        body = main_of(response.text).split('<div class="landscape-body">', 1)[1]
+        assert len(body.encode()) >= HSPOLICY26_PART_HTML[part], part
     assert world.browser.get("/landscape/synthpolicy26/positions/invented-position-0").text.count(
         "noopener"
     ) == (HSPOLICY26_LARGEST_POSITION_ROWS)
-    assert all(weight < PAGE_BUDGET for weight in weights.values()), weights
+    assert all(weight < PAGE_BUDGET for weight in others.values()), others
+    assert max(part_weights.values()) <= (1 - HEADROOM) * PAGE_BUDGET, part_weights
     world.services.search_index.close()

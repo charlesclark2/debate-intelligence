@@ -10,7 +10,7 @@
 {% if view.contents %}<nav class="landscape-contents" aria-labelledby="contents-heading">
 <h2 id="contents-heading">Contents</h2>
 <ul>
-{% for entry in view.contents %}<li><a href="#{{ entry.anchor }}">{{ entry.text }}</a></li>
+{% for entry in view.contents %}<li><a href="{{ entry.href }}">{{ entry.text }}</a></li>
 {% endfor %}</ul>
 </nav>
 {% endif %}<div class="landscape-body">

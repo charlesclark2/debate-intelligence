@@ -49,6 +49,10 @@ CONCRETE_PATHS: Final = {
     "/account/email/remove": ["/account/email/remove"],
     "/landscape": ["/landscape"],
     "/landscape/{caselist}": ["/landscape/synthpolicy26", "/landscape/nocaselist26"],
+    "/landscape/{caselist}/report/{part}": [
+        "/landscape/synthpolicy26/report/negative",
+        "/landscape/synthpolicy26/report/no-such-part",
+    ],
     "/landscape/{caselist}/schools": ["/landscape/synthpolicy26/schools", "/landscape/synthld26/schools"],
     "/landscape/{caselist}/schools/{school}": [
         "/landscape/synthpolicy26/schools/ashgrove",

@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e32-argument-landscape/t17-kritikal-affirmatives.yaml`](../../plan_specs/v1/e32-argument-landscape/t17-kritikal-affirmatives.yaml) |
 | Epic / release | `v1-e32-argument-landscape` / `v1.2` |
 | Branch | `task/v1-e32-t17-kritikal-affirmatives` |
-| Session status | COMPLETE: built and tested after the PM's rulings of 2026-10-25. The real store's cache refill and dry run are the operator's next step, and no criterion waits on them <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE: built and tested after the PM's rulings of 2026-10-25. The operator refilled the caches, and the dry run on the real store is recorded. The coach's edit to the K families comes back before the pull request <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -42,6 +42,16 @@ affirmative is now identified rather than left among the unidentified rounds.
   * 14 targeted mutants: 12 caught at once.
   * One survivor was an equivalent check, now removed.
   * One survivor needed a test, and is now caught.
+
+**On hspolicy26 after the operator's refill** ([below](#the-real-store-after-the-refill-2026-10-25)):
+* **40 affirmative rounds by 19 teams are kritikal affirmatives:** 31 by their own marker, 9 by carry.
+* **Unidentified rounds fall from 709 to 669 of 2,192.** `PLAN_TEXT`, `TEAM_CARRY` and `PLACED_CARD`
+  are unchanged (1,172, 254 and 57).
+* **The advantage guard refused 17 rounds.**
+* **The control is 5 rounds** (`PLAN_TEXT` 3, `TEAM_CARRY` 2), so **option (b) would move 2 rounds.**
+* **5 K families** appear in the K-aff files' headings, 1 file each.
+* **No scan hit is in the new section.**
+* The dry run took 71.8 s and wrote nothing.
 
 **What to look at first:**
 * [the fixture's table](../../tests/fixtures/landscape/kritikal_affs/README.md) and its two goldens;
@@ -217,6 +227,82 @@ No Hypothesis is used, so there is no example database to isolate (agreement 8).
     `tests/config`: 2,493 passed in 68.5 s.
 * **No shared test ground changed:** no `pyproject.toml`, `uv.lock`, conftest or pytest plugin. So no
   whole-selection hand-off.
+
+## The real store after the refill (2026-10-25)
+
+hspolicy26, parser `2026.10.20-docx-6`, through 2026-10-20, taxonomy 1.3.0, with the K family list as
+committed (the coach's edit has not come back yet).
+
+**The operator's refill and dry run** ([Operator follow-ups](#operator-follow-ups) 2 and 3).
+* `tests/config` passed first: 60 passed.
+* No `DEBATE_*` variable was set and no `caselist pull` was running.
+
+| Step | Result | Runtime |
+|---|---|---|
+| `classify_landscape_positions.py classify` | 3,825 sources, 126,681 cards. Counted 63,494 (50.1%), the same as under 1.2.0. Review queue 1,340 rows, as before. Cache: 107,187 keys, 0 hits (the version bump), written | 37.6 s |
+| `assign_landscape_affs.py plan-texts` | 1,770 sources, 0 cached, 1,770 parsed, 0 refused, 0 unread. Verdicts as under 1.2.0: NAMES 950, CONFLICTING 7, UNNAMED 2, NONE 811. **K-aff markers: 28 documents hold one, 26 of them with no plan text, by 22 teams** | 221.7 s |
+| `read_landscape_texts.py` | 3,825 sources parsed, 0 unread, cache written. Every kind's found and placed counts as t11's and t16's | 412.9 s |
+| `landscape_dry_run_by_section.py`, no `--publish` | Nothing written, 7 files planned. The lines below | 71.8 s |
+
+**How affirmative rounds are identified, 1.2.0 against 1.3.0:**
+
+| Method | 1.2.0 | **1.3.0** |
+|---|---|---|
+| `PLAN_TEXT` | 1,172 | 1,172 |
+| `TEAM_CARRY` | 254 | 254 |
+| `PLACED_CARD` | 57 | 57 |
+| `KRITIKAL_AFF_MARKER` | | **31** |
+| `KRITIKAL_AFF_CARRY` | | **9** |
+| Not identified | 709 of 2,192 | **669 of 2,192** (30.5%) |
+| Of those, the K aff not carried in: the round's own file reads an advantage | | **17** |
+| Identified another way, with a K-aff marker in a file (the control) | | **5 rounds, 5 files: `PLAN_TEXT` 3, `TEAM_CARRY` 2** |
+
+* **No existing assignment moved** (ruling (a)). The three old methods have the same rounds.
+* **The K-aff group:** 40 rounds by 19 teams. The 40 rounds come off the unidentified 709 exactly.
+* **Option (b)'s size, on record:** the control's `TEAM_CARRY` share is **2 rounds**. Those are the
+  rounds a round's own marker would take from its team's carry. The 3 `PLAN_TEXT` rounds would not move
+  under (b), because a plan text naming an aff wins either way. (b) would also make those teams
+  disagree, which could cost them other carried rounds; that knock-on was not measured.
+* **The advantage guard refused 17 rounds,** against 9 carried. Most of the K-aff teams' other open
+  rounds hold a card placed under an advantage, and the guard treats each as a policy aff with an
+  unlabelled plan, the rounds ruling 4's follow-up task covers. Whether some are K affs reading an
+  advantage was not measured.
+* **The K families in the K-aff files' headings:** cap, settler colonialism, colonialism, feminism and
+  Buddhism, 1 file and 1 team each. That is 5 of the 23 marker files, so the line is short, as the
+  counts said it would be.
+* **The scan:** 9 hits, 0 not yet accepted. 1 is in report.md's plank table (v1-e32-t16's), and 8 are
+  in `top_cards.csv`. **None is in the Kritikal affirmatives section.**
+
+**The 31 rounds against the counts' 28.** I ran two more read-only passes (49.0 s and 54.2 s): the same
+landscape service as a dry run, with t11's texts off. Both had the guards checked first and a 115 s
+limit on the interpreter. All 17 files under `landscape/` and `reports/` were checksummed before and
+after each pass, and none changed. They printed counts only.
+
+| | Files | Rounds |
+|---|---|---|
+| The counts (1.2.0's unidentified rounds, the proposed list) | 25 | 28 |
+| **The build's `KRITIKAL_AFF_MARKER`** | **23** | **31** |
+| Role of the ballot only / with an advocacy label | 13 / 2, as the counts | |
+| `The 1AC is` | 6, against 5 | one of them disclosed in **6 rounds** |
+| A method label | 2, against 5 | |
+
+The difference comes from two places:
+* **Method: 3 files fewer.** The counts' sentence pattern took `The`, `Our` or `My` with `method` or
+  `methodology` and `is`, `will` or `should`. The approved list is `Our method is` only, and no file has
+  that exact wording, so the build's 2 method files are the two `Method` labels.
+* **`The 1AC is`: 1 file more, in 6 rounds.** The counts read that sentence only outside headings. The
+  build reads it in any unit, as t11 reads `The role of the ballot is`. The extra file is disclosed in
+  6 rounds; which unit holds its sentence was not checked.
+
+28 − 3 + 6 = 31.
+
+**What Decision 2's per-round rule leaves out: nothing today.** 26 files hold a marker and no plan text.
+23 are in `KRITIKAL_AFF_MARKER` rounds. The other 3 are disclosed in:
+* 1 `PLAN_TEXT` round, whose other file names an aff;
+* 2 `TEAM_CARRY` rounds;
+* 2 negative rounds.
+
+No unidentified round holds a marker file beside a file with a plan text of its own.
 
 ## The counts (hspolicy26, through 2026-10-20, taxonomy 1.2.0)
 
@@ -516,8 +602,8 @@ after it reads everything again. That is an operator block:
      task if at all.
 2. **"A file with no plan text" is read per round.** Every file of the round must have t09's `NONE`
    verdict and one of them a marker, as t09's carry guard reads a round. A round whose other file holds
-   an unnamed plan text is a policy round. The counts' 25 marker files were all `NONE`. The real-store
-   count after the refill will say how many rounds this rule leaves out.
+   an unnamed plan text is a policy round. **Measured after the refill: it leaves out no unidentified
+   round** ([the real store](#the-real-store-after-the-refill-2026-10-25)).
 3. **A round t02 placed under an aff** is left to the report's `PLACED_CARD`, whatever its markers, as
    t09 leaves it.
 4. **The advantage guard reads t15's placement:** a card t02 placed under an advantage, READS, at or
@@ -546,6 +632,10 @@ after it reads everything again. That is an operator block:
 
 The PM's ruling of 2026-10-25 on the build's questions set this order. The coach's list does not hold
 up the refill or the dry run.
+
+**Done on 2026-10-25:** steps 2 and 3, the refill (37.6 + 221.7 + 412.9 s) and the dry run (71.8 s),
+with `tests/config` first (60 passed). The output is
+[above](#the-real-store-after-the-refill-2026-10-25). Step 1, the coach's edit, is still to come.
 
 1. **The coach's K families.** The file is
    `~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t17-kritikal-affirmatives/config/landscape/kritikal_affs/policy-2026-27-nhi.yaml`.
@@ -641,6 +731,9 @@ if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset i
 * **The real-store numbers** come after the refill: K-aff rounds by marker and by carry, the guard's
   refusals, the families, the control by method, and the rounds still unidentified. They are measured
   in the dry run ([Operator follow-ups](#operator-follow-ups) 3).
+* **The method sentence.** The approved `Our method is` matches no file of hspolicy26. The counts'
+  wider pattern (`The`, `Our` or `My` with `method` or `methodology`, then `is`, `will` or `should`)
+  found 3 more K-aff files that way. Widening the sentence is the PM's to rule, with its own count.
 * **Option (b),** a round's own marker beating its team's carry, is the PM's to decide from the
   control's `TEAM_CARRY` count, as a later task if at all.
 * **The CLI's JSON** does not carry the group's counts yet. The run's report carries them

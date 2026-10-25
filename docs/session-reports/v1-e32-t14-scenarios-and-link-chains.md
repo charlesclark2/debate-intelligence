@@ -762,9 +762,43 @@ sides kept; 819 landscape tests pass.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-25
 
 **Notes:**
+
+Built to the five rulings and the two after the build, and checked hard.
+1. **ac1 to ac3 pass.**
+   * The goldens were committed by hand before any code (`78cc4bc`) and matched on the first run.
+   * The rule's tests failed against two opposite skeletons, with no case passing both. That is
+     a stronger red than one skeleton gives, and the right way to show a rule isn't vacuous.
+   * The service's tests failed against a fill-nothing plugin. The one vacuous pass was found and
+     tightened.
+2. **Mutants:** 20 of 20 caught, including the nine on the PM's cases. The card-above mutant was
+   first caught by the golden alone and now has a test of its own.
+3. **The re-count with the build matches the ruled counts:** 44 and 43 rows, labelled internal links
+   on 7 and 0, the card above on 11 and 30, the same names and the same 4 withheld, and no scan hit.
+   * Each of the three figures that moved is traced to a ruled rule: scenario rows 13 and 0, after
+     the two-team threshold and withholding; 8 advantage link positions, from the `link turn`
+     exclusion in tags; and ac3's 251 and 676.
+4. **Accepted as made:**
+   * Deviation 1, kept by the ruling of 2026-10-25;
+   * Deviation 2, the re-count through the report service with no pool, since t09's and t11's
+     inputs touch neither section;
+   * decisions 1 to 10. The catch in decision 4 is a good one: no-position overrides still label
+     roles, found because solvency showed in 22 documents and the rule counted 7;
+   * `placing_index` made public, and `tag_opening` factored out of t10 with its 80 cases unchanged;
+   * the scenario-name table in this report: heading words used by two or more teams, each line
+     screened for caselist words, with no card text, school or team code. It is the coach's seed
+     for option (b).
+5. **The affected set** stopped at 77% with no failure, so it is left to the PR's `ci` under
+   agreement 10. Everything that changed passed within the limit (3,949). No shared test ground
+   changed.
+6. **Follow-ups the PM files:** the coach's scenario vocabulary (option b, a taxonomy bump under
+   t08's lock), after Nov 1. Unlabelled structure stays with v1-e32-t07.
+
+**After the merge:** v1-e32-t20 (the report's affirmative and negative halves) can start. The PM
+coordinates a republish of hspolicy26 so the coach has the scenarios and chains for Nov 1. No
+re-review is needed.

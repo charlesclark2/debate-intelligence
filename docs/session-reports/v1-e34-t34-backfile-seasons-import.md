@@ -6,53 +6,32 @@
 | Spec | [`plan_specs/v1/e34-caselist-sync/t34-backfile-seasons-import.yaml`](../../plan_specs/v1/e34-caselist-sync/t34-backfile-seasons-import.yaml) |
 | Epic / release | `v1-e34-caselist-sync` / `v1.1` |
 | Branch | `task/v1-e34-t34-backfile-seasons-import` |
-| Session status | IN PROGRESS <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | PARTIAL <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
-**Stopped after the counts, waiting for the PM's ruling** (the PM's instruction of 2026-10-26). The
-read-only `caselist backfile-survey` command is built and was run twice by the operator. Through the
-documented API, **four complete archives exist in the backfile range**: LD and Policy of 2024-25 and
-2025-26, 14.86 GB in all. PF has no complete archive in any season, and 2021-22 to 2023-24 answer
-HTTP 500 for every caselist's downloads listing. Two findings the PM should read first. **This Mac
-has 12 GiB free**, against an estimated 70 GB that the four imports would keep locally. And **PF
-backfiles would need weeklies**, which Permitted use 8's wording ("from OpenCaselist's complete
-archives") does not cover. The build has not started.
+**Built and tested; stopped for the operator's two runs and the PM's amendment of ac3.** The counts
+(ac1) went to the PM, who ruled on 2026-10-25. This session then built the backfile marker
+(`caselist.backfile_caselists`, holding the four approved complete archives in the dev and prod
+profiles) and `debate-research caselist backfile-import` (a dry run, then `--execute`). The import
+keeps its ledger in the bucket and takes the weekly run's lock per step. It refuses inside Tuesday
+06:00 to Thursday 00:00 Chicago, on a spent budget of one a day, and on too little free space.
+`caselist pull` and `landscape report` refuse a backfile. Removal, the suppression list and a path
+hold reach it, each by test. The tests ran red first against a refuse-nothing skeleton, and all 7
+mutants of the rules were caught.
 
-## Plan nodes
+**Read Deviation 1 first.** A backfile is imported as its own dated snapshot,
+`manifests/<slug>/<date>.jsonl`, not into `v1-e34-t04`'s `full/<date>` namespace as the ruling said.
+The parse pipeline reads only the dated series, so a `full/` backfile parses to nothing. The Goal
+stays **InProgress**. ac3 is the Mac's dry run, a live call, handed over below, and the PM is to amend
+its wording. The node's own criterion runs longer than two minutes on this Mac, so it is handed over
+too.
 
-| Node | Status | Notes |
-|---|---|---|
-| `backfile-import` | In progress | Counts done (ac1). Marker, import command and tests wait for the PM's ruling |
+## The counts step (ac1)
 
-## Acceptance criteria
-
-| Criterion | Status | Evidence (command → result) |
-|---|---|---|
-| ac1: counts before any import, sent to the PM with a proposed order | PASS, pending the PM's ruling | `DEBATE_ENV=dev uv run debate-research --json caselist backfile-survey` (operator, 2026-10-25) → exit 0: 65 caselists listed, 15 surveyed, 17 listing requests, 4 size requests. The re-run with `--first-season 2021-22 --last-season 2023-24 --no-sizes` → exit 0: 9 × `PROVIDER_UNAVAILABLE (HTTP 500)`. Counts in [`docs/data/caselist-backfile-seasons.md`](../data/caselist-backfile-seasons.md). Estimates and proposals under Decisions; sent as a relay prompt |
-| ac2: with stand-in API and bucket, a backfile imports, parses and publishes; the weekly run and the landscape never include it; removal and a hold reach it; red first | NOT RUN | Not started: waits for the PM's ruling on the marker |
-| ac3: the operator imports the first backfile caselist in dev and records its counts (operator) | NOT RUN | After the build, the seed (2026-10-29 or 30) and disk space |
-| Node: `uv run pytest packages/debate_core/tests/application -k caselist` | NOT RUN | At the end of the build |
-
-Tests so far: `test_caselist_backfile_survey.py` (core, 12 tests; CLI, 7 tests) and four `archive_size`
-tests in `test_client.py` → all pass. A mutant that took the `HEAD` out of the download window
-(`download=False`) failed `test_archive_sizes_are_paced_in_the_download_window_with_downloads`.
-
-## Files changed
-
-* `debate_core.integrations.opencaselist`: `declared_size`, a `HEAD` paced as a download, and
-  `OpenCaselistClient.archive_size`.
-* `debate_core.application.caselist.backfile_survey`: the survey.
-* `debate_cli`: `caselist backfile-survey`, its container seam, and its row in the bucket-mode
-  command classification (`NEVER_WRITE_A_BUCKET`).
-* `docs/data/caselist-backfile-seasons.md`: the survey's counts.
-
-## Deviations from the spec
-
-None so far. Two will need the PM: PF has no complete archive, and seasons 2021-22 to 2023-24 serve
-no archive at all.
-
-## Decisions and assumptions
+The survey's tests: `test_caselist_backfile_survey.py` (core, 12; CLI, 7) and four `archive_size`
+tests in `test_client.py`. A mutant that took the `HEAD` out of the download window (`download=False`)
+failed `test_archive_sizes_are_paced_in_the_download_window_with_downloads`.
 
 * **The size comes from a `HEAD`**, because the downloads listing carries no sizes. Each `HEAD` is
   paced as a download (8 a minute) and none is counted against the day's five bulk downloads, since
@@ -80,13 +59,205 @@ no archive at all.
   161.5 s): about 40 minutes for an LD season. So 1.5 to 2.5 hours per caselist end to end. The
   bucket holds the same again: about 70 GB in dev, and in prod at the promotion.
 
+## PM rulings applied (2026-10-25)
+
+| Ruling | Where it is |
+|---|---|
+| Q1: order `hspolicy25`, `hsld25`, `hspolicy24`, `hsld24`; one complete archive per rolling 24 h; no import from Tuesday 06:00 to Thursday 00:00 Chicago, at the start and at each locked step; the weekly ledger never touched; the backfile ledger in the bucket; earliest Thursday 2026-11-05 | `backfile_import.py` (`in_no_import_window`, `BACKFILE_LEDGER_KEY`, `_locked`); `docs/runbooks/caselist-backfiles.md` |
+| Q2: the `caselist.backfile_caselists` setting; overlap with `sync_caselists` refused; pull and landscape refuse; the import refuses what is not listed or is before 2021-22; the annual purge reads the same setting | `settings.py`; `caselist/backfiles.py`; `CaselistSyncService.plan`; `LandscapeRunService.run`; `test_the_annual_purge_keeps_what_the_setting_names` (against the accessor: `v1-e30-t28` has no code yet) |
+| Q3: the four complete archives only; PF and the three HTTP-500 seasons marked not imported, with reasons | `docs/data/caselist-backfile-seasons.md`, "What is imported, and what is not" |
+| Q4: runs unchanged in the caselist image (settings only; the token backend the environment's; the bucket's ledger and lock); a free-space precheck with both numbers; ac3 becomes the Mac's dry run; reuse t04's downloader | The container builds everything from settings. The downloader is `ArchivesResource.download` with the complete archive's ceiling. `space_needed`. Deviation 1 for the namespace |
+| Q5: restore locked; download, import and parse not locked; publish and bundle locked; parsed store locked; the weekly run's lock; the rebuild in the runbook; bundle growth recorded; no index | `BackfileImportService.run`; `caselist-removal.md` steps 5 and P1b; "Bundle growth" below |
+
+## Plan nodes
+
+| Node | Status | Notes |
+|---|---|---|
+| `backfile-import` | Built; its criterion NOT RUN in the session | Counts (ac1), then the build (ac2). The node's command takes over two minutes here (Operator follow-ups, 1) |
+
+## Acceptance criteria
+
+| Criterion | Status | Evidence (command → result) |
+|---|---|---|
+| ac1: counts before any import, sent to the PM with a proposed order | PASS | `DEBATE_ENV=dev uv run debate-research --json caselist backfile-survey` (operator, 2026-10-25) → exit 0: 65 caselists listed, 15 surveyed, 17 listing requests, 4 size requests. The re-run with `--first-season 2021-22 --last-season 2023-24 --no-sizes` → exit 0: 9 × `PROVIDER_UNAVAILABLE (HTTP 500)`. Counts in [`docs/data/caselist-backfile-seasons.md`](../data/caselist-backfile-seasons.md); estimates under "The counts step". Sent as a relay prompt; the PM ruled the same day |
+| ac2: with stand-in API and bucket, a backfile caselist imports, parses and publishes; the weekly run's caselists and the landscape never include it; a removal and a hold reach its sources; tests shown failing first | PASS | `packages/debate_cli/tests/bucket_mode/test_backfile_import.py` (20 tests, moto + respx, real composition root) and `packages/debate_core/tests/application/test_caselist_backfile_rules.py` (23). Red first, details below. Green: `.venv/bin/python -m pytest packages/debate_core/tests/application/test_caselist_backfile_rules.py packages/debate_cli/tests/bucket_mode/test_backfile_import.py -q -n 4` → `43 passed` |
+| ac3: the operator imports the first backfile caselist in dev and records its counts (to be amended by the PM: the Mac's dry run only) | NOT RUN | The dry run is a live call, so it is the operator's (Operator follow-ups, 2). The real imports move to the PM's E40 task |
+| Node: `uv run pytest packages/debate_core/tests/application -k caselist` | NOT RUN | Selects 2,016 tests and did not finish inside a 115-second alarm on this Mac (load average 6.5 from other sessions). Handed over (Operator follow-ups, 1). Its new and changed files did run: see "What was run" |
+
+### Red first
+
+Committed red as `646b116`: tests plus a refuse-nothing skeleton. On the skeleton,
+`.venv/bin/python -m pytest packages/debate_core/tests/application/test_caselist_backfile_rules.py packages/debate_core/tests/application/test_caselist_sync_run_lock.py packages/debate_cli/tests/bucket_mode/test_backfile_import.py -q -n 4 -p no:randomly`
+→ `30 failed, 30 passed`. Every new behavioural test failed: the window (7 cases), its end, the three
+space cases, the pull and landscape refusals, and 17 of the 18 CLI tests then written. The 18th, a
+profile naming a backfile among the weekly caselists, rests on the setting, which was already
+written. The setting and the
+lock re-take were already written, so their five tests were run against the start commit's
+`settings.py` and `run_lock.py` instead → `5 failed`. The failures were the overlap, the
+pre-2021-22 slug, the slug pattern and the accessor (`ValidationError`, extra field), and "the
+second lease renews in the background".
+
+### Mutants
+
+Seven, on `backfile_import.py`, each against the two test files above, each with a fresh
+`HYPOTHESIS_STORAGE_DIRECTORY` (no property tests here; agreement 8 followed anyway). All caught:
+
+| Mutant | Caught by |
+|---|---|
+| The window not asked again in a locked step | `test_a_window_that_opens_during_the_import_stops_the_next_locked_step_and_the_run_resumes_after_it` |
+| The bundle's change not compared | `test_a_bundle_a_removal_rewrote_during_the_import_is_never_overwritten` |
+| The download's start not recorded | `…imports_parses_and_publishes_as_its_dated_snapshot`, `…one_complete_archive_a_day…` |
+| The lock held through the download | `test_the_lock_is_the_weekly_runs_taken_for_each_step_and_free_during_the_download` |
+| The window opening at 05:00 | two window cases |
+| The parsed store counted three times | five space tests |
+| The budget never spent in the plan | `test_one_complete_archive_a_day_from_the_buckets_ledger_whatever_machine_asks` |
+
+### What was run
+
+The affected set (`uv run scripts/affected_tests.py`) is 341 of 494 test files, about four minutes of
+the whole selection. Under agreement 10 it was not run and is left to the pull request's `ci`. Run
+instead, in the session:
+
+* `tests/architecture tests/specs packages/debate_cli/tests/test_app.py packages/debate_cli/tests/test_help_rendering.py packages/debate_core/tests/integrations/opencaselist tests/smoke/test_caselist_backfile.py` → `498 passed in 30.24s`
+* `packages/debate_cli/tests/bucket_mode` (every bucket-mode test, the lock classification included) → `96 passed in 80.99s` (before the last two tests were added; those two then passed)
+* `test_landscape_run.py test_landscape_command.py test_caselist_sync.py test_caselist_sync_full_archive.py test_caselist_sync_run_lock.py` → `187 passed in 16.83s`
+* `test_settings_environments.py test_settings.py test_config_command.py` → `116 passed in 1.78s`
+* The survey's tests and the new ones together → `83 passed in 26.37s`
+* `ruff format --check packages tests/smoke` → 869 files already formatted; `ruff check packages tests/smoke` → all checks passed; `pyright packages/debate_core packages/debate_cli tests/smoke/test_caselist_backfile.py` → 0 errors; `lint-imports` → 16 kept, 0 broken; `scripts/check_thin_handlers.py` → 57 handlers within 25 statements; `scripts/validate_specs.py` → OK; `check_command_blocks.py`, `check_links.py`, `docs_index.py --check-descriptions` → OK
+
+## Files changed
+
+* `debate_core.application.caselist.backfile_import` (new): the rules, the plan and the four-step import.
+* `debate_core.application.caselist.backfiles` (new): the pull and landscape refusals.
+* `debate_core.application.caselist.backfile_survey` (counts step): the survey.
+* `debate_core.application.settings`: `caselist.backfile_caselists`, its validators, `is_backfile`, `FIRST_BACKFILE_SEASON_START`.
+* `debate_core.application.caselist_sync`: the sync service refuses a backfile in `plan`; `archive_entries`, a public name for the reader the pull uses.
+* `debate_core.application.landscape_run`: refuses a backfile.
+* `debate_core.application.caselist.run_lock`: a lease taken again after a release renews again.
+* `debate_core.integrations.opencaselist`: the `HEAD` size (counts step).
+* `debate_cli`: `caselist backfile-import` and `backfile-survey`, their container builders, their rows in the bucket-mode classification.
+* `config/profiles/dev.toml`, `prod.toml`: the four backfiles.
+* Tests: `test_caselist_backfile_rules.py`, `test_backfile_import.py`, the re-take test in `test_caselist_sync_run_lock.py`, `tests/smoke/test_caselist_backfile.py`, and the counts step's.
+* Docs: `docs/runbooks/caselist-backfiles.md` (new), `docs/runbooks/caselist-removal.md` (steps 5 and P1b), `docs/data/caselist-backfile-seasons.md`.
+
+## Deviations from the spec
+
+1. **The backfile is its own dated snapshot, not `full/<date>`** (the ruling Q4 said "t04's
+   downloader and `full/<date>` namespace", as I had proposed). Building it showed the proposal was
+   wrong. The parse pipeline reads only the dated series (`enumerate_sources`, which never passes
+   `full_archives=True`: a current caselist's complete archive re-lists what its weeklies hold), and
+   it dates every card by its snapshot's name, `date.fromisoformat(snapshot)`. A `full/` backfile
+   parsed to nothing in the first green run (`parsed 0, cards 0`). Making the pipeline read `full/`
+   for backfiles would change `enumerate_sources` and its eight callers, the occurrence table's
+   provenance included, which the current season shares. So the import keeps t04's downloader and
+   the complete archive's own size ceilings. It files the archive with the weekly importer as the
+   backfile's one dated snapshot, `manifests/<slug>/<date>.jsonl`, where parse, provenance, removal,
+   holds, status and publish all read it unchanged. A backfile has no weekly series, so nothing
+   collides. A later complete archive of the same backfile imports as its next snapshot against the
+   previous one. **The PM may prefer the pipeline change instead.** Say so and it is a separate,
+   larger task.
+2. **Outside `constraints.packages`:** `tests/smoke/test_caselist_backfile.py` (working agreement 5:
+   a new user-facing command gets a smoke check), and `.../tests/application/test_caselist_sync_run_lock.py`
+   for the lock re-take.
+3. **The lock module changed.** `BucketRunLock.start_renewing` used to return at once when it had
+   ever started a thread, so a lease taken again after a release never renewed, while the bucket
+   client's write fence asks that same lock object. A command that locks per step needs it to. One
+   test (`test_a_lease_taken_again_after_a_release_renews_again`) was red on the start commit.
+4. **The node's own criterion was not run** in the session (above). Handed over.
+
+## Decisions and assumptions
+
+* **A backfile import is bucket-mode only** (`NOT_IN_BUCKET_MODE`), because its ledger and its lock
+  are the bucket's. Prod is in local mode, so an `--execute` there is refused anyway. `--confirm-prod`
+  is asked as well, as every other prod write asks.
+* **The suppression list is the weekly pull's own** (`LocalFallbackSuppressionList`): both copies
+  read as one, and a held upload recorded in this machine's copy, which the everyday credential may
+  write. I first read both copies strictly. A hold during the unlocked import then tried to write
+  the bucket's held-digest record and was refused (`RUN_LOCK_NOT_HELD`). The pull's rule is also
+  what "exactly as they reach the current season" asks.
+* **A dry run's exit code is 1 when the import would be refused**, naming every refusal, so that the
+  two-block hand-off stops on it. It reads the bucket (the ledger, the seed, the manifest) and writes
+  nothing.
+* **The free-space estimate** is the archive in the inbox, its blobs (the archive's size again; a
+  complete archive's members came to 0.96 of it), and the parsed store, 4 times (measured 3.96 for LD
+  and 3.88 for Policy), plus 25%, rounded up. For `hspolicy25` that is 29,687,044,928 bytes. An archive
+  already imported, or already in the inbox, needs no room for the inbox's copy.
+* **Running the import again is the post-removal rebuild**, with no download and no budget. It
+  restores the backfile's parsed store, rebuilds the aggregates a whole-file removal deleted, and
+  publishes them. Tested: `test_running_it_again_rebuilds_the_aggregates_after_a_removal_with_no_second_download`.
+  A backfile's parsed store is never on the Mac, so `caselist parse --publish` there cannot rebuild it.
+* **The search index is untouched.** The weekly stage indexes its own caselists and a backfile
+  import has no index stage. `tub index build --caselist <backfile>` by hand is not refused: that is
+  `v1-e39-t18`'s decision.
+* **No run record.** A backfile import is not a weekly run. It writes nothing to `reports/sync-runs/`
+  (tested) and sends no notification.
+* **The API gate first.** The container builds the OpenCaselist client before any bucket adapter, so
+  an installation without `caselist.api_enabled` refuses a backfile command with
+  `CASELIST_API_DISABLED`, as the smoke check pins.
+
+### Bundle growth
+
+Each imported backfile adds its manifest to the run-state bundle that every cloud weekly run restores
+and saves: an estimated 15 to 17 MB uncompressed for an LD season (about 32,000 rows at the dev
+manifests' measured 480 bytes per row), 4 to 7 MB for Policy, and a few MB compressed. Estimates, not
+measurements. The first import records the real figure. The weekly run restores only its own
+caselists' parsed stores, so a backfile's parsed store (10 to 17 GB, estimated) never enters its
+scratch storage.
+
 ## Operator follow-ups
 
-The two survey runs above, done 2026-10-25.
+**1. The node's acceptance criterion** (expected runtime 3 to 4 minutes on this Mac). Where: your
+Mac, in this task's worktree.
+
+```bash
+cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e34-t34-backfile-seasons-import
+uv run pytest packages/debate_core/tests/application -k caselist
+```
+
+Success looks like `2016 passed` (or `passed` with no `failed` and no `error`) on the last line;
+paste the last 5 lines back.
+
+**2. ac3 as the PM ruled it: the dry run on the Mac** (expected runtime under a minute, after the
+login). Where: the same worktree. It needs the dev evidence SSO session to read the bucket's ledger.
+It makes one downloads listing and one `HEAD`, and downloads, writes and locks nothing. The block
+stops if a `DEBATE_*` variable is set or a `caselist pull` is running, and sets `DEBATE_ENV=dev` for
+the one command.
+
+```bash
+cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e34-t34-backfile-seasons-import
+aws sso login --profile debate-dev-evidence
+```
+
+```bash
+cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e34-t34-backfile-seasons-import
+if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ variables are set:"; env | grep '^DEBATE_' | cut -d= -f1; elif pgrep -fl 'debate-research( --json)? caselist pull'; then echo "STOP: a caselist pull is running (above)"; else DEBATE_ENV=dev uv run debate-research --json caselist backfile-import --caselist hspolicy25 > /private/tmp/claude-501/-Users-charlesclark-Documents-debate-debate-intelligence-tool-debate-intelligence-worktrees-v1-e34-t34-backfile-seasons-import/e6cc4772-8e35-4b16-8a97-d019baa128ba/scratchpad/survey/backfile-dry-run.json; echo "exit $?"; fi
+```
+
+Success looks like `exit 1`, the refusal the PM expects today. The file then holds
+`NOT_ENOUGH_FREE_SPACE`, with this Mac's free bytes against 29,687,044,928 needed. Before the
+cutover's seed it also holds `RUN_STATE_NOT_SEEDED`. The plan in it shows `archive_date` 2026-06-30,
+`archive_bytes` 3,958,272,657, `backfile_downloads_left` 1 and `inside_no_import_window` false. Paste
+back the `exit` line. The session records the counts in `docs/data/caselist-backfile-seasons.md`. Run
+on a Tuesday after 06:00 or a Wednesday, it shows `INSIDE_NO_IMPORT_WINDOW` as well. The tests show
+the window and the budget refusals on every run.
 
 ## Follow-up work
 
-None yet.
+* **The E40 one-off import task** (the PM is filing it): the caselist image's task definition with
+  larger scratch storage, running `caselist backfile-import --caselist <slug>` (dry run, then
+  `--execute`) with the weekly run's environment. The free-space check needs about 30 GB for
+  `hspolicy25` and 33 GB for `hsld25`. The same task is where a backfile's post-removal rebuild runs.
+* **A held upload's record in a cloud task.** Like the weekly cloud run's importers, the import
+  records a held upload in its working copy's suppression files. In a cloud task those vanish when
+  the task stops, and the removal runbook's "run the removal again" finds held uploads through the
+  inbox, which is gone too. This is shared with the weekly cloud run (ADR-0020), so it is E40's to
+  look at, not this task's.
+* **No alert on a failed backfile import.** It is not a weekly run, so nothing announces a failure.
+  The E40 task may want one.
+* **Whether the parse pipeline should read `full/` manifests for backfiles** (Deviation 1), if the
+  PM prefers that to the dated snapshot.
+* **`v1-e30-t28`'s purge** should call `CaselistSettings.is_backfile` when it gets code. The test here
+  pins the accessor.
 
 ## PM review
 

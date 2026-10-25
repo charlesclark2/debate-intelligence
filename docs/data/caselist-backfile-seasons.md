@@ -48,10 +48,10 @@ The PM's ruling of 2026-10-25 (Q3): the four complete archives only, under polic
 
 | Caselist | Season | Imported | Why |
 |---|---|---|---|
-| `hspolicy25` | 2025-26 | Yes, first | Complete archive of 2026-06-30 |
-| `hsld25` | 2025-26 | Yes, second | Complete archive of 2026-06-30 |
-| `hspolicy24` | 2024-25 | Yes, third | Complete archive of 2025-05-06 |
-| `hsld24` | 2024-25 | Yes, fourth | Complete archive of 2025-07-01 |
+| `hspolicy25` | 2025-26 | To import, first | Complete archive of 2026-06-30 |
+| `hsld25` | 2025-26 | To import, second | Complete archive of 2026-06-30 |
+| `hspolicy24` | 2024-25 | To import, third | Complete archive of 2025-05-06 |
+| `hsld24` | 2024-25 | To import, fourth | Complete archive of 2025-07-01 |
 | `hspf25`, `hspf24` | 2025-26, 2024-25 | **Not imported** | Weeklies only (36 and 41), no complete archive. Policy 1.17 imports backfiles from complete archives |
 | `hsld23`, `hspf23`, `hspolicy23` | 2023-24 | **Not imported** | The downloads listing answers HTTP 500: the API serves no archive. Per-round files are not fetched |
 | `hsld22`, `hspf22`, `hspolicy22` | 2022-23 | **Not imported** | The same: HTTP 500, no archive |

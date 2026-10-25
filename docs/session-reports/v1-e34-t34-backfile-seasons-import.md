@@ -6,11 +6,11 @@
 | Spec | [`plan_specs/v1/e34-caselist-sync/t34-backfile-seasons-import.yaml`](../../plan_specs/v1/e34-caselist-sync/t34-backfile-seasons-import.yaml) |
 | Epic / release | `v1-e34-caselist-sync` / `v1.1` |
 | Branch | `task/v1-e34-t34-backfile-seasons-import` |
-| Session status | PARTIAL <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
-**Built and tested; the operator's two runs are done; waiting for the PM's review and amendment of ac3.** The counts
+**Complete.** Accepted by the PM on 2026-10-25. ac3 is as amended on dev, and every criterion passes. The counts
 (ac1) went to the PM, who ruled on 2026-10-25. This session then built the backfile marker
 (`caselist.backfile_caselists`, holding the four approved complete archives in the dev and prod
 profiles) and `debate-research caselist backfile-import` (a dry run, then `--execute`). The import
@@ -23,9 +23,8 @@ mutants of the rules were caught.
 **Read Deviation 1 first.** A backfile is imported as its own dated snapshot,
 `manifests/<slug>/<date>.jsonl`, not into `v1-e34-t04`'s `full/<date>` namespace as the ruling said.
 The parse pipeline reads only the dated series, so a `full/` backfile parses to nothing. The Goal
-stays **InProgress** until the PM amends ac3. As written it asks for an import in dev, which moved to the
-E40 task. The dry run the ruling put in its place ran on the Mac and refused as expected. The node's
-criterion passed in the operator's run.
+is **Succeeded**. ac3, as the PM amended it on dev, is the Mac's dry run, which refused as expected.
+The imports themselves are `v1-e40-t09`'s. The node's criterion passed in the operator's run.
 
 ## The counts step (ac1)
 
@@ -81,7 +80,7 @@ failed `test_archive_sizes_are_paced_in_the_download_window_with_downloads`.
 |---|---|---|
 | ac1: counts before any import, sent to the PM with a proposed order | PASS | `DEBATE_ENV=dev uv run debate-research --json caselist backfile-survey` (operator, 2026-10-25) → exit 0: 65 caselists listed, 15 surveyed, 17 listing requests, 4 size requests. The re-run with `--first-season 2021-22 --last-season 2023-24 --no-sizes` → exit 0: 9 × `PROVIDER_UNAVAILABLE (HTTP 500)`. Counts in [`docs/data/caselist-backfile-seasons.md`](../data/caselist-backfile-seasons.md); estimates under "The counts step". Sent as a relay prompt; the PM ruled the same day |
 | ac2: with stand-in API and bucket, a backfile caselist imports, parses and publishes; the weekly run's caselists and the landscape never include it; a removal and a hold reach its sources; tests shown failing first | PASS | `packages/debate_cli/tests/bucket_mode/test_backfile_import.py` (20 tests, moto + respx, real composition root) and `packages/debate_core/tests/application/test_caselist_backfile_rules.py` (23). Red first, details below. Green: `.venv/bin/python -m pytest packages/debate_core/tests/application/test_caselist_backfile_rules.py packages/debate_cli/tests/bucket_mode/test_backfile_import.py -q -n 4` → `43 passed` |
-| ac3: the operator imports the first backfile caselist in dev and records its counts (to be amended by the PM: the Mac's dry run only) | NOT RUN as written; the ruled dry run done | As written (an import in dev), not run: the imports move to the PM's E40 task. The dry run the PM ruled ac3 becomes: `DEBATE_ENV=dev uv run debate-research --json caselist backfile-import --caselist hspolicy25` (operator, 2026-10-25) → exit 1, `RUN_STATE_NOT_SEEDED` and `NOT_ENOUGH_FREE_SPACE` (11,044,614,144 bytes free, 29,687,044,928 needed); archive 2026-06-30, 3,958,272,657 bytes; 1 download left; outside the window. Recorded in `docs/data/caselist-backfile-seasons.md`. The Goal stays InProgress until the PM amends ac3 |
+| ac3 (as amended by the PM, 2026-10-25): the operator's dry run on the Mac, listings and a `HEAD`, no download, showing the window, budget and free-space refusals; the imports are `v1-e40-t09`'s | PASS | `DEBATE_ENV=dev uv run debate-research --json caselist backfile-import --caselist hspolicy25` (operator, 2026-10-25) → exit 1, `BACKFILE_IMPORT_REFUSED`: `NOT_ENOUGH_FREE_SPACE` (11,044,614,144 bytes free, 29,687,044,928 needed) and `RUN_STATE_NOT_SEEDED`. One listing and one `HEAD`, nothing downloaded: archive 2026-06-30, 3,958,272,657 bytes. The plan shows the budget (1 download left) and the window (outside); the window and budget refusals are shown by the tests on every run (`test_inside_the_no_import_window_…`, `test_one_complete_archive_a_day_…`). Recorded in `docs/data/caselist-backfile-seasons.md` |
 | Node: `uv run pytest packages/debate_core/tests/application -k caselist` | PASS | Run by the operator at `a1756fc`, 2026-10-25: `2016 passed in 165.47s (0:02:45)`. Over two minutes on this Mac, so handed over rather than run in the session |
 
 ### Red first
@@ -244,6 +243,15 @@ cutover's seed it also holds `RUN_STATE_NOT_SEEDED`. The plan in it shows `archi
 back the `exit` line. The session records the counts in `docs/data/caselist-backfile-seasons.md`. Run
 on a Tuesday after 06:00 or a Wednesday, it shows `INSIDE_NO_IMPORT_WINDOW` as well. The tests show
 the window and the budget refusals on every run.
+
+### After the review
+
+The PM's instruction was to merge `origin/dev` into the branch, so it was merged (`e76323a`, dev at
+`f431fc5`), not rebased with `scripts/task sync`. The commit ids above are this branch's own and stay
+valid. The merge had no conflicts. The spec came in with dev's amended ac3 and kept this branch's
+status. On the merged tree:
+`packages/debate_cli/tests/bucket_mode/test_bucket_mode_lock.py packages/debate_cli/tests/bucket_mode/test_backfile_import.py packages/debate_core/tests/application/test_caselist_backfile_rules.py packages/debate_core/tests/application/test_caselist_backfile_survey.py packages/debate_cli/tests/test_caselist_backfile_survey.py tests/smoke/test_caselist_backfile.py tests/specs packages/debate_cli/tests/test_app.py`
+→ `206 passed in 39.11s`.
 
 ## Follow-up work
 

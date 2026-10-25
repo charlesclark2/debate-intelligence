@@ -88,6 +88,15 @@ tub = [
     "cryptography>=44",
 ]
 
+# The local classifier compared against the deterministic placements (v1-e32-t21): word and
+# short-phrase weights with a linear classifier, trained on this machine from the parsed card store,
+# with no pretrained model, download or model provider. Only
+# debate_core.arguments.landscape.local_classifier imports it, and nothing a front end wires does, so
+# no `debate-cli` extra asks for it: `uv sync --all-packages --extra local-classifier`.
+local-classifier = [
+    "scikit-learn>=1.5",
+]
+
 [build-system]
 requires = ["uv_build>=0.11.7,<0.12"]
 build-backend = "uv_build"

@@ -1,0 +1,91 @@
+# TASK v1-e32-t18-school-view-by-position - The school view by position: every team that reads each DA, CP and K, with its caselist page
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t18-school-view-by-position
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "The school view by position: every team that reads each DA, CP and K, with its caselist page"
+spec:
+  # Filed by the PM, 2026-10-24, from the coach's read of the first Policy report with v1-e32-t09 to t11 (Charlie, 2026-10-24) and data-use policy version 1.14.
+  description: >-
+    Before the team's first tournament (2026-11-07), the coach wants to see where each off-case
+    position is read, to find those teams' disclosures and build the team's own files.
+    v1-e32-t04's schools.md is by school; schools.csv has one row per school, team code, side
+    and position. Add to schools.md a "By position" section after "By school": per position,
+    grouped by kind (DAs, CPs, Ks, Ts, then the affirmative side), the schools and team codes
+    reading it, with side and rounds, ranked by rounds, each with a link to the team's public
+    OpenCaselist page. Data-use policy 1.14 allows exactly that link in the school view and
+    nothing more: built from the caselist, the school and the team code alone, by
+    `debate_core.domain.search_source_links`'s rule (reuse it, do not copy it), so a school or
+    team code that is not one address word gets no link and is counted. schools.csv gains a
+    `team_page` column with the same link or empty. No tournament, round, debater or document
+    path; no card, tag or text. Circuit-wide files never carry a link. Count first on
+    hspolicy26, before building: how many of the view's schools and team codes get a link, and
+    how many do not and why; send that to the PM with the build (no ruling is needed unless the
+    share without a link is large).
+  priority: 1
+  constraints:
+    packages: [debate_core.application, debate_core.arguments, debate_core.domain, tests/fixtures/landscape, packages/debate_core/tests, docs/guides]
+    forbidden:
+      - A tournament, round, debater name or document path in the school view
+      - A link or team code in a circuit-wide file
+      - A link built from anything but the caselist, the school and the team code
+      - Network or AWS access in any test (no link is fetched)
+  context:
+    - kind: TaskRef
+      name: v1-e32-t04-trend-and-school-views
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        On the synthetic fixture, schools.md's "By position" section lists each position's
+        schools and team codes with side, rounds and the team-page link, and schools.csv's
+        team_page column matches, against hand-written golden files; a school or team code
+        that is not one address word gets no link; tests shown failing first.
+    - id: ac2
+      description: >-
+        No circuit-wide file carries a link or team code, by test; the counts of linked and
+        unlinked teams on hspolicy26 are in the report.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t18-school-view-by-position-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    Count the linkable teams, then add the by-position section and the team_page column with
+    golden files, reusing the search pilot's link rule.
+  goalRef:
+    name: v1-e32-t18-school-view-by-position
+  graph:
+    nodes:
+      - id: school-view-by-position
+        kind: Task
+        name: School view by position
+        description: >-
+          Count the linkable teams, then add the by-position section and the team_page
+          column with golden files, reusing the search pilot's link rule.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Landscape report tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_landscape_report.py]
+status:
+  phase: Pending

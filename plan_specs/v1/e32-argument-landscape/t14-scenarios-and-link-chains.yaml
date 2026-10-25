@@ -1,0 +1,107 @@
+# TASK v1-e32-t14-scenarios-and-link-chains - Each DA's and advantage's scenarios and link chain, and what each impact card runs through
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t14-scenarios-and-link-chains
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "Each DA's and advantage's scenarios and link chain, and what each impact card runs through"
+spec:
+  # Filed by the PM, 2026-10-24, from the coach's read of the first Policy report with v1-e32-t09 to t11 (Charlie, 2026-10-24).
+  description: >-
+    The coach asked two things of the impact cards v1-e32-t10 shows under each DA and advantage:
+    what the extinction runs through (the scenario, or the internal link above the impact), and,
+    as a first deterministic step toward the link-chain summary the debate tub should one day
+    carry (v3 E21's chain completeness), each position's uniqueness, link, internal link and
+    impact. Counts first (working agreement 7), read-only, over hspolicy26, per placed DA and
+    advantage (READS, on its own side): how many documents mark structure under the position's
+    heading with scenario headings (`Scenario 1`, `Sc 2`, a named sub-heading that is no alias,
+    such as `Pandemics`), with chain-role labels (`Uniqueness`/`UQ`, `Link(s)`, `Internal
+    link(s)`/`IL`, `Impact(s)`, and for advantages `Harms`, `Inherency`, `Solvency`), or with
+    neither; for t10's impact cards, how many sit under a scenario heading, how many have a card
+    above them in the same block, and what labels that card carries; and how many distinct
+    scenario headings each position shows, grouped by their normalized words, with the teams
+    reading each. Send the counts to the PM with the proposed role labels and options for naming
+    a scenario before building: (a) the normalized heading words, shown only when two or more
+    teams use them; (b) a coach-edited scenario vocabulary per position in the taxonomy (as
+    v1-e32-t09's mechanisms are), a taxonomy version bump under v1-e32-t08's released-ids lock;
+    (c) another the counts suggest. After the ruling: under each impact card, its scenario and
+    the tag of the internal-link card above it, exactly as parsed; and per DA and advantage, its
+    most-read card for each chain role, by distinct teams as top cards are ranked. A role or
+    scenario no heading or label gives is counted, never guessed. Tags are shown as top cards
+    show them; no school or team code in report.md or impact_cards.csv.
+  priority: 1
+  constraints:
+    packages: [debate_core.application, debate_core.arguments, debate_core.domain, tests/fixtures/landscape, packages/debate_core/tests, docs/guides, config/landscape, tests/config]
+    forbidden:
+      - A school, team code or debater's name in a circuit-wide file, log or commit
+      - Card text, plan or counterplan text in a committed file or fixture (synthetic values only)
+      - Network or AWS access in any test
+      - Model calls (deterministic only; model stages are v1-e32-t07's)
+  context:
+    - kind: TaskRef
+      name: v1-e32-t10-impact-cards-per-position
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Counts before any rule, per DA and advantage, of documents with scenario headings,
+        chain-role labels or neither, and of t10's impact cards under a scenario heading or
+        below another card, sent to the PM with the proposed role labels and scenario-naming
+        options.
+    - id: ac2
+      description: >-
+        After the ruling, on the synthetic fixture, report.md shows under each impact card
+        its scenario and its internal link's tag, and per DA and advantage its most-read
+        card per chain role, matching hand-written golden files; an ANSWERS card or a card
+        on the other side never fills a role; a role or scenario no heading or label gives
+        is counted, not guessed; tests shown failing first.
+    - id: ac3
+      description: >-
+        The report states, per kind, how many documents carry no scenario heading and no
+        role label.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t14-scenarios-and-link-chains-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    Count scenario headings and chain-role labels under placed DAs and advantages, send the
+    counts and options to the PM, then build the impact cards' scenarios and internal links and
+    each position's most-read card per role, with golden files.
+  goalRef:
+    name: v1-e32-t14-scenarios-and-link-chains
+  graph:
+    nodes:
+      - id: scenarios-and-chains
+        kind: Task
+        name: Scenarios and link chains
+        description: >-
+          Count scenario headings and chain-role labels under placed DAs and advantages,
+          send the counts and options to the PM, then build the impact cards' scenarios
+          and internal links and each position's most-read card per role, with golden
+          files.
+        estimatedEffort: 5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Landscape report tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_landscape_report.py]
+status:
+  phase: Pending

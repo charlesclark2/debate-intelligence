@@ -388,5 +388,122 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e32-t12-landscape-cli-seven-files
+    - id: t14
+      kind: Task
+      name: 'Each DA''s and advantage''s scenarios and link chain, and what each impact card runs through'
+      description: >-
+        Each DA's and advantage's scenarios and link chain, and what each impact card runs
+        through.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t14-scenarios-and-link-chains.yaml
+        goalRef: v1-e32-t14-scenarios-and-link-chains
+      dependsOn:
+      - t10
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t14-scenarios-and-link-chains reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t14-scenarios-and-link-chains
+    - id: t15
+      kind: Task
+      name: 'The advantages each affirmative''s teams read'
+      description: >-
+        The advantages each affirmative's teams read.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t15-advantages-per-aff.yaml
+        goalRef: v1-e32-t15-advantages-per-aff
+      dependsOn:
+      - t09
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t15-advantages-per-aff reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t15-advantages-per-aff
+    - id: t16
+      kind: Task
+      name: 'An advantage counterplan''s planks, and the advantage each one solves'
+      description: >-
+        An advantage counterplan's planks, and the advantage each one solves.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t16-advantage-cp-planks.yaml
+        goalRef: v1-e32-t16-advantage-cp-planks
+      dependsOn:
+      - t11
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t16-advantage-cp-planks reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t16-advantage-cp-planks
+    - id: t17
+      kind: Task
+      name: 'Kritikal affirmatives identified, not left among the rounds with no identified aff'
+      description: >-
+        Kritikal affirmatives identified, not left among the rounds with no identified aff.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t17-kritikal-affirmatives.yaml
+        goalRef: v1-e32-t17-kritikal-affirmatives
+      dependsOn:
+      - t09
+      - t11
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t17-kritikal-affirmatives reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t17-kritikal-affirmatives
+    - id: t18
+      kind: Task
+      name: 'The school view by position: every team that reads each DA, CP and K, with its caselist page'
+      description: >-
+        The school view by position: every team that reads each DA, CP and K, with its
+        caselist page.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t18-school-view-by-position.yaml
+        goalRef: v1-e32-t18-school-view-by-position
+      dependsOn:
+      - t04
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t18-school-view-by-position reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t18-school-view-by-position
+    - id: t19
+      kind: Task
+      name: 'A dry run''s scan refusal says nothing was written and gives the publish command'
+      description: >-
+        A dry run's scan refusal says nothing was written and gives the publish command.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t19-dry-run-scan-refusal-wording.yaml
+        goalRef: v1-e32-t19-dry-run-scan-refusal-wording
+      dependsOn:
+      - t05
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t19-dry-run-scan-refusal-wording reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t19-dry-run-scan-refusal-wording
 status:
   phase: Pending

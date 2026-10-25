@@ -133,9 +133,9 @@ spec:
         release record counts as attributed for AUTO; each by test shown failing first.
     - id: ac10
       description: >-
-        (PM amendment 2026-10-21) `files build` runs the wired quality check, refuses an
-        output directory inside a git working tree, and the writer's highlighted-cite
-        refusal is reached by a test on a constructed card, each shown failing first.
+        (PM amendment 2026-10-21; amended 2026-10-24, since v1-e33-t08 removed the writer's
+        highlighted-cite refusal) `files build` runs the wired quality check and refuses an
+        output directory inside a git working tree, each shown failing first.
 status:
   phase: Pending
 ---

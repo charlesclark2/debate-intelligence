@@ -1052,6 +1052,11 @@ were run with `.venv/bin/python -m pytest -n auto -m "not slow and not live"` un
   * `validate_specs.py` OK;
   * `check_command_blocks.py --base origin/dev` OK;
   * `docs_index.py --check-descriptions` OK.
+* **After the affected set, `dev` moved** to `9ed01f4` (`v1-e32-t04` merged), and `scripts/task sync`
+  rebased the branch onto it with no conflict. The landscape tests from every layer were run again
+  (`arguments/landscape`, `integrations/landscape`, the application's landscape and plan-text tests,
+  the CLI's landscape command, `tests/config`, the script and the landscape smoke test): 804 passed.
+  `pyright`, `lint-imports`, `ruff check .` and `validate_specs.py` OK.
 
 ### Deviations (resumed session)
 

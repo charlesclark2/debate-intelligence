@@ -50,7 +50,11 @@ from debate_core.application.ports.suppression import SuppressionList
 from debate_core.application.ports.taxonomy_repository import TaxonomyRepository
 from debate_core.application.position_classification import PositionClassificationService
 from debate_core.arguments.landscape.aff_assignment import AffRound, AssignmentCounts, assign_affs
-from debate_core.arguments.landscape.plan_text import DocumentPlanText, PlanTextVocabulary
+from debate_core.arguments.landscape.plan_text import (
+    DocumentPlanText,
+    PlanTextVocabulary,
+    ResolutionalPlanWords,
+)
 from debate_core.arguments.landscape.review_queue import DEFAULT_REVIEW_THRESHOLD, needs_review
 from debate_core.domain.caselist import Disclosure, Side
 from debate_core.domain.landscape import PositionKind, Taxonomy
@@ -146,6 +150,7 @@ class AffAssignmentService:
             classifications=classified.classifications,
             plan_texts=plan_texts.verdicts,
             taxonomy=taxonomy,
+            resolutional=self._taxonomies.resolutional_plan_words(taxonomy.topic_id),
         )
         return dataclasses.replace(built, plan_texts=plan_texts)
 
@@ -170,6 +175,7 @@ class AffAssignmentService:
             classifications=classifications,
             plan_texts=plan_texts.verdicts,
             taxonomy=taxonomy,
+            resolutional=self._taxonomies.resolutional_plan_words(taxonomy.topic_id),
         ).assignments
 
     async def _read_plan_texts(
@@ -198,9 +204,14 @@ def build_aff_assignments(
     classifications: Sequence[PositionClassification],
     plan_texts: Mapping[str, DocumentPlanText],
     taxonomy: Taxonomy,
+    resolutional: ResolutionalPlanWords | None = None,
     review_threshold: float = DEFAULT_REVIEW_THRESHOLD,
 ) -> AffAssignmentRun:
-    """Every affirmative round in range assigned its aff where a signal names one, with counts."""
+    """Every affirmative round in range assigned its aff where a signal names one, with counts.
+
+    `resolutional` is the topic's resolutional plan, whose aff gives way to any other a round or a team
+    names (:meth:`~debate_core.arguments.landscape.plan_text.PlanTextVocabulary.narrowest`).
+    """
     documents: defaultdict[str, set[str]] = defaultdict(set)
     teams: dict[str, str | None] = {}
     by_source: defaultdict[str, set[str]] = defaultdict(set)
@@ -232,7 +243,7 @@ def build_aff_assignments(
         rounds,
         plan_texts,
         {one: frozenset(found) for one, found in placed.items()},
-        PlanTextVocabulary(taxonomy),
+        PlanTextVocabulary(taxonomy, resolutional),
     )
     keys = {one.round_key for one in assigned} | set(placed)
     return AffAssignmentRun(

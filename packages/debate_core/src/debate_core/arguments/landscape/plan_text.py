@@ -28,9 +28,11 @@ the text (the PM's rulings of 2026-10-24).
 Every aff position's aliases and tag keywords, matched as whole words. A retired position's words
 count under the position it was merged into, and name nothing when it was retired with nowhere to
 go. A child named with its parent wins; two affs neither of which is the other's ancestor, two
-children of one parent included, are a conflict, and name nothing. `medicare for all` and `m4a`
-named single payer until the coach named its Medicare for All child, whose keywords now hold them
-(the PM's rulings of 2026-10-24); no word names an aff from here, only from the taxonomy.
+children of one parent included, are a conflict, and name nothing. The resolutional aff (below) is the
+least specific: beside another aff it gives way to it, so it never makes a conflict.
+`medicare for all` and `m4a` named single payer until the coach named its Medicare for All child,
+whose keywords now hold them (the PM's rulings of 2026-10-24); no word names an aff from here, only
+from the taxonomy.
 
 **The resolutional plan** (:class:`ResolutionalPlanWords`, the PM's context for ac3). Most plan
 texts that name no aff say the resolution and little else. A shaped plan text that names no aff
@@ -246,9 +248,16 @@ class PlanTextVocabulary:
         return (self._resolutional.position_id,)
 
     def narrowest(self, position_ids: set[str]) -> tuple[str, ...]:
-        """`position_ids` without any that is an ancestor of another."""
+        """`position_ids` without any that is an ancestor of another, nor the resolutional aff beside another.
+
+        The resolutional aff is the least specific aff (the PM's ruling of 2026-10-24): beside exactly one
+        other aff it gives way to it, and it never makes a conflict, nor settles one between two others.
+        """
         ancestors = {ancestor for one in position_ids for ancestor in self._ancestors(one)}
-        return tuple(sorted(position_ids - ancestors))
+        found = position_ids - ancestors
+        if self._resolutional is not None and len(found) > 1:
+            found = found - {self._resolutional.position_id}
+        return tuple(sorted(found))
 
     def _ancestors(self, position_id: str) -> list[str]:
         found: list[str] = []

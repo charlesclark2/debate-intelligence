@@ -311,6 +311,7 @@ RESOLUTIONAL = ResolutionalPlanWords(
 )
 NATIONAL = taxonomy(
     position("sample-plan-aff", aliases=["sample plan"]),
+    position("other-plan-aff", aliases=["other plan"]),
     position("national-plan-aff"),
     position("spending-da", kind="da", aliases=["spending da"]),
 )
@@ -349,6 +350,33 @@ def test_an_aff_the_plan_text_names_wins_over_the_resolutional_rule() -> None:
         "The United States federal government should establish a national sample plan."
     )
     assert found == DocumentPlanText(PlanTextVerdict.NAMES, "sample-plan-aff")
+
+
+def test_the_resolutional_aff_beside_one_other_aff_names_the_other() -> None:
+    found = verdict(
+        (BLOCK, "Plan"),
+        (ANALYTIC, SHAPED_NOTHING),
+        (BLOCK, "Plan"),
+        (ANALYTIC, "Sample plan."),
+        vocabulary=WITH_RESOLUTIONAL,
+    )
+    assert found == DocumentPlanText(PlanTextVerdict.NAMES, "sample-plan-aff")
+
+
+def test_the_resolutional_aff_never_makes_a_conflict_and_never_settles_one() -> None:
+    assert WITH_RESOLUTIONAL.narrowest({"national-plan-aff"}) == ("national-plan-aff",)
+    assert WITH_RESOLUTIONAL.narrowest({"national-plan-aff", "sample-plan-aff"}) == ("sample-plan-aff",)
+    assert WITH_RESOLUTIONAL.narrowest({"national-plan-aff", "sample-plan-aff", "other-plan-aff"}) == (
+        "other-plan-aff",
+        "sample-plan-aff",
+    )
+
+
+def test_without_the_rule_the_same_aff_conflicts_like_any_other() -> None:
+    assert PlanTextVocabulary(NATIONAL).narrowest({"national-plan-aff", "sample-plan-aff"}) == (
+        "national-plan-aff",
+        "sample-plan-aff",
+    )
 
 
 def test_the_resolutional_rule_needs_a_federal_actor() -> None:

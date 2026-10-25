@@ -16,15 +16,22 @@ from debate_core.arguments.landscape.aff_assignment import (
     AssignedAff,
     assign_affs,
 )
-from debate_core.arguments.landscape.plan_text import DocumentPlanText, PlanTextVerdict, PlanTextVocabulary
+from debate_core.arguments.landscape.plan_text import (
+    DocumentPlanText,
+    PlanTextVerdict,
+    PlanTextVocabulary,
+    ResolutionalPlanWords,
+)
 from debate_core.domain.landscape import Taxonomy
 
 SAMPLE = "sample-plan-aff"
 CHILD = "route-plan-aff"
 OTHER = "other-plan-aff"
+NATIONAL = "national-plan-aff"
 NAMES_SAMPLE = DocumentPlanText(PlanTextVerdict.NAMES, SAMPLE)
 NAMES_CHILD = DocumentPlanText(PlanTextVerdict.NAMES, CHILD)
 NAMES_OTHER = DocumentPlanText(PlanTextVerdict.NAMES, OTHER)
+NAMES_NATIONAL = DocumentPlanText(PlanTextVerdict.NAMES, NATIONAL)
 CONFLICTING = DocumentPlanText(PlanTextVerdict.CONFLICTING)
 UNNAMED = DocumentPlanText(PlanTextVerdict.UNNAMED)
 NONE = DocumentPlanText(PlanTextVerdict.NONE)
@@ -41,19 +48,27 @@ def _position(identifier: str, **fields: Any) -> dict[str, Any]:
     }
 
 
+TAXONOMY = Taxonomy.model_validate(
+    {
+        "topic_id": "sample-topic",
+        "taxonomy_version": "1.0.0",
+        "event": "POLICY",
+        "positions": [
+            _position(SAMPLE, aliases=["sample plan"]),
+            _position(CHILD, parent=SAMPLE, tag_keywords=["voucher route"]),
+            _position(OTHER, aliases=["other plan"]),
+            _position(NATIONAL),
+        ],
+    }
+)
 WORDS = PlanTextVocabulary(
-    Taxonomy.model_validate(
-        {
-            "topic_id": "sample-topic",
-            "taxonomy_version": "1.0.0",
-            "event": "POLICY",
-            "positions": [
-                _position(SAMPLE, aliases=["sample plan"]),
-                _position(CHILD, parent=SAMPLE, tag_keywords=["voucher route"]),
-                _position(OTHER, aliases=["other plan"]),
-            ],
-        }
-    )
+    TAXONOMY,
+    ResolutionalPlanWords(
+        topic_id="sample-topic",
+        position_id=NATIONAL,
+        frame_words=("federal", "should"),
+        resolutional_words=("national",),
+    ),
 )
 
 
@@ -92,6 +107,26 @@ def test_a_conflicting_document_leaves_the_round_unassigned() -> None:
 def test_a_parent_and_its_child_in_one_round_name_the_child() -> None:
     found = assigned(rounds(("r1", "team-a", ("d1", "d2"))), {"d1": NAMES_SAMPLE, "d2": NAMES_CHILD})
     assert found == {"r1": (CHILD, PLAN_TEXT_METHOD)}
+
+
+def test_the_resolutional_aff_beside_another_in_one_round_gives_way_to_it() -> None:
+    found = assigned(rounds(("r1", "team-a", ("d1", "d2"))), {"d1": NAMES_NATIONAL, "d2": NAMES_SAMPLE})
+    assert found == {"r1": (SAMPLE, PLAN_TEXT_METHOD)}
+
+
+def test_the_resolutional_aff_never_settles_a_conflict_between_two_others() -> None:
+    specs = rounds(("r1", "team-a", ("d1", "d2", "d3")))
+    assert assigned(specs, {"d1": NAMES_NATIONAL, "d2": NAMES_SAMPLE, "d3": NAMES_OTHER}) == {}
+
+
+def test_a_team_naming_the_resolutional_aff_and_one_other_carries_the_other() -> None:
+    specs = rounds(("r1", "team-a", ("d1",)), ("r2", "team-a", ("d2",)), ("r3", "team-a", ("d3",)))
+    found = assigned(specs, {"d1": NAMES_NATIONAL, "d2": NAMES_SAMPLE, "d3": NONE})
+    assert found == {
+        "r1": (NATIONAL, PLAN_TEXT_METHOD),
+        "r2": (SAMPLE, PLAN_TEXT_METHOD),
+        "r3": (SAMPLE, TEAM_CARRY_METHOD),
+    }
 
 
 def test_one_document_read_in_two_rounds_names_both() -> None:

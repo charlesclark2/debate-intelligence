@@ -211,8 +211,13 @@ def _disclosure_path(school: str, side: str, round_number: int) -> str:
     return f"School {school}/Code{school}/{file}"
 
 
-def producer(tmp_path: Path, *, plan_words: str | None = None) -> AffAssignmentService:
-    """The service, built over a planted data directory; `plan_words` is the topic's plan-text file."""
+def producer(
+    tmp_path: Path, *, plan_words: str | None = None, extra: tuple[tuple[str, str | None], ...] = ()
+) -> AffAssignmentService:
+    """The service over a planted data directory; `plan_words` is the topic's plan-text file.
+
+    `extra` plants more affirmative rounds, each a school and its plan text.
+    """
 
     data_dir = tmp_path / "data"
     store = PlantedCaselist(data_dir, PRODUCER_CASELIST)
@@ -223,6 +228,7 @@ def producer(tmp_path: Path, *, plan_words: str | None = None) -> AffAssignmentS
         ("Four", UNNAMED),
         ("Five", UNNAMED),
         ("Two", None),
+        *extra,
     ]
     for number, (school, plan) in enumerate(planted, start=1):
         store.source(
@@ -287,6 +293,25 @@ async def test_the_producer_names_the_resolutional_aff_from_the_topics_plan_text
         ("PLAN_TEXT", "sample-plan-aff"),
         ("PLAN_TEXT", "sample-plan-aff"),
         ("PLAN_TEXT", "sample-plan-aff"),
+        ("TEAM_CARRY", "sample-plan-aff"),
+    ]
+
+
+@pytest.mark.anyio
+async def test_the_producer_carries_the_other_aff_of_a_team_that_also_reads_the_resolutional_one(
+    tmp_path: Path,
+) -> None:
+
+    service = producer(tmp_path, plan_words=PRODUCER_PLAN_WORDS, extra=(("Four", NAMED), ("Four", None)))
+    found = await service.aff_assignments(PRODUCER_CASELIST, date(2026, 9, 29))
+    assert sorted((one.method, one.position_id) for one in found) == [
+        ("PLAN_TEXT", "national-plan-aff"),
+        ("PLAN_TEXT", "national-plan-aff"),
+        ("PLAN_TEXT", "sample-plan-aff"),
+        ("PLAN_TEXT", "sample-plan-aff"),
+        ("PLAN_TEXT", "sample-plan-aff"),
+        ("PLAN_TEXT", "sample-plan-aff"),
+        ("TEAM_CARRY", "sample-plan-aff"),
         ("TEAM_CARRY", "sample-plan-aff"),
     ]
 

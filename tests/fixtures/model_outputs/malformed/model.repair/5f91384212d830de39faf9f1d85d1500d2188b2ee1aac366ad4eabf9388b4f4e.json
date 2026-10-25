@@ -1,16 +1,34 @@
 {
-  "output": null,
+  "output": {},
   "output_schema": "debate_core.testing.contracts.model_router.ContractPassage",
   "prompt_id": "model.repair",
   "prompt_version": "1.0.0",
   "variables": {
     "failed_prompt": "example.select-passage@1.0.0",
+    "failed_system": "You choose one passage from a numbered list of paragraphs.\nAnswer with the paragraph's number and the character offsets where the passage starts and ends.\nNever copy any of the paragraph's words into your answer.",
+    "failed_user": "Choose the passage that best supports this tag: Malformed answer: empty tool output",
     "json_schema": "{\n  \"additionalProperties\": false,\n  \"description\": \"The output schema the contract asks for: which passage, by id and offsets, never its text.\",\n  \"properties\": {\n    \"end_offset\": {\n      \"title\": \"End Offset\",\n      \"type\": \"integer\"\n    },\n    \"paragraph_id\": {\n      \"title\": \"Paragraph Id\",\n      \"type\": \"integer\"\n    },\n    \"start_offset\": {\n      \"title\": \"Start Offset\",\n      \"type\": \"integer\"\n    }\n  },\n  \"required\": [\n    \"paragraph_id\",\n    \"start_offset\",\n    \"end_offset\"\n  ],\n  \"title\": \"ContractPassage\",\n  \"type\": \"object\"\n}",
     "problems": [
       {
-        "loc": [],
-        "msg": "the answer did not call the schema's tool",
-        "type": "missing_tool_call"
+        "loc": [
+          "paragraph_id"
+        ],
+        "msg": "Field required",
+        "type": "missing"
+      },
+      {
+        "loc": [
+          "start_offset"
+        ],
+        "msg": "Field required",
+        "type": "missing"
+      },
+      {
+        "loc": [
+          "end_offset"
+        ],
+        "msg": "Field required",
+        "type": "missing"
       }
     ],
     "schema_name": "ContractPassage"

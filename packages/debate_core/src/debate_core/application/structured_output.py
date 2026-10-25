@@ -12,10 +12,12 @@ four things in this order:
    invalid answer arrives as :class:`~debate_core.application.errors.InvalidModelOutput` carrying
    its problems and none of its values, whichever router produced it.
 3. **Repairs an invalid answer exactly once** with the registered `model.repair` prompt, on the same
-   task class route and parameters (ac4). The repair request holds the schema and the filtered
-   problems. It never holds the answer that failed, and never the call's own variables, so source
-   text is not sent again. An answer that never called the schema's tool is invalid output like
-   any other and gets the same one repair (ac5).
+   task class route and parameters (ac4). The repair request carries the failed call's own prompt,
+   rendered by the registry exactly as the call was (same id, version and variables, unchanged and
+   never re-authored), followed by `model.repair`'s instructions with the schema and the filtered
+   problems (the PM's review of 2026-10-24). It never holds anything from the answer that failed.
+   An answer that never called the schema's tool is invalid output like any other and gets the
+   same one repair (ac5).
 4. **Raises** :class:`~debate_core.application.model_errors.ModelOutputError` with `attempts=2`
    when the repair is invalid too (ac2). There is no default, partial or best-effort result on any
    path, whatever the policy says (ac3).
@@ -64,7 +66,13 @@ from debate_core.application.model_errors import (
     output_problems,
 )
 from debate_core.application.ports.model_router import ModelRouter
-from debate_core.domain.model_contracts import ModelParams, ModelPrompt, ModelResponse, TaskClass
+from debate_core.domain.model_contracts import (
+    ModelParams,
+    ModelPrompt,
+    ModelResponse,
+    RenderedPrompt,
+    TaskClass,
+)
 from debate_core.domain.prompt_spec import PromptSpec
 from debate_core.domain.provenance import GeneratedArtifactMetadata
 
@@ -125,6 +133,10 @@ class PromptCatalog(Protocol):
 
     def get(self, prompt_id: str, version: str) -> CatalogedPrompt:
         """`prompt_id` at exactly `version`."""
+        ...
+
+    def render(self, prompt: ModelPrompt) -> RenderedPrompt:
+        """The text `prompt` sends, as a real router renders it; `PromptRenderError` if it does not fit."""
         ...
 
 
@@ -212,17 +224,20 @@ class StructuredOutputGuard:
 
         Raises `PromptMismatchError` before any model call when `schema` or `task_class` is not
         what the prompt's registry entry declares, and the registry's `UnknownPromptError` when the
-        prompt is not registered. Raises :class:`ModelOutputError` when the answer and its one
+        prompt is not registered, and its `PromptRenderError` when the variables do not fit the
+        prompt, all before any model call. Raises :class:`ModelOutputError` when the answer and its one
         repair are both invalid. Every other router error passes through unchanged.
         """
-        self._check_registration(task_class, prompt, schema)
+        rendered = self._check_registration(task_class, prompt, schema)
         attempts: list[OutputAttempt] = []
         attempt_prompt = prompt
         problems: tuple[OutputProblem, ...] = ()
         model_id: str | None = None
         for number in range(1, 2 + policy.max_repairs):
             if number > 1:
-                attempt_prompt = repair_prompt(prompt, schema, problems, version=self._repair_version)
+                attempt_prompt = repair_prompt(
+                    prompt, rendered, schema, problems, version=self._repair_version
+                )
             try:
                 response = await self._router.generate_structured(task_class, attempt_prompt, schema, params)
             except InvalidModelOutput as invalid:
@@ -253,7 +268,8 @@ class StructuredOutputGuard:
 
     def _check_registration(
         self, task_class: TaskClass, prompt: ModelPrompt, schema: type[BaseModel]
-    ) -> None:
+    ) -> RenderedPrompt:
+        """Refuse a call its registry entry does not declare, and return the text the call sends."""
         entry = self._prompts.get(prompt.prompt_id, prompt.prompt_version)
         if entry.schema is not schema:
             raise PromptMismatchError(
@@ -271,10 +287,12 @@ class StructuredOutputGuard:
                 registered=entry.spec.task_class.value,
                 requested=task_class.value,
             )
+        return self._prompts.render(prompt)
 
 
 def repair_prompt(
     failed: ModelPrompt,
+    rendered: RenderedPrompt,
     schema: type[BaseModel],
     problems: Sequence[OutputProblem],
     *,
@@ -282,9 +300,10 @@ def repair_prompt(
 ) -> ModelPrompt:
     """The `model.repair` call for an answer to `failed` that did not fit `schema` for `problems`.
 
-    It holds the schema, at most :data:`MAX_REPORTED_PROBLEMS` problems, and the failed prompt's id
-    and version, so a reader of a repair cassette can tell which prompt it repaired. Nothing the
-    model said, and none of the failed call's variables, so no source text is sent again.
+    `rendered` is `failed` as the prompt registry renders it, the text the failed call sent. The
+    repair carries it unchanged, so the model gets the task again (the PM's review of 2026-10-24),
+    then the schema, at most :data:`MAX_REPORTED_PROBLEMS` problems and the failed prompt's id and
+    version. Nothing the model said in the failed answer is in it.
     """
     listed = _described(problems)[:MAX_REPORTED_PROBLEMS]
     return ModelPrompt(
@@ -292,6 +311,8 @@ def repair_prompt(
         prompt_version=version,
         variables={
             "failed_prompt": f"{failed.prompt_id}@{failed.prompt_version}",
+            "failed_system": rendered.system,
+            "failed_user": rendered.user,
             "schema_name": schema.__name__,
             "json_schema": json.dumps(schema.model_json_schema(), indent=2, sort_keys=True),
             "problems": [

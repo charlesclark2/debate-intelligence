@@ -18,16 +18,17 @@ with the same malformed answer, so the repair fails too.
 | empty tool output | `{}` |
 | no tool call | `null`, which the fake reads as an answer that never called the schema's tool |
 
-**Two cases share one repair fixture.** "wrong types" and "coercible values" fail with the same
-three `int_type` problems, and a repair request holds only the schema and the problems, so both ask
-the same repair question and get the same file (the "coercible values" answer). That is how the
-guard works today, not a mistake in the fixtures; the session report of v1-e05-t05 raises it.
+**Every case has a repair fixture of its own.** A repair request carries the failed call's own
+prompt, rendered with its variables, so two calls that fail the same way still ask different repair
+questions. "wrong types" and "coercible values" fail with the same three `int_type` problems and
+are filed apart, by their tags (the PM's review of v1-e05-t05).
 
 ## Rewriting them
 
-A repair fixture's key covers the repair prompt's variables, which include pydantic's messages, so a
-pydantic upgrade that rewords one, a change to the repair prompt's variables or a new
-`model.repair` version needs the repair files written again. Write them with `FixtureDirectory` as
+A repair fixture's key covers the repair prompt's variables: the failed call's rendered prompt and
+pydantic's messages. So a change to `select-passage.md`, a pydantic upgrade that rewords a message,
+a change to the repair prompt's variables or a new `model.repair` version needs the repair files
+written again. Write them with `FixtureDirectory` as
 `tests/fixtures/model_cassettes/README.md` describes, building each repair request with
 `repair_prompt`, as the guard does:
 
@@ -38,9 +39,11 @@ from debate_core.application.errors import InvalidModelOutput
 from debate_core.application.structured_output import repair_prompt, validate_model_output
 from debate_core.domain.model_contracts import ModelPrompt, ModelRequest, TaskClass
 from debate_core.integrations.models.fake_router import FixtureDirectory
+from debate_core.integrations.models.prompt_registry import load_prompt_file
 from debate_core.testing.contracts.model_router import ContractPassage
 
 fixtures = FixtureDirectory(Path("tests/fixtures/model_outputs/malformed"))
+example = load_prompt_file(Path("tests/fixtures/prompts/example/select-passage.md"))
 prompt = ModelPrompt(
     prompt_id="example.select-passage",
     prompt_version="1.0.0",
@@ -51,6 +54,6 @@ fixtures.write(ModelRequest.build(TaskClass.HIGH_VOLUME, prompt, ContractPassage
 try:
     validate_model_output(ContractPassage, answer, prompt=prompt, model_id=None)
 except InvalidModelOutput as invalid:
-    repair = repair_prompt(prompt, ContractPassage, invalid.problems)
+    repair = repair_prompt(prompt, example.render(prompt.variables), ContractPassage, invalid.problems)
     fixtures.write(ModelRequest.build(TaskClass.HIGH_VOLUME, repair, ContractPassage), answer)
 ```

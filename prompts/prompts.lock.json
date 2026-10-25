@@ -3,7 +3,7 @@
   "prompts": {
     "model.repair": {
       "1.0.0": {
-        "body_sha256": "62a594adf722b36d4099dacb03f9af55a0307fc5bd5fec92882d999232c053b7",
+        "body_sha256": "62f84d9990009db70021ed0f1b6d6edebd9d6e64157afbea382e63e684654f10",
         "output_schema": "debate_core.application.structured_output.RepairedSchema",
         "task_class": "complex_reasoning"
       }

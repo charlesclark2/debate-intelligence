@@ -82,6 +82,9 @@ NOT_FAIL_CLOSED = ValidationPolicy(fail_closed=False)
 SENTINEL = "sentinel-0b7e-standing-in-for-card-text"
 """Invented text a malformed answer carries; no request, error or log record may repeat it."""
 
+CALL_SENTINEL = "sentinel-41d2-standing-in-for-snapshot-text"
+"""Invented text a call's variables carry; the repair request carries it once, no error or log record ever."""
+
 
 @pytest.fixture
 def anyio_backend() -> str:
@@ -531,7 +534,18 @@ async def test_repair_call_runs_the_registered_repair_prompt_on_the_original_rou
     assert repair.output_schema == call.output_schema
 
 
-async def test_repair_request_holds_the_schema_and_problems_and_nothing_the_call_or_model_said(
+EXAMPLE_SYSTEM = (
+    "You choose one passage from a numbered list of paragraphs.\n"
+    "Answer with the paragraph's number and the character offsets where the passage starts and ends.\n"
+    "Never copy any of the paragraph's words into your answer."
+)
+"""`select-passage.md`'s system turn, copied by hand from the file."""
+
+EXAMPLE_USER = "Choose the passage that best supports this tag: Warming kills"
+"""`select-passage.md`'s user turn with the tag `Warming kills`, written by hand."""
+
+
+async def test_repair_request_carries_the_call_and_the_problems_and_nothing_the_model_said(
     registry: PromptRegistry,
 ) -> None:
     router = ScriptedModelRouter([INVALID, VALID])
@@ -539,8 +553,17 @@ async def test_repair_request_holds_the_schema_and_problems_and_nothing_the_call
     await guarded(router, registry).generate(TASK, example_prompt(), ContractPassage, policy=FAIL_CLOSED)
 
     variables = router.calls[1].prompt.variables
-    assert set(variables) == {"failed_prompt", "schema_name", "json_schema", "problems"}
+    assert set(variables) == {
+        "failed_prompt",
+        "failed_system",
+        "failed_user",
+        "schema_name",
+        "json_schema",
+        "problems",
+    }
     assert variables["failed_prompt"] == "example.select-passage@1.0.0"
+    assert variables["failed_system"] == EXAMPLE_SYSTEM
+    assert variables["failed_user"] == EXAMPLE_USER
     assert variables["schema_name"] == "ContractPassage"
     assert isinstance(variables["json_schema"], str)
     assert json.loads(variables["json_schema"]) == ContractPassage.model_json_schema()
@@ -551,49 +574,107 @@ async def test_repair_request_holds_the_schema_and_problems_and_nothing_the_call
             "msg": "Input should be a valid integer",
         }
     ]
-    sent = router.calls[1].model_dump_json()
-    assert "Warming kills" not in sent
-    assert "the third" not in sent
+    assert "the third" not in router.calls[1].model_dump_json()
 
 
-async def test_repair_request_renders_with_the_registered_template(registry: PromptRegistry) -> None:
+async def test_repair_request_carries_the_calls_own_rendered_prompt_byte_for_byte(
+    registry: PromptRegistry,
+) -> None:
+    """The call's turns open the repair's turns unchanged, then come model.repair's instructions."""
     router = ScriptedModelRouter([{}, VALID])
 
     await guarded(router, registry).generate(TASK, example_prompt(), ContractPassage, policy=FAIL_CLOSED)
 
-    rendered = registry.render(router.calls[1].prompt)
-    assert (
-        "The answer to prompt example.select-passage@1.0.0 did not fit the schema ContractPassage."
-        in rendered.user
+    call, repair = router.calls
+    sent_first = registry.render(call.prompt)
+    sent_again = registry.render(repair.prompt)
+    assert (sent_first.system, sent_first.user) == (EXAMPLE_SYSTEM, EXAMPLE_USER)
+    assert sent_again.system is not None
+    assert sent_again.system.startswith(
+        EXAMPLE_SYSTEM + "\n\nA previous answer to the request below did not fit"
     )
-    assert "- at paragraph_id: Field required (missing)" in rendered.user
-    assert '"additionalProperties": false' in rendered.user
-    assert rendered.system is not None and "calling the tool once" in rendered.system
+    assert sent_again.user.startswith(
+        EXAMPLE_USER + "\n\nThe previous answer to this request (prompt example.select-passage@1.0.0) "
+        "did not fit the schema ContractPassage.\n"
+    )
+    assert sent_again.system.count(EXAMPLE_SYSTEM) == 1
+    assert sent_again.user.count(EXAMPLE_USER) == 1
+    assert "- at paragraph_id: Field required (missing)" in sent_again.user
+    assert '"additionalProperties": false' in sent_again.user
+    assert "calling the tool once" in sent_again.system
 
 
-async def test_repair_sentinel_appears_in_no_repair_request_error_or_log_record(
+async def test_repair_of_a_prompt_with_no_system_turn_opens_with_the_repair_instructions(
+    registry: PromptRegistry, tmp_path: Path
+) -> None:
+    source = (FIXTURES / "prompts" / "example" / "select-passage.md").read_text(encoding="utf-8")
+    front_matter, _, _ = source.partition("<!-- system -->")
+    no_system = tmp_path / "no-system.md"
+    no_system.write_text(
+        front_matter.replace("example.select-passage", "example.no-system") + "Tag to support: {{ tag }}\n",
+        encoding="utf-8",
+    )
+    registry = PromptRegistry([*registry.prompts, load_prompt_file(no_system)])
+    prompt = ModelPrompt(
+        prompt_id="example.no-system", prompt_version="1.0.0", variables={"tag": "Warming kills"}
+    )
+    router = ScriptedModelRouter([{}, VALID])
+
+    await guarded(router, registry).generate(TASK, prompt, ContractPassage, policy=FAIL_CLOSED)
+
+    repair = router.calls[1].prompt
+    assert repair.variables["failed_system"] is None
+    sent_again = registry.render(repair)
+    assert sent_again.system is not None
+    assert sent_again.system.startswith("A previous answer to the request below did not fit")
+    assert sent_again.user.startswith("Tag to support: Warming kills\n\nThe previous answer to this request")
+
+
+async def test_repair_requests_of_two_calls_that_fail_alike_differ(registry: PromptRegistry) -> None:
+    """Two calls, one failure: each repair still names its own call, so their cassettes cannot collide."""
+    router = ScriptedModelRouter([INVALID, VALID, INVALID, VALID])
+    guard = guarded(router, registry)
+
+    await guard.generate(TASK, example_prompt("Warming kills"), ContractPassage, policy=FAIL_CLOSED)
+    await guard.generate(TASK, example_prompt("Tariffs help"), ContractPassage, policy=FAIL_CLOSED)
+
+    first_repair, second_repair = router.calls[1], router.calls[3]
+    assert first_repair.prompt.variables["problems"] == second_repair.prompt.variables["problems"]
+    assert first_repair.prompt.variables != second_repair.prompt.variables
+
+
+async def test_repair_sentinels_the_answers_reaches_nothing_and_the_calls_reaches_only_the_repair(
     registry: PromptRegistry, caplog: pytest.LogCaptureFixture
 ) -> None:
+    """SENTINEL is in the model's answer; CALL_SENTINEL is in the call's variables."""
     caplog.set_level(logging.DEBUG)
     malformed = {"paragraph_id": SENTINEL, "start_offset": 0, "end_offset": [SENTINEL], "note": SENTINEL}
     router = ScriptedModelRouter([malformed, malformed])
 
     with pytest.raises(ModelOutputError) as raised:
-        await guarded(router, registry).generate(TASK, example_prompt(), ContractPassage, policy=FAIL_CLOSED)
+        await guarded(router, registry).generate(
+            TASK, example_prompt(f"Warming kills {CALL_SENTINEL}"), ContractPassage, policy=FAIL_CLOSED
+        )
 
     repair = router.calls[1]
-    assert SENTINEL not in repair.model_dump_json()
     rendered = registry.render(repair.prompt)
-    assert SENTINEL not in (rendered.system or "") + rendered.user
+    sent = (rendered.system or "") + rendered.user
+    assert SENTINEL not in repair.model_dump_json()
+    assert SENTINEL not in sent
+    assert repair.model_dump_json().count(CALL_SENTINEL) == 1
+    assert sent.count(CALL_SENTINEL) == 1
     error = raised.value
-    assert SENTINEL not in "".join(traceback.format_exception(error))
-    assert SENTINEL not in repr(error.args) + repr(error.problems) + repr(error.attempt_records)
+    reported = "".join(traceback.format_exception(error))
+    reported += repr(error.args) + repr(error.problems) + repr(error.attempt_records)
+    for sentinel in (SENTINEL, CALL_SENTINEL):
+        assert sentinel not in reported
     assert error.__cause__ is None
     assert error.__context__ is None
     assert caplog.records, "the guard logs each failed attempt"
     for record in caplog.records:
-        assert SENTINEL not in record.getMessage()
-        assert SENTINEL not in repr(vars(record))
+        for sentinel in (SENTINEL, CALL_SENTINEL):
+            assert sentinel not in record.getMessage()
+            assert sentinel not in repr(vars(record))
 
 
 async def test_repair_logs_the_prompt_attempts_and_error_counts_only(

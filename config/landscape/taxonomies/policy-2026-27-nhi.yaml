@@ -25,7 +25,10 @@ positions:
     aliases: [single payer, aff single payer, single payer aff, singlepayer]
 
   # Single payer's mechanisms, from the coach's plan-text answers: a card under single payer whose tag
-  # holds one child's keywords goes under that child, and a plan text naming one names it
+  # holds one child's keywords goes under that child, and a plan text naming one names it.
+  # PM ruling 2026-10-24 (v1-e32-t09, resumed question 1): each label here and in the affs below is the
+  # coach's mechanism_name in sentence case. tests/config refuses a capital after a label's first word
+  # (it reads as a person's name), so only the case changed; his wording is otherwise kept.
   - id: global-budgets-aff
     label: Global budgets
     kind: aff

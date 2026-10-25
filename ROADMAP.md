@@ -62,7 +62,7 @@ v2.3's extension work.
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 48 | 44 | 238 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 104 | 81 | 489 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 28 | 15 | 212 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 30 | 15 | 216 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 2 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
@@ -315,6 +315,8 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [Each Policy affirmative round's plan, counted first, so the landscape names what affs read](plan_specs/v1/e32-argument-landscape/t09-policy-plan-texts.yaml) `v1-e32-t09-policy-plan-texts` | InProgress | 1 | 5.0 |
 | [Impact cards per DA and advantage in the landscape report](plan_specs/v1/e32-argument-landscape/t10-impact-cards-per-position.yaml) `v1-e32-t10-impact-cards-per-position` | Succeeded | 1 | 4.0 |
 | [Counterplan texts, kritik alternatives and overviews in the landscape report](plan_specs/v1/e32-argument-landscape/t11-negative-analytic-texts.yaml) `v1-e32-t11-negative-analytic-texts` | Pending | 2 | 5.0 |
+| [The landscape command names the seven-file bundle and counts its trends and schools](plan_specs/v1/e32-argument-landscape/t12-landscape-cli-seven-files.yaml) `v1-e32-t12-landscape-cli-seven-files` | Pending | 1 | 1.0 |
+| [A removal and the annual purge reach the landscape bundles' school views](plan_specs/v1/e32-argument-landscape/t13-removal-reaches-landscape-school-views.yaml) `v1-e32-t13-removal-reaches-landscape-school-views` | Pending | 2 | 3.0 |
 
 #### [E33 — Evidence File Builder](plan_specs/v1/e33-file-builder/epic.yaml)
 
@@ -437,7 +439,7 @@ Whitefish Bay Debate has a public, mobile-friendly team website: team informatio
 | [Parent email updates](plan_specs/v1/e37-calendar-and-announcements/t05-parent-email-signup.yaml) `v1-e37-t05-parent-email-signup` | InProgress | 2 | 6.0 |
 | [Season results: how the team's students placed at each tournament](plan_specs/v1/e37-calendar-and-announcements/t06-season-results.yaml) `v1-e37-t06-season-results` | InProgress | 2 | 6.0 |
 | [A link to the team's Instagram account, never an embed](plan_specs/v1/e37-calendar-and-announcements/t07-instagram-link.yaml) `v1-e37-t07-instagram-link` | Succeeded | 1 | 1.0 |
-| [The site smoke check reads the home page's results band and the results page](plan_specs/v1/e37-calendar-and-announcements/t08-smoke-results-band.yaml) `v1-e37-t08-smoke-results-band` | Pending | 1 | 1.0 |
+| [The site smoke check reads the home page's results band and the results page](plan_specs/v1/e37-calendar-and-announcements/t08-smoke-results-band.yaml) `v1-e37-t08-smoke-results-band` | Pending | 2 | 1.0 |
 
 #### [E38 — Team Donations](plan_specs/v1/e38-donations/epic.yaml)
 

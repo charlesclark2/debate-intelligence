@@ -15,8 +15,9 @@ fitted here, from the rows it is given.
 
 A card as the matcher reads it (:func:`~debate_core.arguments.landscape.matcher.read_items`): its
 headings normalized with the disclosing teams' own names and the caselist's schools taken out, and
-its tag as words with the same names taken out (:func:`card_tag`). Never a cite, a file path, a
-team or the card's text. A token is a feature only when the training cards of at least
+its tag as words with the same names and every team code of the caselist taken out (:func:`card_tag`).
+Never a cite, a file path, a team or the card's text: the disclosing teams are kept only as keyed
+digests (:func:`team_token`), to count. A token is a feature only when the training cards of at least
 `minimum_teams` distinct teams carry it (:data:`DEFAULT_MINIMUM_FEATURE_TEAMS`), so a word only one
 team writes, such as a debater's name, never is.
 
@@ -37,7 +38,8 @@ one are never labels.
 3. **What it would place**: the unplaced cards, and the other cards no label covers, it would place at
    that confidence, by kind.
 4. **A coach sample** (:func:`coach_sample`): unplaced cards for the coach to label from their tag and
-   headings, stratified by confidence and predicted kind, one card per document.
+   headings, stratified by one model's confidence and by predicted kind, one card per document, and
+   each compared model's score on the coach's labels (:func:`score_sample`).
 
 Deterministic for a seed: the split, the fitted weights, the predictions and the sample are the same
 on every run, whatever order the rows arrive in. Pure: rows in, values out. The caller reads the store
@@ -112,6 +114,7 @@ __all__ = [
     "row_to_json",
     "sample_lines",
     "score_sample",
+    "team_token",
     "team_vocabulary",
     "write_sample_csv",
 ]
@@ -192,7 +195,7 @@ class FeatureRow:
     item_id: str
     source_sha256: str
     teams: tuple[str, ...] = field(repr=False)
-    """The opaque identities of the teams that disclosed the card's document; only counted."""
+    """The teams that disclosed the card's document, as keyed digests (:func:`team_token`): only counted."""
     headings: tuple[str, ...] = field(repr=False)
     """The non-empty normalized headings over the card, outermost first, names taken out."""
     placing: tuple[bool, ...]
@@ -228,6 +231,16 @@ def card_tag(
     return " ".join(word for word in words.split() if word not in codes) or None
 
 
+def team_token(identity: str, salt: bytes) -> str:
+    """A team's identity as a digest keyed by `salt`, equal for equal identities under one salt.
+
+    The builder of a feature table draws the salt and keeps it nowhere, so the table can count a word's
+    teams and cannot name one: an unkeyed digest of a school and code could be found by trying the
+    caselist's schools.
+    """
+    return hashlib.blake2b(identity.encode(), key=salt, digest_size=12).hexdigest()
+
+
 def code_words(names: Mapping[str, Sequence[str]]) -> frozenset[str]:
     """Every word of every team code of a caselist's schools (`school -> codes`), as a tag's words are."""
     return frozenset(word for codes in names.values() for code in codes for word in tag_words(code).split())
@@ -248,15 +261,17 @@ def feature_rows(
     caselist: CaselistNames,
     matcher: PositionMatcher,
     *,
+    team_salt: bytes,
     codes: Collection[str] = frozenset(),
     review_threshold: float = DEFAULT_REVIEW_THRESHOLD,
 ) -> tuple[FeatureRow, ...]:
     """Every card of `source` as the classifier reads it, placed by `matcher`, in file order.
 
-    `codes` are the caselist's team codes as :func:`code_words` gives them, taken out of each tag.
+    `codes` are the caselist's team codes as :func:`code_words` gives them, taken out of each tag; the
+    teams are written as :func:`team_token` keys them under `team_salt`.
     """
     own = [name for team in source.teams for name in team.names if name.strip()]
-    teams = tuple(sorted({team.identity for team in source.teams if team.identity}))
+    teams = tuple(sorted({team_token(team.identity, team_salt) for team in source.teams if team.identity}))
     rows: list[FeatureRow] = []
     for item in read_items(source, caselist):
         if item.kind is not ItemKind.CARD:

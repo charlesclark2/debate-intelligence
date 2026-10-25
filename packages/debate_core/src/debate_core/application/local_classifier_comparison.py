@@ -8,8 +8,9 @@ asked. This module builds the table and says when it no longer stands:
 * :func:`build_feature_table` places every card of a
   :class:`~debate_core.application.landscape_seeding.SeedReading` with the topic's
   :class:`~debate_core.arguments.landscape.matcher.PositionMatcher`, exactly as the classification
-  service does, without its cache and without writing anything, and takes every team code of the
-  caselist out of each tag;
+  service does, without its cache and without writing anything. It takes every team code of the
+  caselist out of each tag, and keeps each disclosing team only as a digest keyed by a salt it draws
+  for the build and keeps nowhere, so the table counts teams and names none;
 * :func:`sources_no_longer_live` names the table's sources that a removal has since reached: no longer
   parsed in the store's version, or under a suppression the table was not built under. A table with
   any is read no further; the caller builds it again from the store, which no longer holds them.
@@ -21,6 +22,7 @@ the repository, and nothing here logs or returns a heading, tag or team in a `re
 from __future__ import annotations
 
 import json
+import secrets
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from datetime import date
@@ -96,10 +98,13 @@ async def build_feature_table(
     matcher = PositionMatcher(taxonomy, taxonomies.overrides(reading.topic_id))
     names = CaselistNames(reading.caselist_names)
     codes = code_words(reading.caselist_names)
+    salt = secrets.token_bytes(16)
     rows = tuple(
         row
         for source in reading.sources
-        for row in feature_rows(source, names, matcher, codes=codes, review_threshold=review_threshold)
+        for row in feature_rows(
+            source, names, matcher, team_salt=salt, codes=codes, review_threshold=review_threshold
+        )
     )
     return FeatureTable(
         caselist=reading.caselist,

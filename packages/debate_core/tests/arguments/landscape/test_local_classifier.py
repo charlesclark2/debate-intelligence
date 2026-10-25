@@ -50,6 +50,7 @@ from debate_core.arguments.landscape.local_classifier import (
     row_to_json,
     sample_lines,
     score_sample,
+    team_token,
     team_vocabulary,
     write_sample_csv,
 )
@@ -187,7 +188,10 @@ def synthetic_sources(seed: int = 7) -> tuple[SeedSource, ...]:
 
 SOURCES = synthetic_sources()
 CODES = code_words(SCHOOLS)
-ROWS = tuple(row for source in SOURCES for row in feature_rows(source, NAMES, MATCHER, codes=CODES))
+SALT = b"an invented salt"
+ROWS = tuple(
+    row for source in SOURCES for row in feature_rows(source, NAMES, MATCHER, team_salt=SALT, codes=CODES)
+)
 FORBIDDEN = {
     word.casefold()
     for school, codes in SCHOOLS.items()
@@ -328,6 +332,7 @@ def test_the_classifier_reads_no_network_model_or_download() -> None:
         "itertools",
         "json",
         "re",
+        "secrets",
         "typing",
         "sklearn.feature_extraction.text",
         "sklearn.linear_model",
@@ -412,7 +417,7 @@ def test_the_labels_are_the_deterministic_placements_at_or_above_the_threshold()
             )
         ),
     )
-    rows = feature_rows(source, NAMES, LABEL_MATCHER)
+    rows = feature_rows(source, NAMES, LABEL_MATCHER, team_salt=SALT)
     assert [(row.placement, row.label) for row in rows] == [
         ("ALIAS", "spending-da"),
         ("INHERITED", "spending-da"),
@@ -433,7 +438,9 @@ def test_the_labels_are_the_deterministic_placements_at_or_above_the_threshold()
     ]
     assert [row.placing for row in rows][:3] == [(True,), (True, False), (True,)]
     assert rows[5].placing == (False,)
-    assert rows[0].teams == ("one",)
+    assert rows[0].teams == (team_token("one", SALT),)
+    assert team_token("one", SALT) != team_token("one", b"another salt")
+    assert "one" not in row_to_json(rows[0])
 
 
 def test_feature_tokens_keep_headings_and_the_tag_apart() -> None:

@@ -207,9 +207,57 @@ v1-e05-t05 asks two questions.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** CHANGES_REQUESTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-24
 
 **Notes:**
+
+Careful, well-tested work. The one change asked is question 1, which the session rightly put first.
+1. **What is accepted as built:**
+   * ac1 to ac6 and both of the PM's checks (the sentinel, and logs carrying counts only), with
+     red runs against a refuse-nothing skeleton and 20 of 20 mutants caught;
+   * **Deviation 2**, validation in every router through `validate_model_output`, held by the
+     contract suite. The point that a guard above the port cannot see coercion that already happened
+     is correct, and the suite proved it on the two lax stand-ins;
+   * **strict JSON mode** rather than Python-mode strict, measured first;
+   * withholding a schema author's message that quotes the refused value, and the length cuts;
+   * `fail_closed` carried without behaviour of its own, with no default, so every caller chooses;
+   * `max_repairs: Literal[1]`; `ModelOutputError` subclassing `InvalidModelOutput`;
+   * **Deviations 3 and 4**: `RepairedSchema` with the nominal task class, pinned in the lock, and
+     `"output": null` in t03's fixtures;
+   * **Deviation 1**: `debate_core.domain` and `debate_core.testing` are needed. The PM amends
+     `constraints.packages` in a PM batch.
+2. **Question 1: (B), with the shape below. That is the change requested.** My instruction "never
+   the original source text written again" meant never *re-authored*, as the spec says. It did not
+   mean a repair should run blind. As built, the repair model gets no task, so a repaired card
+   selection could only invent offsets, and two calls that fail alike share a cassette. Under
+   replay, that serves one call another call's answer. Both outcomes are worse than sending the
+   task again. The variables already went to the same model through the same router under data-use
+   policy's model rules, so sending them unchanged a second time adds no exposure.
+   * The repair request carries the failed call's own prompt, the same `prompt_id@version` and
+     variables rendered by the registry exactly as the first call was, unchanged and not
+     re-authored, followed by `model.repair`'s instructions with the schema and the filtered
+     problems.
+   * It still carries **nothing from the failed answer**: no value, no key the model invented beyond
+     the 64-character location cut, and no text.
+   * Mutant 13 flips. "Repair drops the call's variables or alters them" must now be caught, with a
+     test that the rendered original appears in the repair request byte for byte.
+   * Keep the sentinel test, with the sentinel in the model's answer. Add a second sentinel in the
+     call's variables, which must appear in the repair request once, and in no error or log record.
+   * Repair cassettes and fixtures become unique per call. Show "wrong types" and "coercible values"
+     with repair files of their own.
+   * `model.repair` 1.0.0 is not on dev yet, so edit it in place and re-lock it. Its changelog says
+     what the request carries.
+3. **Question 2: yes, as a v1-e05-t03 follow-up,** before the first live recording of a structured
+   prompt. Record mode writes the invalid answer, or `"output": null` when no tool was called, so a
+   repaired pair can be recorded. The PM files it, and nothing changes here.
+4. **The follow-ups on t07** (a failed attempt's usage) and **t06** are right. The PM adds the t07
+   one to its spec in a PM batch.
+5. **The affected set** of 453 files is left to the PR's `ci` under agreement 10, and the
+   application and contract directories passed (5,932). The one-process log-state run was the right
+   extra check.
+
+Re-review after the change. Expect a short one: question 1's shape, the flipped mutant, the two
+sentinels and the unique repair fixtures.

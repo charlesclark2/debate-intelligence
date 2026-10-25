@@ -409,8 +409,28 @@ def objects_under(world: World, prefix: str) -> dict[str, Any]:
     }
 
 
+#: Keys `v1-e40-t03` added to the details: each stage's start and end, and the data volume's
+#: reading. Their values are pinned by hand in `test_caselist_sync_stage_times_and_volume.py`; here
+#: they are checked for their shape apart from the rest (`times_and_volume_in_run_order`).
+TIMES_AND_VOLUME: Final = ("stage_times", "data_volume")
+
+#: The stages a run times, in the order it carries them out.
+RUN_ORDER: Final = [str(stage) for stage in SyncStage]
+
+
 def without_the_version(details: Mapping[str, Any]) -> dict[str, Any]:
-    return {key: value for key, value in details.items() if key != "schema_version"}
+    return {key: value for key, value in details.items() if key not in ("schema_version", *TIMES_AND_VOLUME)}
+
+
+def times_and_volume_in_run_order(details: Mapping[str, Any]) -> bool:
+    """Stage times in the run's order, each ending no earlier than it started, and no volume read:
+    nothing in these scenarios sets `storage.volume_warning_percent`."""
+    named = [one["stage"] for one in details["stage_times"]]
+    return (
+        named == [stage for stage in RUN_ORDER if stage in named]
+        and all(one["started_at"] <= one["finished_at"] for one in details["stage_times"])
+        and details["data_volume"] is None
+    )
 
 
 # ------------------------------------------------------------------------------------------------
@@ -593,6 +613,7 @@ async def test_the_codes_and_the_parse_counts_travel_beside_the_record_keyed_by_
     written = details_written(world)
     assert [without_the_version(one) for one in written] == EXPECTED_DETAILS[name]
     assert [one["schema_version"] for one in written] == [1] * len(written)
+    assert all(times_and_volume_in_run_order(one) for one in written)
     in_the_bucket = objects_under(world, DETAILS_PREFIX)
     assert in_the_bucket == {f"{DETAILS_PREFIX}2026/{one['run_id']}.json": one for one in written}
     assert sorted(key.removeprefix(DETAILS_PREFIX) for key in in_the_bucket) == sorted(

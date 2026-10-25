@@ -229,6 +229,51 @@ output "caselist_secret_writer_profile_name" {
 }
 
 output "caselist_login_schedule_name" {
-  description = "The Wednesday login schedule. Null until caselist_login_task is set (apply B)."
+  description = "The Wednesday login schedule. Null until caselist_image_digest is set (apply B)."
   value       = module.caselist_run.login_schedule_name
+}
+
+output "caselist_run_repository_url" {
+  description = "Where scripts/caselist_run_deploy.sh pushes the run image (debate-<env>-caselist-run)."
+  value       = module.caselist_run.repository_url
+}
+
+output "caselist_run_cluster_name" {
+  description = "The cluster the login and run tasks run on (debate-<env>-caselist-run)."
+  value       = module.caselist_run.cluster_name
+}
+
+output "caselist_run_subnet_ids" {
+  description = "The run's two public subnets, where a run started by hand runs."
+  value       = module.caselist_run.run_subnet_ids
+}
+
+output "caselist_run_security_group_id" {
+  description = "The tasks' security group: no inbound rule, outbound HTTPS only."
+  value       = module.caselist_run.run_security_group_id
+}
+
+output "caselist_run_task_definition_arn" {
+  description = "The run task definition the schedule runs, pinned by digest. Null until caselist_image_digest is set (apply B)."
+  value       = module.caselist_run.run_task_definition_arn
+}
+
+output "caselist_run_schedule_name" {
+  description = "The Wednesday 06:00 America/Chicago run schedule. Null until caselist_image_digest is set (apply B)."
+  value       = module.caselist_run.run_schedule_name
+}
+
+output "caselist_run_schedule_state" {
+  description = "ENABLED or DISABLED; disabled until the cutover. Null until apply B."
+  value       = module.caselist_run.run_schedule_state
+}
+
+output "caselist_run_deployer_permission_set_name" {
+  description = "The run's deployer permission set (DebateDevCaselistRunDeployer / DebateProdCaselistRunDeployer)."
+  value       = module.caselist_run.deployer_permission_set_name
+}
+
+output "caselist_run_deployer_profile_name" {
+  description = "The name to give the deployer's SSO profile (debate-dev-caselist-run-deployer / debate-prod-caselist-run-deployer), which scripts/caselist_run_deploy.sh uses."
+  value       = module.caselist_run.deployer_profile_name
 }

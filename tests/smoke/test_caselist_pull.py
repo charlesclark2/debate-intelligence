@@ -291,6 +291,22 @@ def test_a_weekly_pull_downloads_imports_publishes_and_then_finds_nothing_new(
         "openev 2026-policy",
         f"{SYNTHETIC_CASELIST} full/2026-09-15",
     ]
+    # Each stage's start and end, in the summary and in the run's details (v1-e40-t03); no volume
+    # is read without storage.volume_warning_percent, which only the cloud task sets.
+    every_stage = [
+        "select",
+        "download",
+        "import",
+        "publish",
+        "parse",
+        "search_index",
+        "landscape",
+        "report",
+        "retention",
+    ]
+    assert [one["stage"] for one in data["stage_times"]] == every_stage
+    assert [one["stage"] for one in data["run_details"]["stage_times"]] == every_stage
+    assert data["data_volume"] is None
 
     # The report confirmed every week in the bucket, so retention took them out of the inbox
     # (v1-e34-t11), and the summary names each by caselist and date.

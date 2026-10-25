@@ -1244,6 +1244,8 @@ class ServiceContainer:
             if caselist.full_archive_rotation
             else None,
             read_full_archive=self.read_full_archive,
+            # The cloud run's 70% warning on its ephemeral volume (`v1-e40-t03`); unset on the Mac.
+            volume_warning_percent=settings.storage.volume_warning_percent,
         )
 
     def search_index_store_check(self) -> SearchIndexStoreCheck:

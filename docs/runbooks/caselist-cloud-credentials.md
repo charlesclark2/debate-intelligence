@@ -35,7 +35,9 @@ permission set 32 characters, and that name has 33 in dev, so it is
 `Debate<Env>CaselistSecretWriter` (the PM's ruling 1, 2026-10-24).
 
 **The order.** Apply A in dev, then the coach writes the password. Apply B in dev waits for
-`v1-e40-t03`'s first image push, because the login task runs the run's image on the run's network.
+`v1-e40-t03`'s network, cluster and repository and its first image push, because the login task runs
+the run's image on the run's network; [caselist-cloud-run.md](caselist-cloud-run.md) applies them and
+then apply B, for the login and the run together.
 Prod follows at the pilot's promotion (ADR-0020 (7)), by the same steps against `envs/prod`.
 
 **Every dev apply here runs from `dev`, after `v1-e40-t02` has merged: never from a task branch.**
@@ -377,46 +379,16 @@ events have not arrived yet; wait five minutes and run it again.
 
 ## Step 5 — Apply B in dev: the login task and its schedule (follow-up, after `v1-e40-t03`)
 
-Not now: the login task runs the run's image on the run's network, which `v1-e40-t03` builds. Once
-t03 has pushed its first image, its outputs give `caselist_login_task`'s six values. Put them in a
-file beside the root, `infrastructure/envs/dev/caselist-login-task.auto.tfvars` (none of it is a
-secret or a person; commit it or not as t03's runbook says):
-
-```hcl
-caselist_login_task = {
-  cluster_arn        = "arn:aws:ecs:us-east-1:<account>:cluster/debate-dev-caselist-run"
-  subnet_ids         = ["subnet-..."]
-  security_group_ids = ["sg-..."]
-  repository_arn     = "arn:aws:ecr:us-east-1:<account>:repository/debate-dev-caselist-run"
-  repository_url     = "<account>.dkr.ecr.us-east-1.amazonaws.com/debate-dev-caselist-run"
-  image_digest       = "sha256:<64 hex digits>"
-}
-```
-
-Then plan, read, and apply, as in steps 1 and 2.
-
-**Operator command** (expected runtime ~2 min)
-Where: `$WT`
-```bash
-cd "$WT"
-if env | grep -qE '^(TF_VAR_|TF_WORKSPACE=|TF_DATA_DIR=|TF_CLI_ARGS)'; then echo "STOP: a Terraform override is set in this shell"; else AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev plan -input=false -no-color -out=caselist-login.tfplan | tee /tmp/caselist-login-plan.txt | tail -5; fi
-grep -E '^Plan:|must be replaced|will be destroyed' /tmp/caselist-login-plan.txt
-```
-
-**What to read, and what stops you.** `Plan: 11 to add, 0 to change, 0 to destroy.` and no line
-saying `must be replaced` or `will be destroyed`: the log group `debate-dev-caselist-login`, the
-execution role and the scheduler role (each with one inline policy and two exclusive-policy
-resources), the task definition `debate-dev-caselist-login` whose image ends `@sha256:` and the
-digest above, and the schedule. The task definition must show **no `secrets`** in its container
-definition. Send the plan to the PM; apply only after the PM's word:
-
-**Operator command** (expected runtime ~1 min)
-Where: `$WT`
-```bash
-cd "$WT"
-AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev apply -input=false caselist-login.tfplan
-```
-Success looks like `Apply complete! Resources: 11 added, 0 changed, 0 destroyed.`
+Apply B now creates the login task and the run task together, on the network, cluster and repository
+`v1-e40-t03` builds, pinned by one image digest (`caselist_image_digest`; t02's `caselist_login_task`
+is gone). Its steps are [caselist-cloud-run.md](caselist-cloud-run.md)'s 1 to 6: the run's
+infrastructure, the token check (does a new login end the Mac's token?), the deployer's profile,
+the first image push, then apply B, whose plan is `17 to
+add`: this login's 11 (the log group `debate-dev-caselist-login`, the execution role and the
+scheduler role, each with one inline policy and two exclusive-policy resources, the task definition
+`debate-dev-caselist-login` whose image ends `@sha256:` and the digest, and the schedule) and the
+run's 6. The login's task definition must show **no `secrets`** in its container definition, and its
+schedule is `ENABLED`.
 
 **The first scheduled login** runs the next Wednesday at 03:00 America/Chicago. After it, the token
 secret has a version written by the login role, and its log says so. Run this on the Wednesday

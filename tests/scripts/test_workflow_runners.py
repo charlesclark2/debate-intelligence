@@ -16,7 +16,9 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_FILES = sorted((REPO_ROOT / ".github" / "workflows").glob("*.y*ml"))
-PINNED_RUNNERS = {"ubuntu-24.04"}
+# ubuntu-24.04-arm: validate-dev's image job builds the weekly cloud run's arm64 image natively
+# (v1-e40-t03). Pinned like the other, never ubuntu-latest-arm.
+PINNED_RUNNERS = {"ubuntu-24.04", "ubuntu-24.04-arm"}
 
 
 def strings(value: Any) -> Iterator[str]:

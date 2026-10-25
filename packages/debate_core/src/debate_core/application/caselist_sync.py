@@ -495,6 +495,19 @@ serialised; a failed fetch or import whose error quotes it has it taken out of t
 A failed stage's reason, error codes and hint name no path on this machine either (`v1-e34-t13`): a
 refused directory is named by its role, and an error that quotes a file under the data directory
 or the inbox has that directory replaced by its name.
+
+## When each stage ran, and how full the data volume got (`v1-e40-t03`)
+
+ADR-0020 could not time a run's stages from what a run left behind, so the summary now says when
+each stage that ran started and ended (:attr:`RunSummary.stage_times`), and the run's details keep
+the same (:mod:`debate_core.application.sync_runs`). A stage a dry run only planned has no times.
+
+The cloud run works on a restored copy in a fixed ephemeral volume of 100 GiB, which the season's
+corpus grows into. With `storage.volume_warning_percent` set, as the cloud task sets it to 70, the
+run reads how full the data directory's volume is after every stage it times and keeps the fullest
+reading (:attr:`RunSummary.data_volume`); past the threshold, the summary says so, so the volume is
+resized before a run fills it. Unset, the default and the Mac's case, nothing is read: a laptop's
+disk is not the run's to judge. A reading that fails costs the run its reading, never a stage.
 """
 
 from __future__ import annotations
@@ -505,7 +518,8 @@ import json
 import logging
 import os
 import re
-from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
+import shutil
+from collections.abc import Awaitable, Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
@@ -613,6 +627,7 @@ __all__ = [
     "CaselistParseStage",
     "CaselistSyncService",
     "DailyDownloadLimitReached",
+    "DataVolumeUsage",
     "DownloadLedger",
     "DriftKind",
     "FullArchiveImport",
@@ -644,11 +659,13 @@ __all__ = [
     "SnapshotDrift",
     "StageOutcome",
     "StageRecord",
+    "StageTime",
     "SyncPlan",
     "SyncRunInProgress",
     "SyncStage",
     "UndatedArchive",
     "UnknownSyncEvent",
+    "VolumeReading",
     "append_state_line",
     "camp_path_of_manifest_row",
     "caselists_to_parse",
@@ -657,6 +674,7 @@ __all__ = [
     "full_archive_of_inbox_name",
     "inbox_files",
     "openev_id_of_inbox_name",
+    "read_volume",
     "remove_state_file",
     "run_pull",
     "search_index_stores",
@@ -738,7 +756,9 @@ removed, so the version moves; no stage ever filled them, and both were `0` in e
 written. The run log's record schema is untouched again: the stage's counts reach `caselist runs`
 in the parse stage's `reason`, which every build reads. Under version 5, `search_index` (`v1-e39-t09`)
 is added: the search index stage's index id, sizes and warnings (:class:`SearchIndexStageCounts`),
-or `null` when the stage did not run. A key added, so the version stays.
+or `null` when the stage did not run. A key added, so the version stays. So are `stage_times` and
+`data_volume` (`v1-e40-t03`): when each stage started and ended, and how full the data directory's
+volume got, or `null` when the run read no volume.
 """
 RUN_SUMMARY_DIRECTORY: Final = "caselist-sync-runs"
 
@@ -931,6 +951,86 @@ class StageRecord:
             "drift": [one.as_json() for one in self.drift],
             # Additive (`v1-e34-t28`): the version stays.
             "not_compared": [one.as_json() for one in self.not_compared],
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class StageTime:
+    """When one stage of a run started and ended, by the run's own clock (`v1-e40-t03`)."""
+
+    stage: SyncStage
+    started_at: datetime
+    finished_at: datetime
+
+    @property
+    def duration_seconds(self) -> float:
+        return (self.finished_at - self.started_at).total_seconds()
+
+    def as_json(self) -> dict[str, object]:
+        return {
+            "stage": str(self.stage),
+            "started_at": self.started_at.isoformat(),
+            "finished_at": self.finished_at.isoformat(),
+            "duration_seconds": round(self.duration_seconds, 3),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class VolumeReading:
+    """How big the volume a directory is on is, and how much of it is used, in bytes."""
+
+    total_bytes: int
+    used_bytes: int
+
+
+def read_volume(directory: Path) -> VolumeReading:
+    """The volume `directory` is on, as :func:`shutil.disk_usage` reads it."""
+    usage = shutil.disk_usage(directory)
+    return VolumeReading(total_bytes=usage.total, used_bytes=usage.used)
+
+
+@dataclass(frozen=True, slots=True)
+class DataVolumeUsage:
+    """The fullest the data directory's volume was after any stage of a run (`v1-e40-t03`).
+
+    Bytes, a percentage and a stage name, never a path. ADR-0020 (1) 2: the cloud run's ephemeral
+    volume is enlarged once a run passes `warning_percent`, before a run fills it.
+    """
+
+    total_bytes: int
+    peak_used_bytes: int
+    peak_after: SyncStage
+    """The stage after which the volume was fullest."""
+
+    warning_percent: int
+
+    @property
+    def peak_percent(self) -> float:
+        return 100.0 * self.peak_used_bytes / self.total_bytes if self.total_bytes else 0.0
+
+    @property
+    def passed_warning(self) -> bool:
+        """Strictly past the threshold, compared in whole bytes: exactly 70% has not passed 70%."""
+        return self.peak_used_bytes * 100 > self.warning_percent * self.total_bytes
+
+    @property
+    def warning(self) -> str | None:
+        """The sentence the summary carries when the volume passed the threshold, else `None`."""
+        if not self.passed_warning:
+            return None
+        return (
+            f"the data volume was {self.peak_percent:.1f}% used after the {self.peak_after} stage, "
+            f"past the {self.warning_percent}% warning: enlarge it before a run fills it"
+        )
+
+    def as_json(self) -> dict[str, object]:
+        return {
+            "total_bytes": self.total_bytes,
+            "peak_used_bytes": self.peak_used_bytes,
+            "peak_percent": round(self.peak_percent, 1),
+            "peak_after": str(self.peak_after),
+            "warning_percent": self.warning_percent,
+            "warning": self.warning,
         }
 
 
@@ -2347,6 +2447,14 @@ class RunSummary:
     (`v1-e30-t13`'s :attr:`~debate_core.application.caselist.import_service.ImportReport.held_by_request`,
     summed over the run's imports, `v1-e34-t23`). Request ids and counts: never a path."""
 
+    stage_times: tuple[StageTime, ...] = ()
+    """When each stage the run carried out started and ended, in the run's order (`v1-e40-t03`). A
+    stage a dry run only planned has none."""
+
+    data_volume: DataVolumeUsage | None = None
+    """The fullest the data directory's volume was after a stage, or `None` when the run read none:
+    `storage.volume_warning_percent` unset, or every reading failed (`v1-e40-t03`)."""
+
     @property
     def archives_seen(self) -> int:
         return len(self.archives)
@@ -2479,6 +2587,9 @@ class RunSummary:
             "full_archive_recounted": [one.as_json() for one in self.full_archive_recounts],
             # Additive (`v1-e34-t23`): uploads a removal's hold refused, by request id.
             "held_by_request": dict(sorted(self.held_by_request.items())),
+            # Additive (`v1-e40-t03`): when each stage ran, and how full the data volume got.
+            "stage_times": [one.as_json() for one in self.stage_times],
+            "data_volume": self.data_volume.as_json() if self.data_volume is not None else None,
             "selections": [one.as_json() for one in self.archives],
             "openev_selections": [one.as_json() for one in self.openev],
         }
@@ -2549,6 +2660,9 @@ class _RunTally:
     """What the newest run's report stage was cut short before comparing, for this run's report stage
     to compare (`v1-e34-t28`). From the caller, which reads the run's details
     (:func:`~debate_core.application.sync_runs.comparisons_owed_by_the_newest_run`)."""
+    stage_times: list[StageTime] = field(default_factory=lambda: list[StageTime]())
+    data_volume: DataVolumeUsage | None = None
+    """The fullest reading so far, when the run reads its volume (`v1-e40-t03`)."""
 
     def count_held(self, held_by_request: Mapping[str, int]) -> None:
         for request_id, count in held_by_request.items():
@@ -2704,6 +2818,11 @@ class CaselistSyncService:
             and `caselist.full_archive_interval_days`. Off, `--full-archive` still fetches one.
         read_full_archive: Reads a downloaded complete archive, within the complete archive's own
             size ceilings (`caselist.max_full_archive_bytes`). Defaults to `read_archive`.
+        volume_warning_percent: `storage.volume_warning_percent`: past this share of the data
+            directory's volume used after a stage, the summary warns (`v1-e40-t03`). `None`, the
+            default, reads no volume.
+        read_volume: How the data directory's volume is read; :func:`read_volume` unless a test
+            stubs it.
     """
 
     def __init__(
@@ -2731,8 +2850,12 @@ class CaselistSyncService:
         full_archive_rotation: FullArchiveRotation | None = None,
         read_full_archive: ArchiveReader | None = None,
         later_manifests: LaterManifests | None = None,
+        volume_warning_percent: int | None = None,
+        read_volume: Callable[[Path], VolumeReading] = read_volume,
     ) -> None:
         self._source = source
+        self._volume_warning_percent = volume_warning_percent
+        self._read_volume = read_volume
         self._archives = archive_importer
         # The importer's own repository, local store and suppression list unless told otherwise, so
         # that no pull imports a weekly without measuring the later manifests again (`v1-e30-t18`).
@@ -2867,7 +2990,11 @@ class CaselistSyncService:
                 owed_for_drift=frozenset(owed_for_drift), comparisons_owed=tuple(comparisons_owed)
             )
             fallbacks = self._suppression_fallbacks()
-            plan = await self._selection_stage(caselists, tally, full_archive=full_archive)
+            plan = await self._timed(
+                SyncStage.SELECT,
+                tally,
+                lambda: self._selection_stage(caselists, tally, full_archive=full_archive),
+            )
             self._note_local_copy_only(tally, SyncStage.SELECT, since=fallbacks)
             if tally.comparisons_owed:
                 tally.add_to_reason(SyncStage.SELECT, _check_owed(tally.comparisons_owed))
@@ -2877,7 +3004,9 @@ class CaselistSyncService:
                 self._plan_remaining_stages(plan, tally)
             else:
                 await self._execute(plan, tally)
-            await self._retention_stage(tally, plan=plan, dry_run=dry_run)
+            await self._timed(
+                SyncStage.RETENTION, tally, lambda: self._retention_stage(tally, plan=plan, dry_run=dry_run)
+            )
             summary = self._summarise(started, caselists, tally, dry_run=dry_run)
         if not dry_run:
             self._write_summary(summary)
@@ -2920,10 +3049,10 @@ class CaselistSyncService:
             tally.record(SyncStage.SELECT, StageOutcome.COMPLETED, selected)
             for stage in (SyncStage.DOWNLOAD, SyncStage.IMPORT):
                 tally.record(stage, StageOutcome.SKIPPED, "publish-pending does no fetching or importing")
-            await self._publish_stage(tally)
+            await self._timed(SyncStage.PUBLISH, tally, lambda: self._publish_stage(tally))
             for stage in (SyncStage.PARSE, SyncStage.SEARCH_INDEX, SyncStage.LANDSCAPE):
                 tally.record(stage, StageOutcome.SKIPPED, "publish-pending runs no derived stages")
-            await self._report_stage(tally)
+            await self._timed(SyncStage.REPORT, tally, lambda: self._report_stage(tally))
             tally.record(
                 SyncStage.RETENTION,
                 StageOutcome.SKIPPED,
@@ -3411,15 +3540,49 @@ class CaselistSyncService:
     # --------------------------------------------------------------------------------------
 
     async def _execute(self, plan: SyncPlan, tally: _RunTally) -> None:
-        await self._download_stage(plan, tally)
+        await self._timed(SyncStage.DOWNLOAD, tally, lambda: self._download_stage(plan, tally))
         fallbacks = self._suppression_fallbacks()
-        await self._import_stage(tally)
+        await self._timed(SyncStage.IMPORT, tally, lambda: self._import_stage(tally))
         self._note_local_copy_only(tally, SyncStage.IMPORT, since=fallbacks)
-        await self._publish_stage(tally)
-        await self._parse_stage(tally)
-        await self._search_index_stage(plan, tally)
-        await self._landscape_stage(plan, tally)
-        await self._report_stage(tally)
+        await self._timed(SyncStage.PUBLISH, tally, lambda: self._publish_stage(tally))
+        await self._timed(SyncStage.PARSE, tally, lambda: self._parse_stage(tally))
+        await self._timed(SyncStage.SEARCH_INDEX, tally, lambda: self._search_index_stage(plan, tally))
+        await self._timed(SyncStage.LANDSCAPE, tally, lambda: self._landscape_stage(plan, tally))
+        await self._timed(SyncStage.REPORT, tally, lambda: self._report_stage(tally))
+
+    async def _timed[T](self, stage: SyncStage, tally: _RunTally, work: Callable[[], Awaitable[T]]) -> T:
+        """Carry out one stage, recording when it started and ended, then read the volume (`v1-e40-t03`).
+
+        By the run's clock, which gives the summary its own start and finish, so a stage's times
+        always lie within the run's.
+        """
+        started = self._clock()
+        try:
+            return await work()
+        finally:
+            tally.stage_times.append(StageTime(stage=stage, started_at=started, finished_at=self._clock()))
+            self._read_volume_after(stage, tally)
+
+    def _read_volume_after(self, stage: SyncStage, tally: _RunTally) -> None:
+        """Keep the fullest reading of the data directory's volume, when the run reads it at all."""
+        if self._volume_warning_percent is None:
+            return
+        try:
+            reading = self._read_volume(self._state_dir)
+        except OSError as error:
+            # The error's class and no message: a message would quote the data directory's path.
+            logger.warning(
+                "Could not read the data volume after the %s stage (%s)", stage, type(error).__name__
+            )
+            return
+        peak = tally.data_volume
+        if peak is None or reading.used_bytes > peak.peak_used_bytes:
+            tally.data_volume = DataVolumeUsage(
+                total_bytes=reading.total_bytes,
+                peak_used_bytes=reading.used_bytes,
+                peak_after=stage,
+                warning_percent=self._volume_warning_percent,
+            )
 
     async def _download_stage(self, plan: SyncPlan, tally: _RunTally) -> None:
         """Fetch the selected archives oldest-first, then the OpenEv files.
@@ -4658,6 +4821,8 @@ class CaselistSyncService:
             full_archive_imports=tuple(tally.full_archive_imports),
             full_archive_recounts=tuple(tally.full_archive_recounts.values()),
             held_by_request=dict(tally.held_by_request),
+            stage_times=tuple(tally.stage_times),
+            data_volume=tally.data_volume,
         )
 
     def _write_summary(self, summary: RunSummary) -> Path:

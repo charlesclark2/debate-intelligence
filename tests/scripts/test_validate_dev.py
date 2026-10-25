@@ -576,6 +576,62 @@ def test_anything_less_is_a_failure_on_the_requested_commit(
     assert concluded(**changes) == driver.Conclusion(SHA, "failure", description)
 
 
+def test_the_run_image_job_once_reported_must_succeed_too() -> None:
+    """v1-e40-t03: the workflow reports its image job, and a red image is no validated build."""
+    assert concluded(jobs=ALL_GREEN | {"image": "failure"}) == driver.Conclusion(
+        SHA, "failure", "validation failed: image failure"
+    )
+    assert concluded(jobs=ALL_GREEN | {"image": "success"}) == driver.Conclusion(
+        SHA,
+        "success",
+        "v0.1.0-dev.5 installed from its pre-release and validated: recorded and slow tiers green, "
+        "the run image built and checked",
+    )
+
+
+def junit_report(directory: Path, *, tests: int, skipped: int) -> Path:
+    path = directory / "image-smoke.xml"
+    cases = "".join(f'<testcase classname="c" name="t{index}"/>' for index in range(tests - skipped))
+    cases += "".join(
+        f'<testcase classname="c" name="s{index}"><skipped message="no fixture"/></testcase>'
+        for index in range(skipped)
+    )
+    path.write_text(
+        f'<testsuites><testsuite name="pytest" tests="{tests}" failures="0" errors="0" skipped="{skipped}">'
+        f"{cases}</testsuite></testsuites>",
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_tier_report_passes_a_report_with_tests_and_no_skip(tmp_path: Path) -> None:
+    report = junit_report(tmp_path, tests=7, skipped=0)
+
+    assert (
+        driver.main(["tier-report", "--name", "image smoke", str(report)], github=FakeGitHub())
+        == driver.PASSED
+    )
+
+
+@pytest.mark.parametrize(("tests", "skipped"), [(7, 1), (0, 0)])
+def test_tier_report_fails_a_skip_or_an_empty_report(tmp_path: Path, tests: int, skipped: int) -> None:
+    report = junit_report(tmp_path, tests=tests, skipped=skipped)
+
+    assert (
+        driver.main(["tier-report", "--name", "image smoke", str(report)], github=FakeGitHub())
+        == driver.PROBLEM
+    )
+
+
+def test_tier_report_fails_when_there_is_no_report(tmp_path: Path) -> None:
+    assert (
+        driver.main(
+            ["tier-report", "--name", "image smoke", str(tmp_path / "missing.xml")], github=FakeGitHub()
+        )
+        == driver.PROBLEM
+    )
+
+
 def test_a_cancelled_run_is_an_error_not_a_pending_left_behind() -> None:
     assert concluded(jobs=ALL_GREEN | {"smoke": "cancelled"}) == driver.Conclusion(
         SHA, "error", "validation was cancelled before it finished"

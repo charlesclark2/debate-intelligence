@@ -6,10 +6,19 @@
 # v1-e40-t02 builds the credentials and the scheduled login:
 #
 #   credentials.tf        the key, the two secrets and their resource policies
-#   roles.tf              the login role, and the run role's credentials grant
+#   roles.tf              the login role, and the run role with its two grants
 #   credential_writer.tf  the coach's Debate<Env>CaselistSecretWriter permission set
-#   login_task.tf         the login task definition and its Wednesday schedule, once
-#                         var.login_task names the run's network and image (v1-e40-t03)
+#   login_task.tf         the login task definition and its Wednesday 03:00 schedule, once
+#                         var.image_digest names a pushed image
+#
+# v1-e40-t03 builds the run:
+#
+#   network.tf            the run's VPC: public subnets, no inbound rule, outbound HTTPS, S3
+#                         gateway endpoint
+#   cluster.tf            the cluster and the image repository
+#   run_task.tf           the run's execution role, log group, task definition and Wednesday 06:00
+#                         schedule, disabled until the cutover
+#   deployer.tf           the Debate<Env>CaselistRunDeployer permission set
 #
 # Applies are operator-run (docs/runbooks/caselist-cloud-credentials.md). There are no GitHub OIDC
 # roles until v2-e10-t03, so CI never runs plan or apply against this module, and neither does an

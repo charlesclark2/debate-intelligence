@@ -44,6 +44,7 @@ from debate_cli.exit_codes import (
     exit_code_for_failure_codes,
 )
 from debate_core.application.caselist_sync import (
+    DataVolumeUsage,
     InboxFileKind,
     InboxFileVerdict,
     InboxRetention,
@@ -1024,3 +1025,72 @@ def test_a_run_that_exits_one_notifies_that_a_person_should_look(
         "A person should look: at least one failure here will be the same on the next scheduled run."
         in notification.message
     )
+
+
+# ------------------------------------------------------------------------------------------------
+# Each stage's times and the data volume's warning (`v1-e40-t03`)
+# ------------------------------------------------------------------------------------------------
+
+
+def test_a_run_reports_each_stages_times_in_its_summary_and_its_details(
+    installation: Path, site: respx.MockRouter
+) -> None:
+    envelope = pull("--caselist", SYNTHETIC_CASELIST)
+
+    data = envelope["data"]
+    every_stage = [
+        "select",
+        "download",
+        "import",
+        "publish",
+        "parse",
+        "search_index",
+        "landscape",
+        "report",
+        "retention",
+    ]
+    assert [one["stage"] for one in data["stage_times"]] == every_stage
+    assert [one["stage"] for one in data["run_details"]["stage_times"]] == every_stage
+    assert data["data_volume"] is None, "storage.volume_warning_percent is unset: no volume is read"
+    assert data["run_details"]["data_volume"] is None
+
+
+def test_a_run_under_a_volume_warning_reads_the_data_directorys_volume_and_warns_past_it(
+    installation: Path, site: respx.MockRouter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The composition root hands the run the setting. This machine's real disk is read, so the
+    threshold is 1%: any disk holding an operating system and this checkout is past it."""
+    monkeypatch.setenv("DEBATE_STORAGE__VOLUME_WARNING_PERCENT", "1")
+
+    envelope = pull("--caselist", SYNTHETIC_CASELIST)
+
+    volume = envelope["data"]["data_volume"]
+    assert volume["warning_percent"] == 1
+    assert volume["peak_percent"] > 1
+    assert volume["warning"].endswith("past the 1% warning: enlarge it before a run fills it")
+    assert envelope["data"]["run_details"]["data_volume"] == volume
+    assert envelope["exit_code"] == ExitCode.OK, "a warning is not a failure"
+
+
+def test_the_caption_carries_the_data_volumes_warning_and_nothing_below_it() -> None:
+    started = datetime(2026, 11, 4, 12, 0, tzinfo=UTC)
+    gib = 1024**3
+
+    def summary(used: int) -> RunSummary:
+        return RunSummary(
+            run_id="20261104T120000Z",
+            started_at=started,
+            finished_at=started,
+            dry_run=False,
+            caselists=(SYNTHETIC_CASELIST,),
+            stages=(StageRecord(SyncStage.SELECT, StageOutcome.COMPLETED),),
+            data_volume=DataVolumeUsage(
+                total_bytes=100 * gib, peak_used_bytes=used, peak_after=SyncStage.PARSE, warning_percent=70
+            ),
+        )
+
+    assert _caption(summary(71 * gib)).endswith(
+        " Warning: the data volume was 71.0% used after the parse stage, past the 70% warning: "
+        "enlarge it before a run fills it. 0.0s."
+    )
+    assert "Warning" not in _caption(summary(70 * gib))

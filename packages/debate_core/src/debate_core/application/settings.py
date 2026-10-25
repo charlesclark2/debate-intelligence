@@ -328,6 +328,20 @@ class S3StorageSettings(SettingsGroup):
         """:attr:`multipart_threshold_mb` in the bytes the S3 adapters take."""
         return self.multipart_threshold_mb * 1024 * 1024
 
+    @field_validator("aws_profile")
+    @classmethod
+    def _blank_is_none(cls, value: str | None) -> str | None:
+        """An empty value is no profile: botocore's credential chain, the task role in the cloud.
+
+        The committed dev and prod profiles name the operator's SSO profile, and an environment
+        variable can only override a value, never remove one. So the cloud run sets
+        `DEBATE_STORAGE__S3__AWS_PROFILE=` to sign with its task role (ADR-0020 (5)); botocore
+        itself would take an empty name for a profile called "" and refuse it.
+        """
+        if value is not None and not value.strip():
+            return None
+        return value
+
     @field_validator("endpoint_url")
     @classmethod
     def _on_this_machine(cls, value: str | None) -> str | None:
@@ -358,6 +372,16 @@ class StorageSettings(SettingsGroup):
     s3: S3StorageSettings = Field(
         default_factory=S3StorageSettings,
         description="The cloud evidence store for this environment, or the defaults when it has none.",
+    )
+    volume_warning_percent: int | None = Field(
+        default=None,
+        ge=1,
+        le=99,
+        description=(
+            "Past this share of the data directory's volume used after any stage, `caselist pull` "
+            "warns in its summary. The cloud run sets 70 for its fixed ephemeral volume (ADR-0020 "
+            "(1) 2). Unset, the default, reads no volume: a laptop's disk is not the run's to judge."
+        ),
     )
 
     @field_validator("data_dir")

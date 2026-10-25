@@ -6,9 +6,10 @@
 # is a start that failed: the schedule's retry policy is zero, so a wrong password costs one
 # attempt a week.
 #
-# None of this exists until var.login_task names the run's cluster, subnets, security group and
-# image (v1-e40-t03), so the credentials can be applied first ("apply A") and this second
-# ("apply B"), after t03's first image push.
+# It runs on the run's cluster, in its subnets and security group, from its repository
+# (v1-e40-t03: network.tf, cluster.tf). None of it exists until var.image_digest names an image
+# pushed there, so the credentials are applied first ("apply A"), the network, cluster and
+# repository next, and this once the first image is pushed ("apply B").
 #
 # Who can make the login role run: the task definition is Terraform's, and pins its image by
 # digest and its command, and only the schedule's role (assumable by scheduler.amazonaws.com for
@@ -17,7 +18,7 @@
 # password in the container's environment; the command reads it with the task role instead.
 
 locals {
-  create_login_task = var.login_task != null
+  create_login_task = var.image_digest != null
 
   login_family         = "${var.name_prefix}-login"
   login_schedule_name  = "${var.name_prefix}-login"
@@ -28,7 +29,7 @@ locals {
   # schedule names the role.
   login_schedule_arn = "arn:${local.partition}:scheduler:${local.region}:${local.account_id}:schedule/default/${local.login_schedule_name}"
 
-  login_image = local.create_login_task ? "${var.login_task.repository_url}@${var.login_task.image_digest}" : null
+  login_image = local.create_login_task ? "${aws_ecr_repository.run.repository_url}@${var.image_digest}" : null
 
   # What makes the CLI the cloud login (ADR-0020 (5)): no secret, only names and switches. No AWS
   # profile, so the SDK signs with the task role.
@@ -81,7 +82,7 @@ locals {
           "ecr:BatchGetImage",
           "ecr:GetDownloadUrlForLayer",
         ]
-        Resource = var.login_task.repository_arn
+        Resource = aws_ecr_repository.run.arn
       },
       {
         Sid    = "WriteTheLoginLog"
@@ -122,7 +123,7 @@ locals {
         Action   = "ecs:RunTask"
         Resource = aws_ecs_task_definition.login[0].arn
         Condition = {
-          ArnEquals = { "ecs:cluster" = var.login_task.cluster_arn }
+          ArnEquals = { "ecs:cluster" = aws_ecs_cluster.run.arn }
         }
       },
       {
@@ -249,7 +250,7 @@ resource "aws_scheduler_schedule" "login" {
   }
 
   target {
-    arn      = var.login_task.cluster_arn
+    arn      = aws_ecs_cluster.run.arn
     role_arn = aws_iam_role.scheduler[0].arn
 
     ecs_parameters {
@@ -261,8 +262,8 @@ resource "aws_scheduler_schedule" "login" {
       enable_ecs_managed_tags = false
 
       network_configuration {
-        subnets          = var.login_task.subnet_ids
-        security_groups  = var.login_task.security_group_ids
+        subnets          = [for subnet in aws_subnet.public : subnet.id]
+        security_groups  = [aws_security_group.run.id]
         assign_public_ip = true
       }
     }

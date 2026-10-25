@@ -31,7 +31,8 @@ spec:
     role, never the login role.
   priority: 1
   constraints:
-    packages: [infrastructure, ops, debate_cli, debate_core.application, packages/debate_cli/tests, packages/debate_core/tests, docs/runbooks]
+    # PM ruling 2026-10-24: the deploy script, the validate-dev image job and their tests, and the smoke check run inside the image.
+    packages: [infrastructure, ops, debate_cli, debate_core.application, packages/debate_cli/tests, packages/debate_core/tests, docs/runbooks, scripts, .github/workflows, tests/scripts, tests/smoke]
     forbidden:
       - Credentials in the image, its environment or its logs
       - A run that ignores the lock
@@ -56,7 +57,7 @@ spec:
         volume passes 70% used says so in its summary, by test with a stubbed volume; the
         record's own fields are unchanged.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

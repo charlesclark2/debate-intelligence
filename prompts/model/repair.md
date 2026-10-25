@@ -1,7 +1,7 @@
 ---
 prompt_id: model.repair
 version: 1.0.0
-status: draft
+status: released
 task_class: complex_reasoning
 output_schema: debate_core.application.structured_output.RepairedSchema
 owner: v1-e05-model-router

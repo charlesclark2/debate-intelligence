@@ -1,4 +1,12 @@
 {
   "format": 1,
-  "prompts": {}
+  "prompts": {
+    "model.repair": {
+      "1.0.0": {
+        "body_sha256": "62a594adf722b36d4099dacb03f9af55a0307fc5bd5fec92882d999232c053b7",
+        "output_schema": "debate_core.application.structured_output.RepairedSchema",
+        "task_class": "complex_reasoning"
+      }
+    }
+  }
 }

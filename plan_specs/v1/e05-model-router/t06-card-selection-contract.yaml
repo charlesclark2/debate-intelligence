@@ -70,7 +70,7 @@ spec:
         (PM amendment 2026-10-19) A generated artifact cannot be built or stored without its
         response metadata and inputs, by test.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -136,7 +136,8 @@ def the_next_run_finishes_the_week(
     assert all(key.startswith(LATE_ONLY_UNDER) for key in late), sorted(late)
     if late:
         assert following["data"]["parse"] is None, "late only when the next run had nothing to parse"
-        assert world.run("caselist", "parse", "--caselist", "testcl26", "--publish")["exit_code"] == ExitCode.OK
+        parsed = world.run("caselist", "parse", "--caselist", "testcl26", "--publish")
+        assert parsed["exit_code"] == ExitCode.OK, parsed
         built = world.run("tub", "index", "build", "--caselist", "testcl26", "--caselist", "openev")
         assert built["exit_code"] == ExitCode.OK, built
         assert world.run("tub", "index", "publish", "--env", "dev", "--newest")["exit_code"] == ExitCode.OK

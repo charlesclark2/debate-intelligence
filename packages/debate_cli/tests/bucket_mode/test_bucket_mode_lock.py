@@ -43,7 +43,7 @@ def at(moment: datetime) -> str:
 
 
 def another_runner_holds_the_lock(world: World, *, lease_left: timedelta) -> None:
-    """Another runner's lease, written as that runner would: held, by a Mac, expiring `lease_left` from now."""
+    """Another runner's lease, as that runner writes it: held, by a Mac, expiring `lease_left` from now."""
     now = world.clock.now
     body = {
         "format_version": 1,
@@ -127,7 +127,8 @@ def test_an_expired_lease_is_taken_over_and_the_run_says_so(world: World, tmp_pa
     ]
     assert any(body.get("took_over_from") == OTHER_RUN for body in taken)
     assert world.lock()["state"] == "free"
-    assert f"reports/sync-runs/2026/{pulled['data']['run_id']}.json" in world.keys("reports/sync-runs/")
+    record = f"reports/sync-runs/2026/{pulled['data']['run_id']}.json"
+    assert record in world.object_keys("reports/sync-runs/")
 
 
 def test_a_lease_short_of_the_skew_margin_past_its_expiry_is_still_refused(
@@ -150,7 +151,7 @@ def test_a_bucket_with_no_lock_object_is_never_started_on(world: World, tmp_path
 
     assert refused["exit_code"] == ExitCode.DOMAIN_FAILURE, refused
     assert refused["error"]["code"] == "RUN_STATE_NOT_SEEDED"
-    assert world.keys() == set(), "not one object, the run's record included"
+    assert world.object_keys() == set(), "not one object, the run's record included"
     assert world.last_record(empty)[0]["error_class"] == "RunStateNotSeeded"
     assert not any(str(call.request.url).endswith(".zip") for call in world.site.calls), "no download"
 
@@ -291,8 +292,8 @@ def unsuppress(world: World) -> Command:
         Body=(entry.to_line() + "\n").encode(),
     )
     return lambda: world.run(
-        "caselist", "unsuppress", "--sha256", digest, "--reason", "REMOVED_IN_ERROR", "--request", "RM-2026-01",
-        "--execute",
+        "caselist", "unsuppress", "--sha256", digest, "--reason", "REMOVED_IN_ERROR",
+        "--request", "RM-2026-01", "--execute",
     )  # fmt: skip
 
 
@@ -394,5 +395,5 @@ def test_in_local_mode_a_bucket_with_no_lock_object_changes_nothing(world: World
     pulled = world.pull()
 
     assert pulled["exit_code"] == ExitCode.OK, pulled
-    assert RUN_LOCK_KEY not in world.keys()
+    assert RUN_LOCK_KEY not in world.object_keys()
     assert pulled["data"]["run_details"]["bucket_run"] is None

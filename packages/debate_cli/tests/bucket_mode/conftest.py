@@ -101,7 +101,7 @@ class World:
     def copy_bucket(self, to: str) -> None:
         """Copy every current object of this bucket, with its metadata, into bucket `to`."""
         self._create(to)
-        for key in sorted(self.keys()):
+        for key in sorted(self.object_keys()):
             self.client.copy_object(Bucket=to, Key=key, CopySource={"Bucket": self.bucket, "Key": key})
 
     def use(self, data_dir: Path) -> Path:
@@ -145,7 +145,7 @@ class World:
 
     # -- reading the bucket ---------------------------------------------------------------------
 
-    def keys(self, prefix: str = "") -> set[str]:
+    def object_keys(self, prefix: str = "") -> set[str]:
         found: set[str] = set()
         for page in self.client.get_paginator("list_objects_v2").paginate(Bucket=self.bucket, Prefix=prefix):
             found.update(str(item.get("Key")) for item in page.get("Contents", []))
@@ -169,7 +169,7 @@ class World:
         return json.loads(records[-1]), json.loads(details[-1])
 
     def _create(self, name: str) -> None:
-        if name not in {one["Name"] for one in self.client.list_buckets().get("Buckets", [])}:
+        if name not in {one.get("Name") for one in self.client.list_buckets().get("Buckets", [])}:
             self.client.create_bucket(Bucket=name)
             self.client.put_bucket_versioning(Bucket=name, VersioningConfiguration={"Status": "Enabled"})
 

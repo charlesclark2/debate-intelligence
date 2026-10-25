@@ -103,7 +103,7 @@ def test_a_run_on_an_empty_directory_where_the_bucket_holds_no_parsed_store_fetc
 ) -> None:
     """A version directory the bucket does not hold is a full parse, from sources fetched from `raw/`."""
     full = the_macs_two_weeks_seeded(world, parse=False)
-    assert not world.keys("parsed/")
+    assert not world.object_keys("parsed/")
     world.copy_bucket(COPY)
     mac_copy = tmp_path / "mac-copy"
     shutil.copytree(full, mac_copy)
@@ -126,7 +126,7 @@ def test_a_parsed_file_whose_bytes_are_not_the_publishers_stops_the_restore(
     world: World, tmp_path: Path
 ) -> None:
     the_macs_two_weeks_seeded(world)
-    [key] = sorted(key for key in world.keys("parsed/testcl26/") if key.endswith("index.jsonl"))
+    [key] = sorted(key for key in world.object_keys("parsed/testcl26/") if key.endswith("index.jsonl"))
     head = world.client.head_object(Bucket=world.bucket, Key=key)
     world.client.put_object(
         Bucket=world.bucket, Key=key, Body=b"not what was published\n", Metadata=head["Metadata"]

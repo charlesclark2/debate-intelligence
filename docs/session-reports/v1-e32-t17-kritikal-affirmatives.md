@@ -50,6 +50,16 @@ affirmative is now identified rather than left among the unidentified rounds.
 * [the operator's refill](#operator-follow-ups), which the real store needs before a dry run, because
   1.3.0 re-keys three caches.
 
+**The PM ruled on the build's three questions the same day** ([below](#the-questions-of-2026-10-25-on-the-build-answered)):
+* `constraints.packages` is amended in the next PM batch;
+* precedence (a) stands: no existing assignment moves;
+* the K family list goes to the coach, and the session does not wait for it.
+
+So the dry-run script now prints the method table and the K-aff group, with the control by method, so
+that what option (b) would move is on record after the refill. The coach's edit to the families comes
+back on this branch before the pull request. The session then runs `tests/config`, commits the edit
+and notes it here.
+
 **The affected set was too long for a session at load 14 to 38.** The test directories of what
 changed and the always-run list ran instead
 ([below](#before-the-report-working-agreement-10)).
@@ -96,6 +106,8 @@ The rulings are a PM-ruling comment above the spec's `acceptanceCriteria` (commi
 | `arguments/landscape/render.py` | The section and the method table's two rows |
 | `application/ports/taxonomy_repository.py`, `integrations/landscape/yaml_taxonomy_repository.py` | `kritikal_affs/<topic id>.yaml` loaded and checked with the taxonomies; `kritikal_aff(topic)` |
 | `config/landscape/kritikal_affs/policy-2026-27-nhi.yaml` (new) | The position id and 20 K families with their phrases |
+| `scripts/landscape_dry_run_by_section.py` | After the build's rulings, the dry run prints the affirmative rounds by method, the K-aff group (by marker, by carry, refused), the control with its rounds by method, and the families by id. Counts only |
+| `KritikalAffs.control_by_method` | The control's rounds by the method that identified them. The `TEAM_CARRY` share is what option (b) would move. report.md's row is unchanged |
 | `scripts/assign_landscape_affs.py` | Its vocabulary takes the K-aff config, so it fills the same plan-text cache as the run; it prints the markers' and the K-aff rounds' counts |
 | `docs/guides/landscape-taxonomy.md` | "Kritikal affirmatives": the markers, the carry and its guard, what report.md shows, how to edit the families, and the refill after a taxonomy bump |
 
@@ -119,6 +131,8 @@ counted.
 | `tests/config`, the directory test | 1 failed, 55 passed, until the new directory was listed |
 | `integrations/landscape/test_plan_text_store.py` | t09's field pin failed on the new cache fields. It now pins them and the marker's own four fields |
 | `tests/scripts/test_assign_landscape_affs.py` | 1 failed, 8 passed against the committed script, swapped back byte for byte after |
+| `tests/scripts/test_landscape_dry_run_by_section.py` (after the build's rulings) | 2 failed, 1 passed (the no-hit case) before the script printed the method table and the group |
+| The control by method (the report test and the script test) | 2 failed, 107 passed, then 109 passed |
 
 **The goldens.** The group's counts matched the fixture table on the first run.
 * The section golden failed once, on its own last line. I had trimmed the blank line that ends a
@@ -197,6 +211,10 @@ No Hypothesis is used, so there is no example database to isolate (agreement 8).
   * `check_links.py`: OK;
   * `pre-commit run check-merge-conflict --all-files`: passed;
   * `validate_specs.py`: OK ([below](#files-changed)).
+* **After the build's rulings:**
+  * `pyright` (the project's configuration): 0 errors;
+  * `arguments/landscape`, the application's report, assignment and run tests, `tests/scripts`,
+    `tests/config`: 2,493 passed in 68.5 s.
 * **No shared test ground changed:** no `pyproject.toml`, `uv.lock`, conftest or pytest plugin. So no
   whole-selection hand-off.
 
@@ -456,10 +474,12 @@ after it reads everything again. That is an operator block:
   * `application/test_landscape_report.py`, `test_aff_assignment.py`, `test_plan_texts.py` and
     `test_landscape_run.py`;
   * `integrations/landscape/test_plan_text_store.py`;
-  * `tests/config/test_landscape_taxonomies.py`; `tests/scripts/test_assign_landscape_affs.py`.
+  * `tests/config/test_landscape_taxonomies.py`; `tests/scripts/test_assign_landscape_affs.py` and
+    `test_landscape_dry_run_by_section.py`.
 * **`tests/fixtures/landscape/kritikal_affs/`** (new, by hand): `README.md`, `taxonomy.yaml`,
   `rounds.yaml`, `report_section.md`, `method_table.md`.
-* **`scripts/assign_landscape_affs.py`.**
+* **`scripts/assign_landscape_affs.py`**, and **`scripts/landscape_dry_run_by_section.py`** with its test
+  in `tests/scripts` (after the build's rulings).
 * **`docs/guides/landscape-taxonomy.md`:** a section on kritikal affirmatives.
 * **The spec:** the PM's rulings as a comment above `acceptanceCriteria`, and the Goal's phase.
 
@@ -473,7 +493,12 @@ after it reads everything again. That is an operator block:
    * `scripts/assign_landscape_affs.py` and its test in `tests/scripts`. The script must read the same
      vocabulary as the run, or it would fill a plan-text cache the run never hits.
 
-   Question 1 asks to amend the list.
+   The dry-run script (`scripts/landscape_dry_run_by_section.py`) and its test joined these after the
+   build's rulings.
+
+   **Ruled 2026-10-25: amended.** The PM adds `debate_core.integrations`, `scripts` and `tests/scripts`
+   to `constraints.packages` in the next PM batch, with a ruling comment, as for t09 and t11. The
+   session does not touch the spec for it.
 2. **The control row counts rounds and names its files.** Ruling 2 asked for "marker files among
    identified rounds" in the method table, whose column is rounds. So the row gives the rounds, and its
    label gives the files ("a control: 2 files" in the fixture).
@@ -485,7 +510,10 @@ after it reads everything again. That is an operator block:
    whose other rounds name a policy aff is that aff's `TEAM_CARRY`, as before.
    * This keeps the 1,483 identified rounds of 1.2.0 where they are.
    * The control counts how often a marker sits in such a round.
-   * Question 2 asks whether the PM would rather have the marker win.
+   * **Ruled 2026-10-25: (a).** A K aff never moves an existing assignment.
+   * The control row from the dry run after the refill goes on record, by method. Its `TEAM_CARRY`
+     share is the size of what (b) would move. The PM decides on (b) from that number, as a later
+     task if at all.
 2. **"A file with no plan text" is read per round.** Every file of the round must have t09's `NONE`
    verdict and one of them a marker, as t09's carry guard reads a round. A round whose other file holds
    an unnamed plan text is a policy round. The counts' 25 marker files were all `NONE`. The real-store
@@ -503,7 +531,8 @@ after it reads everything again. That is an operator block:
    * ordered by files, then teams, then the config's order;
    * a longer phrase first, so `racial cap` is not also `cap`.
 
-   The 20 families and their phrases are my proposal for the coach to edit. They are the 14 Ks of 1.2.0
+   The 20 families and their phrases are my proposal. The coach is editing them (ruling of 2026-10-25),
+   and the report finishes with the list as it is. They are the 14 Ks of 1.2.0
    by their own words, and afropessimism, neoliberalism, feminism, Baudrillard, Deleuze, Nietzsche and
    anthropocentrism. `security` reads only `securitization`, because "security" heads health headings.
 7. **A label counts only over a text,** as t11's labels do: `Advocacy` or `Method` over a heading or
@@ -515,21 +544,56 @@ after it reads everything again. That is an operator block:
 
 ## Operator follow-ups
 
-1. **Refill the three caches under taxonomy 1.3.0** (ruling 1). Expected runtime: about 6 to 14
+The PM's ruling of 2026-10-25 on the build's questions set this order. The coach's list does not hold
+up the refill or the dry run.
+
+1. **The coach's K families.** The file is
+   `~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t17-kritikal-affirmatives/config/landscape/kritikal_affs/policy-2026-27-nhi.yaml`.
+   It counts the K families named in the K-aff files' headings, in one line of report.md. It never
+   places anything.
+
+   **The coach may:**
+   * rename a family (its `label`, or its `id` in lowercase kebab case);
+   * merge two families into one, add one, or drop one;
+   * change a family's heading words (`phrases`): lowercase words, each phrase in one family only, a
+     longer phrase matched first.
+
+   **He may not:**
+   * write a school, a team code or a tournament word anywhere in the file;
+   * change `schema_version`, `topic_id` or `position_id`.
+
+   After his edit, from the task worktree:
+
+```bash
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t17-kritikal-affirmatives
+```
+
+```bash
+uv run pytest tests/config
+```
+
+   **Success looks like:** every test passed, with 0 failed. A failure names the file and the phrase.
+   * The edit comes back on this branch before the pull request. The session then runs
+     `tests/config`, commits it and records it in this report.
+   * An edit to the file changes the plan-text cache's key. If it lands after the refill below, run
+     the refill's `assign_landscape_affs.py plan-texts` step once more before the dry run (about 204
+     s).
+
+2. **Refill the three caches under taxonomy 1.3.0** (ruling 1). Expected runtime: about 6 to 14
    minutes.
    * The classifications are read again in process.
    * The plan texts parse every affirmative file: 204 s on 2026-10-23.
    * The analytic texts parse every on-topic file: 551 s under load on 2026-10-24, about 2 to 4 minutes
      idle.
 
-   It writes only under `~/.debate-research/dev/landscape/`: the classification cache and the review
-   queue, the plan-text cache, and the analytic-text cache. Nothing is written to a bucket, and nothing
-   is published. It prints counts only. It refuses to start if a `DEBATE_*` variable is set or a
-   `caselist pull` is running. First, from the task worktree:
+   **Local only:**
+   * it writes under `~/.debate-research/dev/landscape/` alone: the classification cache and the
+     review queue, the plan-text cache, and the analytic-text cache;
+   * nothing is published, and nothing is written to a bucket before the cloud cutover's seed;
+   * it prints counts only.
 
-```bash
-cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t17-kritikal-affirmatives
-```
+   It refuses to start if a `DEBATE_*` variable is set or a `caselist pull` is running. From the task
+   worktree (the `cd` above):
 
 ```bash
 if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; else uv run python scripts/classify_landscape_positions.py classify --caselist hspolicy26 --snapshot 2026-10-20 && uv run python scripts/assign_landscape_affs.py plan-texts --caselist hspolicy26 --snapshot 2026-10-20 && uv run python scripts/read_landscape_texts.py --caselist hspolicy26 --snapshot 2026-10-20; fi
@@ -544,19 +608,29 @@ if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset i
 
    A `STOP:` line means nothing ran. A failure stops at the script that failed (the `&&`). Paste every
    line back.
-2. **Then the dry run without `--publish`,** on the warm caches. It is read-only, takes about 75 s, and
-   takes no bucket lock (only `--publish` without `--dry-run` does). The session can run it itself
-   once the refill is done. Or paste:
+
+3. **Then the dry run, printing the counts and the method table, control row included.** It is the
+   landscape service as a dry run without `--publish`, so it is read-only and takes no bucket lock.
+   Expected runtime: about 75 s on the warm caches. It prints counts and ids only, never a text, team
+   or school. The session can run it itself once the refill is done. Or paste, from the task worktree:
 
 ```bash
-if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; else uv run debate-research landscape report --caselist hspolicy26 --snapshot 2026-10-20 --dry-run; fi
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; else uv run python scripts/landscape_dry_run_by_section.py --caselist hspolicy26 --snapshot 2026-10-20; fi
 ```
 
    **Success looks like:**
-   * exit 0, taxonomy 1.3.0, and nothing written;
-   * the method counts with `KRITIKAL_AFF_MARKER` above zero;
-   * "Affirmative rounds with no identified aff" below 1.2.0's 709.
-3. **The publish with this group** waits for the cloud cutover seed (ruling 1): no dev bucket writes
+   * `Dry run of hspolicy26 through 2026-10-20, taxonomy 1.3.0: nothing written; 7 files planned.`;
+   * `Affirmative rounds by method: ...`, with `KRITIKAL_AFF_MARKER` above zero, and `not identified N
+     of 2192` with N below 1.2.0's 709;
+   * the `Kritikal affirmatives (kritikal-aff): ...` line: rounds by own marker and by carry, and those
+     refused by the advantage guard;
+   * the `Control: ... by method: ...` line. Its `TEAM_CARRY` count is what option (b) would move, for
+     the record;
+   * the `K families in the K-aff files' headings: ...` line;
+   * the scan lines, as before.
+
+   Paste every line back. A `Refused:` line means the run did not start, and says why.
+4. **The publish with this group** waits for the cloud cutover's seed (ruling 1): no dev bucket writes
    before then.
 
 ## Follow-up work
@@ -565,14 +639,25 @@ if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset i
   43% of the 709. The PM files the task. The advantage guard keeps the K aff out of those rounds until
   then.
 * **The real-store numbers** come after the refill: K-aff rounds by marker and by carry, the guard's
-  refusals, the families, the control, and the rounds still unidentified. They are measured in the
-  dry run.
+  refusals, the families, the control by method, and the rounds still unidentified. They are measured
+  in the dry run ([Operator follow-ups](#operator-follow-ups) 3).
+* **Option (b),** a round's own marker beating its team's carry, is the PM's to decide from the
+  control's `TEAM_CARRY` count, as a later task if at all.
 * **The CLI's JSON** does not carry the group's counts yet. The run's report carries them
   (`LandscapeReport.kritikal_affs`), for `landscape report --json` to print if the PM wants them.
 
 ## Questions for the PM
 
-Three, paste-ready:
+None open.
+
+### The questions of 2026-10-25 on the build, answered
+
+The PM ruled the same day:
+1. `constraints.packages` amended in the next PM batch (Deviations 1);
+2. precedence (a), with the control row by method on record from the dry run (Decisions 1);
+3. the K family list to the coach, not waited for ([Operator follow-ups](#operator-follow-ups) 1).
+
+Kept as asked:
 
 ```text
 v1-e32-t17 questions (session, 2026-10-25, after the build). Built as ruled:

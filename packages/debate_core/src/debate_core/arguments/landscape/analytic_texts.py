@@ -12,7 +12,8 @@ A **label** is a paragraph of at most 8 words, not evidence or a cite, that t01'
 team's own names and the caselist's schools taken out) reduces to one of a kind's labels below. Its text is
 the next paragraph with words in it, when that is a tag, an analytic, an undertag or an unstyled
 paragraph; a heading or evidence under a label is no text, and the label is not counted. An **inline**
-label opens the paragraph that holds the text (`Text: The fifty states should ...`), and a **sentence**
+label opens the paragraph that holds the text (`Text: The fifty states should ...`) and is no part of
+the text, so a labelled copy and an unlabelled one are one text; a **sentence**
 label is the text itself (`The alternative is ...`).
 
 * **CP text:** `text`, `texts`, `the text`, `cp text`, `cp texts`, `counterplan text`, `counterplan texts`
@@ -87,6 +88,7 @@ from debate_core.domain.style_profile import StructuralUnit
 
 __all__ = [
     "ALTERNATIVE_LABELS",
+    "AnalyticTextInputs",
     "CP_TEXT_LABELS",
     "MAX_WORDS_BEFORE_SHOULD",
     "OVERVIEW_WORDS",
@@ -137,7 +139,7 @@ MAX_BY_PLACE_WORDS: Final = 120
 _RULE_VERSION: Final = "analytic-texts-1"
 """Bumped when how a text is found, read or placed changes, so a cached reading is read again."""
 
-_SEPARATOR: Final = r"\s*[:\-–—]\s*\S"
+_SEPARATOR: Final = r"\s*[:\-\u2013\u2014]\s*(?=\S)"
 _CP_INLINE: Final = re.compile(
     r"^\s*(?:(?:the\s+)?(?:cp|counterplan)(?:\s+text)?|(?:the\s+)?text)" + _SEPARATOR, re.IGNORECASE
 )
@@ -147,6 +149,12 @@ _ALTERNATIVE_INLINE: Final = re.compile(
 _ROLE_INLINE: Final = re.compile(
     r"^\s*(?:rob|roj|role\s+of\s+the\s+(?:ballot|judge))" + _SEPARATOR, re.IGNORECASE
 )
+_INLINE_LABELS: Final = {
+    AnalyticTextKind.CP_TEXT: _CP_INLINE,
+    AnalyticTextKind.K_ALTERNATIVE: _ALTERNATIVE_INLINE,
+    AnalyticTextKind.ROLE_OF_THE_BALLOT: _ROLE_INLINE,
+}
+"""An inline label, up to its text: the label is no part of the text it opens."""
 _ALTERNATIVE_SENTENCE: Final = re.compile(
     r"^\s*(?:the|our)\s+alt(?:ernative)?\s+(?:is|should|will)\b", re.IGNORECASE
 )
@@ -216,6 +224,20 @@ class TextGroup:
     teams: frozenset[object] = field(repr=False)
     texts: tuple[tuple[str, int, str], ...] = field(default=(), repr=False)
     """(source digest, paragraph, text) of each copy read again as it was read."""
+
+
+@dataclass(frozen=True, slots=True)
+class AnalyticTextInputs:
+    """What the landscape report is given of the caselist's analytic texts (`v1-e32-t11`)."""
+
+    readings: Mapping[str, tuple[AnalyticTextReading, ...]] = field(repr=False)
+    """Each readable source's readings, by source digest."""
+    texts: Mapping[tuple[str, int], str] = field(repr=False)
+    """Each quoted kind's text read again as it was read, by (source digest, paragraph)."""
+    caselist_names: Mapping[str, Sequence[str]] = field(repr=False)
+    """Every school of the caselist with its codes: a text naming one is withheld."""
+    refused_by_guard: Mapping[str, int] = field(default_factory=dict[str, int], repr=False)
+    """Each source's first `should` analytics under a CP the actor guard left out."""
 
 
 class AnalyticTextRules:
@@ -348,6 +370,7 @@ def read_analytic_texts(
 
     def keep(kind: AnalyticTextKind, form: TextForm, label: SectionParagraph, text: SectionParagraph) -> None:
         where = place(label.section_path, source.tags)
+        words = _without_inline_label(kind, text.text) if form is TextForm.INLINE else text.text
         found.append(
             AnalyticTextReading(
                 kind=kind,
@@ -356,7 +379,7 @@ def read_analytic_texts(
                 element_index=text.element_index,
                 unit=text.unit,
                 kept=text.element_index in source.in_cards,
-                digest=None if kind is AnalyticTextKind.OVERVIEW else text_digest(text.text),
+                digest=None if kind is AnalyticTextKind.OVERVIEW else text_digest(words),
                 placement=where.placement,
                 position_id=where.position_id,
                 role=where.role,
@@ -426,8 +449,13 @@ def read_back_texts(
     texts: dict[int, str] = {}
     for one in wanted:
         paragraph = by_index.get(one.element_index)
-        if one.digest is not None and paragraph is not None and text_digest(paragraph.text) == one.digest:
-            texts[one.element_index] = paragraph.text
+        if one.digest is None or paragraph is None:
+            continue
+        text = (
+            _without_inline_label(one.kind, paragraph.text) if one.form is TextForm.INLINE else paragraph.text
+        )
+        if text_digest(text) == one.digest:
+            texts[one.element_index] = text
     return texts
 
 
@@ -476,6 +504,13 @@ def top_texts(
         else None
     )
     return quoted, more, withheld
+
+
+def _without_inline_label(kind: AnalyticTextKind, text: str) -> str:
+    """`text` without the inline label that opens it, when one does."""
+    label = _INLINE_LABELS.get(kind)
+    found = label.match(text) if label is not None else None
+    return text[found.end() :] if found is not None else text
 
 
 def _commonest(texts: Sequence[tuple[str, int, str]]) -> str:

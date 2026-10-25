@@ -136,7 +136,8 @@ def test_an_inline_text_label_with_should_under_a_placed_cp_is_its_cp_text() -> 
         p(1, ANALYTIC, "Text: " + FIFTY_STATES, "States CP"),
     )
     assert found.readings == (
-        reading(CP, TextForm.INLINE, 1, 1, ANALYTIC, "Text: " + FIFTY_STATES, "states-cp"),
+        # The label is no part of the text: worded alike, it is one text with an unlabelled copy.
+        reading(CP, TextForm.INLINE, 1, 1, ANALYTIC, FIFTY_STATES, "states-cp"),
     )
 
 
@@ -144,7 +145,9 @@ def test_an_inline_text_label_with_should_under_a_placed_cp_is_its_cp_text() -> 
 def test_every_inline_cp_label_opens_a_cp_text(label: str) -> None:
     text = f"{label} {CONGRESS}"
     found = read(p(4, HAT, "States CP"), p(5, OTHER, text, "States CP"))
-    assert [(one.kind, one.form, one.element_index) for one in found.readings] == [(CP, TextForm.INLINE, 5)]
+    assert [(one.kind, one.form, one.element_index, one.digest) for one in found.readings] == [
+        (CP, TextForm.INLINE, 5, text_digest(CONGRESS))
+    ]
 
 
 def test_an_inline_label_without_should_is_a_heading_naming_the_cp_not_its_text() -> None:
@@ -298,7 +301,9 @@ def test_an_alt_label_over_a_heading_or_evidence_holds_no_text() -> None:
 
 def test_an_inline_alt_in_an_analytic_is_read_and_as_a_heading_is_left_out() -> None:
     inline = read(p(0, HAT, "Cap K"), p(1, ANALYTIC, "Alt: reject sample markets", "Cap K"))
-    assert [(one.kind, one.form) for one in inline.readings] == [(ALT, TextForm.INLINE)]
+    assert [(one.kind, one.form, one.digest) for one in inline.readings] == [
+        (ALT, TextForm.INLINE, text_digest("reject sample markets"))
+    ]
     assert read(p(0, HAT, "Cap K"), p(1, BLOCK, "Alt - Socialism", "Cap K")).readings == ()
 
 
@@ -469,6 +474,15 @@ def test_reading_back_returns_only_paragraphs_that_still_hash_to_their_digest() 
     assert read_back_texts(paragraphs, wanted) == {
         1: "  The alternative IS to reject the market, in sample care!  "
     }
+
+
+def test_reading_back_an_inline_text_returns_it_without_its_label() -> None:
+    wanted = (
+        reading(CP, TextForm.INLINE, 3, 3, ANALYTIC, CONGRESS, "states-cp"),
+        reading(ROB, TextForm.INLINE, 4, 4, ANALYTIC, "vote for the sample method", "cap-k"),
+    )
+    paragraphs = (p(3, ANALYTIC, "CP Text: " + CONGRESS), p(4, ANALYTIC, "ROB - vote for the sample method"))
+    assert read_back_texts(paragraphs, wanted) == {3: CONGRESS, 4: "vote for the sample method"}
 
 
 @pytest.mark.parametrize(

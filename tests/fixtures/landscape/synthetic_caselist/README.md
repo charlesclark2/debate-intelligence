@@ -21,6 +21,7 @@ the same: the trends of the third window, worked out by hand below.
 | `cards.jsonl` | 54 cards of 20 sources, each with its exact fingerprint and E31 cluster, and the DA and advantage cards with the normalized headings over them |
 | `classifications.jsonl` | The `v1-e32-t02` classification of each card |
 | `expected_trends.csv` | The trend rows of a report through 2026-09-22, by hand (`v1-e32-t04` ac1) |
+| `analytic_texts.json` | `v1-e32-t11`'s readings of CP texts, alternatives, roles of the ballot and overviews, written by hand (below) |
 
 Source digests read at a glance: `a1a1…` is an affirmative file, `b1b1…` a negative one. Cluster
 `n` is `nn` repeated; copy `a` of cluster 2 is `0202…020a`.
@@ -125,3 +126,30 @@ rounds read through 2026-09-15, with their rounds: school plus team code, never 
 of 2026-10-24 dropped the last tournament). The same reads as
 the report: no ANSWERS, nothing below the threshold, no placement in a round on the other side.
 `VV`'s `b7` round reads the Capitalism K on no readable side, so it is left out and counted.
+
+## Analytic texts (`v1-e32-t11`)
+
+`analytic_texts.json` is written by hand, not by the generator: what `v1-e32-t11`'s reader would keep of
+each file's CP texts, alternatives, roles of the ballot and overviews, with the words each reading was
+made from and what reading the file again returns. The golden report's two text sections were written
+by hand from it. Through 2026-09-15:
+
+* **The States CP's texts rank by teams.** The first text is in `b1` (YY and JJ), `b2` (QQ, after its
+  `Text:` label) and `b3` (WW, in capitals and without its full stop, so the commoner wording shows): 4
+  teams. The second is in `b4` (YY), `b6` (WW) and `b8` (KK), whose copy could not be read again, so KK
+  counts and `b4`'s copy shows: 3. The third is in `b5` (ZZ) and `b4` (YY): 2. `b6`'s other text is
+  the 1 more text, read by 1 team.
+* **A text naming a school is withheld.** `b5`'s text names `Ashgrove Fictional`, a school of the
+  caselist: it is counted and not shown.
+* **A CP no card counts still shows its text.** `b3`'s Courts CP text, though `courts-cp` has no row.
+* **Placed elsewhere:** `b2`'s text under the Midterms DA, and `a6`'s copy of the first text, in a
+  round on the other side. **Not placed:** `b4`'s under headings that place nothing, `b8`'s under none.
+  **The actor guard** left out 2 paragraphs of `b6` (and 5 of `b9`, out of range).
+* **The alternatives.** The first is in `b2` (QQ), `b8` (KK) and `b7` (VV), whose round has no side
+  and so is not the other side: 3 teams. `a1`'s copy answers the K. `b4`'s two are under no heading and
+  `b6`'s under headings that place nothing.
+* **One role of the ballot** is placed, `b2`'s; `b6`'s is not.
+* **Overviews, counted only:** the Midterms DA's in `b1` (YY, JJ) and `b4` (YY) on the negative and
+  `a6` (JJ) on the affirmative, so 2 teams, 1 aff and 2 neg; the Costs advantage's in `a3` (VV); the
+  States CP's in `b5` (ZZ). `a1`'s answers the Spending DA; `b3`'s and `b8`'s are not placed.
+

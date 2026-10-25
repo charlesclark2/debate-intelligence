@@ -11,6 +11,7 @@ from __future__ import annotations
 import ast
 import csv
 import dataclasses
+import re
 from datetime import date
 from pathlib import Path
 
@@ -32,6 +33,7 @@ from debate_core.domain.caselist import Disclosure, RoundLabel, Side
 from debate_core.domain.debate_files import CardCompleteness
 from debate_core.domain.landscape_classification import OverrideRules, PositionRole
 from debate_core.domain.landscape_report import AffAssignment, LandscapeReport, PositionStats
+from debate_core.domain.landscape_texts import AnalyticTextKind, LandscapeTexts, MoreTexts, TextCoverage
 from debate_core.testing.landscape_report import (
     SYNTHETIC_CASELIST,
     read_synthetic_caselist,
@@ -770,3 +772,137 @@ def test_no_module_that_builds_or_renders_the_report_imports_a_model_router() ->
             for name in [node.module or "", *(alias.name for alias in node.names)]
         }
         assert not {name for name in imported if "model_router" in name or "ModelRouter" in name}, module
+
+
+# ------------------------------------------------------------------------------------------------
+# Analytic texts (v1-e32-t11): CP texts, alternatives, roles of the ballot, overview counts
+# ------------------------------------------------------------------------------------------------
+#
+# Counted by hand from tests/fixtures/landscape/synthetic_caselist/analytic_texts.json (its README's
+# "Analytic texts"): b1 is read by YY and JJ, b2 by QQ, b3 and b6 by WW, b4 by YY, b5 by ZZ, b7 by VV on
+# no readable side, b8 by KK; a1, a3 and a6 are XX's, VV's and JJ's affirmative files; b9 is out of range.
+
+
+def _texts(report: LandscapeReport | None = None):  # noqa: ANN202 - the report's own type
+    texts = (report or _report()).texts
+    assert texts is not None
+    return texts
+
+
+def _shown(kind: AnalyticTextKind, position_id: str) -> list[tuple[int, int, str]]:
+    found = next(one for one in _texts().positions if one.kind is kind and one.position_id == position_id)
+    return [(row.rank, row.teams, row.text) for row in found.texts]
+
+
+def test_texts_each_cp_shows_its_top_three_texts_by_teams_and_counts_the_rest() -> None:
+    assert _shown(AnalyticTextKind.CP_TEXT, "states-cp") == [
+        (1, 4, "The fifty states should establish a sample single payer system."),
+        (2, 3, "Congress should give the fifty states sample block grants."),
+        (3, 2, "The fifty states should adopt a sample payment cap."),
+    ]
+    states = next(one for one in _texts().positions if one.position_id == "states-cp")
+    assert states.more == MoreTexts(position_id="states-cp", kind=AnalyticTextKind.CP_TEXT, texts=1, teams=1)
+    # A CP no card counts for (courts-cp is below the threshold) still shows the texts placed under it.
+    assert _shown(AnalyticTextKind.CP_TEXT, "courts-cp") == [
+        (1, 1, "The federal courts should strike down a sample mandate.")
+    ]
+
+
+def test_texts_are_ordered_by_kind_then_by_their_teams() -> None:
+    assert [(one.kind, one.position_id) for one in _texts().positions] == [
+        (AnalyticTextKind.CP_TEXT, "states-cp"),
+        (AnalyticTextKind.CP_TEXT, "courts-cp"),
+        (AnalyticTextKind.K_ALTERNATIVE, "cap-k"),
+        (AnalyticTextKind.ROLE_OF_THE_BALLOT, "cap-k"),
+    ]
+
+
+def test_texts_a_round_on_no_readable_side_counts_and_the_commonest_wording_shows() -> None:
+    # b7's round has no side, so it is not the other side: VV reads the first alternative with QQ and KK.
+    assert _shown(AnalyticTextKind.K_ALTERNATIVE, "cap-k") == [
+        (1, 3, "The alternative is to reject sample markets in care."),
+        (2, 2, "Our alternative is sample democratic planning."),
+        (3, 1, "refuse the sample market."),
+    ]
+
+
+def test_texts_a_text_naming_a_school_is_withheld_and_counted() -> None:
+    texts = _texts()
+    shown = {row.text for one in texts.positions for row in one.texts}
+    assert not any("Ashgrove" in text for text in shown)
+    assert _coverage(texts, AnalyticTextKind.CP_TEXT).withheld_texts == 1
+
+
+def _coverage(texts: LandscapeTexts, kind: AnalyticTextKind) -> TextCoverage:
+    return next(one for one in texts.coverage if one.kind is kind)
+
+
+@pytest.mark.parametrize(
+    ("kind", "expected"),
+    [
+        # labels, documents, counted, elsewhere, place nothing, no heading, withheld, unread, guard
+        (AnalyticTextKind.CP_TEXT, (15, 8, 11, 2, 1, 1, 1, 1, 2)),
+        (AnalyticTextKind.K_ALTERNATIVE, (9, 8, 5, 1, 1, 2, 0, 0, 0)),
+        (AnalyticTextKind.ROLE_OF_THE_BALLOT, (2, 2, 1, 0, 1, 0, 0, 0, 0)),
+        (AnalyticTextKind.OVERVIEW, (8, 8, 5, 1, 1, 1, 0, 0, 0)),
+    ],
+)
+def test_texts_every_label_in_range_is_counted_by_where_it_was_placed(
+    kind: AnalyticTextKind, expected: tuple[int, ...]
+) -> None:
+    one = _coverage(_texts(), kind)
+    assert (
+        one.labels,
+        one.documents,
+        one.counted,
+        one.elsewhere,
+        one.headings_place_nothing,
+        one.no_heading,
+        one.withheld_texts,
+        one.unread,
+        one.refused_by_guard,
+    ) == expected
+
+
+def test_texts_out_of_range_files_are_not_read() -> None:
+    # b9 is disclosed after the report's date: its copy of the first CP text and its 5 refusals count nowhere.
+    assert _coverage(_texts(), AnalyticTextKind.CP_TEXT).refused_by_guard == 2
+    # Through the first snapshot only b1, b2 and b3 are in range: 1, 2 and 2 CP-text labels, and no refusal.
+    texts = _texts(_report(_inputs(through=FIRST)))
+    assert _coverage(texts, AnalyticTextKind.CP_TEXT).labels == 5
+    assert _coverage(texts, AnalyticTextKind.CP_TEXT).refused_by_guard == 0
+
+
+def test_texts_a_placed_text_not_read_again_counts_its_team_but_shows_another_copy() -> None:
+    # b8's copy of the second text could not be read again; KK still reads it, and b4's copy shows.
+    assert _shown(AnalyticTextKind.CP_TEXT, "states-cp")[1] == (
+        2,
+        3,
+        "Congress should give the fifty states sample block grants.",
+    )
+
+
+def test_texts_overviews_are_counted_per_side_and_never_quoted() -> None:
+    texts = _texts()
+    assert [
+        (one.position_id, one.label, one.position_kind.value, one.teams, one.aff_teams, one.neg_teams)
+        for one in texts.overviews
+    ] == [
+        ("election-da", "Midterms DA", "da", 2, 1, 2),
+        ("costs-advantage", "Costs advantage", "advantage", 1, 1, 0),
+        ("states-cp", "States CP", "cp", 1, 0, 1),
+    ]
+    assert AnalyticTextKind.OVERVIEW not in {one.kind for one in texts.positions}
+
+
+def test_texts_without_readings_the_report_has_no_text_sections() -> None:
+    assert _report(_inputs(analytic_texts=None)).texts is None
+
+
+def test_texts_a_text_is_never_beside_a_school_or_team_code() -> None:
+    disclosures = read_synthetic_caselist(FIXTURE).disclosures
+    names = {one.school for one in disclosures} | {one.team_code for one in disclosures}
+    dumped = _texts().model_dump_json()
+    assert not {
+        name for name in names if re.search(rf"(?<![A-Za-z0-9]){re.escape(name)}(?![A-Za-z0-9])", dumped)
+    }

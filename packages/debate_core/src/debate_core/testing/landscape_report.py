@@ -2,7 +2,9 @@
 
 `scripts/make_landscape_fixture.py` writes `tests/fixtures/landscape/synthetic_caselist/`; the
 report's service tests and its renderer tests both build their inputs from it with
-:func:`read_synthetic_caselist`, so the two read one fixture the same way. Everything in it is
+:func:`read_synthetic_caselist`, so the two read one fixture the same way. Its `analytic_texts.json`,
+`v1-e32-t11`'s readings of CP texts, alternatives, roles of the ballot and overviews, is written by hand,
+not by the script, and read with the rest (:func:`read_synthetic_analytic_texts`). Everything in it is
 invented: see the directory's README.
 """
 
@@ -18,10 +20,12 @@ import yaml
 
 from debate_core.application.landscape_report import LandscapeReportInputs
 from debate_core.application.landscape_staleness import LandscapeStaleness, assess_staleness
+from debate_core.arguments.landscape.analytic_texts import AnalyticTextInputs, text_digest
 from debate_core.domain.caselist import Disclosure
 from debate_core.domain.landscape import Taxonomy, TopicMap
 from debate_core.domain.landscape_classification import OverrideRules, PositionClassification
 from debate_core.domain.landscape_report import AffAssignment, LandscapeCard
+from debate_core.domain.landscape_texts import AnalyticTextReading
 
 __all__ = [
     "SYNTHETIC_CASELIST",
@@ -31,6 +35,7 @@ __all__ = [
     "SYNTHETIC_THROUGH",
     "TOPIC_CHANGE_CASELIST",
     "TOPIC_CHANGE_SNAPSHOT",
+    "read_synthetic_analytic_texts",
     "read_synthetic_caselist",
     "read_topic_change_caselist",
     "synthetic_staleness",
@@ -47,10 +52,59 @@ TOPIC_CHANGE_SNAPSHOT: Final = date(2026, 9, 1)
 """The topic-change caselist's second snapshot: the first on its new topic."""
 SYNTHETIC_REPORT_DATE: Final = date(2026, 9, 17)
 SYNTHETIC_PARSER_VERSION: Final = "2026.10.20-docx-6"
+ANALYTIC_TEXTS_FILE: Final = "analytic_texts.json"
 
 
 def _rows[ModelT](path: Path, read: Callable[[object], ModelT]) -> tuple[ModelT, ...]:
     return tuple(read(json.loads(line)) for line in path.read_text(encoding="utf-8").splitlines() if line)
+
+
+def read_synthetic_analytic_texts(directory: Path) -> AnalyticTextInputs | None:
+    """`analytic_texts.json`'s readings, texts and guard counts; None when the directory has no such file.
+
+    A source is named as the fixture names it (`b1`, the digest `b1b1…b1`). A reading's digest is computed
+    from its `words`, as the reader computes one, and its `quoted` text, when not null, is what reading the
+    source again returns. The caselist's schools, a text naming one of which is withheld, are the fixture's.
+    """
+    path = directory / ANALYTIC_TEXTS_FILE
+    if not path.is_file():
+        return None
+    document = json.loads(path.read_text(encoding="utf-8"))
+    readings: dict[str, tuple[AnalyticTextReading, ...]] = {}
+    texts: dict[tuple[str, int], str] = {}
+    refused: dict[str, int] = {}
+    for name, held in document["sources"].items():
+        sha = name * 32
+        found: list[AnalyticTextReading] = []
+        for row in held["readings"]:
+            found.append(
+                AnalyticTextReading(
+                    kind=row["kind"],
+                    form=row["form"],
+                    label_element_index=row["label"],
+                    element_index=row["paragraph"],
+                    unit=row["unit"],
+                    kept=row["kept"],
+                    digest=text_digest(row["words"]) if "words" in row else None,
+                    placement=row["placement"],
+                    position_id=row.get("position"),
+                    role=row.get("role"),
+                )
+            )
+            if row.get("quoted") is not None:
+                texts[(sha, row["paragraph"])] = row["quoted"]
+        readings[sha] = tuple(found)
+        if held.get("refused_by_guard"):
+            refused[sha] = held["refused_by_guard"]
+    names: dict[str, set[str]] = {}
+    for one in _rows(directory / "disclosures.jsonl", Disclosure.model_validate):
+        names.setdefault(one.school, set()).add(one.team_code)
+    return AnalyticTextInputs(
+        readings=readings,
+        texts=texts,
+        caselist_names={school: tuple(sorted(codes)) for school, codes in sorted(names.items())},
+        refused_by_guard=refused,
+    )
 
 
 def read_synthetic_caselist(
@@ -71,6 +125,7 @@ def read_synthetic_caselist(
         disclosures=_rows(directory / "disclosures.jsonl", Disclosure.model_validate),
         cards=_rows(directory / "cards.jsonl", LandscapeCard.model_validate),
         aff_assignments=aff_assignments,
+        analytic_texts=read_synthetic_analytic_texts(directory),
     )
 
 

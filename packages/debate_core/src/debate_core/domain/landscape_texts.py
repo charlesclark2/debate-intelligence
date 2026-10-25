@@ -28,7 +28,7 @@ from typing import Final, Self
 
 from pydantic import Field, model_validator
 
-from debate_core.domain.base import DomainModel, Sha256Hex
+from debate_core.domain.base import DomainModel, NonEmptyText, Sha256Hex
 from debate_core.domain.landscape import PositionId, PositionKind
 from debate_core.domain.landscape_classification import PositionRole
 from debate_core.domain.style_profile import StructuralUnit
@@ -42,6 +42,7 @@ __all__ = [
     "LandscapeTexts",
     "MoreTexts",
     "OverviewCount",
+    "PositionTexts",
     "QuotedText",
     "TextCoverage",
     "TextForm",
@@ -132,7 +133,7 @@ class QuotedText(DomainModel):
     position_id: PositionId
     kind: AnalyticTextKind
     rank: int = Field(ge=1)
-    teams: int = Field(ge=1, description="Distinct teams whose files hold it under the position.")
+    teams: int = Field(ge=0, description="Distinct teams whose files hold it under the position.")
     text: str = Field(repr=False, description="Word for word, as one of its files holds it.")
 
 
@@ -142,7 +143,17 @@ class MoreTexts(DomainModel):
     position_id: PositionId
     kind: AnalyticTextKind
     texts: int = Field(ge=1)
-    teams: int = Field(ge=1)
+    teams: int = Field(ge=0)
+
+
+class PositionTexts(DomainModel):
+    """One CP's or K's texts of one kind: its top texts, and the rest as a count."""
+
+    position_id: PositionId
+    label: NonEmptyText
+    kind: AnalyticTextKind
+    texts: tuple[QuotedText, ...] = Field(min_length=1, description="By rank.")
+    more: MoreTexts | None = None
 
 
 class TextCoverage(DomainModel):
@@ -181,16 +192,20 @@ class OverviewCount(DomainModel):
     """One position's overviews: the teams with one, on each side. No text."""
 
     position_id: PositionId
+    label: NonEmptyText
+    position_kind: PositionKind
     aff_teams: int = Field(ge=0)
     neg_teams: int = Field(ge=0)
+    teams: int = Field(ge=0, description="Distinct teams with an overview under it, on either side.")
 
 
 class LandscapeTexts(DomainModel):
     """The report's analytic texts: quoted rows per CP and K, and overview counts per position."""
 
     texts_per_position: int = Field(ge=1)
-    quoted: tuple[QuotedText, ...] = Field(description="In report order: kind, position, rank.")
-    more: tuple[MoreTexts, ...] = ()
+    positions: tuple[PositionTexts, ...] = Field(
+        description="By kind, then by the teams with a text under the position, then position id."
+    )
     coverage: tuple[TextCoverage, ...] = Field(
         description="One per kind, in :class:`AnalyticTextKind` order."
     )

@@ -15,6 +15,9 @@ id; cards by rank). Nothing here computes a count; the service did.
   puts it there. Of the cards, it lists only each advantage's and DA's impact cards, under its kind's
   table (`v1-e32-t10`): the coach's review of 2026-10-24 found the most-read cards of every position
   no help in a prep meeting, so they are in top_cards.csv only, and asked for the impacts instead.
+  When the run read the caselist's analytic texts (`v1-e32-t11`), it shows each CP's and K's top texts
+  word for word, the teams reading each and what could not be shown, then each position's overview
+  count, with no overview text. The texts are in report.md only, never beside a school or team code.
 * **positions.csv** has the positions' rows for a spreadsheet, **top_cards.csv** each position's
   most-read cards, and **impact_cards.csv** each advantage's and DA's impact cards, with how many
   documents of each kind carry no labelled impact in its header block. **trends.csv** has each
@@ -30,10 +33,10 @@ id; cards by rank). Nothing here computes a count; the service did.
 
 ## What is written exactly, and what is escaped
 
-A card's tag and short cite are written exactly as parsed in the CSV. A position's label, and an
-impact card's tag and cite, in Markdown, where a `|` would split a table cell and a `*` start
-emphasis, have those characters escaped with a backslash and runs of whitespace made one space, so
-the cell shows the same text. Shares are
+A card's tag and short cite are written exactly as parsed in the CSV. A position's label, an
+impact card's tag and cite, and a quoted CP text, alternative or role of the ballot, in Markdown,
+where a `|` would split a table cell and a `*` start emphasis, have those characters escaped with a
+backslash and runs of whitespace made one space, so the cell shows the same text. Shares are
 fractions to three places in the CSV and percentages to one place in Markdown, both rounded half up;
 a delta is percentage points to one place, rounded half up, in both. Markdown writes counts with
 thousands separators, the CSV without. A school or team code in schools.md is escaped
@@ -63,6 +66,7 @@ from debate_core.domain.landscape_report import (
     TopCard,
 )
 from debate_core.domain.landscape_schools import SchoolView
+from debate_core.domain.landscape_texts import QUOTED_KINDS, AnalyticTextKind, TextCoverage
 from debate_core.domain.landscape_trends import (
     WINDOW_DAYS,
     LandscapeTrends,
@@ -165,6 +169,29 @@ _METHOD_LABELS: Final = {
     PLACED_CARD_METHOD: "A card in the round placed under the aff",
     PLAN_TEXT_METHOD: "The round's plan text names the aff",
     TEAM_CARRY_METHOD: "The team's other rounds name the aff",
+}
+_TEXT_KINDS: Final = {
+    AnalyticTextKind.CP_TEXT: (
+        "Counterplan texts",
+        "a CP-text label (`Text:`, `CP Text`) or as the first `should` analytic of a block placed under a CP",
+        "a CP",
+    ),
+    AnalyticTextKind.K_ALTERNATIVE: (
+        "Kritik alternatives",
+        "an alternative label (`Alt`, `The alternative is`)",
+        "a K",
+    ),
+    AnalyticTextKind.ROLE_OF_THE_BALLOT: (
+        "Roles of the ballot",
+        "a role-of-the-ballot label (`Role of the ballot`, `ROB`, `The role of the ballot is`)",
+        "a K",
+    ),
+}
+"""Each quoted kind's heading, what finds it, and what it must be placed under (`v1-e32-t11`)."""
+_TEXT_NOUNS: Final = {
+    AnalyticTextKind.CP_TEXT: "CP text",
+    AnalyticTextKind.K_ALTERNATIVE: "alternative",
+    AnalyticTextKind.ROLE_OF_THE_BALLOT: "role of the ballot",
 }
 _TITLES_NOT_READ: Final = "The caselist's own round titles and cite entries are not read this season."
 """The PM's ruling of 2026-10-24 (`v1-e32-t09`): the site's round and cite titles are not taken."""
@@ -277,6 +304,7 @@ def render_markdown(report: LandscapeReport, trends: LandscapeTrends | None = No
     lines: list[str] = []
     lines += _header_section(report, trends)
     lines += _positions_section(report)
+    lines += _texts_sections(report)
     lines += _new_section(report) if trends is None else _trend_sections(trends)
     lines += _unclassified_section(report)
     return "\n".join(lines).rstrip("\n") + "\n"
@@ -409,6 +437,95 @@ def _impact_block(
         ]
         lines.append("")
     return lines
+
+
+def _texts_sections(report: LandscapeReport) -> list[str]:
+    """`v1-e32-t11`'s sections: each CP's and K's top texts word for word, and the overviews' counts."""
+    texts = report.texts
+    if texts is None:
+        return []
+    coverage = {one.kind: one for one in texts.coverage}
+    lines = [
+        "## Counterplan texts, alternatives and roles of the ballot",
+        "",
+        "The teams' own words, quoted as their files hold them (data-use policy 1.13), never beside a "
+        "school or team code. A text belongs to the position its section is placed under: the nearest "
+        "placed heading over its label, as a card is placed. A label under no placed heading is counted "
+        "here and never placed by a guess. Texts worded alike are one text. Each CP and K shows the "
+        f"{texts.texts_per_position:,} texts the most teams read, and how many more there are. A text naming "
+        "a school of the caselist is withheld.",
+        "",
+    ]
+    for kind in QUOTED_KINDS:
+        heading, found_by, under = _TEXT_KINDS[kind]
+        one = coverage[kind]
+        lines += [
+            f"### {heading}",
+            "",
+            f"Found by {found_by}: {one.labels:,} in {one.documents:,} files.",
+            "",
+            f"* Placed under {under} the team reads, and counted: {one.counted:,}.",
+            _not_placed(one),
+            "* Placed under another kind of position, as an answer, or in a round on the other side: "
+            f"{one.elsewhere:,}.",
+        ]
+        if kind is AnalyticTextKind.CP_TEXT:
+            lines.append(
+                "* Left out by the actor guard (no actor in the 12 words before `should`): "
+                f"{one.refused_by_guard:,}."
+            )
+        if one.withheld_texts:
+            lines.append(f"* Withheld for naming a school: {_count(one.withheld_texts, 'text')}.")
+        if one.unread:
+            lines.append(f"* Could not be read again as they were read: {one.unread:,}.")
+        lines.append("")
+        shown = [position for position in texts.positions if position.kind is kind]
+        if not shown:
+            lines += [f"No {_TEXT_NOUNS[kind]} was placed under {under} the team reads.", ""]
+        for position in shown:
+            lines += [
+                f"**{_cell(position.label)}** (`{position.position_id}`)",
+                "",
+                "| Rank | Teams | Text |",
+                "|---|---|---|",
+            ]
+            lines += [f"| {row.rank} | {row.teams:,} | {_cell(row.text)} |" for row in position.texts]
+            lines.append("")
+            if position.more is not None:
+                more = position.more
+                noun = "text" if more.texts == 1 else "texts"
+                lines += [f"And {more.texts:,} more {noun}, read by {_count(more.teams, 'team')}.", ""]
+    overview = coverage[AnalyticTextKind.OVERVIEW]
+    lines += [
+        "## Overviews",
+        "",
+        "Counted, never quoted: data-use policy 1.13 does not list overviews, and the coach keeps it so "
+        "(2026-10-24). Per position, the teams whose files hold an overview label (`Overview`, `O/V`, `OV`) "
+        "under it, on each side.",
+        "",
+        f"Found: {overview.labels:,} in {overview.documents:,} files.",
+        "",
+        f"* Placed under a position the team reads, and counted: {overview.counted:,}.",
+        _not_placed(overview),
+        f"* Placed under an answer to a position: {overview.elsewhere:,}.",
+        "",
+    ]
+    if not texts.overviews:
+        return [*lines, "No overview was placed under a position the team reads.", ""]
+    lines += ["| Position | Kind | Teams | Aff teams | Neg teams |", "|---|---|---|---|---|"]
+    lines += [
+        f"| {_cell(one.label)} (`{one.position_id}`) | {one.position_kind.value} | {one.teams:,} | "
+        f"{one.aff_teams:,} | {one.neg_teams:,} |"
+        for one in texts.overviews
+    ]
+    return [*lines, ""]
+
+
+def _not_placed(coverage: TextCoverage) -> str:
+    return (
+        f"* Not placed: {coverage.unplaced:,} ({coverage.headings_place_nothing:,} under headings that place "
+        f"nothing, such as `1NC` or `OFF`; {coverage.no_heading:,} under no heading)."
+    )
 
 
 def _new_section(report: LandscapeReport) -> list[str]:

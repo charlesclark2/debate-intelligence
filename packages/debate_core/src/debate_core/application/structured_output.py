@@ -17,7 +17,10 @@ four things in this order:
    never re-authored), followed by `model.repair`'s instructions with the schema and the filtered
    problems (the PM's review of 2026-10-24). It never holds anything from the answer that failed.
    An answer that never called the schema's tool is invalid output like any other and gets the
-   same one repair (ac5).
+   same one repair (ac5). So does a schema-valid answer that the call's `check` refuses: the
+   checks that need more than the schema, such as card selection offsets against their snapshot
+   (v1-e05-t06-card-selection-contract). Its problems are the check's, and like every problem
+   they hold no part of the answer.
 4. **Raises** :class:`~debate_core.application.model_errors.ModelOutputError` with `attempts=2`
    when the repair is invalid too (ac2). There is no default, partial or best-effort result on any
    path, whatever the policy says (ac3).
@@ -44,7 +47,7 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Final, Protocol
 
@@ -80,6 +83,7 @@ __all__ = [
     "REPAIR_PROMPT_ID",
     "REPAIR_PROMPT_VERSION",
     "CatalogedPrompt",
+    "OutputCheck",
     "PromptCatalog",
     "RepairedSchema",
     "StructuredOutputGuard",
@@ -107,6 +111,15 @@ class RepairedSchema(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+type OutputCheck[OutputT: BaseModel] = Callable[[OutputT], Sequence[OutputProblem]]
+"""What else a schema-valid answer must satisfy: its problems, empty when it may be used.
+
+A check sees the validated output and whatever its caller closed over (a card selection's check
+holds the snapshot). Its problems are treated as validation problems: the answer is repaired once,
+then refused. A problem's message must not quote the answer, as pydantic's never do.
+"""
 
 
 class CatalogedPrompt(Protocol):
@@ -219,8 +232,12 @@ class StructuredOutputGuard:
         params: ModelParams | None = None,
         *,
         policy: ValidationPolicy,
+        check: OutputCheck[OutputT] | None = None,
     ) -> StructuredResult[OutputT]:
         """Run `prompt` as `task_class` and return a strictly valid instance of `schema`.
+
+        With `check`, the instance must also pass it: an answer it finds problems with is repaired
+        and refused exactly as one that does not fit `schema`.
 
         Raises `PromptMismatchError` before any model call when `schema` or `task_class` is not
         what the prompt's registry entry declares, and the registry's `UnknownPromptError` when the
@@ -244,14 +261,17 @@ class StructuredOutputGuard:
                 problems = _described(invalid.problems)
                 model_id = invalid.model_id
             else:
-                attempts.append(
-                    OutputAttempt(number, attempt_prompt.prompt_id, attempt_prompt.prompt_version)
-                )
-                if number > 1:
-                    _log(logging.INFO, "structured output repaired", prompt, attempts)
-                return StructuredResult(
-                    prompt=prompt, response=response, attempts=tuple(attempts), policy=policy
-                )
+                problems = tuple(check(response.output)) if check is not None else ()
+                if not problems:
+                    attempts.append(
+                        OutputAttempt(number, attempt_prompt.prompt_id, attempt_prompt.prompt_version)
+                    )
+                    if number > 1:
+                        _log(logging.INFO, "structured output repaired", prompt, attempts)
+                    return StructuredResult(
+                        prompt=prompt, response=response, attempts=tuple(attempts), policy=policy
+                    )
+                model_id = response.route.model_id
             attempts.append(
                 OutputAttempt.refused(
                     number, attempt_prompt.prompt_id, attempt_prompt.prompt_version, problems

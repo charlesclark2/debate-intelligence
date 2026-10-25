@@ -12,6 +12,7 @@ The schema is `ContractPassage` (three integers) and the prompt is the worked ex
 from __future__ import annotations
 
 import dataclasses
+import inspect
 import json
 import logging
 import traceback
@@ -52,6 +53,7 @@ from debate_core.domain.model_contracts import (
     ModelParams,
     ModelPrompt,
     ModelProvider,
+    ModelRequest,
     ModelResponse,
     TaskClass,
 )
@@ -800,3 +802,87 @@ def test_the_malformed_fixture_directory_holds_exactly_the_listed_cases() -> Non
     )
 
     assert answers == sorted(f"Malformed answer: {case}" for case in MALFORMED_CASES)
+
+
+# --------------------------------------------------------------------------------------------
+# The optional check (v1-e05-t06-card-selection-contract, the PM's ruling of 2026-10-25)
+# --------------------------------------------------------------------------------------------
+
+
+def test_check_is_optional_and_unset_by_default() -> None:
+    parameter = inspect.signature(StructuredOutputGuard.generate).parameters["check"]
+
+    assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
+    assert parameter.default is None
+
+
+async def _outcome(
+    registry: PromptRegistry, script: Sequence[ScriptedModelResponse], **check: Any
+) -> tuple[list[ModelRequest], tuple[object, ...]]:
+    """The calls a guarded call made and what it ended in, for comparing two ways of making it."""
+    router = ScriptedModelRouter(script)
+    try:
+        result = await guarded(router, registry).generate(
+            TASK, example_prompt(), ContractPassage, policy=FAIL_CLOSED, **check
+        )
+    except ModelOutputError as error:
+        return router.calls, ("refused", str(error), error.attempts, error.attempt_records)
+    return router.calls, ("returned", result.output, result.attempts, result.metadata)
+
+
+def _finds_nothing(output: ContractPassage) -> tuple[OutputProblem, ...]:
+    return ()
+
+
+@pytest.mark.parametrize(
+    ("script", "ending", "prompts"),
+    [
+        pytest.param([VALID], "returned", ["example.select-passage"], id="valid"),
+        pytest.param(
+            [INVALID, VALID], "returned", ["example.select-passage", REPAIR_PROMPT_ID], id="repaired"
+        ),
+        pytest.param(
+            [INVALID, INVALID], "refused", ["example.select-passage", REPAIR_PROMPT_ID], id="refused"
+        ),
+    ],
+)
+async def test_a_call_without_a_check_behaves_as_t05s_guard_does(
+    registry: PromptRegistry, script: Sequence[ScriptedModelResponse], ending: str, prompts: list[str]
+) -> None:
+    omitted = await _outcome(registry, script)
+    unset = await _outcome(registry, script, check=None)
+    finds_nothing = await _outcome(registry, script, check=_finds_nothing)
+
+    assert unset == omitted
+    assert finds_nothing == omitted
+    calls, outcome = omitted
+    assert [call.prompt.prompt_id for call in calls] == prompts
+    assert outcome[0] == ending
+
+
+async def test_check_problems_are_repaired_then_refused_like_validation_problems(
+    registry: PromptRegistry,
+) -> None:
+    refusal = OutputProblem(loc=("end_offset",), type="offset_out_of_bounds", msg="offset 42 is past the end")
+    checked: list[ContractPassage] = []
+
+    def check(output: ContractPassage) -> tuple[OutputProblem, ...]:
+        checked.append(output)
+        return (refusal,)
+
+    router = ScriptedModelRouter([VALID, VALID])
+
+    with pytest.raises(ModelOutputError) as raised:
+        await guarded(router, registry).generate(
+            TASK, example_prompt(), ContractPassage, policy=FAIL_CLOSED, check=check
+        )
+
+    assert len(checked) == 2
+    assert [call.prompt.prompt_id for call in router.calls] == ["example.select-passage", REPAIR_PROMPT_ID]
+    assert router.calls[1].prompt.variables["problems"] == [
+        {"loc": ["end_offset"], "type": "offset_out_of_bounds", "msg": "offset 42 is past the end"}
+    ]
+    assert raised.value.attempts == 2
+    assert raised.value.fail_closed is True
+    assert raised.value.problems == (refusal,)
+    assert raised.value.model_id == "fake-model"

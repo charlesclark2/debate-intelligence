@@ -20,7 +20,7 @@ prompt_id: card.select
 version: 1.0.0
 status: released
 task_class: complex_reasoning
-output_schema: debate_core.evidence.card_selection.CardSelection
+output_schema: debate_core.evidence.selection_contract.CardSelection
 owner: v1-e05-model-router
 changelog:
   - version: 1.0.0
@@ -33,7 +33,8 @@ The instructions the model works under.
 The request, with the call's values: {{ research_need }}
 ```
 
-(`card.select` and its schema path illustrate the format. That prompt is v1-e05-t06's to write.)
+(The real `card.select` is [`card/select.md`](card/select.md), with `card.markup` beside it, from
+`v1-e05-t06-card-selection-contract`.)
 
 The first released prompt is [`model/repair.md`](model/repair.md), the structured-output guard's
 one repair attempt (`v1-e05-t05-structured-output-validation`). It answers in the schema of the

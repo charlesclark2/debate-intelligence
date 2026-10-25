@@ -195,6 +195,8 @@ source_modules = [
     "debate_core.integrations.opencaselist",
     "debate_core.integrations.discovery",
     "debate_core.integrations.http_fetcher",
+    "debate_core.integrations.html_extractor",
+    "debate_core.integrations.pdf_extractor",
     "debate_workers",
 ]
 forbidden_modules = ["boto3", "botocore"]
@@ -226,6 +228,8 @@ source_modules = [
     "debate_core.integrations.parameter_store",
     "debate_core.integrations.secrets_manager",
     "debate_core.integrations.sns",
+    "debate_core.integrations.html_extractor",
+    "debate_core.integrations.pdf_extractor",
     "debate_api",
     "debate_workers",
 ]
@@ -256,6 +260,8 @@ source_modules = [
     "debate_core.integrations.sns",
     "debate_core.integrations.discovery",
     "debate_core.integrations.http_fetcher",
+    "debate_core.integrations.html_extractor",
+    "debate_core.integrations.pdf_extractor",
     "debate_api",
     "debate_workers",
 ]
@@ -300,6 +306,8 @@ name = "Document libraries stay inside debate_core.integrations.docx_parser"
 type = "forbidden"
 # `debate_core.retrieval` is on this list for the same reason it is on the httpx one: HTML and PDF
 # extraction (v1-e04-t04) is an adapter in debate_core.integrations; retrieval keeps its models.
+# `debate_core.integrations.html_extractor` is left off: it parses pages with lxml, and trafilatura
+# and readability-lxml are built on it. The PDF extractor is on it; pypdf needs no lxml.
 source_modules = [
     "debate_core.domain",
     "debate_core.retrieval",
@@ -317,6 +325,7 @@ source_modules = [
     "debate_core.integrations.secrets_manager",
     "debate_core.integrations.sns",
     "debate_core.integrations.http_fetcher",
+    "debate_core.integrations.pdf_extractor",
     # PM ruling 2026-10-22 (v1-e07-t05: feedparser falls back to a loose parser on a hostile feed).
     # The feed providers parse XML with defusedxml only, so lxml stays out of discovery too.
     "debate_core.integrations.discovery",
@@ -347,6 +356,51 @@ allow_indirect_imports = true
 source_modules = ["debate_api"]
 forbidden_modules = ["lxml", "docx"]
 
+# v1-e04-t04-content-extraction. trafilatura, readability-lxml and pypdf are debate-core's
+# `extraction` extra. Only the two extractors may import them: html_extractor (trafilatura and
+# readability) and pdf_extractor (pypdf). The rules that decide a PDF's text live in
+# debate_core.retrieval.pdf_layout and see none of them, which is what lets them be tested on lines
+# written by hand.
+[[tool.importlinter.contracts]]
+name = "The extraction libraries stay inside the HTML and PDF extractors"
+type = "forbidden"
+source_modules = [
+    "debate_core.domain",
+    "debate_core.retrieval",
+    "debate_core.evidence",
+    "debate_core.arguments",
+    "debate_core.application",
+    "debate_core.testing",
+    "debate_core.integrations.local",
+    "debate_core.integrations.landscape",
+    "debate_core.integrations.models",
+    "debate_core.integrations.docx_parser",
+    "debate_core.integrations.docx_file_writer",
+    "debate_core.integrations.file_streaming",
+    "debate_core.integrations.s3",
+    "debate_core.integrations.bedrock",
+    "debate_core.integrations.cognito",
+    "debate_core.integrations.cloudwatch_audit",
+    "debate_core.integrations.parameter_store",
+    "debate_core.integrations.secrets_manager",
+    "debate_core.integrations.sns",
+    "debate_core.integrations.opencaselist",
+    "debate_core.integrations.discovery",
+    "debate_core.integrations.http_fetcher",
+    "debate_api",
+    "debate_workers",
+]
+forbidden_modules = ["trafilatura", "readability", "pypdf"]
+
+# v1-e04-t04-content-extraction. The fetch command (v1-e04-t06) will have the composition root build
+# the extractors, so the chain is by design; no command imports an extraction library itself.
+[[tool.importlinter.contracts]]
+name = "The CLI reaches the extraction libraries only through debate_core.integrations"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = ["debate_cli"]
+forbidden_modules = ["trafilatura", "readability", "pypdf"]
+
 # PM ruling 2026-10-22 (v1-e07-t05: feedparser falls back to a loose parser on a hostile feed).
 # defusedxml is the `feeds` extra: the feed providers in debate_core.integrations.discovery parse RSS
 # and Atom from strangers with it, refusing entity declarations and external references. Nothing
@@ -375,6 +429,8 @@ source_modules = [
     "debate_core.integrations.sns",
     "debate_core.integrations.opencaselist",
     "debate_core.integrations.http_fetcher",
+    "debate_core.integrations.html_extractor",
+    "debate_core.integrations.pdf_extractor",
     "debate_api",
     "debate_workers",
 ]

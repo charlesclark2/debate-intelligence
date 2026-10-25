@@ -5,11 +5,21 @@ How the weekly OpenCaselist pull is installed, enabled, watched and turned off o
 Mac. The command it runs is `debate-research caselist pull` (`v1-e34-t02-scheduled-sync`); the
 schedule around it is `ops/launchd/`.
 
+**From the cutover (`v1-e40-t06`), the weekly run is the cloud's**, in the team's AWS account
+([ADR-0020](../adr/0020-weekly-caselist-run-in-the-cloud.md)). The Mac's agent is unloaded and its
+plist kept, so that a week the cloud run is down can be run on the Mac by hand. Which machine runs
+the week, and how to fall back to the Mac, is [caselist-cutover.md](caselist-cutover.md)'s. This
+runbook stays the reference for the Mac's agent, its checks and what a run reports. Two things
+changed with the cutover: the agent passes no `--caselist`, because the caselists are the build's
+`caselist.sync_caselists`, and every dev build keeps the run's state in the bucket
+(`caselist.run_state = "bucket"`), so a pull on the Mac takes the bucket's run lock and restores its
+working copy first.
+
 | | |
 |---|---|
 | Runs on | Charlie's Mac, as Charlie, under launchd |
 | Cadence | **Weekly.** Wednesday 06:00 local by default |
-| Command | `debate-research caselist pull --caselist <slug> …` |
+| Command | `debate-research caselist pull`, following the build's `caselist.sync_caselists` (until `v1-e40-t06`, `--caselist <slug> …`) |
 | Agent label | `com.debate-intelligence.caselist-sync` |
 | Logs | `~/Library/Logs/debate-research/caselist-sync.jsonl` and `…err.log` |
 | Run summaries | `<data_dir>/caselist-sync-runs/<run id>.json` |
@@ -241,13 +251,13 @@ Record the counts in [`docs/data/caselist-sync-runs.md`](../data/caselist-sync-r
 ## Step 2 — install the agent
 
 ```bash
-ops/launchd/install.sh --caselist hsld26 --caselist hspolicy26 --env prod --debate-research "$HOME/.local/bin/debate-research" --dry-run
+ops/launchd/install.sh --env dev --debate-research "$HOME/.local/bin/debate-research" --dry-run
 ```
 
 `--dry-run` prints the plist and writes nothing; read it before you install it. Then:
 
 ```bash
-ops/launchd/install.sh --caselist hsld26 --caselist hspolicy26 --env prod --debate-research "$HOME/.local/bin/debate-research"
+ops/launchd/install.sh --env dev --debate-research "$HOME/.local/bin/debate-research"
 ```
 
 That writes `~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist`, copies the
@@ -261,6 +271,12 @@ fails it prints what the build said and installs nothing. The usual reason is a 
 AWS config does not define ([A profile the AWS config does not define](#a-profile-the-aws-config-does-not-define)).
 A build older than that check is refused too, by name. An expired session does not fail it.
 
+The caselists the agent's pull follows are the build's setting `caselist.sync_caselists`, in the
+environment's profile (ADR-0020 (5), `v1-e40-t06`), which the installer also asks the build for. It
+says which they are, `The agent's pull follows the build's caselist.sync_caselists: …`, and installs
+nothing for a build that names none, whose agent would be refused every week. There is no
+`--caselist`: a new season's caselists are a profile change and a new build.
+
 The AWS profile the run uses is the build's setting `storage.s3.aws_profile`: `debate-prod-evidence`
 for prod and `debate-dev-evidence` for dev. The installer has no option for it. Its old
 `--aws-profile` wrote `AWS_PROFILE` into the plist, which nothing the agent runs reads, so it chose
@@ -268,7 +284,7 @@ nothing.
 
 To install over an agent that is already installed, use
 [Reinstalling the agent](#reinstalling-the-agent): the installer then keeps the installed agent's
-environment, caselists, schedule, log directory and wrapper directory unless told otherwise.
+environment, schedule, log directory and wrapper directory unless told otherwise.
 
 `--weekday`, `--hour` and `--minute` set the schedule. A first install defaults to Wednesday 06:00,
 the day after the site publishes the week's archives; over an installed agent, each one left out
@@ -339,9 +355,11 @@ It loads a one-off copy of the installed plist as `com.debate-intelligence.casel
 with no schedule, running the copied wrapper's `--check`. That prints the path
 `DEBATE_RESEARCH_BIN` resolves to and the build's `debate-research --version`, then runs
 `debate-research doctor --evidence-profiles --search-index` (`v1-e34-t22`, `v1-e34-t30`), and
-nothing else: no `caselist pull`, no listing call to OpenCaselist, no download. The agent's
-caselists reach the store check as `DEBATE_CASELIST__SYNC_CASELISTS` in the check's environment,
-because `--check` takes no argument; the agent's own plist is not changed. The installer kickstarts it, waits for it, prints
+nothing else: no `caselist pull`, no listing call to OpenCaselist, no download. The store check
+reads the build's own `caselist.sync_caselists`, as the agent's pull does. An agent installed before
+`v1-e40-t06` names its caselists as `--caselist` arguments instead; those reach the store check as
+`DEBATE_CASELIST__SYNC_CASELISTS` in the check's environment, because `--check` takes no argument,
+and the agent's own plist is not changed. The installer kickstarts it, waits for it, prints
 its log (`~/Library/Logs/debate-research/caselist-sync-check.log`) and exit code, and boots it out.
 It reads the agent's `runs` count before and after and fails if it changed. It refuses to run
 against an agent whose wrapper is not this checkout's copied out, so reinstall first. That
@@ -420,8 +438,8 @@ the agent's schedule, Wednesday at 06:00 by default, and its other settings by t
    1 is older than the check.
 
 3. **Install the agent**, with no option but the build. Over an installed agent the installer
-   reads the installed plist and keeps its environment and its caselists (`v1-e34-t24`), and its
-   schedule, its log directory and its wrapper directory (`v1-e34-t25`). The first three commands
+   reads the installed plist and keeps its environment (`v1-e34-t24`), and its schedule, its log
+   directory and its wrapper directory (`v1-e34-t25`). The first three commands
    print them from the installed plist, so you can see what will be kept; the fourth is the
    install:
 
@@ -436,16 +454,19 @@ the agent's schedule, Wednesday at 06:00 by default, and its other settings by t
    first three commands printed. For a dev agent on the default schedule:
 
    * `Keeping the installed agent's environment, dev, from its plist's DEBATE_ENV (--env changes it).`
-   * `Keeping the installed agent's caselists: hsld26 hspolicy26, from its plist's ProgramArguments (--caselist replaces them).`
    * `Keeping the installed agent's schedule, Wednesday at 06:00, from its plist's StartCalendarInterval (--weekday, --hour and --minute change it).`
    * `Keeping the installed agent's log directory, …/Library/Logs/debate-research, from its plist's StandardOutPath and StandardErrorPath (--log-dir changes it).`
    * `Keeping the installed agent's wrapper directory, …/.local/share/debate-research/launchd, from its plist's ProgramArguments (--wrapper-dir changes it).`
+   * `The agent's pull follows the build's caselist.sync_caselists: hsld26 hspolicy26 hspf26.`
 
    Then it runs step 2's check itself and installs nothing if that fails. Success ends, as a first
    install does, with `Wrote …` and the data directory the agent keeps its data in, which should
    be the one it had. Adding `--dry-run` shows the same lines and writes nothing.
 
-   * **`--caselist`** replaces the caselists, and the installer says so.
+   * **There is no `--caselist`** (`v1-e40-t06`). The caselists are the build's, so a different
+     list is a profile change and a new build. An agent installed before then has `--caselist`
+     arguments in its plist; the reinstall drops them, `Not carried over from the installed plist:
+     the arguments --caselist … after the wrapper.`, and says so again if the build names others.
    * **`--weekday`, `--hour`, `--minute`, `--log-dir` or `--wrapper-dir`** changes that setting
      alone, and the installer says from what to what. Before `v1-e34-t25` each went back to its
      default on a reinstall that did not repeat it, so an agent installed for Thursday moved to
@@ -473,8 +494,8 @@ the agent's schedule, Wednesday at 06:00 by default, and its other settings by t
    ```
 
    If `bootstrap` says `Bootstrap failed: 5: Input/output error`, the bootout had not finished;
-   run the bootstrap line again. `print` should show the copied wrapper, the caselists and the
-   calendar interval, and `runs = 0`.
+   run the bootstrap line again. `print` should show the copied wrapper as the only program
+   argument, the calendar interval, and `runs = 0`.
 
 5. **Check it under launchd:**
 

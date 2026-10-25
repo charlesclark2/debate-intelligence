@@ -3,10 +3,12 @@
   launchd agent for the weekly caselist sync (v1-e34-t02-scheduled-sync).
 
   A template, not a plist: the placeholders below are filled in by ops/launchd/install.sh on the
-  machine the agent runs on. Nothing here names a caselist, a home directory or an AWS account,
-  because this file is committed and none of those three are decisions this repository makes
-  (docs/process/working-agreements.md, and the task spec's "no hardcoded caselist slugs or
-  absolute user paths in committed files").
+  machine the agent runs on. Nothing here names a home directory or an AWS account, because this
+  file is committed and neither is a decision this repository makes (docs/process/working-agreements.md,
+  and v1-e34-t02's "no absolute user paths in committed files"). Nor does it name a caselist: the
+  wrapper is given no argument, and the weekly pull follows the build's caselist.sync_caselists, in
+  the environment's profile, as the cloud run does (ADR-0020 (5), v1-e40-t06). Until v1-e40-t06 the
+  installer wrote each caselist here as an argument of its own.
 
   StartCalendarInterval, not StartInterval. Two reasons, and the first is the important one:
 
@@ -38,7 +40,6 @@
     <key>ProgramArguments</key>
     <array>
         <string>@WRAPPER@</string>
-@CASELIST_ARGUMENTS@
     </array>
 
     <key>StartCalendarInterval</key>

@@ -4,7 +4,8 @@
 running the renderer (working agreement 6), and so was the third window's `expected_trends.csv`. The
 scan reads every school, team code and tournament the fixture's disclosures name, and the paths they
 were filed under, and finds none in the circuit-wide files; the school view names schools and team
-codes and nothing more.
+codes and nothing more, but the link to each team's openCaselist page (`v1-e32-t18`), which no
+circuit-wide file carries.
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ from debate_core.application.landscape_report import (
     LandscapeReportInputs,
     LandscapeReportService,
 )
+from debate_core.application.landscape_scan import scan_report
 from debate_core.application.landscape_staleness import STALE_BANNER_HEADING
 from debate_core.arguments.landscape.render import (
     IMPACT_CARD_COLUMNS,
@@ -372,7 +374,7 @@ def test_the_trend_and_school_csv_columns_are_the_specs() -> None:
     assert {"weekly_teams", "weekly_share", "previous_share", "delta_points", "trend_label"} <= set(
         TREND_COLUMNS
     )
-    assert SCHOOL_COLUMNS == ("school", "team_code", "side", "position_id", "rounds")
+    assert SCHOOL_COLUMNS == ("school", "team_code", "side", "position_id", "rounds", "team_page")
     assert list(_csv_rows(files["schools.csv"])[0]) == list(SCHOOL_COLUMNS)
 
 
@@ -414,3 +416,54 @@ def test_a_stale_school_view_starts_with_the_banner() -> None:
     files = _bundle(report_date=date(2026, 9, 25)).files
     assert files["schools.md"].startswith(STALE_BANNER_HEADING)
     assert "# stale=true\n" in files["schools.csv"]
+
+
+BIRCHMOOR_PAGE = "https://opencaselist.com/synthpolicy26/Birchmoor"
+
+
+def test_no_circuit_wide_file_carries_a_link_and_the_school_view_does() -> None:
+    """`v1-e32-t18`: policy 1.14 allows the team-page link in the school view and nowhere else."""
+    files = _bundle().files
+    for name in CIRCUIT_WIDE_FILES:
+        assert "opencaselist" not in files[name].casefold(), name
+        assert not re.search(r"https?:|www\.", files[name]), name
+    for name in SCHOOL_VIEW_FILES:
+        assert f"{BIRCHMOOR_PAGE}/QQ" in files[name]
+        assert f"{BIRCHMOOR_PAGE}/ZZ" in files[name]
+
+
+def test_the_scan_still_reads_the_school_view_for_paths_only_and_finds_nothing() -> None:
+    """The run scans the bundle so; a team-page link is no path, so the school view has no hit."""
+    files = _bundle().files
+    disclosures = read_synthetic_caselist(FIXTURE).disclosures
+    assert scan_report(files, disclosures, school_view_files=SCHOOL_VIEW_FILES) == ()
+    named = scan_report({name: files[name] for name in SCHOOL_VIEW_FILES}, disclosures)
+    assert {hit.file for hit in named} == set(SCHOOL_VIEW_FILES)
+
+
+def test_a_team_code_that_is_not_one_address_word_gets_no_link_and_is_counted() -> None:
+    inputs = read_synthetic_caselist(FIXTURE)
+    disclosures = tuple(
+        one.evolve(team_code="Q-Q") if one.team_code == "QQ" else one for one in inputs.disclosures
+    )
+    files = _files(dataclasses.replace(inputs, disclosures=disclosures))
+    counted = (
+        "1 of 8 team codes link to their openCaselist page; 7 do not: 6 whose school is not one address "
+        "word, 1 whose team code is not one address word"
+    )
+    assert f"| Team pages | {counted} |" in files["schools.md"]
+    assert f"# team_pages={counted}\n" in files["schools.csv"]
+    assert "| Birchmoor | Q-Q | neg | 1 | none |" in files["schools.md"]
+    assert f"| Birchmoor | ZZ | neg | 1 | [openCaselist]({BIRCHMOOR_PAGE}/ZZ) |" in files["schools.md"]
+    rows = [row for row in _csv_rows(files["schools.csv"]) if row["school"] == "Birchmoor"]
+    assert {(row["team_code"], row["team_page"]) for row in rows} == {
+        ("Q-Q", ""),
+        ("ZZ", f"{BIRCHMOOR_PAGE}/ZZ"),
+    }
+    assert "opencaselist" not in "".join(files[name] for name in CIRCUIT_WIDE_FILES).casefold()
+
+
+def test_the_by_position_section_follows_the_by_school_section() -> None:
+    text = _bundle().files["schools.md"]
+    headings = [line for line in text.splitlines() if line.startswith("## ")]
+    assert headings == ["## By school", "## By position"]

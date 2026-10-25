@@ -53,6 +53,7 @@ from debate_core.domain.base import DomainModel, NonEmptyText, Sha256Hex
 from debate_core.domain.caselist import CaselistSlug
 from debate_core.domain.enums import ProvenanceMode
 from debate_core.domain.landscape import PositionId, PositionKind, PositionSide, TaxonomyVersion
+from debate_core.domain.landscape_texts import LandscapeTexts
 
 __all__ = [
     "AFF_METHOD_PATTERN",
@@ -293,4 +294,9 @@ class LandscapeReport(DomainModel):
     unclassified: UnclassifiedSummary
     aff_identification: tuple[AffIdentification, ...] = Field(
         description="Identified affirmative rounds by method, in method order."
+    )
+    texts: LandscapeTexts | None = Field(
+        default=None,
+        description="`v1-e32-t11`'s CP texts, alternatives, roles of the ballot and overview counts; None "
+        "when the run read none.",
     )

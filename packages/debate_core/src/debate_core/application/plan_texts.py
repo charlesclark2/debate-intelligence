@@ -54,7 +54,14 @@ from debate_core.arguments.landscape.plan_text import (
 from debate_core.domain.caselist import SourceDocument
 from debate_core.domain.debate_files import ParsedDocument, ParseFailure
 
-__all__ = ["PLAN_TEXT_SOURCE_PATH", "PlanTextCounts", "PlanTextRun", "PlanTextService", "PlanTextWordsRun"]
+__all__ = [
+    "PLAN_TEXT_SOURCE_PATH",
+    "PlanTextCounts",
+    "PlanTextRun",
+    "PlanTextService",
+    "PlanTextWordsRun",
+    "blob_jobs",
+]
 
 PLAN_TEXT_SOURCE_PATH: Final = "plan-text-reading.docx"
 """The path the parser is given in place of a disclosure path, which names a school and a team."""
@@ -137,7 +144,9 @@ class PlanTextService:
         missing = [source for sha, source in sorted(wanted.items()) if sha not in cached]
         written: dict[str, CachedPlanText] = {}
         unread: set[str] = set()
-        for job, result in self._runner.run(self._parser, self._jobs(missing)):
+        for job, result in self._runner.run(
+            self._parser, blob_jobs(missing, self._local, PLAN_TEXT_SOURCE_PATH)
+        ):
             sha = job.source.sha256
             if isinstance(result, ParsedDocument):
                 paragraphs, in_cards = paragraphs_of(result)
@@ -197,7 +206,11 @@ class PlanTextService:
         words: dict[str, tuple[str, ...]] = {}
         texts: dict[str, tuple[str, ...]] = {}
         mismatched = unread = parsed = 0
-        jobs = self._jobs([source for source, _ in (wanted[sha] for sha in sorted(wanted))])
+        jobs = blob_jobs(
+            [source for source, _ in (wanted[sha] for sha in sorted(wanted))],
+            self._local,
+            PLAN_TEXT_SOURCE_PATH,
+        )
         for job, result in self._runner.run(self._parser, jobs):
             if not isinstance(result, ParsedDocument):
                 unread += 1
@@ -219,36 +232,41 @@ class PlanTextService:
             texts=dict(sorted(texts.items())),
         )
 
-    def _jobs(self, sources: Sequence[SourceDocument]) -> Iterator[LoadableJob]:
-        for source in sources:
-            job = ParseJob(
-                source=source,
-                source_path=PLAN_TEXT_SOURCE_PATH,
-                snapshot=source.last_seen_snapshot,
-                camp=None,
+
+def blob_jobs(
+    sources: Sequence[SourceDocument], local: LocalEvidence, source_path: str
+) -> Iterator[LoadableJob]:
+    """A parse job per source, its bytes read from this machine's blob store and checked against its name.
+
+    The parser is given `source_path`, a placeholder, never the disclosure's path. A source of a format the
+    parser cannot read loads no bytes, so the parser refuses it by format. `v1-e32-t11`'s analytic texts are
+    read the same way.
+    """
+    for source in sources:
+        job = ParseJob(source=source, source_path=source_path, snapshot=source.last_seen_snapshot, camp=None)
+        yield job, _loader(source, local)
+
+
+def _loader(source: SourceDocument, local: LocalEvidence) -> Callable[[], bytes]:
+    def load() -> bytes:
+        if not source.is_parsable:
+            return b""  # refused by format; the parser never reads the bytes
+        path_for = local.blob_path_for
+        if path_for is None:
+            raise SourceLoadError(PipelineFailureReason.SOURCE_MISSING, "no local blob path")
+        try:
+            content = path_for(local_blob_key(source.sha256)).read_bytes()
+        except FileNotFoundError:
+            raise SourceLoadError(
+                PipelineFailureReason.SOURCE_MISSING, "not in this machine's blob store"
+            ) from None
+        if hashlib.sha256(content).hexdigest() != source.sha256:
+            raise SourceLoadError(
+                PipelineFailureReason.SOURCE_INTEGRITY, "the blob does not hash to its name"
             )
-            yield job, self._loader(source)
+        return content
 
-    def _loader(self, source: SourceDocument) -> Callable[[], bytes]:
-        def load() -> bytes:
-            if not source.is_parsable:
-                return b""  # refused by format; the parser never reads the bytes
-            path_for = self._local.blob_path_for
-            if path_for is None:
-                raise SourceLoadError(PipelineFailureReason.SOURCE_MISSING, "no local blob path")
-            try:
-                content = path_for(local_blob_key(source.sha256)).read_bytes()
-            except FileNotFoundError:
-                raise SourceLoadError(
-                    PipelineFailureReason.SOURCE_MISSING, "not in this machine's blob store"
-                ) from None
-            if hashlib.sha256(content).hexdigest() != source.sha256:
-                raise SourceLoadError(
-                    PipelineFailureReason.SOURCE_INTEGRITY, "the blob does not hash to its name"
-                )
-            return content
-
-        return load
+    return load
 
 
 class _UnwrittenPlanTexts:

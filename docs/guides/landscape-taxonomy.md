@@ -372,6 +372,39 @@ lowercase word each. Adding a word is a configuration edit like an alias: `uv ru
 checks it, and the next run reads every affirmative file again. The words come from teams' plan
 texts, so the check refuses one shaped like a team code or naming a school, as it does for an alias.
 
+## CP texts, alternatives, roles of the ballot and overviews
+
+The report quotes each CP's and each K's texts word for word, and counts each position's overviews.
+They are the teams' own analytic words, read from each file's paragraphs, so the store's cards do not
+hold most of them. A text belongs to the position its section is placed under: the nearest heading over
+its label that an alias or your decision places, as a card is placed. A label under `1NC` or `OFF`, or
+under headings that place nothing, is counted and never placed by a guess, so an alias or a decision you
+add for such a heading places its texts too.
+
+* **A CP text** is the paragraph a label holds or opens: `Text:`, `CP Text:`, `Counterplan:`, or a
+  `Text` or `CP Text` heading over it. It holds `should`. Most teams write it with no label, so the
+  first analytic with `should` in a block placed under a CP is its text too, when an **actor** is among
+  the at most 12 words before its `should`: "The fifty states should ..." is a text, and "Our counter
+  interpretation is that we should ..." is not.
+* **An alternative** is a tag or analytic opening `The alternative is`, `The alt is` or `Our alternative
+  is`, or the one under an `Alt` or `Alternative` heading. `Alt causes`, `Alt fails` and `Perm do the
+  alt` answer an alternative, and are left out.
+* **A role of the ballot** is under a `Role of the ballot`, `ROB`, `Role of the judge` or `ROJ` heading,
+  or opens `The role of the ballot is`. A `Ballot` heading on its own is left out: it also heads
+  ballot-PIK and presumption blocks.
+* **An overview** is a heading `Overview`, `O/V`, `OV` or `OVW`, alone or with other words (`Impact
+  overview`). Overviews are counted, never quoted: the data-use policy does not list them, and you
+  decided on 2026-10-24 to keep it so.
+
+Each CP and K shows its 3 texts the most teams read, then how many more texts and teams there are.
+Texts worded alike are one text. A text naming a school of the caselist is withheld and counted.
+
+The actors are in `config/landscape/analytic_texts/<topic id>.yaml`, one lowercase phrase each and no
+`the` (`fifty states`, `usfg`, `congress`). Adding one is a configuration edit like an alias: `uv run
+pytest tests/config` checks it, and the next run reads every file of the topic again, once (551
+seconds for hspolicy26's first reading, on 2026-10-24). An edit to a position or a decision of yours
+reads them again too, because a text's position is kept with it.
+
 ## The review queue and your decisions
 
 Each run writes a review queue: the headings that cards nothing placed sit under, one row each, with

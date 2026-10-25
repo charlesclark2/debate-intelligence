@@ -1,0 +1,28 @@
+# The actors a CP text read by its place must name (v1-e32-t11, the PM's ruling 1 of 2026-10-24). With
+# no label, a CP text is the first "should" analytic of a block whose nearest placed heading is a CP the
+# team reads, and only when one of these phrases is among the at most 12 words before its "should":
+# "The fifty states should ..." passes, "Our counter interpretation is that we should ..." does not.
+# Lowercase words as the text's words are compared, without "the". docs/guides/landscape-taxonomy.md
+# says how to edit it. No CP text, team or school is written here.
+schema_version: 1
+topic_id: policy-2026-27-nhi
+cp_text_actors:
+  - fifty states
+  - 50 states
+  - states
+  - state
+  - territories
+  - governors
+  - united states
+  - usfg
+  - federal government
+  - congress
+  - supreme court
+  - federal judiciary
+  - courts
+  - executive branch
+  - president
+  - department of health and human services
+  - hhs
+  - centers for medicare and medicaid services
+  - cms

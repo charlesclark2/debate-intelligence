@@ -1,0 +1,90 @@
+{
+  "about": "v1-e32-t11's analytic-text readings of the synthetic caselist, written by hand (README, 'Analytic texts'). Every text is invented. 'words' is what a reading was made from, and its digest is computed from it when the fixture is read; 'quoted' is what reading the source again returns, or null when it could not be read again as it was read; an overview has neither.",
+  "sources": {
+    "b1": {
+      "readings": [
+        {"kind": "CP_TEXT", "form": "BY_PLACE", "label": 12, "paragraph": 12, "unit": "ANALYTIC", "kept": false, "placement": "PLACED", "position": "states-cp", "role": "READS", "words": "The fifty states should establish a sample single payer system.", "quoted": "The fifty states should establish a sample single payer system."},
+        {"kind": "K_ALTERNATIVE", "form": "SENTENCE", "label": 30, "paragraph": 30, "unit": "TAG", "kept": true, "placement": "PLACED", "position": "cap-k", "role": "READS", "words": "Our alternative is sample democratic planning.", "quoted": "Our alternative is sample democratic planning."},
+        {"kind": "OVERVIEW", "form": "LABEL", "label": 40, "paragraph": 40, "unit": "BLOCK", "kept": false, "placement": "PLACED", "position": "election-da", "role": "READS"}
+      ]
+    },
+    "b2": {
+      "readings": [
+        {"kind": "CP_TEXT", "form": "INLINE", "label": 5, "paragraph": 5, "unit": "ANALYTIC", "kept": false, "placement": "PLACED", "position": "states-cp", "role": "READS", "words": "The fifty states should establish a sample single payer system.", "quoted": "The fifty states should establish a sample single payer system."},
+        {"kind": "CP_TEXT", "form": "INLINE", "label": 9, "paragraph": 9, "unit": "ANALYTIC", "kept": false, "placement": "PLACED", "position": "election-da", "role": "READS", "words": "The fifty states should delay a sample election.", "quoted": "The fifty states should delay a sample election."},
+        {"kind": "K_ALTERNATIVE", "form": "SENTENCE", "label": 20, "paragraph": 20, "unit": "TAG", "kept": true, "placement": "PLACED", "position": "cap-k", "role": "READS", "words": "The alternative is to reject sample markets in care.", "quoted": "The alternative is to reject sample markets in care."},
+        {"kind": "ROLE_OF_THE_BALLOT", "form": "SENTENCE", "label": 24, "paragraph": 24, "unit": "ANALYTIC", "kept": false, "placement": "PLACED", "position": "cap-k", "role": "READS", "words": "The role of the ballot is to vote for the best sample method.", "quoted": "The role of the ballot is to vote for the best sample method."}
+      ]
+    },
+    "b3": {
+      "readings": [
+        {"kind": "CP_TEXT", "form": "BY_PLACE", "label": 7, "paragraph": 7, "unit": "ANALYTIC", "kept": false, "placement": "PLACED", "position": "states-cp", "role": "READS", "words": "The Fifty States should establish a sample single payer system", "quoted": "The Fifty States should establish a sample single payer system"},
+        {"kind": "CP_TEXT", "form": "LABEL", "label": 15, "paragraph": 16, "unit": "ANALYTIC", "kept": false, "placement": "PLACED", "position": "courts-cp", "role": "READS", "words": "The federal courts should strike down a sample mandate.", "quoted": "The federal courts should strike down a sample mandate."},
+        {"kind": "OVERVIEW", "form": "LABEL", "label": 2, "paragraph": 2, "unit": "BLOCK", "kept": false, "placement": "NO_HEADING"}
+      ]
+    },
+    "b4": {
+      "readings": [
+        {"kind": "CP_TEXT", "form": "BY_PLACE", "label": 8, "paragraph": 8, "unit": "ANALYTIC", "kept": false, "placement": "PLACED", "position": "states-cp", "role": "READS", "words": "Congress should give the fifty states sample block grants.", "quoted": "Congress should give the fifty states sample block grants."},
+        {"kind": "CP_TEXT", "form": "BY_PLACE", "label": 14, "paragraph": 14, "unit": "ANALYTIC", "kept": false, "placement": "PLACED", "position": "states-cp", "role": "READS", "words": "The fifty states should adopt a sample payment cap.", "quoted": "The fifty states should adopt a sample payment cap."},
+        {"kind": "CP_TEXT", "form": "LABEL", "label": 21, "paragraph": 22, "unit": "ANALYTIC", "kept": false, "placement": "HEADINGS_PLACE_NOTHING", "words": "The fifty states should act alone on sample care.", "quoted": null},
+        {"kind": "K_ALTERNATIVE", "form": "SENTENCE", "label": 31, "paragraph": 31, "unit": "TAG", "kept": true, "placement": "NO_HEADING", "words": "The alternative is sample mutual aid.", "quoted": null},
+        {"kind": "K_ALTERNATIVE", "form": "SENTENCE", "label": 35, "paragraph": 35, "unit": "TAG", "kept": true, "placement": "NO_HEADING", "words": "The alt is sample refusal.", "quoted": null},
+        {"kind": "OVERVIEW", "form": "LABEL", "label": 3, "paragraph": 3, "unit": "BLOCK", "kept": false, "placement": "PLACED", "position": "election-da", "role": "READS"}
+      ]
+    },
+    "b5": {
+      "readings": [
+        {"kind": "CP_TEXT", "form": "LABEL", "label": 4, "paragraph": 5, "unit": "ANALYTIC", "kept": false, "placement": "PLACED", "position": "states-cp", "role": "READS", "words": "The fifty states should adopt a sample payment cap.", "quoted": "The fifty states should adopt a sample payment cap."},
+        {"kind": "CP_TEXT", "form": "BY_PLACE", "label": 11, "paragraph": 11, "unit": "ANALYTIC", "kept": false, "placement": "PLACED", "position": "states-cp", "role": "READS", "words": "Ashgrove Fictional should pilot a sample state program.", "quoted": "Ashgrove Fictional should pilot a sample state program."},
+        {"kind": "K_ALTERNATIVE", "form": "INLINE", "label": 18, "paragraph": 18, "unit": "ANALYTIC", "kept": false, "placement": "PLACED", "position": "cap-k", "role": "READS", "words": "refuse the sample market.", "quoted": "refuse the sample market."},
+        {"kind": "OVERVIEW", "form": "LABEL", "label": 1, "paragraph": 1, "unit": "BLOCK", "kept": false, "placement": "PLACED", "position": "states-cp", "role": "READS"}
+      ]
+    },
+    "b6": {
+      "refused_by_guard": 2,
+      "readings": [
+        {"kind": "CP_TEXT", "form": "BY_PLACE", "label": 6, "paragraph": 6, "unit": "ANALYTIC", "kept": false, "placement": "PLACED", "position": "states-cp", "role": "READS", "words": "Congress should give the fifty states sample block grants.", "quoted": "Congress should give the fifty states sample block grants."},
+        {"kind": "CP_TEXT", "form": "BY_PLACE", "label": 19, "paragraph": 19, "unit": "ANALYTIC", "kept": false, "placement": "PLACED", "position": "states-cp", "role": "READS", "words": "Each of the fifty states should run a sample exchange.", "quoted": "Each of the fifty states should run a sample exchange."},
+        {"kind": "K_ALTERNATIVE", "form": "SENTENCE", "label": 27, "paragraph": 27, "unit": "TAG", "kept": true, "placement": "HEADINGS_PLACE_NOTHING", "words": "The alternative is a sample commons.", "quoted": null},
+        {"kind": "ROLE_OF_THE_BALLOT", "form": "LABEL", "label": 33, "paragraph": 34, "unit": "ANALYTIC", "kept": false, "placement": "HEADINGS_PLACE_NOTHING", "words": "Vote for the sample commons.", "quoted": null}
+      ]
+    },
+    "b7": {
+      "readings": [
+        {"kind": "K_ALTERNATIVE", "form": "LABEL", "label": 10, "paragraph": 11, "unit": "TAG", "kept": true, "placement": "PLACED", "position": "cap-k", "role": "READS", "words": "The alternative is to reject sample markets in care.", "quoted": "The alternative is to reject sample markets in care."}
+      ]
+    },
+    "b8": {
+      "readings": [
+        {"kind": "CP_TEXT", "form": "INLINE", "label": 3, "paragraph": 3, "unit": "ANALYTIC", "kept": false, "placement": "PLACED", "position": "states-cp", "role": "READS", "words": "Congress should give the fifty states sample block grants.", "quoted": null},
+        {"kind": "CP_TEXT", "form": "INLINE", "label": 13, "paragraph": 13, "unit": "ANALYTIC", "kept": false, "placement": "NO_HEADING", "words": "Congress should fund a sample trial.", "quoted": null},
+        {"kind": "K_ALTERNATIVE", "form": "SENTENCE", "label": 25, "paragraph": 25, "unit": "TAG", "kept": true, "placement": "PLACED", "position": "cap-k", "role": "READS", "words": "The alternative is to reject sample markets in care.", "quoted": "The alternative is to reject sample markets in care."},
+        {"kind": "OVERVIEW", "form": "LABEL", "label": 8, "paragraph": 8, "unit": "BLOCK", "kept": false, "placement": "HEADINGS_PLACE_NOTHING"}
+      ]
+    },
+    "b9": {
+      "refused_by_guard": 5,
+      "readings": [
+        {"kind": "CP_TEXT", "form": "BY_PLACE", "label": 4, "paragraph": 4, "unit": "ANALYTIC", "kept": false, "placement": "PLACED", "position": "states-cp", "role": "READS", "words": "The fifty states should establish a sample single payer system.", "quoted": "The fifty states should establish a sample single payer system."}
+      ]
+    },
+    "a1": {
+      "readings": [
+        {"kind": "K_ALTERNATIVE", "form": "SENTENCE", "label": 17, "paragraph": 17, "unit": "TAG", "kept": true, "placement": "PLACED", "position": "cap-k", "role": "ANSWERS", "words": "The alternative is to reject sample markets in care.", "quoted": null},
+        {"kind": "OVERVIEW", "form": "LABEL", "label": 26, "paragraph": 26, "unit": "BLOCK", "kept": false, "placement": "PLACED", "position": "spending-da", "role": "ANSWERS"}
+      ]
+    },
+    "a3": {
+      "readings": [
+        {"kind": "OVERVIEW", "form": "LABEL", "label": 2, "paragraph": 2, "unit": "BLOCK", "kept": false, "placement": "PLACED", "position": "costs-advantage", "role": "READS"}
+      ]
+    },
+    "a6": {
+      "readings": [
+        {"kind": "CP_TEXT", "form": "INLINE", "label": 9, "paragraph": 9, "unit": "ANALYTIC", "kept": false, "placement": "PLACED", "position": "states-cp", "role": "READS", "words": "The fifty states should establish a sample single payer system.", "quoted": null},
+        {"kind": "OVERVIEW", "form": "LABEL", "label": 14, "paragraph": 14, "unit": "BLOCK", "kept": false, "placement": "PLACED", "position": "election-da", "role": "READS"}
+      ]
+    }
+  }
+}

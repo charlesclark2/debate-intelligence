@@ -117,6 +117,83 @@ DA documents with no labelled impact: 3 of 6 (50.0%).
 |---|---|---|---|---|---|---|---|
 | T: national health insurance (`nhi-t`) | 2 | 1 | 0 | 2 | 16.7% | 2026-09-08 |  |
 
+## Counterplan texts, alternatives and roles of the ballot
+
+The teams' own words, quoted as their files hold them (data-use policy 1.13), never beside a school or team code. A text belongs to the position its section is placed under: the nearest placed heading over its label, as a card is placed. A label under no placed heading is counted here and never placed by a guess. Texts worded alike are one text. Each CP and K shows the 3 texts the most teams read, and how many more there are. A text naming a school of the caselist is withheld.
+
+### Counterplan texts
+
+Found by a CP-text label (`Text:`, `CP Text`) or as the first `should` analytic of a block placed under a CP: 15 in 8 files.
+
+* Placed under a CP the team reads, and counted: 11.
+* Not placed: 2 (1 under headings that place nothing, such as `1NC` or `OFF`; 1 under no heading).
+* Placed under another kind of position, as an answer, or in a round on the other side: 2.
+* Left out by the actor guard (no actor in the 12 words before `should`): 2.
+* Withheld for naming a school: 1 text.
+* Could not be read again as they were read: 1.
+
+**States CP** (`states-cp`)
+
+| Rank | Teams | Text |
+|---|---|---|
+| 1 | 4 | The fifty states should establish a sample single payer system. |
+| 2 | 3 | Congress should give the fifty states sample block grants. |
+| 3 | 2 | The fifty states should adopt a sample payment cap. |
+
+And 1 more text, read by 1 team.
+
+**Courts CP** (`courts-cp`)
+
+| Rank | Teams | Text |
+|---|---|---|
+| 1 | 1 | The federal courts should strike down a sample mandate. |
+
+### Kritik alternatives
+
+Found by an alternative label (`Alt`, `The alternative is`): 9 in 8 files.
+
+* Placed under a K the team reads, and counted: 5.
+* Not placed: 3 (1 under headings that place nothing, such as `1NC` or `OFF`; 2 under no heading).
+* Placed under another kind of position, as an answer, or in a round on the other side: 1.
+
+**Capitalism K** (`cap-k`)
+
+| Rank | Teams | Text |
+|---|---|---|
+| 1 | 3 | The alternative is to reject sample markets in care. |
+| 2 | 2 | Our alternative is sample democratic planning. |
+| 3 | 1 | refuse the sample market. |
+
+### Roles of the ballot
+
+Found by a role-of-the-ballot label (`Role of the ballot`, `ROB`, `The role of the ballot is`): 2 in 2 files.
+
+* Placed under a K the team reads, and counted: 1.
+* Not placed: 1 (1 under headings that place nothing, such as `1NC` or `OFF`; 0 under no heading).
+* Placed under another kind of position, as an answer, or in a round on the other side: 0.
+
+**Capitalism K** (`cap-k`)
+
+| Rank | Teams | Text |
+|---|---|---|
+| 1 | 1 | The role of the ballot is to vote for the best sample method. |
+
+## Overviews
+
+Counted, never quoted: data-use policy 1.13 does not list overviews, and the coach keeps it so (2026-10-24). Per position, the teams whose files hold an overview label (`Overview`, `O/V`, `OV`) under it, on each side.
+
+Found: 8 in 8 files.
+
+* Placed under a position the team reads, and counted: 5.
+* Not placed: 2 (1 under headings that place nothing, such as `1NC` or `OFF`; 1 under no heading).
+* Placed under an answer to a position: 1.
+
+| Position | Kind | Teams | Aff teams | Neg teams |
+|---|---|---|---|---|
+| Midterms DA (`election-da`) | da | 2 | 1 | 2 |
+| Costs advantage (`costs-advantage`) | advantage | 1 | 1 | 0 |
+| States CP (`states-cp`) | cp | 1 | 0 | 1 |
+
 ## New this week
 
 Positions first read on this topic in this week's window, 2026-09-09 to 2026-09-15:

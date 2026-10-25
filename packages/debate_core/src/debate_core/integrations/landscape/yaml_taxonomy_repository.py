@@ -7,6 +7,7 @@ The directory holds the coach's files::
     config/landscape/taxonomies/generic.yaml           format-level positions, merged in by event
     config/landscape/overrides/<topic id>.yaml         the coach's decisions on that topic's headings
     config/landscape/plan_texts/<topic id>.yaml        when a plan text names the resolutional aff
+    config/landscape/analytic_texts/<topic id>.yaml    the actors a CP text read by its place names
 
 :meth:`YamlTaxonomyRepository.load` reads every file at once and checks each on its own (the
 models in :mod:`debate_core.domain.landscape`) and against the others:
@@ -20,6 +21,7 @@ models in :mod:`debate_core.domain.landscape`) and against the others:
   names a position that taxonomy counts under (`v1-e32-t02`);
 * a plan-text file's `topic_id` is its file's stem, the topic has a taxonomy, and the aff it names
   is an active aff of it (`v1-e32-t09`);
+* an analytic-text file's `topic_id` is its file's stem and the topic has a taxonomy (`v1-e32-t11`);
 * a mapping that gives one key twice is an error rather than YAML's silent "last one wins", which
   would drop a coach's first list of aliases without a word.
 
@@ -43,17 +45,20 @@ from debate_core.application.ports.taxonomy_repository import (
     ResolvedTopic,
     TaxonomyConfigError,
 )
+from debate_core.arguments.landscape.analytic_texts import CounterplanActors
 from debate_core.arguments.landscape.plan_text import PlanTextVocabulary, ResolutionalPlanWords
 from debate_core.domain.landscape import GENERIC_TOPIC_ID, Taxonomy, TopicMap
 from debate_core.domain.landscape_classification import OverrideRules
 
 __all__ = [
+    "ANALYTIC_TEXT_DIRECTORY",
     "GENERIC_FILE",
     "OVERRIDE_DIRECTORY",
     "PLAN_TEXT_DIRECTORY",
     "TAXONOMY_DIRECTORY",
     "TOPICS_FILE",
     "YamlTaxonomyRepository",
+    "load_analytic_text_file",
     "load_override_file",
     "load_taxonomy_file",
     "load_topic_map",
@@ -65,6 +70,7 @@ TOPICS_FILE: Final = "topics.yaml"
 TAXONOMY_DIRECTORY: Final = "taxonomies"
 OVERRIDE_DIRECTORY: Final = "overrides"
 PLAN_TEXT_DIRECTORY: Final = "plan_texts"
+ANALYTIC_TEXT_DIRECTORY: Final = "analytic_texts"
 GENERIC_FILE: Final = f"{GENERIC_TOPIC_ID}.yaml"
 
 
@@ -131,6 +137,19 @@ def load_plan_text_file(path: Path) -> ResolutionalPlanWords:
     return words
 
 
+def load_analytic_text_file(path: Path) -> CounterplanActors:
+    """Read and check one analytic-text file on its own; its `topic_id` must be the file's stem."""
+    try:
+        actors = CounterplanActors.model_validate(read_config_file(path))
+    except ValidationError as error:
+        raise TaxonomyConfigError(str(path), str(error)) from error
+    if actors.topic_id != path.stem:
+        raise TaxonomyConfigError(
+            str(path), f"its topic_id is {actors.topic_id}, but the file is named for {path.stem}"
+        )
+    return actors
+
+
 def load_override_file(path: Path) -> OverrideRules:
     """Read and check one overrides file on its own; its `topic_id` must be the file's stem."""
     try:
@@ -175,11 +194,13 @@ class YamlTaxonomyRepository:
         taxonomies: Mapping[str, Taxonomy],
         overrides: Mapping[str, OverrideRules] | None = None,
         plan_texts: Mapping[str, ResolutionalPlanWords] | None = None,
+        analytic_texts: Mapping[str, CounterplanActors] | None = None,
     ) -> None:
         self._topic_map = topic_map
         self._taxonomies = dict(taxonomies)
         self._overrides = dict(overrides or {})
         self._plan_texts = dict(plan_texts or {})
+        self._analytic_texts = dict(analytic_texts or {})
 
     @classmethod
     def load(cls, directory: Path) -> YamlTaxonomyRepository:
@@ -229,6 +250,7 @@ class YamlTaxonomyRepository:
             merged,
             _load_overrides(directory / OVERRIDE_DIRECTORY, merged),
             _load_plan_texts(directory / PLAN_TEXT_DIRECTORY, merged),
+            _load_analytic_texts(directory / ANALYTIC_TEXT_DIRECTORY, merged),
         )
 
     def topic_map(self) -> TopicMap:
@@ -249,6 +271,11 @@ class YamlTaxonomyRepository:
         if topic_id not in self._taxonomies:
             raise NoTaxonomyForTopic(topic_id)
         return self._plan_texts.get(topic_id)
+
+    def cp_text_actors(self, topic_id: str) -> CounterplanActors | None:
+        if topic_id not in self._taxonomies:
+            raise NoTaxonomyForTopic(topic_id)
+        return self._analytic_texts.get(topic_id)
 
     def resolve(self, caselist: str, snapshot: date) -> ResolvedTopic | None:
         found = self._topic_map.resolve(caselist, snapshot)
@@ -298,4 +325,23 @@ def _load_plan_texts(directory: Path, taxonomies: Mapping[str, Taxonomy]) -> dic
         except ValueError as error:
             raise TaxonomyConfigError(str(path), str(error)) from error
         found[words.topic_id] = words
+    return found
+
+
+def _load_analytic_texts(directory: Path, taxonomies: Mapping[str, Taxonomy]) -> dict[str, CounterplanActors]:
+    """Every analytic-text file, each for a topic with a taxonomy."""
+    paths = sorted(directory.iterdir()) if directory.is_dir() else []
+    found: dict[str, CounterplanActors] = {}
+    for path in paths:
+        if path.suffix != ".yaml":
+            raise TaxonomyConfigError(
+                str(path), "an analytic-text file ends in .yaml; this one would be skipped"
+            )
+        actors = load_analytic_text_file(path)
+        if actors.topic_id not in taxonomies:
+            raise TaxonomyConfigError(
+                str(path),
+                f"no topic in {TOPICS_FILE} gives {actors.topic_id} a taxonomy, so nothing reads it",
+            )
+        found[actors.topic_id] = actors
     return found

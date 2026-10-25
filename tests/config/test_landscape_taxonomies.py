@@ -18,6 +18,8 @@
 * **The resolutional plan's words** (`plan_texts/<topic id>.yaml`, `v1-e32-t09`) load with the
   taxonomies, and the same check runs over them: they came from the teams' plan texts, so a word
   shaped like a team code or naming a school is refused.
+* **The CP texts' actors** (`analytic_texts/<topic id>.yaml`, `v1-e32-t11`) load with the taxonomies,
+  and the same check runs over their phrases: an actor is a word the teams' CP texts hold.
 * **Nothing else is in the directory** but the release lock (`released.yaml`, `v1-e32-t08`, checked
   in `test_landscape_released_ids.py`), so the seeding CSV and the review queue, which hold real
   headings, cannot be committed beside the files by mistake.
@@ -33,17 +35,20 @@ from typing import Any
 
 import pytest
 
+from debate_core.arguments.landscape.analytic_texts import CounterplanActors
 from debate_core.arguments.landscape.headings import normalize_heading
 from debate_core.arguments.landscape.plan_text import ResolutionalPlanWords
 from debate_core.domain.landscape import Taxonomy
 from debate_core.domain.landscape_classification import OverrideRules
 from debate_core.integrations.landscape.released_ids import RELEASED_FILE
 from debate_core.integrations.landscape.yaml_taxonomy_repository import (
+    ANALYTIC_TEXT_DIRECTORY,
     OVERRIDE_DIRECTORY,
     PLAN_TEXT_DIRECTORY,
     TAXONOMY_DIRECTORY,
     TOPICS_FILE,
     YamlTaxonomyRepository,
+    load_analytic_text_file,
     load_override_file,
     load_plan_text_file,
     load_taxonomy_file,
@@ -53,6 +58,7 @@ CONFIG = Path(__file__).resolve().parents[2] / "config" / "landscape"
 TAXONOMY_FILES = sorted((CONFIG / TAXONOMY_DIRECTORY).glob("*.yaml"))
 OVERRIDE_FILES = sorted((CONFIG / OVERRIDE_DIRECTORY).glob("*.yaml"))
 PLAN_TEXT_FILES = sorted((CONFIG / PLAN_TEXT_DIRECTORY).glob("*.yaml"))
+ANALYTIC_TEXT_FILES = sorted((CONFIG / ANALYTIC_TEXT_DIRECTORY).glob("*.yaml"))
 MINIMUM_ACTIVE_POSITIONS = 12
 
 SHORT_WORDS = frozenset(
@@ -123,6 +129,19 @@ def plan_text_findings(words: ResolutionalPlanWords) -> list[str]:
     return findings
 
 
+def analytic_text_findings(actors: CounterplanActors) -> list[str]:
+    """Every actor phrase of an analytic-text file shaped like a team code or naming a school."""
+    findings: list[str] = []
+    for phrase in actors.cp_text_actors:
+        findings += _heading_findings(f"the CP text actors of {actors.topic_id}", phrase)
+        findings += [
+            f"the CP text actors of {actors.topic_id}: {word!r} names a school"
+            for word in phrase.split()
+            if word in SCHOOL_WORDS
+        ]
+    return findings
+
+
 # ------------------------------------------------------------------------------------------------
 # The committed files
 # ------------------------------------------------------------------------------------------------
@@ -177,6 +196,11 @@ def test_no_plan_text_word_names_a_team_a_school_or_a_person(path: Path) -> None
     assert plan_text_findings(load_plan_text_file(path)) == []
 
 
+@pytest.mark.parametrize("path", ANALYTIC_TEXT_FILES, ids=lambda path: path.stem)
+def test_no_cp_text_actor_names_a_team_a_school_or_a_person(path: Path) -> None:
+    assert analytic_text_findings(load_analytic_text_file(path)) == []
+
+
 def test_the_directory_holds_only_the_topic_map_taxonomies_overrides_plan_texts_and_release_lock() -> None:
     found = sorted(str(path.relative_to(CONFIG)) for path in CONFIG.rglob("*") if path.is_file())
     allowed = [
@@ -185,6 +209,7 @@ def test_the_directory_holds_only_the_topic_map_taxonomies_overrides_plan_texts_
         *(f"{TAXONOMY_DIRECTORY}/{path.name}" for path in TAXONOMY_FILES),
         *(f"{OVERRIDE_DIRECTORY}/{path.name}" for path in OVERRIDE_FILES),
         *(f"{PLAN_TEXT_DIRECTORY}/{path.name}" for path in PLAN_TEXT_FILES),
+        *(f"{ANALYTIC_TEXT_DIRECTORY}/{path.name}" for path in ANALYTIC_TEXT_FILES),
     ]
     assert found == sorted(allowed)
 
@@ -288,3 +313,20 @@ def test_the_plan_text_check_passes_debate_vocabulary() -> None:
         resolutional_words=("national", "plan"),
     )
     assert plan_text_findings(words) == []
+
+
+@pytest.mark.parametrize(
+    ("phrase", "expected"),
+    [("qx states", "shaped like a team code"), ("the sample academy", "names a school")],
+)
+def test_the_cp_text_actor_check_refuses(phrase: str, expected: str) -> None:
+    actors = CounterplanActors(topic_id="policy-sample-topic", cp_text_actors=("congress", phrase))
+    (finding,) = analytic_text_findings(actors)
+    assert expected in finding
+
+
+def test_the_cp_text_actor_check_passes_actors() -> None:
+    actors = CounterplanActors(
+        topic_id="policy-sample-topic", cp_text_actors=("fifty states", "50 states", "usfg", "hhs", "cms")
+    )
+    assert analytic_text_findings(actors) == []

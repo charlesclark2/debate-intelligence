@@ -92,6 +92,7 @@ from debate_core.application.landscape_staleness import (
 )
 from debate_core.application.landscape_trends import landscape_trends
 from debate_core.application.ports.parsed_store import OccurrenceRecord
+from debate_core.arguments.landscape.analytic_texts import AnalyticTextInputs, TextGroup, top_texts
 from debate_core.arguments.landscape.impacts import is_impact_card
 from debate_core.arguments.landscape.render import (
     header_metadata,
@@ -136,6 +137,16 @@ from debate_core.domain.landscape_report import (
     UnclassifiedSummary,
 )
 from debate_core.domain.landscape_schools import SchoolView
+from debate_core.domain.landscape_texts import (
+    DEFAULT_TEXTS_PER_POSITION,
+    POSITION_KIND_OF,
+    AnalyticTextKind,
+    LandscapeTexts,
+    OverviewCount,
+    PositionTexts,
+    TextCoverage,
+    TextPlacement,
+)
 from debate_core.domain.landscape_trends import (
     DEFAULT_TREND_MINIMUM_TEAMS,
     DEFAULT_TREND_THRESHOLD_POINTS,
@@ -255,6 +266,9 @@ class LandscapeReportInputs:
     topic_range: tuple[date, date] | None = None
     """The first and last snapshot date `topics.yaml` gives the topic in this caselist, so the report can
     say whether its windows span a full topic cycle; None when not known."""
+    analytic_texts: AnalyticTextInputs | None = field(default=None, repr=False)
+    """`v1-e32-t11`'s readings of the caselist's CP texts, alternatives, roles of the ballot and overviews,
+    with the texts to quote read again; None when the run read none, and the report has no such sections."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -303,6 +317,7 @@ class LandscapeReportService:
         impact_cards: int = DEFAULT_IMPACT_CARDS,
         trend_threshold_points: Decimal = DEFAULT_TREND_THRESHOLD_POINTS,
         trend_minimum_teams: int = DEFAULT_TREND_MINIMUM_TEAMS,
+        texts_per_position: int = DEFAULT_TEXTS_PER_POSITION,
     ) -> None:
         if not 0.0 <= review_threshold <= 1.0:
             raise ValueError(f"the review threshold is between 0 and 1; got {review_threshold}")
@@ -315,6 +330,7 @@ class LandscapeReportService:
         self._impact = impact_cards
         self._trend_threshold = trend_threshold_points
         self._trend_minimum = trend_minimum_teams
+        self._texts = texts_per_position
 
     def bundle(self, inputs: LandscapeReportInputs, staleness: LandscapeStaleness) -> LandscapeReportBundle:
         """The report, its trends and its school view, with the hook's banner and `stale` flag in them."""
@@ -528,8 +544,141 @@ class LandscapeReportService:
             aff_identification=tuple(
                 AffIdentification(method=method, rounds=count) for method, count in sorted(identified.items())
             ),
+            texts=None
+            if inputs.analytic_texts is None
+            else _landscape_texts(inputs.analytic_texts, in_range, taxonomy, self._texts),
         )
         return report, counted
+
+
+def _landscape_texts(
+    inputs: AnalyticTextInputs, in_range: _Range, taxonomy: Taxonomy, limit: int
+) -> LandscapeTexts:
+    """`v1-e32-t11`'s sections: each CP's and K's top texts by teams, and each position's overview teams.
+
+    Only the files disclosed in range are read. A quoted kind's text counts for the teams of the rounds
+    disclosing its file when it is placed under a position of its kind, READS, and the round is not on the
+    position's other side, as a card's read does; an overview counts on either side, READS. Everything else
+    found is counted where it went: elsewhere, under headings that place nothing, or under no heading.
+    """
+    caselist = CaselistNames(inputs.caselist_names)
+    labels: Counter[AnalyticTextKind] = Counter()
+    documents: defaultdict[AnalyticTextKind, set[str]] = defaultdict(set)
+    where: defaultdict[AnalyticTextKind, Counter[str]] = defaultdict(Counter)
+    unread: Counter[AnalyticTextKind] = Counter()
+    groups: defaultdict[tuple[AnalyticTextKind, str], dict[str, _TextCopies]] = defaultdict(dict)
+    overview_teams: defaultdict[str, dict[str, set[tuple[str, str]]]] = defaultdict(
+        lambda: {_AFF: set(), _NEG: set()}
+    )
+    for sha in sorted(inputs.readings):
+        in_rounds = in_range.by_source.get(sha)
+        if not in_rounds:
+            continue
+        for reading in inputs.readings[sha]:
+            kind = reading.kind
+            labels[kind] += 1
+            documents[kind].add(sha)
+            if reading.placement is not TextPlacement.PLACED or reading.position_id is None:
+                where[kind][reading.placement.value] += 1
+                continue
+            position = _counted_position(taxonomy, reading.position_id)
+            if reading.role is not PositionRole.READS:
+                where[kind]["elsewhere"] += 1
+                continue
+            if kind is AnalyticTextKind.OVERVIEW:
+                where[kind]["counted"] += 1
+                for one in in_rounds:
+                    stated = in_range.rounds[one]
+                    if stated.team is not None and stated.side in (_AFF, _NEG):
+                        overview_teams[position.id][stated.side].add(stated.team)
+                continue
+            opposite = _OPPOSITE.get(position.side)
+            counted = [one for one in in_rounds if in_range.rounds[one].side != opposite]
+            if position.kind is not POSITION_KIND_OF[kind] or not counted or reading.digest is None:
+                where[kind]["elsewhere"] += 1
+                continue
+            where[kind]["counted"] += 1
+            copies = groups[(kind, position.id)].setdefault(reading.digest, _TextCopies())
+            copies.teams |= {team for one in counted if (team := in_range.rounds[one].team) is not None}
+            text = inputs.texts.get((sha, reading.element_index))
+            if text is None:
+                unread[kind] += 1
+            else:
+                copies.texts.append((sha, reading.element_index, text))
+    withheld: Counter[AnalyticTextKind] = Counter()
+    positions: list[tuple[int, PositionTexts]] = []
+    for (kind, position_id), by_digest in groups.items():
+        quoted, more, held = top_texts(
+            position_id,
+            kind,
+            {
+                digest: TextGroup(teams=frozenset(copies.teams), texts=tuple(copies.texts))
+                for digest, copies in by_digest.items()
+            },
+            limit=limit,
+            caselist=caselist,
+        )
+        withheld[kind] += held
+        if quoted:
+            teams = {team for copies in by_digest.values() for team in copies.teams}
+            positions.append(
+                (
+                    len(teams),
+                    PositionTexts(
+                        position_id=position_id,
+                        label=taxonomy.position(position_id).label,
+                        kind=kind,
+                        texts=quoted,
+                        more=more,
+                    ),
+                )
+            )
+    kinds = list(AnalyticTextKind)
+    refused = sum(count for sha, count in inputs.refused_by_guard.items() if in_range.by_source.get(sha))
+    overviews = [
+        OverviewCount(
+            position_id=position_id,
+            label=taxonomy.position(position_id).label,
+            position_kind=taxonomy.position(position_id).kind,
+            aff_teams=len(sides[_AFF]),
+            neg_teams=len(sides[_NEG]),
+            teams=len(sides[_AFF] | sides[_NEG]),
+        )
+        for position_id, sides in overview_teams.items()
+    ]
+    return LandscapeTexts(
+        texts_per_position=limit,
+        positions=tuple(
+            one
+            for _, one in sorted(
+                positions, key=lambda item: (kinds.index(item[1].kind), -item[0], item[1].position_id)
+            )
+        ),
+        coverage=tuple(
+            TextCoverage(
+                kind=kind,
+                labels=labels[kind],
+                documents=len(documents[kind]),
+                counted=where[kind]["counted"],
+                elsewhere=where[kind]["elsewhere"],
+                headings_place_nothing=where[kind][TextPlacement.HEADINGS_PLACE_NOTHING.value],
+                no_heading=where[kind][TextPlacement.NO_HEADING.value],
+                withheld_texts=withheld[kind],
+                unread=unread[kind],
+                refused_by_guard=refused if kind is AnalyticTextKind.CP_TEXT else 0,
+            )
+            for kind in kinds
+        ),
+        overviews=tuple(sorted(overviews, key=lambda one: (-one.teams, one.position_id))),
+    )
+
+
+@dataclass(slots=True)
+class _TextCopies:
+    """One position's copies of one text: the teams reading it, and the copies read again."""
+
+    teams: set[tuple[str, str]] = field(default_factory=set[tuple[str, str]])
+    texts: list[tuple[str, int, str]] = field(default_factory=list[tuple[str, int, str]])
 
 
 def _ranked[RowT: TopCard](

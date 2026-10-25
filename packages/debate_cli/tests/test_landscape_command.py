@@ -227,6 +227,24 @@ def test_the_command_identifies_each_aff_round_through_t09s_plan_texts(world: Sy
     assert (world.data_dir / "landscape" / "plan_texts" / f"{CASELIST}.jsonl").is_file()
 
 
+def test_the_command_reads_the_analytic_texts_into_report_md(world: SyntheticRun) -> None:
+    """`v1-e32-t11`'s seam is wired: the files are read into their own cache, and report.md has the sections.
+
+    Only `aff-two` has bytes in the blob store, and it holds a plan text and no CP text, alternative or
+    overview, so each section says it found none.
+    """
+    result = landscape(world, "--caselist", CASELIST)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert (world.data_dir / "landscape" / "analytic_texts" / f"{CASELIST}.jsonl").is_file()
+    report = (world.data_dir / "reports" / "landscape" / CASELIST / "2026-09-15" / "report.md").read_text(
+        encoding="utf-8"
+    )
+    assert "## Counterplan texts, alternatives and roles of the ballot" in report
+    assert "No CP text was placed under a CP the team reads." in report
+    assert "No overview was placed under a position the team reads." in report
+
+
 def test_report_prints_counts_and_where_it_wrote_for_a_person(world: SyntheticRun) -> None:
     result = landscape(world, "--caselist", CASELIST, json_output=False)
 

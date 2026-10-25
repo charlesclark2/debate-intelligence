@@ -52,6 +52,7 @@ from debate_cli.commands import (
     caselist_seed,
     config,
     doctor,
+    files,
     landscape,
     store,
     tub_index,
@@ -100,6 +101,14 @@ def register_commands(app: typer.Typer) -> None:
     )
     argument_landscape.command("report")(landscape.report)
     app.add_typer(argument_landscape)
+
+    evidence_files = command_group(
+        "files", "Build evidence files from recipes, check built files, and draft recipes (E33)."
+    )
+    evidence_files.command("build")(files.build)
+    evidence_files.command("check")(files.check)
+    evidence_files.command("suggest")(files.suggest)
+    app.add_typer(evidence_files)
 
     evidence_store = command_group("store", "Move evidence between this machine and its bucket.")
     evidence_store.command("sync")(store.sync)

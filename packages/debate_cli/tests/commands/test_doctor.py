@@ -65,6 +65,7 @@ def envelope_of(result: Result) -> dict[str, Any]:
 WIRED_INTEGRATIONS = [
     "debate_core.integrations.cloudwatch_audit",
     "debate_core.integrations.cognito",
+    "debate_core.integrations.docx_file_writer.writer",
     "debate_core.integrations.docx_parser",
     "debate_core.integrations.landscape.analytic_text_store",
     "debate_core.integrations.landscape.classification_store",
@@ -206,7 +207,7 @@ def test_an_integration_that_does_not_import_fails_doctor_naming_each_one(
     assert error["exit_code"] == ExitCode.DOMAIN_FAILURE
     for module in s3_and_opencaselist_do_not_import:
         assert module in error["message"]
-    assert "5 of the 23 integrations" in error["message"]
+    assert "5 of the 24 integrations" in error["message"]
     assert error["details"]["integrations_import"] is False
     assert error["details"]["integrations_failed"] == {
         OPENCASELIST: f"ModuleNotFoundError: no module named {OPENCASELIST!r}",

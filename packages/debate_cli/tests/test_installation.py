@@ -75,10 +75,12 @@ def test_the_container_wires_these_integrations() -> None:
     # `landscape.classification_store`, `landscape.plan_text_store` and
     # `landscape.yaml_taxonomy_repository` at module level for the landscape run (v1-e32-t05), with
     # `landscape.analytic_text_store` for its analytic texts (v1-e32-t11), and
-    # `secrets_manager` inside the caselist secret factory (v1-e40-t02).
+    # `secrets_manager` inside the caselist secret factory (v1-e40-t02), and
+    # `docx_file_writer.writer` inside the file build factory (v1-e33-t03).
     assert wired_integrations() == (
         "debate_core.integrations.cloudwatch_audit",
         "debate_core.integrations.cognito",
+        "debate_core.integrations.docx_file_writer.writer",
         "debate_core.integrations.docx_parser",
         "debate_core.integrations.landscape.analytic_text_store",
         "debate_core.integrations.landscape.classification_store",
@@ -230,7 +232,7 @@ def test_the_check_exits_zero_and_reports_json_for_this_checkout(capsys: pytest.
     report = json.loads(capsys.readouterr().out)
     assert report["complete"] is True
     assert report["covered"] is True
-    assert len(report["imported"]) == len(report["wired"]) == 23
+    assert len(report["imported"]) == len(report["wired"]) == 24
 
 
 # ---------------------------------------------------------------------------------------------
@@ -362,7 +364,9 @@ def test_once_the_docx_parser_is_wired_dropping_the_docx_extra_is_caught() -> No
     wired = (*wired_integrations(), "debate_core.integrations.docx_parser")
 
     assert undeclared_imports(_with_core_extras("aws,http,opencaselist,tub"), wired) == {
-        "debate_core.integrations.docx_parser": {"lxml"}
+        "debate_core.integrations.docx_parser": {"lxml"},
+        # The file builder's writer (v1-e33-t03) reads and writes OOXML with lxml as the parser does.
+        "debate_core.integrations.docx_file_writer.writer": {"lxml"},
     }
     assert undeclared_imports(_cli_dependencies(), wired) == {}
 

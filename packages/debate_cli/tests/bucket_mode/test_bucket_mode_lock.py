@@ -197,6 +197,7 @@ BUCKET_WRITING: Final = {
     "caselist unsuppress",
     "caselist retire",
     "caselist seed-run-state",
+    "caselist restore-run-state",
     "landscape report",
     "tub index publish",
     "store sync",
@@ -309,6 +310,13 @@ def remove(world: World) -> Command:
     )  # fmt: skip
 
 
+def restore_run_state(world: World) -> Command:
+    """`v1-e40-t06`'s restore: it writes only the lock to the bucket, and takes it like every writer."""
+    return lambda: world.run(
+        "caselist", "restore-run-state", "--into", str(world.root / "restored-copy"), "--caselist", "testcl26"
+    )
+
+
 def running(*arguments: str) -> Callable[[World], Command]:
     return lambda world: lambda: world.run(*arguments)
 
@@ -322,6 +330,7 @@ COMMANDS: Final[dict[str, Callable[[World], Command]]] = {
     "caselist retire --bucket": retire,
     "caselist unsuppress": unsuppress,
     "caselist remove": remove,
+    "caselist restore-run-state": restore_run_state,
 }
 """Each bucket-writing command but the pull and the seed, by the name it takes the lock under: its setup,
 then the command. `landscape report --publish` has its own world (`test_landscape_command.py`)."""

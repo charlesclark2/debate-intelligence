@@ -32,10 +32,24 @@
 # warning about that.
 ARG PYTHON_VERSION
 
-# uv, pinned. install_channel.sh needs 0.6.8 or newer for --managed-python.
-FROM ghcr.io/astral-sh/uv:0.11.7 AS uv
+# Both base images are pinned by digest as well as tag (v1-e40-t06), so that a tag moved upstream
+# changes nothing the run is built on until a pull request moves the digest. Each is the multi-arch
+# index's digest, as `docker buildx imagetools inspect <tag>` read it from the registry on 2026-10-26
+# (the operator's run, in v1-e40-t06's session report); buildx takes the linux/arm64 image from it.
+#
+#   python, the tag `scripts/caselist_run_deploy.sh --print-base-image` names:
+#     https://hub.docker.com/_/python/tags?name=slim-bookworm
+#   uv 0.11.7: https://github.com/astral-sh/uv/pkgs/container/uv
+#
+# With a digest, the tag beside it no longer chooses the image. So when requires-python moves, the
+# python digest moves in the same pull request, read the same way for the new tag; until it does,
+# ops/caselist_run/check_image.sh refuses the image, whose base Python is then not the one
+# debate-research runs on.
 
-FROM python:${PYTHON_VERSION}-slim-bookworm AS install
+# uv, pinned. install_channel.sh needs 0.6.8 or newer for --managed-python.
+FROM ghcr.io/astral-sh/uv:0.11.7@sha256:240fb85ab0f263ef12f492d8476aa3a2e4e1e333f7d67fbdd923d00a506a516a AS uv
+
+FROM python:${PYTHON_VERSION}-slim-bookworm@sha256:6a0e06f5ba0b373d051aabd3fffb9b873f27f9a2a3a14bcbe37dee6f0e3bbc70 AS install
 
 ARG RELEASE_TAG
 
@@ -61,7 +75,7 @@ RUN test -n "${RELEASE_TAG}" \
  && sh /build/install_channel.sh --no-path-warning --dir /build/assets "${RELEASE_TAG}" \
  && rm -rf /build "$(uv cache dir)"
 
-FROM python:${PYTHON_VERSION}-slim-bookworm AS run
+FROM python:${PYTHON_VERSION}-slim-bookworm@sha256:6a0e06f5ba0b373d051aabd3fffb9b873f27f9a2a3a14bcbe37dee6f0e3bbc70 AS run
 
 COPY --from=install /opt/debate-research /opt/debate-research
 

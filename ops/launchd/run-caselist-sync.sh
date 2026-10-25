@@ -12,7 +12,9 @@
 # changes with whatever branch is checked out (v1-e34-t10). Editing this file changes the agent
 # only when the installer is run again.
 #
-# Every argument is passed straight through, which is how the agent names its caselists:
+# Every argument is passed straight through. The agent passes none: the caselists its pull follows
+# are the build's caselist.sync_caselists, in the environment's profile (ADR-0020 (5), v1-e40-t06).
+# An agent installed before v1-e40-t06 passes `--caselist <slug>` pairs, which the pull still takes:
 #
 #     run-caselist-sync.sh --caselist hsld26 --caselist hspolicy26
 #
@@ -21,9 +23,10 @@
 # nothing else. `install.sh --check-launchd` runs it under launchd to prove the agent can be
 # executed, that the AWS profile the weekly run will use is one this machine's AWS config defines
 # (v1-e34-t22), and that every store the run's search index stage will index has been parsed by
-# this build (v1-e34-t30), without a sync and without a download. The installer hands the agent's
-# caselists to that check as caselist.sync_caselists, in the check's environment, so `--check`
-# still takes no argument. It ends with doctor's exit code: 1 when a configured evidence profile is
+# this build (v1-e34-t30), without a sync and without a download. The stores are those of the
+# build's caselist.sync_caselists; for an agent installed before v1-e40-t06 the installer hands that
+# check the plist's caselists as the same setting, in the check's environment, so `--check` still
+# takes no argument. It ends with doctor's exit code: 1 when a configured evidence profile is
 # not defined, which is the setting that would make the scheduled run refuse to start, or when a
 # store has never been parsed, which would leave the run without a current search index. What
 # those checks ask, and what does not fail them, is the command's to say, not this file's.

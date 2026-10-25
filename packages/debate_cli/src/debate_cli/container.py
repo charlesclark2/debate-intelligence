@@ -160,6 +160,7 @@ from debate_core.application.caselist.run_lock import (
     HolderKind,
 )
 from debate_core.application.caselist.run_state import RunState
+from debate_core.application.caselist.run_state_restore import RunStateRestore
 from debate_core.application.caselist.run_state_seed import RunStateSeed
 from debate_core.application.caselist.status_service import CaselistStatusService
 from debate_core.application.caselist.suppression import (
@@ -886,9 +887,13 @@ class ServiceContainer:
         return self.singleton("suppression_list", self._build_suppression_list)
 
     def _build_suppression_list(self) -> RecordedSuppressionList:
+        return self._suppression_list_in(self.settings.storage.data_dir)
+
+    def _suppression_list_in(self, data_dir: Path) -> RecordedSuppressionList:
+        """:meth:`suppression_list` over `data_dir`'s copy: this environment's, or a restored one."""
         bucket = self._evidence_bucket()
         return RecordedSuppressionList(
-            local_suppression_list_file(self.settings.storage.data_dir),
+            local_suppression_list_file(data_dir),
             ObjectStoreAppendOnlyRecord(
                 bucket,
                 SUPPRESSION_LIST_KEY,
@@ -1291,15 +1296,17 @@ class ServiceContainer:
         return self.singleton("run_state", self._build_run_state)
 
     def _build_run_state(self) -> RunState:
-        settings = self.settings
-        data_dir = settings.storage.data_dir
+        return self._run_state_in(self.settings.storage.data_dir, self.suppression_list())
+
+    def _run_state_in(self, data_dir: Path, suppression: SuppressionList) -> RunState:
+        """:meth:`run_state` over `data_dir`: this environment's, or a copy's (`v1-e40-t06`)."""
         return RunState(
             bucket=self._evidence_bucket(),
             files=LocalRunStateFiles(data_dir),
-            local=self._local_evidence(),
+            local=self._local_evidence(data_dir),
             staged=self._local_evidence,
             withheld=lambda evidence: functools.partial(withheld_manifest_reason, evidence),
-            suppression=self.suppression_list(),
+            suppression=suppression,
             data_dir=data_dir,
             clock=self.clock(),
         )
@@ -1314,6 +1321,28 @@ class ServiceContainer:
                 bucket=self._evidence_bucket(),
                 data_dir=self.settings.storage.data_dir,
             ),
+        )
+
+    def run_state_restore(self) -> RunStateRestore:
+        """`caselist restore-run-state`: a working copy restored into a directory of its own (`v1-e40-t06`).
+
+        The run state and the suppression list it writes are built over the directory named, never
+        over this environment's data directory, which it refuses.
+        """
+        return self.singleton("run_state_restore", self._build_run_state_restore)
+
+    def _build_run_state_restore(self) -> RunStateRestore:
+        # Imported here, not at module scope: lxml is loaded only by a command that needs the parser.
+        from debate_core.integrations.docx_parser import DebateDocxParser
+
+        def state_in(data_dir: Path) -> RunState:
+            return self._run_state_in(data_dir, self._suppression_list_in(data_dir))
+
+        return RunStateRestore(
+            state_in=state_in,
+            suppression_in=self._suppression_list_in,
+            live_data_dir=self.settings.storage.data_dir,
+            parsed_version=DebateDocxParser().parser_version,
         )
 
     def bucket_run(self) -> BucketRun:

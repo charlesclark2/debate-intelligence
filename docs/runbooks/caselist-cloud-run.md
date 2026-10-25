@@ -290,7 +290,7 @@ Where: `$WT`, in the shell that set `TAG`
 cd "$WT"
 if [ -z "$TAG" ]; then echo "STOP: TAG is not set; run the listing block first"; elif env | grep -qE '^(CASELIST_RUN_DEPLOY_PROFILE|DEBATE_RELEASE_REPO)='; then echo "STOP: a deploy override is set in this shell"; else time scripts/caselist_run_deploy.sh dev "$TAG" --dry-run; fi
 ```
-Success looks like six `ok:` lines, the last `ok: SQLite 3.x.y with FTS5`, then `Dry run complete.
+Success looks like seven `ok:` lines (six before `v1-e40-t06` added the base image's Python), the last `ok: SQLite 3.x.y with FTS5`, then `Dry run complete.
 debate-dev-caselist-run:<tag> built and checked`. Any `check image:` line says what is wrong, and
 nothing was pushed. Note the `real` time for the PM: it is the build's measured runtime.
 
@@ -552,6 +552,13 @@ debate-research caselist runs --remote --last 3
 Success looks like the newest runs being the Mac's, none started at the rehearsal's time.
 
 ## Step 8 — The seed, bucket mode, and one run by hand (at the cutover, after `v1-e40-t04`)
+
+**At the cutover, run this step through [caselist-cutover.md](caselist-cutover.md)**, steps 2 to 5.
+It orders these parts with the Mac's agent, installs the build with the lock first, and checks the
+image apply's plan with `IMAGEPLAN`. Since `v1-e40-t05`'s alerts apply carried bucket mode into the
+run's task definition early (the PM's ruling (a)), the apply below is an image change only, with the
+same counts, and since `v1-e40-t06` the dev profile sets bucket mode itself. What follows is kept as
+the record of what each part does.
 
 **Not before `v1-e40-t04` has merged and been released, and not before `v1-e40-t06`'s cutover has
 unloaded the Mac's agent** (ADR-0020 (4), cutover steps 3 to 5; the PM's ruling 3(b) on t04's plan).

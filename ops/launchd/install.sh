@@ -16,15 +16,22 @@
 # (~/Library/Mobile Documents), ~/Library/CloudStorage (Dropbox, Google Drive and other File
 # Provider folders) or /Volumes.
 #
-#   ops/launchd/install.sh --caselist hsld26 --caselist hspolicy26 --env prod --dry-run
+#   ops/launchd/install.sh --env dev --dry-run
 #   ops/launchd/install.sh --debate-research "$HOME/.local/bin/debate-research"
 #   ops/launchd/install.sh --check-launchd
 #
+# The agent's wrapper runs `debate-research caselist pull` with no `--caselist`: the caselists the
+# weekly run follows are the build's setting `caselist.sync_caselists`, in the environment's profile
+# (ADR-0020 (5), v1-e40-t06), the one the cloud run reads from the same build. This script asks the
+# build for them and refuses to install an agent whose build names none. There is no --caselist any
+# more. An agent installed before v1-e40-t06 named its caselists as arguments in its plist; a
+# reinstall over one drops them, and says which they were and which the build names.
+#
 # Over an installed agent (a plist already at ~/Library/LaunchAgents/<label>.plist) the installed
-# plist is read first, and an option left out keeps what it says: the agent's environment, its
-# caselists (v1-e34-t24), its schedule, its log directory and its wrapper directory (v1-e34-t25)
-# are changed only by an option that says so, and the installer says what it kept and which key of
-# the plist it read it from. A setting the plist does not hold as this script writes it is refused,
+# plist is read first, and an option left out keeps what it says: the agent's environment
+# (v1-e34-t24), its schedule, its log directory and its wrapper directory (v1-e34-t25) are changed
+# only by an option that says so, and the installer says what it kept and which key of the plist it
+# read it from. A setting the plist does not hold as this script writes it is refused,
 # naming the option that sets it, and never replaced by the default. Before it writes anything, a
 # dry run included, it asks the build where the agent's data will be and runs the build's own
 # checks with the agent's evidence profile, `debate-research doctor --evidence-profiles`, as the
@@ -36,10 +43,6 @@
 # runs reads (v1-e34-t24).
 #
 # Options
-#   --caselist SLUG      A caselist the weekly run covers. Repeatable. A first install needs at
-#                        least one: which caselists this installation follows is the operator's
-#                        decision and is not written down in this repository. Over an installed
-#                        agent the default is the caselists it follows, and any given replace them.
 #   --env ENVIRONMENT    DEBATE_ENV for the agent, dev or prod. Default: the installed agent's, or
 #                        prod for a first install. A different one from the installed agent's is
 #                        refused without --confirm-env-change.
@@ -67,8 +70,9 @@
 #                        index stage will index is parsed, without a sync: load a one-off copy of
 #                        the installed plist as <label>.check, running the wrapper's `--check`
 #                        (which prints the console script's version and then runs
-#                        `debate-research doctor --evidence-profiles --search-index`, with the
-#                        agent's caselists as caselist.sync_caselists), kickstart it, print its
+#                        `debate-research doctor --evidence-profiles --search-index`; an agent
+#                        installed before v1-e40-t06 has its plist's caselists handed to it as
+#                        caselist.sync_caselists), kickstart it, print its
 #                        log and exit code, and boot it out. The log names each configured
 #                        evidence profile, whether this machine's AWS config defines it and which
 #                        permission set it is signed in as, and each store and whether this build
@@ -106,7 +110,6 @@ WRAPPER_DIRECTORY_GIVEN=0
 DEBATE_RESEARCH_PATH=""
 DRY_RUN=0
 CHECK_LAUNCHD=0
-CASELISTS=""
 OPTIONS_GIVEN=""
 
 usage() {
@@ -324,7 +327,7 @@ while [ $# -gt 0 ]; do
     # Each option by name, without its value, for the launchd check's guard below.
     OPTIONS_GIVEN="${OPTIONS_GIVEN} $1"
     case "$1" in
-        --caselist) [ $# -ge 2 ] || fail "--caselist needs a slug"; CASELISTS="${CASELISTS} $2"; shift 2 ;;
+        --caselist) fail "there is no --caselist any more: the caselists the weekly run follows are the build's setting caselist.sync_caselists, in the environment's profile (ADR-0020 (5)), and this script asks the build for them before it installs. Nothing was installed. A new season's caselists are a profile change and a new build (docs/runbooks/caselist-scheduled-sync.md)" ;;
         --env) [ $# -ge 2 ] || fail "--env needs a value"; DEBATE_ENVIRONMENT="$2"; ENVIRONMENT_GIVEN=1; shift 2 ;;
         --confirm-env-change) CONFIRM_ENV_CHANGE=1; shift ;;
         --aws-profile) fail "there is no --aws-profile any more: it wrote AWS_PROFILE into the plist, which nothing the agent runs reads. The run's AWS profile is the build's setting storage.s3.aws_profile, and this script checks that profile before it installs (docs/runbooks/caselist-scheduled-sync.md)" ;;
@@ -389,12 +392,13 @@ if [ "${CHECK_LAUNCHD}" -eq 1 ]; then
     trap cleanup EXIT
     trap 'exit 130' HUP INT TERM
 
-    # The installed plist, less its schedule and its caselists: same wrapper, same environment,
-    # same working directory, and a log of its own. The caselists, `--caselist <slug>` after the
-    # wrapper as this script writes them, go into the check's environment as the setting a pull
-    # without --caselist follows, caselist.sync_caselists (JSON, as every list setting takes in the
-    # environment), so that `doctor --search-index` checks the stores the agent's run will index
-    # while the wrapper's `--check` still takes no argument (v1-e34-t30).
+    # The installed plist, less its schedule and its arguments: same wrapper, same environment, same
+    # working directory, and a log of its own. An agent installed since v1-e40-t06 passes its wrapper
+    # no argument, and its pull follows the build's caselist.sync_caselists, which the check's
+    # `doctor --search-index` reads as well. An agent installed before then names its caselists as
+    # `--caselist <slug>` after the wrapper; those go into the check's environment as that setting
+    # (JSON, as every list setting takes in the environment), so that the check still sees the
+    # stores that agent's run will index while the wrapper's `--check` takes no argument (v1-e34-t30).
     cp "${INSTALLED}" "${CHECK_PLIST}"
     plutil -replace Label -string "${CHECK_LABEL}" "${CHECK_PLIST}"
     AGENT_CASELISTS_JSON=""
@@ -409,7 +413,9 @@ if [ "${CHECK_LAUNCHD}" -eq 1 ]; then
         plutil -remove ProgramArguments.1 "${CHECK_PLIST}"
     done
     plutil -insert ProgramArguments.1 -string --check "${CHECK_PLIST}"
-    plutil -replace EnvironmentVariables.DEBATE_CASELIST__SYNC_CASELISTS -string "[${AGENT_CASELISTS_JSON}]" "${CHECK_PLIST}"
+    if [ -n "${AGENT_CASELISTS_JSON}" ]; then
+        plutil -replace EnvironmentVariables.DEBATE_CASELIST__SYNC_CASELISTS -string "[${AGENT_CASELISTS_JSON}]" "${CHECK_PLIST}"
+    fi
     plutil -remove StartCalendarInterval "${CHECK_PLIST}" >/dev/null 2>&1 || true
     plutil -replace RunAtLoad -bool false "${CHECK_PLIST}"
     plutil -replace StandardOutPath -string "${CHECK_LOG}" "${CHECK_PLIST}"
@@ -501,41 +507,35 @@ WRAPPER_DIRECTORY_ADVICE=""
 # A reinstall is for a new build, a new wrapper or a new schedule. At the reinstall of 2026-10-14
 # the agent was a dev agent and --env defaulted to prod, so the runbook's example would have
 # switched it to prod's data directory and bucket (v1-e34-t24). The installed plist is read first,
-# and its environment, caselists, schedule, log directory and wrapper directory are the defaults:
-# an agent installed for Thursday stays on Thursday through a reinstall for a new build
-# (v1-e34-t25).
+# and its environment, schedule, log directory and wrapper directory are the defaults: an agent
+# installed for Thursday stays on Thursday through a reinstall for a new build (v1-e34-t25). Its
+# arguments are not: since v1-e40-t06 this script writes none (see the top of this file).
 
 # The variables this script writes. Any other in an installed plist was put there by hand, and a
 # reinstall writes the plist afresh without it.
 WRITTEN_VARIABLES="DEBATE_ENV HOME DEBATE_RESEARCH_BIN PATH"
 INSTALLED_ENVIRONMENT=""
+INSTALLED_ARGUMENTS=""
 INSTALLED_CASELISTS=""
-INSTALLED_ARGUMENTS_UNKNOWN=0
 DROPPED_VARIABLES=""
 if [ -f "${DESTINATION}" ]; then
     command -v plutil >/dev/null 2>&1 \
-        || fail "an agent is installed at ${DESTINATION}, and reading its environment and caselists needs macOS's plutil; nothing was installed"
+        || fail "an agent is installed at ${DESTINATION}, and reading its environment and arguments needs macOS's plutil; nothing was installed"
     if ! INSTALLED_ENVIRONMENT=$(plutil -extract EnvironmentVariables.DEBATE_ENV raw -o - "${DESTINATION}" 2>/dev/null); then
         [ "${ENVIRONMENT_GIVEN}" -eq 1 ] && [ "${CONFIRM_ENV_CHANGE}" -eq 1 ] \
             || fail "the agent installed at ${DESTINATION} names no DEBATE_ENV, so which environment it runs as is unknown; nothing was installed. Give --env and --confirm-env-change to say which it is to run as"
         INSTALLED_ENVIRONMENT=""
     fi
 
-    # Its arguments after the wrapper, as this script writes them: `--caselist <slug>`, repeated.
+    # Its arguments after the wrapper. This script writes none since v1-e40-t06; an agent installed
+    # before then has `--caselist <slug>` pairs, kept here only to say what a reinstall drops.
     position=1
+    previous_argument=""
     while argument=$(plutil -extract "ProgramArguments.${position}" raw -o - "${DESTINATION}" 2>/dev/null); do
-        slug=""
-        if [ "${argument}" = "--caselist" ]; then
-            slug=$(plutil -extract "ProgramArguments.$((position + 1))" raw -o - "${DESTINATION}" 2>/dev/null) || slug=""
-        fi
-        if [ -z "${slug}" ]; then
-            [ -n "${CASELISTS}" ] \
-                || fail "the agent installed at ${DESTINATION} runs its wrapper with '${argument}', which this script does not write, so which caselists it follows is unknown; nothing was installed. Give --caselist for each caselist it is to follow"
-            INSTALLED_ARGUMENTS_UNKNOWN=1
-            break
-        fi
-        INSTALLED_CASELISTS="${INSTALLED_CASELISTS} ${slug}"
-        position=$((position + 2))
+        INSTALLED_ARGUMENTS="${INSTALLED_ARGUMENTS} ${argument}"
+        [ "${previous_argument}" != "--caselist" ] || INSTALLED_CASELISTS="${INSTALLED_CASELISTS} ${argument}"
+        previous_argument=${argument}
+        position=$((position + 1))
     done
 
     # `raw` lists a dictionary's keys, one to a line.
@@ -584,15 +584,6 @@ if [ -f "${DESTINATION}" ]; then
         note "Switching the agent from ${INSTALLED_ENVIRONMENT:-an environment its plist does not name} to ${DEBATE_ENVIRONMENT}, as --confirm-env-change says."
     fi
 
-    if [ -z "${CASELISTS}" ]; then
-        CASELISTS=${INSTALLED_CASELISTS}
-        note "Keeping the installed agent's caselists:${CASELISTS}, from its plist's ProgramArguments (--caselist replaces them)."
-    elif [ "${INSTALLED_ARGUMENTS_UNKNOWN}" -eq 1 ]; then
-        note "Replacing the installed agent's arguments, which this script did not write, with the caselists${CASELISTS}."
-    elif [ "${CASELISTS}" != "${INSTALLED_CASELISTS}" ]; then
-        note "Replacing the installed agent's caselists${INSTALLED_CASELISTS} with${CASELISTS}."
-    fi
-
     SCHEDULE_OPTIONS=""
     [ "${WEEKDAY_GIVEN}" -eq 0 ] || SCHEDULE_OPTIONS="${SCHEDULE_OPTIONS}, --weekday"
     [ "${HOUR_GIVEN}" -eq 0 ] || SCHEDULE_OPTIONS="${SCHEDULE_OPTIONS}, --hour"
@@ -638,7 +629,6 @@ if [ -f "${DESTINATION}" ]; then
     done
 fi
 
-[ -n "${CASELISTS}" ] || fail "at least one --caselist is required; see --help"
 [ -n "${DEBATE_ENVIRONMENT}" ] || DEBATE_ENVIRONMENT="prod"
 # The defaults, for a first install: over an installed agent each was kept or given above.
 [ -n "${WEEKDAY}" ] || WEEKDAY=3
@@ -652,15 +642,6 @@ case "${DEBATE_ENVIRONMENT}" in
     dev|prod) ;;
     *) fail "--env is dev or prod, not '${DEBATE_ENVIRONMENT}' (docs/process/branching-and-environments.md)" ;;
 esac
-
-# A caselist slug is letters then a two-digit season year (debate_core.domain.caselist). Checked
-# here as well as in the command, because anything else would be written straight into an XML
-# document as an argument the agent runs every week.
-for slug in ${CASELISTS}; do
-    case "${slug}" in
-        *[!a-z0-9]*|'') fail "'${slug}' is not a caselist slug (letters then a two-digit year, e.g. hsld26)" ;;
-    esac
-done
 
 # The console script is written into the plist as the operator gave it or as this shell finds it,
 # never resolved: ~/.local/bin/debate-research is a link uv repoints on every install, so the
@@ -680,25 +661,47 @@ refuse_unsafe_path "wrapper destination" "${WRAPPER_DIRECTORY}" "${WRAPPER_DIREC
 refuse_unsafe_path "log directory" "${LOG_DIRECTORY}" "${LOG_DIRECTORY_ADVICE}"
 WRAPPER="${WRAPPER_DIRECTORY}/${WRAPPER_NAME}"
 
-# Where the agent will keep its data comes from the profile bundled into the installed build, so
-# the build is asked: with the agent's HOME and PATH, from HOME, with the variables given and
-# nothing of this shell's. `config show` only reads. Prints nothing when the build does not say.
-data_directory_as_run_with() {
-    reported=$(cd -- "${HOME}" && env -i HOME="${HOME}" PATH="${AGENT_PATH}" "$@" \
-        "${DEBATE_RESEARCH_PATH}" --json config show) || return 1
-    # The value under `settings`, not the one under `sources`, which names the same key with the
-    # file it came from. The settings object holds no braces, so a value that ever did would make
-    # this find nothing and refuse, rather than read the wrong thing.
-    printf '%s\n' "${reported}" \
-        | sed -n 's/.*"settings": *{\([^{}]*\)}.*/\1/p' \
-        | sed -n 's/.*"storage\.data_dir": *"\([^"\\]*\)".*/\1/p' | head -n 1
+# Where the agent will keep its data, and which caselists its pull follows, come from the profile
+# bundled into the installed build, so the build is asked: with the agent's HOME and PATH, from HOME,
+# with the variables given and nothing of this shell's. `config show` only reads.
+settings_as_run_with() {
+    (cd -- "${HOME}" && env -i HOME="${HOME}" PATH="${AGENT_PATH}" "$@" \
+        "${DEBATE_RESEARCH_PATH}" --json config show)
 }
 
-DATA_DIRECTORY=$(data_directory_as_run_with DEBATE_ENV="${DEBATE_ENVIRONMENT}") \
+# The `settings` object of what `config show` printed: not `sources`, which names the same keys with
+# the file each came from. It holds no braces, so a value that ever did would make the readers below
+# find nothing and refuse, rather than read the wrong thing.
+settings_object_of() {
+    printf '%s\n' "$1" | sed -n 's/.*"settings": *{\([^{}]*\)}.*/\1/p'
+}
+
+# storage.data_dir, or nothing when the build does not say.
+data_directory_in() {
+    settings_object_of "$1" | sed -n 's/.*"storage\.data_dir": *"\([^"\\]*\)".*/\1/p' | head -n 1
+}
+
+# caselist.sync_caselists, a JSON list of slugs, as words each with a space before it; nothing when
+# the build names none.
+caselists_in() {
+    for slug in $(settings_object_of "$1" \
+        | sed -n 's/.*"caselist\.sync_caselists": *\[\([^]]*\)\].*/\1/p' | head -n 1 | tr ',"' '  '); do
+        printf ' %s' "${slug}"
+    done
+}
+
+REPORTED_SETTINGS=$(settings_as_run_with DEBATE_ENV="${DEBATE_ENVIRONMENT}") \
     || fail "${DEBATE_RESEARCH_PATH} --json config show failed, so the agent's data directory is unknown; nothing was installed"
+DATA_DIRECTORY=$(data_directory_in "${REPORTED_SETTINGS}")
 [ -n "${DATA_DIRECTORY}" ] \
     || fail "${DEBATE_RESEARCH_PATH} --json config show did not report storage.data_dir, so the agent's data directory is unknown; nothing was installed"
 refuse_unsafe_path "data directory" "${DATA_DIRECTORY}"
+
+# The caselists the agent's pull will follow (ADR-0020 (5)). A build whose profile names none would
+# have the agent refused every week (NO_CASELISTS_CONFIGURED), so it is not installed.
+BUILD_CASELISTS=$(caselists_in "${REPORTED_SETTINGS}")
+[ -n "${BUILD_CASELISTS}" ] \
+    || fail "${DEBATE_RESEARCH_PATH} names no caselist for ${DEBATE_ENVIRONMENT}: its caselist.sync_caselists is empty, so the agent's weekly pull would follow none and be refused. Nothing was installed. The caselists are the build's setting (ADR-0020 (5)): install a build whose ${DEBATE_ENVIRONMENT} profile names them"
 
 # A variable put in the installed plist by hand is not carried over, and that must not move the
 # agent's data unannounced: the build is asked again with the installed plist's whole environment,
@@ -708,8 +711,9 @@ if [ -n "${DROPPED_VARIABLES}" ] && [ "${CONFIRM_ENV_CHANGE}" -eq 0 ]; then
     for variable in ${DROPPED_VARIABLES}; do
         set -- "$@" "${variable}=$(plutil -extract "EnvironmentVariables.${variable}" raw -o - "${DESTINATION}")"
     done
-    INSTALLED_DATA_DIRECTORY=$(data_directory_as_run_with DEBATE_ENV="${INSTALLED_ENVIRONMENT}" "$@") \
+    INSTALLED_SETTINGS=$(settings_as_run_with DEBATE_ENV="${INSTALLED_ENVIRONMENT}" "$@") \
         || fail "${DEBATE_RESEARCH_PATH} --json config show failed with the installed agent's environment, so whether this install moves its data is unknown; nothing was installed"
+    INSTALLED_DATA_DIRECTORY=$(data_directory_in "${INSTALLED_SETTINGS}")
     [ "${INSTALLED_DATA_DIRECTORY}" = "${DATA_DIRECTORY}" ] \
         || fail "this install would move the agent's data from ${INSTALLED_DATA_DIRECTORY} to ${DATA_DIRECTORY}, because it does not carry over${DROPPED_VARIABLES} from the installed plist. Nothing was installed. Add --confirm-env-change if the move is meant"
 fi
@@ -743,13 +747,21 @@ case "${PROFILE_CHECK_STATUS}" in
         ;;
 esac
 
-# `awk` rather than `sed`, because several of the values are paths that may contain a `/` and one
-# is a multi-line block; awk's index/substr replacement treats every value as a literal.
+# Said once every check has passed, so that a refusal writes nothing to stdout.
+note "The agent's pull follows the build's caselist.sync_caselists:${BUILD_CASELISTS}."
+if [ -n "${INSTALLED_ARGUMENTS}" ]; then
+    note "Not carried over from the installed plist: the arguments${INSTALLED_ARGUMENTS} after the wrapper. The agent's pull takes none: its caselists are the build's (ADR-0020 (5))."
+    if [ -n "${INSTALLED_CASELISTS}" ] && [ "${INSTALLED_CASELISTS}" != "${BUILD_CASELISTS}" ]; then
+        note "The installed agent followed${INSTALLED_CASELISTS}; the build names${BUILD_CASELISTS}."
+    fi
+fi
+
+# `awk` rather than `sed`, because several of the values are paths that may contain a `/`; awk's
+# index/substr replacement treats every value as a literal.
 render() {
     awk \
         -v label="${LABEL}" \
         -v wrapper="${WRAPPER}" \
-        -v caselists="${CASELISTS}" \
         -v weekday="${WEEKDAY}" \
         -v hour="${HOUR}" \
         -v minute="${MINUTE}" \
@@ -768,18 +780,6 @@ render() {
         }
         {
             line = $0
-            # The one placeholder that is a block rather than a value: two elements per caselist,
-            # written here so the XML shape lives in the template and this script beside it, and
-            # nowhere else.
-            if (index(line, "@CASELIST_ARGUMENTS@") > 0) {
-                count = split(caselists, slugs, " ")
-                for (each = 1; each <= count; each++) {
-                    if (slugs[each] == "") continue
-                    print "        <string>--caselist</string>"
-                    print "        <string>" slugs[each] "</string>"
-                }
-                next
-            }
             line = fill(line, "@LABEL@", label)
             line = fill(line, "@WRAPPER@", wrapper)
             line = fill(line, "@WEEKDAY@", weekday)
@@ -829,10 +829,6 @@ echo
 
 # A reinstall over a loaded agent needs a reload and a check, never a pull: the validation pull is
 # for a first install, and suggesting it again would spend the day's downloads for nothing.
-CASELIST_FLAGS=""
-for slug in ${CASELISTS}; do
-    CASELIST_FLAGS="${CASELIST_FLAGS} --caselist ${slug}"
-done
 if command -v launchctl >/dev/null 2>&1 && launchctl print "gui/$(id -u)/${LABEL}" >/dev/null 2>&1; then
     echo "${LABEL} is already loaded, and launchd keeps the plist it loaded. Reload it, then check"
     echo "that launchd can run the new wrapper (no sync, no download):"
@@ -844,8 +840,8 @@ if command -v launchctl >/dev/null 2>&1 && launchctl print "gui/$(id -u)/${LABEL
 else
     echo "Nothing is scheduled yet. Validate the pipeline first, then enable the agent:"
     echo
-    echo "  DEBATE_ENV=dev debate-research caselist pull${CASELIST_FLAGS} --dry-run"
-    echo "  DEBATE_ENV=dev debate-research caselist pull${CASELIST_FLAGS}"
+    echo "  DEBATE_ENV=dev debate-research caselist pull --dry-run"
+    echo "  DEBATE_ENV=dev debate-research caselist pull"
     echo "  launchctl bootstrap gui/\$UID ${DESTINATION}"
     echo "  launchctl print gui/\$UID/${LABEL}"
     echo "  $0 --check-launchd"

@@ -115,7 +115,7 @@ def test_what_the_reinstall_says_it_kept_is_what_the_installer_says() -> None:
 
     for sentence in (
         "Keeping the installed agent's environment, ",
-        "Keeping the installed agent's caselists:",
+        "The agent's pull follows the build's caselist.sync_caselists:",
         "Keeping the installed agent's schedule, ",
         "Keeping the installed agent's log directory, ",
         "Keeping the installed agent's wrapper directory, ",

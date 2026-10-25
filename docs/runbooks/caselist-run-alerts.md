@@ -112,7 +112,7 @@ Where: `$WT`, in the shell that set `TAG`
 cd "$WT"
 if [ -z "$TAG" ]; then echo "STOP: TAG is not set; run the listing block first"; elif env | grep -qE '^(CASELIST_RUN_DEPLOY_PROFILE|DEBATE_RELEASE_REPO)='; then echo "STOP: a deploy override is set in this shell"; else time scripts/caselist_run_deploy.sh dev "$TAG" --dry-run; fi
 ```
-Success looks like six `ok:` lines and `Dry run complete. debate-dev-caselist-run:<tag> built and
+Success looks like seven `ok:` lines and `Dry run complete. debate-dev-caselist-run:<tag> built and
 checked`.
 
 **The push.** As the deployer: it pushes the image, registers a run task definition with it for a

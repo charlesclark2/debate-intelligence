@@ -67,7 +67,12 @@ def report_lines(result: LandscapeRunResult) -> list[str]:
             f"{kritikal.by_carry} by carry; "
             f"{kritikal.refused_by_advantage} refused by the advantage guard, still unidentified.",
             f"Control: {kritikal.control_rounds} rounds identified another way hold a K-aff marker, in "
-            f"{kritikal.control_files} files.",
+            f"{kritikal.control_files} files; by method: "
+            + (
+                ", ".join(f"{method} {count}" for method, count in kritikal.control_by_method.items())
+                or "none"
+            )
+            + ".",
             f"K families in the K-aff files' headings: {families or 'none'}.",
         ]
     texts = result.report.texts

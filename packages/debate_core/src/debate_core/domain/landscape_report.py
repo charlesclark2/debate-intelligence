@@ -456,6 +456,11 @@ class KritikalAffs(DomainModel):
         ge=0, description="Files with a K-aff marker and no plan text in rounds another method identifies."
     )
     control_rounds: int = Field(ge=0, description="The rounds those files are disclosed in.")
+    control_by_method: dict[AffMethod, int] = Field(
+        default_factory=dict[AffMethod, int],
+        description="Those rounds by the method that identified them: the TEAM_CARRY share is what a K-aff "
+        "marker beating the team's carry would move.",
+    )
 
     @model_validator(mode="after")
     def _check_counts(self) -> Self:

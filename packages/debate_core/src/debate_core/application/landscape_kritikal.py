@@ -12,14 +12,17 @@ A pure count over what the landscape report already decided and what the run rea
   naming it and the distinct teams of the K-aff rounds disclosing them. A count of words, never a
   placement, and nothing from a tag. Ordered by files, then teams, then the config's order.
 * **The control** is the files holding a K-aff marker in affirmative rounds another method identifies
-  (a plan text, a team's carry, a placed card), with those rounds: how often a marker sits where an aff
-  is already known. Negative rounds are never counted.
+  (a plan text, a team's carry, a placed card), with those rounds and their methods: how often a marker
+  sits where an aff is already known. Its `TEAM_CARRY` share is what a round's own marker beating its
+  team's carry would move (the PM's option (b) of 2026-10-25, not taken). Negative rounds are never
+  counted.
 
 Teams are opaque here: only their number leaves this module.
 """
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Mapping, Set
 
 from debate_core.application.landscape_counts import AFF_SIDE, CountedReads
@@ -29,7 +32,7 @@ from debate_core.arguments.landscape.aff_assignment import (
 )
 from debate_core.arguments.landscape.kritikal_aff import KritikalAffInputs
 from debate_core.domain.landscape import Taxonomy
-from debate_core.domain.landscape_report import KritikalAffs, KritikalFamilyCount
+from debate_core.domain.landscape_report import PLACED_CARD_METHOD, KritikalAffs, KritikalFamilyCount
 
 __all__ = ["kritikal_affs"]
 
@@ -84,6 +87,8 @@ def kritikal_affs(
         for sha in inputs.marker_sources
         if set(by_source.get(sha, ())) & otherwise
     }
+    control_rounds = {one for found in control.values() for one in found}
+    by_method = Counter(assigned[one][1] if one in assigned else PLACED_CARD_METHOD for one in control_rounds)
     unidentified = affirmative - set(assigned) - set(placed_card_rounds)
     return KritikalAffs(
         position_id=position.id,
@@ -95,5 +100,6 @@ def kritikal_affs(
         refused_by_advantage=len(inputs.refused_by_advantage & unidentified),
         families=tuple(families),
         control_files=len(control),
-        control_rounds=len({one for found in control.values() for one in found}),
+        control_rounds=len(control_rounds),
+        control_by_method=dict(sorted(by_method.items())),
     )

@@ -1617,6 +1617,11 @@ def test_kritikal_the_control_counts_marker_files_in_rounds_identified_another_w
     assert (found.control_files, found.control_rounds) == (2, 2)
 
 
+def test_kritikal_the_control_rounds_by_the_method_that_identified_them() -> None:
+    # CC's round by its plan text, EE's by a placed card: what option (b) would move is the TEAM_CARRY share.
+    assert _kritikal().control_by_method == {"PLACED_CARD": 1, "PLAN_TEXT": 1}
+
+
 def test_kritikal_the_k_aff_is_an_affirmative_position_with_its_rounds() -> None:
     report = LandscapeReportService().build(_kritikal_inputs(), synthetic_staleness())
     row = next(one for one in report.positions if one.position_id == "kritikal-aff")

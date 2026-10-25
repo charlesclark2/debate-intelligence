@@ -99,6 +99,7 @@ def test_the_dry_run_prints_the_k_aff_group_and_the_method_tables_rows_counts_on
                 ),
                 control_files=2,
                 control_rounds=2,
+                control_by_method={"PLAN_TEXT": 1, "TEAM_CARRY": 1},
             )
         }
     )
@@ -106,6 +107,7 @@ def test_the_dry_run_prints_the_k_aff_group_and_the_method_tables_rows_counts_on
         "Affirmative rounds by method: PLACED_CARD 4; not identified 3 of 7.",
         "Kritikal affirmatives (kritikal-aff): 3 rounds by 2 teams, 2 by their own marker, 1 by carry; "
         "1 refused by the advantage guard, still unidentified.",
-        "Control: 2 rounds identified another way hold a K-aff marker, in 2 files.",
+        "Control: 2 rounds identified another way hold a K-aff marker, in 2 files; by method: PLAN_TEXT 1, "
+        "TEAM_CARRY 1.",
         "K families in the K-aff files' headings: cap 3 files (2 teams), afropessimism 1 files (1 teams).",
     ]

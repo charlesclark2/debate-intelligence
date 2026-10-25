@@ -41,7 +41,9 @@ counted.
 | ac1 — on a synthetic store with two caselists' bundles, the plan lists exactly the removed caselist's `schools.csv`/`schools.md`, local and bucket; `--execute` deletes them and their noncurrent versions; circuit-wide files and the other caselist's bundles byte-identical; tests shown failing first, against moto | PASS | `packages/debate_core/tests/application/caselist/test_removal_reaches_landscape_school_views.py` (moto, `testcl26` ×2 snapshots, `othercl26`, and `testcl26b` for the prefix case). Red against a refuse-nothing skeleton: `pytest -n 0 -p no:randomly <that file> test_removal_school_view_selection.py` → **21 failed, 28 passed**, every failure an `AssertionError` or `DID NOT RAISE UnknownLandscapeFile`, none an error. Green: **14 passed** (that file) and **35 passed** (selection file). `TestTheExecution::…byte_for_byte` compares every `(key, version id) → bytes` under `reports/` and every local file before and after |
 | ac2 — `caselist status` reports a school view a removal should have deleted as residue, and clears once it is gone | PASS | `TestStatus::test_it_reports_views_a_removal_should_have_deleted_as_residue_and_clears_once_they_are_gone` (4 bucket + 4 local, `RemovalCompletion(RM-2026-01, 2026-09-30 18:00Z)`, `in_sync` false; after the same removal again, none). Red: failed against the skeleton (`assert () == (OlderVersions…`). CLI text and JSON: `packages/debate_cli/tests/commands/test_caselist_remove_school_view_output.py` → **12 passed** |
 | ac3 — the removal credential's Terraform policy allows deleting those keys and nothing else new, by Terraform test; the removal runbook's manual landscape section is replaced; the annual purge's steps cover school views | PASS | `terraform test` in `infrastructure/modules/evidence_bucket` (offline provider mirror) → **13 passed, 0 failed**. Red: the new test file against `e747b7a`'s `operator_access.tf` → **12 passed, 1 failed** (assertions at lines 748, 786, 847), nothing skipped. `scripts/terraform_checks.sh` (offline) → *All Terraform checks passed* (42 s). Runbook: `docs/runbooks/caselist-removal.md`, "Argument landscape bundles (E32)" rewritten, and new "The annual purge: landscape school views" (dry-run and delete blocks; its script was run on synthetic data, see Decisions). `check_command_blocks.py` → OK. "Nothing else new": see Decisions, the listing prefix |
-| Node `removal-landscape` — `uv run pytest packages/debate_core/tests -k removal` | PASS | verbatim → **398 passed in 39.45s** |
+| Node `removal-landscape` — `uv run pytest packages/debate_core/tests -k removal` | PASS | verbatim → **398 passed in 39.45s**; again after the PM's ruling 4 → **399 passed in 36.00s** |
+| PM ruling 2 (2026-10-24) — deletes granted only on `reports/landscape/*/schools.csv` and `…/schools.md`, pinned by a Terraform test that a widening or circuit-wide mutant fails | PASS | Assertions at `evidence_bucket.tftest.hcl` 748 (every delete resource, exactly) and 786 (the one statement reaching `reports/landscape/` deletes those two ARNs and nothing else). Mutants in the table below: *a whole bundle deletable* (`reports/landscape/*`) and *`report.md` added* both fail the run (12 passed, 1 failed, nothing skipped). Expected plan: see Decisions |
+| PM ruling 4 (2026-10-24) — after deleting, `--execute` lists versions again under the removal credential and confirms no version or marker of the school views remains; an existing test cited or one added, shown failing first | PASS | No existing test covered it, and no code did it (see Deviations 3). Added `TestTheExecution::test_it_lists_again_after_deleting_and_a_view_still_there_leaves_the_removal_incomplete`: a removal credential that answers a delete of one key without doing it. Red → `Failed: DID NOT RAISE RemovalIncomplete`. Green after `_delete_bucket_school_views` re-lists and raises `SchoolViewsLeft` (`SCHOOL_VIEWS_LEFT`, counts only): new file **15 passed**; with the selection, removal-service and CLI output files **82 passed**; `tests/smoke/test_caselist_remove_smoke.py` and `bucket_mode/test_bucket_mode_removal.py` **46 passed in 96.09 s** |
 
 ### Mutants (fresh `HYPOTHESIS_STORAGE_DIRECTORY` per run; no Hypothesis property in these files)
 
@@ -98,7 +100,9 @@ test files (`-n 0 -p no:randomly`), then restored from git. `git status` was cle
   `school_view_versions_counted` and `republish`. `nothing_to_do` counts school views. The planner
   takes `local_reports` and reads the log and scopes once.
 * **`removal_service.py`**: two steps, the bucket's views (after `raw/`/`parsed/`) and this machine's
-  (after its blobs and parsed files). Display counts on `RemovalReport`; the log line is unchanged.
+  (after its blobs and parsed files). The bucket step lists again after deleting and raises
+  `SchoolViewsLeft` if any version or marker it reached is still there (PM ruling 4). Display counts
+  on `RemovalReport`; the log line is unchanged.
 * **`removal_residue.py`, `status_service.py`**: `CaselistResidue.school_views` and
   `school_views_older_than`, part of `found`. Status takes `local_reports`.
 * **`ports/evidence_store.py`, `integrations/s3/object_store.py`**: `ObjectInfo.last_modified`
@@ -127,11 +131,33 @@ test files (`-n 0 -p no:randomly`), then restored from git. `git status` was cle
    owner"). The school-view steps are a section of their own in `caselist-removal.md`, "The annual
    purge: landscape school views", which says the purge's other steps have no runbook yet. Writing
    the rest of the purge was out of scope.
-2. **"Nothing else new" in ac3.** The removal credential gains one delete statement, exactly
+2. **"Nothing else new" in ac3.** *(Ruled (A) by the PM on 2026-10-24, on the condition in ruling 2,
+   which the existing assertions and mutants meet.)* The removal credential gains one delete statement, exactly
    `reports/landscape/*/schools.csv` and `…/schools.md`. Its version-listing condition also gains
    `reports/landscape/` and `reports/landscape/*`. That is listing, not deleting, and without it
    `--execute` cannot find a school view's noncurrent versions, which the spec requires it to
    delete. The PM should confirm this reading (relay question 2).
+
+3. **The PM's ruling 4 says "as the removal does for `raw/` and `parsed/`", but it does not.**
+   `_delete_bucket_objects` lists each `raw/`/`parsed/` key's versions once and deletes them; it
+   never lists again afterwards. Only the preflight's probe (`removal_service.py`, "a version survived
+   the delete") and the run-state bundle's save are confirmed, and `caselist status`'s version listing
+   is the check for `raw/` and `parsed/` afterwards. The school views now get the confirmation the
+   ruling describes. Whether `raw/` and `parsed/` should get it too is a follow-up, below.
+
+## PM rulings of 2026-10-24
+
+Recorded as a comment above the spec's `acceptanceCriteria` (checked: the parsed spec's
+description, context and criteria are unchanged; `validate_specs.py` OK).
+
+1. Run lock (A): no change.
+2. Listing accepted (A), conditional on the delete grant being exactly the two school-view ARNs,
+   pinned by a Terraform test with mutants. Met by the existing assertions and mutants (Acceptance
+   criteria table).
+3. Annual purge (A): the school-view steps stay their own section in `caselist-removal.md`. The PM
+   files the purge-runbook task.
+4. Status sees current views only (A), conditional on `--execute` re-listing after deleting.
+   Implemented, test-first (Acceptance criteria table, Deviations 3).
 
 ## Decisions and assumptions
 
@@ -289,8 +315,11 @@ three blocks for prod, with `envs/prod`, `/tmp/evidence-prod-t13.tfplan`, prod's
   the school views. Changing it would make the plan two changes, so it was left. Fold it into the
   next change to that permission set.
 * **An annual-purge runbook** for the rest of the purge (blobs, manifests, parsed store, OpenEv),
-  which would take in the school-view section (relay question 3). E30.
-* **A noncurrent school view under a newer one** is invisible to status (relay question 4).
+  which would take in the school-view section. The PM files it (ruling 3).
+* **A noncurrent school view under a newer one** is invisible to status (relay question 4, ruled
+  (A)); `--execute` now confirms none is left after it runs.
+* **Confirm `raw/` and `parsed/` deletes the same way** (Deviations 3): after deleting, list each
+  key's versions again and stop `INCOMPLETE` if any survived. E30, if the PM wants it.
 
 ## PM review
 

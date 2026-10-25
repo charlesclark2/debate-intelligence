@@ -149,6 +149,7 @@ __all__ = [
     "RemovalReport",
     "RemovalRunState",
     "RunStateBundleNotRewritten",
+    "SchoolViewsLeft",
     "TakedownAccess",
     "TakedownNotConfigured",
     "TakedownPreflightFailed",
@@ -624,6 +625,21 @@ async def on_the_working_copy[T](run_state: RemovalRunState | None, work: Callab
     return await work()
 
 
+class SchoolViewsLeft(DomainError):
+    """After deleting, the removal credential still lists versions of school views the removal reached.
+
+    A delete the store answered and did not carry out, or a view written again while the removal
+    ran. The run stops `INCOMPLETE`; running the same removal again takes them. Counts only: no key.
+    """
+
+    def __init__(self, versions: int) -> None:
+        self.versions = versions
+        super().__init__(
+            f"{versions} version(s) or delete marker(s) of landscape school views this removal reached "
+            "are still in the bucket after it deleted them; run the same removal again"
+        )
+
+
 class RunStateBundleNotRewritten(DomainError):
     """The removal's rewrite of the run-state bundle was not confirmed in the bucket: nothing of it purged."""
 
@@ -805,19 +821,31 @@ class CaselistRemovalService:
         One listing of every bundle, read through the plan's own selection, so a version the dry run
         could not see (the everyday profile lists no versions under `reports/`) is taken by the same
         rule as the current object it saw. Counted with the other bucket versions; the log holds counts.
+
+        Then it lists them again, and a version or delete marker the rule still reaches is
+        :class:`SchoolViewsLeft` (the PM's ruling 4 of 2026-10-24): `caselist status` sees only the
+        current school views, so this is the check that none of their versions survived.
         """
         if not plan.school_view_reach:
             return
-        doomed = tuple(
-            version
-            for version in await access.versions.list_versions(LANDSCAPE_PREFIX)
-            if reached(version.key, version.last_modified, plan.school_view_reach)
-        )
+        doomed = await self._school_view_versions(plan, access)
         refuse_protected_versions(doomed)
         if doomed:
             deleted = await access.versions.delete_versions(doomed)
             counts.s3_versions_deleted += deleted
             counts.school_view_versions_deleted += deleted
+        left = await self._school_view_versions(plan, access)
+        if left:
+            raise SchoolViewsLeft(len(left))
+
+    @staticmethod
+    async def _school_view_versions(plan: RemovalPlan, access: TakedownAccess) -> tuple[ObjectVersion, ...]:
+        """Every version and delete marker under `reports/landscape/` the plan's reach takes."""
+        return tuple(
+            version
+            for version in await access.versions.list_versions(LANDSCAPE_PREFIX)
+            if reached(version.key, version.last_modified, plan.school_view_reach)
+        )
 
     async def _rewrite_bucket_manifests(
         self, plan: RemovalPlan, access: TakedownAccess, counts: _Counts

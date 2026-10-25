@@ -28,6 +28,7 @@ no camp file, no other holder (the fixture facts `test_manifest_and_aggregate_re
 from __future__ import annotations
 
 import os
+from collections.abc import Sequence
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
@@ -40,6 +41,7 @@ from tests.fixtures.caselist.publish_expectations import digest_of_body
 from debate_core.application.caselist.removal_plan import RemovalPlan, Side, SourceSelector
 from debate_core.application.caselist.removal_residue import OlderVersions, RemovalCompletion
 from debate_core.application.caselist.removal_school_views import SchoolViewReach, UnknownLandscapeFile
+from debate_core.application.caselist.removal_service import RemovalIncomplete, TakedownAccess
 from debate_core.application.caselist.status_service import CaselistStatusService
 from debate_core.application.errors import StoreAccessDenied
 from debate_core.application.ports.evidence_versions import EvidenceVersionStore, ObjectVersion
@@ -207,6 +209,35 @@ class ReportsVersionsRefused:
         raise AssertionError("the everyday profile deletes nothing")
 
 
+class KeepsOneKey:
+    """The removal credential's versions, except that a delete of one key is answered and not done."""
+
+    def __init__(self, access: TakedownAccess, kept: str) -> None:
+        self._inner = access.versions
+        self._kept = kept
+        self.access = TakedownAccess(
+            versions=self,  # pyright: ignore[reportArgumentType]
+            objects=access.objects,
+            caller=access.caller,
+            profile=access.profile,
+            bucket=access.bucket,
+        )
+
+    @property
+    def location(self) -> str:
+        return self._inner.location
+
+    async def list_versions(self, prefix: str) -> tuple[ObjectVersion, ...]:
+        return await self._inner.list_versions(prefix)
+
+    async def get_version_file(self, version: ObjectVersion, destination: Path) -> None:
+        await self._inner.get_version_file(version, destination)
+
+    async def delete_versions(self, versions: Sequence[ObjectVersion]) -> int:
+        await self._inner.delete_versions([one for one in versions if one.key != self._kept])
+        return len(versions)
+
+
 def everyday(world: RemovalWorld) -> ReportsVersionsRefused:
     return ReportsVersionsRefused(S3EvidenceVersionStore(bucket=world.bucket_name, client=world.client))
 
@@ -324,6 +355,23 @@ class TestTheExecution:
             (key, version): data for (key, version), data in bucket_before.items() if key not in REMOVED_VIEWS
         }
         assert report.school_view_versions_deleted == 9, "eight versions and the marker"
+
+    async def test_it_lists_again_after_deleting_and_a_view_still_there_leaves_the_removal_incomplete(
+        self, bundles: RemovalWorld
+    ) -> None:
+        """The PM's ruling 4 of 2026-10-24: after deleting, `--execute` lists the versions again with the
+        removal credential, and a version or marker of a school view it reached that is still there
+        stops the run `INCOMPLETE`, as a delete the store answered and did not carry out would leave."""
+        kept = "reports/landscape/testcl26/2026-09-29/schools.md"
+        service = bundles.service(takedown=lambda: KeepsOneKey(bundles.takedown(), kept).access)
+
+        with pytest.raises(RemovalIncomplete) as stopped:
+            await service.execute(await plan_of(bundles))
+
+        assert stopped.value.error_code == "SCHOOL_VIEWS_LEFT"
+        assert stopped.value.report.log_entry.error_code == "SCHOOL_VIEWS_LEFT"
+        assert {key for key, _ in bucket_reports(bundles) if key in REMOVED_VIEWS} == {kept}
+        assert kept not in str(stopped.value), "the message counts; it names no key"
 
     async def test_the_log_and_the_scope_beside_it_hold_counts_and_no_key(
         self, bundles: RemovalWorld

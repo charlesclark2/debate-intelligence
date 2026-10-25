@@ -477,6 +477,24 @@ async def test_a_run_that_stopped_naming_another_caselist_changes_nothing(
     )
 
 
+async def test_a_run_that_stopped_after_a_cap_bound_run_leaves_the_backlog_counted(
+    objects: FsEvidenceObjectStore, tmp_path: Path
+) -> None:
+    """The cap-bound rule still reads the latest run that listed the caselist: a run that stopped
+    before listing knows nothing of the backlog, so it neither clears it nor hides it. Both apply."""
+    log = log_of(tmp_path, run_of(SEPTEMBER_16, deferred=2))
+    log.append(stopped(EXPIRED_TOKEN))
+    check = LandscapeStalenessCheck(objects=objects, run_log=log)
+
+    staleness = await check.check(CASELIST, report_date=FRESH)
+    banner = staleness.banner() or ""
+
+    assert staleness.archives_awaiting_download == 2 and staleness.cap_bound
+    assert staleness.latest_run_failed
+    assert "2 newer weekly archive(s) are published but not yet downloaded" in banner
+    assert "stopped before its stages (CaselistAuthExpired)." in banner
+
+
 @pytest.mark.parametrize("error_class", [SCHOOL_LIKE, PATH_LIKE, "Expired-Token", "", "1Expired"])
 async def test_an_error_class_that_is_not_an_identifier_is_left_out(
     objects: FsEvidenceObjectStore, tmp_path: Path, error_class: str

@@ -345,6 +345,7 @@ dependencies = [
     { name = "debate-core", extra = ["aws", "docx", "tub"] },
     { name = "fastapi" },
     { name = "jinja2" },
+    { name = "markdown-it-py" },
     { name = "segno" },
     { name = "uvicorn" },
 ]
@@ -355,6 +356,7 @@ requires-dist = [
     { name = "debate-core", extras = ["aws", "docx", "tub"], editable = "packages/debate_core" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "jinja2", specifier = ">=3.1" },
+    { name = "markdown-it-py", specifier = ">=4.0" },
     { name = "segno", specifier = ">=1.6" },
     { name = "uvicorn", specifier = ">=0.32" },
 ]

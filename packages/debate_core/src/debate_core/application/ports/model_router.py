@@ -25,6 +25,13 @@ Implementations: the Bedrock adapter (v1-e05-t02-bedrock-adapter), the fixture-k
 (v1-e05-t03-fake-replay-models), and `ScriptedModelRouter` in `debate_core.testing`, which answers
 from a queue. Each is held to :mod:`debate_core.testing.contracts.model_router`.
 
+Every router validates an answer with
+:func:`~debate_core.application.structured_output.validate_model_output`: strictly, with extra keys
+forbidden, refusing with the problems and never the answer's values. Application services do not
+call a router for structured output directly; they call the
+:class:`~debate_core.application.structured_output.StructuredOutputGuard` in front of it, which
+repairs an invalid answer once (v1-e05-t05-structured-output-validation).
+
 ## Errors a router raises
 
 | Error | When |

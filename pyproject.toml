@@ -70,6 +70,11 @@ dev = [
     # suites run outside the PR path). The lock holds playwright 1.63.0, whose Chromium is v1243.
     "axe-playwright-python>=0.1.8",
     "playwright>=1.63",
+    # debate-core's `extraction` extra (v1-e04-t04): the HTML and PDF extractors, tested on synthetic
+    # pages and a PDF written by tests/fixtures/extraction/build_pdf_fixtures.py, never a download.
+    "pypdf>=6.0",
+    "readability-lxml>=0.8.1",
+    "trafilatura>=2.0",
     "pre-commit>=4.0",
     "pre-commit-hooks>=5.0",
     "pyright[nodejs]>=1.1.400",

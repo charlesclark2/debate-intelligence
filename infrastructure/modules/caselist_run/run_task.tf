@@ -5,7 +5,8 @@
 #   debate-<env>-caselist-run              its log group, and its task definition's family
 #   debate-<env>-caselist-run-execution    pulls its image and writes its log; reads no secret
 #   debate-<env>-caselist-run-scheduler    starts this one revision on the run's cluster
-#   debate-<env>-caselist-run              the schedule, created DISABLED (run_schedule_enabled)
+#   debate-<env>-caselist-run              the schedule, created DISABLED (run_schedule_enabled),
+#                                          alone in its own schedule group of the same name
 #
 # The command is `debate-research --json caselist pull` under a 6-hour deadline in the container
 # (ADR-0020 (1) 6): `timeout` sends the CLI SIGTERM at six hours, as `docker stop` would, and
@@ -32,7 +33,11 @@ locals {
   run_log_group_name = "${var.name_prefix}-run"
   run_container_name = "run"
 
-  run_schedule_arn = "arn:${local.partition}:scheduler:${local.region}:${local.account_id}:schedule/default/${local.run_schedule_name}"
+  # Scheduler assumes the run's scheduler role with aws:SourceArn set to the schedule's group, never
+  # the schedule itself (login_task.tf says why, with AWS's page). The run's schedule is its own
+  # group's only member, so the role trusts this schedule and no other.
+  run_schedule_group_name = "${var.name_prefix}-run"
+  run_schedule_group_arn  = "arn:${local.partition}:scheduler:${local.region}:${local.account_id}:schedule-group/${local.run_schedule_group_name}"
 
   # ADR-0020 (1) 2 and 6. Fargate's ephemeral storage above its 20 GiB default needs platform
   # version 1.4.0 or later, which LATEST is.
@@ -130,7 +135,7 @@ locals {
         Condition = {
           StringEquals = {
             "aws:SourceAccount" = local.account_id
-            "aws:SourceArn"     = local.run_schedule_arn
+            "aws:SourceArn"     = local.run_schedule_group_arn
           }
         }
       },
@@ -250,11 +255,18 @@ resource "aws_iam_role_policy_attachments_exclusive" "run_scheduler" {
   policy_arns = []
 }
 
+# tflint-ignore: aws_resource_missing_tags
+resource "aws_scheduler_schedule_group" "run" {
+  count = local.create_run_task ? 1 : 0
+
+  name = local.run_schedule_group_name
+}
+
 resource "aws_scheduler_schedule" "run" {
   count = local.create_run_task ? 1 : 0
 
   name        = local.run_schedule_name
-  group_name  = "default"
+  group_name  = aws_scheduler_schedule_group.run[0].name
   description = "The ${var.environment} weekly caselist run, three hours after the login (ADR-0020 (1), (2))."
   state       = var.run_schedule_enabled ? "ENABLED" : "DISABLED"
 

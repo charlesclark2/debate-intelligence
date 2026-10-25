@@ -23,6 +23,8 @@
 #        more: no read of the password, no s3:DeleteObject or s3:DeleteObjectVersion; the run's
 #        network has no inbound rule; the run task is 8 vCPU, 16 GB, 100 GiB, arm64, under its
 #        deadline, pinned by digest; its schedule starts after the login, disabled by default;
+#        each schedule sits alone in its own group, and each scheduler role trusts that group's
+#        ARN only (Scheduler's confused-deputy rule; apply B in dev, 2026-10-24);
 #        Debate<Env>CaselistRunDeployer passes the run's roles and never the login's.
 #
 # The account id and user name below are invented.
@@ -240,8 +242,8 @@ run "credentials_apply_creates_no_login_task" {
   command = apply
 
   assert {
-    condition     = length(aws_ecs_task_definition.login) == 0 && length(aws_scheduler_schedule.login) == 0 && length(aws_iam_role.scheduler) == 0
-    error_message = "Without image_digest, the module must create no login task definition, no schedule and no scheduler role (apply A)."
+    condition     = length(aws_ecs_task_definition.login) == 0 && length(aws_scheduler_schedule.login) == 0 && length(aws_iam_role.scheduler) == 0 && length(aws_scheduler_schedule_group.login) == 0 && length(aws_scheduler_schedule_group.run) == 0
+    error_message = "Without image_digest, the module must create no login task definition, no schedule, no schedule group and no scheduler role (apply A)."
   }
 
   assert {
@@ -741,11 +743,27 @@ run "the_login_task_runs_the_pinned_image_as_the_login_role_every_wednesday" {
   }
 
   assert {
+    # The whole condition, compared as one value, so a wildcard ArnLike, a dropped
+    # aws:SourceAccount or the schedule's own ARN each make this false rather than an error.
     condition = (
-      jsondecode(aws_iam_role.scheduler[0].assume_role_policy).Statement[0].Principal.Service == "scheduler.amazonaws.com"
-      && jsondecode(aws_iam_role.scheduler[0].assume_role_policy).Statement[0].Condition.StringEquals["aws:SourceArn"] == "arn:aws:scheduler:us-east-1:111122223333:schedule/default/debate-mock-caselist-login"
+      length(jsondecode(aws_iam_role.scheduler[0].assume_role_policy).Statement) == 1
+      && jsondecode(aws_iam_role.scheduler[0].assume_role_policy).Statement[0].Principal.Service == "scheduler.amazonaws.com"
+      && jsondecode(aws_iam_role.scheduler[0].assume_role_policy).Statement[0].Condition == {
+        StringEquals = {
+          "aws:SourceAccount" = "111122223333"
+          "aws:SourceArn"     = "arn:aws:scheduler:us-east-1:111122223333:schedule-group/debate-mock-caselist-login"
+        }
+      }
     )
-    error_message = "Only the login schedule may assume the scheduler role."
+    error_message = "Only the login schedule's own group may assume the scheduler role: aws:SourceArn is exactly that group's ARN, under StringEquals with aws:SourceAccount (Scheduler's confused-deputy rule)."
+  }
+
+  assert {
+    condition = (
+      aws_scheduler_schedule_group.login[0].name == "debate-mock-caselist-login"
+      && aws_scheduler_schedule.login[0].group_name == aws_scheduler_schedule_group.login[0].name
+    )
+    error_message = "The login's schedule sits in its own group, debate-<env>-caselist-login, never the default group."
   }
 }
 
@@ -1235,8 +1253,26 @@ run "the_run_schedule_starts_after_the_login_and_is_disabled_by_default" {
   }
 
   assert {
-    condition     = jsondecode(aws_iam_role.run_scheduler[0].assume_role_policy).Statement[0].Condition.StringEquals["aws:SourceArn"] == "arn:aws:scheduler:us-east-1:111122223333:schedule/default/debate-mock-caselist-run"
-    error_message = "Only the run schedule may assume the run's scheduler role."
+    condition = (
+      length(jsondecode(aws_iam_role.run_scheduler[0].assume_role_policy).Statement) == 1
+      && jsondecode(aws_iam_role.run_scheduler[0].assume_role_policy).Statement[0].Principal.Service == "scheduler.amazonaws.com"
+      && jsondecode(aws_iam_role.run_scheduler[0].assume_role_policy).Statement[0].Condition == {
+        StringEquals = {
+          "aws:SourceAccount" = "111122223333"
+          "aws:SourceArn"     = "arn:aws:scheduler:us-east-1:111122223333:schedule-group/debate-mock-caselist-run"
+        }
+      }
+    )
+    error_message = "Only the run schedule's own group may assume the run's scheduler role: aws:SourceArn is exactly that group's ARN, under StringEquals with aws:SourceAccount (Scheduler's confused-deputy rule)."
+  }
+
+  assert {
+    condition = (
+      aws_scheduler_schedule_group.run[0].name == "debate-mock-caselist-run"
+      && aws_scheduler_schedule.run[0].group_name == aws_scheduler_schedule_group.run[0].name
+      && aws_scheduler_schedule.run[0].group_name != aws_scheduler_schedule.login[0].group_name
+    )
+    error_message = "The run's schedule sits in its own group, debate-<env>-caselist-run: not the login's group, and never the default group."
   }
 }
 

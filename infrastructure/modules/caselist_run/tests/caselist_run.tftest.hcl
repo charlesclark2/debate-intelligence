@@ -1372,3 +1372,37 @@ run "prod_names_its_own_deployer_inside_thirty_two_characters" {
     error_message = "prod's deployer is DebateProdCaselistRunDeployer, 29 characters (v1-e40-t02's lesson: Identity Center allows 32)."
   }
 }
+
+# v1-e40-t04 ac4 (the PM's ruling of 2026-10-23): the run, its role and every command but a removal
+# never delete. The run role's policies may not allow s3:DeleteObject or s3:DeleteObjectVersion by
+# any spelling IAM matches: the names themselves, a wildcard over them (s3:Delete*, s3:*Object*,
+# s3:*), or an Allow with NotAction, which allows every action it does not name. The run above it
+# lists the role's actions exactly; this one is the rule, so a policy that adds an action and a
+# test that adds it to that list still cannot add a delete.
+run "the_run_role_never_deletes" {
+  command = apply
+
+  assert {
+    condition = length(flatten([
+      for policy in [aws_iam_role_policy.run_credentials.policy, aws_iam_role_policy.run_evidence.policy] : [
+        for statement in jsondecode(policy).Statement : [
+          for action in flatten([try(statement.Action, [])]) : action
+          if anytrue([
+            for deleting in ["s3:DeleteObject", "s3:DeleteObjectVersion"] :
+            can(regex("^(?i)${replace(replace(action, "*", ".*"), "?", ".")}$", deleting))
+          ])
+        ] if statement.Effect == "Allow"
+      ]
+    ])) == 0
+    error_message = "The run role may not delete an object or a version, by name or by a wildcard over either: a delete is a removal's, under the EvidenceRemoval credential (ADR-0020 (3))."
+  }
+
+  assert {
+    condition = alltrue(flatten([
+      for policy in [aws_iam_role_policy.run_credentials.policy, aws_iam_role_policy.run_evidence.policy] : [
+        for statement in jsondecode(policy).Statement : !(statement.Effect == "Allow" && can(statement.NotAction))
+      ]
+    ]))
+    error_message = "No Allow statement of the run role's may use NotAction: it allows every action it does not name, deletes included."
+  }
+}

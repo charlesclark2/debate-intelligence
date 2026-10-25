@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e32-argument-landscape/t11-negative-analytic-texts.yaml`](../../plan_specs/v1/e32-argument-landscape/t11-negative-analytic-texts.yaml) |
 | Epic / release | `v1-e32-argument-landscape` / `v1.2` |
 | Branch | `task/v1-e32-t11-negative-analytic-texts` |
-| Session status | PARTIAL: built and tested; the operator's first cache fill and the dry run are next <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE: built, tested, the cache filled by the operator and the dry run recorded; the first publish is the PM's to coordinate <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -29,18 +29,23 @@ sources against hand-written golden files.
 * **Tests were shown failing first**, and 21 targeted mutants on the withholding rule, the placement
   rule and the guard were all caught, after one new test ([below](#mutants)).
 
-**What is left:**
-* **The first fill of the new cache** is the operator's (about 2 minutes over 8 workers;
-  [the block](#operator-follow-ups)).
-* **Then the dry run on hspolicy26**, without `--publish`, with its runtime and the scan's hits by
-  section. I run it once the cache is warm.
-* **The Goal stays InProgress** until both are recorded. Every criterion is otherwise met.
+**On hspolicy26** ([below](#the-operators-fill-and-the-dry-run-2026-10-24)):
+* **The operator's first fill** read all 3,825 on-topic sources in 551.1 s, with 0 unread. The actor
+  guard kept 151 CP texts by place and refused 5: the 158 and 5 measured on the counts' 163, less the
+  7 that open with an inline `Text:` label and count as labels.
+* **The dry run without `--publish`** took 74 s and wrote nothing.
+  * The report quotes 31 texts under 8 CPs, 4 Ks and 1 role of the ballot, and counts overviews
+    under 44 positions.
+  * 1 text naming a school was withheld.
+  * The scan found **no hit in the new sections**. Its 8 hits are t09's, all in `top_cards.csv`, under
+    the same digest `81374e646621`.
+* **The first publish with these sections** is the PM's to coordinate.
 
 ## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
-| negative-texts | In progress: built and tested; the dry run on hspolicy26 waits on the operator's first cache fill | The counts (2026-10-24), the PM's rulings (2026-10-24), then the reader, the cache, the config, the report's sections and golden, the service, the run's seam and wiring, the operator script and the guide |
+| negative-texts | Done | The counts (2026-10-24), the PM's rulings (2026-10-24), then the reader, the cache, the config, the report's sections and golden, the service, the run's seam and wiring, the operator script and the guide |
 
 ## Acceptance criteria
 
@@ -49,8 +54,8 @@ sources against hand-written golden files.
 | ac1: counts before any rule, per kind, of documents with a CP-text, alternative, role-of-the-ballot or overview label and the paragraph under it, sent to the PM with the proposed labels | PASS | [The counts](#the-counts-hspolicy26-through-2026-10-20), [the proposed labels](#the-proposed-labels), [the questions](#questions-for-the-pm), sent 2026-10-24 and ruled on the same day. Nothing was built before the ruling |
 | ac2: after the ruling, on synthetic sources, the report shows each CP's and K's distinct texts with their team counts and each position's most common overview (ruling 3: overview counts, no text), matching hand-written golden files; a text never beside a school or team code; tests shown failing first | PASS | `tests/fixtures/landscape/golden/report.md`'s two new sections, hand-written from the hand-written `synthetic_caselist/analytic_texts.json`, matched on the renderer's first run (`test_rendering_the_fixture_matches_the_golden_file[report.md]`). The red runs: [below](#checks-shown-failing-for-their-reason). Never beside a school or team code: `test_texts_a_text_is_never_beside_a_school_or_team_code`, the golden's scan test, and the run's test that the texts are in report.md and no other file (Deviations 1 for the overview clause) |
 | negative-texts node: `uv run pytest packages/debate_core/tests/application/test_landscape_report.py` | PASS | `.venv/bin/python -m pytest packages/debate_core/tests/application/test_landscape_report.py -q -p no:randomly` under `perl -e 'alarm 100'` → 65 passed (52 before this task) |
-| PM ruling 1: how many of the 163 the guard keeps, and one test of a `should` analytic it refuses | PASS in part | The refused test: `test_the_actor_guard_refuses_a_should_analytic_naming_no_actor_and_counts_it` (and the twelve-word and whole-word cases). With the committed actor list, measured in memory on the counts' 163: **158 kept, 5 refused**, all 5 theory analytics ("our counter interpretation is that we should ...", "logical policy maker is a neg argument"). The count from the built reader on the real store comes from the operator's fill ([pending](#operator-follow-ups)) |
-| PM: the dry run on hspolicy26 without `--publish`, with counts, its runtime and the scan's hits by section | NOT RUN | Waits on the operator's first cache fill: a dry run writes no cache, so on a cold cache it would parse every source and keep nothing |
+| PM ruling 1: how many of the 163 the guard keeps, and one test of a `should` analytic it refuses | PASS | The refused test: `test_the_actor_guard_refuses_a_should_analytic_naming_no_actor_and_counts_it` (and the twelve-word and whole-word cases). With the committed actor list, measured in memory on the counts' 163: **158 kept, 5 refused**, all 5 theory analytics ("our counter interpretation is that we should ...", "logical policy maker is a neg argument"). The built reader on the real store, in the operator's fill: **151 kept, 5 refused**, the 158 less the 7 paragraphs that open with an inline `Text:` label and are read as labels ([below](#the-operators-fill-and-the-dry-run-2026-10-24)) |
+| PM: the dry run on hspolicy26 without `--publish`, with counts, its runtime and the scan's hits by section | PASS | `debate-research landscape report --caselist hspolicy26 --dry-run` → exit 0 in 74 s, nothing written (checksums of all 10 files under `landscape/` and `reports/` unchanged). Scan: 8 hits, 2 not yet accepted, digest `81374e646621`; all 8 in `top_cards.csv`, **0 in the report.md sections**, the same hits as t09's dry run ([below](#the-operators-fill-and-the-dry-run-2026-10-24)) |
 
 ## The counts (hspolicy26, through 2026-10-20)
 
@@ -259,7 +264,8 @@ The report's cost of quoting was measured with t09's `words` pattern:
 | **Scan hits if every text were quoted** | **2**: a team code in one CP text, the ordinary word `all` that t09's sheet also met; and a school's name, in the K alternative the school rule withholds |
 
 So a report quoting under these rules should raise **1** scan hit, in the CP texts section, for the
-operator to read at the publish. The dry run after the build will give the real number.
+operator to read at the publish. **The dry run after the build found none:** with the top 3 per
+position (ruling 4) the report shows 31 texts, and the CP text holding the word is not among them.
 
 ### Runtimes
 
@@ -382,9 +388,9 @@ Measured in memory on the counts' 163 paragraphs (read-only, 41.4 s for the pass
   than 12 words, with no actor.
 
 The reader's own count on the real store comes from the operator's fill: its "CP texts by place in
-negative files" line. It should be a little under 158. A paragraph that opens with an inline `Text:`
-label counts as that label, not as a text by its place, and the counts found 7 such paragraphs among
-the 163.
+negative files" line. It was expected to be a little under 158: a paragraph that opens with an inline
+`Text:` label counts as that label, not as a text by its place, and the counts found 7 such paragraphs
+among the 163. **The fill printed 151 kept and 5 refused**, which is 158 − 7.
 
 ### Checks shown failing for their reason
 
@@ -478,6 +484,98 @@ a CP text whose second `should` comes after 12 words, catches it: 1 failed.
 * **No shared test ground changed:** no `pyproject.toml`, `uv.lock`, conftest or pytest plugin. So no
   whole-selection hand-off.
 
+## The operator's fill and the dry run (2026-10-24)
+
+### The first fill of the cache
+
+The operator ran `scripts/read_landscape_texts.py --caselist hspolicy26` from the task worktree, with
+no `DEBATE_*` variable and no `caselist pull` running. Its whole output:
+
+```text
+Read hspolicy26 2026.10.20-docx-6 through 2026-10-20: 3825 sources on policy-2026-27-nhi, 2070 negative, 1770 affirmative.
+Analytic texts: 3825 sources, 0 cached, 3825 parsed, 0 refused by the parser, 0 unread; cache written.
+  CP_TEXT: 235 found, 171 placed
+  K_ALTERNATIVE: 545 found, 90 placed
+  ROLE_OF_THE_BALLOT: 50 found, 1 placed
+  OVERVIEW: 1108 found, 572 placed
+CP texts by place in negative files: 151 kept by the actor guard, 5 refused.
+Runtime 551.1 s.
+```
+
+* **The runtime was 551 s, not the 2 to 4 minutes estimated.** The estimate came from the counts'
+  worker time, about 980 s over 8 workers. The machine had other sessions' work on it: load averages
+  of 7 to 42 during the session's own runs that hour. The guide and the script's docstring now give
+  the measured figure.
+* **Found** counts readings, so it is not the counts' documents. The 235 CP texts include the 151 by
+  place in negative files.
+* **Placed** means placed under any position. The report counts a text only under a position of its
+  own kind ("Counted" below).
+
+### The dry run
+
+`debate-research landscape report --caselist hspolicy26 --dry-run` was run from the task worktree,
+without `--publish`, on the warm cache.
+* **Guards:** no `DEBATE_*` variable and no `caselist pull`, checked first.
+* **Time limit:** `perl -e 'alarm 115'` on the interpreter.
+* **Result:** exit 0 in **74 s**, against t09's 52 s.
+  * Its output matched t09's dry run line for line: 97 positions; 2,709 of 4,352 rounds with a read;
+    709 affirmative rounds with no identified aff; and 1,340 review rows.
+  * The same 7 files were planned.
+* **Nothing was written:** all 10 files under `~/.debate-research/dev/landscape/` and `reports/`
+  had the same SHA-256 before the dry run and after it and the scratch runs below.
+* **No workers were orphaned.** One scratch run was stopped by the time limit at 115 s, with the
+  load at 42. Its workers ended with their parent, and none was left running.
+
+**The texts' counts** come from a scratch script that runs the same container service, also as a
+dry run (70.8 s and 77.2 s; `written False`). It counts, and prints no text.
+* **The cache:** 3,825 sources, 3,825 hits, 0 parsed and 0 unread, and nothing written.
+* **Quoting:** 198 sources were read again for 258 texts. All 258 read as they were read, with
+  0 mismatched and 0 unread.
+
+| Kind | Labels | Documents | Counted | Under another kind's position | Headings place nothing | No heading | Withheld | Refused by the guard |
+|---|---|---|---|---|---|---|---|---|
+| CP texts | 235 | 194 | 160 | 11 | 39 | 25 | 0 | 5 |
+| K alternatives | 545 | 464 | 73 | 17 | 223 | 232 | **1** | 0 |
+| Roles of the ballot | 50 | 42 | 1 | 0 | 38 | 11 | 0 | 0 |
+| Overviews | 1,108 | 494 | 571 | 1 | 424 | 112 | (no text) | 0 |
+
+**The texts shown**, at most 3 per position (ruling 4):
+
+| Kind | Positions | The teams with each text shown, then the rest |
+|---|---|---|
+| CP texts | 8 | `states-cp` 9, 3 and 3, and 27 more texts read by 25 teams. `advantage-cp` 12, 1 and 1, then 2 by 2. `public-option-cp` 2, 1 and 1, then 7 by 7. `nhs-cp`, `vouchers-cp` and `delay-cp` 1, 1 and 1, then 2, 1 and 1 more. `smokers-pic` 3 texts. `taxes-pic` 1 text |
+| K alternatives | 4 | `cap-k` 4, 4 and 4, then 30 more by 22 teams. `racial-capitalism-k` 2 and 1. `biopolitics-k` 1 and 1. `security-k` 1 |
+| Roles of the ballot | 1 | `cap-k` 1. The section says how little it holds (ruling 2) |
+
+* 31 texts in all.
+* **Overviews** are counted under 44 positions: 14 DAs, 13 advantages, 8 CPs, 5 Ts and 4 Ks.
+  The most are `midterms-da`'s 40 teams (9 affirmative, 37 negative), then `states-cp`'s 18,
+  `advantage-cp`'s 13 and `cap-k`'s 12.
+
+**The scan, by section.** It found 8 hits, 2 of them not yet accepted, under the digest
+`81374e646621`. These are the hits and the digest of t09's dry run.
+
+| File and section | School | Team code | Tournament | Not yet accepted |
+|---|---|---|---|---|
+| `report.md`: Counterplan texts, alternatives and roles of the ballot | 0 | 0 | 0 | 0 |
+| `report.md`: Overviews | 0 | 0 | 0 | 0 |
+| `report.md`: every other section | 0 | 0 | 0 | 0 |
+| `top_cards.csv` | 3 | 4 | 1 | 2 (the team codes `All`, t09's two) |
+
+**Where the texts are**, from a counts-only check over the dry run's bundle in memory:
+* **The withheld text** (a K alternative naming a school of the caselist) is not in `report.md` or in
+  any other file.
+* **118 of the 258 texts read again occur in `report.md`.** The 31 shown rows are among them. Where
+  the other 87 occur was not broken down.
+* **10 of the 258 also occur in `top_cards.csv`, and 1 of them is among the 31 shown.**
+  * All 10 are K alternatives in the sentence form ("The alternative is …") read from a paragraph
+    that is a card's **tag**.
+  * `top_cards.csv` lists card tags under t03, so these tags were in that file before this task.
+    Its rows give team counts, and the scan found no school or team code on them.
+  * The report's text sections write nothing to any other file, as
+    `test_the_texts_seam_puts_the_quoted_texts_in_report_md_and_nowhere_else` checks on the fixture.
+  * A question for the PM, all the same: [question 3](#questions-for-the-pm).
+
 ## Files changed
 
 * **`debate_core.domain`:** `landscape_texts.py` (new); `landscape_report.py` (the report's `texts`).
@@ -561,7 +659,8 @@ From the build:
 
 ## Operator follow-ups
 
-1. **Fill the analytic-text cache for hspolicy26** (expected runtime about 2 to 4 minutes over the
+1. **Done, 2026-10-24: 551.1 s, its output [above](#the-first-fill-of-the-cache).** Fill the
+   analytic-text cache for hspolicy26 (expected runtime about 2 to 4 minutes over the
    default workers, longer if other sessions load the machine). It reads every on-topic file of the
    newest snapshot through the parser and writes only `~/.debate-research/dev/landscape/analytic_texts/hspolicy26.jsonl`,
    with digests, indexes and ids and no text. It prints counts only, and refuses to start if a
@@ -585,9 +684,9 @@ if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset i
    * the `Runtime` line.
 
    Paste every line back. A `STOP:` line means nothing ran.
-2. **Then I run the dry run** of `debate-research landscape report --caselist hspolicy26 --dry-run`,
-   without `--publish`, on the warm cache. I record its runtime, its counts and the scan's hits by
-   section, and finish this report.
+2. **Done, 2026-10-24: 74 s, nothing written ([above](#the-dry-run)).** The dry run of
+   `debate-research landscape report --caselist hspolicy26 --dry-run`, without `--publish`, on the
+   warm cache.
 3. **The first publish with these sections** is the PM's to coordinate, after the review.
 
 ## Follow-up work
@@ -602,11 +701,13 @@ if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset i
 
 ## Questions for the PM
 
-Two, both about the spec. Paste-ready:
+Four: two about the spec, two from the dry run. Paste-ready:
 
 ```text
-v1-e32-t11 questions (session, 2026-10-24, after the build). The build follows
-your rulings 1-5; the dry run waits on the operator's first cache fill.
+v1-e32-t11 questions (session, 2026-10-24, after the build, the operator's
+fill and the dry run). The build follows your rulings 1-5. The fill took
+551 s; the dry run 74 s, wrote nothing, and the scan found no hit in the new
+sections (its 8 hits are t09's, digest 81374e646621).
 
 1. ac2 still says "each position's most common overview". Your ruling 3 (the
    coach's decision) made overviews counts only: per position, on each side,
@@ -620,6 +721,28 @@ your rulings 1-5; the dry run waits on the operator's first cache fill.
    actors), tests/config, tests/scripts and scripts (the operator's fill), and
    docs/guides. Amend the list with a PM-ruling comment?
    Recommendation: yes, as for t09.
+
+3. 10 of the 258 texts read again are K alternatives read from a card's tag
+   ("The alternative is ..."), and so also appear in top_cards.csv, which
+   lists card tags since t03. 1 of them is among the 31 rows report.md shows.
+   No school or team code is on those rows. Options:
+   (a) keep them: the tag was already in top_cards.csv, and most alternatives
+       are tags (480 of 555 in the counts);
+   (b) leave tag paragraphs out of the quoted alternatives, which would empty
+       most of that section.
+   Recommendation: (a). Policy 1.13 keeps texts out of files beside a school
+   or a team code, and top_cards.csv shows these as tags, as it did before.
+
+4. After an edit to the taxonomy, overrides or actors, the next run reads
+   every source again (ruling 5). A dry run writes no cache, so a dry run
+   then a publish pays that twice: 551 s each on a loaded machine, about
+   2 minutes on an idle one. Options:
+   (a) the runbook runs scripts/read_landscape_texts.py first after such an
+       edit, as an operator block (no code change);
+   (b) let a dry run write this cache (it holds no text), at the cost of
+       "a dry run writes nothing".
+   Recommendation: (a), with the runbook line added in a follow-up task; t09's
+   plan-text cache behaves the same way.
 ```
 
 ### The questions of 2026-10-24 on the counts, answered

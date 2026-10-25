@@ -401,9 +401,9 @@ Texts worded alike are one text. A text naming a school of the caselist is withh
 
 The actors are in `config/landscape/analytic_texts/<topic id>.yaml`, one lowercase phrase each and no
 `the` (`fifty states`, `usfg`, `congress`). Adding one is a configuration edit like an alias: `uv run
-pytest tests/config` checks it, and the next run reads every file of the topic again, once (about 2
-minutes for hspolicy26). An edit to a position or a decision of yours reads them again too, because
-a text's position is kept with it.
+pytest tests/config` checks it, and the next run reads every file of the topic again, once (551
+seconds for hspolicy26's first reading, on 2026-10-24). An edit to a position or a decision of yours
+reads them again too, because a text's position is kept with it.
 
 ## The review queue and your decisions
 

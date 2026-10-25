@@ -12,7 +12,8 @@ CP texts the actor guard kept and refused in negative files. With `--quote` it a
 report would quote, in memory, and counts them; it never prints one.
 
 It exits 1 when it read no source, so an empty store never looks like a run. The first run over hspolicy26
-parses every on-topic file: about 0.25 s of a worker's time each, so about 2 minutes over 8 workers.
+parses every on-topic file: about 0.25 s of a worker's time each, so about 2 minutes over 8 idle workers;
+the operator's first fill, on 2026-10-24 with other work on the machine, took 551 s.
 
     uv run python scripts/read_landscape_texts.py --caselist hspolicy26
 """

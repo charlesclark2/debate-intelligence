@@ -20,6 +20,7 @@ from debate_core.application.caselist_sync import (
     SelectionDecision,
     StageOutcome,
     StageRecord,
+    SyncRunInProgress,
     SyncStage,
 )
 from debate_core.application.landscape_staleness import (
@@ -30,7 +31,7 @@ from debate_core.application.landscape_staleness import (
     with_stale_banner,
     with_staleness_metadata,
 )
-from debate_core.application.ports.caselist_source import ArchiveKind
+from debate_core.application.ports.caselist_source import ArchiveKind, CaselistAuthExpired
 from debate_core.application.sync_runs import (
     SYNC_RUN_LOG_FILENAME,
     RunMode,
@@ -375,33 +376,162 @@ async def test_a_run_that_failed_only_after_publishing_is_not_a_failed_run(
     assert not staleness.stale
 
 
-async def test_a_run_that_stopped_on_an_error_before_listing_changes_nothing(
-    objects: FsEvidenceObjectStore, tmp_path: Path
-) -> None:
-    """A run that raised (an expired token, the lock) listed no archive and has no stage to name.
+STOPPED_RUN_ID = "20260917T060000Z"
 
-    The rule reads the latest run that *listed* the caselist, as the cap-bound rule does, so this
-    run is passed over in both directions: after a success the caselist stays current, and after a
-    failed run it stays stale on that run. Whether such a run needs a rule of its own is the PM's
-    question in this task's report.
-    """
-    log = log_of(tmp_path, run_of(SEPTEMBER_16))
-    stopped = record_for_failure(
-        RuntimeError("stand-in for an expired token"),
-        run_id="20260917T060000Z",
-        started_at=SEPTEMBER_17,
-        finished_at=SEPTEMBER_17,
+
+def stopped(
+    error: BaseException, *, caselists: tuple[str, ...] = (CASELIST,), started: datetime = SEPTEMBER_17
+) -> SyncRunRecord:
+    """A run that raised instead of returning a summary, recorded the way the monitor records it."""
+    return record_for_failure(
+        error,
+        run_id=started.strftime("%Y%m%dT%H%M%SZ"),
+        started_at=started,
+        finished_at=started,
         environment="dev",
         mode="run",
-        caselists=(CASELIST,),
+        caselists=caselists,
     )
-    log.append(stopped)
+
+
+EXPIRED_TOKEN = CaselistAuthExpired(401, f"list archives for {CASELIST}")
+"""The likeliest way a weekly run fails outright (policy E34 gate 5)."""
+
+
+async def test_a_run_that_stopped_on_an_error_naming_the_caselist_makes_it_stale(
+    objects: FsEvidenceObjectStore, tmp_path: Path
+) -> None:
+    """A run that raised listed no archive and has no stage: the reason names its error's class.
+
+    The PM's ruling 1 of 2026-10-24. Before it, this run changed nothing.
+    """
+    log = log_of(tmp_path, run_of(SEPTEMBER_16))
+    record = stopped(EXPIRED_TOKEN)
+    log.append(record)
     check = LandscapeStalenessCheck(objects=objects, run_log=log)
 
     staleness = await check.check(CASELIST, report_date=FRESH)
 
-    assert stopped.outcome is SyncRunOutcome.FAILED and not stopped.deferred_by_caselist
+    assert record.outcome is SyncRunOutcome.FAILED and not record.deferred_by_caselist and not record.stages
+    assert not staleness.too_old and not staleness.cap_bound
+    assert staleness.stale
+    assert staleness.failed_run == FailedSyncRun(
+        run_id=STOPPED_RUN_ID, stopped_before_stages=True, error_class="CaselistAuthExpired"
+    )
+    banner = staleness.banner() or ""
+    assert (
+        f"The latest sync run of this caselist, {STOPPED_RUN_ID}, stopped before its stages "
+        "(CaselistAuthExpired)." in banner
+    )
+    assert "caselist_token" not in banner and "HTTP" not in banner, "the message is never read"
+
+
+async def test_a_later_run_that_listed_the_caselist_clears_a_run_that_stopped(
+    objects: FsEvidenceObjectStore, tmp_path: Path
+) -> None:
+    log = log_of(tmp_path, run_of(SEPTEMBER_16))
+    log.append(stopped(EXPIRED_TOKEN))
+    log.append(
+        record_for_summary(
+            run_of(datetime(2026, 9, 18, 6, tzinfo=UTC)), environment="dev", mode="run", previous=log.read()
+        )
+    )
+    check = LandscapeStalenessCheck(objects=objects, run_log=log)
+
+    staleness = await check.check(CASELIST, report_date=FRESH)
+
+    assert staleness.failed_run is None
     assert not staleness.stale
+
+
+async def test_a_run_the_lock_refused_changes_nothing(objects: FsEvidenceObjectStore, tmp_path: Path) -> None:
+    """The run holding the lock is the one that counts: a second launch flips nothing, either way."""
+    refusal = stopped(SyncRunInProgress(tmp_path / "caselist-sync.lock"))
+    current = log_of(tmp_path / "current", run_of(SEPTEMBER_16))
+    failed = log_of(tmp_path / "failed", run_of(SEPTEMBER_16, failed=(SyncStage.DOWNLOAD,)))
+    for log in (current, failed):
+        log.append(refusal)
+
+    after_success = await LandscapeStalenessCheck(objects=objects, run_log=current).check(
+        CASELIST, report_date=FRESH
+    )
+    after_failure = await LandscapeStalenessCheck(objects=objects, run_log=failed).check(
+        CASELIST, report_date=FRESH
+    )
+
+    assert refusal.error_class == "SyncRunInProgress"
+    assert not after_success.stale
+    assert after_failure.failed_run == FailedSyncRun(run_id=FAILED_RUN_ID, stages=("download",))
+
+
+async def test_a_run_that_stopped_naming_another_caselist_changes_nothing(
+    objects: FsEvidenceObjectStore, tmp_path: Path
+) -> None:
+    log = log_of(tmp_path, run_of(SEPTEMBER_16))
+    log.append(stopped(EXPIRED_TOKEN, caselists=(OTHER_CASELIST,)))
+    check = LandscapeStalenessCheck(objects=objects, run_log=log)
+
+    assert not (await check.check(CASELIST, report_date=FRESH)).stale
+    assert (await check.check(OTHER_CASELIST, report_date=FRESH)).failed_run == FailedSyncRun(
+        run_id=STOPPED_RUN_ID, stopped_before_stages=True, error_class="CaselistAuthExpired"
+    )
+
+
+@pytest.mark.parametrize("error_class", [SCHOOL_LIKE, PATH_LIKE, "Expired-Token", "", "1Expired"])
+async def test_an_error_class_that_is_not_an_identifier_is_left_out(
+    objects: FsEvidenceObjectStore, tmp_path: Path, error_class: str
+) -> None:
+    """The class is a string in the log like any other; only an identifier is repeated, and the
+    message, whatever it holds, never is."""
+    log = log_of(tmp_path, run_of(SEPTEMBER_16))
+    log.append(
+        SyncRunRecord(
+            run_id=STOPPED_RUN_ID,
+            environment="dev",
+            mode="run",
+            started_at=SEPTEMBER_17,
+            finished_at=SEPTEMBER_17,
+            outcome=SyncRunOutcome.FAILED,
+            caselists=(CASELIST,),
+            error_class=error_class,
+            error_message=f"{SCHOOL_LIKE}: {PATH_LIKE}",
+        )
+    )
+    check = LandscapeStalenessCheck(objects=objects, run_log=log)
+
+    staleness = await check.check(CASELIST, report_date=FRESH)
+    said = (staleness.banner() or "") + json.dumps(staleness.csv_metadata())
+
+    assert staleness.failed_run == FailedSyncRun(run_id=STOPPED_RUN_ID, stopped_before_stages=True)
+    assert f"The latest sync run of this caselist, {STOPPED_RUN_ID}, stopped before its stages." in said
+    for part in (SCHOOL_LIKE, "Harrowgate", "HaPX", PATH_LIKE, ".docx", "/", "Expired"):
+        assert part not in said, part
+
+
+async def test_the_class_is_named_and_the_message_is_not(
+    objects: FsEvidenceObjectStore, tmp_path: Path
+) -> None:
+    log = log_of(tmp_path, run_of(SEPTEMBER_16))
+    log.append(
+        SyncRunRecord(
+            run_id=STOPPED_RUN_ID,
+            environment="dev",
+            mode="run",
+            started_at=SEPTEMBER_17,
+            finished_at=SEPTEMBER_17,
+            outcome=SyncRunOutcome.FAILED,
+            caselists=(CASELIST,),
+            error_class="ManifestsNotWritable",
+            error_message=f"{SCHOOL_LIKE}: {PATH_LIKE}",
+        )
+    )
+    check = LandscapeStalenessCheck(objects=objects, run_log=log)
+
+    said = (await check.check(CASELIST, report_date=FRESH)).banner() or ""
+
+    assert "stopped before its stages (ManifestsNotWritable)." in said
+    for part in (SCHOOL_LIKE, "Harrowgate", PATH_LIKE, ".docx", "/"):
+        assert part not in said, part
 
 
 async def test_a_failed_publish_pending_run_changes_nothing(

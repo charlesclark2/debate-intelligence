@@ -90,6 +90,8 @@ class FailedSyncRun:
     run_id: str
     stages: tuple[str, ...] = ()
     """The :class:`SyncStage` names that failed, in the record's order. Never a stage's reason."""
+    stopped_before_stages: bool = False
+    error_class: str | None = None
 
     def sentence(self) -> str:
         """What the banner says of it: the run id and the stage names, and nothing else."""

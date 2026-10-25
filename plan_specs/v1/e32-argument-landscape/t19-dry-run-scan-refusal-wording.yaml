@@ -1,0 +1,74 @@
+# TASK v1-e32-t19-dry-run-scan-refusal-wording - A dry run's scan refusal says nothing was written and gives the publish command
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t19-dry-run-scan-refusal-wording
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "A dry run's scan refusal says nothing was written and gives the publish command"
+spec:
+  # Filed by the PM, 2026-10-24, from the PM's publish of hspolicy26 under taxonomy 1.2.0 (2026-10-24).
+  description: >-
+    A `landscape report --publish --dry-run` whose scan finds hits not yet accepted ends with
+    SCAN_HITS_NOT_ACCEPTED saying "the report is written locally at <directory>", though a dry
+    run writes nothing, and "run again with --accept-scan-hits <digest>" without saying to drop
+    `--dry-run`. On a dry run the panel says nothing was written and names the command to run:
+    the same command without `--dry-run`, with `--accept-scan-hits <digest>`. A publish without
+    `--dry-run` reads as today. The JSON's notice says the same.
+  priority: 3
+  constraints:
+    packages: [debate_cli, packages/debate_cli/tests, debate_core.application, packages/debate_core/tests]
+    forbidden:
+      - Network or AWS access in any test
+      - A change to what a dry run or a publish writes
+  context:
+    - kind: TaskRef
+      name: v1-e32-t05-landscape-cli
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A dry run refused by the scan says nothing was written and names the command without
+        --dry-run and with --accept-scan-hits and the digest, in the panel and the JSON; a
+        publish refused by the scan reads as before; tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t19-dry-run-scan-refusal-wording-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    Change the refusal's wording for a dry run, in the panel and the JSON, with tests.
+  goalRef:
+    name: v1-e32-t19-dry-run-scan-refusal-wording
+  graph:
+    nodes:
+      - id: dry-run-wording
+        kind: Task
+        name: Dry-run scan refusal wording
+        description: >-
+          Change the refusal's wording for a dry run, in the panel and the JSON, with
+          tests.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Landscape command tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/test_landscape_command.py]
+status:
+  phase: Pending

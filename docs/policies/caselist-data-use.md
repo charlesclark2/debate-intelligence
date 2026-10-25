@@ -3,12 +3,12 @@
 
 | | |
 |---|---|
-| Policy version | 1.13 |
-| Status | **Approved**, version 1.13, on the merge of its pull request (decided 2026-10-24). See [Approval](#approval). |
+| Policy version | 1.14 |
+| Status | **Approved**, version 1.14, on the merge of its pull request (decided 2026-10-24). See [Approval](#approval). |
 | Owner | Charlie Clark (product owner and head coach) |
 | Written by | v1-e30-t01-caselist-data-use-policy implementation session, 2026-09-19 |
 | Applies to | Everything the platform collects from OpenCaselist and OpenEv, and everything derived from it, in every environment |
-| Approved by | Charlie Clark, product owner and head coach, 2026-09-19 (versions 1.0 and 1.1), 2026-10-01 (versions 1.3 and 1.4), 2026-10-10 (versions 1.5 and 1.6), 2026-10-11 (version 1.7), 2026-10-13 (version 1.8), 2026-10-15 (version 1.9), 2026-10-19 (version 1.10), 2026-10-22 (versions 1.11 and 1.12) and 2026-10-24 (version 1.13) |
+| Approved by | Charlie Clark, product owner and head coach, 2026-09-19 (versions 1.0 and 1.1), 2026-10-01 (versions 1.3 and 1.4), 2026-10-10 (versions 1.5 and 1.6), 2026-10-11 (version 1.7), 2026-10-13 (version 1.8), 2026-10-15 (version 1.9), 2026-10-19 (version 1.10), 2026-10-22 (versions 1.11 and 1.12) and 2026-10-24 (versions 1.13 and 1.14) |
 | Next review | Start of the 2027-28 season, or sooner if a source's terms change |
 
 This is the policy that governs how the Debate Intelligence Platform collects, stores, uses and
@@ -271,7 +271,7 @@ in stored provenance columns that are never searchable (v1-e39-t02).
 | Report | Maximum identity shown |
 |---|---|
 | Circuit-wide argument landscape (v1-e32-t03) | Nothing. No school, no team code. It may quote team-written plan, counterplan and alternative texts word for word, never beside either (version 1.13). |
-| Per-school and trend views (v1-e32-t04) | **School plus team code, as disclosed. Never more.** |
+| Per-school and trend views (v1-e32-t04) | **School plus team code, as disclosed. Never more**, except a link to the team's public OpenCaselist page built from the caselist, the school and the team code alone (version 1.14). No tournament, round, debater or document path. |
 | Operator import/publish summaries (`docs/data/`) | Aggregate counts only. |
 | Built-file sidecar (E33) | School, team code, side, tournament, round — inside the team only. A built file's text carries none of them (version 1.11). |
 | Student search pilot (E39): result rows and card pages | School, team code, side, tournament, round in a card's provenance line — to signed-in team members only. Never searchable, and no search by debater. A copied or downloaded card carries none of them (version 1.11). |
@@ -635,7 +635,7 @@ before the thing it gates.
 
 ## Approval
 
-**Version 1.13 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
+**Version 1.14 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
 real corpus into dev, model classification over real disclosed text, and automated download (E34)
 are unblocked, each still subject to its own conditions in [Gates](#gates). Version 1.1 recorded
 the maintainer's confirmation of scheduled API downloads and the 10-per-minute rate limit.
@@ -752,16 +752,28 @@ removes it from the next report built. It loosens the policy, since no report qu
 own words before, so under [Review and change control](#review-and-change-control) it needs the
 coach's approval, and merging its pull request records the approval below. Nothing else changes.
 
+Version 1.14 lets the per-school landscape view (E32) link each team to its public OpenCaselist
+team page, `https://opencaselist.com/<caselist>/<school>/<team code>`, the form the student search
+pilot already uses (`debate_core.domain.search_source_links`). Charlie decided it on 2026-10-24, so
+the team can find where each DA, CP and K is read and open that team's disclosures before a
+tournament. The link is built from the caselist, the school and the team code alone, which the view
+already shows, so it discloses nothing new: no tournament, round, debater or document path. It
+changes the per-school row of "What a report may show". The view stays on the operator's machine and
+in the private buckets' `reports/` prefix. It loosens the policy, since that row allowed nothing
+beyond school and team code before, so under [Review and change control](#review-and-change-control)
+it needs the coach's approval, and merging its pull request records the approval below. Nothing
+else changes.
+
 The standing rule for every future version: until this table records an approval of that version,
 nothing this policy governs may happen under it.
 
 | Field | Value |
 |---|---|
-| Policy version | 1.13 (2026-10-24); 1.12 and 1.11 (2026-10-22); 1.10 (2026-10-19); 1.9 (2026-10-15); 1.8 (2026-10-13); 1.7 (2026-10-11); 1.6 and 1.5 (2026-10-10); 1.4 and 1.3 approved 2026-10-01, 1.3 including version 1.2's correction to rule 3; 1.0 and 1.1 approved 2026-09-19 |
+| Policy version | 1.14 and 1.13 (2026-10-24); 1.12 and 1.11 (2026-10-22); 1.10 (2026-10-19); 1.9 (2026-10-15); 1.8 (2026-10-13); 1.7 (2026-10-11); 1.6 and 1.5 (2026-10-10); 1.4 and 1.3 approved 2026-10-01, 1.3 including version 1.2's correction to rule 3; 1.0 and 1.1 approved 2026-09-19 |
 | Approved by | Charlie Clark |
 | Role | Product owner and head coach |
-| Approval date | 2026-10-24 (version 1.13; 1.12 and 1.11: 2026-10-22; 1.10: 2026-10-19; 1.9: 2026-10-15; 1.8: 2026-10-13; 1.7: 2026-10-11; 1.5 and 1.6: 2026-10-10; 1.3 and 1.4: 2026-10-01; 1.0 and 1.1: 2026-09-19) |
-| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.13, including the [clause register](#clause-register) read 2026-09-19 and the [community disclosure norms](#community-disclosure-norms), both confirmed by Charlie |
+| Approval date | 2026-10-24 (versions 1.14 and 1.13; 1.12 and 1.11: 2026-10-22; 1.10: 2026-10-19; 1.9: 2026-10-15; 1.8: 2026-10-13; 1.7: 2026-10-11; 1.5 and 1.6: 2026-10-10; 1.3 and 1.4: 2026-10-01; 1.0 and 1.1: 2026-09-19) |
+| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.14, including the [clause register](#clause-register) read 2026-09-19 and the [community disclosure norms](#community-disclosure-norms), both confirmed by Charlie |
 | Open questions resolved at approval | **5** — removal contact address is `ctcb57@gmail.com`. **7** — two-season retention stands. **8** — resolved by a PM spec change to v1-e29-t03 / v1-e30-t07. **2** (version 1.1) — maintainer confirmed scheduled API downloads at 10 file downloads per minute. **6** (version 1.10) — the school's activities director and IT approved the tool for students; no district review for the E39 pilot |
 | Open questions accepted as known gaps | **1** — OpenCaselist privacy page unread. **3** — OpenEv distribution and per-camp terms unread |
 | Open questions left open | **4** — Bedrock data-protection terms, an E32 gate. **6** — for the V2 tub only, if its scope goes beyond the pilot's |

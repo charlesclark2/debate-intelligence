@@ -24,6 +24,11 @@ spec:
     through GraphRepository into an in-memory adjacency and never call a model. Boundaries: gap
     classification policy is E22-t04, shell identification and coherence findings are E23, and this task
     writes no nodes or edges.
+    (PM amendment 2026-10-24, from the coach's request of 2026-10-24.) The coach wants each DA's
+    and advantage scenario's chain (uniqueness, link, internal link, impact) shown to the team
+    in the debate tub (v2-e35 and its successors), per position, not only used by E22 and E23.
+    chain_completeness's output is shaped for that view, and the deterministic roles v1-e32-t14
+    reads from headings and labels are its starting point and its comparison.
   priority: 1
   constraints:
     packages: [debate_core.arguments, debate_core.application]

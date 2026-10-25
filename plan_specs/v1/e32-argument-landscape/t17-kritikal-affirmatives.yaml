@@ -1,0 +1,95 @@
+# TASK v1-e32-t17-kritikal-affirmatives - Kritikal affirmatives identified, not left among the rounds with no identified aff
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t17-kritikal-affirmatives
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "Kritikal affirmatives identified, not left among the rounds with no identified aff"
+spec:
+  # Filed by the PM, 2026-10-24, from the coach's read of the first Policy report with v1-e32-t09 to t11 (Charlie, 2026-10-24).
+  description: >-
+    v1-e32-t09 identifies an affirmative by its plan text, so a kritikal affirmative, with an
+    advocacy statement or a method and no plan, falls among the rounds with no identified aff
+    (709 of 2,192 on hspolicy26 through 2026-10-20). v1-e32-t11's counts found a
+    role-of-the-ballot label in 19 affirmative documents (15 teams). Counts first (working
+    agreement 7), read-only, over the affirmative rounds with no identified aff: how many files
+    hold no `should` plan text and one or more of a role of the ballot, an advocacy-statement
+    label (`Advocacy`, `Our advocacy is`, `The 1AC is`), a method label, or K-aff headings; how
+    many of those are placed under a K by its alias; and the teams behind each. Send the counts
+    to the PM with options before building: (a) one generic K-aff position per topic; (b) K-aff
+    positions in the taxonomy named by the K they read (cap, afropessimism, settler
+    colonialism), as v1-e32-t09's mechanisms are; with whether t01's position kinds need a new
+    kind, a taxonomy version bump under v1-e32-t08's released-ids lock. After the ruling, the
+    report shows kritikal affirmatives as their own group in the affirmative section, states how
+    many rounds remain with no identified aff, and quotes an advocacy statement only if the PM
+    and Charlie add it to data-use policy 1.13's quotable texts.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.arguments, debate_core.domain, tests/fixtures/landscape, packages/debate_core/tests, docs/guides, config/landscape, tests/config]
+    forbidden:
+      - A school, team code or debater's name in a circuit-wide file, log or commit
+      - Card text, plan or counterplan text in a committed file or fixture (synthetic values only)
+      - Network or AWS access in any test
+      - Model calls (deterministic only; model stages are v1-e32-t07's)
+  context:
+    - kind: TaskRef
+      name: v1-e32-t09-policy-plan-texts
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e32-t11-negative-analytic-texts
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Counts before any rule, over affirmative rounds with no identified aff, of files
+        with K-aff markers and no plan text, by marker and team, sent to the PM with the
+        options.
+    - id: ac2
+      description: >-
+        After the ruling, on the synthetic fixture, the report shows kritikal affirmatives
+        as their own group and the rounds still unidentified, matching a hand-written golden
+        file; tests shown failing first; a taxonomy change passes the released-ids check.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t17-kritikal-affirmatives-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    Count K-aff markers among the unidentified affirmative rounds, send the counts and options
+    to the PM, then identify kritikal affirmatives and show them in the report.
+  goalRef:
+    name: v1-e32-t17-kritikal-affirmatives
+  graph:
+    nodes:
+      - id: kritikal-affs
+        kind: Task
+        name: Kritikal affirmatives
+        description: >-
+          Count K-aff markers among the unidentified affirmative rounds, send the counts
+          and options to the PM, then identify kritikal affirmatives and show them in the
+          report.
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Landscape report tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_landscape_report.py]
+status:
+  phase: Pending

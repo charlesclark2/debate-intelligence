@@ -1,0 +1,100 @@
+# TASK v1-e32-t16-advantage-cp-planks - An advantage counterplan's planks, and the advantage each one solves
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t16-advantage-cp-planks
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "An advantage counterplan's planks, and the advantage each one solves"
+spec:
+  # Filed by the PM, 2026-10-24, from the coach's read of the first Policy report with v1-e32-t09 to t11 (Charlie, 2026-10-24).
+  description: >-
+    An advantage counterplan is a set of planks, each solving one of the affirmative's
+    advantages or impacts, so one text per CP misreads it. v1-e32-t11 quotes a CP text by its
+    label or as the first `should` analytic of a block placed under a CP, so plank 2 onward is
+    dropped today (advantage-cp: 14 teams by place on hspolicy26). Counts first (working
+    agreement 7), read-only, over hspolicy26's blocks placed under advantage-cp (and any other
+    CP whose blocks show more than one `should` analytic): how many blocks hold several `should`
+    analytics, plank labels (`Plank 1`, `1.`, `First,`) or one paragraph with numbered planks;
+    how many planks have a heading or card under them naming an advantage (an alias of an
+    aff-side position, or `solves <advantage>`), or name one in their own words; and how many
+    name none. Send the counts to the PM with the proposed plank rule before building. After the
+    ruling, report.md shows each such CP's planks, grouped by their normalized words with team
+    counts and v1-e32-t11's top-3 cut-off per plank, each with the advantage or impact it solves
+    when a heading, a card or its own words name one, and "solves: not named" otherwise, never
+    guessed. Planks are CP texts under data-use policy 1.13: report.md only, never beside a
+    school or team code, a plank naming a school withheld and counted. The rules digest in
+    v1-e32-t11's cache key changes, so the first run after the merge refills the cache, an
+    operator block.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.arguments, debate_core.domain, tests/fixtures/landscape, packages/debate_core/tests, docs/guides, debate_core.integrations, config/landscape, tests/config, scripts, tests/scripts]
+    forbidden:
+      - A school, team code or debater's name in a circuit-wide file, log or commit
+      - Card text, plan or counterplan text in a committed file or fixture (synthetic values only)
+      - Network or AWS access in any test
+      - Model calls (deterministic only; model stages are v1-e32-t07's)
+  context:
+    - kind: TaskRef
+      name: v1-e32-t11-negative-analytic-texts
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Counts before any rule, of advantage-CP blocks with several should analytics, plank
+        labels or numbered planks, and of planks naming an advantage by heading, card or own
+        words, or none, sent to the PM with the proposed plank rule.
+    - id: ac2
+      description: >-
+        After the ruling, on synthetic sources, report.md shows each multi-plank CP's planks
+        with team counts and the advantage each solves or "not named", matching hand-written
+        golden files; a plank is never beside a school or team code, and one naming a school
+        is withheld and counted; tests shown failing first.
+    - id: ac3
+      description: >-
+        The operator's refill of the analytic-text cache and a dry run without --publish on
+        hspolicy26 are recorded, with the scan's hits by section (operator).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t16-advantage-cp-planks-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    Count planks under advantage CPs, send the counts and rule to the PM, then split planks,
+    name what each solves, and show them in report.md with golden files; the operator refills
+    the cache.
+  goalRef:
+    name: v1-e32-t16-advantage-cp-planks
+  graph:
+    nodes:
+      - id: advantage-cp-planks
+        kind: Task
+        name: Advantage CP planks
+        description: >-
+          Count planks under advantage CPs, send the counts and rule to the PM, then split
+          planks, name what each solves, and show them in report.md with golden files; the
+          operator refills the cache.
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Landscape report tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_landscape_report.py]
+status:
+  phase: Pending

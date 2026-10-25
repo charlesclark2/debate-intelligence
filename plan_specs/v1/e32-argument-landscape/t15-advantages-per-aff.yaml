@@ -1,0 +1,90 @@
+# TASK v1-e32-t15-advantages-per-aff - The advantages each affirmative's teams read
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t15-advantages-per-aff
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "The advantages each affirmative's teams read"
+spec:
+  # Filed by the PM, 2026-10-24, from the coach's read of the first Policy report with v1-e32-t09 to t11 (Charlie, 2026-10-24).
+  description: >-
+    The report lists the advantages read on the topic, but not which affirmatives they go with.
+    v1-e32-t09 assigns affirmative rounds to an aff (1,426 assignments on hspolicy26 through
+    2026-10-20, with taxonomy 1.2.0's mechanisms). Counts first (working agreement 7),
+    read-only: of the assigned affirmative rounds, how many disclose a file holding a placed
+    advantage card (READS, aff side, as v1-e32-t03 counts reads); the distinct advantages per
+    aff and per mechanism, with team counts; how many advantages are read under more than one
+    aff; and how many rounds read an advantage with no assigned aff. Send them to the PM with a
+    proposed cut-off before building. After the ruling, report.md shows under each aff (and each
+    mechanism under it) its advantages ranked by distinct teams, with the cut-off and "and N
+    more, read by M teams", and states how many advantage reads come from rounds with no
+    identified aff. A round's advantages are those of the files it discloses, as a card's read
+    is counted; nothing is inferred from an advantage's name. report.md only, team counts only;
+    no new bundle file, so v1-e32-t04's file lists are unchanged.
+  priority: 1
+  constraints:
+    packages: [debate_core.application, debate_core.arguments, debate_core.domain, tests/fixtures/landscape, packages/debate_core/tests, docs/guides]
+    forbidden:
+      - A school, team code or debater's name in a circuit-wide file, log or commit
+      - Card text, plan or counterplan text in a committed file or fixture (synthetic values only)
+      - Network or AWS access in any test
+      - Model calls (deterministic only; model stages are v1-e32-t07's)
+  context:
+    - kind: TaskRef
+      name: v1-e32-t09-policy-plan-texts
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Counts before any rule, of assigned affirmative rounds with placed advantage reads,
+        distinct advantages per aff and mechanism, advantages shared across affs, and
+        advantage reads with no assigned aff, sent to the PM with a proposed cut-off.
+    - id: ac2
+      description: >-
+        After the ruling, on the synthetic fixture, report.md shows each aff's and
+        mechanism's advantages with team counts and the cut-off, and the reads with no
+        identified aff, matching a hand-written golden file; an advantage read in a round
+        assigned to another aff is never counted under this one; tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t15-advantages-per-aff-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    Count advantage reads per assigned aff and mechanism, send the counts and cut-off to the PM,
+    then add the section to report.md with its golden file.
+  goalRef:
+    name: v1-e32-t15-advantages-per-aff
+  graph:
+    nodes:
+      - id: advantages-per-aff
+        kind: Task
+        name: Advantages per aff
+        description: >-
+          Count advantage reads per assigned aff and mechanism, send the counts and
+          cut-off to the PM, then add the section to report.md with its golden file.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Landscape report tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_landscape_report.py]
+status:
+  phase: Pending

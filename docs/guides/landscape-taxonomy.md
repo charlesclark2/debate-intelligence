@@ -405,6 +405,11 @@ pytest tests/config` checks it, and the next run reads every file of the topic a
 seconds for hspolicy26's first reading, on 2026-10-24). An edit to a position or a decision of yours
 reads them again too, because a text's position is kept with it.
 
+So after an edit to the taxonomy, your decisions or the actors, run the fill on its own first,
+`uv run python scripts/read_landscape_texts.py --caselist <caselist>`, then the dry run and the
+publish. A dry run writes no cache, so without the fill first the dry run and the publish would each
+read every file again (the PM's ruling of 2026-10-24 on v1-e32-t11's question 4).
+
 ## The review queue and your decisions
 
 Each run writes a review queue: the headings that cards nothing placed sit under, one row each, with

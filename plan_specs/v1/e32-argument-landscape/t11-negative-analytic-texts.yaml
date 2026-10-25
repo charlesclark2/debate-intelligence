@@ -28,7 +28,10 @@ spec:
     and in the private `reports/` prefix.
   priority: 2
   constraints:
-    packages: [debate_core.application, debate_core.arguments, debate_core.domain, tests/fixtures/landscape, packages/debate_core/tests]
+    # PM amendment 2026-10-24, from the PM's review (question 2): the cache adapter and the actor
+    # file's loading, the fixture's loader, the composition root and its pinned lists, ruling 1's
+    # actor list, and the operator's fill with its tests and guide, as for v1-e32-t09.
+    packages: [debate_core.application, debate_core.arguments, debate_core.domain, debate_core.integrations, debate_core.testing, debate_cli, config/landscape, tests/fixtures/landscape, packages/debate_core/tests, packages/debate_cli/tests, tests/config, tests/scripts, scripts, docs/guides]
     forbidden:
       - A school, team code or debater's name beside any card or text in a report, fixture, log or commit
       - Card text, plan or counterplan text in a committed file or fixture (synthetic values only)
@@ -66,7 +69,8 @@ spec:
     - id: ac2
       description: >-
         After the ruling, on synthetic sources, the report shows each CP's and K's distinct
-        texts with their team counts and each position's most common overview, matching
+        texts with their team counts and (PM amendment 2026-10-24, ruling 3) each position's
+        count of teams with an overview on each side, with no overview text, matching
         hand-written golden files; a text never stands beside a school or team code; tests
         shown failing first.
 status:

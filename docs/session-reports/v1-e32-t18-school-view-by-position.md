@@ -197,9 +197,38 @@ merge. Nothing was published or written outside this worktree.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-25
 
 **Notes:**
+
+Small, exact, and inside policy 1.14.
+1. **ac1 and ac2 pass, red first.** The goldens were hand-regrouped from the fixture's rows. No
+   circuit-wide file carries a link, by test. The scan is unchanged, and pinned both ways: the
+   school view has no path hit, and scanned as circuit-wide it would show its schools.
+2. **The link rule is reused, not copied.** The search pilot's card page and the school view now
+   call one `team_page_url`, and the card page's 31 tests passed before anything new was added.
+   Computing the link from the view's own caselist and the row's school and team code, never
+   storing it, makes the policy's "built from those three alone" true by construction. That's the
+   right design.
+3. **The count:** 155 of 155 schools and 475 of 475 team codes get a link, so no ruling is needed.
+   Reading the existing 1.2.0 bundle's `schools.csv` instead of a fresh dry run is accepted: it is
+   the same view, read-only, and its checksum was unchanged.
+4. **Mutants:** 15 of 15 caught, across the rule, the view, the circuit-wide renderers, the CSV
+   column, the count and the section order.
+5. **Accepted as made:**
+   * the deviation, renaming one fixture school to a single word through the generator, in its own
+     commit, with every count unchanged;
+   * "none" in `schools.md` and empty in the CSV;
+   * reasons counted in the view's own files;
+   * position ids, not labels;
+   * the negative side first, by the report's kind order;
+   * the coach's guide section.
+6. **The affected set** stopped at 81% with no failure, so it is left to the PR's `ci` under
+   agreement 10. Everything that changed passed within the limit (2,249).
+
+**After the merge:** the PM coordinates a republish of hspolicy26 with v1-e32-t15's section, if it
+lands in time. The coach then opens one team's link to confirm it reaches that team's page. No
+re-review is needed.

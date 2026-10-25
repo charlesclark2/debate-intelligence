@@ -13,7 +13,17 @@
 #
 # Who can make the login role run: the task definition is Terraform's, and pins its image by
 # digest and its command, and only the schedule's role (assumable by scheduler.amazonaws.com for
-# this one schedule) and break-glass hold iam:PassRole on the login role. No secret reaches the
+# this one schedule) and break-glass hold iam:PassRole on the login role.
+#
+# "This one schedule" is its schedule group. EventBridge Scheduler assumes a schedule's role with
+# aws:SourceArn set to the ARN of the schedule's group, never the schedule's own ARN ("Confused
+# deputy prevention in EventBridge Scheduler",
+# https://docs.aws.amazon.com/scheduler/latest/UserGuide/cross-service-confused-deputy-prevention.html).
+# A trust policy naming the schedule refuses Scheduler, and creating the schedule fails with
+# "The execution role you provide must allow AWS EventBridge Scheduler to assume the role" (apply B
+# in dev, 2026-10-24). So the login's schedule sits alone in its own group,
+# debate-<env>-caselist-login, and the scheduler role trusts that group only: never the default
+# group, which any schedule in the account may join. No secret reaches the
 # task through ECS's `secrets` field, which would make the execution role a reader and put the
 # password in the container's environment; the command reads it with the task role instead.
 
@@ -25,9 +35,10 @@ locals {
   login_log_group_name = "${var.name_prefix}-login"
   login_container_name = "login"
 
-  # The schedule's ARN, written out because the scheduler role's trust policy names it and the
-  # schedule names the role.
-  login_schedule_arn = "arn:${local.partition}:scheduler:${local.region}:${local.account_id}:schedule/default/${local.login_schedule_name}"
+  # The schedule's group and its ARN, written out because the scheduler role's trust policy names
+  # it and the schedule names the role. The login's schedule is the group's only member.
+  login_schedule_group_name = "${var.name_prefix}-login"
+  login_schedule_group_arn  = "arn:${local.partition}:scheduler:${local.region}:${local.account_id}:schedule-group/${local.login_schedule_group_name}"
 
   login_image = local.create_login_task ? "${aws_ecr_repository.run.repository_url}@${var.image_digest}" : null
 
@@ -107,7 +118,7 @@ locals {
         Condition = {
           StringEquals = {
             "aws:SourceAccount" = local.account_id
-            "aws:SourceArn"     = local.login_schedule_arn
+            "aws:SourceArn"     = local.login_schedule_group_arn
           }
         }
       },
@@ -234,11 +245,18 @@ resource "aws_iam_role_policy_attachments_exclusive" "scheduler" {
   policy_arns = []
 }
 
+# tflint-ignore: aws_resource_missing_tags
+resource "aws_scheduler_schedule_group" "login" {
+  count = local.create_login_task ? 1 : 0
+
+  name = local.login_schedule_group_name
+}
+
 resource "aws_scheduler_schedule" "login" {
   count = local.create_login_task ? 1 : 0
 
   name        = local.login_schedule_name
-  group_name  = "default"
+  group_name  = aws_scheduler_schedule_group.login[0].name
   description = "The ${var.environment} weekly caselist login, three hours before the run (ADR-0020 (2))."
   state       = var.login_schedule_enabled ? "ENABLED" : "DISABLED"
 

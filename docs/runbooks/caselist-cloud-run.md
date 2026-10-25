@@ -336,16 +336,121 @@ grep -cE '^ +[+~] secrets ' /tmp/caselist-tasks-plan.txt
 
 **What to read, and what stops you.** Send the plan to the PM; apply only after the PM's word.
 
-* `Plan: 17 to add, 0 to change, 0 to destroy.`, no line saying `must be replaced` or `will be
-  destroyed`, and nothing printed by the second `grep`.
+* `Plan: 19 to add, 0 to change, 0 to destroy.` in a fresh environment (dev's re-plan after its
+  partial apply is below), no line saying `must be replaced` or `will be destroyed`, and nothing
+  printed by the second `grep`.
 * The third prints the login's `cron(0 3 ? * WED *)` with `ENABLED`, and the run's `cron(0 6 ? * WED
   *)` with **`DISABLED`**. A run schedule `ENABLED` here is wrong: stop. If step 3 paused the
   login, its schedule shows `DISABLED` too; `ENABLED` then is wrong: stop.
 * The last prints `0`: no secret reaches either task through ECS.
-* The 17: t02's 11 (the login's log group, its execution role and the scheduler role, each with one
-  inline policy and two exclusive-policy resources, its task definition and schedule) and the run's
-  6 (its task definition, whose image ends `@` and the digest, its scheduler role with one inline
-  policy and two exclusive-policy resources, and its schedule).
+* The 19: t02's 12 and the run's 7.
+  * t02's 12: the login's log group; its execution role and the scheduler role, each with one
+    inline policy and two exclusive-policy resources; its task definition; its schedule group,
+    `debate-dev-caselist-login`; and its schedule.
+  * The run's 7: its task definition, whose image ends `@` and the digest; its scheduler role, with
+    one inline policy and two exclusive-policy resources; its schedule group,
+    `debate-dev-caselist-run`; and its schedule.
+
+**In dev, re-planning after apply B's partial apply of 2026-10-24.** The first apply B in dev,
+with the `v1.1.0-dev.137` digest, created 15 of the 17 resources it then planned and destroyed
+nothing. It stopped at both `aws_scheduler_schedule` resources with `ValidationException: The
+execution role you provide must allow AWS EventBridge Scheduler to assume the role`. Each scheduler
+role trusted its schedule's own ARN (`schedule/default/<name>`). EventBridge Scheduler assumes a
+schedule's role with `aws:SourceArn` set to the ARN of the schedule's **group**, never the schedule's
+own ARN ("Confused deputy prevention in EventBridge Scheduler",
+<https://docs.aws.amazon.com/scheduler/latest/UserGuide/cross-service-confused-deputy-prevention.html>).
+Now each schedule sits alone in its own group, `debate-dev-caselist-login` and
+`debate-dev-caselist-run`, and each scheduler role trusts exactly its own group's ARN.
+
+With the fix merged, the re-plan creates the two groups and the two schedules, and updates the two
+scheduler roles' trust policies in place. The plan block above still applies. Its first `grep` must
+print exactly `Plan: 4 to add, 2 to change, 0 to destroy.`, with no `must be replaced` or `will be
+destroyed`, and its second must print nothing. Then this block checks the plan itself. It prints
+`PLAN STOP` with the reason for anything but exactly that shape. The login's schedule must be
+`ENABLED`, or `DISABLED` if `owner.auto.tfvars` pauses it (step 3), and the run's `DISABLED`:
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`
+```bash
+cd "$WT"
+AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev show -json caselist-tasks.tfplan > /tmp/caselist-tasks-plan.json
+python3 -I - /tmp/caselist-tasks-plan.json infrastructure/envs/dev/owner.auto.tfvars <<'PLANCHECK'
+import json, re, sys
+plan = json.load(open(sys.argv[1]))
+paused = re.search(r"^caselist_login_schedule_enabled\s*=\s*false\s*$", open(sys.argv[2]).read(), re.M) is not None
+login_state = "DISABLED" if paused else "ENABLED"
+m = "module.caselist_run."
+expected_creates = {
+    m + "aws_scheduler_schedule_group.login[0]",
+    m + "aws_scheduler_schedule_group.run[0]",
+    m + "aws_scheduler_schedule.login[0]",
+    m + "aws_scheduler_schedule.run[0]",
+}
+expected_updates = {m + "aws_iam_role.scheduler[0]": "login", m + "aws_iam_role.run_scheduler[0]": "run"}
+schedules = {"login": (login_state, "cron(0 3 ? * WED *)"), "run": ("DISABLED", "cron(0 6 ? * WED *)")}
+def unknown(value):
+    if value is True:
+        return True
+    if isinstance(value, dict):
+        return any(unknown(v) for v in value.values())
+    if isinstance(value, list):
+        return any(unknown(v) for v in value)
+    return False
+def trust(policy):
+    try:
+        statements = json.loads(policy)["Statement"]
+        return statements[0] if len(statements) == 1 else None
+    except (TypeError, ValueError, KeyError, IndexError):
+        return None
+changes = [c for c in plan.get("resource_changes", []) if c["change"]["actions"] not in (["no-op"], ["read"])]
+creates = {c["address"]: c["change"] for c in changes if c["change"]["actions"] == ["create"]}
+updates = {c["address"]: c["change"] for c in changes if c["change"]["actions"] == ["update"]}
+others = sorted(c["address"] + " " + "/".join(c["change"]["actions"]) for c in changes if c["change"]["actions"] not in (["create"], ["update"]))
+outside = sorted(c["address"] for c in changes if not c["address"].startswith(m))
+problems = []
+if outside:
+    problems.append("changes outside module.caselist_run " + str(outside))
+if set(creates) != expected_creates:
+    problems.append("creates missing " + str(sorted(expected_creates - set(creates))) + ", unexpected " + str(sorted(set(creates) - expected_creates)))
+else:
+    for which, (state, cron) in schedules.items():
+        group = creates[m + "aws_scheduler_schedule_group." + which + "[0]"]["after"] or {}
+        schedule = creates[m + "aws_scheduler_schedule." + which + "[0]"]["after"] or {}
+        name = "debate-dev-caselist-" + which
+        if group.get("name") != name or schedule.get("group_name") != name:
+            problems.append("the " + which + " schedule is in group " + str(schedule.get("group_name")) + " of " + str(group.get("name")) + ", expected " + name)
+        if schedule.get("state") != state or schedule.get("schedule_expression") != cron:
+            problems.append("the " + which + " schedule is " + str(schedule.get("state")) + " " + str(schedule.get("schedule_expression")) + ", expected " + state + " " + cron)
+if set(updates) != set(expected_updates):
+    problems.append("updates are " + str(sorted(updates)) + ", expected only the two scheduler roles")
+else:
+    for address, which in expected_updates.items():
+        change = updates[address]
+        before, after = change["before"] or {}, change["after"] or {}
+        changed = sorted(k for k in set(before) | set(after) if before.get(k) != after.get(k))
+        unknowns = sorted(k for k, v in (change.get("after_unknown") or {}).items() if unknown(v))
+        if changed != ["assume_role_policy"] or unknowns:
+            problems.append(address + " changes " + str(changed) + " with unknown " + str(unknowns) + ", expected only assume_role_policy")
+            continue
+        old, new = trust(before["assume_role_policy"]), trust(after["assume_role_policy"])
+        account = ((old or {}).get("Condition") or {}).get("StringEquals", {}).get("aws:SourceAccount")
+        wanted = {"StringEquals": {"aws:SourceAccount": account, "aws:SourceArn": "arn:aws:scheduler:us-east-1:" + str(account) + ":schedule-group/debate-dev-caselist-" + which}}
+        if account is None or new is None or new.get("Principal") != {"Service": "scheduler.amazonaws.com"} or new.get("Condition") != wanted:
+            problems.append(address + " trusts " + json.dumps((new or {}).get("Condition")) + ", expected " + json.dumps(wanted))
+if others:
+    problems.append("other actions " + str(others))
+print("PLAN OK: the two schedule groups and two schedules created, the two scheduler roles' trust updated in place to their own groups, the login's schedule " + login_state + " and the run's DISABLED, nothing else" if not problems else "PLAN STOP: " + "; ".join(problems))
+PLANCHECK
+```
+Success looks like `PLAN OK: the two schedule groups and two schedules created, the two scheduler
+roles' trust updated in place to their own groups, the login's schedule ENABLED and the run's
+DISABLED, nothing else` (with `DISABLED` for the login if step 3 paused it). The 4 to add are
+`aws_scheduler_schedule_group.login[0]` and `.run[0]` and `aws_scheduler_schedule.login[0]` and
+`.run[0]`. The 2 to change are `aws_iam_role.scheduler[0]` and `aws_iam_role.run_scheduler[0]`, each
+changing only `assume_role_policy`, to `StringEquals` on `aws:SourceAccount` and on `aws:SourceArn`,
+its own group's ARN. **`PLAN STOP` stops everything**: send its line and the plan to the PM, and do
+not apply.
+
 
 **Operator command** (expected runtime ~1 min)
 Where: `$WT`
@@ -354,9 +459,15 @@ cd "$WT"
 AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev apply -input=false caselist-tasks.tfplan
 AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output caselist_run_schedule_state
 ```
-Success looks like `Apply complete! Resources: 17 added, 0 changed, 0 destroyed.`, then
-`"DISABLED"`. The first scheduled login runs the next Wednesday at 03:00 Chicago time, unless step 3
+Success looks like `Apply complete! Resources: 19 added, 0 changed, 0 destroyed.` in a fresh
+environment, or `Apply complete! Resources: 4 added, 2 changed, 0 destroyed.` for dev's re-plan,
+then `"DISABLED"`. The first scheduled login runs the next Wednesday at 03:00 Chicago time, unless step 3
 paused it; t02's runbook, step 5's last block, checks it.
+
+**If an apply stops partway**, recover only by re-planning from the same worktree. Move it to
+`origin/dev` again ([Before you start](#before-you-start)), plan with the block above, and read the
+new counts with the PM before applying. Never `-target`, and never create or delete a resource by
+hand. The saved plan from the same configuration is what keeps the state and the account in step.
 
 ## Step 7 — A cloud rehearsal: one dry-run pull (after apply B)
 

@@ -330,7 +330,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [The school view by position: every team that reads each DA, CP and K, with its caselist page](plan_specs/v1/e32-argument-landscape/t18-school-view-by-position.yaml) `v1-e32-t18-school-view-by-position` | Succeeded | 1 | 2.0 |
 | [A dry run's scan refusal says nothing was written and gives the publish command](plan_specs/v1/e32-argument-landscape/t19-dry-run-scan-refusal-wording.yaml) `v1-e32-t19-dry-run-scan-refusal-wording` | Pending | 1 | 1.0 |
 | [report.md in two halves: every affirmative section together, then every negative one](plan_specs/v1/e32-argument-landscape/t20-report-sides-together.yaml) `v1-e32-t20-report-sides-together` | Succeeded | 1 | 2.0 |
-| [A local text classifier for the cards headings cannot place, compared before anything is wired](plan_specs/v1/e32-argument-landscape/t21-local-classifier-comparison.yaml) `v1-e32-t21-local-classifier-comparison` | Pending | 1 | 5.0 |
+| [A local text classifier for the cards headings cannot place, compared before anything is wired](plan_specs/v1/e32-argument-landscape/t21-local-classifier-comparison.yaml) `v1-e32-t21-local-classifier-comparison` | InProgress | 1 | 5.0 |
 | [A coach-edited scenario vocabulary per DA and advantage](plan_specs/v1/e32-argument-landscape/t22-scenario-vocabulary.yaml) `v1-e32-t22-scenario-vocabulary` | Pending | 1 | 3.0 |
 
 #### [E33 — Evidence File Builder](plan_specs/v1/e33-file-builder/epic.yaml)
@@ -507,7 +507,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [The weekly run as a container on a schedule](plan_specs/v1/e40-cloud-caselist-run/t03-run-image-and-schedule.yaml) `v1-e40-t03-run-image-and-schedule` | InProgress | 1 | 4.0 |
 | [A cloud run keeps its state in the evidence bucket](plan_specs/v1/e40-cloud-caselist-run/t04-run-state-on-s3.yaml) `v1-e40-t04-run-state-on-s3` | InProgress | 1 | 5.0 |
 | [A failed or late cloud run emails the coach](plan_specs/v1/e40-cloud-caselist-run/t05-run-alerts.yaml) `v1-e40-t05-run-alerts` | InProgress | 1 | 2.0 |
-| [Cut over: the cloud run takes the schedule and the Mac stops](plan_specs/v1/e40-cloud-caselist-run/t06-cutover.yaml) `v1-e40-t06-cutover` | Pending | 4 | 2.0 |
+| [Cut over: the cloud run takes the schedule and the Mac stops](plan_specs/v1/e40-cloud-caselist-run/t06-cutover.yaml) `v1-e40-t06-cutover` | InProgress | 4 | 2.0 |
 | [The evidence bucket itself refuses an unconditional write of the run lock](plan_specs/v1/e40-cloud-caselist-run/t07-lock-writes-conditional-at-the-bucket.yaml) `v1-e40-t07-lock-writes-conditional-at-the-bucket` | Pending | 1 | 1.0 |
 | [A week a killed run published is parsed by the next run, not left for the next import](plan_specs/v1/e40-cloud-caselist-run/t08-parse-owed.yaml) `v1-e40-t08-parse-owed` | Pending | 1 | 3.0 |
 

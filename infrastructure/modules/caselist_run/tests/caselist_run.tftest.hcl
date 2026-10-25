@@ -171,6 +171,34 @@ override_resource {
 }
 
 override_resource {
+  target = aws_cloudwatch_event_rule.credential_write["credentials-key-changed"]
+  values = {
+    arn = "arn:aws:events:us-east-1:111122223333:rule/debate-mock-caselist-credentials-key-changed"
+  }
+}
+
+override_resource {
+  target = aws_cloudwatch_event_rule.credential_write["credentials-secret-policy-changed"]
+  values = {
+    arn = "arn:aws:events:us-east-1:111122223333:rule/debate-mock-caselist-credentials-secret-policy-changed"
+  }
+}
+
+override_resource {
+  target = aws_cloudwatch_event_rule.credential_write["login-role-changed"]
+  values = {
+    arn = "arn:aws:events:us-east-1:111122223333:rule/debate-mock-caselist-login-role-changed"
+  }
+}
+
+override_resource {
+  target = aws_cloudwatch_event_rule.credential_write["login-task-changed"]
+  values = {
+    arn = "arn:aws:events:us-east-1:111122223333:rule/debate-mock-caselist-login-task-changed"
+  }
+}
+
+override_resource {
   target = aws_cloudwatch_event_rule.password_read
   values = {
     arn = "arn:aws:events:us-east-1:111122223333:rule/debate-mock-caselist-password-read"
@@ -1571,7 +1599,7 @@ run "the_alert_topic_emails_the_coach_and_admits_only_these_rules_and_alarms" {
             "arn:aws:events:us-east-1:111122223333:rule/debate-mock-caselist-login-stopped",
             "arn:aws:events:us-east-1:111122223333:rule/debate-mock-caselist-password-read",
           ],
-          [for rule in aws_cloudwatch_event_rule.credential_write : rule.arn],
+          [for name in ["credentials-key-changed", "credentials-secret-policy-changed", "login-role-changed", "login-task-changed"] : "arn:aws:events:us-east-1:111122223333:rule/debate-mock-caselist-${name}"],
         ))
       }),
       jsonencode({
@@ -1600,10 +1628,17 @@ run "the_alert_topic_emails_the_coach_and_admits_only_these_rules_and_alarms" {
 run "a_run_or_a_login_that_stops_non_zero_emails_the_coach" {
   command = apply
 
+  # Each rule and target is named by its literal key, never iterated as a whole map: an object of
+  # these types carries a deprecated attribute (is_enabled), and Terraform 1.16 panics rendering a
+  # failed assertion that refers to one, instead of printing its error message.
+
   assert {
     condition = alltrue([
-      for which, family in { run = "debate-mock-caselist-run", login = "debate-mock-caselist-login" } :
-      jsonencode(jsondecode(aws_cloudwatch_event_rule.task_stopped[which].event_pattern)) == jsonencode({
+      for which, pattern in {
+        run   = aws_cloudwatch_event_rule.task_stopped["run"].event_pattern
+        login = aws_cloudwatch_event_rule.task_stopped["login"].event_pattern
+      } :
+      jsonencode(jsondecode(pattern)) == jsonencode({
         detail = {
           "$or" = [
             { containers = { exitCode = [{ "anything-but" = 0 }] } },
@@ -1611,7 +1646,7 @@ run "a_run_or_a_login_that_stops_non_zero_emails_the_coach" {
           ]
           clusterArn        = ["arn:aws:ecs:us-east-1:111122223333:cluster/debate-mock-caselist-run"]
           lastStatus        = ["STOPPED"]
-          taskDefinitionArn = [{ prefix = "arn:aws:ecs:us-east-1:111122223333:task-definition/${family}:" }]
+          taskDefinitionArn = [{ prefix = "arn:aws:ecs:us-east-1:111122223333:task-definition/debate-mock-caselist-${which}:" }]
         }
         "detail-type" = ["ECS Task State Change"]
         source        = ["aws.ecs"]
@@ -1621,16 +1656,17 @@ run "a_run_or_a_login_that_stops_non_zero_emails_the_coach" {
   }
 
   assert {
-    condition     = alltrue([for which in ["run", "login"] : aws_cloudwatch_event_rule.task_stopped[which].state == "ENABLED"])
+    condition     = aws_cloudwatch_event_rule.task_stopped["run"].state == "ENABLED" && aws_cloudwatch_event_rule.task_stopped["login"].state == "ENABLED"
     error_message = "Both task-state rules are enabled: an AWS service event reaches a rule in the default state."
   }
 
   assert {
-    condition = alltrue([
-      for which in ["run", "login"] :
-      aws_cloudwatch_event_target.task_stopped[which].rule == aws_cloudwatch_event_rule.task_stopped[which].name
-      && aws_cloudwatch_event_target.task_stopped[which].arn == aws_sns_topic.alerts.arn
-    ])
+    condition = (
+      aws_cloudwatch_event_target.task_stopped["run"].rule == "debate-mock-caselist-run-stopped"
+      && aws_cloudwatch_event_target.task_stopped["login"].rule == "debate-mock-caselist-login-stopped"
+      && aws_cloudwatch_event_target.task_stopped["run"].arn == aws_sns_topic.alerts.arn
+      && aws_cloudwatch_event_target.task_stopped["login"].arn == aws_sns_topic.alerts.arn
+    )
     error_message = "Each task-state rule's target is the alert topic."
   }
 
@@ -1638,10 +1674,13 @@ run "a_run_or_a_login_that_stops_non_zero_emails_the_coach" {
     # The email: which task, its exit code, its stop code and reason, and its id; one JSON string,
     # with EventBridge's placeholders intact (jsonencode would escape their angle brackets).
     condition = alltrue([
-      for which in ["run", "login"] :
-      startswith(aws_cloudwatch_event_target.task_stopped[which].input_transformer[0].input_template, "\"The dev weekly caselist ${which} task stopped with exit code <exit_code> (<stop_code>: <reason>). Task <task>.")
-      && can(tostring(jsondecode(aws_cloudwatch_event_target.task_stopped[which].input_transformer[0].input_template)))
-      && aws_cloudwatch_event_target.task_stopped[which].input_transformer[0].input_paths == tomap({
+      for which, transformer in {
+        run   = aws_cloudwatch_event_target.task_stopped["run"].input_transformer[0]
+        login = aws_cloudwatch_event_target.task_stopped["login"].input_transformer[0]
+      } :
+      startswith(transformer.input_template, "\"The dev weekly caselist ${which} task stopped with exit code <exit_code> (<stop_code>: <reason>). Task <task>.")
+      && can(tostring(jsondecode(transformer.input_template)))
+      && transformer.input_paths == tomap({
         task      = "$.detail.taskArn"
         exit_code = "$.detail.containers[0].exitCode"
         stop_code = "$.detail.stopCode"
@@ -1872,20 +1911,27 @@ run "the_credential_rules_match_each_change_of_who_may_read_the_password" {
   }
 
   assert {
-    condition = alltrue([
-      for name, rule in aws_cloudwatch_event_rule.credential_write :
-      rule.state == "ENABLED" && rule.name == "debate-mock-caselist-${name}"
-      && jsondecode(rule.event_pattern)["detail-type"] == ["AWS API Call via CloudTrail"]
-    ])
+    condition = (
+      aws_cloudwatch_event_rule.credential_write["credentials-key-changed"].state == "ENABLED"
+      && aws_cloudwatch_event_rule.credential_write["credentials-secret-policy-changed"].state == "ENABLED"
+      && aws_cloudwatch_event_rule.credential_write["login-role-changed"].state == "ENABLED"
+      && aws_cloudwatch_event_rule.credential_write["login-task-changed"].state == "ENABLED"
+      && toset(keys(local.credential_write_rules)) == toset(["credentials-key-changed", "credentials-secret-policy-changed", "login-role-changed", "login-task-changed"])
+    )
     error_message = "The four write rules are enabled: write events reach a rule in the default state, refused writes included."
   }
 
   assert {
     condition = alltrue([
-      for name, rule in aws_cloudwatch_event_rule.credential_write :
-      aws_cloudwatch_event_target.credential_write[name].rule == rule.name && aws_cloudwatch_event_target.credential_write[name].arn == aws_sns_topic.alerts.arn
-    ]) && length(aws_cloudwatch_event_rule.credential_write) == 4
-    error_message = "Each credentials rule's target is the alert topic."
+      for name, target in {
+        credentials-key-changed           = aws_cloudwatch_event_target.credential_write["credentials-key-changed"]
+        credentials-secret-policy-changed = aws_cloudwatch_event_target.credential_write["credentials-secret-policy-changed"]
+        login-role-changed                = aws_cloudwatch_event_target.credential_write["login-role-changed"]
+        login-task-changed                = aws_cloudwatch_event_target.credential_write["login-task-changed"]
+      } :
+      target.rule == "debate-mock-caselist-${name}" && target.arn == aws_sns_topic.alerts.arn
+    ])
+    error_message = "Each credentials rule is debate-<env>-caselist-<what it watches>, and its target is the alert topic."
   }
 }
 

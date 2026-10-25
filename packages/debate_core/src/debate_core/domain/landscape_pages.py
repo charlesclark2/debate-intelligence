@@ -150,7 +150,8 @@ def landscape_link(href: str, *, caselist: str, anchors: Anchors, team_pages: bo
         return LandscapeLink.SAME_PAGE if fragment.group(1) in anchors else None
     if not team_pages or not href.startswith(_TEAM_PAGE_PREFIX):
         return None
+    # Rebuilt from the bundle's own caselist, so a link on another caselist never equals it.
     parts = href.removeprefix(_TEAM_PAGE_PREFIX).split("/")
-    if len(parts) != 3 or parts[0] != caselist:
+    if len(parts) != 3:
         return None
     return LandscapeLink.TEAM_PAGE if team_page_url(caselist, parts[1], parts[2]) == href else None

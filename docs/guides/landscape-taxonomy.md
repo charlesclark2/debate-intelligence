@@ -425,6 +425,18 @@ So after an edit to the taxonomy, your decisions or the actors, run the fill on 
 publish. A dry run writes no cache, so without the fill first the dry run and the publish would each
 read every file again (the PM's ruling of 2026-10-24 on v1-e32-t11's question 4).
 
+## How report.md is laid out
+
+After its header (what the report was built from, and how to read its numbers) and a short contents
+list, `report.md` comes in three parts (`v1-e32-t20`, from your read of 2026-10-25):
+
+* **Affirmative**: the affs, advantages and the aff side's other positions, each advantage with its
+  impact cards, what each runs through and its link chain, then **Advantages by affirmative**.
+* **Negative**: the DAs with their impact cards and link chains, the CPs, Ks and Ts, then the CP texts,
+  alternatives and roles of the ballot.
+* **Neither side**: positions either side reads, the overviews (counted on both sides), new this week,
+  rising and falling, and what the report could not count.
+
 ## Who reads each position: the school view
 
 Beside the report, each run writes the school view, `schools.md` and `schools.csv`, which name schools
@@ -437,7 +449,8 @@ alone, as the student search's card page builds it, so a team whose school or te
 of the page's address (a school with a space in it, say) has no link, and the view's **Team pages** row
 counts them. On hspolicy26 through 2026-10-20, all 475 team codes at 155 schools had one.
 
-The report itself, `report.md` and its CSVs, names no school or team and carries no link. The view stays
+The report itself, `report.md` and its CSVs, names no school or team and carries no link out of the
+page: report.md's contents list links only to its own headings. The view stays
 on this machine and in the private bucket, like the report.
 
 ## Scenarios and link chains

@@ -20,7 +20,12 @@ id; cards by rank). Nothing here computes a count; the service did.
   count, with no overview text. The texts are in report.md only, never beside a school or team code.
   Under each aff `v1-e32-t09` assigned rounds to, and each mechanism under it, it lists the advantages
   those rounds read, with their teams, the cut-off and what it hides, and the advantage reads of the
-  affirmative rounds with no assigned aff (`v1-e32-t15`). No other file has them.
+  affirmative rounds with no assigned aff (`v1-e32-t15`). No other file has them. After its header and
+  a contents list, its sections come in three parts (`v1-e32-t20`, from the coach's read of
+  2026-10-25): **Affirmative** (the aff side's positions with their impact blocks, then the advantages
+  by aff), **Negative** (the negative's positions with theirs, then the CP texts, alternatives and roles
+  of the ballot), and **Neither side** (positions either side reads, the overviews, which are counted on
+  both sides, the trends and what could not be counted). A part with no section has no heading.
 * **positions.csv** has the positions' rows for a spreadsheet, **top_cards.csv** each position's
   most-read cards, and **impact_cards.csv** each advantage's and DA's impact cards, with how many
   documents of each kind carry no labelled impact in its header block. **trends.csv** has each
@@ -225,6 +230,7 @@ _TITLES_NOT_READ: Final = "The caselist's own round titles and cite entries are 
 """The PM's ruling of 2026-10-24 (`v1-e32-t09`): the site's round and cite titles are not taken."""
 _MARKDOWN_SPECIAL: Final = re.compile(r"([\\`*_\[\]<>|])")
 _WHITESPACE: Final = re.compile(r"\s+")
+_NOT_IN_ANCHOR: Final = re.compile(r"[^\w\- ]")
 _THOUSANDTH: Final = Decimal("0.001")
 _TENTH: Final = Decimal("0.1")
 
@@ -332,17 +338,44 @@ def _csv(
 def render_markdown(report: LandscapeReport, trends: LandscapeTrends | None = None) -> str:
     """report.md, without the stale-data banner: the service passes it through the hook.
 
-    With `trends`, its new, rising and falling sections are theirs (`v1-e32-t04`); without, the new
-    section is `v1-e32-t03`'s.
+    The header, a contents list, then each part with a section (`v1-e32-t20`): the affirmative's, the
+    negative's, and those of neither side. With `trends`, its new, rising and falling sections are
+    theirs (`v1-e32-t04`); without, the new section is `v1-e32-t03`'s.
     """
-    lines: list[str] = []
-    lines += _header_section(report, trends)
-    lines += _positions_section(report)
-    lines += _advantages_section(report)
-    lines += _texts_sections(report)
-    lines += _new_section(report) if trends is None else _trend_sections(trends)
-    lines += _unclassified_section(report)
+    parts = {
+        "Affirmative": [*_positions_section(report, PositionSide.AFF), *_advantages_section(report)],
+        "Negative": [*_positions_section(report, PositionSide.NEG), *_texts_sections(report)],
+        "Neither side": [
+            *_no_positions_section(report),
+            *_positions_section(report, PositionSide.BOTH),
+            *_overviews_section(report),
+            *(_new_section(report) if trends is None else _trend_sections(trends)),
+            *_unclassified_section(report),
+        ],
+    }
+    lines = _header_section(report, trends)
+    lines += _contents_section(parts)
+    for part, part_lines in parts.items():
+        if part_lines:
+            lines += [f"# {part}", "", *part_lines]
     return "\n".join(lines).rstrip("\n") + "\n"
+
+
+def _contents_section(parts: Mapping[str, Sequence[str]]) -> list[str]:
+    """One line per part with a section: its link, then each of its sections'."""
+    lines = ["## Contents", ""]
+    for part, part_lines in parts.items():
+        if part_lines:
+            sections = ", ".join(
+                f"[{line[3:]}](#{_anchor(line[3:])})" for line in part_lines if line.startswith("## ")
+            )
+            lines.append(f"* [{part}](#{_anchor(part)}): {sections}")
+    return [*lines, ""]
+
+
+def _anchor(heading: str) -> str:
+    """A heading's link target as GitHub and most Markdown viewers write it."""
+    return _NOT_IN_ANCHOR.sub("", heading.lower()).replace(" ", "-")
 
 
 def _header_section(report: LandscapeReport, trends: LandscapeTrends | None = None) -> list[str]:
@@ -429,30 +462,33 @@ def _header_section(report: LandscapeReport, trends: LandscapeTrends | None = No
     ]
 
 
-def _positions_section(report: LandscapeReport) -> list[str]:
-    positions = report.positions
-    if not positions:
-        return ["## Positions", "", "No position was read in this range.", ""]
-    lines: list[str] = []
-    for side, on_side in groupby(positions, key=lambda stats: stats.side):
-        lines += [f"## {_SIDE_HEADINGS[side]}", ""]
-        for kind, of_kind in groupby(on_side, key=lambda stats: stats.kind):
-            lines += [
-                f"### {_KIND_HEADINGS[kind]}",
-                "",
-                "| Position | Rounds | Teams | Aff rounds | Neg rounds | Share of teams | First seen | New |",
-                "|---|---|---|---|---|---|---|---|",
-            ]
-            listed = list(of_kind)
-            lines += [
-                f"| {_cell(stats.label)} (`{stats.position_id}`) | {stats.rounds:,} | {stats.teams:,} | "
-                f"{stats.aff_rounds:,} | {stats.neg_rounds:,} | {_percent(*stats.share_of_teams)} | "
-                f"{stats.first_seen_snapshot.isoformat()} | {'yes' if stats.is_new else ''} |"
-                for stats in listed
-            ]
-            lines.append("")
-            if kind in IMPACT_KINDS:
-                lines += _impact_block(report, kind, listed)
+def _no_positions_section(report: LandscapeReport) -> list[str]:
+    return [] if report.positions else ["## Positions", "", "No position was read in this range.", ""]
+
+
+def _positions_section(report: LandscapeReport, side: PositionSide) -> list[str]:
+    """One side's positions by kind, with each advantage's and DA's impact block under its kind's table."""
+    on_side = [stats for stats in report.positions if stats.side is side]
+    if not on_side:
+        return []
+    lines = [f"## {_SIDE_HEADINGS[side]}", ""]
+    for kind, of_kind in groupby(on_side, key=lambda stats: stats.kind):
+        lines += [
+            f"### {_KIND_HEADINGS[kind]}",
+            "",
+            "| Position | Rounds | Teams | Aff rounds | Neg rounds | Share of teams | First seen | New |",
+            "|---|---|---|---|---|---|---|---|",
+        ]
+        listed = list(of_kind)
+        lines += [
+            f"| {_cell(stats.label)} (`{stats.position_id}`) | {stats.rounds:,} | {stats.teams:,} | "
+            f"{stats.aff_rounds:,} | {stats.neg_rounds:,} | {_percent(*stats.share_of_teams)} | "
+            f"{stats.first_seen_snapshot.isoformat()} | {'yes' if stats.is_new else ''} |"
+            for stats in listed
+        ]
+        lines.append("")
+        if kind in IMPACT_KINDS:
+            lines += _impact_block(report, kind, listed)
     return lines
 
 
@@ -617,7 +653,7 @@ def _chain_table(report: LandscapeReport, kind: PositionKind, position_id: str) 
 
 
 def _texts_sections(report: LandscapeReport) -> list[str]:
-    """`v1-e32-t11`'s sections: each CP's and K's top texts word for word, and the overviews' counts."""
+    """`v1-e32-t11`'s negative section: each CP's and K's top texts word for word."""
     texts = report.texts
     if texts is None:
         return []
@@ -672,8 +708,16 @@ def _texts_sections(report: LandscapeReport) -> list[str]:
                 more = position.more
                 noun = "text" if more.texts == 1 else "texts"
                 lines += [f"And {more.texts:,} more {noun}, read by {_count(more.teams, 'team')}.", ""]
-    overview = coverage[AnalyticTextKind.OVERVIEW]
-    lines += [
+    return lines
+
+
+def _overviews_section(report: LandscapeReport) -> list[str]:
+    """`v1-e32-t11`'s overviews: counted on each side, never quoted."""
+    texts = report.texts
+    if texts is None:
+        return []
+    overview = next(one for one in texts.coverage if one.kind is AnalyticTextKind.OVERVIEW)
+    lines = [
         "## Overviews",
         "",
         "Counted, never quoted: data-use policy 1.13 does not list overviews, and the coach keeps it so "

@@ -6,6 +6,10 @@ scan reads every school, team code and tournament the fixture's disclosures name
 were filed under, and finds none in the circuit-wide files; the school view names schools and team
 codes and nothing more, but the link to each team's openCaselist page (`v1-e32-t18`), which no
 circuit-wide file carries.
+
+report.md's affirmative sections, then its negative ones, then those of neither side (`v1-e32-t20`):
+`report_before_sides_together.md` is the golden report.md as it was before the reorder, byte for byte,
+and every section of the reordered report, golden and rendered, is held to its section there.
 """
 
 from __future__ import annotations
@@ -14,6 +18,7 @@ import csv
 import dataclasses
 import random
 import re
+from collections import Counter
 from datetime import date
 from pathlib import Path
 
@@ -39,6 +44,7 @@ from debate_core.arguments.landscape.render import (
     render_markdown,
     render_top_cards_csv,
 )
+from debate_core.domain.landscape import PositionSide
 from debate_core.domain.landscape_report import LandscapeReport, TopCard
 from debate_core.testing.landscape_report import (
     SYNTHETIC_REPORT_DATE,
@@ -52,6 +58,7 @@ REPO = Path(__file__).resolve().parents[5]
 FIXTURE = REPO / "tests" / "fixtures" / "landscape" / "synthetic_caselist"
 GOLDEN = REPO / "tests" / "fixtures" / "landscape" / "golden"
 TOPIC_CHANGE = REPO / "tests" / "fixtures" / "landscape" / "topic_change_caselist"
+BEFORE_SIDES_TOGETHER = REPO / "tests" / "fixtures" / "landscape" / "report_before_sides_together.md"
 FILES = (
     "report.md",
     "positions.csv",
@@ -489,3 +496,119 @@ def test_the_by_position_section_follows_the_by_school_section() -> None:
     text = _bundle().files["schools.md"]
     headings = [line for line in text.splitlines() if line.startswith("## ")]
     assert headings == ["## By school", "## By position"]
+
+
+# ------------------------------------------------------------------------------------------------
+# report.md's sides together (`v1-e32-t20`)
+# ------------------------------------------------------------------------------------------------
+
+PARTS = ("# Affirmative", "# Negative", "# Neither side")
+_HEADING = re.compile(r"#{1,6} ")
+
+
+def _sections(text: str) -> list[str]:
+    """report.md cut before every heading: each section its heading line and the lines up to the next.
+
+    The blank lines that separate a section from the next are not part of it, so the last section of
+    the report, which has none, compares equal to itself anywhere else.
+    """
+    sections: list[list[str]] = []
+    for line in text.splitlines(keepends=True):
+        if _HEADING.match(line) or not sections:
+            sections.append([])
+        sections[-1].append(line)
+    return ["".join(lines).rstrip("\n") for lines in sections]
+
+
+def _heading(section: str) -> str:
+    return section.split("\n", 1)[0]
+
+
+def _by_heading(sections: list[str]) -> dict[tuple[str, int], str]:
+    """Each section by its heading line, and which of the sections with that heading it is."""
+    seen: Counter[str] = Counter()
+    keyed: dict[tuple[str, int], str] = {}
+    for section in sections:
+        seen[_heading(section)] += 1
+        keyed[(_heading(section), seen[_heading(section)])] = section
+    return keyed
+
+
+def _anchor(heading: str) -> str:
+    """A heading's link target as GitHub writes it: lower case, punctuation dropped, spaces as hyphens."""
+    return re.sub(r"[^a-z0-9 _-]", "", heading.lower()).replace(" ", "-")
+
+
+@pytest.mark.parametrize("source", ["hand-written golden", "rendered"])
+def test_every_section_of_report_md_is_byte_identical_to_its_section_before_the_reorder(source: str) -> None:
+    """ac1: the reorder adds the contents list and the three parts' headings, and changes nothing else."""
+    before = _by_heading(_sections(BEFORE_SIDES_TOGETHER.read_text(encoding="utf-8")))
+    golden = (GOLDEN / "report.md").read_text(encoding="utf-8")
+    after = _sections(_bundle().files["report.md"] if source == "rendered" else golden)
+    added = [section for section in after if section in PARTS or _heading(section) == "## Contents"]
+    assert [_heading(section) for section in added] == ["## Contents", *PARTS]
+    kept = _by_heading([section for section in after if section not in added])
+    assert sorted(kept) == sorted(before)
+    for key, section in before.items():
+        assert kept[key] == section, f"{key[0]} (occurrence {key[1]}) changed"
+
+
+def test_report_md_reads_header_contents_affirmative_negative_then_neither_side() -> None:
+    text = _bundle().files["report.md"]
+    assert [line for line in text.splitlines() if re.match(r"#{1,2} ", line)] == [
+        "# Argument landscape: synthpolicy26 through 2026-09-15",
+        "## About this report",
+        "## Contents",
+        "# Affirmative",
+        "## Affirmative positions",
+        "## Advantages by affirmative",
+        "# Negative",
+        "## Negative positions",
+        "## Counterplan texts, alternatives and roles of the ballot",
+        "# Neither side",
+        "## Overviews",
+        "## New this week",
+        "## Rising",
+        "## Falling",
+        "## Unclassified",
+    ]
+
+
+def test_the_contents_links_each_part_and_each_of_its_sections_to_its_heading() -> None:
+    text = _bundle().files["report.md"]
+    contents = next(section for section in _sections(text) if _heading(section) == "## Contents")
+    links = re.findall(r"\[([^\]]+)\]\(#([^)]+)\)", contents)
+    after_contents = text.split("## Contents\n", 1)[1]
+    linked = [line.lstrip("#").strip() for line in after_contents.splitlines() if re.match(r"#{1,2} ", line)]
+    assert [title for title, _ in links] == linked
+    assert [anchor for _, anchor in links] == [_anchor(title) for title in linked]
+    assert len(contents.splitlines()) == 2 + len(PARTS)
+
+
+def test_a_part_with_no_section_has_no_heading_and_no_contents_line() -> None:
+    report = _bundle().report
+    bare = render_markdown(report.model_copy(update={"positions": (), "advantages_by_aff": None}))
+    assert "# Affirmative" not in bare.splitlines()
+    assert "](#affirmative)" not in bare
+    neither = bare.split("# Neither side\n", 1)[1]
+    assert neither.startswith("\n## Positions\n\nNo position was read in this range.\n")
+
+
+def test_positions_either_side_reads_belong_to_neither_side() -> None:
+    report = _bundle().report
+    both = tuple(
+        stats.model_copy(update={"side": PositionSide.BOTH}) if stats.position_id == "condo-bad" else stats
+        for stats in report.positions
+    )
+    text = render_markdown(report.model_copy(update={"positions": both}))
+    neither = text.split("# Neither side\n", 1)[1]
+    assert neither.startswith("\n## Positions either side reads\n\n### Theory\n")
+    assert "(`condo-bad`)" not in text.split("# Neither side\n", 1)[0]
+    assert "](#positions-either-side-reads)" in text
+
+
+@pytest.mark.parametrize("through", [date(2026, 9, 8), SYNTHETIC_THIRD_SNAPSHOT])
+def test_every_window_of_the_fixture_has_the_three_parts_in_order(through: date) -> None:
+    text = _files(read_synthetic_caselist(FIXTURE, through=through))["report.md"]
+    lines = text.splitlines()
+    assert [line for line in lines if line in (*PARTS, "## Contents")] == ["## Contents", *PARTS]

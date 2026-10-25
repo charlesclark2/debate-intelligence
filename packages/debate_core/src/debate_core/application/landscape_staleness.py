@@ -35,33 +35,42 @@ Any of three things, per caselist. When more than one applies, the banner says e
    leaves the newest snapshot where it was, and without this rule the report read "Current" until
    that snapshot aged out. The same record as rule 2 decides it, the latest run that *listed* this
    caselist: when its outcome is `failed`, the report is stale, and the banner names the run's id and
-   the stage that failed. A later run that listed the caselist and did not fail clears it. These
-   change nothing, in either direction:
+   the stage that failed. A later run that listed the caselist and did not fail clears it.
 
-   * a run that never listed this caselist: another caselist's run, and `--publish-pending`, which
-     lists nothing;
-   * a run that raised before it listed anything (an expired token, the run lock, a refused start).
-     Its record has no stage and lists no archive;
+   **A run that stopped on an error counts too** (the PM's ruling of 2026-10-24). A pull that raised
+   (an expired token, a provider error while listing, a refused start) is recorded with no stage
+   and no archive listed, only the caselists it was asked for and its error's class. When those
+   caselists name this one, the run decides as a listing run would, if it is the later of the two,
+   and the banner says the run "stopped before its stages", naming the class. The run lock's
+   refusal (:class:`~debate_core.application.caselist_sync.SyncRunInProgress`) is the exception:
+   the run holding the lock is the one that counts, and a second launch must not flip the report.
+
+   These change nothing, in either direction:
+
+   * a run that never listed this caselist nor stopped naming it: another caselist's run, and
+     `--publish-pending`, which lists nothing and is asked for no caselist;
+   * a run the run lock refused;
    * an `incomplete` run, whose parse, landscape, search-index, report or retention stage failed
      after the snapshot was captured;
    * a run with no end recorded. A killed run writes no record at all, and a line without
      `finished_at`, or one cut off mid-write, is skipped by the log as no record.
 
-   The banner's sentence is built from the run id, which the record's schema holds to digits, and
-   the stage's name when it is one of :class:`~debate_core.application.caselist_sync.SyncStage`'s.
-   Nothing else from the record reaches it: a stage's reason can still name a file, and a school
+   The banner's sentence is built from the run id, which the record's schema holds to digits, the
+   stage's name when it is one of :class:`~debate_core.application.caselist_sync.SyncStage`'s, and
+   the error's class when it is an identifier. Nothing else from the record reaches it, never the
+   error's message: a stage's reason can still name a file, and a school
    or a path never belongs in a report (`docs/policies/caselist-data-use.md` rule 4).
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from typing import Final
 
 from debate_core.application.caselist.publish_plan import manifest_prefix, snapshot_of_manifest_key
-from debate_core.application.caselist_sync import StageOutcome, SyncStage
+from debate_core.application.caselist_sync import StageOutcome, SyncRunInProgress, SyncStage
 from debate_core.application.ports.evidence_store import EvidenceObjectStore
 from debate_core.application.sync_runs import SyncRunLog, SyncRunRecord
 
@@ -85,17 +94,21 @@ STALE_BANNER_HEADING: Final = "> **Stale data.**"
 
 @dataclass(frozen=True, slots=True)
 class FailedSyncRun:
-    """The latest run that listed a caselist, when it ended in failure: its id and failed stages."""
+    """The latest run that listed a caselist or stopped naming it, when it failed."""
 
     run_id: str
     stages: tuple[str, ...] = ()
     """The :class:`SyncStage` names that failed, in the record's order. Never a stage's reason."""
     stopped_before_stages: bool = False
+    """The run raised before it listed anything, and recorded no stage."""
     error_class: str | None = None
+    """The class of the error it stopped on, when that is an identifier. Never its message."""
 
     def sentence(self) -> str:
-        """What the banner says of it: the run id and the stage names, and nothing else."""
-        if not self.stages:
+        """What the banner says of it: the run id, and the stage names or the error's class."""
+        if self.stopped_before_stages:
+            failed = "stopped before its stages" + (f" ({self.error_class})" if self.error_class else "")
+        elif not self.stages:
             failed = "failed"
         elif len(self.stages) == 1:
             failed = f"failed at its {self.stages[0]} stage"
@@ -107,10 +120,38 @@ class FailedSyncRun:
 _STAGE_NAMES: Final = frozenset(str(stage) for stage in SyncStage)
 
 
+_LOCK_REFUSAL: Final = SyncRunInProgress.__name__
+
+
+def _stopped_naming(record: SyncRunRecord, caselist: str) -> bool:
+    """A run that raised, asked for `caselist`, and was not refused by the run lock."""
+    return (
+        not record.succeeded
+        and record.error_class is not None
+        and record.error_class != _LOCK_REFUSAL
+        and caselist in record.caselists
+    )
+
+
+def _latest_run_of(caselist: str, records: Sequence[SyncRunRecord]) -> SyncRunRecord | None:
+    """The latest run that listed `caselist`'s archives, or stopped on an error naming it."""
+    return next(
+        (
+            record
+            for record in reversed(records)
+            if caselist in record.deferred_by_caselist or _stopped_naming(record, caselist)
+        ),
+        None,
+    )
+
+
 def _failed_run_of(record: SyncRunRecord | None) -> FailedSyncRun | None:
     """`record` as a failed run, or `None` when there is no record or it did not fail."""
     if record is None or record.succeeded:
         return None
+    if record.error_class is not None and not record.stages:
+        named = record.error_class if record.error_class.isidentifier() else None
+        return FailedSyncRun(run_id=record.run_id, stopped_before_stages=True, error_class=named)
     failed = str(StageOutcome.FAILED)
     return FailedSyncRun(
         run_id=record.run_id,
@@ -250,12 +291,16 @@ class LandscapeStalenessCheck:
         self._stale_after_days = stale_after_days
 
     async def check(self, caselist: str, *, report_date: date) -> LandscapeStaleness:
-        latest = self._run_log.latest_listing(caselist) if self._run_log is not None else None
+        if self._run_log is None:
+            listing, latest = None, None
+        else:
+            listing = self._run_log.latest_listing(caselist)
+            latest = _latest_run_of(caselist, self._run_log.read())
         return assess_staleness(
             caselist,
             report_date=report_date,
             newest_snapshot=await self.newest_snapshot(caselist),
-            archives_awaiting_download=_awaiting(caselist, latest),
+            archives_awaiting_download=_awaiting(caselist, listing),
             failed_run=_failed_run_of(latest),
             stale_after_days=self._stale_after_days,
         )

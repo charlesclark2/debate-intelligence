@@ -174,7 +174,7 @@ class World:
             self.client.put_bucket_versioning(Bucket=name, VersioningConfiguration={"Status": "Enabled"})
 
     def parsed_digests(self, data_dir: Path | None = None) -> dict[str, str]:
-        """Every parsed-store file under a data directory with its SHA-256: what two parses are compared by."""
+        """Every parsed-store file under a data directory, with its SHA-256: what parses are compared by."""
         root = (data_dir or self.data_dir) / "parsed"
         return {
             path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()

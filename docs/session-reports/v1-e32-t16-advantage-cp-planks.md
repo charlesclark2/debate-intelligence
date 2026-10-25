@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e32-argument-landscape/t16-advantage-cp-planks.yaml`](../../plan_specs/v1/e32-argument-landscape/t16-advantage-cp-planks.yaml) |
 | Epic / release | `v1-e32-argument-landscape` / `v1.2` |
 | Branch | `task/v1-e32-t16-advantage-cp-planks` |
-| Session status | PARTIAL: built and tested after the PM's rulings of 2026-10-25; ac3, the operator's cache refill and dry run, is NOT RUN, so the phase stays InProgress <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE: built and tested after the PM's rulings of 2026-10-25; the operator's refill and dry run recorded; the phase is Succeeded; one scan hit in a plank table for the PM to read before the first publish <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -29,9 +29,18 @@ each CP's planks under its CP texts, on synthetic sources, against hand-written 
   * Planks are in report.md only.
 * **Tests were shown failing first.** 15 targeted mutants were all caught, after one redundant check
   was removed ([below](#mutants)).
-* **Still open: ac3.** The operator refills the analytic-text cache (about 9 minutes), then runs the
-  dry run without `--publish`. Both blocks are [below](#operator-follow-ups). The fill's `--quote`
-  run prints the plank counts by alias the PM asked for.
+* **The planks have their own section,** "Counterplan planks", after the CP texts in report.md's
+  negative part (the PM's note after `v1-e32-t20` merged). The contents list links it. t20's
+  before-the-reorder fixture and its identity test are removed: the golden report.md still pins every
+  byte ([below](#after-v1-e32-t20-the-planks-own-section)).
+* **On hspolicy26** ([below](#the-operators-refill-and-the-dry-run-2026-10-25)):
+  * **The operator's refill** read all 3,825 on-topic sources in 458.9 s, with 0 unread.
+  * **Planks:** 475 found, 447 placed. Under a CP in negative files there are 158 distinct planks
+    under 5 CPs, in 17 groups, with 0 withheld. `advantage-cp` has 92 planks, 13 teams and 9 groups.
+  * **The dry run without `--publish`** took 75.7 s and wrote nothing. It shows 38 plank rows.
+  * **Its scan:** 9 hits, 8 of them t09's in `top_cards.csv`. The other is **1 team-code hit in a
+    plank table, not yet accepted** (digest `79cbed0d4d7e`): a question for the PM before the first
+    publish ([below](#questions-for-the-pm)).
 * **The counts that led to the rulings are kept below:** 152 planks under `advantage-cp`, most in
   lists after a colon stem, 24 naming an advantage in their own words.
 
@@ -39,7 +48,7 @@ each CP's planks under its CP texts, on synthetic sources, against hand-written 
 
 | Node | Status | Notes |
 |---|---|---|
-| advantage-cp-planks | Built; ac3 open | The counts (2026-10-25), the PM's rulings (2026-10-25), then the reader, the cache counts, the report's grouping and section, the fixture and golden, the fill script and the guide. The operator's refill and dry run (ac3) are open |
+| advantage-cp-planks | Done | The counts (2026-10-25), the PM's rulings (2026-10-25), then the reader, the cache counts, the report's grouping and section, the fixture and golden, the fill and dry-run scripts and the guide; after t20, the planks' own section; the operator's refill and dry run (2026-10-25) |
 
 ## Acceptance criteria
 
@@ -47,7 +56,7 @@ each CP's planks under its CP texts, on synthetic sources, against hand-written 
 |---|---|---|
 | ac1: counts before any rule, of advantage-CP blocks with several `should` analytics, plank labels or numbered planks, and of planks naming an advantage by heading, card or own words, or none, sent to the PM with the proposed plank rule | PASS | [The counts](#the-counts-hspolicy26-through-2026-10-20), [the proposed rule](#the-proposed-plank-rule), [the questions](#questions-for-the-pm), sent 2026-10-25 and ruled on the same day. Nothing was built before the ruling |
 | ac2: after the ruling, on synthetic sources, report.md shows each multi-plank CP's planks with team counts and what each solves or "not named", matching hand-written golden files; never beside a school or team code; a plank naming a school withheld and counted; tests shown failing first | PASS | `tests/fixtures/landscape/golden/report.md`'s States CP planks and plank coverage, hand-written from the fixture README's new "Planks" table, matched on the renderer's first run (`test_rendering_the_fixture_matches_the_golden_file[report.md]`). Never beside a school or team code: `test_texts_a_text_is_never_beside_a_school_or_team_code`, which dumps the whole texts model with its planks, now non-empty. Withheld and counted: `test_planks_a_plank_naming_a_school_is_withheld_and_counted`, and `CpPlanks.withheld == 1`. Red runs: [below](#checks-shown-failing-for-their-reason) |
-| ac3: the operator's refill of the analytic-text cache and a dry run without `--publish` on hspolicy26, with the scan's hits by section (operator) | NOT RUN | The operator's two blocks are [below](#operator-follow-ups). The rules digest changed, so the refill reads every on-topic source again |
+| ac3: the operator's refill of the analytic-text cache and a dry run without `--publish` on hspolicy26, with the scan's hits by section (operator) | PASS | The operator ran both from this worktree on 2026-10-25 ([below](#the-operators-refill-and-the-dry-run-2026-10-25)). The refill: 3,825 sources, 0 cached, 3,825 parsed, 0 unread, cache written, in 458.9 s. The dry run: nothing written, 7 files planned, in 75.7 s. Scan, 9 hits by section: 1 team code in report.md's plank table, not yet accepted; 4 team codes, 3 schools and 1 tournament in `top_cards.csv`, all accepted; digest `79cbed0d4d7e` |
 | advantage-cp-planks node: `uv run pytest packages/debate_core/tests/application/test_landscape_report.py` | PASS | `.venv/bin/python -m pytest packages/debate_core/tests/application/test_landscape_report.py -q` under `perl -e 'alarm 100'` → 81 passed (76 before this task's tests) |
 | PM ruling 2: a mutant where a list plank under a stem that fails the guard still shows | PASS | "list plank under a stem failing the guard shows": 4 failed ([below](#mutants)) |
 | PM: mutants on the list boundary (past the first card, the 60-word cap), the alias-only label read as a plank, a partial-word alias match, and a plank double-counted in the totals | PASS | 2, 1 (removed) and 1 (off by one), 4, 1 and 2 failed ([below](#mutants)) |
@@ -354,16 +363,127 @@ The PM asked for these, to see whether a one-word alias over-matches.
   * under `public-option-cp`: `coverage` 1 and `costs` 1.
 
   Every match is a one-word alias. No multi-word alias matched.
-* **From the build:** the fill's `--quote` line prints the same count over every plank read again, any
-  CP. It is recorded here when the operator's run comes back (ac3).
+* **From the operator's refill** (every plank read again, any CP, each copy counted): `budgets` 6,
+  `costs` 6, `coverage` 6, `innovation` 3, `disease` 2, `inequality` 1 and `pandemics` 1. That is 25
+  plank copies naming an advantage in their own words, every one by a one-word alias.
 
 The counts cannot say whether a match is right: they print no plank. That would take the coach
 reading the shown planks in report.md, or the operator reading the dry run's.
 
+## After v1-e32-t20: the planks' own section
+
+`v1-e32-t20` merged into `dev` while the operator ran the refill. `scripts/task sync` rebased this
+branch onto it. Two files conflicted, both resolved keeping both sides:
+* the report module's imports;
+* `render.py`, where t20 split the overviews out of the texts section.
+
+The branch was not on the remote, so nothing was pushed. Then, as the PM asked:
+* **"Counterplan planks" is its own section,** in report.md's negative part, right after "Counterplan
+  texts, alternatives and roles of the ballot". The renderer's negative part lists it after the texts
+  section, so t20's contents list links it with no other change.
+  * It holds where every plank found went, then each CP's plank table.
+  * The CP texts section is t11's again. Each CP's text stays there, shown once, above the CP's planks
+    in the next section.
+  * The golden report.md was edited by hand to match: the coverage and the States CP's table moved, the
+    section's opening paragraph is new, and the contents line gained its link. It matched on the
+    renderer's first run.
+  * t20's heading-order test gained the new heading, by hand.
+* **`tests/fixtures/landscape/report_before_sides_together.md` and
+  `test_every_section_of_report_md_is_byte_identical_to_its_section_before_the_reorder` are removed.**
+  Their job, proving t20's reorder changed no section, is done, and the golden report.md still pins
+  every byte of the rendered report. Their helper `_by_heading` went with them, and the module's
+  docstring says why.
+* **The dry run's section names:** a hit in a plank table is now under "Counterplan planks: plank
+  table". The operator's dry run ran before the move, so it printed "Counterplan texts: plank table"
+  for the same line. A hit's digest is keyed on its file, kind, term and line, never its place, so
+  `79cbed0d4d7e` is unchanged.
+* **After the sync**, the directories of what changed and the always-run list:
+  * 1,366 passed in 9.5 s (the landscape suites, the scripts' tests, `tests/config`,
+    `tests/architecture`, `tests/specs`, the landscape smoke test);
+  * 1,084 passed in 36.8 s (the domain's landscape tests and `packages/debate_cli/tests` without
+    `bucket_mode/`).
+  * The affected set is 193 of 481 files. Its run before the sync stopped at its alarm, so it is left
+    to `ci`.
+  * `pyright packages/debate_core` 0 errors; `lint-imports` 16 kept; `ruff format --check` 1,334
+    files; `check_thin_handlers.py` OK.
+
+## The operator's refill and the dry run (2026-10-25)
+
+Both were run by the operator from this worktree, with the guards of t11's blocks, before the merge.
+
+**The refill, `scripts/read_landscape_texts.py --caselist hspolicy26 --quote`.** Its whole output:
+
+```text
+Read hspolicy26 2026.10.20-docx-6 through 2026-10-20: 3825 sources on policy-2026-27-nhi, 2070 negative, 1770 affirmative.
+Analytic texts: 3825 sources, 0 cached, 3825 parsed, 0 refused by the parser, 0 unread; cache written.
+  CP_TEXT: 235 found, 171 placed
+  K_ALTERNATIVE: 545 found, 90 placed
+  ROLE_OF_THE_BALLOT: 50 found, 1 placed
+  OVERVIEW: 1108 found, 572 placed
+  CP_PLANK: 475 found, 447 placed
+CP texts by place in negative files: 151 kept by the actor guard, 5 refused.
+CP planks: 4 alias-only labels, 4 list planks refused with their CP text, 7 cards under a plank saying solves with other words.
+Quoted: 198 sources read again for 705 texts; 705 read as they were read, 0 not, 0 unread.
+Planks under a CP in negative files: 158 under 5 CPs, in 17 groups by what they solve, 0 withheld for naming a school.
+  advantage-cp: 92 planks, 9 groups, 0 withheld
+  public-option-cp: 4 planks, 3 groups, 0 withheld
+  states-cp: 53 planks, 3 groups, 0 withheld
+  taxes-pic: 4 planks, 1 groups, 0 withheld
+  vouchers-cp: 5 planks, 1 groups, 0 withheld
+Planks naming an advantage alias in their own words: budgets 6, costs 6, coverage 6, innovation 3, disease 2, inequality 1, pandemics 1.
+Runtime 458.9 s.
+```
+
+* **t11's lines are unchanged:** 235, 545, 50 and 1,108 found, and 151 kept and 5 refused by the guard.
+  The rules digest moved, but no CP text, alternative, role of the ballot or overview reads
+  differently.
+* **The 4 alias-only labels** match the counts' 4.
+* **The plank figures are the reader's, and smaller than the counts' approximation.** The counts' pass
+  hung lists off every `should` analytic placed on a CP, and found 152 under `advantage-cp`. The reader
+  hangs planks only off a CP text t11 reads, and finds 92 distinct ones there.
+* **The 7 cards saying `solves` with other words** are over every plank read; the report counts the 5
+  under counted planks.
+* The runtime, 458.9 s, is inside the PM's estimate of about 9 minutes.
+
+**The dry run, `scripts/landscape_dry_run_by_section.py --caselist hspolicy26`,** on the warm cache.
+Its whole output:
+
+```text
+Dry run of hspolicy26 through 2026-10-20, taxonomy 1.2.0: nothing written; 7 files planned.
+Planks: 158 under 5 CPs, in 17 groups by what they solve, 38 rows shown, 0 withheld for naming a school.
+  states-cp: 53 planks, 26 teams, 3 groups, 0 withheld
+  advantage-cp: 92 planks, 13 teams, 9 groups, 0 withheld
+  public-option-cp: 4 planks, 1 teams, 3 groups, 0 withheld
+  taxes-pic: 4 planks, 1 teams, 1 groups, 0 withheld
+  vouchers-cp: 5 planks, 1 teams, 1 groups, 0 withheld
+Planks found: 475 in 97 files; 422 counted, 25 elsewhere, 21 under headings that place nothing, 7 under no heading; 4 refused with their CP text, 4 alias-only labels, 5 cards saying solves with other words, 0 not read again.
+Scan: 9 hits, 1 not yet accepted (digest 79cbed0d4d7e).
+  report.md | Counterplan texts: plank table | team_code: 1 (1 not yet accepted)
+  top_cards.csv | (whole file) | team_code: 4 (0 not yet accepted)
+  top_cards.csv | (whole file) | school: 3 (0 not yet accepted)
+  top_cards.csv | (whole file) | tournament: 1 (0 not yet accepted)
+Hits in report.md's plank tables: 1.
+Runtime 75.7 s.
+```
+
+* **The report's planks agree with the refill's:** 158 under the same 5 CPs, in 17 groups, 0 withheld.
+* **38 plank rows** are shown under the cut-off of 3 per advantage.
+* **Every plank found is counted somewhere:** 422 + 25 + 21 + 7 = 475.
+* **The scan, by section.**
+  * The 8 hits in `top_cards.csv` are t09's: 4 team codes, 3 schools and 1 tournament, all already
+    accepted.
+  * **1 new hit: a team code in a plank table.** A word of some plank's own text is a disclosed team
+    code. The counts cannot say which word; the CLI's `--dry-run` shows the line in the operator's
+    terminal.
+  * The plank-table hit is the only one not yet accepted. So the first publish stops on digest
+    `79cbed0d4d7e` until the operator reads it ([question](#questions-for-the-pm)).
+* The dry run took 75.7 s, against t11's 74 s.
+
 ## Files changed
 
 * **`debate_core.domain`:** `landscape_texts.py`.
-* **`debate_core.arguments.landscape`:** `analytic_texts.py`, `render.py`.
+* **`debate_core.arguments.landscape`:** `analytic_texts.py`; `render.py`, with the "Counterplan
+  planks" section in the negative part.
 * **`debate_core.application`:**
   * `analytic_texts.py`, `landscape_report.py`, `ports/analytic_text_store.py`;
   * `landscape_scan.py`: `hits_by_section`, the dry run's hits by section;
@@ -375,7 +495,8 @@ reading the shown planks in report.md, or the operator reading the dry run's.
     `application/test_landscape_report.py`; `integrations/landscape/test_analytic_text_store.py`;
   * `tests/scripts/test_read_landscape_texts.py`.
 * **`tests/fixtures/landscape`:** `synthetic_caselist/analytic_texts.json` and its README, by hand;
-  `golden/report.md`, by hand.
+  `golden/report.md`, by hand; `report_before_sides_together.md` removed (the PM's note of 2026-10-25),
+  with its test in `arguments/landscape/test_render.py`.
 * **`scripts/read_landscape_texts.py`**, and **`scripts/landscape_dry_run_by_section.py`** (new) with
   `tests/scripts/test_landscape_dry_run_by_section.py`; `application/test_landscape_scan.py` and
   `test_landscape_run.py`.
@@ -449,7 +570,8 @@ From the build:
 
 ## Operator follow-ups
 
-1. **Refill the analytic-text cache for hspolicy26** (expected runtime about 9 minutes on a loaded
+1. **Done, 2026-10-25: 458.9 s, its output [above](#the-operators-refill-and-the-dry-run-2026-10-25).**
+   Refill the analytic-text cache for hspolicy26 (expected runtime about 9 minutes on a loaded
    machine, the PM's estimate; t11's first fill took 551 s).
    * **Why it is needed:** the rules digest changed, so every on-topic source of the newest snapshot
      is read again through the parser.
@@ -482,7 +604,8 @@ if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset i
    * the `Runtime` line.
 
    Paste every line back. A `STOP:` line means nothing ran.
-2. **Then the dry run, without `--publish`, on the warm cache** (expected about 75 s; t11's took 74 s).
+2. **Done, 2026-10-25: 75.7 s, nothing written ([above](#the-operators-refill-and-the-dry-run-2026-10-25)).**
+   Then the dry run, without `--publish`, on the warm cache (expected about 75 s; t11's took 74 s).
    * **What it runs:** `scripts/landscape_dry_run_by_section.py`, the CLI's own landscape service,
      built by its container, as `landscape report --dry-run` runs it.
    * **What it prints:** counts only. That is the planks shown, grouped and withheld, and the scan's
@@ -505,7 +628,10 @@ if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset i
 
    Paste every line back. The CLI's own `--dry-run` shows each hit's line, for the terminal only, if a
    hit needs reading.
-3. **The first publish with the planks** is the PM's to coordinate, after the review.
+3. **The first publish with the planks** is the PM's to coordinate, after the review. It stops on the
+   plank-table hit (digest `79cbed0d4d7e`) until the operator reads that hit's line in
+   `debate-research landscape report --caselist hspolicy26 --dry-run` and accepts it, or it is ruled
+   otherwise (question 1).
 
 ## Follow-up work
 
@@ -520,17 +646,28 @@ if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset i
 **Answered.** The PM ruled on the counts on 2026-10-25 ([above](#the-pms-rulings-applied)). The
 questions as sent are kept below.
 
-One question from the build, paste-ready:
+**The question from the build** (`debate_core.testing` in `constraints.packages`) was ruled yes on
+2026-10-25 and is in the spec.
+
+One question from the dry run, paste-ready:
 
 ```text
-v1-e32-t16 question (session, 2026-10-25, after the build). Built to your
-rulings of 2026-10-25; 15 targeted mutants caught; the operator's refill and
-dry run (ac3) are open, so the phase stays InProgress.
+v1-e32-t16 question (session, 2026-10-25, after the operator's refill and dry
+run). The refill read all 3,825 sources in 458.9 s; the dry run wrote nothing:
+158 planks under 5 CPs, 17 groups, 38 rows shown, 0 withheld. Its scan has 9
+hits: t09's 8 in top_cards.csv, all accepted, and 1 new one, a team code in a
+report.md plank table, not yet accepted (digest 79cbed0d4d7e). A word of a
+plank's own text is a disclosed team code; the counts cannot say which.
 
-1. debate_core.testing is outside constraints.packages: the fixture's loader
-   (read_synthetic_analytic_texts) reads a plank's stem, solves and counts for
-   the golden. Amend the list with a PM-ruling comment, as for t11?
-   Recommendation: yes.
+1. Before the first publish:
+   (a) the operator reads that hit's line in `debate-research landscape report
+       --caselist hspolicy26 --dry-run` and, if the word is an ordinary one, as
+       t09's "All" was, publishes with --accept-scan-hits 79cbed0d4d7e;
+   (b) withhold, as a school-naming plank is, any plank holding a disclosed team
+       code as a whole word (a code change and a re-review).
+   Recommendation: (a). The scan exists for this read, and policy 1.13's rule is
+   about a plank beside a team code, not a word that happens to be one; if the
+   operator finds a real team named, (b) as a follow-up.
 ```
 
 The questions on the counts, as sent:

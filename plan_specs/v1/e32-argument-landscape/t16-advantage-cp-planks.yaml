@@ -87,7 +87,7 @@ spec:
         The operator's refill of the analytic-text cache and a dry run without --publish on
         hspolicy26 are recorded, with the scan's hits by section (operator).
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

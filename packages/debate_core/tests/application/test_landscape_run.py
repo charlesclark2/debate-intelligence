@@ -38,7 +38,7 @@ from debate_core.application.landscape_seeding import SeedReading
 from debate_core.application.landscape_staleness import STALE_BANNER_HEADING
 from debate_core.application.ports.classification_store import ClassificationStore
 from debate_core.application.position_classification import ClassificationRun, PositionClassificationService
-from debate_core.application.sync_runs import SYNC_RUN_LOG_FILENAME, SyncRunLog, SyncRunRecord
+from debate_core.application.sync_runs import SYNC_RUN_LOG_FILENAME, StageEntry, SyncRunLog, SyncRunRecord
 from debate_core.domain.caselist import Side
 from debate_core.domain.landscape import Taxonomy
 from debate_core.domain.landscape_classification import PositionClassification
@@ -301,6 +301,53 @@ async def test_a_run_the_download_cap_held_back_makes_the_report_stale(world: Sy
     assert result.staleness.cap_bound and result.staleness.age_days == 2
     assert result.report.header.stale
     assert (result.directory / "report.md").read_text(encoding="utf-8").startswith(STALE_BANNER_HEADING)
+
+
+def _weekly_run(started: datetime, *, download: str) -> SyncRunRecord:
+    """A weekly run of the synthetic caselist that listed its archives; its download stage ended `download`."""
+    return SyncRunRecord(
+        run_id=started.strftime("%Y%m%dT%H%M%SZ"),
+        environment="dev",
+        mode="run",
+        started_at=started,
+        finished_at=started,
+        outcome="failed" if download == "failed" else "nothing_new",  # pyright: ignore[reportArgumentType]
+        caselists=(CASELIST,),
+        deferred_by_caselist={CASELIST: 0},
+        stages=(
+            StageEntry(stage="select", outcome="completed"),
+            StageEntry(
+                stage="download", outcome=download, reason="0 fetched, then: OpenCaselist did not answer"
+            ),
+            StageEntry(stage="import", outcome="skipped"),
+            StageEntry(stage="publish", outcome="skipped"),
+        ),
+    )
+
+
+async def test_a_failed_latest_run_makes_the_report_stale_and_a_later_success_clears_it(
+    world: SyntheticRun,
+) -> None:
+    """`v1-e34-t32` ac2: two days old would be current, but the latest run that listed it failed."""
+    log = SyncRunLog(world.data_dir / SYNC_RUN_LOG_FILENAME)
+    log.append(_weekly_run(datetime(2026, 9, 16, 6, tzinfo=UTC), download="failed"))
+
+    failed = await _run(_service(world, run_log=log))
+
+    assert failed.staleness.age_days == 2 and not failed.staleness.cap_bound
+    assert failed.report.header.stale
+    report = (failed.directory / "report.md").read_text(encoding="utf-8")
+    assert report.startswith(STALE_BANNER_HEADING)
+    assert "The latest sync run of this caselist, 20260916T060000Z, failed at its download stage." in report
+    assert "# stale=true\n" in (failed.directory / "positions.csv").read_text(encoding="utf-8")
+
+    log.append(_weekly_run(datetime(2026, 9, 17, 6, tzinfo=UTC), download="completed"))
+
+    cleared = await _run(_service(world, run_log=log))
+
+    assert not cleared.report.header.stale
+    assert not (cleared.directory / "report.md").read_text(encoding="utf-8").startswith(STALE_BANNER_HEADING)
+    assert "# stale=false\n" in (cleared.directory / "positions.csv").read_text(encoding="utf-8")
 
 
 async def test_without_the_run_log_the_same_store_reads_as_current(world: SyntheticRun) -> None:

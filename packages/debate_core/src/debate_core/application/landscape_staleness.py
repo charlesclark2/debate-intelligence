@@ -46,6 +46,7 @@ from debate_core.application.sync_runs import SyncRunLog
 __all__ = [
     "DEFAULT_STALE_AFTER_DAYS",
     "STALE_BANNER_HEADING",
+    "FailedSyncRun",
     "LandscapeStaleness",
     "LandscapeStalenessCheck",
     "assess_staleness",
@@ -61,6 +62,14 @@ STALE_BANNER_HEADING: Final = "> **Stale data.**"
 
 
 @dataclass(frozen=True, slots=True)
+class FailedSyncRun:
+    """The latest run that listed a caselist, when it ended in failure."""
+
+    run_id: str
+    stages: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class LandscapeStaleness:
     """Whether one caselist's landscape report, dated `report_date`, is built on stale data."""
 
@@ -70,6 +79,7 @@ class LandscapeStaleness:
     stale_after_days: int = DEFAULT_STALE_AFTER_DAYS
     archives_awaiting_download: int = 0
     """Deferred by the daily cap at the latest run that listed this caselist."""
+    failed_run: FailedSyncRun | None = None
 
     @property
     def age_days(self) -> int | None:
@@ -86,6 +96,10 @@ class LandscapeStaleness:
     @property
     def cap_bound(self) -> bool:
         return self.archives_awaiting_download > 0
+
+    @property
+    def latest_run_failed(self) -> bool:
+        return False
 
     @property
     def stale(self) -> bool:
@@ -130,6 +144,7 @@ def assess_staleness(
     report_date: date,
     newest_snapshot: date | None,
     archives_awaiting_download: int = 0,
+    failed_run: FailedSyncRun | None = None,
     stale_after_days: int = DEFAULT_STALE_AFTER_DAYS,
 ) -> LandscapeStaleness:
     """The pure decision, for a caller that already knows the newest snapshot."""

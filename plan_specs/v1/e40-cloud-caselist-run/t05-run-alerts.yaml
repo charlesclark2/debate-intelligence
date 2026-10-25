@@ -75,7 +75,7 @@ spec:
         resource policies, the login role or its task definition, and a read or refused read
         of the password by any principal but the login role, each with the topic as target.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

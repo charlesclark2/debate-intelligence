@@ -71,7 +71,9 @@ spec:
       SIGTERM. If it does not, that is recorded and filed (v1-e40-t04's follow-up).
   priority: 1
   constraints:
-    packages: [docs/runbooks, docs/data, ops, tests/smoke]
+    # PM amendment 2026-10-25, from the PM's review (question 4, Deviation 1): restore-run-state and
+    # the shared lock helper, the dev profile's caselists and bucket mode, and their tests.
+    packages: [docs/runbooks, docs/data, ops, tests/smoke, debate_core.application, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, config/profiles, tests/integration, tests/scripts, tests/docs]
     forbidden:
       - Two runners publishing in the same week
       - Removing the Mac's ability to run by hand

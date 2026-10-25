@@ -1,0 +1,87 @@
+# TASK v1-e32-t23-school-page-team-links - Team links on a school's page, as on a position's
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t23-school-page-team-links
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "Team links on a school's page, as on a position's"
+spec:
+  # Filed by the PM, 2026-10-25, from the coach's check of the pilot's landscape pages (2026-10-25).
+  description: >-
+    v1-e32-t18 links each team to its public OpenCaselist page (policy 1.14) only in
+    schools.md's "By position" tables. The by-school table has no team page column, so the
+    pilot's school page (v1-e39-t17) shows a school's team codes without links, while a
+    position's page links them. Add the same column to the by-school table, through the same
+    rule (`SchoolView.team_page`) and cell (`openCaselist`, or `none` where the rule gives no
+    link), so a team reads the same on both. schools.csv already carries `team_page`. The pilot
+    already allows a checked team page on the school view; a test there shows the link renders
+    and opens in a new tab. The republish that shows it on the pilot is an operator step after
+    the cloud cutover's seed.
+  priority: 1
+  constraints:
+    packages: [debate_core.arguments, packages/debate_core/tests, tests/fixtures/landscape, packages/debate_api/tests, docs/guides]
+    forbidden:
+      - A team link built from anything but the caselist, school and team code (policy 1.14)
+      - A publish or other dev bucket write before the cloud cutover's seed (v1-e40-t06)
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e32-t18-school-view-by-position
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        On the synthetic fixture, schools.md's by-school table carries a team page column
+        whose cell for a team is the same as in the by-position tables, `none` where the
+        rule gives no link, matching hand-written golden files; tests shown failing first.
+    - id: ac2
+      description: >-
+        The pilot renders the by-school table's team links as checked team pages that open
+        in a new tab, by a test over a synthetic bundle.
+    - id: ac3
+      description: >-
+        After the seed, the operator republishes hspolicy26 to dev and the pilot's school
+        page shows the links (operator).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t23-school-page-team-links-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    Add the team page column to the by-school table, show it renders on the pilot, and republish
+    after the seed.
+  goalRef:
+    name: v1-e32-t23-school-page-team-links
+  graph:
+    nodes:
+      - id: school-page-team-links
+        kind: Task
+        name: School page team links
+        description: >-
+          Add the team page column to the by-school table, show it renders on the pilot,
+          and republish after the seed.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Landscape tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/landscape]
+status:
+  phase: Pending

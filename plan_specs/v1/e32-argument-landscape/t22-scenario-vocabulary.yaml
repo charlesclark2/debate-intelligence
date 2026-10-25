@@ -24,7 +24,9 @@ spec:
     do; a name in the list replaces t14's words for that position; positions without a list keep
     t14's rule. A taxonomy version bump under v1-e32-t08's released-ids lock. Withholding by
     caselist words still applies.
-  priority: 3
+  # PM amendment 2026-10-25: raised from 3, since the coach's names are what make the impact chains
+  # readable (v1-e32-t25); after v1-e32-t17, whose taxonomy bump (1.3.0) comes first.
+  priority: 2
   constraints:
     packages: [config/landscape, tests/config, debate_core.arguments, debate_core.application, tests/fixtures/landscape, packages/debate_core/tests, docs/guides]
     forbidden:
@@ -33,6 +35,9 @@ spec:
   context:
     - kind: TaskRef
       name: v1-e32-t14-scenarios-and-link-chains
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e32-t17-kritikal-affirmatives
       relation: dependsOn
   acceptanceCriteria:
     - id: ac1

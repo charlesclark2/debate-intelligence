@@ -38,7 +38,8 @@ decides rather than lists options.
   `us-east-1`, named `debate-<environment>-<purpose>` and tagged per
   [ADR-0010](0010-primary-aws-region.md), in `dev` and `prod` only
   ([ADR-0013](0013-two-environments-and-dev-main-promotion.md)). The dev pool holds the maintainer
-  and synthetic users, never a student.
+  and synthetic users, never a student, except, until the promotion, at most two pilot validation
+  students under data-use policy 1.18 (amended 2026-10-25).
 - **The team domain.** [ADR-0012](0012-web-hosting.md) put the public site on CloudFront with
   security headers at the edge, no access logging, and one team domain. The `wfbdebate.com` zone in
   Route 53 is read and never created. dev lives under `dev.wfbdebate.com`.
@@ -516,10 +517,17 @@ budgets. The pilot's own budget alarm is set at $10 a month per environment.
 
 | May | On |
 |---|---|
-| `s3:GetObject` | `reports/tub/search/*`, current objects under `raw/`, and `manifests/_suppression/suppression-list.jsonl`, in its own environment's evidence bucket only. No `GetObjectVersion`, no list, no write |
+| `s3:GetObject` | `reports/tub/search/*`, `reports/landscape/*`, current objects under `raw/`, and `manifests/_suppression/suppression-list.jsonl`, in its own environment's evidence bucket only. No `GetObjectVersion`, no write |
+| `s3:ListBucket` | That bucket, only with an `s3:prefix` under `reports/landscape/`: the landscape pages find each caselist's newest bundle. No other listing |
 | `kms:Decrypt` | That bucket's key, through S3 only (`kms:ViaService`) |
 | `logs:CreateLogStream`, `logs:PutLogEvents` | Its audit group, and its application log group |
 | `ssm:GetParameter` | Its own `/debate-<env>-tub/` parameters |
+
+**Amended 2026-10-25 (PM, `v1-e39-t17`, data-use policy 1.16):** the landscape pages read the
+published landscape bundles, so the role gained `reports/landscape/*` in its `GetObject` and a
+listing limited to that prefix. It was applied in dev on 2026-10-25, after the PM read the plan
+(`0 to add, 1 to change, 0 to destroy`), and `simulate-principal-policy` showed every other listing,
+`parsed/`, versions and writes still denied.
 
 It holds no Cognito permission: the self-service calls are authorized by the user's access token,
 and the token endpoint by the client secret. The evidence buckets' Block Public Access settings and
@@ -564,7 +572,8 @@ it.
 
 ### Dev
 
-The dev pool holds the maintainer and synthetic users only (ADR-0013). The dev pilot serves
+The dev pool holds the maintainer and synthetic users only (ADR-0013), and, until the promotion,
+at most two pilot validation students (data-use policy 1.18, amended 2026-10-25). The dev pilot serves
 `v1-e39-t10`'s synthetic seed index. Under the policy's
 [dev exception](../policies/caselist-data-use.md#dev-environment-exception) the operator may also
 publish a real-corpus index to dev for validation, because only operators have accounts there.

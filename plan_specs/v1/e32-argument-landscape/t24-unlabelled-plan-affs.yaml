@@ -1,0 +1,94 @@
+# TASK v1-e32-t24-unlabelled-plan-affs - Policy affs whose plan text has no label, identified by the plan or the advantages
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t24-unlabelled-plan-affs
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "Policy affs whose plan text has no label, identified by the plan or the advantages"
+spec:
+  # Filed by the PM, 2026-10-25, from v1-e32-t17's counts and the PM's ruling 4 (2026-10-25).
+  description: >-
+    Of hspolicy26's 2,192 affirmative rounds through 2026-10-20 (taxonomy 1.2.0), 709 have no
+    identified aff. 555 of their 565 files hold no plan text v1-e32-t09 reads, and 256 of those
+    (304 rounds, 93 teams) carry advantage headings: policy affs whose plan sits under no label
+    t09 reads, about 43% of the 709, far more than kritikal affs (v1-e32-t17). Count first,
+    read-only: in those files, where the plan text sits (a heading or label t09 does not read,
+    or a `should` sentence placed some other way), and which affs their advantages' placements
+    point to (v1-e32-t15's advantages by aff). Send the counts to the PM with a proposed rule:
+    widen t09's plan-text reader, identify the aff from its advantages (a new assignment method
+    beside PLAN_TEXT, TEAM_CARRY and t17's K-aff marker, with a rule for advantages that point
+    to more than one aff), or both. Then build it. Never into a round whose own plan text names
+    another aff, and t17's identification is unchanged. A taxonomy bump only if the rule needs
+    new ids, under v1-e32-t08's lock.
+  priority: 1
+  constraints:
+    packages: [debate_core.arguments, debate_core.application, packages/debate_core/tests, tests/fixtures/landscape, config/landscape, tests/config, docs/guides]
+    forbidden:
+      - A placement read from a team's name, school or team code
+      - An aff assigned into a round whose own plan text names another aff
+      - A quoted plan text beside a school or team code (policy 1.13)
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e32-t17-kritikal-affirmatives
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e32-t15-advantages-per-aff
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Counts before building, read-only: where the 256 files' plan texts sit, and which
+        affs their advantages point to, sent to the PM with a proposed rule.
+    - id: ac2
+      description: >-
+        After the ruling, on synthetic fixtures, the rule identifies an unlabelled plan's
+        aff, refuses a round whose own plan text names another, and the method table counts
+        the new method's rounds; tests shown failing first.
+    - id: ac3
+      description: >-
+        The operator's dry run on hspolicy26 before and after: rounds with no identified
+        aff, by method (operator).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t24-unlabelled-plan-affs-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    Count where the unlabelled plans sit and what their advantages point to, rule, then identify
+    those affs.
+  goalRef:
+    name: v1-e32-t24-unlabelled-plan-affs
+  graph:
+    nodes:
+      - id: unlabelled-plan-affs
+        kind: Task
+        name: Unlabelled plan affs
+        description: >-
+          Count where the unlabelled plans sit and what their advantages point to, rule,
+          then identify those affs.
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Landscape tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/landscape]
+status:
+  phase: Pending

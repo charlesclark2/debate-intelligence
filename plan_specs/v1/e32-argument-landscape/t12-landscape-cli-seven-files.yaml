@@ -57,7 +57,7 @@ spec:
         the stage names or the error class; no school, path or error message from the record
         appears; tests shown failing first.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -828,6 +828,26 @@ there (`v1-e32-t13`'s Terraform change to `operator_access.tf`). Without it, `--
 `raw/` and `parsed/` deletes and before anything on this machine. Running the same command again
 after the apply finishes it.
 
+### The local classifier's files (E32)
+
+`v1-e32-t21`'s comparison keeps a feature table, trained models and the coach's sample under
+`<data dir>/landscape/local-classifier/<caselist>/` on this machine only. They hold tags and
+headings derived from the caselist's cards. Its commands refuse a table whose sources a removal has
+reached, but nothing deletes the directory, so after `DONE` for a removal that touched a caselist,
+delete that caselist's directory here (PM ruling, 2026-10-25). Nothing of it is in a bucket. A coach
+sample deleted this way is drawn again with `scripts/compare_local_classifier.py features` and then
+`sample`; tell the PM if one was waiting to be labelled.
+
+**Operator command** (expected runtime a few seconds)
+Where: your Mac, anywhere. Change `hspolicy26` to the caselist the removal touched, and `dev` to
+`prod` for a prod removal.
+```bash
+DIR="$HOME/.debate-research/dev/landscape/local-classifier/hspolicy26"
+if [ -d "$DIR" ]; then ls "$DIR"; rm -r "$DIR"; echo "deleted: $DIR"; else echo "nothing to delete: $DIR"; fi
+```
+Success looks like the directory's files listed and `deleted: …`, or `nothing to delete: …` where
+the comparison never ran. In the request's register entry, record that it was deleted, with no path.
+
 ## The annual purge: landscape school views
 
 The data-use policy's annual purge runs each September for the season that has just aged out

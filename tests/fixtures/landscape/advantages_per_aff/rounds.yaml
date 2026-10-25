@@ -1,0 +1,37 @@
+schools:
+  Ashgrove Fictional: [XX, YY, ZZ, QQ]
+  Birchwood Fictional: [VV, WW, JJ, KK]
+rounds:
+- {team: XX, side: AFF, tournament: Fictional Invitational, round: R1, files: [a1], assigned: single-payer-aff, method: PLAN_TEXT}
+- {team: XX, side: AFF, tournament: Imaginary Classic, round: R1, files: [a2], assigned: global-budgets-aff, method: PLAN_TEXT}
+- {team: YY, side: AFF, tournament: Fictional Invitational, round: R1, files: [a3], assigned: single-payer-aff, method: TEAM_CARRY}
+- {team: ZZ, side: AFF, tournament: Fictional Invitational, round: R1, files: [a4], assigned: global-budgets-aff, method: PLAN_TEXT}
+- {team: QQ, side: AFF, tournament: Fictional Invitational, round: R1, files: [a5, a9], assigned: single-payer-aff, method: PLAN_TEXT}
+- {team: QQ, side: AFF, tournament: Imaginary Classic, round: R1, files: [a6], assigned: public-option-aff, method: PLAN_TEXT}
+- {team: VV, side: AFF, tournament: Fictional Invitational, round: R1, files: [a7], assigned: nanomedicine-aff, method: PLAN_TEXT}
+- {team: WW, side: AFF, tournament: Fictional Invitational, round: R1, files: [a8], assigned: voucher-aff, method: PLAN_TEXT}
+- {team: JJ, side: AFF, tournament: Fictional Invitational, round: R1, files: [aa]}
+- {team: KK, side: AFF, tournament: Fictional Invitational, round: R1, files: [ab]}
+- {team: KK, side: AFF, tournament: Imaginary Classic, round: R1, files: [ac]}
+- {team: WW, side: NEG, tournament: Imaginary Classic, round: R1, files: [b1]}
+files:
+  a1:
+  - costs-advantage
+  - coverage-advantage
+  - disease-advantage
+  - {position: pandemics-advantage, role: ANSWERS}
+  a2: [costs-advantage, budgets-advantage]
+  a3: [costs-advantage, coverage-advantage, inequality-advantage, innovation-advantage, pandemics-advantage]
+  a4: [costs-advantage, budgets-advantage]
+  a5: [disease-advantage]
+  a9: [coverage-advantage]
+  a6:
+  - innovation-advantage
+  - pandemics-advantage
+  - {position: budgets-advantage, method: TAG_KEYWORD, confidence: 0.5}
+  a7: [nanomedicine-aff]
+  a8: [voucher-aff]
+  aa: [public-option-aff, coverage-advantage, costs-advantage]
+  ab: [costs-advantage]
+  ac: [disease-advantage]
+  b1: [spending-da, costs-advantage]

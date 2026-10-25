@@ -18,6 +18,9 @@ id; cards by rank). Nothing here computes a count; the service did.
   When the run read the caselist's analytic texts (`v1-e32-t11`), it shows each CP's and K's top texts
   word for word, the teams reading each and what could not be shown, then each position's overview
   count, with no overview text. The texts are in report.md only, never beside a school or team code.
+  Under each aff `v1-e32-t09` assigned rounds to, and each mechanism under it, it lists the advantages
+  those rounds read, with their teams, the cut-off and what it hides, and the advantage reads of the
+  affirmative rounds with no assigned aff (`v1-e32-t15`). No other file has them.
 * **positions.csv** has the positions' rows for a spreadsheet, **top_cards.csv** each position's
   most-read cards, and **impact_cards.csv** each advantage's and DA's impact cards, with how many
   documents of each kind carry no labelled impact in its header block. **trends.csv** has each
@@ -324,6 +327,7 @@ def render_markdown(report: LandscapeReport, trends: LandscapeTrends | None = No
     lines: list[str] = []
     lines += _header_section(report, trends)
     lines += _positions_section(report)
+    lines += _advantages_section(report)
     lines += _texts_sections(report)
     lines += _new_section(report) if trends is None else _trend_sections(trends)
     lines += _unclassified_section(report)
@@ -457,6 +461,67 @@ def _impact_block(
         ]
         lines.append("")
     return lines
+
+
+def _advantages_section(report: LandscapeReport) -> list[str]:
+    """`v1-e32-t15`'s section: each assigned aff's and mechanism's top advantages, then what has no aff."""
+    found = report.advantages_by_aff
+    if found is None:
+        return []
+    lines = [
+        "## Advantages by affirmative",
+        "",
+        "Under each aff, the advantages read in the affirmative rounds assigned to it (by the round's plan "
+        "text or the team's other rounds), ranked by the teams reading them; the "
+        f"{found.advantages_per_aff:,} the most teams read are shown. A round assigned to a mechanism counts "
+        "under the mechanism and once under its aff. An advantage read in a round assigned to another aff is "
+        "never counted under this one, and nothing is taken from an advantage's name.",
+        "",
+    ]
+    if not found.affs:
+        lines += ["No affirmative round assigned an aff reads an advantage.", ""]
+    for one in found.affs:
+        heading = f"{_cell(one.label)} (`{one.position_id}`)"
+        lines += [
+            f"#### {heading}, a mechanism of {_cell(one.mechanism_of_label)}"
+            if one.mechanism_of_label is not None
+            else f"### {heading}",
+            "",
+            f"{_count(one.rounds, 'assigned round')} by {_count(one.teams, 'team')}; "
+            f"{one.advantage_teams:,} of the teams read an advantage.",
+            "",
+            "| Advantage | Teams |",
+            "|---|---|",
+        ]
+        lines += [f"| {_cell(row.label)} (`{row.position_id}`) | {row.teams:,} |" for row in one.advantages]
+        lines.append("")
+        if one.more:
+            noun = "advantage" if one.more == 1 else "advantages"
+            lines += [f"And {one.more:,} more {noun}, read by {_count(one.more_teams, 'team')}.", ""]
+    if found.without_advantages:
+        listed = "; ".join(
+            f"{_cell(one.label)} (`{one.position_id}`)"
+            + (
+                f", a mechanism of {_cell(one.mechanism_of_label)}"
+                if one.mechanism_of_label is not None
+                else ""
+            )
+            + f", {_count(one.rounds, 'round')}"
+            for one in found.without_advantages
+        )
+        lines += [f"Assigned rounds with no advantage read: {listed}.", ""]
+    unassigned = found.unassigned
+    verb = "has" if unassigned.reads == 1 else "have"
+    lines.append(
+        f"{_count(unassigned.reads, 'advantage read')} in {_count(unassigned.rounds, 'affirmative round')}, "
+        f"by {_count(unassigned.teams, 'team')}, {verb} no assigned aff."
+    )
+    if unassigned.placed_card_rounds:
+        lines.append(
+            f"A placed card identifies the aff of {unassigned.placed_card_rounds:,} of those rounds, and "
+            "their advantages are not counted under it."
+        )
+    return [*lines, ""]
 
 
 def _texts_sections(report: LandscapeReport) -> list[str]:

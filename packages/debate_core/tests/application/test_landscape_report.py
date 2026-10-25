@@ -1,9 +1,9 @@
-"""LandscapeReportService over the synthetic two-snapshot caselist (`v1-e32-t03` ac1 to ac3, `v1-e32-t10`).
+"""LandscapeReportService over the synthetic caselists (`v1-e32-t03` ac1 to ac3, `v1-e32-t10`, `v1-e32-t15`).
 
 Every expected number here was counted by hand from the fixture's table
 (`tests/fixtures/landscape/synthetic_caselist/README.md`, `scripts/make_landscape_fixture.py`),
 never read off the service. Tests named `aggregate` are the aggregation node's; `top_cards` the
-top-card node's; `impact` `v1-e32-t10`'s impact cards.
+top-card node's; `impact` `v1-e32-t10`'s impact cards; `advantages` `v1-e32-t15`'s advantages by aff.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ from datetime import date
 from pathlib import Path
 
 import pytest
+import yaml
 
 from debate_core.application.landscape_report import (
     LandscapeReportInputs,
@@ -29,10 +30,23 @@ from debate_core.application.landscape_staleness import assess_staleness
 from debate_core.application.ports.parsed_store import OccurrenceRecord
 from debate_core.arguments.landscape.seeding import SeedCard, SeedSource, SeedTeam
 from debate_core.domain.card_occurrence import ClusterMembership
-from debate_core.domain.caselist import Disclosure, RoundLabel, Side
+from debate_core.domain.caselist import Disclosure, Event, RoundLabel, Side
 from debate_core.domain.debate_files import CardCompleteness
-from debate_core.domain.landscape_classification import OverrideRules, PositionRole
-from debate_core.domain.landscape_report import AffAssignment, LandscapeReport, PositionStats
+from debate_core.domain.landscape import PositionKind, Taxonomy
+from debate_core.domain.landscape_classification import (
+    ClassificationMethod,
+    ItemKind,
+    OverrideRules,
+    PositionClassification,
+    PositionRole,
+)
+from debate_core.domain.landscape_report import (
+    AdvantagesByAff,
+    AffAssignment,
+    LandscapeReport,
+    PositionStats,
+    UnassignedAdvantageReads,
+)
 from debate_core.domain.landscape_texts import AnalyticTextKind, LandscapeTexts, MoreTexts, TextCoverage
 from debate_core.testing.landscape_report import (
     SYNTHETIC_CASELIST,
@@ -906,3 +920,206 @@ def test_texts_a_text_is_never_beside_a_school_or_team_code() -> None:
     assert not {
         name for name in names if re.search(rf"(?<![A-Za-z0-9]){re.escape(name)}(?![A-Za-z0-9])", dumped)
     }
+
+
+# ------------------------------------------------------------------------------------------------
+# Advantages by affirmative (`v1-e32-t15`)
+# ------------------------------------------------------------------------------------------------
+#
+# Over `tests/fixtures/landscape/advantages_per_aff/`, whose README holds the table every expected
+# number here was counted from by hand, and whose `report_section.md` was written by hand from it.
+
+ADVANTAGES = REPO / "tests" / "fixtures" / "landscape" / "advantages_per_aff"
+
+
+def _advantage_inputs() -> LandscapeReportInputs:
+    """The fixture's rounds as disclosures, its files' cards as classifications, and t09's assignments."""
+    table = yaml.safe_load((ADVANTAGES / "rounds.yaml").read_text(encoding="utf-8"))
+    taxonomy = Taxonomy.model_validate(
+        yaml.safe_load((ADVANTAGES / "taxonomy.yaml").read_text(encoding="utf-8"))
+    )
+    school_of = {code: school for school, codes in table["schools"].items() for code in codes}
+    disclosures: list[Disclosure] = []
+    assignments: list[AffAssignment] = []
+    for row in table["rounds"]:
+        school, code, side = school_of[row["team"]], row["team"], Side(row["side"])
+        for name in row["files"]:
+            disclosures.append(
+                Disclosure(
+                    caselist=SYNTHETIC_CASELIST,
+                    event=Event.POLICY,
+                    school=school,
+                    team_code=code,
+                    side=side,
+                    tournament=row["tournament"],
+                    round_label=RoundLabel(raw=row["round"], normalized=row["round"]),
+                    snapshot=SECOND,
+                    source_path=f"{school}/{school} {code}/{code}-{side.value}-{row['round']}-{name}.docx",
+                    source_sha256=name * 32,
+                )
+            )
+        if row.get("assigned"):
+            assignments.append(
+                AffAssignment(
+                    round_id=round_id(disclosures[-1]), position_id=row["assigned"], method=row["method"]
+                )
+            )
+    classifications: list[PositionClassification] = []
+    for name, cards in table["files"].items():
+        for index, card in enumerate(cards):
+            placed = {"position": card} if isinstance(card, str) else card
+            classifications.append(
+                PositionClassification(
+                    item_id=f"{name * 32}:card:{index}",
+                    item_kind=ItemKind.CARD,
+                    source_sha256=name * 32,
+                    first_element_index=index,
+                    position_id=placed["position"],
+                    role=PositionRole(placed.get("role", "READS")),
+                    method=ClassificationMethod(placed.get("method", "ALIAS")),
+                    confidence=float(placed.get("confidence", 1.0)),
+                    rationale="synthetic fixture: placed as the fixture table says",
+                    taxonomy_version=taxonomy.taxonomy_version,
+                    prompt_version="none",
+                )
+            )
+    return LandscapeReportInputs(
+        caselist=SYNTHETIC_CASELIST,
+        through=SECOND,
+        taxonomy=taxonomy,
+        overrides=OverrideRules(topic_id=taxonomy.topic_id, overrides=()),
+        parser_version="2026.10.20-docx-6",
+        classifications=classifications,
+        disclosures=disclosures,
+        cards=(),
+        aff_assignments=tuple(assignments),
+    )
+
+
+def _by_aff(advantages_per_aff: int = 5, inputs: LandscapeReportInputs | None = None) -> AdvantagesByAff:
+    report = LandscapeReportService(advantages_per_aff=advantages_per_aff).build(
+        inputs or _advantage_inputs(), synthetic_staleness()
+    )
+    assert report.advantages_by_aff is not None
+    return report.advantages_by_aff
+
+
+def _section(found: AdvantagesByAff, position_id: str) -> tuple[list[tuple[str, int]], int, int]:
+    """An aff's shown advantages with their teams, and its `more` and `more_teams`."""
+    one = next(aff for aff in found.affs if aff.position_id == position_id)
+    return [(row.position_id, row.teams) for row in one.advantages], one.more, one.more_teams
+
+
+def test_advantages_report_md_section_matches_the_hand_written_golden_file() -> None:
+    bundle = LandscapeReportService().bundle(_advantage_inputs(), synthetic_staleness())
+    report_md = bundle.files["report.md"]
+    start = report_md.index("## Advantages by affirmative\n")
+    end = report_md.index("\n## ", start) + 1
+    assert report_md[start:end] == (ADVANTAGES / "report_section.md").read_text(encoding="utf-8")
+
+
+def test_advantages_a_read_in_a_round_assigned_to_another_aff_is_never_counted_under_this_one() -> None:
+    found = _by_aff()
+    # QQ's Public option round reads innovation and pandemics; under Single payer they stay YY's alone,
+    # so they are the 2 more, read by 1 team, and QQ's Single payer reads stay out of Public option.
+    assert _section(found, "single-payer-aff") == (
+        [
+            ("costs-advantage", 3),
+            ("coverage-advantage", 3),
+            ("budgets-advantage", 2),
+            ("disease-advantage", 2),
+            ("inequality-advantage", 1),
+        ],
+        2,
+        1,
+    )
+    assert _section(found, "public-option-aff") == (
+        [("innovation-advantage", 1), ("pandemics-advantage", 1)],
+        0,
+        0,
+    )
+
+
+def test_advantages_a_mechanism_round_counts_under_the_mechanism_and_once_under_its_aff() -> None:
+    found = _by_aff()
+    single_payer = next(aff for aff in found.affs if aff.position_id == "single-payer-aff")
+    assert (single_payer.rounds, single_payer.teams, single_payer.advantage_teams) == (6, 5, 4)
+    global_budgets = next(aff for aff in found.affs if aff.position_id == "global-budgets-aff")
+    assert (global_budgets.mechanism_of, global_budgets.rounds, global_budgets.teams) == (
+        "single-payer-aff",
+        2,
+        2,
+    )
+    assert _section(found, "global-budgets-aff") == ([("budgets-advantage", 2), ("costs-advantage", 2)], 0, 0)
+
+
+def test_advantages_the_cut_off_shows_the_top_n_and_counts_the_rest_by_distinct_teams() -> None:
+    assert _by_aff(3).advantages_per_aff == 3
+    assert _section(_by_aff(3), "single-payer-aff") == (
+        [("costs-advantage", 3), ("coverage-advantage", 3), ("budgets-advantage", 2)],
+        4,
+        3,
+    )
+    assert _section(_by_aff(7), "single-payer-aff")[1:] == (0, 0)
+    assert len(_section(_by_aff(7), "single-payer-aff")[0]) == 7
+
+
+def test_advantages_the_teams_behind_and_n_more_are_distinct_never_a_sum() -> None:
+    # Innovation and pandemics are YY's alone: one team, where a sum would say two.
+    assert _section(_by_aff(), "single-payer-aff")[1:] == (2, 1)
+
+
+def test_advantages_the_affs_are_ordered_and_those_with_no_advantage_read_are_listed_apart() -> None:
+    found = _by_aff()
+    assert [aff.position_id for aff in found.affs] == [
+        "single-payer-aff",
+        "global-budgets-aff",
+        "public-option-aff",
+    ]
+    assert [(one.position_id, one.mechanism_of, one.rounds) for one in found.without_advantages] == [
+        ("nanomedicine-aff", "single-payer-aff", 1),
+        ("voucher-aff", None, 1),
+    ]
+
+
+def test_advantages_nothing_is_taken_from_an_advantages_taxonomy_parent() -> None:
+    # costs-advantage names Public option as its parent; Public option's round reads no costs card.
+    assert "costs-advantage" not in {row for row, _ in _section(_by_aff(), "public-option-aff")[0]}
+
+
+def test_advantages_reads_with_no_assigned_aff_count_placed_card_rounds_with_them() -> None:
+    assert _by_aff().unassigned == UnassignedAdvantageReads(reads=4, rounds=3, teams=2, placed_card_rounds=1)
+
+
+def test_advantages_without_assignments_every_affirmative_advantage_read_has_no_assigned_aff() -> None:
+    # The t03 fixture through 2026-09-15: all 7 affirmative rounds read costs or innovation, 9 reads by
+    # 6 teams (XX's two rounds are one team), and a placed aff card identifies 4 of the rounds.
+    found = _report().advantages_by_aff
+    assert found is not None
+    assert (found.affs, found.without_advantages) == ((), ())
+    assert found.unassigned == UnassignedAdvantageReads(reads=9, rounds=7, teams=6, placed_card_rounds=4)
+
+
+def test_advantages_a_taxonomy_with_no_advantage_has_no_section() -> None:
+    inputs = _advantage_inputs()
+    without = dataclasses.replace(
+        inputs,
+        taxonomy=inputs.taxonomy.model_copy(
+            update={
+                "positions": tuple(
+                    one for one in inputs.taxonomy.positions if one.kind is not PositionKind.ADVANTAGE
+                )
+            }
+        ),
+        classifications=[
+            one for one in inputs.classifications if not (one.position_id or "").endswith("-advantage")
+        ],
+    )
+    bundle = LandscapeReportService().bundle(without, synthetic_staleness())
+    assert bundle.report.advantages_by_aff is None
+    assert "## Advantages by affirmative" not in bundle.files["report.md"]
+
+
+def test_advantages_a_cut_off_below_one_is_refused() -> None:
+    with pytest.raises(ValueError, match="at least one advantage"):
+        LandscapeReportService(advantages_per_aff=0)

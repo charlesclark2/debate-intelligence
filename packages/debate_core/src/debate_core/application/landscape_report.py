@@ -58,6 +58,13 @@ as top cards do, by teams then cluster id, up to N per position. Per kind, a doc
 holding a card counted for a position of that kind, and the report counts those holding an impact
 card among them, so it can say how many carry no labelled impact.
 
+## Advantages by affirmative (`v1-e32-t15`)
+
+Under each aff `v1-e32-t09` assigned rounds to, and each mechanism under it, the advantages those
+rounds read, by the rules of :mod:`debate_core.application.landscape_advantages`: the report's own
+reads, t09's assignments as the only source of a round's aff, and a mechanism's rounds counted once
+under its aff. report.md shows them; no other file does.
+
 ## What never leaves this module
 
 School, team code, tournament and round are read to tell rounds and teams apart, and are not in the
@@ -75,6 +82,7 @@ from typing import Final
 
 from debate_core.application.caselist.publish_plan import source_key
 from debate_core.application.errors import DomainError
+from debate_core.application.landscape_advantages import advantages_by_aff
 from debate_core.application.landscape_bundle_files import CIRCUIT_WIDE_FILES, SCHOOL_VIEW_FILES
 from debate_core.application.landscape_counts import (
     AFF_SIDE,
@@ -122,6 +130,7 @@ from debate_core.domain.landscape_classification import (
     PositionRole,
 )
 from debate_core.domain.landscape_report import (
+    DEFAULT_ADVANTAGES_PER_AFF,
     DEFAULT_IMPACT_CARDS,
     DEFAULT_TOP_CARDS,
     IMPACT_KINDS,
@@ -314,6 +323,7 @@ class LandscapeReportService:
         trend_threshold_points: Decimal = DEFAULT_TREND_THRESHOLD_POINTS,
         trend_minimum_teams: int = DEFAULT_TREND_MINIMUM_TEAMS,
         texts_per_position: int = DEFAULT_TEXTS_PER_POSITION,
+        advantages_per_aff: int = DEFAULT_ADVANTAGES_PER_AFF,
     ) -> None:
         if not 0.0 <= review_threshold <= 1.0:
             raise ValueError(f"the review threshold is between 0 and 1; got {review_threshold}")
@@ -321,12 +331,15 @@ class LandscapeReportService:
             raise ValueError(
                 f"a report lists at least one card per position; got {top_cards} and {impact_cards} (impacts)"
             )
+        if advantages_per_aff < 1:
+            raise ValueError(f"a report lists at least one advantage per aff; got {advantages_per_aff}")
         self._threshold = review_threshold
         self._top = top_cards
         self._impact = impact_cards
         self._trend_threshold = trend_threshold_points
         self._trend_minimum = trend_minimum_teams
         self._texts = texts_per_position
+        self._advantages = advantages_per_aff
 
     def bundle(self, inputs: LandscapeReportInputs, staleness: LandscapeStaleness) -> LandscapeReportBundle:
         """The report, its trends and its school view, with the hook's banner and `stale` flag in them."""
@@ -479,11 +492,13 @@ class LandscapeReportService:
         aff_rounds = sorted(one for one, stated in rounds.items() if stated.side == _AFF)
         neg_rounds = sorted(one for one, stated in rounds.items() if stated.side == _NEG)
         identified: Counter[str] = Counter()
+        placed_card_rounds: set[str] = set()
         for one in aff_rounds:
             if one in assigned:
                 identified[assigned[one].method] += 1
             elif any(one in reads[position_id] for position_id in aff_positions if position_id in reads):
                 identified[PLACED_CARD_METHOD] += 1
+                placed_card_rounds.add(one)
         read_rounds = {one for read in reads.values() for one in read}
         neg_placed = {one for position_id in neg_positions for one in reads.get(position_id, ())}
         counted = CountedReads(
@@ -543,6 +558,13 @@ class LandscapeReportService:
             texts=None
             if inputs.analytic_texts is None
             else _landscape_texts(inputs.analytic_texts, in_range, taxonomy, self._texts),
+            advantages_by_aff=advantages_by_aff(
+                taxonomy=taxonomy,
+                counted=counted,
+                assigned={one: found.position_id for one, found in assigned.items()},
+                placed_card_rounds=placed_card_rounds,
+                limit=self._advantages,
+            ),
         )
         return report, counted
 

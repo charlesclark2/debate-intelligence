@@ -1,0 +1,59 @@
+topic_id: synthetic-policy-topic
+taxonomy_version: 1.2.0
+event: POLICY
+positions:
+- id: single-payer-aff
+  label: Single payer
+  kind: aff
+  side: aff
+- id: global-budgets-aff
+  label: Global budgets
+  kind: aff
+  side: aff
+  parent: single-payer-aff
+- id: nanomedicine-aff
+  label: Nanomedicine coverage
+  kind: aff
+  side: aff
+  parent: single-payer-aff
+- id: public-option-aff
+  label: Public option
+  kind: aff
+  side: aff
+- id: voucher-aff
+  label: Vouchers
+  kind: aff
+  side: aff
+- id: budgets-advantage
+  label: Budgets advantage
+  kind: advantage
+  side: aff
+- id: costs-advantage
+  label: Costs advantage
+  kind: advantage
+  side: aff
+  parent: public-option-aff
+- id: coverage-advantage
+  label: Coverage advantage
+  kind: advantage
+  side: aff
+- id: disease-advantage
+  label: Disease advantage
+  kind: advantage
+  side: aff
+- id: inequality-advantage
+  label: Inequality advantage
+  kind: advantage
+  side: aff
+- id: innovation-advantage
+  label: Innovation advantage
+  kind: advantage
+  side: aff
+- id: pandemics-advantage
+  label: Pandemics advantage
+  kind: advantage
+  side: aff
+- id: spending-da
+  label: Spending DA
+  kind: da
+  side: neg

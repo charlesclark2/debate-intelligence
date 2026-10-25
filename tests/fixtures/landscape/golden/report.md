@@ -117,6 +117,15 @@ DA documents with no labelled impact: 3 of 6 (50.0%).
 |---|---|---|---|---|---|---|---|
 | T: national health insurance (`nhi-t`) | 2 | 1 | 0 | 2 | 16.7% | 2026-09-08 |  |
 
+## Advantages by affirmative
+
+Under each aff, the advantages read in the affirmative rounds assigned to it (by the round's plan text or the team's other rounds), ranked by the teams reading them; the 5 the most teams read are shown. A round assigned to a mechanism counts under the mechanism and once under its aff. An advantage read in a round assigned to another aff is never counted under this one, and nothing is taken from an advantage's name.
+
+No affirmative round assigned an aff reads an advantage.
+
+9 advantage reads in 7 affirmative rounds, by 6 teams, have no assigned aff.
+A placed card identifies the aff of 4 of those rounds, and their advantages are not counted under it.
+
 ## Counterplan texts, alternatives and roles of the ballot
 
 The teams' own words, quoted as their files hold them (data-use policy 1.13), never beside a school or team code. A text belongs to the position its section is placed under: the nearest placed heading over its label, as a card is placed. A label under no placed heading is counted here and never placed by a guess. Texts worded alike are one text. Each CP and K shows the 3 texts the most teams read, and how many more there are. A text naming a school of the caselist is withheld.

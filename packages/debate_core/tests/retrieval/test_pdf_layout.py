@@ -146,7 +146,7 @@ def test_page_numbers_in_each_form_are_removed() -> None:
         "{n} of 9",
         "Page {n} of 9",
         "- {n} -",
-        "– {n} –",
+        "\u2013 {n} \u2013",
     ):
         layout = lay_out_pages(numbered_pages(form, first=11))
         assert [item.reason for item in layout.removed_lines] == [RemovalReason.PAGE_NUMBER] * 3, form
@@ -319,19 +319,19 @@ def test_a_left_fragment_keeps_its_own_hyphens() -> None:
 
 
 def test_a_soft_hyphen_is_dropped() -> None:
-    layout = one_paragraph("the bio­", "diversity they protect")
+    layout = one_paragraph("the bio\u00ad", "diversity they protect")
     assert layout.paragraphs == ("the biodiversity they protect",)
     join = only_join(layout)
-    assert (join.decision, join.character, join.hyphen_kept) == (JoinDecision.SOFT_HYPHEN, "­", False)
+    assert (join.decision, join.character, join.hyphen_kept) == (JoinDecision.SOFT_HYPHEN, "\u00ad", False)
 
 
 def test_a_hyphen_or_dash_not_between_two_letters_is_kept() -> None:
     for first, second, joined, character in (
         ("from 2019-", "2024 onward", "from 2019-2024 onward", "-"),
         ("rising COVID-", "19 cases", "rising COVID-19 cases", "-"),
-        ("the Paris–", "London line", "the Paris–London line", "–"),
-        ("a pause—", "and then more", "a pause—and then more", "—"),
-        ("the word-", "“quoted”", "the word-“quoted”", "-"),
+        ("the Paris\u2013", "London line", "the Paris\u2013London line", "\u2013"),
+        ("a pause\u2014", "and then more", "a pause\u2014and then more", "\u2014"),
+        ("the word-", "\u201cquoted\u201d", "the word-\u201cquoted\u201d", "-"),
     ):
         layout = one_paragraph(first, second)
         assert layout.paragraphs == (joined,)
@@ -426,8 +426,8 @@ def test_a_paragraph_continues_onto_the_next_page_only_when_nothing_ends_it() ->
 
     assert two_pages("runs on", line("to the next page", 730.0)) == ("runs on to the next page and more.",)
     assert two_pages("ends here.", line("New page", 730.0)) == ("ends here.", "New page and more.")
-    assert two_pages("asks a question?”", line("New page", 730.0)) == (
-        "asks a question?”",
+    assert two_pages("asks a question?\u201d", line("New page", 730.0)) == (
+        "asks a question?\u201d",
         "New page and more.",
     )
     assert two_pages("runs on", line("Indented opening", 730.0, x=INDENT)) == (
@@ -493,7 +493,7 @@ def test_the_journal_article_counts_reported_to_the_pm() -> None:
 # No character is invented or lost, except the recorded ones
 # --------------------------------------------------------------------------------------------
 
-_TEXT = st.text(alphabet="abcDE -­–0123.", min_size=1, max_size=24)
+_TEXT = st.text(alphabet="abcDE -\u00ad\u20130123.", min_size=1, max_size=24)
 
 
 @st.composite

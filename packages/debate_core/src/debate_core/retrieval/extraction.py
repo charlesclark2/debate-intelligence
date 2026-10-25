@@ -227,7 +227,7 @@ class ExtractionQuality(DomainModel):
     )
 
 
-type LineEndCharacter = Literal["-", "‐", "­", "–", "—"]
+type LineEndCharacter = Literal["-", "\u2010", "\u00ad", "\u2013", "\u2014"]
 """The characters a PDF line can end in where the next line joins it with no space: hyphen-minus,
 hyphen, soft hyphen, en dash, em dash."""
 
@@ -278,7 +278,7 @@ class LineJoin(DomainModel):
     def _check_decision_matches_outcome(self) -> Self:
         if self.hyphen_kept == (self.decision in _DROPPING_DECISIONS):
             raise ValueError(f"a {self.decision.value} join cannot have hyphen_kept={self.hyphen_kept}")
-        if (self.decision is JoinDecision.SOFT_HYPHEN) != (self.character == "­"):
+        if (self.decision is JoinDecision.SOFT_HYPHEN) != (self.character == "\u00ad"):
             raise ValueError("a join is soft_hyphen exactly when its character is U+00AD")
         return self
 

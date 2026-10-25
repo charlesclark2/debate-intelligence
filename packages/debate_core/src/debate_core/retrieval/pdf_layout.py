@@ -79,23 +79,23 @@ _SIZE_TOLERANCE: Final = 0.5
 
 _JOINING_CHARACTERS: Final[dict[str, LineEndCharacter]] = {
     "-": "-",
-    "‐": "‐",
-    "­": "­",
-    "–": "–",
-    "—": "—",
+    "\u2010": "\u2010",
+    "\u00ad": "\u00ad",
+    "\u2013": "\u2013",
+    "\u2014": "\u2014",
 }
-_DASHES: Final = frozenset({"–", "—"})
-_WORD: Final = re.compile(r"[^\W\d_]+(?:['’\-‐‑][^\W\d_]+)*")
+_DASHES: Final = frozenset({"\u2013", "\u2014"})
+_WORD: Final = re.compile(r"[^\W\d_]+(?:['\u2019\-\u2010\u2011][^\W\d_]+)*")
 _WORD_AT_END: Final = re.compile(_WORD.pattern + r"\Z")
 _SENTENCE_ENDS: Final = frozenset(".!?:")
-_CLOSERS: Final = "\"')]”’"
+_CLOSERS: Final = "\"')]\u201d\u2019"
 
 _ARABIC_FORMS: Final = (
     re.compile(r"([0-9]+)"),
     re.compile(r"page\s+([0-9]+)", re.IGNORECASE),
     re.compile(r"([0-9]+)\s+of\s+[0-9]+", re.IGNORECASE),
     re.compile(r"page\s+([0-9]+)\s+of\s+[0-9]+", re.IGNORECASE),
-    re.compile(r"[-–]\s*([0-9]+)\s*[-–]"),
+    re.compile(r"[-\u2013]\s*([0-9]+)\s*[-\u2013]"),
 )
 _ROMAN_FORM: Final = re.compile(r"[ivxlcdm]+")
 _ROMAN_VALUES: Final = (
@@ -360,7 +360,7 @@ def _ends_in_join(text: str) -> bool:
 
 
 def _spelling(word: str) -> str:
-    return word.casefold().replace("‐", "-").replace("‑", "-")
+    return word.casefold().replace("\u2010", "-").replace("\u2011", "-")
 
 
 def _spellings(body: Sequence[_Line]) -> Counter[str]:
@@ -411,7 +411,7 @@ def _join_lines(
 def _decide(above: str, below: str, evidence: Counter[str]) -> tuple[JoinDecision, int, int]:
     """The rule for one line-end character: the decision, and the two spellings' counts."""
     character = above[-1]
-    if character == "­":
+    if character == "\u00ad":
         return JoinDecision.SOFT_HYPHEN, 0, 0
     left = _WORD_AT_END.search(above[:-1])
     right = _WORD.match(below)

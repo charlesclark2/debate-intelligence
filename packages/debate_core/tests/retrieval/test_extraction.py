@@ -182,10 +182,10 @@ def test_a_join_must_name_a_paragraph_and_an_offset_inside_it() -> None:
 @pytest.mark.parametrize(
     ("decision", "character", "hyphen_kept"),
     [
-        (JoinDecision.SOFT_HYPHEN, "­", False),
+        (JoinDecision.SOFT_HYPHEN, "\u00ad", False),
         (JoinDecision.JOINED_FORM_IN_DOCUMENT, "-", False),
         (JoinDecision.HYPHENATED_FORM_IN_DOCUMENT, "-", True),
-        (JoinDecision.NOT_A_WORD_BREAK, "–", True),
+        (JoinDecision.NOT_A_WORD_BREAK, "\u2013", True),
         (JoinDecision.UNDETERMINED, "-", True),
     ],
 )
@@ -201,7 +201,7 @@ def test_a_join_is_soft_hyphen_exactly_when_its_character_is_one() -> None:
     with pytest.raises(ValidationError, match="exactly when its character is U\\+00AD"):
         join(decision=JoinDecision.SOFT_HYPHEN, character="-", hyphen_kept=False)
     with pytest.raises(ValidationError, match="exactly when its character is U\\+00AD"):
-        join(decision=JoinDecision.UNDETERMINED, character="­", hyphen_kept=True)
+        join(decision=JoinDecision.UNDETERMINED, character="\u00ad", hyphen_kept=True)
 
 
 def test_quality_counts_must_describe_the_paragraphs() -> None:

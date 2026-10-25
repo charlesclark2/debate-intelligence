@@ -64,9 +64,9 @@ PAGE_HEIGHT: Final = 792
 LEFT_MARGIN: Final = 72.0
 PARAGRAPH_INDENT: Final = 90.0
 
-RUNNING_HEADER: Final = "Okonkwo-Hale and Lindqvist · Moral Hazard and the Return of Lost Species"
+RUNNING_HEADER: Final = "Okonkwo-Hale and Lindqvist \u00b7 Moral Hazard and the Return of Lost Species"
 RUNNING_FOOTER: Final = "Synthetic open-access test fixture, CC BY 4.0, not a real publication"
-MASTHEAD: Final = "Journal of Synthetic Conservation Studies · Volume 12 (2026)"
+MASTHEAD: Final = "Journal of Synthetic Conservation Studies \u00b7 Volume 12 (2026)"
 
 JOURNAL_ARTICLE_FILE: Final = Path(__file__).with_name("journal-article.pdf")
 
@@ -114,7 +114,7 @@ _PAGE_TWO: Final = (
     ("line", "overstates the competition; a long-"),
     ("line", "term view would also count donors who give only because revival is exciting."),
     ("line", "Agencies that relied on co-"),
-    ("line", "operation with private funders reported the sharpest declines, and the bio­"),
+    ("line", "operation with private funders reported the sharpest declines, and the bio\u00ad"),
     ("line", "diversity they protect is concentrated in small popu-"),
     ("line", "lations that cannot wait for a revived species to arrive."),
     ("heading", "3. Results"),

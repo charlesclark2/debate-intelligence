@@ -189,22 +189,24 @@ def test_a_line_break_inside_a_paragraph_never_joins_two_words() -> None:
 
 
 def test_a_latin_1_label_is_read_as_windows_1252_so_curly_quotes_survive() -> None:
-    body = page(ARTICLE + "<p>“Protect it now,” the report said, — before it is gone.</p>")
+    body = page(ARTICLE + "<p>\u201cProtect it now,\u201d the report said, \u2014 before it is gone.</p>")
     encoded = body.decode().encode("cp1252")
     extracted = TrafilaturaExtractor().extract(fetched(encoded, "text/html; charset=ISO-8859-1"))
-    assert "“Protect it now,” the report said, — before it is gone." in extracted.paragraphs
+    assert "\u201cProtect it now,\u201d the report said, \u2014 before it is gone." in extracted.paragraphs
 
 
 def test_the_pages_own_meta_charset_is_used_when_the_header_names_none() -> None:
-    body = page(ARTICLE + "<p>Café owners and naïve plans.</p>", head='<meta charset="windows-1252">')
+    body = page(
+        ARTICLE + "<p>Caf\u00e9 owners and na\u00efve plans.</p>", head='<meta charset="windows-1252">'
+    )
     extracted = TrafilaturaExtractor().extract(fetched(body.decode().encode("cp1252"), "text/html"))
-    assert "Café owners and naïve plans." in extracted.paragraphs
+    assert "Caf\u00e9 owners and na\u00efve plans." in extracted.paragraphs
 
 
 def test_a_utf_8_byte_order_mark_decides_the_encoding() -> None:
-    body = b"\xef\xbb\xbf" + page(ARTICLE + "<p>Naïve plans.</p>")
+    body = b"\xef\xbb\xbf" + page(ARTICLE + "<p>Na\u00efve plans.</p>")
     assert (
-        "Naïve plans."
+        "Na\u00efve plans."
         in TrafilaturaExtractor().extract(fetched(body, "text/html; charset=iso-8859-1")).paragraphs
     )
 

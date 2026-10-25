@@ -22,7 +22,7 @@ from __future__ import annotations
 from collections import Counter
 from typing import Final
 
-from hypothesis import given, settings
+from hypothesis import event, given, settings
 from hypothesis import strategies as st
 from tests.fixtures.extraction.build_pdf_fixtures import journal_article_pages
 from tests.fixtures.extraction.expected_output import join_mismatches, load_expected, removed_line_rows
@@ -225,7 +225,7 @@ def test_a_number_that_is_not_the_outermost_line_stays_even_when_it_fits_the_seq
     ]
     layout = lay_out_pages(pages)
     assert [(item.page_number, item.text) for item in layout.removed_lines] == [(1, "1"), (2, "2"), (3, "3")]
-    assert layout.paragraphs[1].endswith("Body line four on page 2. 2")
+    assert "Body line four on page 2. 2 Body line one on page 3." in layout.paragraphs[1]
 
 
 def test_a_page_number_is_found_beneath_a_running_footer() -> None:
@@ -350,9 +350,14 @@ def test_a_dash_after_a_space_is_an_ordinary_line_break() -> None:
 
 
 def test_a_hyphen_at_the_end_of_a_paragraph_is_not_a_join() -> None:
-    lines = (line("a paragraph that ends in co-", 730.0), line("New paragraph after a gap.", 700.0))
+    lines = (
+        line("A paragraph that", 730.0),
+        line("ends in co-", 716.0),
+        line("operation after a gap.", 686.0),
+        line("It goes on.", 672.0),
+    )
     layout = lay_out_pages([PdfPageText(page_number=1, lines=lines)])
-    assert layout.paragraphs == ("a paragraph that ends in co-", "New paragraph after a gap.")
+    assert layout.paragraphs == ("A paragraph that ends in co-", "operation after a gap. It goes on.")
     assert layout.line_joins == ()
 
 
@@ -429,7 +434,7 @@ def test_a_paragraph_continues_onto_the_next_page_only_when_nothing_ends_it() ->
         "runs on",
         "Indented opening and more.",
     )
-    assert two_pages("runs on", line("A heading", 730.0, size=12.0)) == ("runs on", "A heading and more.")
+    assert two_pages("runs on", line("A heading", 730.0, size=12.0)) == ("runs on", "A heading", "and more.")
 
 
 def test_a_line_that_moves_up_the_page_is_a_new_column_and_continues_its_paragraph() -> None:
@@ -522,3 +527,7 @@ def test_every_character_is_in_the_text_a_removed_line_or_a_dropped_join(pages: 
     accounted += sum((visible(item.text) for item in layout.removed_lines), Counter[str]())
     accounted += Counter(join.character for join in layout.line_joins if not join.hyphen_kept)
     assert accounted == printed
+    event(f"joins kept: {min(sum(join.hyphen_kept for join in layout.line_joins), 2)}+")
+    event(f"joins dropped: {min(sum(not join.hyphen_kept for join in layout.line_joins), 2)}+")
+    event(f"lines removed: {min(len(layout.removed_lines), 2)}+")
+    event(f"paragraphs: {min(len(layout.paragraphs), 3)}+")

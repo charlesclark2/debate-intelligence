@@ -36,7 +36,8 @@ one are never labels.
    and :attr:`HeldOutMeasure.confidence_at_target`: the lowest confidence on a fixed grid above which
    held-out precision is at least 90%, there and at every higher grid point with enough cards.
 3. **What it would place**: the unplaced cards, and the other cards no label covers, it would place at
-   that confidence, by kind.
+   that confidence, by kind, with an estimate of its precision on them (:func:`estimate_precision`):
+   held-out precision weighed to how many of them a training card has the features of.
 4. **A coach sample** (:func:`coach_sample`): unplaced cards for the coach to label from their tag and
    headings, stratified by one model's confidence and by predicted kind, one card per document, and
    each compared model's score on the coach's labels (:func:`score_sample`).
@@ -90,6 +91,7 @@ __all__ = [
     "Band",
     "CoachSample",
     "Comparison",
+    "Estimate",
     "FeatureRow",
     "HeldOutMeasure",
     "LocalClassifier",
@@ -103,6 +105,7 @@ __all__ = [
     "coach_sample",
     "code_words",
     "compare",
+    "estimate_precision",
     "feature_rows",
     "feature_tokens",
     "heading_teams",
@@ -663,6 +666,63 @@ class WouldPlace:
     """Cards whose features a labelled training card has exactly."""
     at_threshold_seen: int = 0
     """Of those at the threshold, the ones a training card has the features of."""
+    estimates: tuple[Estimate, ...] = ()
+    """At each grid confidence, how many it would place and the precision held-out cards suggest."""
+    estimated_threshold: float | None = None
+    """The lowest grid confidence from which every :attr:`estimates` precision is at the target."""
+
+
+@dataclass(frozen=True, slots=True)
+class Estimate:
+    """What a model would place at one confidence, and the held-out precision weighed to their mix.
+
+    Held-out cards a training card has the features of are placed far more surely than the rest, and
+    the cards no label covers hold a different mix of the two. The estimate weighs held-out precision
+    on each kind of card by how many of each the model would place at that confidence. It is an
+    estimate, not a measure: the coach's labels are the measure.
+    """
+
+    confidence: float
+    cards: int
+    seen: int
+    held_out: int
+    """Held-out predictions at or above the confidence, which the estimate rests on."""
+    precision: float | None
+
+
+def estimate_precision(
+    measure: HeldOutMeasure,
+    placed: Sequence[tuple[bool, Prediction]],
+    *,
+    minimum_support: int = DEFAULT_MINIMUM_SUPPORT,
+) -> tuple[tuple[Estimate, ...], float | None]:
+    """Each grid confidence's estimate for `placed` `(seen, prediction)` cards, and where it holds the target.
+
+    A confidence at which `placed` holds a kind of card the held-out set has none of gives no estimate.
+    Choosing the threshold, a confidence with no estimate, no card placed, or fewer than
+    `minimum_support` held-out cards is passed over, as :attr:`HeldOutMeasure.confidence_at_target`
+    passes over a thin one.
+    """
+    estimates: list[Estimate] = []
+    for every, unseen in zip(measure.at_or_above, measure.unseen_at_or_above, strict=True):
+        above = [seen for seen, prediction in placed if prediction.confidence >= every.low]
+        seen_cards = sum(above)
+        unseen_cards = len(above) - seen_cards
+        seen_held = every.cards - unseen.cards
+        precision: float | None = None
+        if above and (not seen_cards or seen_held) and (not unseen_cards or unseen.cards):
+            seen_precision = (every.correct - unseen.correct) / seen_held if seen_held else 0.0
+            unseen_precision = unseen.correct / unseen.cards if unseen.cards else 0.0
+            precision = (seen_cards * seen_precision + unseen_cards * unseen_precision) / len(above)
+        estimates.append(Estimate(every.low, len(above), seen_cards, every.cards, precision))
+    found: float | None = None
+    for estimate in reversed(estimates):
+        if not estimate.cards or estimate.precision is None or estimate.held_out < minimum_support:
+            continue
+        if estimate.precision < TARGET_PRECISION:
+            break
+        found = estimate.confidence
+    return tuple(estimates), found
 
 
 @dataclass(frozen=True, slots=True)
@@ -732,6 +792,15 @@ def compare(
             if prediction is not None and threshold is not None and prediction.confidence >= threshold
         ]
         kinds = Counter(_kind(taxonomy, prediction.position_id) for _, prediction in placed)
+        estimates, estimated = (
+            estimate_precision(
+                measure,
+                [(seen, prediction) for seen, prediction in these if prediction is not None],
+                minimum_support=minimum_support,
+            )
+            if measure.unseen_at_or_above
+            else ((), None)
+        )
         standings.append(
             WouldPlace(
                 placement=placement,
@@ -741,6 +810,8 @@ def compare(
                 by_kind=tuple(sorted(kinds.items())),
                 seen_in_training=sum(seen for seen, _ in these),
                 at_threshold_seen=sum(seen for seen, _ in placed),
+                estimates=estimates,
+                estimated_threshold=estimated,
             )
         )
     return Comparison(

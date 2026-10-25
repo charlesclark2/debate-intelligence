@@ -576,6 +576,46 @@ def test_held_out_precision_and_recall_by_kind_position_and_confidence_worked_by
     assert unseen[0.6] == (3, 3)
 
 
+def test_the_precision_estimate_weighs_held_out_precision_to_the_placed_cards_mix() -> None:
+    labels = ["spending-da"] * 2 + ["politics-da"] * 2 + ["states-cp"] * 3
+    held_out = measure_held_out(
+        MEASURE_TAXONOMY,
+        [*labels, "states-cp", "states-cp", "states-cp"],
+        [
+            Prediction("spending-da", 0.97),  # seen, right
+            Prediction("spending-da", 0.92),  # unseen, right
+            Prediction("politics-da", 0.81),  # seen, right
+            Prediction("states-cp", 0.42),  # unseen, wrong
+            Prediction("states-cp", 0.99),  # seen, right
+            Prediction("states-cp", 0.65),  # unseen, right
+            Prediction("states-cp", 0.88),  # unseen, right
+            Prediction("politics-da", 0.55),  # unseen, wrong
+            Prediction("spending-da", 0.31),  # unseen, wrong
+            None,
+        ],
+        seen=[True, False, True, False, True, False, False, False, False, False],
+        minimum_support=1,
+    )
+    placed = [
+        (True, Prediction("spending-da", 0.5)),
+        (False, Prediction("states-cp", 0.5)),
+        (False, Prediction("states-cp", 0.7)),
+        (False, Prediction("cap-k", 0.99)),
+    ]
+    estimates, threshold = module.estimate_precision(held_out, placed, minimum_support=1)
+    found = {round(one.confidence, 3): (one.cards, one.seen, one.precision) for one in estimates}
+    # From 0.45 the held-out seen cards are 3 of 3 right and the unseen 3 of 4 (0.92, 0.55, 0.65,
+    # 0.88): all four placed cards, one seen, give (1 * 1 + 3 * 0.75) / 4.
+    assert found[0.45] == (4, 1, pytest.approx(0.8125))
+    # From 0.55 two unseen cards are placed, and the unseen held-out cards are still 3 of 4.
+    assert found[0.55] == (2, 0, pytest.approx(0.75))
+    # From 0.6 the unseen held-out cards are 0.92, 0.65 and 0.88, all right.
+    assert found[0.6] == (2, 0, pytest.approx(1.0))
+    # From 0.95 no unseen held-out card is left to say how the 0.99 card would do.
+    assert found[0.95] == (1, 0, None)
+    assert threshold == 0.6
+
+
 def test_a_thin_point_is_passed_over_and_a_supported_failure_stops_the_threshold() -> None:
     labels = ["spending-da"] * 6
     predictions = [

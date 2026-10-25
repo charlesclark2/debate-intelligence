@@ -67,6 +67,7 @@ from debate_core.arguments.landscape.local_classifier import (
     DEFAULT_SEED,
     SAMPLE_STRATA,
     TARGET_PRECISION,
+    UNPLACED,
     Band,
     Comparison,
     SampleScore,
@@ -320,6 +321,17 @@ def comparison_json(name: str, comparison: Comparison) -> dict[str, object]:
                 "at_threshold": one.at_threshold,
                 "at_threshold_seen": one.at_threshold_seen,
                 "by_kind": dict(one.by_kind),
+                "estimated_threshold": one.estimated_threshold,
+                "estimates": [
+                    {
+                        "confidence": estimate.confidence,
+                        "cards": estimate.cards,
+                        "seen": estimate.seen,
+                        "held_out": estimate.held_out,
+                        "precision": estimate.precision,
+                    }
+                    for estimate in one.estimates
+                ],
             }
             for one in comparison.would_place
         ],
@@ -392,6 +404,23 @@ def _print_comparison(name: str, comparison: Comparison) -> None:
             f"{one.seen_in_training} have a training card's features exactly, {one.at_threshold_seen} of "
             "them at the threshold."
         )
+    unplaced = next(one for one in comparison.would_place if one.placement == UNPLACED)
+    if unplaced.estimates:
+        print(
+            "  Estimated precision on the UNPLACED cards it would place, held-out precision weighed to their "
+            "mix: confidence, cards, of them like a training card, estimate"
+        )
+        for estimate in unplaced.estimates:
+            print(
+                f"    {estimate.confidence:.3f}: {estimate.cards}, {estimate.seen}, "
+                f"{_ratio(estimate.precision)}"
+            )
+        threshold = (
+            "none reaches it"
+            if unplaced.estimated_threshold is None
+            else f"{unplaced.estimated_threshold:.3f}"
+        )
+        print(f"  Confidence at an estimated {TARGET_PRECISION:.0%} on the UNPLACED cards: {threshold}.")
 
 
 async def _compare(arguments: argparse.Namespace) -> int:

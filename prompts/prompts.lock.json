@@ -1,6 +1,20 @@
 {
   "format": 1,
   "prompts": {
+    "card.markup": {
+      "1.0.0": {
+        "body_sha256": "9f87420f74a69659fdbf2fad2d391252edcf0762f4aa1286fa333a7692c4b62a",
+        "output_schema": "debate_core.evidence.selection_contract.MarkupSuggestion",
+        "task_class": "complex_reasoning"
+      }
+    },
+    "card.select": {
+      "1.0.0": {
+        "body_sha256": "f17a32587e8c54b3a3a5c662574ee4245f5ace12ae858cc4f4538e204887c730",
+        "output_schema": "debate_core.evidence.selection_contract.CardSelection",
+        "task_class": "complex_reasoning"
+      }
+    },
     "model.repair": {
       "1.0.0": {
         "body_sha256": "62f84d9990009db70021ed0f1b6d6edebd9d6e64157afbea382e63e684654f10",

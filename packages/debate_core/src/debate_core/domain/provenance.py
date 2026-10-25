@@ -9,7 +9,11 @@ Every structured model result carries its metadata: :attr:`ModelResponse.metadat
 <debate_core.domain.model_contracts.ModelResponse.metadata>` builds it from the response's own
 route, prompt and time, so no router can return a result without it or with a different one. The
 caller adds what only it knows, the snapshots and retrieved items the prompt's variables came from,
-with :meth:`GeneratedArtifactMetadata.with_inputs` before persisting.
+with :meth:`GeneratedArtifactMetadata.with_inputs` before persisting. That returns a
+:class:`SourcedArtifactMetadata`, a type of its own whose inputs are required fields, and an
+artifact declares its metadata as that type: the bare `response.metadata` is refused by the type
+checker and by validation alike, so an artifact cannot be built or loaded without the inputs it
+was generated from (v1-e05-t06-card-selection-contract, ac5).
 
 An output the structured-output guard had to repair says so: `repair_attempted` is true and
 `repair_prompt_version` names the version of the `model.repair` prompt that produced it, while
@@ -29,7 +33,7 @@ from pydantic import Field, model_validator
 from debate_core.domain.base import DomainModel, NonEmptyText, Ulid, UtcDatetime
 from debate_core.domain.model_contracts import ResolvedRoute
 
-__all__ = ["GeneratedArtifactMetadata"]
+__all__ = ["GeneratedArtifactMetadata", "SourcedArtifactMetadata"]
 
 
 class GeneratedArtifactMetadata(DomainModel):
@@ -87,6 +91,30 @@ class GeneratedArtifactMetadata(DomainModel):
         """The temperature sent; `None` when the model's default applied."""
         return self.route.temperature
 
-    def with_inputs(self, *, snapshot_ids: Iterable[str] = (), retrieval_ids: Iterable[str] = ()) -> Self:
-        """This metadata with the snapshots and retrieved items the call's variables came from."""
-        return self.evolve(snapshot_ids=tuple(snapshot_ids), retrieval_ids=tuple(retrieval_ids))
+    def with_inputs(
+        self, *, snapshot_ids: Iterable[str], retrieval_ids: Iterable[str]
+    ) -> SourcedArtifactMetadata:
+        """This metadata with the snapshots and retrieved items the call's variables came from.
+
+        Both are required, even when one is empty: a caller says what the prompt was given rather
+        than leaving it out.
+        """
+        return SourcedArtifactMetadata.model_validate(
+            {**self.__dict__, "snapshot_ids": tuple(snapshot_ids), "retrieval_ids": tuple(retrieval_ids)}
+        )
+
+
+class SourcedArtifactMetadata(GeneratedArtifactMetadata):
+    """Provenance with the call's inputs recorded: the only metadata a generated artifact accepts.
+
+    :meth:`GeneratedArtifactMetadata.with_inputs` returns one. Its `snapshot_ids` and
+    `retrieval_ids` have no default, so a stored document without them does not load, and it is a
+    type of its own, so a field declared as it refuses the bare metadata a response carries.
+    """
+
+    snapshot_ids: tuple[Ulid, ...] = Field(
+        description="The source snapshots whose text the prompt was given, in the order given."
+    )
+    retrieval_ids: tuple[NonEmptyText, ...] = Field(
+        description="The retrieved items (search results, cards) the prompt was given, in order, if any.",
+    )

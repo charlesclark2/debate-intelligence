@@ -1,0 +1,33 @@
+{
+  "output": {
+    "confidence": 0.75,
+    "passages": [
+      {
+        "end_offset": null,
+        "first_paragraph": 2,
+        "last_paragraph": 2,
+        "start_offset": 52
+      },
+      {
+        "end_offset": 120,
+        "first_paragraph": 3,
+        "last_paragraph": 3,
+        "start_offset": 59
+      }
+    ],
+    "rationale": "Paragraph 2 says the fight crowds out the budget; paragraph 3 says a failed deal brings a shutdown.",
+    "tag": {
+      "argument_role": "link",
+      "confidence": 0.8,
+      "need_alignment": "direct",
+      "text": "An energy fight leaves no time for a budget, so a shutdown follows"
+    }
+  },
+  "output_schema": "debate_core.evidence.selection_contract.CardSelection",
+  "prompt_id": "card.select",
+  "prompt_version": "1.0.0",
+  "variables": {
+    "numbered_snapshot": "[P1] The Senate’s “clean grid” bill—passed 52–48 on Tuesday—spends political capital the majority will need later.\n\n[P2] Analysts at the Café Économique institute warn that the fight leaves no room for a budget deal this spring 🌍 before the recess.\n\n[P3] If the budget deal fails—and “fails” is the word staff use—a shutdown follows within weeks 😬 and the grid program stalls.\n\n[P4] Violet harbor engines quietly folded seven paper lanterns beneath the northern quarry wall.",
+    "research_need": "Politics DA link: an energy fight costs the majority the budget"
+  }
+}

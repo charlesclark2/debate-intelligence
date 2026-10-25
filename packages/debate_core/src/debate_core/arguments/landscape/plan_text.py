@@ -48,6 +48,11 @@ text that names none, `NONE` when it holds no plan text at all, and `UNREAD` for
 not be parsed. Only `NAMES` identifies a round (`PLAN_TEXT`); `NONE` is the only verdict a team's aff
 may be carried into (:mod:`~debate_core.arguments.landscape.aff_assignment`).
 
+**K-aff markers** (`v1-e32-t17`) are read from the same paragraphs, in the same pass and cache, when
+the topic has a K-aff config (:class:`PlanTextVocabulary`'s `kritikal`; the reading is
+:func:`~debate_core.arguments.landscape.kritikal_aff.read_kritikal_markers`), and the vocabulary's
+digest covers that config, so an edit to it reads every source again.
+
 Pure and deterministic: no I/O, no model, and nothing returned or logged holds a paragraph's text.
 """
 

@@ -310,6 +310,11 @@ report shows which one did:
    their own. A round whose plan text names something else, or no aff at all, is never carried into,
    and a team whose rounds name two affs carries nothing.
 
+4. **A K-aff marker** (`KRITIKAL_AFF_MARKER`), for a round none of the above identifies. A file of the
+   round holds no plan text and a marker of a kritikal affirmative, and the round counts under the
+   topic's one K-aff position, `kritikal-aff` ([below](#kritikal-affirmatives)).
+5. **The team's other K-aff rounds** (`KRITIKAL_AFF_CARRY`), as `TEAM_CARRY` carries a plan.
+
 A round none of these identifies is counted as unidentified. The caselist's own round titles and cite
 entries are not read: this project does not take them from the site this season.
 
@@ -333,6 +338,50 @@ team once, however many of the hidden advantages it reads.
   aff of the rounds whose files hold its cards, so setting `parent` cannot move it.
 * **An aff or mechanism whose rounds read no advantage** gets no section. It is named in one closing
   line, with its rounds.
+
+### Kritikal affirmatives
+
+A kritikal affirmative has an advocacy statement or a method, and no plan, so its plan text names
+nothing. Taxonomy 1.3.0 has one position for every K aff, `kritikal-aff` (the PM's ruling of
+2026-10-25). The headings of K-aff files name the K they read in only a few files, so there is no
+position per K.
+
+**A round counts under it** when nothing above identifies it, none of its files holds a plan text, and
+one of them holds a marker:
+* **a role of the ballot:** the labels the CP texts' section reads ([below](#cp-texts-alternatives-roles-of-the-ballot-and-overviews));
+* **an advocacy statement:** `Advocacy` or `Advocacy statement` over a paragraph, a paragraph opening
+  `Advocacy:`, or a sentence opening `Our advocacy is`;
+* **`The 1AC is`,** opening a sentence;
+* **a method:** `Method` over a paragraph, a paragraph opening `Method:`, or a sentence opening `Our
+  method is`.
+
+`Methods` is not a marker: it heads a policy aff's study block.
+
+A marker is counted and never quoted. An advocacy statement is not among the texts data-use policy 1.13
+lets a report quote.
+
+**The team's other rounds.** A team whose only identified aff is the K aff carries it into its other
+affirmative rounds with no plan text, as `TEAM_CARRY` does. It is never carried into a round whose
+own file reads an advantage: that round is a policy aff whose plan text has no label. A round refused
+that way stays unidentified, and the report counts it.
+
+**What report.md shows.** **Kritikal affirmatives** comes after Advantages by affirmative. It gives:
+* the K-aff rounds and teams, by their own marker and by carry;
+* the rounds refused for an advantage;
+* the K families the K-aff files' headings name, with files and teams. That is a count of words in
+  headings, never a placement, and nothing is read from a card's tag;
+* how many affirmative rounds still have no identified aff.
+
+The method table under **Unclassified** adds the refused rounds and a control: the rounds another
+method identifies whose files hold a marker.
+
+**The families are yours to edit,** in `config/landscape/kritikal_affs/<topic id>.yaml`:
+* each family has an id, a label and its phrases, in lowercase words;
+* a longer phrase is matched first, so `racial cap` is not also `cap`;
+* a phrase may name one family only.
+
+`uv run pytest tests/config` checks the file, which also names the K-aff position. An edit to it, like
+a new alias, makes the next run read every affirmative file again.
 
 ## The plan-text sheet and your mechanisms
 
@@ -451,7 +500,10 @@ reads them again too, because a text's position is kept with it.
 
 So after an edit to the taxonomy, your decisions or the actors, run the fill on its own first,
 `uv run python scripts/read_landscape_texts.py --caselist <caselist>`, then the dry run and the
-publish. A dry run writes no cache, so without the fill first the dry run and the publish would each
+publish. After a taxonomy bump or a K-aff file edit, also refill the classifications
+(`scripts/classify_landscape_positions.py classify`) and the plan texts
+(`scripts/assign_landscape_affs.py plan-texts`) first: their caches are keyed on the taxonomy and on
+the K-aff file too. A dry run writes no cache, so without the fill first the dry run and the publish would each
 read every file again (the PM's ruling of 2026-10-24 on v1-e32-t11's question 4).
 
 ## How report.md is laid out
@@ -460,7 +512,8 @@ After its header (what the report was built from, and how to read its numbers) a
 list, `report.md` comes in three parts (`v1-e32-t20`, from your read of 2026-10-25):
 
 * **Affirmative**: the affs, advantages and the aff side's other positions, each advantage with its
-  impact cards, what each runs through and its link chain, then **Advantages by affirmative**.
+  impact cards, what each runs through and its link chain, then **Advantages by affirmative** and
+  **Kritikal affirmatives**.
 * **Negative**: the DAs with their impact cards and link chains, the CPs, Ks and Ts, then the CP texts,
   alternatives and roles of the ballot.
 * **Neither side**: positions either side reads, the overviews (counted on both sides), new this week,

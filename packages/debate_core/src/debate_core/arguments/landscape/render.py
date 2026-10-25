@@ -20,12 +20,16 @@ id; cards by rank). Nothing here computes a count; the service did.
   count, with no overview text. The texts are in report.md only, never beside a school or team code.
   Under each aff `v1-e32-t09` assigned rounds to, and each mechanism under it, it lists the advantages
   those rounds read, with their teams, the cut-off and what it hides, and the advantage reads of the
-  affirmative rounds with no assigned aff (`v1-e32-t15`). No other file has them. After its header and
-  a contents list, its sections come in three parts (`v1-e32-t20`, from the coach's read of
-  2026-10-25): **Affirmative** (the aff side's positions with their impact blocks, then the advantages
-  by aff), **Negative** (the negative's positions with theirs, then the CP texts, alternatives and roles
-  of the ballot), and **Neither side** (positions either side reads, the overviews, which are counted on
-  both sides, the trends and what could not be counted). A part with no section has no heading.
+  affirmative rounds with no assigned aff (`v1-e32-t15`). No other file has them. Then the kritikal
+  affirmatives (`v1-e32-t17`): the K-aff rounds by marker and by carry, the rounds the advantage guard
+  refused, the K families the K-aff files' headings name, and the rounds still unidentified; the method
+  table under Unclassified adds the refusals and the marker control. No marker's words are shown.
+  After its header and a contents list, its sections come in three parts (`v1-e32-t20`, from the
+  coach's read of 2026-10-25): **Affirmative** (the aff side's positions with their impact blocks, then
+  the advantages by aff and the kritikal affirmatives), **Negative** (the negative's positions with
+  theirs, then the CP texts, alternatives and roles of the ballot), and **Neither side** (positions
+  either side reads, the overviews, which are counted on both sides, the trends and what could not be
+  counted). A part with no section has no heading.
 * **positions.csv** has the positions' rows for a spreadsheet, **top_cards.csv** each position's
   most-read cards, and **impact_cards.csv** each advantage's and DA's impact cards, with how many
   documents of each kind carry no labelled impact in its header block. **trends.csv** has each

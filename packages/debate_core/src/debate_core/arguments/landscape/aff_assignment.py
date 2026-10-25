@@ -16,7 +16,16 @@ method that named it, and otherwise under an aff a card in the round was placed 
    document with no reading counts as unread). A round t02 placed under an aff is left to the report.
    A team whose rounds name two affs, or hold a conflicting round, carries nothing, and a round
    disclosed by no readable team is never carried into or from.
-3. **Otherwise nothing.** A round no signal identifies is not assigned, and the report shows it as
+3. **`KRITIKAL_AFF_MARKER`** (`v1-e32-t17`, the PM's rulings of 2026-10-25, given
+   :class:`KritikalSignals`). A round the two above leave unassigned, not conflicting and not placed,
+   none of whose documents holds a plan text (`NONE`) and one of which holds a K-aff marker, reads the
+   topic's K aff. The assignments above are never changed by it.
+4. **`KRITIKAL_AFF_CARRY`.** A team whose only identified aff is the K aff (no plan text or placed
+   card names another, and its rounds do not disagree) carries it into its other open rounds by step
+   2's guard, every document `NONE`, and never into a round whose own file reads an advantage (a card
+   t02 placed under one, READS, at or above the review threshold: t15's placement). Such a round stays
+   unidentified and its key is counted (:attr:`AssignmentCounts.refused_by_advantage`).
+5. **Otherwise nothing.** A round no signal identifies is not assigned, and the report shows it as
    unidentified. A round t02 placed under an aff and no plan text names is left to the report's
    `PLACED_CARD`.
 

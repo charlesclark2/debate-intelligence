@@ -11,7 +11,10 @@ on-topic disclosures, `v1-e32-t02`'s classifications and each affirmative file's
 * **a placed aff** is t03's `PLACED_CARD` rule: a card of the round's files `v1-e32-t02` placed under
   an aff (through its `merged_into` links), READS, at or above the review threshold;
 * **the assignment** is :func:`~debate_core.arguments.landscape.aff_assignment.assign_affs`':
-  `PLAN_TEXT`, then `TEAM_CARRY`, and a round no signal identifies is not assigned.
+  `PLAN_TEXT`, then `TEAM_CARRY`, then, when the topic has a K-aff config (`v1-e32-t17`),
+  `KRITIKAL_AFF_MARKER` and `KRITIKAL_AFF_CARRY`, never into a round whose own file reads an advantage
+  (a card placed under one, READS, at or above the threshold); a round no signal identifies is not
+  assigned. The K-aff inputs the report counts its group from come back with the assignments.
 
 A team is the round's school and team code, compared without case, and is only ever an opaque key
 here. Nothing is written or logged.

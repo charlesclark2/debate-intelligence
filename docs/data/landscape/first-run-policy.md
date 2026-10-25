@@ -175,4 +175,8 @@ merge.
 
 ## The coach's review
 
-Not yet given.
+Given 2026-10-24, on the published report for 2026-10-20: it "looks great", with no fixes asked
+for. His one question was why the affirmative side shows a single aff. The first report places
+every plan under `single-payer-aff`, the topic's one aff position at 1.1.0. The mechanisms that
+split it come from his plan-text sheet (`v1-e32-t09`'s ac3). He filled that sheet's 131 clusters
+on 2026-10-24, and a later taxonomy version applies them.

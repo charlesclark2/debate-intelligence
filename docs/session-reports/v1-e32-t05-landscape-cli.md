@@ -781,3 +781,15 @@ Then: scripts/task pr --partial, and blocks 0 to 4 after the merge.
 **Block 2's `--publish` waits until v1-e32-t08 has merged.** Right after the publish, the operator
 runs t08's lock writer for 1.1.0 (the PM's ruling on t08, 2026-10-24), and the PM commits the lock
 in a PM batch.
+
+## PM record, 2026-10-24
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+* **ac5 and the first-dev-run node: done.** Blocks 0 to 4 ran on dev after the merge: the dry run,
+  the scan's 6 hits read and accepted (`ae969d4918b6`), the publish, and the release of taxonomy
+  1.1.0 (recorded in the PM batch of 2026-10-24 (i)). The coach reviewed the Policy report on
+  2026-10-24, before 2026-11-07, with no fixes; his review is in
+  [the first-run note](../data/landscape/first-run-policy.md#the-coachs-review).
+* **ac4 is still to be recorded:** the PM records validate-dev's result for the recorded tier, which
+  runs the landscape smoke check, and then sets the Goal `Succeeded`.

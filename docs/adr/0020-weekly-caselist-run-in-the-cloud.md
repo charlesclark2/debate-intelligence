@@ -272,6 +272,10 @@ context `SecretARN` and `SecretVersionId`, so the key policy can say which secre
    set-password`, which prompts with hidden input, as `login` does, and writes the secret, so the
    password never reaches shell history or a process listing. The coach writes it again after
    changing it at Tabroom and never reads it back.
+   **Amended 2026-10-24 (PM ruling 1, `v1-e40-t02`):** the permission set is
+   `Debate<Env>CaselistSecretWriter`. Identity Center caps a permission set's name at 32 characters,
+   and `DebateDevCaselistCredentialWriter` is 33 (34 in prod). Its grants are as above, and the name
+   in the table above reads the same way.
 
 **Both the key policy and each secret's resource policy enforce this,** so neither an IAM grant nor a
 policy left off by mistake widens the read:
@@ -284,17 +288,39 @@ policy left off by mistake widens the read:
   `kms:CreateGrant` and `kms:ReEncrypt*` to everyone, since Secrets Manager needs no grant. So
   `DebateMaintainer`'s PowerUserAccess, which allows `kms:*` in IAM, decrypts nothing here and cannot
   change the policy.
+  **Amended 2026-10-24 (PM rulings, `v1-e40-t02`'s apply A):** creating a secret under this key is
+  a use of the key by its creator. When a secret's key is set, Secrets Manager validates the
+  caller's access with a `GenerateDataKey` and a `Decrypt` whose encryption context is the
+  secret's real `SecretARN` and `SecretVersionId` `RequestToValidateKeyAccess`, and discards both
+  results. The first apply in dev was refused at that `GenerateDataKey`. So break-glass, which
+  applies Terraform, holds two more allows: `kms:GenerateDataKey` and `kms:Decrypt`, each only
+  through Secrets Manager, for the two secrets' ARNs, and only with that validation id. The three
+  decrypt denies except break-glass, and one more deny refuses break-glass every decrypt whose
+  version id is not the validation id. A ciphertext decrypts only under the encryption context it
+  was made with, and every stored version's data key is bound to its own version id, so
+  break-glass still cannot decrypt a stored password or token through the key. Applied in dev on
+  2026-10-24 (9 added, 1 changed), and checked: the writer, `debate-dev` and break-glass are each
+  refused `GetSecretValue` on the password.
 - **Password secret's resource policy.** Denies `secretsmanager:GetSecretValue` to every principal
   whose `aws:PrincipalArn` is not the login role; denies `PutSecretValue` to every principal but
   the writer's role; denies `PutResourcePolicy`, `DeleteResourcePolicy`, `UpdateSecret` (which could
   move the secret to another key), `DeleteSecret` and `ReplicateSecretToRegions` to every principal
   but `DebateBreakGlassAdmin`.
+  **Amended 2026-10-24 (PM ruling 5, `v1-e40-t02`):** `UpdateSecretVersionStage`, which can move
+  the current label to an older value, is refused as a write, like `PutSecretValue`. `RotateSecret`
+  and `RestoreSecret` join the break-glass-only list, since each changes which value or key a read
+  reaches.
 - **Token secret's resource policy.** The same, with the run role as the only reader and the login
   role and the writer as the writers.
 - **No secret reaches a task through ECS's `secrets` field.** That would make the task *execution*
   role a reader and put the password in the container's environment. Each task's own code calls
   `GetSecretValue` with its task role, holds the value as a `SecretStr`, and registers it with the
   redaction filter, as the token store does today.
+  **Amended 2026-10-24 (PM ruling 4, `v1-e40-t02`):** the token is registered with the redaction
+  filter, as the token store does. The password is never registered, because registering keeps a
+  value in a process-wide set for the life of the process. It is never formatted, and the Secrets
+  Manager client quiets botocore's two wire loggers (`botocore.endpoint` and `botocore.parsers`),
+  which log `PutSecretValue`'s and `GetSecretValue`'s values at DEBUG, for the length of each call.
 
 **Who can make the login role run.** The login task definition is owned by Terraform and pins its
 image by digest. Only `DebateBreakGlassAdmin` (the apply) and the login schedule's role
@@ -778,6 +804,7 @@ that is unplugged, closed or away, which is the coach's reason for the move.
 
 | Claim | Source |
 |---|---|
+| (Read 2026-10-24.) Setting a secret's key makes Secrets Manager validate the caller with a `GenerateDataKey` and a `Decrypt`, discarded, whose encryption context is the secret's ARN and `SecretVersionId` `RequestToValidateKeyAccess` | [Secret encryption and decryption](https://docs.aws.amazon.com/secretsmanager/latest/userguide/security-encryption.html), "Validating access to the KMS key" |
 | Secrets Manager calls `GenerateDataKey` for `PutSecretValue` and `Decrypt` for `GetSecretValue`; `PutSecretValue` decrypts only when a request changes an existing version; the encryption context `SecretARN` and `SecretVersionId`; `kms:ViaService`; the CloudTrail shape of `GenerateDataKey` and `Decrypt` with `invokedBy` | [Secret encryption and decryption](https://docs.aws.amazon.com/secretsmanager/latest/userguide/security-encryption.html) |
 | Conditional writes: `If-None-Match` and `If-Match` on `PutObject`; a delete marker counts as absent; the first of concurrent writers wins and the rest get `412`; `409` on a concurrent delete; conditional deletes exist for general purpose buckets | [Conditional requests](https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-requests.html), [Conditional writes](https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-writes.html) |
 | Fargate ephemeral storage: 20 GiB default, 200 GiB at most, set by `ephemeralStorage`, holds the image, AES-256 encrypted, platform version 1.4.0 | [Fargate task ephemeral storage](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/fargate-task-storage.html) |

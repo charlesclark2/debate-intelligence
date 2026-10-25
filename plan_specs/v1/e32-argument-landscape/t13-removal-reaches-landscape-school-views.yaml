@@ -1,0 +1,99 @@
+# TASK v1-e32-t13-removal-reaches-landscape-school-views - A removal and the annual purge reach the landscape bundles' school views
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t13-removal-reaches-landscape-school-views
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "A removal and the annual purge reach the landscape bundles' school views"
+spec:
+  # Filed by the PM, 2026-10-24, from v1-e32-t04's follow-up work 1 (the PM's review of 2026-10-24).
+  description: >-
+    Since v1-e32-t04, each landscape bundle under `reports/landscape/<caselist>/<snapshot>/`, in
+    the private bucket and in the operator's local `reports/`, holds a per-school view
+    (`schools.csv` and `schools.md`) naming schools and team codes as disclosed. The data-use
+    policy keeps per-school views on the same clock as their sources and removes them with their
+    sources, but `caselist remove` and the annual purge do not reach `reports/landscape/`, so
+    the removal runbook carries a manual step for now. Make the removal plan list, and
+    `--execute` delete (locally and in the bucket, noncurrent versions included, under the
+    removal credential), the school-view files of every landscape bundle of the removed source's
+    caselist, never another caselist's and never a circuit-wide file. The plan says the newest
+    snapshot's bundle is to be republished without the removed rounds, and `caselist status`
+    reports school-view files a removal left behind as residue. The annual purge's runbook steps
+    delete the school views of the bundles whose snapshots fall in the purged season. The
+    removal runbook's manual section is replaced by these steps. Filed in E32 rather than E30
+    because it needs v1-e32-t04, a later release than E30's.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, infrastructure, docs/runbooks, tests/smoke]
+    forbidden:
+      - A school, team code, debater name or path in the removal log, the suppression list, the register or any committed file
+      - Deleting a circuit-wide landscape file (report.md, positions.csv, top_cards.csv, impact_cards.csv, trends.csv)
+      - Deleting anything of another caselist's bundles
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e30-t07-source-removal
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e32-t04-trend-and-school-views
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        On a synthetic store with two caselists' landscape bundles, a removal's plan lists
+        exactly the removed caselist's `schools.csv` and `schools.md` files, local and
+        bucket, and `--execute` deletes them and their noncurrent versions, leaving every
+        circuit-wide file and the other caselist's bundles byte-identical; tests shown
+        failing first, against moto.
+    - id: ac2
+      description: >-
+        `caselist status` reports a school-view file a removal should have deleted as
+        residue, and clears once it is gone.
+    - id: ac3
+      description: >-
+        The removal credential's Terraform policy allows deleting those keys and nothing
+        else new, by Terraform test; the removal runbook's manual landscape section is
+        replaced, and the annual purge's steps cover school views.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t13-removal-reaches-landscape-school-views-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    Extend the removal plan and execute with the landscape school-view files, add the status
+    residue check, the removal credential's grant and the runbook steps.
+  goalRef:
+    name: v1-e32-t13-removal-reaches-landscape-school-views
+  graph:
+    nodes:
+      - id: removal-landscape
+        kind: Task
+        name: Removal reaches school views
+        description: >-
+          Extend the removal plan and execute with the landscape school-view files, add
+          the status residue check, the removal credential's grant and the runbook steps.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Removal tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, removal]
+status:
+  phase: Pending

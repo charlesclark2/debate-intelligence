@@ -36,6 +36,12 @@ spec:
     (PM ruling 2026-10-23.) The cutover waits until `t04`'s purge of the run-state bundle's
     noncurrent versions by `caselist remove` is merged, since policy 1.12 promises it from its
     merge.
+    (PM ruling 2026-10-24, from v1-e40-t02's question 3.) Each scheduled login asks OpenCaselist
+    for a new token, and nothing recorded says whether that ends the token the Mac's keychain
+    holds. On the Wednesday of the first scheduled login (apply B in dev), the operator runs
+    `debate-research caselist auth status --check` on the Mac. If the Mac's session was ended, the
+    Mac is logged in by hand each week until this task unloads its schedule. Either way the answer
+    is recorded in ADR-0020 and in this task's report, and the cutover's runbook says which.
   priority: 1
   constraints:
     packages: [docs/runbooks, docs/data, ops, tests/smoke]

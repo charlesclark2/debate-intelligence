@@ -90,6 +90,7 @@ __all__ = [
     "ALTERNATIVE_LABELS",
     "AnalyticTextInputs",
     "CP_TEXT_LABELS",
+    "MAX_LABEL_WORDS",
     "MAX_WORDS_BEFORE_SHOULD",
     "OVERVIEW_WORDS",
     "ROLE_OF_THE_BALLOT_LABELS",
@@ -103,12 +104,15 @@ __all__ = [
     "SectionParagraph",
     "SourceParagraphs",
     "SourceTexts",
+    "TEXT_UNITS",
     "TextGroup",
     "heading_placement",
+    "label_form",
     "names_a_school",
     "passes_actor_guard",
     "read_analytic_texts",
     "read_back_texts",
+    "role_of_the_ballot_form",
     "section_paragraphs_of",
     "text_digest",
     "top_texts",
@@ -178,9 +182,10 @@ _PLANK_LABEL: Final = re.compile(
 _SOLVES_VERBS: Final = ("solves", "solve", "solving")
 _HEADING_UNITS: Final = frozenset({StructuralUnit.POCKET, StructuralUnit.HAT, StructuralUnit.BLOCK})
 _NOT_TEXT_UNITS: Final = frozenset({StructuralUnit.EVIDENCE, StructuralUnit.CITE})
-_TEXT_UNITS: Final = frozenset(
+TEXT_UNITS: Final = frozenset(
     {StructuralUnit.TAG, StructuralUnit.ANALYTIC, StructuralUnit.UNDERTAG, StructuralUnit.OTHER}
 )
+"""The units that can hold a label's text: what may follow a label for it to count."""
 _LIST_UNITS: Final = frozenset({StructuralUnit.ANALYTIC, StructuralUnit.UNDERTAG, StructuralUnit.OTHER})
 
 Phrase = Annotated[str, StringConstraints(pattern=r"^[0-9a-z]+(?: [0-9a-z]+)*$")]
@@ -380,6 +385,24 @@ def heading_placement(
     return place
 
 
+def role_of_the_ballot_form(
+    text: str, unit: StructuralUnit, form: str | None, next_unit: StructuralUnit | None
+) -> TextForm | None:
+    """How a paragraph holds a role of the ballot, by the labels above; None when it holds none.
+
+    `form` is the paragraph's label form (:func:`label_form`) and `next_unit` the unit of the next
+    paragraph with words in it. A label counts only over a text; an inline label never in a heading.
+    `v1-e32-t17` reads a K aff's role of the ballot by this same rule.
+    """
+    if form in ROLE_OF_THE_BALLOT_LABELS:
+        return TextForm.LABEL if next_unit in TEXT_UNITS else None
+    if _ROLE_INLINE.match(text) and unit not in _HEADING_UNITS:
+        return TextForm.INLINE
+    if _ROLE_SENTENCE.match(text):
+        return TextForm.SENTENCE
+    return None
+
+
 def passes_actor_guard(text: str, actors: Collection[str]) -> bool:
     """At most 12 words before the first `should`, and an actor phrase among them, as whole words."""
     words = tag_words(text).split()
@@ -430,7 +453,7 @@ def read_analytic_texts(
         if one.unit in _NOT_TEXT_UNITS:
             continue
         following = written[position + 1] if position + 1 < len(written) else None
-        under = following if following is not None and following.unit in _TEXT_UNITS else None
+        under = following if following is not None and following.unit in TEXT_UNITS else None
         form = _label_form(one, own_names, names)
         should = _holds_should(one.text)
         if form in CP_TEXT_LABELS:
@@ -445,13 +468,11 @@ def read_analytic_texts(
             keep(AnalyticTextKind.K_ALTERNATIVE, TextForm.INLINE, one, one)
         elif _ALTERNATIVE_SENTENCE.match(one.text):
             keep(AnalyticTextKind.K_ALTERNATIVE, TextForm.SENTENCE, one, one)
-        if form in ROLE_OF_THE_BALLOT_LABELS:
-            if under is not None:
-                keep(AnalyticTextKind.ROLE_OF_THE_BALLOT, TextForm.LABEL, one, under)
-        elif _ROLE_INLINE.match(one.text) and one.unit not in _HEADING_UNITS:
-            keep(AnalyticTextKind.ROLE_OF_THE_BALLOT, TextForm.INLINE, one, one)
-        elif _ROLE_SENTENCE.match(one.text):
-            keep(AnalyticTextKind.ROLE_OF_THE_BALLOT, TextForm.SENTENCE, one, one)
+        role = role_of_the_ballot_form(one.text, one.unit, form, under.unit if under is not None else None)
+        if role is TextForm.LABEL and under is not None:
+            keep(AnalyticTextKind.ROLE_OF_THE_BALLOT, TextForm.LABEL, one, under)
+        elif role is not None:
+            keep(AnalyticTextKind.ROLE_OF_THE_BALLOT, role, one, one)
         if form is not None and _is_overview(form):
             keep(AnalyticTextKind.OVERVIEW, TextForm.LABEL, one, one)
     refused = 0
@@ -553,7 +574,7 @@ class _Planks:
         return form in self._rules.advantage_aliases
 
     def _is_separate(self, one: SectionParagraph) -> bool:
-        if one.unit not in _TEXT_UNITS:
+        if one.unit not in TEXT_UNITS:
             return False
         if _PLANK_LABEL.match(one.text):
             return True
@@ -703,11 +724,16 @@ def commonest_text(texts: Sequence[tuple[str, int, str]]) -> str:
 
 
 def _label_form(one: SectionParagraph, own_names: Sequence[str], caselist: CaselistNames) -> str | None:
+    return label_form(one.text, own_names, caselist)
+
+
+def label_form(text: str, own_names: Sequence[str] = (), caselist: CaselistNames | None = None) -> str | None:
     """A short paragraph's normalized form, as a label is matched; None for a longer one."""
-    words = tag_words(one.text).split()
+    words = tag_words(text).split()
     if not 0 < len(words) <= MAX_LABEL_WORDS:
         return None
-    return normalize_source_heading(one.text, [name for name in own_names if name.strip()], caselist).text
+    names = [name for name in own_names if name.strip()]
+    return normalize_source_heading(text, names, caselist or CaselistNames({})).text
 
 
 def _is_overview(form: str) -> bool:

@@ -45,9 +45,14 @@ reaches the network.
   `docs/data/parsed-card-store.md` describes. None is on record for a row the importer has not
   recorded; the card still resolves, without one.
 * **Unpinned (AUTO).** Among the card's rows in the recipe's caselist that the suppression list
-  does not stop: the latest `last_snapshot`, then the lowest source SHA-256, then the lowest first
-  element index, then the lowest disclosure digest. Each key is a field of the stored row, so the
+  neither stops nor holds: an attributed row before an unattributed one, then the latest
+  `last_snapshot`, then the lowest source SHA-256, then the lowest first element index, then the
+  lowest disclosure digest. Each key is a field of the stored row or the record it joins, so the
   choice is total and does not depend on the order the store lists rows in.
+* **Attributed** (PM amendments of 2026-10-19 and 2026-10-20, `v1-e33-t03`). A caselist row with
+  a disclosure on record, or a camp row with its release record: what the built file's sidecar
+  names the card's provenance from. An unattributed row is taken only when no attributed one
+  remains, and `files build` names each card resolved to one before it builds.
 * **Pinned.** The rows at the pin's source and element index in the pin's caselist, holding the
   card the reference names, whose snapshot span and disclosure match every field the pin gives.
   Rows of the same disclosure attributes are one occurrence, as in
@@ -65,9 +70,17 @@ it is rebuilt; the resolver asks again because a list merged from another machin
 before this machine's next rebuild. AUTO passes over such a row to the next by the rule above; a
 card with none left is `SUPPRESSED_OCCURRENCE`. A pin to such an occurrence is refused with
 `SUPPRESSED_OCCURRENCE`, never moved to another one, and so is a pin to a source suppressed as a
-whole, which a rebuilt store no longer holds at all. Path holds (`v1-e30-t13`) stop new bytes at an
-import. A row an earlier build imported at a held path is left out of the table when it is rebuilt
-(`v1-e31-t26`), and the resolver does not ask about holds itself.
+whole, which a rebuilt store no longer holds at all.
+
+**Path holds** (`v1-e30-t13`) stop new bytes at an import, and a row an earlier build imported at a
+held path is left out of the table when it is rebuilt (`v1-e31-t26`). The resolver asks too (PM
+amendment 2026-10-20, `v1-e33-t03`), because a hold merged from another machine stops a row before
+this machine's next rebuild. It asks the publisher's one rule for a held stored row,
+:func:`~debate_core.application.caselist.publish_plan.stored_row_hold`, for each disclosure record of
+the row, as the search index build does: a row is one path over several weeks, and a hold on any
+week's record of it holds the row. AUTO passes over a held row as over a suppressed one, and a pin
+to one is `SUPPRESSED_OCCURRENCE`, never moved. A row with no disclosure on record has no path to
+ask about, and a camp row is at no caselist path, so neither is held.
 
 ## Camp (OpenEv) cards (`v1-e33-t06`)
 
@@ -106,6 +119,7 @@ import yaml
 from pydantic import ValidationError
 
 from debate_core.application.caselist.openev_manifest import openev_release_name
+from debate_core.application.caselist.publish_plan import stored_row_hold
 from debate_core.application.caselist.suppression import load_suppression_state
 from debate_core.application.errors import DomainError
 from debate_core.application.ports.caselist import CaselistRepository
@@ -593,7 +607,8 @@ class Resolution(StrEnum):
     """The recipe's pin named it."""
 
     AUTO = "AUTO"
-    """Chosen by the rule: latest snapshot, then lowest source SHA-256 (see the module docstring)."""
+    """Chosen by the rule: attributed first, then latest snapshot, then lowest source SHA-256 (see the
+    module docstring)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -645,6 +660,22 @@ class _Store:
 
 
 type _Attribution = tuple[str, str, str, str, str] | None
+
+
+@dataclass(frozen=True, slots=True)
+class _Candidate:
+    """A row AUTO may choose, with the records its provenance would be named from."""
+
+    row: OccurrenceRecord
+    disclosure: Disclosure | None = field(repr=False)
+    camp_file: CampFile | None
+
+    @property
+    def attributed(self) -> bool:
+        """A caselist row with its disclosure on record, or a camp row with its release record."""
+        if self.row.caselist == OPENEV_STORE:
+            return self.camp_file is not None
+        return self.disclosure is not None
 
 
 def _auto_order(row: OccurrenceRecord) -> tuple[tuple[int, str], str, int, str]:
@@ -861,17 +892,21 @@ class _Resolution:
                 f"{caselist}'s occurrence store ({store.version}) has no card with this fingerprint",
             )
             return None
-        live = [row for row in rows if not state.suppresses(row.source_sha256, disclosure=row.disclosure)]
-        if not live:
+        candidates: list[_Candidate] = []
+        for row in rows:
+            if state.suppresses(row.source_sha256, disclosure=row.disclosure) or await self._held(row, state):
+                continue
+            candidates.append(_Candidate(row, await self._disclosure_of(row), await self._camp_file_of(row)))
+        if not candidates:
             self._error(
                 RecipeErrorCode.SUPPRESSED_OCCURRENCE,
                 f"{path}.fingerprint",
-                f"the removal suppression list stops every occurrence of this card in {caselist} "
+                f"the removal suppression list stops or holds every occurrence of this card in {caselist} "
                 f"({len(rows)})",
             )
             return None
-        row = min(live, key=_auto_order)
-        return await self._resolved(ref, path, Resolution.AUTO, row, await self._disclosure_of(row))
+        best = min(candidates, key=lambda one: (not one.attributed, _auto_order(one.row)))
+        return self._resolved(ref, path, Resolution.AUTO, best.row, best.disclosure, best.camp_file)
 
     async def _pinned(
         self, ref: CardRef, pin: OccurrencePin, path: str, state: SuppressionState
@@ -942,16 +977,26 @@ class _Resolution:
                 "refused, never moved to another occurrence: pin another, or remove the pin",
             )
             return None
+        for row, _ in matching:
+            if await self._held(row, state):
+                self._error(
+                    RecipeErrorCode.SUPPRESSED_OCCURRENCE,
+                    where,
+                    "the pinned disclosure is at a path a removal holds; a pin to it is refused, never "
+                    "moved to another occurrence: pin another, or remove the pin",
+                )
+                return None
         row, disclosure = min(matching, key=lambda pair: _auto_order(pair[0]))
-        return await self._resolved(ref, path, Resolution.PINNED, row, disclosure)
+        return self._resolved(ref, path, Resolution.PINNED, row, disclosure, await self._camp_file_of(row))
 
-    async def _resolved(
-        self,
+    @staticmethod
+    def _resolved(
         ref: CardRef,
         path: str,
         resolution: Resolution,
         row: OccurrenceRecord,
         disclosure: Disclosure | None,
+        camp_file: CampFile | None,
     ) -> ResolvedCard:
         return ResolvedCard(
             path=path,
@@ -960,7 +1005,7 @@ class _Resolution:
             resolution=resolution,
             occurrence=row,
             disclosure=disclosure,
-            camp_file=await self._camp_file_of(row),
+            camp_file=camp_file,
         )
 
     async def _store_of(self, caselist: str) -> _Store | None:
@@ -968,19 +1013,31 @@ class _Resolution:
             self._stores[caselist] = await self._ports.read(caselist)
         return self._stores[caselist]
 
-    async def _disclosure_of(self, row: OccurrenceRecord) -> Disclosure | None:
-        """The latest disclosure record whose digest is the row's; `None` when none is on record."""
+    async def _records_of(self, row: OccurrenceRecord) -> list[Disclosure]:
+        """Every disclosure record whose digest is the row's: one path, in each week that listed it."""
         if row.disclosure is None:
-            return None
+            return []
         key = (row.caselist, row.source_sha256)
         if key not in self._disclosures:
             self._disclosures[key] = await self._ports.disclosures(*key)
-        matching = [
+        return [
             disclosure
             for disclosure in self._disclosures[key]
             if disclosure_digest(row.caselist, disclosure.source_path) == row.disclosure
         ]
+
+    async def _disclosure_of(self, row: OccurrenceRecord) -> Disclosure | None:
+        """The latest disclosure record whose digest is the row's; `None` when none is on record."""
+        matching = await self._records_of(row)
         return max(matching, key=lambda one: (one.snapshot, one.source_path)) if matching else None
+
+    async def _held(self, row: OccurrenceRecord, state: SuppressionState) -> bool:
+        """Whether a path hold covers the row: the publisher's rule, asked of each of its records."""
+        return any(
+            stored_row_hold(row.caselist, one.snapshot.isoformat(), row.source_sha256, one.source_path, state)
+            is not None
+            for one in await self._records_of(row)
+        )
 
     async def _camp_file_of(self, row: OccurrenceRecord) -> CampFile | None:
         """The release record of a camp row: the camp file's record whose release is the row's."""

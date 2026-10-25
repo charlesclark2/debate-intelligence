@@ -21,7 +21,9 @@ and :meth:`ServiceContainer.verify_manifest`, which `debate-research verify` run
 :meth:`ServiceContainer.caselist_parse` and :meth:`ServiceContainer.parsed_publisher`, which
 `debate-research caselist parse` runs (`v1-e31-t06-parse-pipeline`); and
 :meth:`ServiceContainer.landscape_run`, which `debate-research landscape report` runs
-(`v1-e32-t05-landscape-cli`). The import
+(`v1-e32-t05-landscape-cli`); and :meth:`ServiceContainer.file_build`,
+:meth:`ServiceContainer.file_quality` and :meth:`ServiceContainer.file_suggest`, which
+`debate-research files build`, `files check` and `files suggest` run (`v1-e33-t03-file-build-cli`). The import
 commands also read archives and place manifests through it (:meth:`ServiceContainer.read_archive`,
 :meth:`ServiceContainer.archive_digest`, :meth:`ServiceContainer.evidence_object_path`), so no
 command imports an adapter (`v1-e01-t13-composition-root-cleanup`). The rest of V1's services and
@@ -184,6 +186,9 @@ from debate_core.application.evidence_sync import (
     SyncKeyspace,
 )
 from debate_core.application.evidence_verifier import EvidenceVerifier
+from debate_core.application.file_build_service import FileBuildService
+from debate_core.application.file_quality_service import FileQualityService
+from debate_core.application.file_suggest_service import FileSuggestService
 from debate_core.application.landscape_run import LandscapeRunService
 from debate_core.application.landscape_scan import ScanAcceptanceLog
 from debate_core.application.plan_texts import PlanTextService
@@ -246,6 +251,7 @@ if TYPE_CHECKING:  # pragma: no cover - imported for the type checker only; see 
     from mypy_boto3_s3.client import S3Client
 
     from debate_core.application.caselist_login import ScheduledLogin, SecretText, TabroomPasswordSecret
+    from debate_core.integrations.docx_parser import DebateDocxParser
     from debate_core.integrations.opencaselist import CaselistTokenStore, OpenCaselistClient
 
 __all__ = [
@@ -271,6 +277,9 @@ SERVICE_NAMES: Final[tuple[str, ...]] = (
     "caselist_token_store",
     "evidence_profile_check",
     "evidence_sync",
+    "file_build",
+    "file_quality",
+    "file_suggest",
     "openev_import",
     "opencaselist_client",
     "search_index_build",
@@ -361,6 +370,11 @@ PARSED_DIRECTORY: Final = Path("parsed")
 
 LANDSCAPE_REPORTS_DIRECTORY: Final = Path("reports") / "landscape"
 """Where `landscape report` writes each bundle in the data directory, by caselist and snapshot."""
+
+FILES_DIRECTORY: Final = Path("files")
+"""The files directory, in the data directory: recipes and drafts under `recipes/<topic>/`, built files
+under `built/<topic>/` (`v1-e33-t03`). Derived, as every path of the local store is, so one environment
+is one directory."""
 
 SCAN_ACCEPTANCES_DIRECTORY: Final = "scan-acceptances"
 """Beside the classification cache: the scan hits the operator accepted, per caselist (`v1-e32-t05`)."""
@@ -584,6 +598,81 @@ class ServiceContainer:
             analytic_texts=texts,
             stale_after_days=settings.caselist.stale_after_days,
         )
+
+    @property
+    def files_dir(self) -> Path:
+        """Where `files build` and `files suggest` write by default: `<data dir>/files`."""
+        return self.settings.storage.data_dir / FILES_DIRECTORY
+
+    def file_quality(self) -> FileQualityService:
+        """The built-file quality check (`v1-e33-t04`), which `files build` and `files check` both run.
+
+        Offline: the parser `files build` writes with, this machine's blob store, and this
+        environment's local copy of the suppression list. A build reaches no bucket (`v1-e33-t03`'s
+        forbidden list), so the check it runs reads what the build read.
+        """
+        return self.singleton("file_quality", self._build_file_quality)
+
+    def _build_file_quality(self) -> FileQualityService:
+        return FileQualityService(
+            parser=self._docx_parser(),
+            snapshots=FsSnapshotStore(self.settings.storage.data_dir),
+            suppression=self.local_suppression_list(),
+        )
+
+    def file_build(self) -> FileBuildService:
+        """Build one recipe into a file, its sidecar and its quality report (`v1-e33-t03`).
+
+        Over this machine's parsed store, caselist records, blob store and local suppression list, with
+        the lossless writer (`v1-e33-t02`) and :meth:`file_quality`, the one quality check this
+        container wires. No bucket, no model, no network.
+        """
+        return self.singleton("file_build", self._build_file_build)
+
+    def _build_file_build(self) -> FileBuildService:
+        # Imported here, not at module scope: lxml is loaded only by a command that builds a file.
+        from debate_core.integrations.docx_file_writer.writer import DocxEvidenceFileWriter
+
+        data_dir = self.settings.storage.data_dir
+        parser = self._docx_parser()
+        blobs = FsSnapshotStore(data_dir)
+        return FileBuildService(
+            parsed_store=LocalParsedStore(data_dir),
+            caselists=SqliteCaselistRepository(self.database),
+            suppression=self.local_suppression_list(),
+            blobs=blobs,
+            writer=DocxEvidenceFileWriter(snapshots=blobs, parser=parser),
+            quality=self.file_quality(),
+            parser_version=parser.parser_version,
+            files_dir=self.files_dir,
+            clock=self.clock(),
+        )
+
+    def file_suggest(self, *, config_dir: Path) -> FileSuggestService:
+        """Write a draft recipe from a landscape's most-read cards (`v1-e33-t03`).
+
+        The landscape is :meth:`landscape_run` without a bucket, which the service runs dry; the
+        resolver it pins with reads what :meth:`file_build` reads, so a draft resolves as it will build.
+        """
+        return self.singleton("file_suggest", lambda: self._build_file_suggest(config_dir))
+
+    def _build_file_suggest(self, config_dir: Path) -> FileSuggestService:
+        data_dir = self.settings.storage.data_dir
+        return FileSuggestService(
+            landscape=self.landscape_run(config_dir=config_dir, with_bucket=False),
+            parsed_store=LocalParsedStore(data_dir),
+            caselists=SqliteCaselistRepository(self.database),
+            suppression=self.local_suppression_list(),
+            parser_version=self._docx_parser().parser_version,
+            files_dir=self.files_dir,
+        )
+
+    def _docx_parser(self) -> DebateDocxParser:
+        """One E31 parser for the file builder's services: the writer and the check read alike."""
+        # Imported here, not at module scope: lxml is loaded only by a command that needs the parser.
+        from debate_core.integrations.docx_parser import DebateDocxParser
+
+        return self.singleton("docx_parser", DebateDocxParser)
 
     def caselist_parse(self, *, with_bucket: bool) -> CaselistParseService:
         """Build the incremental parse pipeline over this machine's store (`v1-e31-t06`).

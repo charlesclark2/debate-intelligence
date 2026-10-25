@@ -461,6 +461,28 @@ DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/dev" uv run deb
       the path entries are.
 - [ ] Find every built file whose provenance sidecar cites a removed sha256 (E33). Withdraw it from
       use immediately and rebuild it without those cards before anyone reads it in a round.
+      `files check` finds them (`v1-e33-t03`): it runs the built-file quality check over a file and
+      its sidecar, and its `suppression` check FAILs each card whose source or disclosure the list
+      stops, naming the request. It reads this machine's copy of the list, so run it here after the
+      removal's `--execute`, over each environment's built files, `<data_dir>/files/built/`. In dev:
+
+      ```bash
+      find ~/.debate-research/dev/files/built -name '*.docx' -print0 | DEBATE_ENV=dev xargs -0 -n 1 uv run debate-research files check
+      ```
+
+      And in prod:
+
+      ```bash
+      find ~/.debate-research/prod/files/built -name '*.docx' -print0 | DEBATE_ENV=prod xargs -0 -n 1 uv run debate-research files check
+      ```
+
+      Each file prints its table of checks; a file with no `FAIL` under `suppression` holds no
+      removed card. `xargs` exits 123 when any file failed a check, and a file can fail another check
+      for another reason (a file built before `v1-e33-t08` fails `provenance-complete`, and says so),
+      so read the `suppression` row of each. `find` printing nothing means no file has been built in
+      that environment. Rebuild each file that failed it with `debate-research files build <recipe>`
+      over its recipe: AUTO passes over the removed occurrence, and a pin to it is refused with
+      `SUPPRESSED_OCCURRENCE`, so edit that pin first.
 - [ ] If the file was shared inside the team outside the evidence store — a copy in someone's
       Dropbox, a printout in a tub — retrieve and destroy it. Per policy there should be none; if
       there is, note it in the register as an incident.

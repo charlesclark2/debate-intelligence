@@ -12,7 +12,8 @@ disclosure on record. Each test builds the same request again and compares:
   `LINES` taken out, and its header's last sentence (`HEADER_SENTENCES`) cut, is the new file, every
   other paragraph, run and style byte for byte, and every other part of the package too;
 * **the sidecar**, byte for byte, but for `docx_sha256`, which is the new file's own hash, and
-  `builder_version`, now `2026.10.22-file-writer-3`.
+  `builder_version`, now the running writer's: `2026.10.22-file-writer-3` when this was written,
+  `2026.10.24-file-writer-4` since `v1-e33-t03`, which changes a draft recipe's bytes alone.
 
 The header's last sentence pointed the reader below each cite, to the line. It goes with the line,
 rather than pointing to the sidecar, because a download of the file carries no sidecar (PM ruling,
@@ -103,9 +104,9 @@ CAMP_LINE = f"[OpenEv: {CAMP} 2031 — Policy, {CAMP_TITLE}]"
 CAMP_LINE_WITHOUT_A_RECORD = f"[OpenEv: {CAMP} 2031 — Policy]"
 NO_DISCLOSURE = "[Disclosed: hspolicy26 2026-09-15]"
 
-#: The writer versions before and after this task, as the sidecars record them.
+#: The writer version the recorded sidecars hold, and the running writer's, as the sidecars record them.
 RECORDED_VERSION: Final = "2026.10.19-file-writer-2"
-BUILDER_VERSION: Final = "2026.10.22-file-writer-3"
+BUILDER_VERSION: Final = "2026.10.24-file-writer-4"
 
 _DISCLOSED_ONLY = " Who disclosed each card is below its cite."
 _WITH_A_CAMP_CARD = " Where each card came from is below its cite."

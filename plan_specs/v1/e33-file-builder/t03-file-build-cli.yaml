@@ -137,7 +137,7 @@ spec:
         highlighted-cite refusal) `files build` runs the wired quality check and refuses an
         output directory inside a git working tree, each shown failing first.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

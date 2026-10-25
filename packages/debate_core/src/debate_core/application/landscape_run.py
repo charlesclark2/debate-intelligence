@@ -93,7 +93,7 @@ from debate_core.arguments.landscape.analytic_texts import CounterplanActors
 from debate_core.arguments.landscape.review_queue import DEFAULT_REVIEW_THRESHOLD, ReviewRow
 from debate_core.domain.landscape import Taxonomy
 from debate_core.domain.landscape_classification import OverrideRules, PositionClassification
-from debate_core.domain.landscape_report import AffAssignment, LandscapeReport
+from debate_core.domain.landscape_report import AffAssignment, LandscapeCard, LandscapeReport
 from debate_core.domain.landscape_schools import SchoolView
 from debate_core.domain.landscape_trends import LandscapeTrends
 
@@ -265,6 +265,8 @@ class LandscapeRunRequest:
     accept_scan_hits: str | None = None
     """The digest the operator read the hits under, from an earlier run's refusal."""
     model_mode: LandscapeModelMode = LandscapeModelMode.NONE
+    top_cards: int | None = None
+    """Most-read cards per position; None for the report's default. `files suggest` asks for its `--top`."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -327,6 +329,10 @@ class LandscapeRunResult:
     """None when no publish was asked for: `--no-publish`, and a dry run without `--publish`."""
     analytic_texts: AnalyticTextsForReport | None = field(default=None, repr=False)
     """`v1-e32-t11`'s reading of the analytic texts and its counts; None when no source of them is wired."""
+    taxonomy: Taxonomy | None = field(default=None, repr=False)
+    """The taxonomy the report counted under, for a reader of :attr:`report` (`files suggest`)."""
+    cards: tuple[LandscapeCard, ...] = field(default=(), repr=False)
+    """Every card the report ranked from, with its cluster and its headings as the matcher reads them."""
 
     @property
     def model_calls(self) -> int:
@@ -469,7 +475,17 @@ class LandscapeRunService:
             ),
             None,
         )
-        bundle = LandscapeReportService(review_threshold=self._threshold).bundle(
+        cards = landscape_cards(
+            reading.sources,
+            await self._parsed.read_occurrences(request.caselist, reading.version) or (),
+            reading.caselist_names,
+        )
+        counting = (
+            LandscapeReportService(review_threshold=self._threshold)
+            if request.top_cards is None
+            else LandscapeReportService(review_threshold=self._threshold, top_cards=request.top_cards)
+        )
+        bundle = counting.bundle(
             LandscapeReportInputs(
                 caselist=request.caselist,
                 through=snapshot,
@@ -478,11 +494,7 @@ class LandscapeRunService:
                 parser_version=parse_version_directory(reading.version)[0],
                 classifications=classified.classifications,
                 disclosures=reading.disclosures,
-                cards=landscape_cards(
-                    reading.sources,
-                    await self._parsed.read_occurrences(request.caselist, reading.version) or (),
-                    reading.caselist_names,
-                ),
+                cards=cards,
                 aff_assignments=assignments,
                 analytic_texts=texts.inputs if texts is not None else None,
                 snapshot_topics=snapshot_topics,
@@ -524,6 +536,8 @@ class LandscapeRunService:
             scan=scan,
             publish=publish,
             analytic_texts=texts,
+            taxonomy=taxonomy,
+            cards=cards,
         )
 
     async def _snapshot(self, caselist: str, asked: date | None) -> date:

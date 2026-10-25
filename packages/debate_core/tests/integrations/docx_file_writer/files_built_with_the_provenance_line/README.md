@@ -5,8 +5,9 @@ Four built files and their sidecars, as the writer built them before `v1-e33-t08
 wrote the provenance line below each cite. `test_built_files_without_the_line.py` builds the same
 four requests again and checks that each file has lost exactly its provenance-line paragraphs and
 its header's last sentence, which pointed to them, and that each sidecar is unchanged byte for byte,
-apart from `docx_sha256`, the built file's own hash, and `builder_version`, now
-`2026.10.22-file-writer-3` (PM ruling, 2026-10-22).
+apart from `docx_sha256`, the built file's own hash, and `builder_version`, now the running
+writer's (`2026.10.22-file-writer-3` then, PM ruling 2026-10-22; `2026.10.24-file-writer-4` since
+`v1-e33-t03`, which changes only a draft recipe's bytes).
 
 | File | What it holds |
 |---|---|

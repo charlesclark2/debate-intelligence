@@ -104,6 +104,11 @@ PLAN_KEYS_BEFORE_THIS_TASK = frozenset(
 
 EXECUTION_KEYS = frozenset({"outcome", "log_entry", "preflight_probes_left"})
 
+SCHOOL_VIEW_KEYS = frozenset({"school_views"})
+"""What `v1-e32-t13` added to every plan: the landscape school views, by key (`school_views`)."""
+SCHOOL_VIEW_EXECUTION_KEYS = frozenset({"school_views_deleted"})
+"""And to an execution's: how many of the deletions were school views."""
+
 
 def suppressed(sha256: str, path: str | None = None) -> SuppressionEntry:
     """A suppression entry: of the whole file, or of its copy at one `CASELIST` path."""
@@ -238,12 +243,16 @@ def test_a_plan_that_withdraws_nothing_has_an_empty_list() -> None:
 def test_the_plans_keys_are_t11s_and_the_two_this_task_adds() -> None:
     plan = a_team_removal_that_withdraws()
 
-    assert set(plan_summary(plan, SETTINGS, None)) == PLAN_KEYS_BEFORE_THIS_TASK | {
+    assert set(plan_summary(plan, SETTINGS, None)) == PLAN_KEYS_BEFORE_THIS_TASK | SCHOOL_VIEW_KEYS | {
         "withdrawals",
         "manifest_versions_swept",
     }
     assert set(plan_summary(plan, SETTINGS, executed(plan))) == (
-        PLAN_KEYS_BEFORE_THIS_TASK | EXECUTION_KEYS | {"withdrawals", "manifest_versions_swept"}
+        PLAN_KEYS_BEFORE_THIS_TASK
+        | EXECUTION_KEYS
+        | SCHOOL_VIEW_KEYS
+        | SCHOOL_VIEW_EXECUTION_KEYS
+        | {"withdrawals", "manifest_versions_swept"}
     )
 
 

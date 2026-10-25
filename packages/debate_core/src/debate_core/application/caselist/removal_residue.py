@@ -279,8 +279,9 @@ class CaselistResidue:
     in the bucket and on this machine, by role (`v1-e32-t13`,
     :mod:`~debate_core.application.caselist.removal_school_views`). Part of :attr:`found`."""
     school_views_older_than: RemovalCompletion | None = None
-    """The latest completed removal run whose own scope names this caselist: what a school view is
-    compared with, which may be earlier than :attr:`older_than` (see that module's docstring)."""
+    """The latest completed removal run whose own scope names this caselist, which the views in
+    :attr:`school_views` are older than; it may be earlier than :attr:`older_than` (see that module's
+    docstring). `None` when no view is left."""
 
     @property
     def found(self) -> bool:

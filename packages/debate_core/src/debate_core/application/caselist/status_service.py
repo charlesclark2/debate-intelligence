@@ -759,6 +759,8 @@ class CaselistStatusService:
             return CaselistResidue(
                 caselist=residue.caselist, checked=False, not_checked_reason=error_code_of(refused)
             )
+        if not views:
+            return residue
         return dataclasses.replace(residue, school_views=views, school_views_older_than=cutoff)
 
     async def _caselist_status(

@@ -341,9 +341,44 @@ to follow, both made:
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-26
 
 **Notes:**
+
+The build the cutover session needs, with a runbook to run it.
+1. **What was built.**
+   * `restore-run-state`, with each refusal giving its own reason. The three early mutant survivors
+     were fixed by strengthening the tests, not explained away, and a fresh Mac is covered.
+   * The dev profile with its caselists and bucket mode; the installer without `--caselist`.
+   * Two plan checks, each `PLAN OK` only for its exact shape and tested on synthetic plans.
+   * The comparison, which compares record digests as well as counts.
+   * A nine-step runbook.
+   * The WAL checkpoint flake was found and fixed at its cause.
+2. **The rulings of 2026-10-26, as answered in the session:**
+   * 1: (a), bucket mode stays in the dev profile;
+   * 2: (a), a follow-up task gives the restore a way to bring raw sources for a hand prod publish;
+   * 3: adopted, the policy sentence for a copy restored on the operator's machine, in a PM batch
+     as data-use policy 1.18;
+   * 4: amend, `constraints.packages` in a PM batch.
+3. **Changes after the review, both checked:**
+   * the "Before you start" warning: no dev bucket write from a checkout between the merge and the
+     seed;
+   * both base images pinned by index digest, citing the registry pages, with a test written by
+     hand from the operator's output.
+4. **Accepted as made:**
+   * Deviations 1 to 4. IMAGEPLAN being an image change only follows the t05 ruling, and it stops a
+     plan that still adds bucket mode;
+   * decisions 1 to 9, including a new-or-empty restore directory, `--confirm-prod`, the shared lock
+     helper, and the real pull as the second runner, held to 20 or more minutes of lease.
+5. **The affected set** did not finish within the limit, so it is left to the PR's `ci` under
+   agreement 10. The changed areas, `bucket_mode`, the rest of the CLI tests and `tests/smoke`
+   passed within it.
+6. **A note for the cutover's step 4:** the alerts' apply of 2026-10-26 also applied v1-e32-t13's
+   removal-credential grant. Read with the PM, it was exactly t13's one statement and the listing
+   prefix, `25 added, 6 changed, 2 destroyed`. So step 4's plan should show only the image change.
+
+**The PR merges `--partial`,** phase `InProgress`, until the cutover session runs ac1 and ac2. The
+PM reads every plan in the runbook before its apply. No re-review is needed.

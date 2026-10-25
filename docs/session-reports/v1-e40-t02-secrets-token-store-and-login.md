@@ -45,13 +45,12 @@ this report's stale parts are updated (condition 3).
 `origin/dev` worktree at `30ba804`, the apply created 8 of the 17 and destroyed nothing, then both
 `CreateSecret` calls failed with `AccessDeniedException: Access to KMS is not allowed`. Creating a
 secret under a customer-managed key has Secrets Manager call `kms:GenerateDataKey` as the caller,
-and the key policy gave break-glass administration only. The fix is one Allow,
-`BreakGlassEncryptsWhenCreatingTheTwoSecrets`: `kms:GenerateDataKey` for break-glass's role
-(`aws:PrincipalArn` like its pattern, the account root as principal, as the other statements do),
-through Secrets Manager in this region, for the two secrets' ARN patterns. No decrypt, no other key
-action, no grant. The three decrypt denies and `NoGrantsAndNoReEncryption` are byte-identical to
-before. A 14th Terraform test holds it, and the three mutations the PM named, plus three more, are
-each killed. The runbook now has the re-plan's exact check (`Plan: 9 to add, 1 to change, 0 to
+and the key policy gave break-glass administration only. The fix, as the PM's second review
+completed it: break-glass may make Secrets Manager's key-validation calls, a `GenerateDataKey` and a
+`Decrypt` with `SecretVersionId` `RequestToValidateKeyAccess`, through Secrets Manager, for the two
+secrets, and is denied every other decrypt (see [Changes after the second
+review](#changes-after-the-second-review)). No other key action and no grant;
+`NoGrantsAndNoReEncryption` is byte-identical to before. The runbook now has the re-plan's exact check (`Plan: 9 to add, 1 to change, 0 to
 destroy.`), a corrected reading of `MalformedPolicyDocumentException`, and how to recover from a
 partial apply. The task merges `--partial` again; the operator re-plans from `caselist-credentials-dev`
 after the merge, and the PM reads the plan first.
@@ -69,7 +68,7 @@ after the merge, and the PM reads the plan first.
 | Node `token-store`: Token store tests pass (`uv run pytest packages/debate_core/tests -k token`) | PASS | `.venv/bin/python -m pytest packages/debate_core/tests -k token -q` under `perl -e 'alarm 115'` → `145 passed in 15.17s` |
 | ac1 — the Secrets Manager backend passes the token store's contract tests with a stubbed client | PASS | `test_token_store_contract.py`: one suite parametrized over the keyring, file and secretsmanager backends (the last over a stubbed client raising botocore's own `ClientError`), plus four Secrets-Manager-only cases (one read per process, a save is one write and no read, built only when named, refused without a secret). Run with `test_token_store.py` → `45 passed in 2.18s` |
 | ac1 — a redaction test shows neither secret reaches a log or an error | PASS | `secrets_manager/test_managed_secret.py` (22 tests) and `commands/test_caselist_auth_secrets_manager.py` (8): every record at DEBUG, botocore's wire loggers included, checked for each secret raw, JSON-escaped once and twice, and by its random core. Two controls show botocore logs both values when the client is bypassed. Against a mutant that turns the quieting off, 10 tests fail and pytest's whole output holds **0** secret-shaped strings; with the harness's guard also off, the same scan finds 11, so it can see them |
-| ac2 — Terraform's tests show only the login role can read the password and only the run role the token, both under the dedicated key | PASS | `terraform -chdir=infrastructure/modules/caselist_run test` → `Success! 13 passed, 0 failed.`; with the break-glass encryption fix, `Success! 14 passed, 0 failed.` (the 14th: break-glass may GenerateDataKey for the two secrets through Secrets Manager, holds nothing else beyond administration, and every decrypt deny excepts only the login and run roles; mutants below) Every role and secret has an ARN of its own (`override_resource`). Mutation: 22 of 22 mutants caught (below) |
+| ac2 — Terraform's tests show only the login role can read the password and only the run role the token, both under the dedicated key | PASS | `terraform -chdir=infrastructure/modules/caselist_run test` → `Success! 13 passed, 0 failed.`; with break-glass's key validation, `Success! 14 passed, 0 failed.` (the 14th, `break_glass_may_only_validate_the_key_and_decrypts_no_stored_version`: break-glass may GenerateDataKey and Decrypt only with the validation context, is denied any other decrypt, the login and run roles alone decrypt a stored password and token, and no other principal escapes a deny; against the first fix's policy it fails; mutants below) Every role and secret has an ARN of its own (`override_resource`). Mutation: 22 of 22 mutants caught (below) |
 | ac2 — the operator applies dev | NOT RUN | The first run (2026-10-24, `origin/dev` at `30ba804`) created 8 of 17 and stopped at both `CreateSecret` calls: the key policy did not let break-glass encrypt. Fixed in this branch; the re-plan from `caselist-credentials-dev` follows its merge, read by the PM first. Operator follow-ups below |
 | ac2 — prod at promotion | NOT RUN | At the pilot's promotion, after this branch merges (runbook, "Prod") |
 | ac2 — one scheduled login stores a token (operator) | NOT RUN | Waits for apply B, which needs `v1-e40-t03`'s network and first image (the PM's ruling (2)) |
@@ -101,6 +100,13 @@ because none of these tests uses Hypothesis, though the Python run set a fresh
   `kms:Decrypt`; drop the secrets' encryption context; drop the break-glass principal pattern, so any
   principal in the account). `6 of 6 caught by a false assertion (none skipped); source restored`.
   The original 22, rerun with the statement in place: `22 of 22 mutants caught`.
+* **Break-glass's key validation** (the second review): the PM's named mutants, drop
+  `SecretVersionId` from break-glass's GenerateDataKey; from its Decrypt; exempt every principal
+  (`ArnNotLike "*"`) from the password deny, the token deny and the general deny (three); drop the
+  break-glass-only deny; the validation Decrypt for any `SecretARN`; and without `kms:ViaService`.
+  With them, the first fix's six, adapted to the statement's new text. `14 of 14 caught by a false
+  assertion (none skipped); source restored`. The original 22, rerun: `22 of 22 mutants caught`, none
+  skipped.
 * **The Python rules**: 16 mutants: set-password without a terminal; set-password printing the
   password; prompting before the secret is checked; a refused login tried again; the alert naming
   the account; the password read before the API is checked; a failure not notified; the token
@@ -252,11 +258,12 @@ git switch --detach origin/dev
 test -f infrastructure/modules/caselist_run/credentials.tf && test -f infrastructure/envs/dev/caselist_run.tf \
   && echo "ok: $(pwd) at origin/dev $(git rev-parse --short HEAD), caselist_run merged" \
   || echo "NOT MERGED: $(pwd) at origin/dev has no infrastructure/modules/caselist_run; wait for v1-e40-t02 to merge"
-grep -c BreakGlassEncryptsWhenCreatingTheTwoSecrets infrastructure/modules/caselist_run/credentials.tf
+grep -c BreakGlassDecryptsOnlyToValidateTheKey infrastructure/modules/caselist_run/credentials.tf
 git status --porcelain | grep -v 'owner.auto.tfvars' | head -3
 ```
 Success looks like `ok: ... at origin/dev <commit>, caselist_run merged`, then `1`, and nothing after
-it. A `0` means the fix has not merged into `dev` yet: stop and wait.
+it. A `0` means the fix, with the second review's validation `Decrypt`, has not merged into `dev`
+yet: stop and wait.
 
 **2. Sign in as break-glass** (~1 min).
 
@@ -491,6 +498,48 @@ v1-e40-t02 questions (session report: docs/session-reports/v1-e40-t02-secrets-to
    steps 1-7 in the report), merge --partial with the phase InProgress, and set Succeeded once apply
    B's first Wednesday login has written a token and prod is applied at promotion.
 ```
+
+## Changes after the second review
+
+The PM's second review (2026-10-24, changes requested) found that the first fix covered only half of
+what `CreateSecret` asks KMS for. AWS documents it in "Validating access to the KMS key", in [Secret
+encryption and decryption in AWS Secrets
+Manager](https://docs.aws.amazon.com/secretsmanager/latest/userguide/security-encryption.html):
+when a secret's key is set, Secrets Manager calls both `GenerateDataKey` and `Decrypt` as the
+caller, with `SecretARN` the secret's ARN and `SecretVersionId` the literal
+`RequestToValidateKeyAccess`, and discards the results. The page answers the question the first
+fix's evidence hand-off was to settle (does the call carry `SecretARN`): it does, so the `SecretARN`
+condition stays, and that hand-off is withdrawn. Changes 1 to 5, in `254fa53` and the commit after it:
+
+1. **`BreakGlassEncryptsWhenCreatingTheTwoSecrets` is narrowed to validation:** `StringEquals
+   kms:EncryptionContext:SecretVersionId = RequestToValidateKeyAccess`, beside `kms:ViaService`.
+2. **`BreakGlassDecryptsOnlyToValidateTheKey`**, one Allow: `kms:Decrypt`, break-glass's
+   `aws:PrincipalArn` pattern (the account root as principal), `kms:ViaService` Secrets Manager in
+   this region, `SecretARN` like the two secrets' patterns, `SecretVersionId` the validation id.
+3. **The decrypt denies are split.** Each of the three existing denies keeps its `ArnNotEquals` for
+   its reader roles and gains `ArnNotLike` for break-glass's pattern (`aws:PrincipalArn` with both
+   operators, ANDed). One new deny, `BreakGlassDecryptsNothingButTheValidation`, refuses break-glass
+   every decrypt whose `SecretVersionId` is not the validation id (`StringNotEquals`, true also when
+   the key is missing), for any secret. It is the union of the three break-glass halves the PM
+   described, since the general deny's half has no `SecretARN` condition and so covers the other
+   two: the four exempt exactly break-glass's validation and nothing wider. The module's comment
+   explains the shape. `NoGrantsAndNoReEncryption` is byte-identical.
+4. **Tests and mutations.** The 14th run is replaced by
+   `break_glass_may_only_validate_the_key_and_decrypts_no_stored_version`, which shows the four
+   properties asked for. The decrypt-allow set in the first key-policy run now encodes each
+   statement's service and version id, and the three split denies are checked for exactly their
+   exemptions. `Success! 14 passed, 0 failed.`; against the first fix's policy, `Failure! 12
+   passed, 2 failed.` (false assertions, none skipped). Mutants: `14 of 14` and the original
+   `22 of 22` caught, as listed under Acceptance criteria.
+5. **Runbook and report.** The re-plan's counts are the same (`9 to add, 1 to change, 0 to
+   destroy`, only the key's `policy` changing), so the plan check is unchanged; block 1 above now
+   greps for the validation `Decrypt`, so a `dev` holding only the first fix stops. The runbook's
+   partial-apply note adds the validation reading and, if `CreateSecret` is refused again, a block
+   that pulls CloudTrail's KMS events for that minute and prints each call's action, result and
+   `SecretVersionId` for the PM (tested offline against sample events, a missing-field event and an
+   empty window). The page is cited in `credentials.tf`, the module README, the runbook and here.
+
+Stopped here for the PM's third review, as asked: no pull request is opened.
 
 ## PM review
 

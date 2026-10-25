@@ -252,6 +252,51 @@ switch --detach origin/dev`), then step 1 from the top, and read the new counts 
 applying. Never `-target`, and never create or delete a resource by hand: the saved plan from the
 same configuration is what keeps the state and the account in step.
 
+**If `CreateSecret` is refused again.** Creating a secret under this key has Secrets Manager
+validate the caller's access to it: one `GenerateDataKey` and one `Decrypt` as the caller, with
+`SecretVersionId` the literal `RequestToValidateKeyAccess`, whose results are discarded ("Validating
+access to the KMS key" in [Secret encryption and decryption in AWS Secrets
+Manager](https://docs.aws.amazon.com/secretsmanager/latest/userguide/security-encryption.html)). The
+key policy allows break-glass exactly those two calls and denies it every other decrypt; the first
+run in dev was refused at the `GenerateDataKey`, before the policy allowed them. A refusal now means
+a call reached KMS in a shape the policy does not expect. Do not change the policy or the secrets by
+hand: pull the KMS events of the minute the apply failed, with `REFUSED_FROM` and `REFUSED_TO` a
+couple of minutes either side of the error's time, and send the PM what it prints: each call's
+action, its result, and the `SecretVersionId` it carried.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`
+```bash
+cd "$WT"
+REFUSED_FROM='2026-10-24T22:14:00Z'
+REFUSED_TO='2026-10-24T22:17:00Z'
+aws cloudtrail lookup-events --profile debate-admin --region us-east-1 \
+  --lookup-attributes AttributeKey=EventSource,AttributeValue=kms.amazonaws.com \
+  --start-time "$REFUSED_FROM" --end-time "$REFUSED_TO" --output json > /tmp/caselist-kms-events.json
+python3 -I - /tmp/caselist-kms-events.json <<'KMSEVENTS'
+import json, sys
+events = json.load(open(sys.argv[1])).get("Events", [])
+print(str(len(events)) + " KMS events")
+for event in events:
+    detail = json.loads(event["CloudTrailEvent"])
+    context = (detail.get("requestParameters") or {}).get("encryptionContext") or {}
+    issuer = ((detail.get("userIdentity") or {}).get("sessionContext") or {}).get("sessionIssuer") or {}
+    print(" ".join([
+        str(detail.get("eventTime")),
+        str(detail.get("eventName")),
+        str(detail.get("errorCode", "ok")),
+        "invokedBy=" + str(detail.get("invokedBy", "-")),
+        "role=" + str(issuer.get("userName", "-")),
+        "SecretVersionId=" + str(context.get("SecretVersionId", "-")),
+        "SecretARN=" + str(context.get("SecretARN", "-")).rsplit(":", 1)[-1],
+    ]))
+KMSEVENTS
+```
+Success looks like `N KMS events` with N above zero, then one line per call: its time, its action
+(`GenerateDataKey` or `Decrypt`), `ok` or the error code, the service that made it, the role and the
+`SecretVersionId`. `0 KMS events` does not mean nothing was refused: CloudTrail takes up to about five
+minutes to deliver an event, or the window missed it, so wait or widen the window and run it again.
+
 ## Step 3 — The coach writes the Tabroom password
 
 Once, now, and again only after the password changes at Tabroom. `set-password` prompts for the

@@ -40,6 +40,34 @@ and 2025-26. PF keeps weeklies for those seasons but no complete archive. For 20
 downloads listing answers HTTP 500 for every caselist, both times, once each with no retry (500 is
 not a status the client retries). Through the documented API those seasons serve no archive.
 
+## What is imported, and what is not
+
+The PM's ruling of 2026-10-25 (Q3): the four complete archives only, under policy 1.17, in this order
+([docs/runbooks/caselist-backfiles.md](../runbooks/caselist-backfiles.md)). They are the profile's
+`caselist.backfile_caselists`.
+
+| Caselist | Season | Imported | Why |
+|---|---|---|---|
+| `hspolicy25` | 2025-26 | Yes, first | Complete archive of 2026-06-30 |
+| `hsld25` | 2025-26 | Yes, second | Complete archive of 2026-06-30 |
+| `hspolicy24` | 2024-25 | Yes, third | Complete archive of 2025-05-06 |
+| `hsld24` | 2024-25 | Yes, fourth | Complete archive of 2025-07-01 |
+| `hspf25`, `hspf24` | 2025-26, 2024-25 | **Not imported** | Weeklies only (36 and 41), no complete archive. Policy 1.17 imports backfiles from complete archives |
+| `hsld23`, `hspf23`, `hspolicy23` | 2023-24 | **Not imported** | The downloads listing answers HTTP 500: the API serves no archive. Per-round files are not fetched |
+| `hsld22`, `hspf22`, `hspolicy22` | 2022-23 | **Not imported** | The same: HTTP 500, no archive |
+| `hsld21`, `hspf21`, `hspolicy21` | 2021-22 | **Not imported** | The same: HTTP 500, no archive |
+| 20 high-school caselists | before 2021-22 | **Never imported** | Policy 1.17, Retention |
+
+Whether the site could regenerate the 2021-22 to 2023-24 archives is a question Charlie may put to the
+maintainer, outside this task.
+
+## The dry run on the Mac
+
+_Not yet run._
+
 ## Imports
 
-_Not yet run._ Each import's counts go here, one row per caselist.
+_Not yet run._ The imports run in the cloud from Thursday 2026-11-05 at the earliest, one a day
+outside the no-import window. Each import's counts go here, one row per caselist: members, stored,
+suppressed, held, sources uploaded, parsed, unsupported, failed, cards, parsed objects uploaded, and
+each step's seconds.

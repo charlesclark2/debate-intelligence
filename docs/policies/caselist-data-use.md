@@ -3,12 +3,12 @@
 
 | | |
 |---|---|
-| Policy version | 1.14 |
-| Status | **Approved**, version 1.14, on the merge of its pull request (decided 2026-10-24). See [Approval](#approval). |
+| Policy version | 1.15 |
+| Status | **Approved**, version 1.15, on the merge of its pull request (decided 2026-10-24). See [Approval](#approval). |
 | Owner | Charlie Clark (product owner and head coach) |
 | Written by | v1-e30-t01-caselist-data-use-policy implementation session, 2026-09-19 |
 | Applies to | Everything the platform collects from OpenCaselist and OpenEv, and everything derived from it, in every environment |
-| Approved by | Charlie Clark, product owner and head coach, 2026-09-19 (versions 1.0 and 1.1), 2026-10-01 (versions 1.3 and 1.4), 2026-10-10 (versions 1.5 and 1.6), 2026-10-11 (version 1.7), 2026-10-13 (version 1.8), 2026-10-15 (version 1.9), 2026-10-19 (version 1.10), 2026-10-22 (versions 1.11 and 1.12) and 2026-10-24 (versions 1.13 and 1.14) |
+| Approved by | Charlie Clark, product owner and head coach, 2026-09-19 (versions 1.0 and 1.1), 2026-10-01 (versions 1.3 and 1.4), 2026-10-10 (versions 1.5 and 1.6), 2026-10-11 (version 1.7), 2026-10-13 (version 1.8), 2026-10-15 (version 1.9), 2026-10-19 (version 1.10), 2026-10-22 (versions 1.11 and 1.12) and 2026-10-24 (versions 1.13, 1.14 and 1.15) |
 | Next review | Start of the 2027-28 season, or sooner if a source's terms change |
 
 This is the policy that governs how the Debate Intelligence Platform collects, stores, uses and
@@ -262,7 +262,8 @@ personal data about a minor (architecture proposal §14).
 operator's machine, the weekly cloud run's working copy of that store on its task's ephemeral
 storage while the run runs (ADR-0020), the `manifests/` prefix of the private dev and prod evidence
 buckets (which holds the cloud run's run-state bundle, `manifests/_run-state/`), the
-provenance sidecar of a built file, the per-school landscape view, and the student search pilot's
+provenance sidecar of a built file, a file recipe under the data directory's `files/` (version
+1.15), the per-school landscape view, and the student search pilot's
 index (`reports/tub/search/` in the private buckets, and the copy its function holds while it runs),
 in stored provenance columns that are never searchable (v1-e39-t02).
 
@@ -274,6 +275,7 @@ in stored provenance columns that are never searchable (v1-e39-t02).
 | Per-school and trend views (v1-e32-t04) | **School plus team code, as disclosed. Never more**, except a link to the team's public OpenCaselist page built from the caselist, the school and the team code alone (version 1.14). No tournament, round, debater or document path. |
 | Operator import/publish summaries (`docs/data/`) | Aggregate counts only. |
 | Built-file sidecar (E33) | School, team code, side, tournament, round — inside the team only. A built file's text carries none of them (version 1.11). |
+| File recipe under the data directory's `files/` (E33) | A pin's side, tournament, round, and school and team code, each only when needed to tell two disclosures of the same bytes apart — inside the team only, on the operator's machine. A recipe is never written inside a git working tree, and a published recipe carries none of them (version 1.15). |
 | Student search pilot (E39): result rows and card pages | School, team code, side, tournament, round in a card's provenance line — to signed-in team members only. Never searchable, and no search by debater. A copied or downloaded card carries none of them (version 1.11). |
 | Removal log and suppression list (v1-e30-t07), and the records beside them (v1-e30-t13, t14, t15, t16, t23) | sha256, date, reason code, request id; a held path's digest, the keys a removal reached, and a caselist slug. |
 
@@ -635,7 +637,7 @@ before the thing it gates.
 
 ## Approval
 
-**Version 1.14 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
+**Version 1.15 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
 real corpus into dev, model classification over real disclosed text, and automated download (E34)
 are unblocked, each still subject to its own conditions in [Gates](#gates). Version 1.1 recorded
 the maintainer's confirmation of scheduled API downloads and the 10-per-minute rate limit.
@@ -764,16 +766,27 @@ beyond school and team code before, so under [Review and change control](#review
 it needs the coach's approval, and merging its pull request records the approval below. Nothing
 else changes.
 
+Version 1.15 lets a file recipe that `files suggest` drafts (E33, `v1-e33-t03`) name a pin's school
+and team code, as a built file's sidecar already may. A pin narrows only as far as it must, least
+personal first: side, then tournament, then round, and a school and team code only where two teams
+disclosed the same bytes. Charlie decided it on 2026-10-24, from the PM's ruling on `v1-e33-t03`'s
+question. A recipe lives under the data directory's `files/` on the operator's machine, is never
+written inside a git working tree, and loses every such field when published (`v1-e33-t05`). It
+changes "Where personal data is allowed to live" and adds a row to "What a report may show". It
+loosens the policy, since no recipe named a team before, so under
+[Review and change control](#review-and-change-control) it needs the coach's approval, and merging
+its pull request records the approval below. Nothing else changes.
+
 The standing rule for every future version: until this table records an approval of that version,
 nothing this policy governs may happen under it.
 
 | Field | Value |
 |---|---|
-| Policy version | 1.14 and 1.13 (2026-10-24); 1.12 and 1.11 (2026-10-22); 1.10 (2026-10-19); 1.9 (2026-10-15); 1.8 (2026-10-13); 1.7 (2026-10-11); 1.6 and 1.5 (2026-10-10); 1.4 and 1.3 approved 2026-10-01, 1.3 including version 1.2's correction to rule 3; 1.0 and 1.1 approved 2026-09-19 |
+| Policy version | 1.15, 1.14 and 1.13 (2026-10-24); 1.12 and 1.11 (2026-10-22); 1.10 (2026-10-19); 1.9 (2026-10-15); 1.8 (2026-10-13); 1.7 (2026-10-11); 1.6 and 1.5 (2026-10-10); 1.4 and 1.3 approved 2026-10-01, 1.3 including version 1.2's correction to rule 3; 1.0 and 1.1 approved 2026-09-19 |
 | Approved by | Charlie Clark |
 | Role | Product owner and head coach |
-| Approval date | 2026-10-24 (versions 1.14 and 1.13; 1.12 and 1.11: 2026-10-22; 1.10: 2026-10-19; 1.9: 2026-10-15; 1.8: 2026-10-13; 1.7: 2026-10-11; 1.5 and 1.6: 2026-10-10; 1.3 and 1.4: 2026-10-01; 1.0 and 1.1: 2026-09-19) |
-| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.14, including the [clause register](#clause-register) read 2026-09-19 and the [community disclosure norms](#community-disclosure-norms), both confirmed by Charlie |
+| Approval date | 2026-10-24 (versions 1.15, 1.14 and 1.13; 1.12 and 1.11: 2026-10-22; 1.10: 2026-10-19; 1.9: 2026-10-15; 1.8: 2026-10-13; 1.7: 2026-10-11; 1.5 and 1.6: 2026-10-10; 1.3 and 1.4: 2026-10-01; 1.0 and 1.1: 2026-09-19) |
+| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.15, including the [clause register](#clause-register) read 2026-09-19 and the [community disclosure norms](#community-disclosure-norms), both confirmed by Charlie |
 | Open questions resolved at approval | **5** — removal contact address is `ctcb57@gmail.com`. **7** — two-season retention stands. **8** — resolved by a PM spec change to v1-e29-t03 / v1-e30-t07. **2** (version 1.1) — maintainer confirmed scheduled API downloads at 10 file downloads per minute. **6** (version 1.10) — the school's activities director and IT approved the tool for students; no district review for the E39 pilot |
 | Open questions accepted as known gaps | **1** — OpenCaselist privacy page unread. **3** — OpenEv distribution and per-camp terms unread |
 | Open questions left open | **4** — Bedrock data-protection terms, an E32 gate. **6** — for the V2 tub only, if its scope goes beyond the pilot's |

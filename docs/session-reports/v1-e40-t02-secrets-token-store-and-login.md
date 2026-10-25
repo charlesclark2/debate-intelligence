@@ -777,3 +777,19 @@ Added by the PM. Nothing above is changed, and this section is not a review.
   with one schedule group per schedule. The re-plan follows its merge, read by the PM first.
 * **Still open:** the two schedules, the first Wednesday's scheduled login writing a token, and prod
   at the pilot's promotion.
+
+## PM record, 2026-10-24 (third)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+* **Apply B in dev is complete.** After `v1-e40-t03`'s resumed session merged (`cd56754`, one schedule
+  group per schedule), the re-plan from `caselist-credentials-dev` printed `Plan: 4 to add, 2 to
+  change, 0 to destroy.` The runbook's JSON check printed `PLAN OK`. The PM read both scheduler
+  roles' trust changes: each moves from its schedule's ARN in the `default` group to its own
+  schedule group's ARN, with the account condition unchanged.
+* The apply printed `Apply complete! Resources: 4 added, 2 changed, 0 destroyed.` The login schedule
+  `debate-dev-caselist-login` is `ENABLED` (Wednesdays 03:00 America/Chicago), and the run schedule
+  `debate-dev-caselist-run` is `DISABLED`.
+* **Still open, so the Goal stays `InProgress`:** the first scheduled login writing a token
+  (Wednesday 2026-10-28, checked by the token secret's `LastChangedDate` and the login log), and
+  prod at the pilot's promotion.

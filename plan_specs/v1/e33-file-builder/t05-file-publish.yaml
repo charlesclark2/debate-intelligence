@@ -39,6 +39,10 @@ spec:
     (PM amendment 2026-10-21, from v1-e33-t04's PM review.) The publish gate reads the quality
     check's status: a file publishes only when it is PASS, and a warning never blocks a publish;
     it is printed and recorded.
+    (PM amendment 2026-10-24, from v1-e33-t03's follow-up 2.) A file built from a `status: draft`
+    recipe (its header begins `DRAFT:`) is refused, whatever its quality status; if the sidecar
+    does not yet record the recipe's status, this task adds it and reads it. The gate reads what
+    `files check` and `FileBuildResult.failing_checks` give.
   priority: 2
   constraints:
     packages: [debate_core.application, debate_core.domain, debate_cli, docs/data, tests/smoke]

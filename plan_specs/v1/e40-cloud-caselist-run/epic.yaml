@@ -207,5 +207,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e40-t07-lock-writes-conditional-at-the-bucket
+    - id: t08
+      kind: Task
+      name: 'A week a killed run published is parsed by the next run, not left for the next import'
+      description: >-
+        A week a killed run published is parsed by the next run, not left for the next
+        import.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t08-parse-owed.yaml
+        goalRef: v1-e40-t08-parse-owed
+      dependsOn:
+      - t04
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t08-parse-owed reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t08-parse-owed
 status:
   phase: Pending

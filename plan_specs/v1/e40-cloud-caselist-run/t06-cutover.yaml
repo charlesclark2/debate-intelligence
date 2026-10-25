@@ -58,6 +58,17 @@ spec:
     * Before the cutover, the run image's two base images (`python:3.12-slim-bookworm` and the
       pinned uv image) are pinned by digest rather than tag, in `ops/caselist_run/Dockerfile`, and a
       new image is pushed and its digest applied.
+    (PM amendment 2026-10-24, from v1-e40-t04's PM review, item 7.) The cutover also carries:
+    * `debate-research caselist restore-run-state`, a command over v1-e40-t04's built
+      `RunState.restore`, for the comparison's restored working copy and for a hand publish to prod
+      from a copy restored under the dev lock (ADR-0020 (4) and (7)). It takes the lock, writes
+      only into the named data directory, and is tested against moto.
+    * A JSON plan check for the bucket-mode apply, in the style of v1-e40-t02's and t03's: `PLAN OK`
+      only for the two task definitions replaced and the two schedules repointed to them (`2 to
+      add, 4 to change, 2 to destroy`), with the run's schedule still `DISABLED`, tested on
+      synthetic plans. The PM reads the plan before the apply.
+    * The first cloud run's logs are read for a process-pool parse stopping within 120 seconds of
+      SIGTERM. If it does not, that is recorded and filed (v1-e40-t04's follow-up).
   priority: 1
   constraints:
     packages: [docs/runbooks, docs/data, ops, tests/smoke]

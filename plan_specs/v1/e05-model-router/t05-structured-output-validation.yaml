@@ -31,7 +31,9 @@ spec:
     refuses a mismatch before any model call.
   priority: 1
   constraints:
-    packages: [debate_core.application, debate_core.integrations]
+    # PM amendment 2026-10-24, from the PM's review (Deviation 1): the provenance metadata's repair
+    # fields, and the scripted router and contract suite that hold every router to one validation.
+    packages: [debate_core.application, debate_core.integrations, debate_core.domain, debate_core.testing]
     forbidden:
       - More than one repair retry per call
       - Returning partially valid objects when fail_closed is set

@@ -1,0 +1,74 @@
+# TASK v1-e33-t09-style-profile-version-refusal - files build refuses a store written under another style profile, as it refuses another parser version
+# Epic: E33 Evidence File Builder | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e33-t09-style-profile-version-refusal
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e33-file-builder
+  annotations:
+    debate/title: "files build refuses a store written under another style profile, as it refuses another parser version"
+spec:
+  # Filed by the PM, 2026-10-24, from v1-e33-t03's follow-up 3 (the PM's review of 2026-10-24).
+  description: >-
+    v1-e33-t03's `files build` refuses, before resolving anything, a store another parser or
+    fingerprint version made. A store whose newest generation was written under another style
+    profile, at the same parser version, still gives `OCCURRENCE_MISMATCH` for every card. Count
+    first how the store records its style profile's version and how the running build reads its
+    own. Then add the style profile to the same refusal: one refusal naming every version that
+    differs and the re-parse, before any card is resolved.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, packages/debate_core/tests, debate_cli, packages/debate_cli/tests]
+    forbidden:
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e33-t03-file-build-cli
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A store written under another style profile is refused once, before any card is
+        resolved, in the same refusal as a parser or fingerprint version, naming both
+        profiles and the re-parse; tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e33-t09-style-profile-version-refusal-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e33-file-builder
+spec:
+  description: >-
+    Read the store's and the build's style profile versions, and add them to the build's store
+    refusal.
+  goalRef:
+    name: v1-e33-t09-style-profile-version-refusal
+  graph:
+    nodes:
+      - id: style-profile-refusal
+        kind: Task
+        name: Style profile in the store refusal
+        description: >-
+          Read the store's and the build's style profile versions, and add them to the
+          build's store refusal.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: File build service tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_file_build_service.py]
+status:
+  phase: Pending

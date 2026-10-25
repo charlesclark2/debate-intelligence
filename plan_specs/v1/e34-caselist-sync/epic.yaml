@@ -825,5 +825,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e34-t32-failed-run-reads-stale
+    - id: t33
+      kind: Task
+      name: 'A keychain failure under launchd names its cause, and clearing a token already gone is no error'
+      description: >-
+        A keychain failure under launchd names its cause, and clearing a token already gone
+        is no error.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t33-keychain-errors-named.yaml
+        goalRef: v1-e34-t33-keychain-errors-named
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t33-keychain-errors-named reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t33-keychain-errors-named
 status:
   phase: Pending

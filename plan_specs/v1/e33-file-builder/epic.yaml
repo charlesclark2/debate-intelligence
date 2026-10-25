@@ -262,5 +262,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e33-t08-provenance-line-one-function
+    - id: t09
+      kind: Task
+      name: 'files build refuses a store written under another style profile, as it refuses another parser version'
+      description: >-
+        files build refuses a store written under another style profile, as it refuses
+        another parser version.
+      inputs:
+        specRef: plan_specs/v1/e33-file-builder/t09-style-profile-version-refusal.yaml
+        goalRef: v1-e33-t09-style-profile-version-refusal
+      dependsOn:
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e33-t09-style-profile-version-refusal reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e33-t09-style-profile-version-refusal
 status:
   phase: Pending

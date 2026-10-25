@@ -62,7 +62,7 @@ v2.3's extension work.
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 49 | 45 | 240 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 104 | 82 | 489 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 30 | 18 | 216 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 36 | 18 | 236 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 2 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
@@ -318,6 +318,12 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [Counterplan texts, kritik alternatives and overviews in the landscape report](plan_specs/v1/e32-argument-landscape/t11-negative-analytic-texts.yaml) `v1-e32-t11-negative-analytic-texts` | Succeeded | 2 | 5.0 |
 | [The landscape command names the seven-file bundle and counts its trends and schools](plan_specs/v1/e32-argument-landscape/t12-landscape-cli-seven-files.yaml) `v1-e32-t12-landscape-cli-seven-files` | InProgress | 1 | 1.0 |
 | [A removal and the annual purge reach the landscape bundles' school views](plan_specs/v1/e32-argument-landscape/t13-removal-reaches-landscape-school-views.yaml) `v1-e32-t13-removal-reaches-landscape-school-views` | Pending | 2 | 3.0 |
+| [Each DA's and advantage's scenarios and link chain, and what each impact card runs through](plan_specs/v1/e32-argument-landscape/t14-scenarios-and-link-chains.yaml) `v1-e32-t14-scenarios-and-link-chains` | Pending | 1 | 5.0 |
+| [The advantages each affirmative's teams read](plan_specs/v1/e32-argument-landscape/t15-advantages-per-aff.yaml) `v1-e32-t15-advantages-per-aff` | Pending | 1 | 3.0 |
+| [An advantage counterplan's planks, and the advantage each one solves](plan_specs/v1/e32-argument-landscape/t16-advantage-cp-planks.yaml) `v1-e32-t16-advantage-cp-planks` | Pending | 1 | 4.0 |
+| [Kritikal affirmatives identified, not left among the rounds with no identified aff](plan_specs/v1/e32-argument-landscape/t17-kritikal-affirmatives.yaml) `v1-e32-t17-kritikal-affirmatives` | Pending | 2 | 4.0 |
+| [The school view by position: every team that reads each DA, CP and K, with its caselist page](plan_specs/v1/e32-argument-landscape/t18-school-view-by-position.yaml) `v1-e32-t18-school-view-by-position` | Pending | 1 | 2.0 |
+| [A dry run's scan refusal says nothing was written and gives the publish command](plan_specs/v1/e32-argument-landscape/t19-dry-run-scan-refusal-wording.yaml) `v1-e32-t19-dry-run-scan-refusal-wording` | Pending | 1 | 1.0 |
 
 #### [E33 — Evidence File Builder](plan_specs/v1/e33-file-builder/epic.yaml)
 

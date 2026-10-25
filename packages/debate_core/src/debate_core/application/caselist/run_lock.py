@@ -560,9 +560,15 @@ class BucketRunLock:
         return self.taken
 
     def start_renewing(self) -> None:
-        """Renew every :data:`RENEW_EVERY` in a daemon thread until :meth:`release`."""
-        if self._renewer is not None:
+        """Renew every :data:`RENEW_EVERY` in a daemon thread until :meth:`release`.
+
+        A lease taken again after a release renews again, on a thread of its own: a command that holds
+        the lock for each of several steps, as `caselist backfile-import` does (`v1-e34-t34`), takes
+        and releases this same lock, whose holder the bucket client's write fence asks.
+        """
+        if self._renewer is not None and self._renewer.is_alive():
             return
+        self._stop_renewing = threading.Event()
         self._renewer = threading.Thread(
             target=self._renew_periodically, name="run-lock-renewal", daemon=True
         )

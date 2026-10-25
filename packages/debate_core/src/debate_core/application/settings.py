@@ -78,6 +78,7 @@ their `DEBATE_ENV` is a bug in the program.
 from __future__ import annotations
 
 import os
+import re
 import tempfile
 import tomllib
 from collections.abc import Callable, Iterator, Mapping
@@ -105,7 +106,7 @@ from pydantic_settings import (
 )
 
 from debate_core.application.errors import DomainError
-from debate_core.domain.caselist import Event
+from debate_core.domain.caselist import CASELIST_SLUG_PATTERN, Event
 from debate_core.domain.model_contracts import ModelProvider
 
 __all__ = [
@@ -118,6 +119,7 @@ __all__ = [
     "PROFILE_DIRECTORY_VARIABLE",
     "PROFILE_SUBDIRECTORY",
     "SECRET_PLACEHOLDER",
+    "FIRST_BACKFILE_SEASON_START",
     "MAX_CASELIST_BULK_DOWNLOADS_PER_DAY",
     "MAX_CASELIST_DOWNLOADS_PER_MINUTE",
     "OPENCASELIST_API_BASE_URL",
@@ -522,6 +524,12 @@ class ProviderSettings(SettingsGroup):
 MAX_CASELIST_DOWNLOADS_PER_MINUTE: Final = 10
 """The OpenCaselist maintainer's rate limit: file downloads per minute (policy clause 12)."""
 
+FIRST_BACKFILE_SEASON_START: Final = 2021
+"""The first season data-use policy 1.17 keeps as a backfile, 2021-22, by the year it starts.
+
+Seasons before it are not imported (Retention). A caselist slug ends in the two digits of the year
+its season starts: `hspolicy21` is 2021-22."""
+
 MAX_CASELIST_BULK_DOWNLOADS_PER_DAY: Final = 5
 """OpenCaselist's own ceiling on bulk archive downloads per user per day.
 
@@ -748,6 +756,16 @@ class CaselistSettings(SettingsGroup):
             'DEBATE_CASELIST__SYNC_CASELISTS=["hsld26","hspolicy26"].'
         ),
     )
+    backfile_caselists: tuple[str, ...] = Field(
+        default=(),
+        description=(
+            "Caselist slugs kept as backfiles (data-use policy 1.17, Permitted uses 8): earlier "
+            "seasons, from 2021-22 on, imported once from their complete archive by `caselist "
+            "backfile-import`. `caselist pull` and the weekly run never pull one, `landscape report` "
+            "never reads one, and the annual purge keeps them. Never one of sync_caselists. A list in "
+            'a profile file; JSON in the environment: DEBATE_CASELIST__BACKFILE_CASELISTS=["hspolicy25"].'
+        ),
+    )
     inbox_dir: Path | None = Field(
         default=None,
         description=(
@@ -897,7 +915,7 @@ class CaselistSettings(SettingsGroup):
             )
         return value
 
-    @field_validator("sync_caselists", mode="before")
+    @field_validator("sync_caselists", "backfile_caselists", mode="before")
     @classmethod
     def _one_slug_or_many(cls, value: object) -> object:
         """Accept a bare slug as well as a list, so `sync_caselists = "hsld26"` in a profile works.
@@ -906,6 +924,22 @@ class CaselistSettings(SettingsGroup):
         any validator here sees it, which is true of every list setting in this module.
         """
         return (value,) if isinstance(value, str) else value
+
+    @field_validator("backfile_caselists")
+    @classmethod
+    def _backfiles_from_2021_22_on(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        for slug in value:
+            if not re.fullmatch(CASELIST_SLUG_PATTERN, slug):
+                raise ValueError(f"{slug!r} is not a caselist slug")
+            if 2000 + int(slug[-2:]) < FIRST_BACKFILE_SEASON_START:
+                raise ValueError(
+                    f"{slug} is of a season before 2021-22, which data-use policy 1.17 does not import"
+                )
+        return value
+
+    def is_backfile(self, caselist: str) -> bool:
+        """Whether `caselist` is kept as a backfile: what pull, the landscape and the purge each ask."""
+        return caselist in self.backfile_caselists
 
     @field_validator("inbox_dir")
     @classmethod
@@ -938,6 +972,17 @@ class CaselistSettings(SettingsGroup):
         if value is None:
             return None
         return Path(os.path.expandvars(str(value))).expanduser().absolute()
+
+    @model_validator(mode="after")
+    def _a_backfile_is_never_pulled(self) -> CaselistSettings:
+        """A slug in both lists would be pulled weekly and classified: refused at startup (`v1-e34-t34`)."""
+        both = sorted(set(self.sync_caselists) & set(self.backfile_caselists))
+        if both:
+            raise ValueError(
+                f"caselist.backfile_caselists and caselist.sync_caselists both name {', '.join(both)}; "
+                "a backfile is never pulled by the weekly run"
+            )
+        return self
 
     @model_validator(mode="after")
     def _sns_needs_its_topic(self) -> CaselistSettings:

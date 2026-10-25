@@ -47,7 +47,7 @@ from debate_core.application.ports.caselist_source import (
     CaselistInfo,
     UnexpectedCaselistResponse,
 )
-from debate_core.application.settings import ConfigurationError
+from debate_core.application.settings import FIRST_BACKFILE_SEASON_START, ConfigurationError
 
 __all__ = [
     "FIRST_BACKFILE_SEASON_START",
@@ -60,9 +60,6 @@ __all__ = [
     "season_label",
     "season_start_year",
 ]
-
-FIRST_BACKFILE_SEASON_START: Final = 2021
-"""The first season policy 1.17 keeps as a backfile, 2021-22, by the year it starts."""
 
 _HIGH_SCHOOL_LEVELS: Final = frozenset({"hs", "high school", "highschool"})
 

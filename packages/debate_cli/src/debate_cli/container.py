@@ -251,6 +251,7 @@ from debate_core.integrations.models.routing_policy import RoutingPolicy
 if TYPE_CHECKING:  # pragma: no cover - imported for the type checker only; see the factories
     from mypy_boto3_s3.client import S3Client
 
+    from debate_core.application.caselist.backfile_import import BackfileImportService
     from debate_core.application.caselist.backfile_survey import BackfileSurvey
     from debate_core.application.caselist_login import ScheduledLogin, SecretText, TabroomPasswordSecret
     from debate_core.integrations.docx_parser import DebateDocxParser
@@ -599,6 +600,7 @@ class ServiceContainer:
             aff_assignments=affs,
             analytic_texts=texts,
             stale_after_days=settings.caselist.stale_after_days,
+            backfile_caselists=settings.caselist.backfile_caselists,
         )
 
     @property
@@ -1527,6 +1529,7 @@ class ServiceContainer:
             # bundle after a publish that confirmed everything.
             state_written=self.bucket_run().state_written(),
             after_publish=self.bucket_run().after_publish if self._in_bucket_mode else None,
+            backfile_caselists=caselist.backfile_caselists,
         )
 
     def search_index_store_check(self) -> SearchIndexStoreCheck:
@@ -1783,6 +1786,49 @@ class ServiceContainer:
         from debate_core.application.caselist.backfile_survey import BackfileSurvey
 
         return self.singleton("backfile_survey", lambda: BackfileSurvey(self.opencaselist_client()))
+
+    def backfile_import(self, *, event_for_caselist: Callable[[str], Event | None]) -> BackfileImportService:
+        """`caselist backfile-import`: one backfile caselist, imported, parsed and published (`v1-e34-t34`).
+
+        Over the bucket's lock and state, and the suppression list's two copies read as one with no
+        fallback to this machine's alone: a backfile import that cannot read the bucket's copy stops
+        rather than bring back a file a removal took out. Everything comes from settings, so the same
+        build runs it on the Mac and in the caselist image.
+        """
+        return self.singleton("backfile_import", lambda: self._build_backfile_import(event_for_caselist))
+
+    def _build_backfile_import(self, event_for_caselist: Callable[[str], Event | None]) -> BackfileImportService:
+        # Imported here, not at module scope: lxml is loaded only by a command that needs the parser.
+        from debate_core.application.caselist.backfile_import import BackfileImportService
+        from debate_core.integrations.docx_parser import DebateDocxParser
+
+        settings = self.settings
+        bucket = bool(settings.storage.s3.bucket)
+        suppression = self.suppression_list() if bucket else self.local_suppression_list()
+        return BackfileImportService(
+            caselist_settings=settings.caselist,
+            bucket_mode=self._in_bucket_mode,
+            source=self.opencaselist_client(),
+            importer=CaselistImportService(
+                caselists=SqliteCaselistRepository(self.database),
+                blobs=FsSnapshotStore(settings.storage.data_dir),
+                suppression=suppression,
+            ),
+            local=self._local_evidence(),
+            read_full_archive=self.read_full_archive,
+            event_for_caselist=event_for_caselist,
+            inbox=self._inbox_directory(),
+            data_dir=settings.storage.data_dir,
+            bucket=self._evidence_bucket if bucket else None,
+            guard=self.bucket_write_guard(),
+            run_state=self.run_state if bucket else None,
+            seeded=(lambda: self.bucket_run_lock().bucket_is_seeded()) if bucket else None,
+            publisher=self.caselist_publish if bucket else None,
+            parse=lambda: self._build_caselist_parse(suppression),
+            parsed_publisher=self.parsed_publisher if bucket else None,
+            parsed_version=DebateDocxParser().parser_version,
+            clock=self.clock(),
+        )
 
     def opencaselist_client(self) -> OpenCaselistClient:
         """The OpenCaselist API client, or the refusal this installation's settings call for.

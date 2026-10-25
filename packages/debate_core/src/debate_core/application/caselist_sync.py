@@ -528,6 +528,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import TYPE_CHECKING, Final, Protocol, Self, cast
 
+from debate_core.application.caselist.backfiles import refuse_backfiles
 from debate_core.application.caselist.evidence_listing import (
     LocalEvidence,
     local_file,
@@ -2843,6 +2844,9 @@ class CaselistSyncService:
             default, reads no volume.
         read_volume: How the data directory's volume is read; :func:`read_volume` unless a test
             stubs it.
+        backfile_caselists: `caselist.backfile_caselists`. A run asked for one of them, by
+            `--caselist` or `--full-archive`, is refused with :class:`BackfileIsNotPulled` before
+            anything is listed (`v1-e34-t34`).
     """
 
     def __init__(
@@ -2874,8 +2878,11 @@ class CaselistSyncService:
         read_volume: Callable[[Path], VolumeReading] = read_volume,
         state_written: Callable[[Path], None] | None = None,
         after_publish: Callable[[], Awaitable[object]] | None = None,
+        backfile_caselists: Sequence[str] = (),
     ) -> None:
         self._source = source
+        # A backfile (`v1-e34-t34`) is never pulled, by the weekly run or by hand: refused in `plan`.
+        self._backfiles = tuple(backfile_caselists)
         # Bucket mode (`v1-e40-t04`): each state file is saved as it is written, a download's start
         # before the download, and the run-state bundle after a publish that confirmed everything.
         self._state_written = state_written
@@ -2939,6 +2946,7 @@ class CaselistSyncService:
         caselist's newest complete archive takes the run's one slot, still after the weeklies, and
         the caselist is pulled too when it is not among `caselists`.
         """
+        refuse_backfiles([*caselists, full_archive], self._backfiles)
         caselists = _with_requested(caselists, full_archive)
         if not caselists:
             raise NoCaselistsConfigured

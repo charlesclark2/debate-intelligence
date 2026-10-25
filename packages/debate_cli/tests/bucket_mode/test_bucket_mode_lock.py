@@ -190,6 +190,7 @@ def test_a_pull_whose_lease_is_taken_while_it_runs_writes_nothing_more_and_ends_
 # ------------------------------------------------------------------------------------------------
 
 BUCKET_WRITING: Final = {
+    "caselist backfile-import",
     "caselist pull",
     "caselist publish",
     "caselist parse",

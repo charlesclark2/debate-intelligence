@@ -1,0 +1,118 @@
+# TASK v1-e39-t17-landscape-pages - The landscape report and its school view on the pilot, for signed-in team members
+# Epic: E39 — Team Evidence Search (Student Pilot) | Release: v1.7 (Team evidence search pilot) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e39-t17-landscape-pages
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+  annotations:
+    debate/title: "The landscape report and its school view on the pilot, for signed-in team members"
+spec:
+  # Filed by the PM, 2026-10-25, from Charlie's decision of 2026-10-25 and data-use policy version 1.16.
+  description: >-
+    The coach and debaters want to read the argument landscape reports in the pilot they already
+    use, not as files on the operator's machine. Data-use policy 1.16 allows it: the newest
+    published bundle's report.md and per-school view, to signed-in members (student and coach
+    alike), under the E39 gate with its new item 11. Add a Landscape area to the pilot: a page
+    listing the caselists with a published bundle (their newest snapshot and its date), and for
+    each, the report and the school view rendered server-side from the bundle's own report.md
+    and schools.md, with a contents list from the headings and anchors to each section. The
+    pages follow ADR-0019: server-rendered Jinja, the one first-party script and no other, no
+    inline script, signed-in responses private and never cached. They read
+    `reports/landscape/<caselist>/<snapshot>/` from the private bucket through the pilot
+    function's role, and hold a bundle no longer than five minutes, so a removal (v1-e32-t13) or
+    a republish reaches them within five minutes (gate item 11). Markdown is rendered with raw
+    HTML escaped. The only links out are the school view's OpenCaselist team pages, re-checked
+    against `debate_core.domain.search_source_links`' rule at render, so a link the rule would
+    refuse renders as text. Every page view writes an audit record under gate item 4, naming the
+    caselist, the snapshot and the page, never a school or team code. The pages offer no search,
+    no download and no share link. Count first, before building, from the newest hspolicy26
+    bundle: each file's size, its rendered HTML size, and the number of sections and table rows,
+    against ADR-0019's page-weight line, and propose per-section pages if a page would be too
+    heavy. The function role's read grant for `reports/landscape/` is a Terraform change: the
+    operator applies it after the merge and the PM reads the plan first. The deploy is the
+    operator's, as for every pilot deploy.
+  priority: 1
+  constraints:
+    packages: [debate_api, packages/debate_api/tests, debate_core.application, debate_core.domain, packages/debate_core/tests, infrastructure/modules/evidence_search, infrastructure/envs, docs/runbooks, docs/guides]
+    forbidden:
+      - A landscape page to anyone not signed in, or cached by CloudFront or the browser
+      - A bundle held longer than five minutes
+      - A school or team code in an audit record
+      - Raw HTML from a bundle rendered unescaped, or a link out other than a checked OpenCaselist team page
+      - Search, download or share links on a landscape page
+      - A third-party script, font or stylesheet
+      - Network or AWS access in any test (moto and stand-ins only)
+  context:
+    - kind: TaskRef
+      name: v1-e39-t07-removal-audit-and-exposure
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e39-t11-search-pages-follow-ups
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Counts before building, from the newest hspolicy26 bundle (sizes, rendered sizes,
+        sections and rows against ADR-0019's page weight), sent to the PM with the proposed
+        page layout.
+    - id: ac2
+      description: >-
+        With a moto bucket holding synthetic bundles, a signed-in student and coach see the
+        caselist list, the report and the school view, with a contents list and section
+        anchors; signed-out, expired and tampered sessions are refused on every new route,
+        added to the authorization matrix; responses are private and uncached; tests shown
+        failing first.
+    - id: ac3
+      description: >-
+        A bundle is re-read after five minutes, so a deleted school view or a republished
+        report shows within five minutes; raw HTML in a bundle is escaped; a link the
+        team-page rule refuses renders as text; each page view writes an audit record naming
+        the caselist, snapshot and page and no school or team code; each by test.
+    - id: ac4
+      description: >-
+        The function role's read of reports/landscape/ is granted by Terraform, tested, and
+        applied in dev by the operator after the PM reads the plan; the deployed dev pilot
+        shows the hspolicy26 report to a signed-in coach (operator).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e39-t17-landscape-pages-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+spec:
+  description: >-
+    Count the bundle's sizes, then build the landscape routes, the cache, the rendering, the
+    audit records and the Terraform read grant, then the operator's apply and deploy.
+  goalRef:
+    name: v1-e39-t17-landscape-pages
+  graph:
+    nodes:
+      - id: landscape-pages
+        kind: Task
+        name: Landscape pages
+        description: >-
+          Count the bundle's sizes, then build the landscape routes, the cache, the
+          rendering, the audit records and the Terraform read grant, then the operator's
+          apply and deploy.
+        estimatedEffort: 6h
+        acceptanceCriteria:
+          - type: test_passes
+            name: API tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests]
+status:
+  phase: Pending

@@ -505,5 +505,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e32-t19-dry-run-scan-refusal-wording
+    - id: t20
+      kind: Task
+      name: 'report.md in two halves: every affirmative section together, then every negative one'
+      description: >-
+        report.md in two halves: every affirmative section together, then every negative
+        one.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t20-report-sides-together.yaml
+        goalRef: v1-e32-t20-report-sides-together
+      dependsOn:
+      - t14
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t20-report-sides-together reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t20-report-sides-together
 status:
   phase: Pending

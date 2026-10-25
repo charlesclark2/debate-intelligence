@@ -251,6 +251,7 @@ from debate_core.integrations.models.routing_policy import RoutingPolicy
 if TYPE_CHECKING:  # pragma: no cover - imported for the type checker only; see the factories
     from mypy_boto3_s3.client import S3Client
 
+    from debate_core.application.caselist.backfile_survey import BackfileSurvey
     from debate_core.application.caselist_login import ScheduledLogin, SecretText, TabroomPasswordSecret
     from debate_core.integrations.docx_parser import DebateDocxParser
     from debate_core.integrations.opencaselist import CaselistTokenStore, OpenCaselistClient
@@ -1773,6 +1774,15 @@ class ServiceContainer:
             notifier=self.sync_notifier(),
             environment=self.settings.environment.value,
         )
+
+    def backfile_survey(self) -> BackfileSurvey:
+        """`caselist backfile-survey`: what the API serves for earlier seasons, over the API client.
+
+        Read-only (`v1-e34-t34`): listings and `HEAD` sizes, no download, no bucket, so no lock.
+        """
+        from debate_core.application.caselist.backfile_survey import BackfileSurvey
+
+        return self.singleton("backfile_survey", lambda: BackfileSurvey(self.opencaselist_client()))
 
     def opencaselist_client(self) -> OpenCaselistClient:
         """The OpenCaselist API client, or the refusal this installation's settings call for.

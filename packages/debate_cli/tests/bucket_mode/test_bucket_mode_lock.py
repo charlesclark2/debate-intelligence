@@ -208,6 +208,7 @@ NEVER_WRITE_A_BUCKET: Final = {
     "doctor",
     "verify",
     "config show",
+    "caselist backfile-survey",
     "caselist cards",
     "caselist import",
     "caselist import-openev",

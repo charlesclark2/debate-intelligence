@@ -160,8 +160,8 @@ from debate_core.domain.landscape_classification import (
     PositionRole,
 )
 from debate_core.domain.landscape_report import (
-    DEFAULT_ADVANTAGES_PER_AFF,
     CHAIN_ROLES,
+    DEFAULT_ADVANTAGES_PER_AFF,
     DEFAULT_IMPACT_CARDS,
     DEFAULT_TOP_CARDS,
     IMPACT_KINDS,

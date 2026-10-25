@@ -80,6 +80,16 @@ variable "evidence_bucket_arn" {
   }
 }
 
+variable "evidence_key_arn" {
+  description = "ARN of the key this environment's evidence is encrypted with. From module.evidence_store.kms_key_arn. The one key the run's evidence policy may use."
+  type        = string
+
+  validation {
+    condition     = can(regex("^arn:aws[a-z-]*:kms:[a-z0-9-]+:[0-9]{12}:key/[0-9a-f-]+$", var.evidence_key_arn))
+    error_message = "evidence_key_arn must be a KMS key ARN."
+  }
+}
+
 variable "evidence_policy_json" {
   description = <<-EOT
     The everyday evidence permissions, as the EvidenceOperator permission set holds them
@@ -119,16 +129,12 @@ variable "evidence_policy_json" {
       for statement in try(jsondecode(var.evidence_policy_json).Statement, [{ Resource = "*" }]) :
       alltrue([
         for resource in flatten([statement.Resource]) :
-        resource == var.evidence_bucket_arn || startswith(resource, "${var.evidence_bucket_arn}/") || can(regex("^arn:aws[a-z-]*:kms:[a-z0-9-]+:[0-9]{12}:key/[0-9a-f-]+$", resource))
+        resource == var.evidence_bucket_arn || startswith(resource, "${var.evidence_bucket_arn}/") || resource == var.evidence_key_arn
       ])
     ])
-    error_message = "evidence_policy_json may name this environment's evidence bucket, its objects and the evidence key, and nothing else."
+    error_message = "evidence_policy_json may name this environment's evidence bucket, its objects and its evidence key, and nothing else: not the credentials key, not another bucket."
   }
 
-  validation {
-    condition     = !strcontains(var.evidence_policy_json, "tabroom-password") && !strcontains(var.evidence_policy_json, ":secretsmanager:")
-    error_message = "evidence_policy_json must name no secret: the run role's one secret is the token, granted in roles.tf, and it never reads the password."
-  }
 }
 
 variable "image_digest" {

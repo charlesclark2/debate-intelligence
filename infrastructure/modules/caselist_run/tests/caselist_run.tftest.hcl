@@ -192,6 +192,7 @@ variables {
   # The everyday evidence permissions, in the shape module.evidence_store.operator_policy_json has
   # (infrastructure/modules/evidence_bucket/operator_access.tf), over an invented bucket and key.
   evidence_bucket_arn = "arn:aws:s3:::debate-mock-evidence-00000000"
+  evidence_key_arn    = "arn:aws:kms:us-east-1:111122223333:key/00000000-0000-0000-0000-0000000e1de5"
   evidence_policy_json = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -1030,6 +1031,23 @@ run "an_evidence_policy_naming_another_bucket_is_refused" {
     evidence_policy_json = jsonencode({
       Version   = "2012-10-17"
       Statement = [{ Effect = "Allow", Action = "s3:GetObject", Resource = "arn:aws:s3:::debate-prod-evidence-00000000/*" }]
+    })
+  }
+
+  expect_failures = [var.evidence_policy_json]
+}
+
+run "an_evidence_policy_using_the_credentials_key_is_refused" {
+  command = plan
+
+  variables {
+    evidence_policy_json = jsonencode({
+      Version = "2012-10-17"
+      Statement = [{
+        Effect   = "Allow"
+        Action   = "kms:Decrypt"
+        Resource = "arn:aws:kms:us-east-1:111122223333:key/00000000-0000-0000-0000-00000000c0de"
+      }]
     })
   }
 

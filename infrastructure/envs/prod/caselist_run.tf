@@ -31,6 +31,7 @@ module "caselist_run" {
 
   # The run role holds the everyday evidence permissions, the EvidenceOperator set's own document.
   evidence_bucket_arn  = module.evidence_store.bucket_arn
+  evidence_key_arn     = module.evidence_store.kms_key_arn
   evidence_policy_json = module.evidence_store.operator_policy_json
 
   image_digest           = var.caselist_image_digest

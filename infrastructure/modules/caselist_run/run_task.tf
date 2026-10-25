@@ -68,6 +68,9 @@ locals {
     { name = "DEBATE_STORAGE__S3__AWS_PROFILE", value = "" },
     { name = "DEBATE_STORAGE__VOLUME_WARNING_PERCENT", value = tostring(local.volume_warning_percent) },
     { name = "DEBATE_PARSE__WORKERS", value = tostring(local.run_parse_workers) },
+    # A failed run emails the coach through the alert topic (v1-e40-t05, ADR-0020 (6)).
+    { name = "DEBATE_CASELIST__NOTIFIER", value = "sns" },
+    { name = "DEBATE_CASELIST__ALERT_TOPIC_ARN", value = local.alert_topic_arn },
     { name = "AWS_REGION", value = local.region },
   ]
 
@@ -168,6 +171,14 @@ locals {
         Condition = {
           StringEquals = { "iam:PassedToService" = "ecs-tasks.amazonaws.com" }
         }
+      },
+      {
+        # A start Scheduler could not deliver goes to the run's dead-letter queue, sent with this
+        # role (alerts.tf).
+        Sid      = "KeepAStartThatFailed"
+        Effect   = "Allow"
+        Action   = "sqs:SendMessage"
+        Resource = aws_sqs_queue.schedule_dead_letters["run"].arn
       },
     ]
   }) : null
@@ -302,10 +313,14 @@ resource "aws_scheduler_schedule" "run" {
     }
 
     # Never twice in a week: a second run would spend the week's downloads again. A start that
-    # failed is the dead-letter alarm's to report (v1-e40-t05).
+    # failed goes to the dead-letter queue, whose alarm emails the coach (alerts.tf).
     retry_policy {
       maximum_retry_attempts       = 0
       maximum_event_age_in_seconds = 3600
+    }
+
+    dead_letter_config {
+      arn = aws_sqs_queue.schedule_dead_letters["run"].arn
     }
   }
 }

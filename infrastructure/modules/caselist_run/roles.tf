@@ -6,7 +6,8 @@
 #   debate-<env>-caselist-run     the run's role: reads the token only, never the password, and
 #                                 holds the everyday evidence permissions (v1-e40-t03), the same
 #                                 document as the EvidenceOperator permission set's, which lists,
-#                                 reads, publishes and never deletes. Nothing more. The run's state
+#                                 reads, publishes and never deletes; and publishes a failed run to
+#                                 the alert topic (v1-e40-t05). Nothing more. The run's state
 #                                 (ADR-0020 (3)) lives under prefixes that document already writes.
 #
 # Each role's policies are held exclusive, so a policy attached or written by hand is removed at
@@ -61,11 +62,24 @@ resource "aws_iam_role_policy" "run_evidence" {
   policy = var.evidence_policy_json
 }
 
-# The run role's two policies, and no other: one written or attached by hand is removed at the
+# ADR-0020 (6): a failed run tells the coach, through the environment's alert topic and no other
+# (v1-e40-t05). Its own policy, never a statement in the evidence document, which is the
+# EvidenceOperator permission set's too.
+resource "aws_iam_role_policy" "run_alerts" {
+  name   = "caselist-alerts"
+  role   = aws_iam_role.run.id
+  policy = local.run_role_alerts_policy
+}
+
+# The run role's three policies, and no other: one written or attached by hand is removed at the
 # next apply.
 resource "aws_iam_role_policies_exclusive" "run" {
-  role_name    = aws_iam_role.run.name
-  policy_names = [aws_iam_role_policy.run_credentials.name, aws_iam_role_policy.run_evidence.name]
+  role_name = aws_iam_role.run.name
+  policy_names = [
+    aws_iam_role_policy.run_credentials.name,
+    aws_iam_role_policy.run_evidence.name,
+    aws_iam_role_policy.run_alerts.name,
+  ]
 }
 
 resource "aws_iam_role_policy_attachments_exclusive" "run" {
@@ -116,6 +130,18 @@ locals {
       {
         # ADR-0020 (6): a failed login tells the coach, without naming the account.
         Sid      = "TellTheCoachALoginFailed"
+        Effect   = "Allow"
+        Action   = "sns:Publish"
+        Resource = local.alert_topic_arn
+      },
+    ]
+  })
+
+  run_role_alerts_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "TellTheCoachARunFailed"
         Effect   = "Allow"
         Action   = "sns:Publish"
         Resource = local.alert_topic_arn

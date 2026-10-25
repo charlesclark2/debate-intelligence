@@ -94,6 +94,7 @@ from pydantic import (
     SecretStr,
     ValidationError,
     field_validator,
+    model_validator,
 )
 from pydantic_settings import (
     BaseSettings,
@@ -134,6 +135,7 @@ __all__ = [
     "Settings",
     "StorageSettings",
     "RunStateMode",
+    "SNS_TOPIC_ARN_PATTERN",
     "SyncNotifierKind",
     "environment_for_build_channel",
     "find_repository_root",
@@ -552,6 +554,15 @@ class SyncNotifierKind(StrEnum):
     """Always `osascript` `display notification`."""
     NONE = "none"
     """Nothing: the run log and `caselist runs` only."""
+    SNS = "sns"
+    """The environment's alert topic, `debate-<env>-caselist-run-alerts`, which emails the coach
+    (`v1-e40-t05`, ADR-0020 (6)): what the cloud run and the cloud login set. Needs
+    `caselist.alert_topic_arn`. Never chosen by `auto`."""
+
+
+SNS_TOPIC_ARN_PATTERN: Final = r"^arn:aws[a-z-]*:sns:[a-z0-9-]+:[0-9]{12}:[A-Za-z0-9_-]{1,256}$"
+"""An SNS topic's ARN: partition, region, account and name. The region is the topic's, and the
+`sns` notifier publishes there."""
 
 
 class RunStateMode(StrEnum):
@@ -853,7 +864,17 @@ class CaselistSettings(SettingsGroup):
         default=SyncNotifierKind.AUTO,
         description=(
             "Where a failed or stuck `caselist pull` is announced: `macos` (Notification Centre), "
-            "`none`, or `auto` (macOS on a Mac, never in the test environment)."
+            "`sns` (the alert topic, which emails the coach; the cloud run and login), `none`, or "
+            "`auto` (macOS on a Mac, never in the test environment)."
+        ),
+    )
+    alert_topic_arn: str | None = Field(
+        default=None,
+        pattern=SNS_TOPIC_ARN_PATTERN,
+        description=(
+            "The SNS topic the `sns` notifier publishes to: debate-<environment>-caselist-run-alerts, "
+            "which Terraform creates with the coach's email as its one subscription (ADR-0020 (6)). "
+            "Required by `notifier = sns` and read by nothing else. An ARN, not a credential."
         ),
     )
     stale_after_days: int = Field(
@@ -917,6 +938,16 @@ class CaselistSettings(SettingsGroup):
         if value is None:
             return None
         return Path(os.path.expandvars(str(value))).expanduser().absolute()
+
+    @model_validator(mode="after")
+    def _sns_needs_its_topic(self) -> CaselistSettings:
+        """`notifier = sns` with no topic would announce nothing, silently: refused at startup."""
+        if self.notifier is SyncNotifierKind.SNS and self.alert_topic_arn is None:
+            raise ValueError(
+                "caselist.notifier = sns needs caselist.alert_topic_arn, the environment's alert "
+                "topic (debate-<environment>-caselist-run-alerts)"
+            )
+        return self
 
 
 class CardFingerprintSettings(SettingsGroup):

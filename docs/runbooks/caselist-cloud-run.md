@@ -52,6 +52,10 @@ roles to ECS and is refused the login's, so nobody but the schedule ever starts 
    2026-10-24). Step 8 says so again.
 8. The run's schedule is enabled at the cutover (`v1-e40-t06`), never before.
 
+The alerts that email the coach when a run or the login fails, a run is late or a schedule cannot
+start (`v1-e40-t05`) are applied after apply B, with an image that has them:
+[caselist-run-alerts.md](caselist-run-alerts.md).
+
 **Every dev apply here runs from `dev`, after `v1-e40-t03` has merged, never from a task branch**,
 for the reason t02's runbook gives: an apply from a configuration without these resources would plan
 to destroy them.
@@ -633,7 +637,10 @@ grep -E '^ +[~+] state ' /tmp/caselist-bucket-mode-plan.txt
   definitions each replaced (the two `must be replaced` lines), and the two schedules and their
   scheduler roles' policies repointed at the new revisions. The run schedule's revision is the one
   ruling 1 expects to see repointed.
-* The second `grep` prints `1` or more: the run's new revision carries bucket mode. `0`: stop.
+* The second `grep` prints `1` or more: the run's new revision carries bucket mode. `0`: stop,
+  unless the alerts' apply ([caselist-run-alerts.md](caselist-run-alerts.md), step 2) already
+  carried bucket mode into the run's task definition, which its plan check reported as a `NOTE for
+  the PM` and the PM let go on. Then the revision here changes its image alone and `0` is expected.
 * Nothing printed by the third, and no schedule's `state` turning `ENABLED` in the fourth: the run's
   schedule stays `DISABLED` until `v1-e40-t06` enables it.
 

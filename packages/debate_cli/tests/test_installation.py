@@ -75,8 +75,9 @@ def test_the_container_wires_these_integrations() -> None:
     # `landscape.classification_store`, `landscape.plan_text_store` and
     # `landscape.yaml_taxonomy_repository` at module level for the landscape run (v1-e32-t05), with
     # `landscape.analytic_text_store` for its analytic texts (v1-e32-t11), and
-    # `secrets_manager` inside the caselist secret factory (v1-e40-t02), and
-    # `docx_file_writer.writer` inside the file build factory (v1-e33-t03).
+    # `secrets_manager` inside the caselist secret factory (v1-e40-t02),
+    # `docx_file_writer.writer` inside the file build factory (v1-e33-t03), and `sns` inside
+    # sync_notifier (v1-e40-t05).
     assert wired_integrations() == (
         "debate_core.integrations.cloudwatch_audit",
         "debate_core.integrations.cognito",
@@ -102,6 +103,7 @@ def test_the_container_wires_these_integrations() -> None:
         "debate_core.integrations.s3.run_lock_object",
         "debate_core.integrations.s3.version_directories",
         "debate_core.integrations.secrets_manager",
+        "debate_core.integrations.sns",
     )
 
 
@@ -232,7 +234,7 @@ def test_the_check_exits_zero_and_reports_json_for_this_checkout(capsys: pytest.
     report = json.loads(capsys.readouterr().out)
     assert report["complete"] is True
     assert report["covered"] is True
-    assert len(report["imported"]) == len(report["wired"]) == 24
+    assert len(report["imported"]) == len(report["wired"]) == 25
 
 
 # ---------------------------------------------------------------------------------------------
@@ -324,13 +326,14 @@ def test_debate_cli_declares_every_distribution_its_wired_integrations_import() 
 def test_dropping_the_aws_extra_leaves_the_s3_adapter_without_boto3() -> None:
     gaps = undeclared_imports(_with_core_extras("docx,http,opencaselist,tub"), wired_integrations())
 
-    # The pilot's two adapters (v1-e39-t05) and the caselist secrets' (v1-e40-t02) take boto3 from
-    # the same extra.
+    # The pilot's two adapters (v1-e39-t05), the caselist secrets' (v1-e40-t02) and the alert
+    # topic's (v1-e40-t05) take boto3 from the same extra.
     assert gaps == {
         "debate_core.integrations.s3": {"boto3", "botocore"},
         "debate_core.integrations.cognito": {"boto3", "botocore"},
         "debate_core.integrations.cloudwatch_audit": {"boto3", "botocore"},
         "debate_core.integrations.secrets_manager": {"boto3", "botocore"},
+        "debate_core.integrations.sns": {"boto3", "botocore"},
         # The bucket's run lock (v1-e40-t04) reads a conditional write's refusal off botocore's error.
         "debate_core.integrations.s3.run_lock_object": {"botocore"},
     }

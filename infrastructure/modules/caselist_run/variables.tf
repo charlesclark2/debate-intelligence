@@ -209,3 +209,28 @@ variable "login_log_retention_days" {
   type        = number
   default     = 90
 }
+
+variable "alert_email" {
+  description = <<-EOT
+    The coach's address: the alert topic's one email subscription (ADR-0020 (6)). The calling root
+    passes the address the budgets already write to. AWS sends it a confirmation link once, and
+    nothing published reaches it until the coach follows the link.
+  EOT
+  type        = string
+
+  validation {
+    condition     = can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.alert_email))
+    error_message = "alert_email must be one email address: the coach's, which the alert topic emails."
+  }
+}
+
+variable "late_run_alarm_actions_enabled" {
+  description = <<-EOT
+    Whether the late-run alarm emails the coach. Off by default: its missing data breaches, so the
+    alarm is in ALARM from the moment it exists, until a run records itself. ADR-0020 (4)'s cutover
+    (v1-e40-t06) turns it on after the first recorded cloud run, with
+    `caselist_run_late_alarm_actions_enabled = true` in the root's owner.auto.tfvars.
+  EOT
+  type        = bool
+  default     = false
+}

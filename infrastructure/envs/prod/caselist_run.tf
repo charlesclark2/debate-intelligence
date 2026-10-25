@@ -3,7 +3,7 @@
 # CaselistSecretWriter permission set (v1-e40-t02); the run's network, cluster, image repository
 # and CaselistRunDeployer permission set (v1-e40-t03); and, once caselist_image_digest names a
 # pushed image, the login and run task definitions with their Wednesday schedules, the run's
-# disabled until the cutover (v1-e40-t06).
+# disabled until the cutover (v1-e40-t06); and the alerts that email the coach (v1-e40-t05).
 #
 # This file is character-for-character the same in envs/dev and envs/prod, like every other file
 # in these roots except terraform.tfvars and backend.tf. The two differ only in the names the
@@ -37,6 +37,12 @@ module "caselist_run" {
   image_digest           = var.caselist_image_digest
   login_schedule_enabled = var.caselist_login_schedule_enabled
   run_schedule_enabled   = var.caselist_run_schedule_enabled
+
+  # The alerts (v1-e40-t05, ADR-0020 (6)): to the address the pilot's budget alarm writes to, the
+  # Owner address unless owner.auto.tfvars names another; the late-run alarm silent until the
+  # cutover's first recorded run.
+  alert_email                    = length(var.evidence_search_budget_emails) > 0 ? var.evidence_search_budget_emails[0] : var.owner
+  late_run_alarm_actions_enabled = var.caselist_run_late_alarm_actions_enabled
 }
 
 # A writer nobody is assigned is easy to end up with, because the user name lives in a gitignored

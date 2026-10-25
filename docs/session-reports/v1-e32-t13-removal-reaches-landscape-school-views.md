@@ -326,9 +326,50 @@ three blocks for prod, with `envs/prod`, `/tmp/evidence-prod-t13.tfplan`, prod's
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-24
 
 **Notes:**
+
+Thorough, and safe in the direction that matters.
+1. **ac1 to ac3 pass, red first.**
+   * Selection is one function on t04's constants. An unknown file stops the plan; it is never
+     guessed. The caselist segment is matched whole, shown with the `testcl26b` stand-in.
+   * The byte-for-byte comparison covers every `(key, version)` under `reports/` and every local
+     file.
+   * Status residue clears after the same removal runs again.
+   * 12 Python and 4 Terraform mutants were caught, including each one named in the PM's context.
+2. **The grant matches ruling 2.** I read the diff: one `DeleteLandscapeSchoolViews` statement with
+   `s3:DeleteObject` and `s3:DeleteObjectVersion` on `reports/landscape/*/schools.csv` and
+   `…/schools.md` only, plus the listing prefix pair. A test ties the Terraform list to
+   `SCHOOL_VIEW_FILES`. The expected plan is one in-place update of the removal permission set's
+   inline policy: 0 to add, 1 to change, 0 to destroy. The PM reads it before any apply.
+3. **Deviation 3 is right, and the error was mine.** Ruling 4 claimed the removal re-lists `raw/` and
+   `parsed/` after deleting. It does not; only the preflight probe and status check those. The
+   school views now get the confirmation, test-first, and the PM files the same check for `raw/` and
+   `parsed/` as an E30 follow-up.
+4. **Accepted as made:**
+   * re-runs reach an earlier completed run's caselists only for views written before that run
+     completed, cut off per run rather than per request. A republished view is never deleted or
+     counted. That leaves residue rather than deleting the wrong file, which is the right side to
+     err on;
+   * `ObjectInfo.last_modified` with `compare=False`;
+   * the constants moved to `landscape_bundle_files.py` to break the import cycle, re-exported and
+     not copied;
+   * execution re-listing under the removal profile, so a view under a delete marker still goes;
+   * counts only in the log and register, with the log line's keys unchanged;
+   * `--out` bundles not reached;
+   * the annual-purge section (Deviation 1, ruling 3), exercised on synthetic data;
+   * the permission set's description left alone, so the plan stays one change.
+5. **The affected set** stopped at 63% under load. The one failure it found was fixed in code
+   (`school_views_older_than` is set only when views are left), and the rest is left to the PR's
+   `ci` under agreement 10. The changed directories and the always-run list passed.
+6. **The PM files these in a PM batch:** the annual-purge runbook task; re-list confirmation for
+   `raw/` and `parsed/` (E30); the `evidence-store-layout.md` `reports/` row; and the permission
+   set's description, folded into its next change.
+
+**After the merge:** the operator's three blocks, plan then apply then simulate, in dev and then
+prod. The PM reads each plan first. Until the apply, `remove --execute` stops `INCOMPLETE` at the
+school views, and running it again afterwards finishes it. No re-review is needed.

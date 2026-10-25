@@ -57,8 +57,8 @@ Four things to look at first:
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| Node `image-schedule`: Terraform checks pass (`bash scripts/terraform_checks.sh`) | PASS | Run as written, with the registry replaced by the provider already unpacked in the main checkout (`TF_CLI_CONFIG_FILE` naming a `filesystem_mirror`; every directory needs only `hashicorp/aws`): `All Terraform checks passed.`, exit 0, 27.8 s. fmt, validate, tflint and `terraform test` of every root and module. No lock file changed, and the `.terraform` directories it left were removed |
-| ac1 — Terraform's tests show the run role's grants and the schedule | PASS | `terraform -chdir=infrastructure/modules/caselist_run test` → `Success! 25 passed, 0 failed.` t02's 13 runs pass on the new inputs; 12 are new (below). Mutation: 22 of 22 caught (below) |
+| Node `image-schedule`: Terraform checks pass (`bash scripts/terraform_checks.sh`) | PASS | Run as written, with the registry replaced by the provider already unpacked in the main checkout (`TF_CLI_CONFIG_FILE` naming a `filesystem_mirror`; every directory needs only `hashicorp/aws`): `All Terraform checks passed.`, exit 0, 27.5 s (after the sync below). fmt, validate, tflint and `terraform test` of every root and module. No lock file changed, and the `.terraform` directories it left were removed |
+| ac1 — Terraform's tests show the run role's grants and the schedule | PASS | `terraform -chdir=infrastructure/modules/caselist_run test` → `Success! 26 passed, 0 failed.` t02's 14 runs pass (its first 13 on the new inputs, and the break-glass run its pull request #465 added); 12 are new (below). Mutation: 22 of 22 caught (below) |
 | ac1 — the image builds from a tag and runs `debate-research caselist pull` against stubbed services in CI | NOT RUN | It runs in validate-dev's new `image` job, which runs only after a merge into `dev`. What can run before the merge did. `tests/scripts/test_caselist_run_deploy.py` → `20 passed` (the build's arguments, the offline check, the push and registration, the prod guard; 7 of 7 mutants caught). `tests/smoke/test_caselist_pull.py` against the workspace's build → `9 passed`, now asserting stage times. A local dry-run build of a real tag is operator follow-up A. The first validate-dev run after the merge closes this, and gives the CI build's time |
 | ac2 — the operator applies dev and starts one run by hand; its record matches a Mac run's shape | NOT RUN | Operator, after the merge, and the hand run only after `v1-e40-t04` (question 1). Runbook [caselist-cloud-run.md](../runbooks/caselist-cloud-run.md), steps 1 to 6 |
 | ac3 — each stage's start and end in the run's details, a 70% volume warning in the summary by test with a stubbed volume, the record's fields unchanged | PASS | `test_caselist_sync_stage_times_and_volume.py` → `11 passed`: every stage timed in order, a stage's 7 minutes read from a stub that moves the clock, dry runs and `--publish-pending` timed for what they carry out, a 75% stub warning with its text, exactly 70% not warning and one byte more warning, the fullest reading kept, no reading without the setting, a failed reading costing no stage. Against a skeleton that times and reads nothing, 10 of them fail. The record: the test lists its 23 fields by hand, and `test_pull_run_record_is_read_by_every_build.py`'s schema checks against the two older builds pass unchanged (83 passed with the refusal suite). The CLI shows the warning in its caption (`test_caselist_pull.py`, 3 new) |
@@ -80,10 +80,10 @@ Four things to look at first:
 no Hypothesis is involved).
 
 * **Terraform, 22 mutants, 22 caught; sources restored after each** (`git checkout`, worktree clean
-  after). 19 were caught by a failing assertion with nothing skipped (`24 passed, 1 failed` or
-  `23 passed, 2 failed`). 3 were caught as `Missing expected failure` on the very run written for
-  that validation, which Terraform follows by skipping the rest of the file. No assertion errored,
-  which memory says to rule out first.
+  after), run again on the synced tree with the same result. 19 were caught by a failing assertion
+  with nothing skipped (`25 passed, 1 failed` or `24 passed, 2 failed`). 3 were caught as `Missing
+  expected failure` on the very run written for that validation, which Terraform follows by
+  skipping the rest of the file. No assertion errored, which memory says to rule out first.
   * The deployer (8): it may pass the login role; it may pass any role; no `iam:PassedToService`; the
     deny becomes an allow; the deny spares the login's execution role; the deny names the run role;
     it runs any family; it runs on any cluster.
@@ -104,26 +104,31 @@ no Hypothesis is involved).
   task-role check before registering; the credential pattern blind to `TOKEN`; the SQLite floor
   unchecked; checks with the network on; prod taking a dev tag.
 
-**The checks run before this report.** The affected set is
-`310 of 451 test files (68.7%) ... from 46 changed files`, because `settings.py` reaches the root
+**The checks run before this report**, after syncing with `scripts/task sync` onto `origin/dev` at
+`337a78c`. Two syncs were needed, because `dev` moved twice: t02's key-policy fix (#465) and the PM's
+batch (#468). The first conflicted in two files, both resolved by keeping both sides. In the module's
+tests, each side had appended a block, dev's break-glass run and this task's runs. In the module's
+README, two mutation sentences were joined. Everything below was run after the first sync, and the
+spec and docs checks again after the second, which changed only docs and specs. The affected set is
+`312 of 453 test files (68.9%) ... from 48 changed files`, because `settings.py` reaches the root
 conftest. At about six minutes for the whole selection that is about four, over the two-minute line,
 so per agreement 10 it is left to the pull request's `ci`, not run or handed over. Within the two
 minutes, each under `perl -e 'alarm 115'` on `.venv/bin/python -m pytest -m "not slow and not live"`:
 
 | Command | Result |
 |---|---|
-| `packages/debate_cli/tests` (all of it, for the pinned integration lists) | First run: 1 failed, `test_pull_refused_before_the_bucket_is_built.py`, a hand-written details pin I had missed. Fixed by hand: `909 passed in 37.43s` |
-| `tests/architecture tests/specs tests/docs tests/scripts` | `1680 passed in 62.56s` |
-| `packages/debate_core/tests/application/caselist` | `1564 passed in 72.71s` |
-| The rest of `packages/debate_core/tests/application` | `1861 passed in 14.20s` (and the sync and settings files alone: `253 passed`) |
-| `tests/smoke/test_caselist_pull.py test_caselist_runs.py test_smoke_harness.py` against the workspace's build | `11 passed`; after the smoke edit, `test_caselist_pull.py` → `9 passed` |
+| `packages/debate_cli/tests` (all of it, for the pinned integration lists) | Before the sync, first run: 1 failed, `test_pull_refused_before_the_bucket_is_built.py`, a hand-written details pin I had missed, fixed by hand. After the sync: `909 passed in 37.01s` |
+| `tests/architecture tests/specs tests/docs tests/scripts` | `1684 passed in 59.38s`; after the second sync, `tests/specs tests/docs tests/architecture` → `333 passed` |
+| `packages/debate_core/tests/application/caselist` | `1564 passed in 77.11s` |
+| The rest of `packages/debate_core/tests/application` | `1900 passed in 17.09s` |
+| `tests/smoke/test_caselist_pull.py test_caselist_runs.py test_smoke_harness.py` against the workspace's build | `11 passed in 19.77s` |
 | The logging check (agreement 10): `test_caselist_sync.py` and the new volume tests, `-n 0 -p no:randomly`, both orders | `87 passed`; reversed, `87 passed` |
-| `uv run --frozen ruff format --check .` / `ruff check .` | `1240 files already formatted` / `All checks passed!` |
+| `uv run --frozen ruff format --check .` / `ruff check .` | `1251 files already formatted` / `All checks passed!` |
 | `uv run --frozen pyright` (the whole configuration, as CI runs it) | `0 errors, 0 warnings, 0 informations` |
 | `uv run --frozen lint-imports` | `Contracts: 16 kept, 0 broken.` |
 | `uv run --frozen python scripts/check_thin_handlers.py` | `OK: 50 CLI command and API route handlers within 25 statements` |
-| `uv run --frozen python scripts/validate_specs.py` | `OK: 435 files, 40 epics, 373 tasks, 22 releases` |
-| `check_command_blocks.py`, `check_links.py`, `docs_index.py --check-descriptions` | `OK: no # comments in 404 shell code blocks`; `OK: 2257 relative links and anchors`; `All 47 indexed documents under docs/ have a description`. No `!` in any bash block of either runbook |
+| `uv run --frozen python scripts/validate_specs.py` | `OK: 437 files, 40 epics, 375 tasks, 22 releases` |
+| `check_command_blocks.py --base origin/dev`, `check_links.py`, `docs_index.py --check-descriptions` | `OK: no # comments in 414 shell code blocks in 151 Markdown files (1 session reports changed since origin/dev)`; `OK: 2274 relative links and anchors`; `All 47 indexed documents under docs/ have a description`. No `!` in any bash block of either runbook or this report |
 | `shellcheck` on the deploy script and the image check | Clean |
 | `scripts/actionlint.sh` | Not run: it downloads actionlint, a live call. The pull request's `ci` runs it |
 
@@ -166,8 +171,8 @@ minutes, each under `perl -e 'alarm 115'` on `.venv/bin/python -m pytest -m "not
    PM asked for CI to build the image. That meant `.github/workflows/validate-dev.yml`,
    `scripts/validate_dev.py`, their tests in `tests/scripts/`, and `tests/smoke/test_caselist_pull.py`
    for agreement 5's smoke check. Question 5 asks for the packages list to be amended.
-2. **t02's 13 Terraform runs pass, but three of them changed.** Their names and assertions are
-   unchanged. The three apply-B runs take `image_digest` where they took `login_task`. The
+2. **t02's Terraform runs pass, but three of its first 13 changed.** Their names and assertions are
+   unchanged, and so is the break-glass run #465 added. The three apply-B runs take `image_digest` where they took `login_task`. The
    no-Identity-Center run sets `deployer_user_names = []` (its validation needs it) and gains one
    assertion. One message says `image_digest` for `login_task`.
 3. **Three hand-written expectations gained the details' two keys**, written by hand

@@ -54,7 +54,7 @@ spec:
         identified aff, matching a hand-written golden file; an advantage read in a round
         assigned to another aff is never counted under this one; tests shown failing first.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

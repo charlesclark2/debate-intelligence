@@ -215,6 +215,29 @@ def test_a_school_page_shows_that_schools_rows_and_a_repeated_anchor_is_the_othe
     ]
 
 
+def test_a_school_page_links_each_team_page_in_a_new_tab_and_shows_none_as_text(member: Any) -> None:
+    """`v1-e32-t23`: the by-school table's team page column, checked as the position page's is."""
+    ashgrove = main_of(page(member, "/landscape/synthpolicy26/schools/ashgrove"))
+    hollow = main_of(page(member, "/landscape/synthpolicy26/schools/birch-hollow"))
+    hyphenated = main_of(page(member, "/landscape/synthpolicy26/schools/birch-hollow-2"))
+
+    new_tab = 'target="_blank" rel="noopener noreferrer"'
+    team_page = f'<a href="https://opencaselist.com/synthpolicy26/Ashgrove/AB" {new_tab}>'
+    assert re.findall(r"<a [^>]*>", ashgrove) == [
+        '<a href="/landscape/synthpolicy26/schools">',
+        team_page,
+        team_page,
+    ]
+    assert ashgrove.count('openCaselist<span class="new-tab"> (opens in a new tab)</span></a>') == 2
+    assert "<th>Team page</th>" in ashgrove
+    assert re.findall(r"<a [^>]*>", hyphenated) == [
+        '<a href="/landscape/synthpolicy26/schools">',
+        f'<a href="https://opencaselist.com/synthpolicy26/Birch-Hollow/EF" {new_tab}>',
+    ]
+    assert "<td>CD</td>\n<td>neg</td>\n<td><code>invented-da</code></td>\n<td>2</td>\n<td>none</td>" in hollow
+    assert "opencaselist.com" not in hollow
+
+
 def test_a_position_page_links_each_team_page_in_a_new_tab_and_shows_none_as_text(member: Any) -> None:
     position = main_of(page(member, "/landscape/synthpolicy26/positions/invented-da"))
 

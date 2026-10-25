@@ -483,12 +483,48 @@ def test_a_team_code_that_is_not_one_address_word_gets_no_link_and_is_counted() 
     assert f"# team_pages={counted}\n" in files["schools.csv"]
     assert "| Birchmoor | Q-Q | neg | 1 | none |" in files["schools.md"]
     assert f"| Birchmoor | ZZ | neg | 1 | [openCaselist]({BIRCHMOOR_PAGE}/ZZ) |" in files["schools.md"]
+    assert "| Q-Q | neg | `cap-k` | 1 | none |" in files["schools.md"]
+    assert f"| ZZ | neg | `states-cp` | 1 | [openCaselist]({BIRCHMOOR_PAGE}/ZZ) |" in files["schools.md"]
+    assert _team_page_cells(files["schools.md"], "## By school") == _team_page_cells(
+        files["schools.md"], "## By position"
+    )
     rows = [row for row in _csv_rows(files["schools.csv"]) if row["school"] == "Birchmoor"]
     assert {(row["team_code"], row["team_page"]) for row in rows} == {
         ("Q-Q", ""),
         ("ZZ", f"{BIRCHMOOR_PAGE}/ZZ"),
     }
     assert "opencaselist" not in "".join(files[name] for name in CIRCUIT_WIDE_FILES).casefold()
+
+
+def _team_page_cells(text: str, section: str) -> dict[tuple[str, str], set[str]]:
+    """Each team's team page cells in one `##` section of schools.md, keyed by school and team code.
+
+    By school, a row is a team code under its school's `###` heading; by position, a row names both.
+    """
+    body = text.split(f"{section}\n", 1)[1].split("\n## ", 1)[0]
+    cells: dict[tuple[str, str], set[str]] = {}
+    school = ""
+    for line in body.splitlines():
+        if line.startswith("### "):
+            school = line.removeprefix("### ")
+        if not line.startswith("| ") or line.startswith(("| Team code |", "| School |")):
+            continue
+        row = [cell.strip() for cell in line.strip("|").split("|")]
+        team = (school, row[0]) if section == "## By school" else (row[0], row[1])
+        cells.setdefault(team, set()).add(row[-1])
+    return cells
+
+
+def test_a_team_reads_the_same_team_page_by_school_as_by_position() -> None:
+    """`v1-e32-t23`: the by-school table's team page column is the by-position tables' cell."""
+    text = _bundle().files["schools.md"]
+    by_school = _team_page_cells(text, "## By school")
+    assert by_school == _team_page_cells(text, "## By position")
+    assert len(by_school) == 8
+    assert all(len(cells) == 1 for cells in by_school.values())
+    assert by_school[("Birchmoor", "QQ")] == {f"[openCaselist]({BIRCHMOOR_PAGE}/QQ)"}
+    assert by_school[("Ashgrove Fictional", "XX")] == {"none"}
+    assert sum(cells == {"none"} for cells in by_school.values()) == 6
 
 
 def test_the_by_position_section_follows_the_by_school_section() -> None:

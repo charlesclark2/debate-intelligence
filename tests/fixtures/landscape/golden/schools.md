@@ -19,49 +19,49 @@ Every count comes from files teams disclosed to the caselist (FILE_IMPORT), not 
 
 ### Ashgrove Fictional
 
-| Team code | Side | Position | Rounds |
-|---|---|---|---|
-| XX | aff | `costs-advantage` | 2 |
-| XX | aff | `single-payer-aff` | 2 |
-| YY | neg | `cap-k` | 1 |
-| YY | neg | `election-da` | 1 |
-| YY | neg | `hospital-closures-da` | 1 |
-| YY | neg | `spending-da` | 1 |
-| YY | neg | `states-cp` | 1 |
+| Team code | Side | Position | Rounds | Team page |
+|---|---|---|---|---|
+| XX | aff | `costs-advantage` | 2 | none |
+| XX | aff | `single-payer-aff` | 2 | none |
+| YY | neg | `cap-k` | 1 | none |
+| YY | neg | `election-da` | 1 | none |
+| YY | neg | `hospital-closures-da` | 1 | none |
+| YY | neg | `spending-da` | 1 | none |
+| YY | neg | `states-cp` | 1 | none |
 
 ### Birchmoor
 
-| Team code | Side | Position | Rounds |
-|---|---|---|---|
-| QQ | aff | `condo-bad` | 1 |
-| QQ | aff | `costs-advantage` | 1 |
-| QQ | neg | `cap-k` | 1 |
-| QQ | neg | `spending-da` | 1 |
-| ZZ | aff | `costs-advantage` | 1 |
-| ZZ | aff | `innovation-advantage` | 1 |
-| ZZ | neg | `spending-da` | 1 |
-| ZZ | neg | `states-cp` | 1 |
+| Team code | Side | Position | Rounds | Team page |
+|---|---|---|---|---|
+| QQ | aff | `condo-bad` | 1 | [openCaselist](https://opencaselist.com/synthpolicy26/Birchmoor/QQ) |
+| QQ | aff | `costs-advantage` | 1 | [openCaselist](https://opencaselist.com/synthpolicy26/Birchmoor/QQ) |
+| QQ | neg | `cap-k` | 1 | [openCaselist](https://opencaselist.com/synthpolicy26/Birchmoor/QQ) |
+| QQ | neg | `spending-da` | 1 | [openCaselist](https://opencaselist.com/synthpolicy26/Birchmoor/QQ) |
+| ZZ | aff | `costs-advantage` | 1 | [openCaselist](https://opencaselist.com/synthpolicy26/Birchmoor/ZZ) |
+| ZZ | aff | `innovation-advantage` | 1 | [openCaselist](https://opencaselist.com/synthpolicy26/Birchmoor/ZZ) |
+| ZZ | neg | `spending-da` | 1 | [openCaselist](https://opencaselist.com/synthpolicy26/Birchmoor/ZZ) |
+| ZZ | neg | `states-cp` | 1 | [openCaselist](https://opencaselist.com/synthpolicy26/Birchmoor/ZZ) |
 
 ### Cedarvale Fictional
 
-| Team code | Side | Position | Rounds |
-|---|---|---|---|
-| VV | aff | `costs-advantage` | 1 |
-| VV | aff | `public-option-aff` | 1 |
-| WW | neg | `nhi-t` | 2 |
-| WW | neg | `election-da` | 1 |
-| WW | neg | `provider-strikes-da` | 1 |
+| Team code | Side | Position | Rounds | Team page |
+|---|---|---|---|---|
+| VV | aff | `costs-advantage` | 1 | none |
+| VV | aff | `public-option-aff` | 1 | none |
+| WW | neg | `nhi-t` | 2 | none |
+| WW | neg | `election-da` | 1 | none |
+| WW | neg | `provider-strikes-da` | 1 | none |
 
 ### Driftwood Fictional
 
-| Team code | Side | Position | Rounds |
-|---|---|---|---|
-| JJ | aff | `innovation-advantage` | 1 |
-| JJ | aff | `single-payer-aff` | 1 |
-| JJ | neg | `spending-da` | 1 |
-| JJ | neg | `states-cp` | 1 |
-| KK | aff | `costs-advantage` | 1 |
-| KK | aff | `innovation-advantage` | 1 |
+| Team code | Side | Position | Rounds | Team page |
+|---|---|---|---|---|
+| JJ | aff | `innovation-advantage` | 1 | none |
+| JJ | aff | `single-payer-aff` | 1 | none |
+| JJ | neg | `spending-da` | 1 | none |
+| JJ | neg | `states-cp` | 1 | none |
+| KK | aff | `costs-advantage` | 1 | none |
+| KK | aff | `innovation-advantage` | 1 | none |
 
 ## By position
 

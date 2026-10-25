@@ -394,9 +394,46 @@ None. The affected set is the whole selection in effect, which the pull request'
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-25
 
 **Notes:**
+
+The contract ADR-006 needed: the model selects, it never authors, and every refusal is named
+without quoting.
+1. **ac1 to ac5 pass.** The three definitions the PM asked for (the 12-word rule, the offset unit,
+   and "overlap inconsistently" as nine named cases) were committed before the code, and the tests
+   implement them as written.
+   * Code points, paragraph-relative, are the right unit: they are what Python slices and what
+     v1-e03-t03 already uses. ac4's round trip proves it byte for byte on curly quotes, dashes,
+     accents and emoji.
+   * ac5 is enforced by type as well as by test, as asked. Pyright refuses the bare metadata.
+2. **Red and mutants.** The tests were written after a first implementation, and shown red by
+   swapping in a refuse-nothing skeleton: 81 failed and 60 passed, each pass of the expected kind.
+   That is accepted. 26 of 26 mutants were caught, including the PM's six and six more on the
+   rulings' work.
+3. **The rulings of 2026-10-25 are done as asked:**
+   * the two-sentinel test extended to the check path;
+   * the optional hook pinned three ways (absent, `None`, a check that finds nothing);
+   * the allowance named by file and exact expression, with a citing comment, and its four failure
+     cases kept as tests.
+   The default-check mutant being caught only by the signature pin is correct, and saying so was
+   right.
+4. **Accepted as made:**
+   * Deviations 1 to 5. The PM's batch of 2026-10-25 (o) adds `debate_core.application` to
+     `constraints.packages`;
+   * walking every string in the answer rather than a list of fields, so a later field is covered;
+   * checking quotes against the whole snapshot;
+   * `card.markup` shown only the touched paragraphs, numbered as in the whole snapshot;
+   * versions pinned in code until v1-e09-t04;
+   * hand-written answers filed under computed keys, with no record mode.
+5. **The affected set** is the whole selection in effect, so it is left to the PR's `ci` under
+   agreement 10. Everything that changed passed within the limit (4,179 and 2,260), with the logging
+   suites run in one process.
+6. **Follow-ups:** v1-e06-t02 consumes this, with `ModelOutputError` mapped to an UNVERIFIED card.
+   Long sources need a paragraph window there. Miscounting within bounds is for v1-e09-t03's evals.
+   Real cassettes need v1-e05-t10.
+
+No re-review is needed.

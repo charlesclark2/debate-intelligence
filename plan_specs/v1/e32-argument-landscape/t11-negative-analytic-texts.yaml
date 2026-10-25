@@ -54,7 +54,7 @@ spec:
         hand-written golden files; a text never stands beside a school or team code; tests
         shown failing first.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

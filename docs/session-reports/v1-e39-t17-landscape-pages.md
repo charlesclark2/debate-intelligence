@@ -337,6 +337,59 @@ in the runbook's "What to record" table. This check is ac4's evidence.
   contents list as the index. That is the PM's question now.
 * **`v1-e39-t10`'s pilot review** may want the landscape pages in the coach's beta checklist.
 
+## PM review
+
+<!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
+this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
+
+**Verdict:** CHANGES_REQUESTED
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:** PM (Claude), 2026-10-26
+
+**Notes:**
+
+Most of this is right and stays as built. Two changes, both small.
+
+**Accepted as built:**
+* ac1 to ac3. The moto tests for the five-minute hold, a deleted school view and a republished
+  report; escaping and the link rule over every planted case; one audit record per view, naming no
+  school, team code or position; every route in the authorization matrix and the exposure test.
+  Red against a refuse-nothing skeleton (43 failed).
+* The mutants. Deleting the redundant caselist comparison when its mutant survived is agreement 8
+  applied properly. So is treating the Terraform assertion's error, rather than a failure, as not a
+  catch.
+* **Deviation 2:** `s3:ListBucket` limited by `s3:prefix` to `reports/landscape/*`. There's no
+  pointer file and E32 must not change. The PM amends ADR-0019's role table in a PM batch, and a
+  `current.json` pointer from E32 is a later follow-up.
+* **Deviation 3, closed:** the adapter logs request paths only at `debug`. The dev app log shows 0
+  path events over the debaters' use, and `web_adapter_never_logs_at_debug` holds it. That meets the
+  ruling's condition.
+* **Deviation 1**, the audit schema: `docs/data` is added in a PM batch.
+* Rendering in a worker thread; the shelf's re-read on change; 503 on a failed bucket or audit write;
+  no record for a 404.
+
+**Change 1: the report is one page per `#` part, not one page.** At 92% of the page line after a
+single republish (the report grew 75%), one page is a layout the next feature will break, and
+nothing would fail when it did, because the budget test reads a fixed size.
+* `/landscape/<caselist>` shows the header ("About this report") and the contents list.
+* The contents list links to one page per part (Affirmative, Negative, Neither side), with each
+  `##` section's anchor on its part page.
+* A part's path is its heading's anchor.
+* Size the page-weight test from the republished hspolicy26 bundle per part (about 45, 57 and 9 KB
+  rendered by your figures). Also assert that the largest part leaves at least a quarter of the line
+  free, so the next growth is seen in a test, not on a Chromebook.
+* Audit kinds gain `report-part`, still naming no school, team code or position.
+
+**Change 2: the header keeps its Search link and cart on landscape pages.** Gate item 11's "no
+search, no download and no share link" is about the reports: no search over them, no download of
+them, no link that shares them. It isn't about the site's navigation. Restore the header as on every
+other signed-in page. The landscape pages themselves still offer none of the three, and the
+forbidden-list test should check the page body, not the header.
+
+Re-review after the change. Expect a short one: the part pages, their sizes and headroom, the new
+audit kind and the header.
+
 ## Changes after the PM's review
 
 The PM's review of 2026-10-26 (CHANGES_REQUESTED) asked for two changes. Both are in `e128fa5`;
@@ -409,58 +462,12 @@ No Terraform changed in this round, so the expected dev plan is still `Plan: 0 t
 destroy.` The runbook's landscape section and step 5's check now name the part pages, the
 `report-part` kind and the normal header, and the signed-out check covers four routes.
 
-## PM review
+### Still open
 
-<!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
-this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
-
-**Verdict:** CHANGES_REQUESTED
-<!-- ACCEPTED / CHANGES_REQUESTED -->
-
-**Reviewed by / date:** PM (Claude), 2026-10-26
-
-**Notes:**
-
-Most of this is right and stays as built. Two changes, both small.
-
-**Accepted as built:**
-* ac1 to ac3. The moto tests for the five-minute hold, a deleted school view and a republished
-  report; escaping and the link rule over every planted case; one audit record per view, naming no
-  school, team code or position; every route in the authorization matrix and the exposure test.
-  Red against a refuse-nothing skeleton (43 failed).
-* The mutants. Deleting the redundant caselist comparison when its mutant survived is agreement 8
-  applied properly. So is treating the Terraform assertion's error, rather than a failure, as not a
-  catch.
-* **Deviation 2:** `s3:ListBucket` limited by `s3:prefix` to `reports/landscape/*`. There's no
-  pointer file and E32 must not change. The PM amends ADR-0019's role table in a PM batch, and a
-  `current.json` pointer from E32 is a later follow-up.
-* **Deviation 3, closed:** the adapter logs request paths only at `debug`. The dev app log shows 0
-  path events over the debaters' use, and `web_adapter_never_logs_at_debug` holds it. That meets the
-  ruling's condition.
-* **Deviation 1**, the audit schema: `docs/data` is added in a PM batch.
-* Rendering in a worker thread; the shelf's re-read on change; 503 on a failed bucket or audit write;
-  no record for a 404.
-
-**Change 1: the report is one page per `#` part, not one page.** At 92% of the page line after a
-single republish (the report grew 75%), one page is a layout the next feature will break, and
-nothing would fail when it did, because the budget test reads a fixed size.
-* `/landscape/<caselist>` shows the header ("About this report") and the contents list.
-* The contents list links to one page per part (Affirmative, Negative, Neither side), with each
-  `##` section's anchor on its part page.
-* A part's path is its heading's anchor.
-* Size the page-weight test from the republished hspolicy26 bundle per part (about 45, 57 and 9 KB
-  rendered by your figures). Also assert that the largest part leaves at least a quarter of the line
-  free, so the next growth is seen in a test, not on a Chromebook.
-* Audit kinds gain `report-part`, still naming no school, team code or position.
-
-**Change 2: the header keeps its Search link and cart on landscape pages.** Gate item 11's "no
-search, no download and no share link" is about the reports: no search over them, no download of
-them, no link that shares them. It isn't about the site's navigation. Restore the header as on every
-other signed-in page. The landscape pages themselves still offer none of the three, and the
-forbidden-list test should check the page body, not the header.
-
-Re-review after the change. Expect a short one: the part pages, their sizes and headroom, the new
-audit kind and the header.
+**ac4 — NOT RUN** (operator, after the merge): the Terraform grant is tested in the module (18 runs
+pass), but the dev plan (read by the PM first), the apply, the deploy and the coach's check of the
+hspolicy26 report on the deployed dev pilot are the operator's, as Operator follow-ups 2 to 5 give
+them. The Goal stays InProgress until they are recorded.
 
 ## PM review, second
 

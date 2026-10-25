@@ -216,6 +216,8 @@ class RemovalWorld:
             if "removal_log" in signature(RemovalPlanner).parameters
             else {}
         )
+        # The landscape bundles under reports/ are the planner's since v1-e32-t13, likewise.
+        log |= self._local_reports(RemovalPlanner)
         return RemovalPlanner(
             caselists=self.repository,
             local=self.local,
@@ -230,6 +232,12 @@ class RemovalWorld:
             bucket=self.bucket_name,
             **log,
         )
+
+    def _local_reports(self, built: type) -> dict[str, EvidenceVersionStore]:
+        """The data directory keyed as the bucket is, for a build whose planner and service take it."""
+        if "local_reports" not in signature(built).parameters:
+            return {}
+        return {"local_reports": FsEvidenceVersionStore(self.data_dir)}
 
     def takedown(self) -> TakedownAccess:
         """The takedown credential's reach, on moto (which does not enforce IAM: the tests that need a
@@ -257,6 +265,7 @@ class RemovalWorld:
             takedown=takedown or self.takedown,
             clock=FixedClock(REMOVAL_TIME),
             environment="dev",
+            **self._local_reports(CaselistRemovalService),
         )
 
     def tree(self) -> dict[str, bytes]:

@@ -130,6 +130,7 @@ import asyncio
 import shlex
 from collections import Counter
 from collections.abc import Coroutine
+from datetime import UTC
 from typing import Annotated, Any, TypedDict
 
 import typer
@@ -154,6 +155,7 @@ from debate_core.application.caselist.removal_plan import (
     PlannedSource,
     RemovalPlan,
     RemovalSelector,
+    SchoolViewRemoval,
     Side,
     SourceSelector,
     TeamSelector,
@@ -387,6 +389,11 @@ def render_plan(plan: RemovalPlan, report: RemovalReport | None) -> str:
             f"{report.manifest_rows_dropped} row(s); {report.inbox_files_deleted} inbox file(s) deleted and "
             f"{report.inbox_files_rewritten} rewritten."
         )
+        if report.school_view_files_deleted or report.school_view_versions_deleted:
+            lines.append(
+                f"Of those, {report.school_view_files_deleted} local file(s) and "
+                f"{report.school_view_versions_deleted} bucket version(s) were landscape school views."
+            )
         lines.append(f"It covered {_what_the_plan_covers(plan, carried_out=True)}.")
         lines += _probes_left_lines(report.preflight_probes_left)
     lines.append(f"Request {plan.request_id}, reason {plan.reason}, selector {_describe(plan.selector)}.")
@@ -421,6 +428,7 @@ def render_plan(plan: RemovalPlan, report: RemovalReport | None) -> str:
             versions = "" if rewrite.versions is None else f", {rewrite.versions} version(s) replaced by one"
             lines.append(f"  {rewrite.side.value:6} {rewrite.key}  -{rewrite.rows_dropped} row(s){versions}")
     lines += _swept_version_lines(plan)
+    lines += _school_view_lines(plan, report)
 
     lines += ["", *_inbox_lines(plan)]
 
@@ -455,6 +463,55 @@ def render_plan(plan: RemovalPlan, report: RemovalReport | None) -> str:
             f"  {_execute_command(plan)}",
         ]
     return "\n".join(lines)
+
+
+def _school_view_lines(plan: RemovalPlan, report: RemovalReport | None) -> list[str]:
+    """*LANDSCAPE SCHOOL VIEWS* and *REPUBLISH* (`v1-e32-t13`): which per-school files go, and which
+    bundle the PM is to have republished. Keys only: a caselist, a snapshot and a file's name."""
+    if not plan.school_view_reach:
+        return []
+    caselists = ", ".join(one.caselist for one in plan.school_view_reach)
+    lines = [
+        "",
+        f"LANDSCAPE SCHOOL VIEWS deleted, here and in the bucket: {len(plan.school_views)} file(s) of "
+        f"{caselists}",
+        "  Each names schools and team codes as disclosed. The circuit-wide files beside them",
+        "  (report.md and its CSVs) and every other caselist's bundles are left as they are.",
+    ]
+    for one in plan.school_view_reach:
+        if one.older_than is not None:
+            lines.append(
+                f"  {one.caselist}: only those written before {one.older_than.request_id}'s run completed "
+                f"{one.older_than.completed_at.astimezone(UTC):%Y-%m-%d %H:%M} UTC; this run finishes it."
+            )
+    lines += [f"  {_school_view_line(planned)}" for planned in plan.school_views] or [
+        "  (none: no school view they reach is on this machine or in the bucket)"
+    ]
+    if not plan.school_view_versions_counted and report is None:
+        lines += [
+            "  Bucket versions not counted: the everyday profile lists no versions under reports/.",
+            "  --execute lists every version of every bundle with the removal profile and deletes each",
+            "  this rule reaches, a noncurrent one the listing above could not show included.",
+        ]
+    if plan.republish:
+        lines += [
+            "",
+            "REPUBLISH, once this removal is done: the newest bundle it took a school view from, without",
+            "  the removed rounds. This command never republishes; tell the PM, who coordinates it.",
+            *(
+                f"  {caselist} {snapshot.isoformat()}: debate-research landscape report "
+                f"--caselist {caselist} --snapshot {snapshot.isoformat()} --publish"
+                for caselist, snapshot in plan.republish
+            ),
+        ]
+    return lines
+
+
+def _school_view_line(planned: SchoolViewRemoval) -> str:
+    if planned.side is Side.LOCAL:
+        return f"{planned.side.value:6} {planned.key}"
+    versions = "versions not counted" if planned.versions is None else f"{len(planned.versions)} version(s)"
+    return f"{planned.side.value:6} {planned.key}  {versions}"
 
 
 def _swept_version_lines(plan: RemovalPlan) -> list[str]:
@@ -969,6 +1026,12 @@ def _confirmation(plan: RemovalPlan) -> list[str]:
             f"  - Taken out of the download inbox on this machine: {len(plan.inbox)} downloaded file(s) "
             "held it."
         )
+    if plan.school_views:
+        bundles = len({planned.key.rsplit("/", 1)[0] for planned in plan.school_views})
+        lines.append(
+            f"  - Deleted: the per-school view of {bundles} argument landscape report(s); the newest is "
+            "to be republished without the removed rounds."
+        )
     named_removed = {source.sha256 for source in _not_later_uploads(plan, Disposition.REMOVE)}
     held = sum(1 for hold in plan.suppression_after.path_holds if hold.sha256 in named_removed)
     if held:
@@ -1103,6 +1166,7 @@ def plan_summary(plan: RemovalPlan, settings: Settings, report: RemovalReport | 
             for entry in plan.withdrawals
         ],
         "manifest_versions_swept": _swept_json(plan),
+        "school_views": _school_views_json(plan),
         "inbox_directory": plan.inbox_directory,
         "inbox_exists": plan.inbox_exists,
         "inbox": [
@@ -1132,7 +1196,44 @@ def plan_summary(plan: RemovalPlan, settings: Settings, report: RemovalReport | 
         data["outcome"] = str(report.log_entry.outcome)
         data["log_entry"] = report.log_entry.to_line()
         data["preflight_probes_left"] = _probes_left_json(report.preflight_probes_left)
+        data["school_views_deleted"] = {
+            "local_files": report.school_view_files_deleted,
+            "bucket_versions": report.school_view_versions_deleted,
+        }
     return data
+
+
+def _school_views_json(plan: RemovalPlan) -> dict[str, JsonValue]:
+    """*LANDSCAPE SCHOOL VIEWS* and *REPUBLISH* for a program (`v1-e32-t13`): keys, which hold a
+    caselist, a snapshot and a file's name, and counts."""
+    return {
+        "reach": [
+            {
+                "caselist": one.caselist,
+                "older_than": None
+                if one.older_than is None
+                else {
+                    "request_id": one.older_than.request_id,
+                    "completed_at": one.older_than.completed_at.astimezone(UTC)
+                    .isoformat()
+                    .replace("+00:00", "Z"),
+                },
+            }
+            for one in plan.school_view_reach
+        ],
+        "files": [
+            {
+                "key": planned.key,
+                "side": planned.side.value,
+                "versions": None if planned.versions is None else len(planned.versions),
+            }
+            for planned in plan.school_views
+        ],
+        "versions_counted": plan.school_view_versions_counted,
+        "republish": [
+            {"caselist": caselist, "snapshot": snapshot.isoformat()} for caselist, snapshot in plan.republish
+        ],
+    }
 
 
 def _swept_json(plan: RemovalPlan) -> JsonValue:

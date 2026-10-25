@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import shutil
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 
 from debate_core.application.errors import NotFound
@@ -45,6 +46,9 @@ class FsEvidenceVersionStore:
     async def list_versions(self, prefix: str) -> tuple[ObjectVersion, ...]:
         """Every file under the root whose key starts with `prefix`.
 
+        Each is dated by the file's modification time, as `caselist status` compares a local landscape
+        school view with a removal's completion (`v1-e32-t13`).
+
         Only the directory the prefix names is walked — `sha256/ab/cd/<digest>` looks in one fan-out
         directory, not the whole blob tree — so a removal of sixty sources does not walk a
         2,000-file tree sixty times.
@@ -55,7 +59,7 @@ class FsEvidenceVersionStore:
             if not start.resolve().is_relative_to(self._root.resolve()):
                 return ()
             found = [
-                ObjectVersion(key=key, version_id=None, size=path.stat().st_size)
+                _version(key, path)
                 for path in files_under(start)
                 if not path.name.startswith(INCOMING_FILE_PREFIX)
                 and (key := path.relative_to(self._root).as_posix()).startswith(prefix)
@@ -99,3 +103,14 @@ class FsEvidenceVersionStore:
         while current.resolve() != root and current.is_dir() and not any(current.iterdir()):
             current.rmdir()
             current = current.parent
+
+
+def _version(key: str, path: Path) -> ObjectVersion:
+    """The one version a file is: its key, its size, and its modification time."""
+    stat = path.stat()
+    return ObjectVersion(
+        key=key,
+        version_id=None,
+        size=stat.st_size,
+        last_modified=datetime.fromtimestamp(stat.st_mtime, tz=UTC),
+    )

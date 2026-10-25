@@ -60,6 +60,7 @@ from debate_core.application.analytic_texts import AnalyticTextsForReport
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.publish_plan import manifest_prefix, snapshot_of_manifest_key
 from debate_core.application.errors import DomainError, NotFound
+from debate_core.application.landscape_bundle_files import REPORTS_PREFIX
 from debate_core.application.landscape_report import (
     SCHOOL_VIEW_FILES,
     LandscapeReportInputs,
@@ -121,9 +122,6 @@ __all__ = [
     "UnknownSnapshot",
     "report_key",
 ]
-
-REPORTS_PREFIX: Final = "reports/landscape"
-"""Where a landscape bundle goes in the bucket, and under the data directory."""
 
 BUNDLE_FILES: Final = (
     "positions.csv",

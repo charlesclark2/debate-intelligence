@@ -947,6 +947,8 @@ class ServiceContainer:
             ),
             environment=self.settings.environment.value,
             inbox=self.caselist_inbox(),
+            # The landscape school views a removal left on this machine (v1-e32-t13).
+            local_reports=FsEvidenceVersionStore(storage.data_dir),
             versions=S3EvidenceVersionStore(
                 bucket=str(storage.s3.bucket),
                 profile=storage.s3.aws_profile,
@@ -980,6 +982,8 @@ class ServiceContainer:
             local=self._local_evidence(),
             local_blobs=FsEvidenceVersionStore(data_dir / BLOB_DIRECTORY.parent),
             local_parsed=FsEvidenceVersionStore(data_dir / PARSED_DIRECTORY),
+            # The data directory keyed as the bucket is, for reports/landscape/ (v1-e32-t13).
+            local_reports=FsEvidenceVersionStore(data_dir),
             remote=bucket,
             # The everyday profile, which may list versions under the removable prefixes
             # (v1-e29-t06). Where that grant is not applied, the plan says they were not counted.
@@ -1011,6 +1015,7 @@ class ServiceContainer:
             local=self._local_evidence(),
             local_blobs=FsEvidenceVersionStore(data_dir / BLOB_DIRECTORY.parent),
             local_parsed=FsEvidenceVersionStore(data_dir / PARSED_DIRECTORY),
+            local_reports=FsEvidenceVersionStore(data_dir),
             inbox=self.caselist_inbox(),
             remote=bucket,
             suppression=suppression,

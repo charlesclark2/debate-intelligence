@@ -266,10 +266,22 @@ class CaselistResidue:
     withdrawn_copies: tuple[WithdrawnCopy, ...] = ()
     """Files withdrawn from this caselist, by the withdrawal record, of whose copy here something is
     left, in digest order (`v1-e30-t19`). Part of :attr:`found` since `v1-e30-t24`."""
+    school_views: tuple[OlderVersions, ...] = ()
+    """Landscape school-view files of this caselist written before :attr:`school_views_older_than`,
+    in the bucket and on this machine, by role (`v1-e32-t13`,
+    :mod:`~debate_core.application.caselist.removal_school_views`). Part of :attr:`found`."""
+    school_views_older_than: RemovalCompletion | None = None
+    """The latest completed removal run whose own scope names this caselist: what a school view is
+    compared with, which may be earlier than :attr:`older_than` (see that module's docstring)."""
 
     @property
     def found(self) -> bool:
-        return bool(self.files) or bool(self.older_versions) or bool(self.withdrawn_copies)
+        return (
+            bool(self.files)
+            or bool(self.older_versions)
+            or bool(self.withdrawn_copies)
+            or bool(self.school_views)
+        )
 
     @property
     def current_objects(self) -> int | None:

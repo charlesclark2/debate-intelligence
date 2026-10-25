@@ -156,6 +156,7 @@ manifest (`docs/policies/caselist-data-use.md`, rule 4), and neither does an inb
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
@@ -189,21 +190,25 @@ from debate_core.application.caselist.publish_plan import (
 from debate_core.application.caselist.removal_residue import (
     CaselistResidue,
     CompletedRemovals,
+    RemovalCompletion,
     completed_removals,
     removal_residue,
 )
+from debate_core.application.caselist.removal_school_views import school_view_cutoffs, school_views_left
 from debate_core.application.caselist.suppression import (
     caselist_withdrawn_from,
     load_suppression_state,
     read_held_digests,
     read_withdrawals,
 )
-from debate_core.application.errors import DomainError, NotFound
+from debate_core.application.errors import DomainError, NotFound, StoreAccessDenied, error_code_of
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectInfo, ObjectKey
 from debate_core.application.ports.evidence_versions import EvidenceVersionStore
 from debate_core.application.ports.parsed_store import PARSED_PREFIX, source_digest_of_key
 from debate_core.application.ports.suppression import (
     RemovalLog,
+    RemovalLogEntry,
+    RemovalScopeEntry,
     RemovalScopeLog,
     SuppressionAction,
     SuppressionList,
@@ -523,6 +528,9 @@ class CaselistStatusService:
         inbox: The download inbox, for the uploads a removal's hold covers there (`v1-e30-t21`).
             Read only when :meth:`status` is asked for them, and the held-digest record beside the
             suppression list with it (`v1-e30-t24`).
+        local_reports: The data directory, keyed as the bucket is, for the landscape school views a
+            removal left on this machine (`v1-e32-t13`). Listed only with the residue check; without
+            one, only the bucket's are counted.
         concurrency: `HeadObject` calls in flight at once.
     """
 
@@ -536,6 +544,7 @@ class CaselistStatusService:
         removal_log: RemovalLog | None = None,
         environment: str | None = None,
         inbox: InboxHolds | None = None,
+        local_reports: EvidenceVersionStore | None = None,
         concurrency: int = _DEFAULT_CONCURRENCY,
     ) -> None:
         if concurrency < 1:
@@ -549,6 +558,7 @@ class CaselistStatusService:
         self._removal_log = removal_log
         self._environment = environment
         self._inbox = inbox
+        self._local_reports = local_reports
         self._semaphore_size = concurrency
 
     async def status(
@@ -601,10 +611,19 @@ class CaselistStatusService:
         removals = CompletedRemovals()
         not_attributed: tuple[str, ...] = ()
         if residue and self._versions is not None:
-            removals = await self._completed_removals()
+            entries, scopes = await self._removal_records()
+            removals = (
+                completed_removals(entries, scopes, self._environment)
+                if self._environment is not None
+                else CompletedRemovals()
+            )
+            cutoffs = school_view_cutoffs(entries, scopes, self._environment) if self._environment else {}
             withdrawn, not_attributed = await self._withdrawn_copies(suppression, caselists)
             left = [
-                await removal_residue(self._versions, name, suppression, removals, withdrawn.get(name))
+                await self._school_views_left(
+                    await removal_residue(self._versions, name, suppression, removals, withdrawn.get(name)),
+                    cutoffs.get(name),
+                )
                 for name in caselists
             ]
         inbox: tuple[HeldInboxUpload, ...] = ()
@@ -710,13 +729,35 @@ class CaselistStatusService:
             )
         return frozenset(held)
 
-    async def _completed_removals(self) -> CompletedRemovals:
-        """This environment's completed removals, from both copies of the log and of its scopes."""
+    async def _removal_records(self) -> tuple[tuple[RemovalLogEntry, ...], tuple[RemovalScopeEntry, ...]]:
+        """Both copies of the removal log and of its scopes, read as one; none without a log."""
         if self._removal_log is None or self._environment is None:
-            return CompletedRemovals()
+            return (), ()
         log = self._removal_log
         scopes = await log.scopes() if isinstance(log, RemovalScopeLog) else ()
-        return completed_removals(await log.entries(), scopes, self._environment)
+        return tuple(await log.entries()), tuple(scopes)
+
+    async def _school_views_left(
+        self, residue: CaselistResidue, cutoff: RemovalCompletion | None
+    ) -> CaselistResidue:
+        """`residue`, with the landscape school views of its caselist a removal should have deleted
+        (`v1-e32-t13`): see :func:`~debate_core.application.caselist.removal_school_views.school_views_left`.
+
+        Only for a caselist a completed run's own scope names, and only once the version listing was
+        allowed. A refused listing of `reports/` leaves the caselist not checked, as a refused version
+        listing does: a zero would say nothing is left.
+        """
+        if cutoff is None or not residue.checked:
+            return residue
+        try:
+            views = await school_views_left(
+                residue.caselist, cutoff, bucket=self._remote, local=self._local_reports
+            )
+        except StoreAccessDenied as refused:
+            return CaselistResidue(
+                caselist=residue.caselist, checked=False, not_checked_reason=error_code_of(refused)
+            )
+        return dataclasses.replace(residue, school_views=views, school_views_older_than=cutoff)
 
     async def _caselist_status(
         self,

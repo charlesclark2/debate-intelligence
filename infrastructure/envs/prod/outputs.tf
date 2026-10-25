@@ -243,6 +243,16 @@ output "caselist_run_cluster_name" {
   value       = module.caselist_run.cluster_name
 }
 
+output "caselist_run_subnet_ids" {
+  description = "The run's two public subnets, where a run started by hand runs."
+  value       = module.caselist_run.run_subnet_ids
+}
+
+output "caselist_run_security_group_id" {
+  description = "The tasks' security group: no inbound rule, outbound HTTPS only."
+  value       = module.caselist_run.run_security_group_id
+}
+
 output "caselist_run_task_definition_arn" {
   description = "The run task definition the schedule runs, pinned by digest. Null until caselist_image_digest is set (apply B)."
   value       = module.caselist_run.run_task_definition_arn

@@ -2,7 +2,8 @@
 # E40 task builds: t03). 28 characters in dev and 29 in prod, inside Identity Center's 32.
 #
 # It may push an image to the run's repository, register a run task definition, and start, watch
-# and stop a run on the run's cluster, reading the network to start it on from the run's schedule.
+# and stop a run on the run's cluster. The subnets and security group a run by hand starts in come
+# from the root's outputs (docs/runbooks/caselist-cloud-run.md).
 # It may pass the run's two roles to ECS, and never the login's: ECS checks iam:PassRole on a task
 # definition's task and execution roles when it is registered and on any role override when a
 # task is started, so this set can neither register a definition naming the login role nor run
@@ -93,13 +94,6 @@ locals {
         Effect   = "Allow"
         Action   = ["ecs:DescribeTasks", "ecs:StopTask"]
         Resource = local.run_cluster_task_arns
-      },
-      {
-        # The subnets and security group a run by hand starts in are the schedule's own.
-        Sid      = "ReadTheRunSchedulesNetwork"
-        Effect   = "Allow"
-        Action   = "scheduler:GetSchedule"
-        Resource = local.run_schedule_arn
       },
       {
         Sid    = "ReadTheRunLog"

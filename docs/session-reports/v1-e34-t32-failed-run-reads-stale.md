@@ -319,3 +319,31 @@ shows only as an absent record. Recorded here, with no task for now. For the clo
   and update the summary, Decisions and Questions here. Commit.
 
 If anything comes out differently, stop and ask for another review.
+
+## PM review, second
+
+**Verdict:** ACCEPTED
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:** PM (Claude), 2026-10-24
+
+**Notes:**
+
+The condition is closed as ruled.
+1. **The rule.**
+   * A raised run whose `caselists` names the caselist, later than the latest listing, reads stale:
+     "stopped before its stages (`<class>`)".
+   * The class is named only when `str.isidentifier()`, and `error_message` is never read.
+   * A `SyncRunInProgress` refusal and a `--publish-pending` raise change nothing.
+   * A later listing that did not fail clears it.
+2. **Red, then green.** The red run shows 8 `AssertionError`s. Both pass-at-red tests are shown to
+   bite. The PM's four mutants and four more were caught, and the first session's seven still
+   catch on the new code.
+3. **The extra test is right, and it is accepted.** The surviving mutant read the cap-bound count
+   from the stopped run, so the session added a test, and the backlog now stays counted from
+   `latest_listing` beside a stopped run.
+4. **The affected set** (156 files) hit the alarm even on a quiet machine, so it stays with the
+   PR's `ci`, under agreement 10.
+
+Nothing else changes from the first review. The Goal is `Succeeded`. The PM's next batch amends the
+description (ruling 3) and folds ruling 4 into `v1-e32-t12`.

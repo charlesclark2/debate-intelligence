@@ -35,7 +35,10 @@ spec:
     operator block.
   priority: 2
   constraints:
-    packages: [debate_core.application, debate_core.arguments, debate_core.domain, tests/fixtures/landscape, packages/debate_core/tests, docs/guides, debate_core.integrations, config/landscape, tests/config, scripts, tests/scripts]
+    # PM ruling 2026-10-25, from the session's question after the build: the fixture's loader
+    # (read_synthetic_analytic_texts) reads a plank's stem, solves and counts for the golden, as for
+    # v1-e32-t11.
+    packages: [debate_core.application, debate_core.arguments, debate_core.domain, debate_core.testing, tests/fixtures/landscape, packages/debate_core/tests, docs/guides, debate_core.integrations, config/landscape, tests/config, scripts, tests/scripts]
     forbidden:
       - A school, team code or debater's name in a circuit-wide file, log or commit
       - Card text, plan or counterplan text in a committed file or fixture (synthetic values only)

@@ -94,6 +94,7 @@ from debate_core.domain.search_source_links import NoTeamPage
 
 __all__ = [
     "IMPACT_CARD_COLUMNS",
+    "PLANK_TABLE_HEADER",
     "POSITION_COLUMNS",
     "SCHOOL_COLUMNS",
     "TOP_CARD_COLUMNS",
@@ -203,6 +204,8 @@ _METHOD_LABELS: Final = {
     PLAN_TEXT_METHOD: "The round's plan text names the aff",
     TEAM_CARRY_METHOD: "The team's other rounds name the aff",
 }
+PLANK_TABLE_HEADER: Final = "| Solves | Rank | Teams | Plank |"
+"""The header of a CP's plank table in report.md (`v1-e32-t16`), which the scan's section counts look for."""
 _TEXT_KINDS: Final = {
     AnalyticTextKind.CP_TEXT: (
         "Counterplan texts",
@@ -788,7 +791,7 @@ def _planks_table(planks: CpPlanks) -> list[str]:
     lines = [summary, ""]
     if not planks.groups:
         return [*lines, "None of them can be shown.", ""]
-    lines += ["| Solves | Rank | Teams | Plank |", "|---|---|---|---|"]
+    lines += [PLANK_TABLE_HEADER, "|---|---|---|---|"]
     rest: list[str] = []
     for group in planks.groups:
         solves = _cell(group.label) if group.label is not None else "not named"

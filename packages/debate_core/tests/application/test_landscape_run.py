@@ -499,6 +499,17 @@ async def test_a_dry_run_without_publish_names_the_keys_and_asks_no_bucket(world
     assert [(one.key, one.action) for one in result.publish.planned] == [(key, None) for key in KEYS]
 
 
+async def test_a_dry_run_holds_in_memory_the_files_a_run_writes(world: SyntheticRun) -> None:
+    # What the dry run's scan counts by section is read from these (v1-e32-t16); a run writes them.
+    dry = await _run(_service(world), dry_run=True)
+    assert not dry.written and not (world.data_dir / "reports").exists()
+    written = await _run(_service(world))
+    assert sorted(dry.bundle_files) == sorted(BUNDLE_FILES)
+    assert {
+        name: path.read_text(encoding="utf-8") for name, path in zip(BUNDLE_FILES, written.files, strict=True)
+    } == dict(dry.bundle_files)
+
+
 # ------------------------------------------------------------------------------------------------
 # The scan before sharing (the PM's rulings of 2026-10-24)
 # ------------------------------------------------------------------------------------------------

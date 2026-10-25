@@ -5,7 +5,8 @@ States CP with its text, a theory block the actor guard refuses, a Capitalism K 
 overview and a role of the ballot, and an `OFF` block whose alternative nothing places; one negative file
 with only that `OFF` block; one affirmative file with an overview under an advantage; and one negative file
 whose bytes are not on this machine. A fifth, negative, holds `v1-e32-t16`'s planks: an advantage CP whose
-CP text ends in a colon and lists two planks, one after a label that is only an advantage's alias, and a
+CP text ends in a colon and lists three planks, one after a label that is only an advantage's alias and one
+naming a school of the caselist, and a
 labelled States CP text with no actor whose one list plank the guard refuses. The counts the script prints
 were worked out by hand from those files (working agreement 6).
 
@@ -107,6 +108,7 @@ def with_planks() -> bytes:
                 paragraph_xml(run_xml("Costs"), style="Analytic"),
                 paragraph_xml(run_xml("Expand sample clinics."), style="Analytic"),
                 paragraph_xml(run_xml("Cut sample costs and fees."), style="Analytic"),
+                paragraph_xml(run_xml("School One should fund sample clinics."), style="Analytic"),
                 _card("Sample clinics work"),
                 paragraph_xml(run_xml("States CP"), style="Heading2"),
                 paragraph_xml(run_xml("Text: The sample panel should:"), style="Analytic"),
@@ -194,7 +196,7 @@ KINDS = [
     "  K_ALTERNATIVE: 3 found, 1 placed",
     "  ROLE_OF_THE_BALLOT: 1 found, 1 placed",
     "  OVERVIEW: 2 found, 2 placed",
-    "  CP_PLANK: 2 found, 2 placed",
+    "  CP_PLANK: 3 found, 3 placed",
     "CP texts by place in negative files: 2 kept by the actor guard, 1 refused.",
     "CP planks: 1 alias-only labels, 1 list planks refused with their CP text, 0 cards under a plank saying "
     "solves with other words.",
@@ -226,9 +228,14 @@ def test_quote_reads_the_texts_again_and_prints_counts_only(
 ) -> None:
     assert run(world, "--quote") == 0
     lines = printed(capsys)
-    # Two CP texts and two planks more in neg-five; only "Cut sample costs and fees." names an alias itself.
-    assert lines[-2:] == [
-        "Quoted: 2 sources read again for 7 texts; 7 read as they were read, 0 not, 0 unread.",
+    # Two CP texts and three planks more in neg-five. The three are distinct; the one naming School One is
+    # withheld, and the other two both solve Costs (by the label, and by their own words): 1 group.
+    # Only "Cut sample costs and fees." names an alias itself.
+    assert lines[-4:] == [
+        "Quoted: 2 sources read again for 8 texts; 8 read as they were read, 0 not, 0 unread.",
+        "Planks under a CP in negative files: 3 under 1 CPs, in 1 groups by what they solve, 1 withheld for "
+        "naming a school.",
+        "  advantage-cp: 3 planks, 1 groups, 1 withheld",
         "Planks naming an advantage alias in their own words: costs 1.",
     ]
     for words in ("sample program", "sample markets", "sample method", "counter interpretation", "clinics"):

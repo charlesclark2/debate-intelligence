@@ -9,8 +9,9 @@ names one), as `v1-e32-t02`'s classifier does, and reads every one from its own 
 store, parsing only what the cache does not hold. It writes the cache and nothing else, and prints counts
 only: sources, cache hits, sources parsed, refused and unread, each kind's texts found and placed, the
 CP texts the actor guard kept and refused in negative files, and the planks' counts (`v1-e32-t16`). With
-`--quote` it also reads again the texts a report would quote, in memory, and counts them, with the planks
-naming each advantage alias in their own words; it never prints a text.
+`--quote` it also reads again the texts a report would quote, in memory, and counts them: the planks under
+a CP in negative files, the groups they make by the advantage they solve and those withheld for naming a
+school, and the planks naming each advantage alias in their own words. It never prints a text.
 
 It exits 1 when it read no source, so an empty store never looks like a run. The first run over hspolicy26
 parses every on-topic file: about 0.25 s of a worker's time each, so about 2 minutes over 8 idle workers;
@@ -43,10 +44,17 @@ from debate_core.application.caselist.suppression import RecordedSuppressionList
 from debate_core.application.errors import DomainError
 from debate_core.application.landscape_seeding import read_seed_sources
 from debate_core.application.landscape_staleness import LandscapeStalenessCheck
-from debate_core.arguments.landscape.analytic_texts import AnalyticTextRules, advantage_aliases_in
+from debate_core.arguments.landscape.analytic_texts import (
+    AnalyticTextRules,
+    advantage_aliases_in,
+    commonest_text,
+    names_a_school,
+)
 from debate_core.arguments.landscape.matcher import tag_words
 from debate_core.arguments.landscape.source_headings import CaselistNames
 from debate_core.domain.caselist import Side
+from debate_core.domain.landscape import PositionKind
+from debate_core.domain.landscape_classification import PositionRole
 from debate_core.domain.landscape_texts import AnalyticTextKind, TextForm
 from debate_core.integrations.docx_parser import DebateDocxParser
 from debate_core.integrations.landscape.analytic_text_store import LocalAnalyticTextStore
@@ -173,6 +181,37 @@ async def _read(arguments: argparse.Namespace) -> int:
             f"{len(quoted.texts)} read as they were read, {quoted.mismatched} not, {quoted.unread} unread."
         )
         schools = CaselistNames(reading.caselist_names)
+        by_cp: dict[str, dict[str, tuple[set[str], list[tuple[str, int, str]]]]] = {}
+        for (sha, index), one in planks.items():
+            if sha not in negative or one.position_id is None or one.role is not PositionRole.READS:
+                continue
+            if taxonomy.resolve(one.position_id).kind is not PositionKind.CP or one.digest is None:
+                continue
+            solves, copies = by_cp.setdefault(one.position_id, {}).setdefault(one.digest, (set(), []))
+            solves.update(one.solves)
+            if (text := quoted.texts.get((sha, index))) is not None:
+                copies.append((sha, index, text))
+        per_cp: list[tuple[str, int, int, int]] = []
+        for position_id, by_digest in sorted(by_cp.items()):
+            withheld = {
+                digest
+                for digest, (_, copies) in by_digest.items()
+                if copies and names_a_school(commonest_text(copies), schools)
+            }
+            groups = {
+                group
+                for digest, (solves, copies) in by_digest.items()
+                if copies and digest not in withheld
+                for group in sorted(solves) or [None]
+            }
+            per_cp.append((position_id, len(by_digest), len(groups), len(withheld)))
+        print(
+            f"Planks under a CP in negative files: {sum(one[1] for one in per_cp)} under {len(per_cp)} CPs, "
+            f"in {sum(one[2] for one in per_cp)} groups by what they solve, "
+            f"{sum(one[3] for one in per_cp)} withheld for naming a school."
+        )
+        for position_id, count, groups, withheld in per_cp:
+            print(f"  {position_id}: {count} planks, {groups} groups, {withheld} withheld")
         by_alias = Counter(
             alias
             for key, text in quoted.texts.items()

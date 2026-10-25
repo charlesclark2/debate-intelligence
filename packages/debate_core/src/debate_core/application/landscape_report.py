@@ -122,7 +122,13 @@ from debate_core.application.landscape_staleness import (
 )
 from debate_core.application.landscape_trends import landscape_trends
 from debate_core.application.ports.parsed_store import OccurrenceRecord
-from debate_core.arguments.landscape.analytic_texts import AnalyticTextInputs, TextGroup, top_texts
+from debate_core.arguments.landscape.analytic_texts import (
+    AnalyticTextInputs,
+    TextGroup,
+    commonest_text,
+    names_a_school,
+    top_texts,
+)
 from debate_core.arguments.landscape.headings import NormalizedHeading
 from debate_core.arguments.landscape.impacts import is_impact_card
 from debate_core.arguments.landscape.link_chains import (
@@ -186,8 +192,10 @@ from debate_core.domain.landscape_texts import (
     DEFAULT_TEXTS_PER_POSITION,
     POSITION_KIND_OF,
     AnalyticTextKind,
+    CpPlanks,
     LandscapeTexts,
     OverviewCount,
+    PlankGroup,
     PositionTexts,
     TextCoverage,
     TextPlacement,
@@ -633,6 +641,8 @@ def _landscape_texts(
     where: defaultdict[AnalyticTextKind, Counter[str]] = defaultdict(Counter)
     unread: Counter[AnalyticTextKind] = Counter()
     groups: defaultdict[tuple[AnalyticTextKind, str], dict[str, _TextCopies]] = defaultdict(dict)
+    planks: defaultdict[str, dict[str, _TextCopies]] = defaultdict(dict)
+    solves_other_words = 0
     overview_teams: defaultdict[str, dict[str, set[tuple[str, str]]]] = defaultdict(
         lambda: {_AFF: set(), _NEG: set()}
     )
@@ -664,7 +674,12 @@ def _landscape_texts(
                 where[kind]["elsewhere"] += 1
                 continue
             where[kind]["counted"] += 1
-            copies = groups[(kind, position.id)].setdefault(reading.digest, _TextCopies())
+            if kind is AnalyticTextKind.CP_PLANK:
+                copies = planks[position.id].setdefault(reading.digest, _TextCopies())
+                copies.solves |= set(reading.solves)
+                solves_other_words += reading.solves_other_words
+            else:
+                copies = groups[(kind, position.id)].setdefault(reading.digest, _TextCopies())
             copies.teams |= {team for one in counted if (team := in_range.rounds[one].team) is not None}
             text = inputs.texts.get((sha, reading.element_index))
             if text is None:
@@ -699,8 +714,17 @@ def _landscape_texts(
                     ),
                 )
             )
+    by_cp = [
+        _cp_planks(position_id, by_digest, taxonomy, caselist, limit)
+        for position_id, by_digest in planks.items()
+    ]
+    withheld[AnalyticTextKind.CP_PLANK] = sum(one.withheld for one in by_cp)
     kinds = list(AnalyticTextKind)
     refused = sum(count for sha, count in inputs.refused_by_guard.items() if in_range.by_source.get(sha))
+    planks_refused = sum(
+        count for sha, count in inputs.planks_refused_by_guard.items() if in_range.by_source.get(sha)
+    )
+    plank_labels = sum(count for sha, count in inputs.plank_labels.items() if in_range.by_source.get(sha))
     overviews = [
         OverviewCount(
             position_id=position_id,
@@ -731,11 +755,66 @@ def _landscape_texts(
                 no_heading=where[kind][TextPlacement.NO_HEADING.value],
                 withheld_texts=withheld[kind],
                 unread=unread[kind],
-                refused_by_guard=refused if kind is AnalyticTextKind.CP_TEXT else 0,
+                refused_by_guard=(
+                    refused
+                    if kind is AnalyticTextKind.CP_TEXT
+                    else planks_refused
+                    if kind is AnalyticTextKind.CP_PLANK
+                    else 0
+                ),
+                plank_labels=plank_labels if kind is AnalyticTextKind.CP_PLANK else 0,
+                solves_other_words=solves_other_words if kind is AnalyticTextKind.CP_PLANK else 0,
             )
             for kind in kinds
         ),
         overviews=tuple(sorted(overviews, key=lambda one: (-one.teams, one.position_id))),
+        planks=tuple(sorted(by_cp, key=lambda one: (-one.teams, one.position_id))),
+    )
+
+
+def _cp_planks(
+    position_id: str,
+    by_digest: dict[str, _TextCopies],
+    taxonomy: Taxonomy,
+    caselist: CaselistNames,
+    limit: int,
+) -> CpPlanks:
+    """`v1-e32-t16`'s planks of one CP: grouped by the advantage each solves, the top `limit` per group.
+
+    A plank naming two advantages is in both groups and once in the CP's totals; one naming none is in the
+    last group, "solves: not named". A plank naming a school of the caselist is withheld, from every group,
+    and counted once.
+    """
+    withheld = {
+        digest
+        for digest, copies in by_digest.items()
+        if copies.texts and names_a_school(commonest_text(copies.texts), caselist)
+    }
+    members: defaultdict[str | None, dict[str, TextGroup]] = defaultdict(dict)
+    for digest, copies in by_digest.items():
+        if digest in withheld:
+            continue
+        for solves in sorted(copies.solves) or [None]:
+            members[solves][digest] = TextGroup(teams=frozenset(copies.teams), texts=tuple(copies.texts))
+    groups: list[tuple[int, str, PlankGroup]] = []
+    for solves, group in members.items():
+        quoted, more, _ = top_texts(
+            position_id, AnalyticTextKind.CP_PLANK, group, limit=limit, caselist=caselist
+        )
+        if not quoted:
+            continue
+        teams = len({team for one in group.values() for team in one.teams})
+        label = None if solves is None else taxonomy.position(solves).label
+        groups.append((teams, solves or "", PlankGroup(solves=solves, label=label, planks=quoted, more=more)))
+    return CpPlanks(
+        position_id=position_id,
+        label=taxonomy.position(position_id).label,
+        planks=len(by_digest),
+        teams=len({team for copies in by_digest.values() for team in copies.teams}),
+        withheld=len(withheld),
+        groups=tuple(
+            one for _, _, one in sorted(groups, key=lambda item: (item[2].solves is None, -item[0], item[1]))
+        ),
     )
 
 
@@ -745,6 +824,8 @@ class _TextCopies:
 
     teams: set[tuple[str, str]] = field(default_factory=set[tuple[str, str]])
     texts: list[tuple[str, int, str]] = field(default_factory=list[tuple[str, int, str]])
+    solves: set[str] = field(default_factory=set[str])
+    """A plank's advantages, as any copy of it names them (`v1-e32-t16`)."""
 
 
 def _ranked[RowT: TopCard](

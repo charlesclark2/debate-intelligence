@@ -4,8 +4,10 @@ Four invented sources in a synthetic caselist: two negative files by two invente
 States CP with its text, a theory block the actor guard refuses, a Capitalism K with its alternative, an
 overview and a role of the ballot, and an `OFF` block whose alternative nothing places; one negative file
 with only that `OFF` block; one affirmative file with an overview under an advantage; and one negative file
-whose bytes are not on this machine. The counts the script prints were worked out by hand from those
-files (working agreement 6).
+whose bytes are not on this machine. A fifth, negative, holds `v1-e32-t16`'s planks: an advantage CP whose
+CP text ends in a colon and lists two planks, one after a label that is only an advantage's alias, and a
+labelled States CP text with no actor whose one list plank the guard refuses. The counts the script prints
+were worked out by hand from those files (working agreement 6).
 
 Every school, team code, tournament and text here is invented.
 """
@@ -45,8 +47,10 @@ taxonomy_version: 1.0.0
 event: POLICY
 positions:
   - {{id: sample-plan-aff, label: Sample plan, kind: aff, side: aff, aliases: [sample plan]}}
-  - {{id: costs-advantage, label: Costs advantage, kind: advantage, side: aff, aliases: [costs advantage]}}
+  - {{id: costs-advantage, label: Costs advantage, kind: advantage, side: aff,
+      aliases: [costs advantage, costs]}}
   - {{id: states-cp, label: States CP, kind: cp, side: neg, aliases: [states cp]}}
+  - {{id: advantage-cp, label: Advantage CP, kind: cp, side: neg, aliases: [advantage cp]}}
   - {{id: cap-k, label: Capitalism K, kind: k, side: neg, aliases: [cap k]}}
 """
 
@@ -94,6 +98,24 @@ def negative() -> bytes:
     )
 
 
+def with_planks() -> bytes:
+    return build_docx(
+        "".join(
+            [
+                paragraph_xml(run_xml("Advantage CP"), style="Heading2"),
+                paragraph_xml(run_xml("Congress should:"), style="Analytic"),
+                paragraph_xml(run_xml("Costs"), style="Analytic"),
+                paragraph_xml(run_xml("Expand sample clinics."), style="Analytic"),
+                paragraph_xml(run_xml("Cut sample costs and fees."), style="Analytic"),
+                _card("Sample clinics work"),
+                paragraph_xml(run_xml("States CP"), style="Heading2"),
+                paragraph_xml(run_xml("Text: The sample panel should:"), style="Analytic"),
+                paragraph_xml(run_xml("Ban sample surprise bills."), style="Analytic"),
+            ]
+        )
+    )
+
+
 def off_only() -> bytes:
     return build_docx(paragraph_xml(run_xml("OFF"), style="Heading2") + _card("The alt is sample refusal."))
 
@@ -127,6 +149,12 @@ def world(tmp_path: Path) -> tuple[Path, Path]:
         [PlantedCard(("Costs Advantage",))],
         disclosures=[("2026-09-15", path("Three", "Aff", 3))],
         content=affirmative(),
+    )
+    store.source(
+        "neg-five",
+        [PlantedCard(("Advantage CP",))],
+        disclosures=[("2026-09-15", path("Five", "Neg", 5))],
+        content=with_planks(),
     )
     store.source("neg-gone", [PlantedCard(("Cap K",))], disclosures=[("2026-09-15", path("Four", "Neg", 4))])
     config_dir = tmp_path / "config"
@@ -162,11 +190,14 @@ def printed(capsys: pytest.CaptureFixture[str]) -> list[str]:
 
 
 KINDS = [
-    "  CP_TEXT: 1 found, 1 placed",
+    "  CP_TEXT: 3 found, 3 placed",
     "  K_ALTERNATIVE: 3 found, 1 placed",
     "  ROLE_OF_THE_BALLOT: 1 found, 1 placed",
     "  OVERVIEW: 2 found, 2 placed",
-    "CP texts by place in negative files: 1 kept by the actor guard, 1 refused.",
+    "  CP_PLANK: 2 found, 2 placed",
+    "CP texts by place in negative files: 2 kept by the actor guard, 1 refused.",
+    "CP planks: 1 alias-only labels, 1 list planks refused with their CP text, 0 cards under a plank saying "
+    "solves with other words.",
 ]
 
 
@@ -175,17 +206,17 @@ def test_the_texts_are_read_counted_and_cached(
 ) -> None:
     assert run(world) == 0
     assert printed(capsys) == [
-        f"Read {CASELIST} 2026.10.20-docx-6 through {SNAPSHOT}: 4 sources on {TOPIC}, "
-        "3 negative, 1 affirmative.",
-        "Analytic texts: 4 sources, 0 cached, 3 parsed, 0 refused by the parser, 1 unread; cache written.",
+        f"Read {CASELIST} 2026.10.20-docx-6 through {SNAPSHOT}: 5 sources on {TOPIC}, "
+        "4 negative, 1 affirmative.",
+        "Analytic texts: 5 sources, 0 cached, 4 parsed, 0 refused by the parser, 1 unread; cache written.",
         *KINDS,
     ]
     data_dir, _ = world
     cache = data_dir / "landscape" / "analytic_texts" / f"{CASELIST}.jsonl"
-    assert len(cache.read_text(encoding="utf-8").splitlines()) == 3
+    assert len(cache.read_text(encoding="utf-8").splitlines()) == 4
     assert run(world) == 0
     assert printed(capsys)[1:] == [
-        "Analytic texts: 4 sources, 3 cached, 0 parsed, 0 refused by the parser, 1 unread; cache unchanged.",
+        "Analytic texts: 5 sources, 4 cached, 0 parsed, 0 refused by the parser, 1 unread; cache unchanged.",
         *KINDS,
     ]
 
@@ -195,8 +226,12 @@ def test_quote_reads_the_texts_again_and_prints_counts_only(
 ) -> None:
     assert run(world, "--quote") == 0
     lines = printed(capsys)
-    assert lines[-1] == "Quoted: 1 source read again for 3 texts; 3 read as they were read, 0 not, 0 unread."
-    for words in ("sample program", "sample markets", "sample method", "counter interpretation"):
+    # Two CP texts and two planks more in neg-five; only "Cut sample costs and fees." names an alias itself.
+    assert lines[-2:] == [
+        "Quoted: 2 sources read again for 7 texts; 7 read as they were read, 0 not, 0 unread.",
+        "Planks naming an advantage alias in their own words: costs 1.",
+    ]
+    for words in ("sample program", "sample markets", "sample method", "counter interpretation", "clinics"):
         assert not any(words in line for line in lines)
 
 

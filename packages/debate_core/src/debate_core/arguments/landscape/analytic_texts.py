@@ -98,6 +98,7 @@ __all__ = [
     "CounterplanActors",
     "Placement",
     "advantage_aliases_in",
+    "commonest_text",
     "plank_words",
     "SectionParagraph",
     "SourceParagraphs",
@@ -654,7 +655,7 @@ def top_texts(
     for digest, group in groups.items():
         if not group.texts:
             continue
-        text = _commonest(group.texts)
+        text = commonest_text(group.texts)
         if names_a_school(text, caselist):
             withheld += 1
             continue
@@ -694,8 +695,8 @@ def _without_inline_label(kind: AnalyticTextKind, text: str) -> str:
     return text[found.end() :] if found is not None else text
 
 
-def _commonest(texts: Sequence[tuple[str, int, str]]) -> str:
-    """The wording most copies hold, then the first copy's by source digest and paragraph."""
+def commonest_text(texts: Sequence[tuple[str, int, str]]) -> str:
+    """What a group shows: the wording most copies hold, then the first copy's by source and paragraph."""
     counts = Counter(text for _, _, text in texts)
     best = max(counts.values())
     return min((sha, index, text) for sha, index, text in texts if counts[text] == best)[2]

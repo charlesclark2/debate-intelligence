@@ -21,7 +21,7 @@ builds the credentials and the scheduled login, in two applies:
 | `credentials.tf` | The KMS key `alias/debate-<env>-caselist-credentials`; the secrets `debate-<env>-caselist-tabroom-password` and `debate-<env>-caselist-token`, created empty; each secret's resource policy | A |
 | `roles.tf` | The login role `debate-<env>-caselist-login`; the run role `debate-<env>-caselist-run` with its credentials grant; each role's policies held exclusive | A |
 | `credential_writer.tf` | The `Debate<Env>CaselistSecretWriter` permission set, its inline policy and its one assignment | A |
-| `login_task.tf` | The login task definition, pinned by digest; its execution role and log group; the scheduler role; the schedule, Wednesdays at 03:00 America/Chicago, never retried | B, once `image_digest` is set |
+| `login_task.tf` | The login task definition, pinned by digest; its execution role and log group; the scheduler role, which trusts the login's schedule group only; the schedule group `debate-<env>-caselist-login` and the schedule in it, Wednesdays at 03:00 America/Chicago, never retried | B, once `image_digest` is set |
 
 [`v1-e40-t03-run-image-and-schedule`](../../../plan_specs/v1/e40-cloud-caselist-run/t03-run-image-and-schedule.yaml)
 builds the run, in the apply between those two, and in apply B:
@@ -30,7 +30,7 @@ builds the run, in the apply between those two, and in apply B:
 |---|---|---|
 | `network.tf` | The VPC `debate-<env>-caselist-run`, its default security group held with no rule, two public subnets, the internet gateway and route, the S3 gateway endpoint, and the tasks' security group: no inbound rule, outbound HTTPS only | the run's |
 | `cluster.tf` | The cluster and the image repository `debate-<env>-caselist-run`: immutable tags, a scan on push, KMS, the five newest images kept | the run's |
-| `run_task.tf` | The run's execution role and log group; then the run task definition (Fargate, arm64, 8 vCPU, 16 GB, 100 GiB, `debate-research --json caselist pull` under a 6-hour deadline, pinned by digest), its scheduler role and its schedule, Wednesdays at 06:00 America/Chicago, never retried, **created disabled** | the run's; B for the task and schedule |
+| `run_task.tf` | The run's execution role and log group; then the run task definition (Fargate, arm64, 8 vCPU, 16 GB, 100 GiB, `debate-research --json caselist pull` under a 6-hour deadline, pinned by digest), its scheduler role, which trusts the run's schedule group only, and the schedule group `debate-<env>-caselist-run` with the schedule in it, Wednesdays at 06:00 America/Chicago, never retried, **created disabled** | the run's; B for the task and schedule |
 | `roles.tf` | The run role's `everyday-evidence` policy: `module.evidence_store.operator_policy_json` itself | the run's |
 | `deployer.tf` | The `Debate<Env>CaselistRunDeployer` permission set: push to the repository, register a run task definition passing the run's two roles and never the login's, start, watch and stop a run | the run's |
 
@@ -53,6 +53,15 @@ The deployer may pass the run role and the run's execution role to ECS tasks, an
 refuses it the login role and the login's execution role. `ecs:RegisterTaskDefinition` takes no
 resource, so the pass-role rule is what holds a registration to the run's roles, and both schedules
 pin the revision Terraform made.
+
+Each schedule sits alone in a schedule group of its own, and each scheduler role trusts
+`scheduler.amazonaws.com` only with `aws:SourceAccount` and with `aws:SourceArn` set to exactly that
+group's ARN. That is the group, not the schedule, because EventBridge Scheduler assumes the role with
+the group's ARN as `aws:SourceArn` ("Confused deputy prevention in EventBridge Scheduler",
+<https://docs.aws.amazon.com/scheduler/latest/UserGuide/cross-service-confused-deputy-prevention.html>).
+It is never the `default` group, which any schedule in the account may join. A trust naming the
+schedule's own ARN refuses Scheduler, which is how dev's first apply B failed at both schedules on
+2026-10-24.
 
 ## Who may read what
 

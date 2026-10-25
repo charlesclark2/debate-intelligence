@@ -383,12 +383,27 @@ Apply B now creates the login task and the run task together, on the network, cl
 `v1-e40-t03` builds, pinned by one image digest (`caselist_image_digest`; t02's `caselist_login_task`
 is gone). Its steps are [caselist-cloud-run.md](caselist-cloud-run.md)'s 1 to 6: the run's
 infrastructure, the token check (does a new login end the Mac's token?), the deployer's profile,
-the first image push, then apply B, whose plan is `17 to
-add`: this login's 11 (the log group `debate-dev-caselist-login`, the execution role and the
-scheduler role, each with one inline policy and two exclusive-policy resources, the task definition
-`debate-dev-caselist-login` whose image ends `@sha256:` and the digest, and the schedule) and the
-run's 6. The login's task definition must show **no `secrets`** in its container definition, and its
-schedule is `ENABLED`.
+the first image push, then apply B. In a fresh environment apply B's plan is `19 to add`: this
+login's 12 and the run's 7. The login's 12 are:
+* the log group `debate-dev-caselist-login`;
+* the execution role and the scheduler role, each with one inline policy and two exclusive-policy
+  resources;
+* the task definition `debate-dev-caselist-login`, whose image ends `@sha256:` and the digest;
+* the schedule group `debate-dev-caselist-login`, whose only member is the schedule;
+* the schedule.
+
+The login's task definition must show **no `secrets`** in its container definition. Its schedule is
+`ENABLED`, unless the token check paused it.
+
+The scheduler role trusts its schedule's group, not the schedule. EventBridge Scheduler assumes the
+role with `aws:SourceArn` set to the group's ARN ("Confused deputy prevention in EventBridge
+Scheduler",
+<https://docs.aws.amazon.com/scheduler/latest/UserGuide/cross-service-confused-deputy-prevention.html>).
+Dev's first apply B trusted the schedule's ARN and stopped at both schedules, after creating the
+other 15. Its re-plan reads exactly `Plan: 4 to add, 2 to change, 0 to destroy.`.
+[caselist-cloud-run.md](caselist-cloud-run.md)'s step 6 checks that plan with a JSON check. As there,
+recover from a partial apply only by re-planning from the same worktree: never `-target`, and never
+a resource made or deleted by hand.
 
 **The first scheduled login** runs the next Wednesday at 03:00 America/Chicago. After it, the token
 secret has a version written by the login role, and its log says so. Run this on the Wednesday

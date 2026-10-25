@@ -315,7 +315,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [Each Policy affirmative round's plan, counted first, so the landscape names what affs read](plan_specs/v1/e32-argument-landscape/t09-policy-plan-texts.yaml) `v1-e32-t09-policy-plan-texts` | Succeeded | 1 | 5.0 |
 | [Impact cards per DA and advantage in the landscape report](plan_specs/v1/e32-argument-landscape/t10-impact-cards-per-position.yaml) `v1-e32-t10-impact-cards-per-position` | Succeeded | 1 | 4.0 |
 | [Counterplan texts, kritik alternatives and overviews in the landscape report](plan_specs/v1/e32-argument-landscape/t11-negative-analytic-texts.yaml) `v1-e32-t11-negative-analytic-texts` | Pending | 2 | 5.0 |
-| [The landscape command names the seven-file bundle and counts its trends and schools](plan_specs/v1/e32-argument-landscape/t12-landscape-cli-seven-files.yaml) `v1-e32-t12-landscape-cli-seven-files` | Pending | 1 | 1.0 |
+| [The landscape command names the seven-file bundle and counts its trends and schools](plan_specs/v1/e32-argument-landscape/t12-landscape-cli-seven-files.yaml) `v1-e32-t12-landscape-cli-seven-files` | InProgress | 1 | 1.0 |
 | [A removal and the annual purge reach the landscape bundles' school views](plan_specs/v1/e32-argument-landscape/t13-removal-reaches-landscape-school-views.yaml) `v1-e32-t13-removal-reaches-landscape-school-views` | Pending | 2 | 3.0 |
 
 #### [E33 — Evidence File Builder](plan_specs/v1/e33-file-builder/epic.yaml)

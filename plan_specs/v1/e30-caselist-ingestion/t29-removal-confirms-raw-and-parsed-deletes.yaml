@@ -1,0 +1,75 @@
+# TASK v1-e30-t29-removal-confirms-raw-and-parsed-deletes - A removal lists raw/ and parsed/ again after deleting, and stops incomplete if a version survived
+# Epic: E30 Caselist Evidence Ingestion | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e30-t29-removal-confirms-raw-and-parsed-deletes
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+  annotations:
+    debate/title: "A removal lists raw/ and parsed/ again after deleting, and stops incomplete if a version survived"
+spec:
+  # Filed by the PM, 2026-10-24, from v1-e32-t13's Deviation 3 (the PM's review of 2026-10-24).
+  description: >-
+    `caselist remove --execute` lists each `raw/` and `parsed/` key's versions once and deletes
+    them, and never lists again afterwards; only the preflight's probe and `caselist status`
+    check afterwards. v1-e32-t13 gave the landscape school views a re-list after deleting that
+    stops the removal `INCOMPLETE` if any version or delete marker it reached remains. Give
+    `raw/` and `parsed/` the same: after deleting, list each reached key's versions again under
+    the removal credential, and stop `INCOMPLETE`, counts only in the error, if any survived. A
+    re-run finishes it.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, packages/debate_core/tests, debate_cli, packages/debate_cli/tests]
+    forbidden:
+      - Network or AWS access in any test (moto only)
+      - A key, school or path in the removal log or error
+  context:
+    - kind: TaskRef
+      name: v1-e30-t07-source-removal
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        With a removal credential that answers a delete without doing it, a removal stops
+        INCOMPLETE naming counts only, and a re-run that deletes finishes it; tests shown
+        failing first, against moto.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e30-t29-removal-confirms-raw-and-parsed-deletes-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+spec:
+  description: >-
+    Re-list raw/ and parsed/ versions after deleting, and stop incomplete if any survived.
+  goalRef:
+    name: v1-e30-t29-removal-confirms-raw-and-parsed-deletes
+  graph:
+    nodes:
+      - id: relist-after-delete
+        kind: Task
+        name: Re-list after deleting
+        description: >-
+          Re-list raw/ and parsed/ versions after deleting, and stop incomplete if any
+          survived.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Removal tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, removal]
+status:
+  phase: Pending

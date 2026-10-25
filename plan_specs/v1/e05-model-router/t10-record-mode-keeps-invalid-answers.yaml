@@ -1,0 +1,81 @@
+# TASK v1-e05-t10-record-mode-keeps-invalid-answers - Record mode keeps an invalid answer, so a repaired call can be recorded live
+# Epic: E05 Model Router & Structured LLM Contracts | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e05-t10-record-mode-keeps-invalid-answers
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e05-model-router
+  annotations:
+    debate/title: "Record mode keeps an invalid answer, so a repaired call can be recorded live"
+spec:
+  # Filed by the PM, 2026-10-24, from v1-e05-t05's question 2 (the PM's review of 2026-10-24).
+  description: >-
+    When the live router raises `InvalidModelOutput`, v1-e05-t03's record mode writes nothing,
+    so a repaired call recorded live replays as `MissingFixtureError` on its first half, and
+    that half has to be written by hand (as v1-e05-t05's ac5 cassettes were). Make record mode
+    write the invalid answer as the router received it, or `"output": null` when no tool was
+    called (v1-e05-t05's fixture form), keyed as any recording is, so a replay raises the same
+    `InvalidModelOutput` and the guard's repair finds its own recorded cassette. A recorded
+    invalid answer holds what the model said, as every cassette does, and stays under the
+    cassette rules. Built before the first live recording of a structured prompt.
+  priority: 3
+  constraints:
+    packages: [debate_core.integrations, packages/debate_core/tests, tests/fixtures]
+    forbidden:
+      - A live model call in any test
+      - A provider error (refused, throttled) recorded as an answer
+  context:
+    - kind: TaskRef
+      name: v1-e05-t03-fake-replay-models
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e05-t05-structured-output-validation
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        With a stand-in live router, recording a call whose first answer is invalid and
+        whose repair is valid writes two cassettes, and replaying them gives the same
+        InvalidModelOutput, the same repair request and the same result; a no-tool answer
+        records as output null; a provider error records nothing; tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e05-t10-record-mode-keeps-invalid-answers-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e05-model-router
+spec:
+  description: >-
+    Make record mode write invalid answers and no-tool answers, and replay them as the live run
+    saw them.
+  goalRef:
+    name: v1-e05-t10-record-mode-keeps-invalid-answers
+  graph:
+    nodes:
+      - id: record-invalid
+        kind: Task
+        name: Record mode keeps invalid answers
+        description: >-
+          Make record mode write invalid answers and no-tool answers, and replay them as
+          the live run saw them.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Record-replay tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/models/test_record_replay.py]
+status:
+  phase: Pending

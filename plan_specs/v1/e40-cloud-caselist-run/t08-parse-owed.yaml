@@ -1,0 +1,83 @@
+# TASK v1-e40-t08-parse-owed - A week a killed run published is parsed by the next run, not left for the next import
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t08-parse-owed
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "A week a killed run published is parsed by the next run, not left for the next import"
+spec:
+  # Filed by the PM, 2026-10-24, from v1-e40-t04's finding 2 (the PM's review of 2026-10-24).
+  description: >-
+    A run killed after its publish stage and before its parse leaves that week published but not
+    parsed. The next pull finds nothing new to import, and the parse stage parses only what its
+    own run imported, so the week waits for the next import into that caselist or for `caselist
+    parse --publish` by hand. Nothing is lost; it is late, on the Mac as in the cloud. Record a
+    "parse owed" entry, per caselist and snapshot, in the run's state files when a publish
+    completes, cleared when that snapshot's parse completes. Keep it in local mode's state and
+    in bucket mode's saved state alike, so either runner honours it. A run that starts with a
+    parse owed parses those snapshots first, even when it imports nothing, and `caselist runs`
+    and `caselist status` say a parse is owed. A removal that reaches a snapshot clears its
+    entry.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, docs/runbooks]
+    forbidden:
+      - Network or AWS access in any test (moto and stand-ins only)
+      - A school, team code or path in the state files
+  context:
+    - kind: TaskRef
+      name: v1-e40-t04-run-state-on-s3
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A run killed after its publish and before its parse leaves a parse-owed entry, and
+        the next run parses that snapshot first though it imports nothing, in local and
+        bucket mode; a completed parse clears it; tests shown failing first, using
+        v1-e40-t04's kill harness.
+    - id: ac2
+      description: >-
+        `caselist runs` and `caselist status` say a parse is owed, and a removal that
+        reaches the snapshot clears the entry, by test.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t08-parse-owed-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    Record a parse owed at publish, honour and clear it at the next run's parse, and show it.
+  goalRef:
+    name: v1-e40-t08-parse-owed
+  graph:
+    nodes:
+      - id: parse-owed
+        kind: Task
+        name: Parse owed
+        description: >-
+          Record a parse owed at publish, honour and clear it at the next run's parse, and
+          show it.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Bucket-mode tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/bucket_mode]
+status:
+  phase: Pending

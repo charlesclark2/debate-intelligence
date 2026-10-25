@@ -265,5 +265,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e05-t09-replay-and-model-exit-codes
+    - id: t10
+      kind: Task
+      name: 'Record mode keeps an invalid answer, so a repaired call can be recorded live'
+      description: >-
+        Record mode keeps an invalid answer, so a repaired call can be recorded live.
+      inputs:
+        specRef: plan_specs/v1/e05-model-router/t10-record-mode-keeps-invalid-answers.yaml
+        goalRef: v1-e05-t10-record-mode-keeps-invalid-answers
+      dependsOn:
+      - t03
+      - t05
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e05-t10-record-mode-keeps-invalid-answers reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e05-t10-record-mode-keeps-invalid-answers
 status:
   phase: Pending

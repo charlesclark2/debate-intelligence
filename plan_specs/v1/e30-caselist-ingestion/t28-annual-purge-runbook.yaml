@@ -1,0 +1,81 @@
+# TASK v1-e30-t28-annual-purge-runbook - The annual purge, as one runbook
+# Epic: E30 Caselist Evidence Ingestion | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e30-t28-annual-purge-runbook
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+  annotations:
+    debate/title: "The annual purge, as one runbook"
+spec:
+  # Filed by the PM, 2026-10-24, from v1-e30-t01's follow-up 4 and v1-e32-t13's ruling 3 (the PM, 2026-10-24).
+  description: >-
+    The data-use policy deletes a season's data on 31 August after the following season ends
+    (2026-27 data by 31 August 2028), but no runbook says how. v1-e32-t13 added "The annual
+    purge: landscape school views" to `docs/runbooks/caselist-removal.md` as a section of its
+    own until this runbook exists. Write `docs/runbooks/annual-purge.md` covering every store
+    the retention table names: source blobs and manifests, the parsed store and fingerprints,
+    the download inbox, OpenEv camp files, the search pilot's index, the run-state bundle,
+    landscape bundles (their school views included, moved here from the removal runbook), and
+    built files, each locally and in each bucket, noncurrent versions included, under the
+    removal credential. Each step is a dry run listing counts, then the delete, then a check
+    that nothing of the season remains. Where a step has no command today, the runbook says so
+    and names the gap as follow-up work, never a hand `aws s3 rm` over a prefix it has not
+    listed first.
+  priority: 3
+  constraints:
+    packages: [docs/runbooks, tests/docs]
+    forbidden:
+      - A school, team code or path in the runbook's examples beyond synthetic ones
+      - A step that deletes before it lists
+  context:
+    - kind: TaskRef
+      name: v1-e30-t07-source-removal
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        docs/runbooks/annual-purge.md covers every store in the policy's retention table,
+        locally and in each bucket, each step a dry run, the delete and a check; the removal
+        runbook's school-view purge section moves into it and links to it;
+        check_command_blocks and check_links pass.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e30-t28-annual-purge-runbook-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+spec:
+  description: >-
+    Write the annual purge runbook from the retention table, moving in the school-view steps.
+  goalRef:
+    name: v1-e30-t28-annual-purge-runbook
+  graph:
+    nodes:
+      - id: purge-runbook
+        kind: Task
+        name: Annual purge runbook
+        description: >-
+          Write the annual purge runbook from the retention table, moving in the
+          school-view steps.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Docs tests pass
+            command: uv
+            args: [run, pytest, tests/docs]
+status:
+  phase: Pending

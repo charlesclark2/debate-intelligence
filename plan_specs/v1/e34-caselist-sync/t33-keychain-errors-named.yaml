@@ -1,0 +1,96 @@
+# TASK v1-e34-t33-keychain-errors-named - A keychain failure under launchd names its cause, and clearing a token already gone is no error
+# Epic: E34 Caselist Sync | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e34-t33-keychain-errors-named
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+  annotations:
+    debate/title: "A keychain failure under launchd names its cause, and clearing a token already gone is no error"
+spec:
+  # Filed by the PM, 2026-10-24, from the Mac's scheduled run of 2026-10-21, read by the PM.
+  description: >-
+    The Mac's scheduled `caselist pull` of 2026-10-21 failed as `INTERNAL_ERROR`
+    (`KeyringError`), "a bug in debate-research", with a verdict of `person`. The build hides
+    the message, rightly, because it can quote a path on the machine, so the cause could not be
+    read afterwards. That morning the Mac had no working login, so the likeliest cause is the
+    token store reading or clearing a keychain item that was not there, or a keychain a process
+    under launchd could not reach. Count first, from `keyring`'s documentation and its macOS
+    backend's code, and by test against a stand-in keyring: which errors `KeyringTokenBackend`'s
+    three calls can raise, for a missing item, a locked keychain, a keychain a background
+    process may not read, and no keychain at all (no one logged in). Then give each one its own
+    error code and a hint ("log in again with `caselist auth login`", "the Mac must be logged
+    in, not only switched on", "the keychain denied this program: grant it access or set
+    `caselist.token_backend = "file"`"), still never quoting the message, and make deleting a
+    token that is already gone succeed quietly. A run that fails this way records the named code,
+    and its notice gives the hint rather than "a bug in debate-research". `INTERNAL_ERROR` stays
+    for what is truly unexpected.
+  priority: 2
+  constraints:
+    packages: [debate_core.integrations, debate_core.application, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, docs/runbooks]
+    forbidden:
+      - A keyring error's message, a path or a token in any error, log or run record
+      - Network or AWS access in any test
+      - A real keychain in any test (a stand-in keyring only)
+  context:
+    - kind: TaskRef
+      name: v1-e34-t01-caselist-api-client
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Counts before any rule: which errors each of the token store's keyring calls can
+        raise on macOS, from the library's documentation and code, recorded in the report
+        with sources.
+    - id: ac2
+      description: >-
+        With a stand-in keyring, a missing item, a locked keychain, a refused program and no
+        keychain each give their own error code and hint and quote no message; deleting a
+        token that is already gone succeeds; an unexpected error is still INTERNAL_ERROR;
+        tests shown failing first.
+    - id: ac3
+      description: >-
+        A scheduled run that fails on one of the named errors records the named code, and its
+        failure notice gives the hint rather than "a bug in debate-research", by test.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e34-t33-keychain-errors-named-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+spec:
+  description: >-
+    Count the keyring errors the token store can meet, then name each with a code and hint, make
+    a missing token's delete quiet, and carry the code into the run record.
+  goalRef:
+    name: v1-e34-t33-keychain-errors-named
+  graph:
+    nodes:
+      - id: keychain-errors
+        kind: Task
+        name: Keychain errors named
+        description: >-
+          Count the keyring errors the token store can meet, then name each with a code
+          and hint, make a missing token's delete quiet, and carry the code into the run
+          record.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Token store tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/opencaselist]
+status:
+  phase: Pending

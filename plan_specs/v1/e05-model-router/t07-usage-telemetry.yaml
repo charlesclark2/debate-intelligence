@@ -24,6 +24,11 @@ spec:
     shared `--max-cost` option helper for debate_cli so any model-using command (landscape classification
     in E32, cut in E06, auto-cut and daily in E08) can adopt it, plus `debate-research usage` for a daily
     summary. Boundaries: does not implement CloudWatch metrics (V2) or change routing decisions (t01); the fake router reports zero cost.
+    (PM amendment 2026-10-24, from v1-e05-t05's follow-up.) An attempt that fails validation raises
+    `InvalidModelOutput`, which carries no `ModelUsage`, so the tokens of a repaired call's first
+    attempt are lost today. The error, or the structured-output guard's attempt record, carries the
+    attempt's usage, and telemetry and the budget guard count both attempts of a repaired call, by
+    test.
   priority: 2
   constraints:
     packages: [debate_core.integrations, debate_core.application, debate_cli]

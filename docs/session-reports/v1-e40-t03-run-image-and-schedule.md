@@ -840,3 +840,24 @@ myself.
    seed (ADR-0020, amended 2026-10-24).
 
 The PR merges `--partial`, with the phase `InProgress`.
+
+## PM record, 2026-10-24
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+* **The re-plan and apply after the resumed merge** (`cd56754`): `Plan: 4 to add, 2 to change, 0 to
+  destroy.`, `PLAN OK` from the runbook's JSON check, then `Apply complete! Resources: 4 added, 2
+  changed, 0 destroyed.` The run schedule is `DISABLED`, and the run's task definition is
+  `debate-dev-caselist-run:1` on the `v1.1.0-dev.137` image.
+* **The rehearsal (runbook step 7): passed.** A hand-started dry-run pull, `caselist pull --dry-run
+  --caselist hsld26`, ran on Fargate arm64 from the run deployer's profile and stopped
+  `EssentialContainerExited` with exit code `0`. It answered `"status": "ok"` with 16 archives
+  wanted (every week of the season, as expected from an empty data directory before `v1-e40-t04`),
+  nothing downloaded and nothing published.
+  * That proves the image, the network, the run role's read of the token and OpenCaselist's
+    answer to a listing from an AWS address, the risk ADR-0020 named.
+  * `caselist runs --remote --last 3` afterwards showed no run record from the rehearsal; the newest
+    record was the Mac's of 2026-10-22.
+* **ac1 is complete** (its CI part was recorded in the second review).
+* **Still open, so the Goal stays `InProgress`:** ac2's hand run (step 8), which is `v1-e40-t06`'s
+  cutover step 5, after `v1-e40-t04`'s seed.

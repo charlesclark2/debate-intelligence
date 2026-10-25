@@ -324,3 +324,40 @@ def test_a_bundled_profile_is_what_decides_the_weekly_index_refresh(
     settings = load_settings(env_file=no_dotenv, build_channel="dev", bundled_config_root=bundled_root)
 
     assert settings.caselist.refresh_search_index is False
+
+
+# ---------------------------------------------------------------------------------------------
+# The weekly run's caselists and its state are dev's profile's, from the cutover (v1-e40-t06)
+# ---------------------------------------------------------------------------------------------
+
+
+@pytest.fixture
+def committed_root(tmp_path: Path) -> Path:
+    """The committed `config/`, as the wheel bundles it."""
+    bundled = tmp_path / "committed"
+    shutil.copytree(CONFIG, bundled / "config")
+    return bundled
+
+
+def test_the_committed_dev_profile_names_the_runs_three_caselists_and_keeps_its_state_in_the_bucket(
+    committed_root: Path, no_dotenv: Path
+) -> None:
+    """ADR-0020 (5): the run's command names no caselist, so the build it runs must.
+
+    The three are the Mac agent's `--caselist` arguments as its plist held them at the cutover, in
+    that order. Bucket mode is the Mac's as well as the cloud task's from the cutover (ADR-0020 (4)).
+    """
+    development = load_settings(environment="dev", env_file=no_dotenv, bundled_config_root=committed_root)
+
+    assert development.caselist.sync_caselists == ("hsld26", "hspolicy26", "hspf26")
+    assert development.caselist.run_state.value == "bucket"
+
+
+def test_the_committed_prod_profile_follows_no_caselist_and_keeps_its_state_locally(
+    committed_root: Path, no_dotenv: Path
+) -> None:
+    """Until the run's home moves at the pilot's promotion (ADR-0020 (7)), prod is published by hand."""
+    production = load_settings(environment="prod", env_file=no_dotenv, bundled_config_root=committed_root)
+
+    assert production.caselist.sync_caselists == ()
+    assert production.caselist.run_state.value == "local"

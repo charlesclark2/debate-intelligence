@@ -63,3 +63,19 @@ budget_usd_daily = 2.0
 # weekly cadence was agreed with the OpenCaselist maintainer. The cadence, the 8-per-minute
 # download rate and the 5-per-day bulk cap are the maintainer's and are not raised here.
 api_enabled = true
+
+# The caselists the weekly run follows (ADR-0020 (5), v1-e40-t06). The run's command, in the cloud
+# task and on the Mac alike, is `debate-research caselist pull` with no --caselist, and both read
+# this list from the build they run. A new season's caselists are a change here and a tag, as every
+# other setting the run reads already is. Until the cutover they were the Mac agent's --caselist
+# arguments in its plist, which named these three; prod.toml gains the same line when the run's
+# home moves to prod (ADR-0020 (7)).
+sync_caselists = ["hsld26", "hspolicy26", "hspf26"]
+
+# Where the weekly run keeps its state: the dev evidence bucket, from the cutover (ADR-0020 (3), (4),
+# v1-e40-t06). Every command that writes to the dev bucket takes the bucket's run lock, and a pull
+# restores its working copy from the bucket first. A bucket that has not been seeded refuses every
+# such command (RUN_STATE_NOT_SEEDED), so a build with this line is installed on the Mac only after
+# the Mac's last scheduled run, and the seed comes next (docs/runbooks/caselist-cutover.md). A
+# command that only reads the bucket, or does not touch it, is unchanged.
+run_state = "bucket"

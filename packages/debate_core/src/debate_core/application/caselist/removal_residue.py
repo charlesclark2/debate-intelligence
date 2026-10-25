@@ -109,6 +109,14 @@ not looked at, not that something was found.
 * **`manifests/_suppression/`**: the list, the log, the path holds and the scopes are appended to,
   and their old versions are the record of what was asked, which no removal deletes.
 
+## Landscape school views (`v1-e32-t13`)
+
+A removal deletes the school views of each caselist it touches. Which of them are left is counted by
+:func:`~debate_core.application.caselist.removal_school_views.school_views_left`, from a plain listing
+of `reports/landscape/` (the everyday profile lists no versions under `reports/`) and this machine's
+files, against the latest completed run whose own scope names the caselist; the caller puts them in
+:attr:`CaselistResidue.school_views`. They are part of :attr:`CaselistResidue.found`.
+
 So "nothing found" means no version of a wholly removed file is left under `raw/` and `parsed/`, no
 copy a withdrawal took from a caselist that keeps no holder of it, and no aggregate or rewritten
 manifest version is older than a removal that touched its caselist, and the command says exactly

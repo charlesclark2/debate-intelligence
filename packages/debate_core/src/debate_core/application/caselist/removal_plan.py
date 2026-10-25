@@ -149,6 +149,20 @@ caselist the removal removes or withdraws anything from, is planned for deletion
 here and in the bucket (:attr:`ObjectKind.PARSED_AGGREGATE`). They hold nothing that cannot be
 rebuilt, and the next `caselist parse` rebuilds the current directory's without what was removed.
 
+## The landscape bundles' school views (`v1-e32-t13`)
+
+Each landscape bundle, `reports/landscape/<caselist>/<snapshot>/`, holds a per-school view
+(`schools.csv`, `schools.md`) naming schools and team codes as disclosed. The plan lists every one of
+every caselist it touches (:attr:`RemovalPlan.touched_caselists`), on this machine and in the bucket
+(:attr:`RemovalPlan.school_views`), and, for a re-run, those of each caselist an earlier completed run
+of the request touched that were written before that run completed
+(:attr:`RemovalPlan.school_view_reach`). Never a circuit-wide file, never another caselist's bundle:
+:mod:`~debate_core.application.caselist.removal_school_views` says how, and `caselist status` counts
+what a removal left by the same selection. The everyday profile may list `reports/` but not its
+versions, so in dev and prod the bucket's are not counted here; the execution lists them with the
+removal profile. The plan names the newest bundle to republish (:attr:`RemovalPlan.republish`) and
+republishes nothing.
+
 ## The sync's inbox
 
 The plan also lists every file in the download inbox (`caselist pull`'s, `v1-e30-t09`) that holds

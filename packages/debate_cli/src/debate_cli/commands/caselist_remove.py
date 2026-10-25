@@ -89,6 +89,15 @@ profile may not list or read them it says they were not counted. `--json` carrie
 the withdrawal record, with no path left to show, says which caselist the record names, or that
 none does.
 
+## Landscape school views (`v1-e32-t13`)
+
+Under *LANDSCAPE SCHOOL VIEWS* the plan lists each `schools.csv` and `schools.md` of the touched
+caselists' landscape bundles, by side and key, and says the circuit-wide files and other caselists'
+bundles stay; under *REPUBLISH* the newest bundle to rebuild without the removed rounds, with its
+`landscape report --publish` command, which this command never runs: the PM coordinates it. A key is
+a caselist, a snapshot and a file's name, so the JSON carries keys too (`school_views`). The `DONE`
+line says how many of the deletions were school views; the removal log counts them with the rest.
+
 ## What is printed and what is not
 
 The plan's text names the team's paths, school and team code: this is the operator's own terminal,

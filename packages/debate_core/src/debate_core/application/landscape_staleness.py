@@ -15,7 +15,7 @@ block. Nothing else about a report changes (the task spec forbids it).
 
 ## When a report is stale
 
-Either of two things, per caselist:
+Any of three things, per caselist. When more than one applies, the banner says each.
 
 1. **The newest snapshot is too old.** More than `caselist.stale_after_days` (8 by default) older
    than the report date. The sync is weekly, so a current store is at most seven days behind, and
@@ -30,6 +30,27 @@ Either of two things, per caselist:
    run is therefore **not current**, whatever the snapshot's age (ac6). It is decided from the run
    log: the latest run that listed this caselist, and how many of its archives it deferred. A later
    run that fetched them clears it.
+
+3. **The last run failed** (`v1-e34-t32`). A weekly run whose download, import or publish failed
+   leaves the newest snapshot where it was, and without this rule the report read "Current" until
+   that snapshot aged out. The same record as rule 2 decides it, the latest run that *listed* this
+   caselist: when its outcome is `failed`, the report is stale, and the banner names the run's id and
+   the stage that failed. A later run that listed the caselist and did not fail clears it. These
+   change nothing, in either direction:
+
+   * a run that never listed this caselist: another caselist's run, and `--publish-pending`, which
+     lists nothing;
+   * a run that raised before it listed anything (an expired token, the run lock, a refused start).
+     Its record has no stage and lists no archive;
+   * an `incomplete` run, whose parse, landscape, search-index, report or retention stage failed
+     after the snapshot was captured;
+   * a run with no end recorded. A killed run writes no record at all, and a line without
+     `finished_at`, or one cut off mid-write, is skipped by the log as no record.
+
+   The banner's sentence is built from the run id, which the record's schema holds to digits, and
+   the stage's name when it is one of :class:`~debate_core.application.caselist_sync.SyncStage`'s.
+   Nothing else from the record reaches it: a stage's reason can still name a file, and a school
+   or a path never belongs in a report (`docs/policies/caselist-data-use.md` rule 4).
 """
 
 from __future__ import annotations
@@ -40,8 +61,9 @@ from datetime import date
 from typing import Final
 
 from debate_core.application.caselist.publish_plan import manifest_prefix, snapshot_of_manifest_key
+from debate_core.application.caselist_sync import StageOutcome, SyncStage
 from debate_core.application.ports.evidence_store import EvidenceObjectStore
-from debate_core.application.sync_runs import SyncRunLog
+from debate_core.application.sync_runs import SyncRunLog, SyncRunRecord
 
 __all__ = [
     "DEFAULT_STALE_AFTER_DAYS",
@@ -63,10 +85,41 @@ STALE_BANNER_HEADING: Final = "> **Stale data.**"
 
 @dataclass(frozen=True, slots=True)
 class FailedSyncRun:
-    """The latest run that listed a caselist, when it ended in failure."""
+    """The latest run that listed a caselist, when it ended in failure: its id and failed stages."""
 
     run_id: str
     stages: tuple[str, ...] = ()
+    """The :class:`SyncStage` names that failed, in the record's order. Never a stage's reason."""
+
+    def sentence(self) -> str:
+        """What the banner says of it: the run id and the stage names, and nothing else."""
+        if not self.stages:
+            failed = "failed"
+        elif len(self.stages) == 1:
+            failed = f"failed at its {self.stages[0]} stage"
+        else:
+            failed = f"failed at its {', '.join(self.stages[:-1])} and {self.stages[-1]} stages"
+        return f"The latest sync run of this caselist, {self.run_id}, {failed}."
+
+
+_STAGE_NAMES: Final = frozenset(str(stage) for stage in SyncStage)
+
+
+def _failed_run_of(record: SyncRunRecord | None) -> FailedSyncRun | None:
+    """`record` as a failed run, or `None` when there is no record or it did not fail."""
+    if record is None or record.succeeded:
+        return None
+    failed = str(StageOutcome.FAILED)
+    return FailedSyncRun(
+        run_id=record.run_id,
+        stages=tuple(
+            dict.fromkeys(
+                entry.stage
+                for entry in record.stages
+                if entry.outcome == failed and entry.stage in _STAGE_NAMES
+            )
+        ),
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,6 +133,7 @@ class LandscapeStaleness:
     archives_awaiting_download: int = 0
     """Deferred by the daily cap at the latest run that listed this caselist."""
     failed_run: FailedSyncRun | None = None
+    """The latest run that listed this caselist, when it failed (`v1-e34-t32`)."""
 
     @property
     def age_days(self) -> int | None:
@@ -99,11 +153,11 @@ class LandscapeStaleness:
 
     @property
     def latest_run_failed(self) -> bool:
-        return False
+        return self.failed_run is not None
 
     @property
     def stale(self) -> bool:
-        return self.too_old or self.cap_bound
+        return self.too_old or self.cap_bound or self.latest_run_failed
 
     def banner(self) -> str | None:
         """The Markdown banner for a stale report, or `None` for a current one."""
@@ -123,6 +177,8 @@ class LandscapeStaleness:
                 f" {self.archives_awaiting_download} newer weekly archive(s) are published but not yet "
                 "downloaded (the daily download limit held them back)."
             )
+        if self.failed_run is not None:
+            said += f" {self.failed_run.sentence()}"
         return (
             f"{STALE_BANNER_HEADING} {said} Rounds disclosed since then are missing; check the "
             "caselist before prepping against this landscape."
@@ -154,6 +210,7 @@ def assess_staleness(
         newest_snapshot=newest_snapshot,
         stale_after_days=stale_after_days,
         archives_awaiting_download=archives_awaiting_download,
+        failed_run=failed_run,
     )
 
 
@@ -171,7 +228,7 @@ def with_staleness_metadata(metadata: Mapping[str, str], staleness: LandscapeSta
 
 
 class LandscapeStalenessCheck:
-    """Reads the newest snapshot from the manifests and the backlog from the run log.
+    """Reads the newest snapshot from the manifests, and the backlog and a failed run from the run log.
 
     Args:
         objects: The local evidence object store, where `manifests/<caselist>/<date>.jsonl` live.
@@ -191,11 +248,13 @@ class LandscapeStalenessCheck:
         self._stale_after_days = stale_after_days
 
     async def check(self, caselist: str, *, report_date: date) -> LandscapeStaleness:
+        latest = self._run_log.latest_listing(caselist) if self._run_log is not None else None
         return assess_staleness(
             caselist,
             report_date=report_date,
             newest_snapshot=await self.newest_snapshot(caselist),
-            archives_awaiting_download=self._awaiting(caselist),
+            archives_awaiting_download=_awaiting(caselist, latest),
+            failed_run=_failed_run_of(latest),
             stale_after_days=self._stale_after_days,
         )
 
@@ -217,8 +276,7 @@ class LandscapeStalenessCheck:
                 continue
         return max(dates) if dates else None
 
-    def _awaiting(self, caselist: str) -> int:
-        if self._run_log is None:
-            return 0
-        latest = self._run_log.latest_listing(caselist)
-        return latest.deferred_by_caselist.get(caselist, 0) if latest is not None else 0
+
+def _awaiting(caselist: str, latest: SyncRunRecord | None) -> int:
+    """What the latest run that listed `caselist` left to the daily cap."""
+    return latest.deferred_by_caselist.get(caselist, 0) if latest is not None else 0

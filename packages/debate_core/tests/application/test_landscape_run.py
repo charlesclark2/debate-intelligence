@@ -304,7 +304,7 @@ async def test_a_run_the_download_cap_held_back_makes_the_report_stale(world: Sy
 
 
 def _weekly_run(started: datetime, *, download: str) -> SyncRunRecord:
-    """A weekly run of the synthetic caselist that listed its archives; its download stage ended `download`."""
+    """A weekly run of the synthetic caselist that listed its archives, its download stage `download`."""
     return SyncRunRecord(
         run_id=started.strftime("%Y%m%dT%H%M%SZ"),
         environment="dev",

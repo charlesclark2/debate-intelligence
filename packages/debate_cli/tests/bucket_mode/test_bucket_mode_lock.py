@@ -29,6 +29,7 @@ from debate_cli.app import create_app
 from debate_cli.exit_codes import ExitCode
 from debate_core.application.caselist.bucket_run import BucketRun
 from debate_core.application.caselist.run_lock import RUN_LOCK_KEY
+from debate_core.application.caselist.run_state import BundleSave, RunState
 from debate_core.application.ports.suppression import ReasonCode, SuppressionAction, SuppressionEntry
 
 World = Any
@@ -397,3 +398,28 @@ def test_in_local_mode_a_bucket_with_no_lock_object_changes_nothing(world: World
     assert pulled["exit_code"] == ExitCode.OK, pulled
     assert RUN_LOCK_KEY not in world.object_keys()
     assert pulled["data"]["run_details"]["bucket_run"] is None
+
+
+def test_a_run_whose_lease_is_taken_ends_run_lock_lost_even_with_nothing_left_to_write(
+    world: World, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A bundle that is not saved writes nothing, so no fence refusal tells the run: it asks the lease."""
+    seeded_with_two_weeks(world)
+    published = BucketRun.after_publish
+
+    async def then_taken_over(self: BucketRun) -> None:
+        await published(self)
+        another_runner_holds_the_lock(world, lease_left=timedelta(minutes=30))
+
+    async def not_saved(self: RunState) -> BundleSave:
+        return BundleSave(saved=False, reason="not saved: a manifest is not yet confirmed in the bucket")
+
+    monkeypatch.setattr(BucketRun, "after_publish", then_taken_over)
+    monkeypatch.setattr(RunState, "save_bundle", not_saved)
+    empty = world.use(tmp_path / "empty")
+
+    lost = world.pull()
+
+    assert lost["exit_code"] != ExitCode.OK, lost
+    record, details = world.last_record(empty)
+    assert (record["error_class"], details["failure_codes"]) == ("RunLockLost", ["RUN_LOCK_LOST"])

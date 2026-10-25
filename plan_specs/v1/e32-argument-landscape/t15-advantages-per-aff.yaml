@@ -41,6 +41,20 @@ spec:
     - kind: TaskRef
       name: v1-e32-t09-policy-plan-texts
       relation: dependsOn
+  # PM rulings on ac1's counts, 2026-10-24 (session report, "The counts", questions 1-6, each (a)):
+  # 1. Top 5 advantages per aff and per mechanism, ranked by distinct teams, then "and N more, read
+  #    by M teams".
+  # 2. The rounds identified only by a placed card count with the no-assigned-aff reads, and the
+  #    report says how many of them a placed card identifies. t09's assignments stay the only source.
+  # 3. The line reads "591 advantage reads in 328 affirmative rounds, by 104 teams, have no assigned
+  #    aff", with the live numbers.
+  # 4. One closing line names each aff, and each mechanism (such as nanomedicine), with assigned
+  #    rounds but no advantage read, with its round counts; it gets no empty section.
+  # 5. No separate section for single payer's rounds that name no mechanism: they count only in the
+  #    combined single payer section, each round once.
+  # 6. M is the distinct teams reading any of the hidden advantages under that aff, never a sum.
+  # Mutants: another aff's round counted here, a mechanism round counted twice under its parent, the
+  # cut-off, and M as a sum. report.md is the only bundle file that changes.
   acceptanceCriteria:
     - id: ac1
       description: >-

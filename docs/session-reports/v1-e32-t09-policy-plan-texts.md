@@ -807,17 +807,17 @@ Each takes the coach's tag keywords and no alias.
 * **`medicare for all` and `m4a`** now name the Medicare for all child through its keywords. The
   interim words are gone from the code.
 * **On hspolicy26 through 2026-10-20** (still the newest snapshot):
-  * **1,479 of 2,192 affirmative rounds (67.5%) are identified**, against the first report's 1,252
+  * **1,483 of 2,192 affirmative rounds (67.7%) are identified**, against the first report's 1,252
     (57.1%);
   * 360 of 552 teams (65.2%);
   * `landscape report --dry-run`, without `--publish`, gives the same numbers and wrote nothing.
 
-**Look first at** [the questions](#questions-for-the-pm-resumed-session). There are two Deviations:
-* the labels are in sentence case, not exactly as the coach wrote them, because the configuration
-  check refuses his Title Case;
-* `tests/config` is outside `constraints.packages`.
+**The PM ruled on this section's three questions the same day** ([below](#the-pms-rulings-on-the-resumed-questions-applied)):
+* sentence-case labels stay, with a PM-ruling comment in the taxonomy;
+* `tests/config` joins `constraints.packages`;
+* `nhi-aff` is the least specific aff, so it never makes a conflict.
 
-There are also two conflicts beyond the three the PM named.
+The counts in this section are after those rulings.
 
 ### Acceptance criteria (this session)
 
@@ -867,35 +867,35 @@ before the operator's run. After is the operator's run under 1.2.0.
 | NAMES single payer → NAMES single payer | 548 |
 | NAMES single payer → NAMES a child | 216 |
 | UNNAMED → NAMES a child | 82 |
-| UNNAMED → NAMES another aff | 62 |
+| UNNAMED → NAMES another aff | 63 |
 | **UNNAMED → NAMES `nhi-aff`** | **41** |
-| UNNAMED → CONFLICTING | 5 |
+| UNNAMED → CONFLICTING | 4 |
 | NAMES single payer → CONFLICTING | 3 |
 | UNNAMED → UNNAMED | 2 |
 
-* **The totals:** NAMES 767 → 949, UNNAMED 192 → 2, CONFLICTING 0 → 8, NONE 811 → 811.
+* **The totals:** NAMES 767 → 950, UNNAMED 192 → 2, CONFLICTING 0 → 7, NONE 811 → 811.
 * **The two left UNNAMED** are one document each, as C98 and C100 were. Neither gets an override.
 
 **Rounds**, before from the first report (the same snapshot) and after from the dry run:
 
 | | First report (1.1.0) | **1.2.0** |
 |---|---|---|
-| Identified affirmative rounds | 1,252 of 2,192 (57.1%) | **1,479 (67.5%)** |
-| `PLAN_TEXT` | 959 | 1,171 |
-| `TEAM_CARRY` | 226 | 251 |
+| Identified affirmative rounds | 1,252 of 2,192 (57.1%) | **1,483 (67.7%)** |
+| `PLAN_TEXT` | 959 | 1,172 |
+| `TEAM_CARRY` | 226 | 254 |
 | `PLACED_CARD` (rounds no plan text or carry names) | 67 | 57 |
-| Unidentified | 940 | 713 |
+| Unidentified | 940 | 709 |
 
 1.2.0 also gives:
-* 10 conflicting rounds, 1 refused carry, 73 teams carrying and 27 teams disagreeing;
+* 9 conflicting rounds, 1 refused carry, 75 teams carrying and 21 teams disagreeing;
 * **360 of 552 teams identified (65.2%)**, against 298 in this task's run of 2026-10-24.
 
 **`nhi-aff` takes 56 rounds**: 47 by their own plan text and 9 carried. These are the rounds the
 resolutional rule moves.
 
 Rounds by aff under 1.2.0 (`PLAN_TEXT` + `TEAM_CARRY`):
-* single payer 705 + 133;
-* global budgets 114 + 4;
+* single payer 705 + 135;
+* global budgets 114 + 5;
 * single public authority 71 + 8;
 * value-based reimbursement 61 + 28;
 * `nhi-aff` 47 + 9;
@@ -905,7 +905,7 @@ Rounds by aff under 1.2.0 (`PLAN_TEXT` + `TEAM_CARRY`):
 * lower payment rates 22 + 2;
 * degrowth 16;
 * ucc 13 + 1;
-* indigenous 4 + 10;
+* indigenous 5 + 10;
 * incarceration 7 + 2;
 * prescription drug coverage 5 + 6;
 * reproductive health, tiered NHI and nanomedicine coverage 8, 8 and 7;
@@ -940,7 +940,7 @@ and no such actor names nothing and is not shaped.
 
 #### The conflicts
 
-There are 8 CONFLICTING documents (10 rounds). Six are the three the PM named:
+There are 7 CONFLICTING documents (9 rounds). Six are the three the PM named:
 
 | Cluster | The affs its plan texts name | Documents |
 |---|---|---|
@@ -948,17 +948,19 @@ There are 8 CONFLICTING documents (10 rounds). Six are the three the PM named:
 | C66 | public option and value-based reimbursement | 2 |
 | C74 | degrowth and single public authority | 2 |
 | (new) | incarceration and single payer | 1 |
-| (new) | indigenous and `nhi-aff` | 1 |
 
-The last two follow from the keywords as the coach wrote them. They are left as conflicts, as the
-PM ruled for the others (question 3).
+The new one follows from the keywords as the coach wrote them, and stays CONFLICTING (the PM's ruling
+on question 3). A document naming indigenous and `nhi-aff` was a conflict too, until the PM's
+least-specific rule; it now names indigenous.
 
 #### The dry run
 
 `debate-research landscape report --caselist hspolicy26 --dry-run` was run from the task worktree,
 without `--publish`.
 * **Guards:** no `DEBATE_*` variable, no `caselist pull`.
-* **Runtimes:** 54 s, and 50 s with `--json` for the method counts.
+* **Runtimes, after the rulings:** 52 s, 54 s with `--json` for the method counts, and 47.3 s for the
+  school-view rows. The view's rows are not in the command's output, so they were read from the same
+  service's dry-run result by a scratch script.
 * **Nothing written:** every file under `~/.debate-research/dev/landscape/` and `reports/` had the
   same SHA-256 after both runs.
 
@@ -969,13 +971,14 @@ and the snapshot was current (5 days old, 0 archives awaiting download).
 |---|---|---|
 | Classification coverage by cards | 63,494 of 126,681 (50.1%) | 63,494 (50.1%) |
 | Cards by method | | ALIAS 39,302; INHERITED 21,303; OVERRIDE 2,803; no position 4,888; TAG_KEYWORD 1,457; unplaced 56,928 |
-| Classification coverage by rounds | 2,622 of 4,352 (60.2%) | **2,705 (62.2%)** |
-| Affirmative rounds with no identified aff | 940 of 2,192 (42.9%) | **713 (32.5%)** |
-| How affirmative rounds are identified | plan text 959, team carry 226, placed card 67 | plan text 1,171, team carry 251, placed card 57 |
+| Classification coverage by rounds | 2,622 of 4,352 (60.2%) | **2,709 (62.2%)** |
+| Affirmative rounds with no identified aff | 940 of 2,192 (42.9%) | **709 (32.3%)** |
+| How affirmative rounds are identified | plan text 959, team carry 226, placed card 67 | plan text 1,172, team carry 254, placed card 57 |
 | Negative rounds with no placed negative position | 1,238 | 1,238 |
 | Position-rounds set aside as answers | 4,965 | 4,965 |
 | Positions read; top-card rows | 75; 353 | 97; 358 |
 | Review queue | 1,340 rows | 1,340 rows |
+| School-view rows (`v1-e32-t04`, measured by t04 at 1.1.0) | 2,005: aff 1,120, neg 885; 147 schools, 456 team codes | **2,109: aff 1,224, neg 885; 155 schools, 475 team codes** (2,107 without the least-specific rule) |
 | Classification cache | | 107,187 lookups, 0 hits (the version bump), nothing written |
 | Scan before sharing | 6 hits, accepted | **8 hits, 2 not yet accepted** (digest `81374e646621`) |
 
@@ -985,8 +988,8 @@ first report accepted the same word in another row. Neither names a team. The op
 accepts them at the publish, which the PM coordinates.
 
 **Planned keys:**
-* `reports/landscape/hspolicy26/2026-10-20/`: `positions.csv`, `top_cards.csv`, `impact_cards.csv`
-  and `report.md`;
+* `reports/landscape/hspolicy26/2026-10-20/`: `positions.csv`, `top_cards.csv`, `impact_cards.csv`,
+  `trends.csv`, `schools.csv`, `schools.md` and `report.md` (t04's seven files, since the sync);
 * nothing uploaded.
 
 ### What was built
@@ -1069,7 +1072,7 @@ were run with `.venv/bin/python -m pytest -n auto -m "not slow and not live"` un
    * Question 1.
 2. **`tests/config/test_landscape_taxonomies.py` is outside `constraints.packages`.** ac3 names the
    config tests, and the new file under `config/landscape/` needs the directory test to list it.
-   Question 2.
+   Question 2. **Closed:** the PM added `tests/config` to the list on 2026-10-24.
 3. **The frame words are fixed in config**, as the sheet of 2026-10-24 printed them, not recomputed
    from each run's plan texts.
    * The cache keeps no words, so a frame recomputed weekly could not be applied per document.
@@ -1117,6 +1120,10 @@ scripts/task pr v1-e32-t09-policy-plan-texts
 
 ### Questions for the PM (resumed session)
 
+All three were answered on 2026-10-24: (1) (a); (2) yes; (3) the incarceration document stays
+CONFLICTING, and `nhi-aff` became the least specific aff
+([applied](#the-pms-rulings-on-the-resumed-questions-applied)). Kept as asked:
+
 ```text
 v1-e32-t09 questions (resumed session, 2026-10-24). ac3 passes; the Goal is Succeeded.
 
@@ -1141,6 +1148,76 @@ v1-e32-t09 questions (resumed session, 2026-10-24). ac3 passes; the Goal is Succ
    (b) Ask the coach.
    Recommendation: (a). Two documents, and your ruling not to bend keywords.
 ```
+
+### The PM's rulings on the resumed questions, applied
+
+The PM ruled on 2026-10-24:
+1. **(a), sentence case, as committed.** A PM-ruling comment above the labels in
+   `policy-2026-27-nhi.yaml` says the config check refuses a capital in the middle of a label, and the
+   coach's wording is otherwise kept. A comment changes no position, so the positions digest and the
+   1.1.0 lock are untouched (`tests/config`, 52 passed).
+2. **Yes.** `constraints.packages` adds `tests/config`, with a PM-ruling comment dated 2026-10-24.
+   Deviation 2 is closed.
+3. **The incarceration and single payer document stays CONFLICTING. For the indigenous and `nhi-aff`
+   document, one rule:** `nhi-aff` is the least specific aff. A document whose plan texts name it and
+   exactly one other aff names that other aff, and `nhi-aff` never makes a conflict.
+
+**Where the rule is:** `PlanTextVocabulary.narrowest`. Beside any other aff, the topic's resolutional
+aff is dropped. So it also never settles a conflict between two others.
+
+**Its reach:** the narrowest step serves three levels, so the rule holds at each:
+* a document's plan texts;
+* a round's documents;
+* a team's rounds, for the carry.
+
+`build_aff_assignments` takes the topic's resolutional plan for the last two. The service passes it
+from both its paths: `run` and t05's `assignments` seam.
+
+**The cache:** the rule changes no paragraph's reading, so the plan-text cache's key is unchanged.
+Nothing was read again and no operator run was needed.
+
+**Shown failing first:** 5 failed, 98 passed, across `test_plan_text.py`, the round-assignment tests
+and the producer. Then 6 targeted mutants, each caught:
+* the aff never giving way;
+* giving way only beside two others;
+* giving way alone;
+* either service path dropping the plan;
+* `build_aff_assignments` ignoring it.
+
+**What it moves on hspolicy26** (counts above are after it):
+
+| | Before the rule | **After** |
+|---|---|---|
+| CONFLICTING documents | 8 | **7** (the indigenous and `nhi-aff` one names indigenous) |
+| Conflicting rounds | 10 | 9 |
+| Identified affirmative rounds | 1,479 | **1,483** (67.7%) |
+| `PLAN_TEXT` / `TEAM_CARRY` / placed card only | 1,171 / 251 / 57 | 1,172 / 254 / 57 |
+| Unidentified | 713 | 709 |
+| Teams carrying / disagreeing | 73 / 27 | 75 / 21 |
+| School-view rows | 2,107 (aff 1,222) | 2,109 (aff 1,224) |
+
+The 4 rounds:
+* 1 is the indigenous document's round;
+* 3 are carries by 2 teams whose rounds name `nhi-aff` and one other aff: 2 into single payer and 1
+  into global budgets.
+
+`nhi-aff` keeps its 56 rounds. Identified teams stay at 360.
+
+**Checks after the rulings:** `uv run scripts/affected_tests.py --base f2e8440` chose 175 of 451
+test files. They ran in six parts under a 115 s limit each: 4,891 passed, and one failed for its
+reason.
+* **The failure:** `tests/scripts/test_task_restart.py::test_an_existing_accepted_report_still_reads_accepted[v1-e32-t09-policy-plan-texts]`.
+  It asks every report whose first review is ACCEPTED to read ACCEPTED. This report's last review is
+  the new, empty one, which reads PENDING until the PM fills it, as the resumed workflow requires.
+* **It passes on the PM's verdict.** `scripts/task_helper.py`'s `report_verdict` reads the report as
+  ACCEPTED once that line says so (checked on an in-memory copy). `scripts/task pr` opens no PR before
+  then, so the pull request's CI never sees PENDING.
+* **The rest:** `ruff check .`, `ruff format --check .`, `pyright` 0 errors, `lint-imports` 16 kept,
+  `check_thin_handlers.py` OK, `validate_specs.py` OK, `docs_index.py --check-descriptions` OK.
+* **The sync:** `dev` moved to `cadafe7` (docs and specs only), and `scripts/task sync` rebased the
+  branch onto it with no conflict.
+
+The Goal stays **Succeeded**: every criterion passes with the rulings applied.
 
 ## PM review
 

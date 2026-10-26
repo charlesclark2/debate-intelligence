@@ -23,6 +23,7 @@ that keeps binding.
 | [`modules/evidence_bucket/`](modules/evidence_bucket/) | One environment's evidence store: private versioned KMS-encrypted bucket, its key, and the EvidenceOperator and EvidenceRemoval permission sets | `v1-e29-t03-evidence-buckets` |
 | [`modules/evidence_search/`](modules/evidence_search/) | One environment's student evidence search pilot: the function behind CloudFront, the Cognito user pool, the audit log, the TubDeployer and TubAccounts permission sets | `v1-e39-t04-pilot-infrastructure` |
 | [`modules/caselist_run/`](modules/caselist_run/) | One environment's weekly caselist run in the cloud: the credentials key, the Tabroom password and caselist token secrets, the login and run roles, the CaselistSecretWriter permission set, and the scheduled login; the run's VPC, cluster, image repository, task definition and schedule, and the CaselistRunDeployer permission set | `v1-e40-t02-secrets-token-store-and-login`, `v1-e40-t03-run-image-and-schedule` (E40) |
+| [`modules/bedrock_access/`](modules/bedrock_access/) | One environment's BedrockInvoker permission set: `bedrock:InvokeModel` on the inference profiles and models the routing files name, and its assignment | `v1-e05-t08-bedrock-invoke-access` |
 | [`envs/dev/`](envs/dev/), [`envs/prod/`](envs/prod/) | The two environment roots | `v1-e29-t02-terraform-bootstrap` |
 
 There is no `envs/stage`, and adding one means changing ADR-0013 first.
@@ -132,6 +133,21 @@ steps, including the targeted first apply and the CLI-only settings, are
 
 The function reads the evidence bucket through its own role and nothing else: the bucket's Block
 Public Access settings and policy are untouched, and CloudFront's only origin is the function URL.
+
+## Calling the routed models
+
+Both roots call [`modules/bedrock_access`](modules/bedrock_access/) from `bedrock_access.tf`, which
+is identical in the two roots, and both pass it both routing files in `config/`, so the grant is
+read from the routes themselves. The operator steps, with the account's one-time model access, are
+[docs/runbooks/bedrock-access.md](../docs/runbooks/bedrock-access.md).
+
+| | dev | prod |
+|---|---|---|
+| Permission set | `DebateDevBedrockInvoker` | `DebateProdBedrockInvoker` |
+| Its profile, `models.aws_profile` | `debate-dev-bedrock` | `debate-prod-bedrock` |
+
+The set holds `bedrock:InvokeModel` and nothing else. The Claude models behind the `us.` profiles are
+granted only through those profiles (`bedrock:InferenceProfileArn`).
 
 ## Tagging
 

@@ -269,3 +269,17 @@ variable "caselist_run_late_alarm_actions_enabled" {
   type        = bool
   default     = false
 }
+
+# --- Calling the routed Bedrock models (v1-e05-t08-bedrock-invoke-access) ------------------------
+#
+# Identical in both roots; the people are in the gitignored owner.auto.tfvars.
+
+variable "bedrock_invoker_user_names" {
+  description = <<-EOT
+    Identity Center user names assigned this environment's BedrockInvoker permission set, which a
+    model call is made with through the profile models.aws_profile names. Adult maintainers only,
+    never students. Supplied through the gitignored owner.auto.tfvars.
+  EOT
+  type        = list(string)
+  default     = []
+}

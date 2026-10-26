@@ -292,3 +292,15 @@ output "caselist_run_late_alarm_actions_enabled" {
   description = "Whether the late-run alarm emails the coach: false until the cutover's first recorded run."
   value       = module.caselist_run.late_run_alarm_actions_enabled
 }
+
+# --- Calling the routed Bedrock models (v1-e05-t08-bedrock-invoke-access) ------------------------
+
+output "bedrock_invoker_permission_set_name" {
+  description = "The permission set a model call is made with (DebateDevBedrockInvoker / DebateProdBedrockInvoker)."
+  value       = module.bedrock_access.permission_set_name
+}
+
+output "bedrock_profile_name" {
+  description = "The name to give the BedrockInvoker SSO profile (debate-dev-bedrock / debate-prod-bedrock): what models.aws_profile names in config/profiles/<env>.toml."
+  value       = module.bedrock_access.profile_name
+}

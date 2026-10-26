@@ -39,3 +39,7 @@ caselist_credential_writer_user_names = ["your-identity-center-user-name"]
 # CaselistRunDeployer is what scripts/caselist_run_deploy.sh runs as (v1-e40-t03): push the run's
 # image, register its task definition, start a run by hand. Adult maintainers only.
 caselist_run_deployer_user_names = ["your-identity-center-user-name"]
+
+# BedrockInvoker is what a model call runs as (v1-e05-t08): bedrock:InvokeModel on the routed
+# models and nothing else, through the profile models.aws_profile names. Adult maintainers only.
+bedrock_invoker_user_names = ["your-identity-center-user-name"]

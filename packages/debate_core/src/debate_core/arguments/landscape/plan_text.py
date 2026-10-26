@@ -370,10 +370,10 @@ def read_transition_plan_texts(
         if not _is_transition_label(one.text) or position + 1 >= len(written):
             continue
         plan = written[position + 1]
+        # A label of either list is never shaped, so the shape test refuses one; t09's inline label is
+        # shaped, and is t09's to read.
         if (
             plan.unit not in _NOT_PLAN_TEXT_UNITS
-            and not _is_label(plan.text)
-            and not _is_transition_label(plan.text)
             and not _is_inline(plan.text)
             and not _TRANSITION_INLINE_LABEL.match(plan.text)
             and _shaped(plan.text)

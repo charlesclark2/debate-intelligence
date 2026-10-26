@@ -58,7 +58,7 @@ spec:
         The operator's dry run on hspolicy26 before and after: rounds with no identified
         aff, by method (operator).
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

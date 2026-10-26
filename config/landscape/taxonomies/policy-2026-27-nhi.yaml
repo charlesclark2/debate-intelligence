@@ -187,7 +187,7 @@ positions:
     aliases: [adv disease, disease advantage, advantage disease, disease adv, disease]
     # The seed: v1-e32-t14's names two or more teams use here, teams (documents) beside each.
     scenarios:
-      - {name: clog, forms: [clog]}                    # 2 teams (2 documents)
+      - {name: clog, forms: [clog, court clog]}                    # 2 teams (2 documents)
       - {name: court curbing, forms: [court curbing]}  # 2 teams (2 documents)
     not_scenarios: []
   - id: inequality-advantage
@@ -206,10 +206,8 @@ positions:
     aliases: [adv economy, advantage economy, economy advantage, economy adv, adv econ, econ adv, econ advantage, economy, econ]
     # The seed: v1-e32-t14's names two or more teams use here, teams (documents) beside each.
     scenarios:
-      - {name: costs rising, forms: [costs rising]}                          # 4 teams (7 documents)
-      - {name: contention the advantage, forms: [contention the advantage]}  # 3 teams (4 documents)
       - {name: debt, forms: [debt]}                                          # 3 teams (3 documents)
-    not_scenarios: []
+    not_scenarios: [costs rising, contention the advantage]
   - id: growth-advantage
     label: Growth advantage
     kind: advantage
@@ -274,21 +272,14 @@ positions:
     aliases: [midterms da, da midterms, midterms disad, midterms]
     # The seed: v1-e32-t14's names two or more teams use here, teams (documents) beside each.
     scenarios:
-      - {name: dome, forms: [dome]}                                          # 15 teams (32 documents)
-      - {name: golden dome, forms: [golden dome]}                            # 5 teams (7 documents)
-      - {name: dems win, forms: [dems win]}                                  # 3 teams (4 documents)
+      - {name: golden dome, forms: [golden dome, dome, dome arms racing]}    # 5 teams (7 documents)
       - {name: iran, forms: [iran]}                                          # 3 teams (4 documents)
       - {name: polycrisis, forms: [polycrisis]}                              # 3 teams (8 documents)
       - {name: china coop, forms: [china coop]}                              # 2 teams (7 documents)
       - {name: corruption, forms: [corruption]}                              # 2 teams (3 documents)
-      - {name: dem win crushes trumpism, forms: [dem win crushes trumpism]}  # 2 teams (5 documents)
       - {name: democracy, forms: [democracy]}                                # 2 teams (2 documents)
-      - {name: dome arms racing, forms: [dome arms racing]}                  # 2 teams (2 documents)
-      - {name: other issues, forms: [other issues]}                          # 2 teams (2 documents)
-      - {name: too early, forms: [too early]}                                # 2 teams (2 documents)
-      - {name: trump steals, forms: [trump steals]}                          # 2 teams (3 documents)
-      - {name: warming, forms: [warming]}                                    # 2 teams (2 documents)
-    not_scenarios: []
+      - {name: warming, forms: [warming, global warming, climate change]}    # 2 teams (2 documents)
+    not_scenarios: [too early, dems win, trump, dem win crushes trumpism, other issues, trump steals]
   - id: pharma-da
     label: Pharma DA
     kind: da
@@ -305,10 +296,7 @@ positions:
     side: neg
     aliases: [econ da, da econ, economy da, da economy]
     # The seed: v1-e32-t14's names two or more teams use here, teams (documents) beside each.
-    scenarios:
-      - {name: decline, forms: [decline]}  # 2 teams (8 documents)
-      - {name: econ, forms: [econ]}        # 2 teams (3 documents)
-    not_scenarios: []
+    not_scenarios: [decline, econ]
   - id: irs-da
     label: IRS DA
     kind: da
@@ -381,11 +369,7 @@ positions:
     kind: da
     side: neg
     aliases: [medical devices da, da medical devices, da devices, devices da]
-    # The seed: v1-e32-t14's names two or more teams use here, teams (documents) beside each.
-    scenarios:
-      - {name: augmentation, forms: [augmentation]}                                # 4 teams (5 documents)
-      - {name: augmentation innovation key, forms: [augmentation innovation key]}  # 2 teams (3 documents)
-    not_scenarios: []
+    not_scenarios: [augmentation, augmentation innovation key]
   - id: innovation-da
     label: Innovation DA
     kind: da

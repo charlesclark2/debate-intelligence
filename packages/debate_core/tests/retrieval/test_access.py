@@ -442,11 +442,19 @@ def documented_status(status_code: int, body_kind: str) -> AccessStatus:
     return ERROR
 
 
+NAMED_STATUSES: Final = (401, 402, 403, 404, 410, 429, 451, 503)
+"""The statuses the table names; drawn half the time, since a uniform draw is 96% "any other"."""
+
+
 @PROPERTY_SETTINGS
-@given(status_code=st.integers(400, 599), body_kind=st.sampled_from(BODY_KINDS))
+@given(
+    status_code=st.sampled_from(NAMED_STATUSES) | st.integers(400, 599),
+    body_kind=st.sampled_from(BODY_KINDS),
+)
 def test_mapping_property_every_error_status_maps_as_documented(status_code: int, body_kind: str) -> None:
     decision = classify(response(status_code, BODIES[body_kind]), None)
     event(f"status: {decision.status.value}")
+    event(f"code: {status_code if status_code in NAMED_STATUSES else 'other'}, body: {body_kind}")
     assert decision.status is documented_status(status_code, body_kind)
 
 

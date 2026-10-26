@@ -133,6 +133,8 @@ VERDICTS = [
     "  NONE: 1 documents, 1 teams",
     "  UNREAD: 0 documents, 0 teams",
     "  names sample-plan-aff: 3 documents, 3 teams",
+    "Plan texts under Thus: NAMES 0, UNNAMED 0, CONFLICTING 0 documents; 0 naming an aff with no plan text "
+    "t09 reads.",
 ]
 
 
@@ -176,6 +178,8 @@ resolutional_words: [national, program, route, using, voucher]
         "  UNREAD: 0 documents, 0 teams",
         "  names sample-plan-aff: 3 documents, 3 teams",
         "  names national-plan-aff: 2 documents, 2 teams",
+        "Plan texts under Thus: NAMES 0, UNNAMED 0, CONFLICTING 0 documents; 0 naming an aff with no plan "
+        "text t09 reads.",
     ]
 
 
@@ -264,10 +268,12 @@ def test_assign_assigns_each_affirmative_round_and_prints_counts(
     world: tuple[Path, Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
     assert run(world, "assign") == 0
-    assert printed(capsys)[-2:] == [
+    assert printed(capsys)[-3:] == [
         "Aff rounds: 6 by 5 teams; assigned 4 (PLAN_TEXT 3, TEAM_CARRY 1), left to placed cards 0, "
         "unidentified 2 (0 with conflicting plan texts).",
         "Carry refused into 0 rounds; teams identified 3 of 5; 0 teams whose rounds disagree.",
+        "Plans under Thus: the K-aff carry refused in 0 rounds; 0 rounds conflicting; their carry refused "
+        "into 0 rounds; 0 rounds identified another way hold one naming another aff.",
     ]
 
 
@@ -304,7 +310,38 @@ def test_with_a_k_aff_config_the_markers_and_the_k_aff_rounds_are_counted(
     assert "K-aff markers: 1 documents hold one, 1 of them with no plan text, by 1 teams." in printed(capsys)
     assert run(world, "assign") == 0
     lines = printed(capsys)
-    assert "KRITIKAL_AFF_MARKER 1" in lines[-3]
-    assert lines[-1] == (
+    assert "KRITIKAL_AFF_MARKER 1" in lines[-4]
+    assert lines[-2] == (
         "K aff: 1 affirmative documents hold a marker; the carry refused by the advantage guard in 0 rounds."
+    )
+
+
+def test_plan_texts_under_thus_are_counted_and_identify_their_rounds(  # `v1-e32-t24`
+    world: tuple[Path, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_dir, _ = world
+    PlantedCaselist(data_dir, CASELIST).source(
+        "thus-one",
+        [PlantedCard(("1AC", "Advantage One"))],
+        disclosures=[("2026-09-15", path(1, "Aff", 7))],
+        content=build_docx(
+            paragraph_xml(run_xml("Advantage One"), style="Heading3")
+            + paragraph_xml(run_xml("Thus the plan:"), style="Analytic")
+            + paragraph_xml(
+                run_xml("The United States federal government should establish a sample plan."),
+                style="Analytic",
+            )
+        ),
+    )
+    assert run(world, "plan-texts") == 0
+    assert (
+        "Plan texts under Thus: NAMES 1, UNNAMED 0, CONFLICTING 0 documents; 1 naming an aff with no plan "
+        "text t09 reads."
+    ) in printed(capsys)
+    assert run(world, "assign") == 0
+    lines = printed(capsys)
+    assert "TRANSITION_PLAN_TEXT 1" in lines[-3]
+    assert lines[-1] == (
+        "Plans under Thus: the K-aff carry refused in 0 rounds; 0 rounds conflicting; their carry refused "
+        "into 0 rounds; 0 rounds identified another way hold one naming another aff."
     )

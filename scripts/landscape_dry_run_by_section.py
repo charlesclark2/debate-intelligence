@@ -75,6 +75,20 @@ def report_lines(result: LandscapeRunResult) -> list[str]:
             + ".",
             f"K families in the K-aff files' headings: {families or 'none'}.",
         ]
+    transition = result.report.transition_plans
+    if transition is None:
+        lines.append("Plans under Thus: none were read.")
+    else:
+        lines.append(
+            f"Plans under Thus: the K-aff carry refused in {transition.refused_kritikal_carry} rounds; "
+            f"{transition.control_rounds} rounds identified another way hold one naming another aff; by "
+            "method: "
+            + (
+                ", ".join(f"{method} {count}" for method, count in transition.control_by_method.items())
+                or "none"
+            )
+            + "."
+        )
     texts = result.report.texts
     if texts is None:
         lines.append("Planks: no analytic texts were read.")

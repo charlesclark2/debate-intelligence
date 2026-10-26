@@ -16,7 +16,7 @@ from typing import Any
 from debate_core.application.landscape_report import LandscapeReportService
 from debate_core.application.landscape_run import ScanResult
 from debate_core.application.landscape_scan import ScanHit, ScanKind
-from debate_core.domain.landscape_report import KritikalAffs, KritikalFamilyCount
+from debate_core.domain.landscape_report import KritikalAffs, KritikalFamilyCount, TransitionPlans
 from debate_core.testing.landscape_report import read_synthetic_caselist, synthetic_staleness
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
@@ -54,6 +54,7 @@ def test_the_dry_run_prints_the_planks_and_the_scans_hits_by_section_and_counts_
         "7 files planned.",
         "Affirmative rounds by method: PLACED_CARD 4; not identified 3 of 7.",
         "Kritikal affirmatives: no K-aff markers were read.",
+        "Plans under Thus: none were read.",
         "Planks: 8 under 1 CPs, in 3 groups by what they solve, 7 rows shown, 1 withheld for naming a "
         "school.",
         "  states-cp: 8 planks, 6 teams, 3 groups, 1 withheld",
@@ -111,3 +112,21 @@ def test_the_dry_run_prints_the_k_aff_group_and_the_method_tables_rows_counts_on
         "TEAM_CARRY 1.",
         "K families in the K-aff files' headings: cap 3 files (2 teams), afropessimism 1 files (1 teams).",
     ]
+
+
+def test_the_dry_run_prints_the_transition_plan_rows_counts_only() -> None:
+    # `v1-e32-t24`: the refused K-aff carries and the control by method, set by hand on the report.
+    result = _result()
+    result.report = result.report.model_copy(
+        update={
+            "transition_plans": TransitionPlans(
+                refused_kritikal_carry=7,
+                control_rounds=15,
+                control_by_method={"KRITIKAL_AFF_MARKER": 2, "TEAM_CARRY": 13},
+            )
+        }
+    )
+    assert script.report_lines(result)[3] == (
+        "Plans under Thus: the K-aff carry refused in 7 rounds; 15 rounds identified another way hold one "
+        "naming another aff; by method: KRITIKAL_AFF_MARKER 2, TEAM_CARRY 13."
+    )

@@ -43,6 +43,10 @@ request_timeout_seconds = 30.0
 routing_file = "config/model_routing.prod.yaml"
 # Production spend ceiling per day, enforced by the E05 BudgetGuard. Never the same as dev's.
 budget_usd_daily = 20.0
+# The AWS profile every Bedrock call is signed with, never AWS_PROFILE (v1-e05-t08): the SSO profile
+# of DebateProdBedrockInvoker, as `terraform -chdir=infrastructure/envs/prod output bedrock_profile_name`
+# reports it, written here for the same reason as storage.s3.aws_profile. A name, not a secret.
+aws_profile = "debate-prod-bedrock"
 
 [caselist]
 # The E34 gate of docs/policies/caselist-data-use.md. Off by default in

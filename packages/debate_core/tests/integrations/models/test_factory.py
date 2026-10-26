@@ -57,14 +57,16 @@ def settings_with(tmp_path: Path, **models: object) -> Settings:
 
 
 class RealRouterSpy:
-    """A `RealRouterFactory` that records the policy it was given and builds a scripted router."""
+    """A `RealRouterFactory` that records the policy and profile it was given and builds a scripted router."""
 
     def __init__(self, *answers: ScriptedModelResponse) -> None:
         self.policies: list[RoutingPolicy] = []
+        self.profiles: list[str | None] = []
         self.router = ScriptedModelRouter(answers)
 
-    def __call__(self, policy: RoutingPolicy) -> ModelRouter:
+    def __call__(self, policy: RoutingPolicy, *, aws_profile: str | None) -> ModelRouter:
         self.policies.append(policy)
+        self.profiles.append(aws_profile)
         return self.router
 
 
@@ -151,6 +153,27 @@ def test_the_variable_selects_live_with_no_code_change(tmp_path: Path) -> None:
     assert spy.policies == [RoutingPolicy.load(EXAMPLE_ROUTING_FILE)]
 
 
+def test_the_real_router_is_built_with_the_settings_aws_profile(tmp_path: Path) -> None:
+    """v1-e05-t08: `models.aws_profile` reaches the real router from the settings, so no composition
+    root can build a Bedrock client from whatever `AWS_PROFILE` the shell holds."""
+    spy = RealRouterSpy()
+    settings = settings_with(tmp_path, provider="bedrock", aws_profile="debate-dev-bedrock")
+
+    build_model_router(settings, environ={"DEBATE_MODEL_MODE": "live"}, real_router=spy)
+
+    assert spy.profiles == ["debate-dev-bedrock"]
+
+
+def test_no_profile_in_the_settings_is_no_profile_for_the_real_router(tmp_path: Path) -> None:
+    spy = RealRouterSpy()
+
+    build_model_router(
+        settings_with(tmp_path, provider="bedrock"), environ={"DEBATE_MODEL_MODE": "live"}, real_router=spy
+    )
+
+    assert spy.profiles == [None]
+
+
 def test_the_option_wins_over_the_variable(tmp_path: Path) -> None:
     router = build_model_router(
         settings_with(tmp_path, provider="bedrock"),
@@ -219,7 +242,8 @@ def test_a_bad_routing_file_fails_before_any_router_exists(tmp_path: Path) -> No
 def test_no_setting_chooses_record_replay_or_live(tmp_path: Path) -> None:
     every_setting = settings_with(tmp_path).redacted_dict()
 
-    assert set(ModelSettings.model_fields) == {"provider", "routing_file", "budget_usd_daily"}
+    # aws_profile (v1-e05-t08) says which credential a live call is signed with, never whether one is made.
+    assert set(ModelSettings.model_fields) == {"provider", "routing_file", "budget_usd_daily", "aws_profile"}
     assert [key for key in every_setting if "mode" in key.rsplit(".", 1)[-1]] == []
 
 

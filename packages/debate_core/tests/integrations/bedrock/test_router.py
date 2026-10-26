@@ -15,8 +15,10 @@ Retries and the shared contract run with the whole directory.
 
 from __future__ import annotations
 
+import functools
 import io
 import json
+import os
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -37,7 +39,7 @@ from debate_core.application.errors import (
     ProviderRateLimited,
 )
 from debate_core.application.ports.model_router import ModelRouter
-from debate_core.application.settings import ConfigurationError
+from debate_core.application.settings import ConfigurationError, load_settings
 from debate_core.domain.model_contracts import (
     Effort,
     ModelParams,
@@ -244,10 +246,10 @@ def test_the_client_connect_timeout_is_never_longer_than_the_call() -> None:
     assert config.connect_timeout == 2
 
 
-def test_the_client_is_built_from_the_region_and_profile_free_credential_chain(
+def test_the_client_is_built_from_the_region_the_timeout_and_the_profile_and_nothing_else(
     fake_aws_credentials: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Region and timeout in, nothing else: no key, no profile, no account."""
+    """Region, timeout and profile in: no key and no account, and the profile is the session's own."""
     calls: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
     real_session = boto3.session.Session
 
@@ -260,19 +262,147 @@ def test_the_client_is_built_from_the_region_and_profile_free_credential_chain(
 
     client: Any = build_bedrock_runtime_client(TEST_REGION, 45)
 
-    assert calls == [((), {"region_name": TEST_REGION})]
+    assert [(args, sorted(kwargs)) for args, kwargs in calls] == [((), ["botocore_session", "region_name"])]
+    assert calls[0][1]["region_name"] == TEST_REGION
+    assert calls[0][1]["botocore_session"].profile is None
     assert client.meta.service_model.service_name == "bedrock-runtime"
     assert client.meta.region_name == TEST_REGION
     assert client.meta.config.read_timeout == 45
 
 
-def test_the_client_for_a_profile_the_aws_config_lacks_is_a_typed_refusal(
-    fake_aws_credentials: None, monkeypatch: pytest.MonkeyPatch
+SETTING_PROFILE = "debate-dev-bedrock"
+"""The profile `models.aws_profile` names in these tests; its key says which profile signed."""
+
+SHELL_PROFILE = "a-profile-the-shell-holds"
+
+
+@pytest.fixture
+def two_defined_profiles(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """An AWS config defining the setting's profile, another the shell's `AWS_PROFILE` names, and a
+    default, each with a static key of its own, and no key in the environment: which profile a
+    client is signed with is which key it holds."""
+    for name in (
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_SESSION_TOKEN",
+        "AWS_SECURITY_TOKEN",
+        "AWS_DEFAULT_PROFILE",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    profiles = {
+        SETTING_PROFILE: "KEY-OF-THE-SETTING",
+        SHELL_PROFILE: "KEY-OF-THE-SHELL",
+        "default": "KEY-OF-DEFAULT",
+    }
+    config = tmp_path / "aws-config"
+    config.write_text(
+        "".join(
+            ("[default]\n" if name == "default" else f"[profile {name}]\n") + f"region = {TEST_REGION}\n"
+            for name in profiles
+        ),
+        encoding="utf-8",
+    )
+    credentials = tmp_path / "aws-credentials"
+    credentials.write_text(
+        "".join(
+            f"[{name}]\naws_access_key_id = {key}\naws_secret_access_key = testing\n"
+            for name, key in profiles.items()
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("AWS_CONFIG_FILE", str(config))
+    monkeypatch.setenv("AWS_SHARED_CREDENTIALS_FILE", str(credentials))
+    monkeypatch.setenv("AWS_EC2_METADATA_DISABLED", "true")
+    monkeypatch.setenv("AWS_PROFILE", SHELL_PROFILE)
+
+
+def signing_key(client: Any) -> str:
+    """The access key the client's requests would be signed with."""
+    return client._request_signer._credentials.access_key  # noqa: SLF001 - botocore has no public accessor
+
+
+def test_the_client_is_signed_with_the_profile_it_is_given_and_not_the_one_aws_profile_names(
+    two_defined_profiles: None,
+) -> None:
+    """ac2: the setting decides, whatever `AWS_PROFILE` the shell holds."""
+    client: Any = build_bedrock_runtime_client(TEST_REGION, 30, profile=SETTING_PROFILE)
+
+    assert signing_key(client) == "KEY-OF-THE-SETTING"
+
+
+def test_with_no_profile_the_client_ignores_aws_profile(two_defined_profiles: None) -> None:
+    """No profile is botocore's chain without `AWS_PROFILE`: a role on a task or an instance, and
+    here the config's default."""
+    client: Any = build_bedrock_runtime_client(TEST_REGION, 30)
+
+    assert signing_key(client) == "KEY-OF-DEFAULT"
+
+
+def test_an_aws_profile_the_config_lacks_changes_nothing(
+    two_defined_profiles: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("AWS_PROFILE", "a-profile-nobody-defined")
 
-    with pytest.raises(ModelAccessDenied, match="AWS_PROFILE"):
-        build_bedrock_runtime_client(TEST_REGION, 30)
+    client: Any = build_bedrock_runtime_client(TEST_REGION, 30, profile=SETTING_PROFILE)
+
+    assert signing_key(client) == "KEY-OF-THE-SETTING"
+
+
+def test_the_client_for_a_profile_the_aws_config_lacks_is_a_typed_refusal_naming_the_setting(
+    two_defined_profiles: None,
+) -> None:
+    with pytest.raises(ModelAccessDenied) as refused:
+        build_bedrock_runtime_client(TEST_REGION, 30, profile="debate-dev-bedrock-typo")
+
+    assert refused.value.hint is not None
+    assert "models.aws_profile" in refused.value.hint
+    assert "AWS_PROFILE" not in str(refused.value)
+    assert "aws sso login" not in str(refused.value), "a profile that is not defined is not cured by a login"
+
+
+async def test_the_router_builds_each_client_with_its_profile(
+    stubbed: StubbedBedrock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With no client factory given, every client is built with the router's `aws_profile`."""
+    from debate_core.integrations.bedrock import router as router_module
+
+    built: list[tuple[str, float, str | None]] = []
+
+    def spy(region: str, timeout_seconds: float, *, profile: str | None = None) -> Any:
+        built.append((region, timeout_seconds, profile))
+        return stubbed.client
+
+    monkeypatch.setattr(router_module, "build_bedrock_runtime_client", spy)
+    stubbed.add_answer()
+    router = BedrockModelRouter(
+        routing_policy(),
+        aws_profile=SETTING_PROFILE,
+        render_prompt=render_for_tests,
+        clock=FixedClock(INVOKED_AT),
+    )
+
+    await choose(router)
+
+    assert built == [(TEST_REGION, 30, SETTING_PROFILE)]
+
+
+def test_bedrock_model_router_passes_its_profile_to_the_router(monkeypatch: pytest.MonkeyPatch) -> None:
+    from debate_core.integrations.bedrock import router as router_module
+
+    built: list[str | None] = []
+
+    def spy(region: str, timeout_seconds: float, *, profile: str | None = None) -> Any:
+        built.append(profile)
+        return object()
+
+    monkeypatch.setattr(router_module, "build_bedrock_runtime_client", spy)
+    policy = routing_policy()
+
+    router = bedrock_model_router(policy, aws_profile=SETTING_PROFILE)
+    assert isinstance(router, BedrockModelRouter)
+    router.client_for(policy.resolve(TaskClass.RERANK))
+
+    assert built == [SETTING_PROFILE]
 
 
 async def test_the_client_comes_from_the_routes_region_and_timeout(stubbed: StubbedBedrock) -> None:
@@ -909,6 +1039,11 @@ def first_call_policy() -> RoutingPolicy:
     )
 
 
+def one_route(task_class: TaskClass = TaskClass.HIGH_VOLUME, **fields: Any) -> RoutingPolicy:
+    """A routing file with one route, the test default for `task_class` with `fields` merged in."""
+    return RoutingPolicy(routes={task_class: _route(task_class, **fields)})
+
+
 async def test_first_call_asks_each_question_by_changing_the_adapters_request_in_one_way(
     stubbed: StubbedBedrock,
 ) -> None:
@@ -925,7 +1060,7 @@ async def test_first_call_asks_each_question_by_changing_the_adapters_request_in
         {"results": [{"index": 0, "relevance_score": 0.8}, {"index": 1, "relevance_score": 0.1}]}
     )
 
-    findings = await run_first_call(first_call_policy(), client_factory=stubbed.factory)
+    findings = await run_first_call({"routing.yaml": first_call_policy()}, client_factory=stubbed.factory)
 
     adapter_call, *variants = sent
     assert adapter_call["toolConfig"]["toolChoice"] == {"auto": {}}
@@ -946,7 +1081,6 @@ async def test_first_call_asks_each_question_by_changing_the_adapters_request_in
 async def test_first_call_records_each_refusal_with_bedrocks_code_and_message(
     stubbed: StubbedBedrock,
 ) -> None:
-    policy = RoutingPolicy(routes={TaskClass.HIGH_VOLUME: routing_policy().routes[TaskClass.HIGH_VOLUME]})
     stubbed.add_answer({"colour": "blue"}, name="ProbeAnswer")
     stubbed.add_error(
         "converse", "ValidationException", 400, "tool_choice any is not supported for this model"
@@ -959,7 +1093,7 @@ async def test_first_call_records_each_refusal_with_bedrocks_code_and_message(
     stubbed.add_error("converse", "ValidationException", 400, "structured outputs are not supported")
     stubbed.add_converse([{"text": "ok"}], stop_reason="end_turn")
 
-    findings = await run_first_call(policy, client_factory=stubbed.factory)
+    findings = await run_first_call({"routing.yaml": one_route()}, client_factory=stubbed.factory)
 
     outcomes = {finding.probe: finding.outcome for finding in findings}
     assert outcomes == {
@@ -979,43 +1113,200 @@ async def test_first_call_records_each_refusal_with_bedrocks_code_and_message(
 async def test_first_call_denied_access_stops_a_route_without_sending_the_rest(
     stubbed: StubbedBedrock,
 ) -> None:
-    policy = RoutingPolicy(routes={TaskClass.HIGH_VOLUME: routing_policy().routes[TaskClass.HIGH_VOLUME]})
     stubbed.add_error(
         "converse", "AccessDeniedException", 403, "not authorized to perform bedrock:InvokeModel"
     )
 
-    findings = await run_first_call(policy, client_factory=stubbed.factory)
+    findings = await run_first_call({"routing.yaml": one_route()}, client_factory=stubbed.factory)
 
     assert [finding.outcome for finding in findings] == ["refused"] + ["not tried"] * len(FIRST_CALL_PROBES)
     assert "bedrock:InvokeModel" in findings[0].detail
 
 
-def test_first_call_table_is_markdown_the_report_can_hold(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+async def test_first_call_probes_each_model_once_however_many_routes_name_it(
+    stubbed: StubbedBedrock,
 ) -> None:
-    from debate_core.integrations.bedrock import first_call
+    """v1-e05-t08: the dev and prod files share two of their three Claude models, and dev routes two
+    classes to one. Each is asked its questions once, and every route it serves is named beside it,
+    so one run over both files costs the same as a run over the models alone."""
+    shared = {"model_id": "provider-model-small", "inference_profile": "geo.provider-model-small"}
+    dev = RoutingPolicy(
+        routes={
+            TaskClass.COMPLEX_REASONING: _route(TaskClass.COMPLEX_REASONING, **shared),
+            TaskClass.HIGH_VOLUME: _route(TaskClass.HIGH_VOLUME, **shared),
+        }
+    )
+    prod = RoutingPolicy(
+        routes={
+            TaskClass.HIGH_VOLUME: _route(TaskClass.HIGH_VOLUME, **shared),
+            TaskClass.DEEP_AUDIT: _route(TaskClass.DEEP_AUDIT),
+        }
+    )
+    targets: list[str] = []
+    stubbed.client.meta.events.register(
+        "provide-client-params.bedrock-runtime.Converse",
+        lambda params, **_: targets.append(params["modelId"]),  # pyright: ignore[reportUnknownLambdaType, reportUnknownArgumentType]
+    )
+    for _ in range(2):
+        stubbed.add_answer({"colour": "blue"}, name="ProbeAnswer")
+        for _ in FIRST_CALL_PROBES:
+            stubbed.add_converse([{"text": "ok"}], stop_reason="end_turn")
 
-    canned = [
-        first_call.Finding(TaskClass.HIGH_VOLUME, "geo.provider-model", "toolChoice any", "refused", "a | b"),
-        first_call.Finding(TaskClass.RERANK, "provider-reranker", "rerank two documents", "not tried", "x"),
-    ]
+    findings = await run_first_call({"dev.yaml": dev, "prod.yaml": prod}, client_factory=stubbed.factory)
 
-    async def fake_run(policy: RoutingPolicy, **_: Any) -> list[first_call.Finding]:
-        return canned
+    probes_per_model = 1 + len(FIRST_CALL_PROBES)
+    assert (
+        targets
+        == ["geo.provider-model-small"] * probes_per_model
+        + ["geo.provider-model-deep-audit"] * probes_per_model
+    )
+    assert {finding.target: finding.routes for finding in findings} == {
+        "geo.provider-model-small": (
+            "dev.yaml complex_reasoning",
+            "dev.yaml high_volume",
+            "prod.yaml high_volume",
+        ),
+        "geo.provider-model-deep-audit": ("prod.yaml deep_audit",),
+    }
 
-    monkeypatch.setattr(first_call, "run_first_call", fake_run)
-    routing = tmp_path / "routing.yaml"
+
+async def test_first_call_signs_every_client_with_the_profile_it_is_given(
+    stubbed: StubbedBedrock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from debate_core.integrations.bedrock import router as router_module
+
+    profiles: list[str | None] = []
+
+    def spy(region: str, timeout_seconds: float, *, profile: str | None = None) -> Any:
+        profiles.append(profile)
+        return stubbed.client
+
+    monkeypatch.setattr(router_module, "build_bedrock_runtime_client", spy)
+    stubbed.add_invoke({"embedding": [0.1, 0.2], "inputTextTokenCount": 2})
+
+    await run_first_call({"routing.yaml": one_route(TaskClass.EMBEDDINGS)}, aws_profile=SETTING_PROFILE)
+
+    assert profiles == [SETTING_PROFILE]
+
+
+async def test_first_call_counts_the_tokens_its_accepted_calls_were_billed(stubbed: StubbedBedrock) -> None:
+    stubbed.add_answer({"colour": "blue"}, name="ProbeAnswer", input_tokens=300, output_tokens=40)
+    stubbed.add_error("converse", "ValidationException", 400, "tool_choice any is not supported")
+    for _ in FIRST_CALL_PROBES[1:]:
+        stubbed.add_converse([{"text": "ok"}], stop_reason="end_turn", input_tokens=200, output_tokens=10)
+
+    findings = await run_first_call({"routing.yaml": one_route()}, client_factory=stubbed.factory)
+
+    from debate_core.integrations.bedrock.first_call import render_totals
+
+    assert (
+        render_totals(findings)
+        == "6 requests accepted and billed, 1300 input and 90 output tokens; 1 refused."
+    )
+
+
+@pytest.fixture
+def probe_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    """A dev profile naming a routing file and a Bedrock profile of its own, a shell `AWS_PROFILE`
+    naming another, and no `.env`."""
+    for name in list(os.environ):
+        if name.startswith("DEBATE_"):
+            monkeypatch.delenv(name, raising=False)
+    routing = tmp_path / "model_routing.test-dev.yaml"
     routing.write_text(
         "routes:\n  rerank:\n    provider: bedrock\n    model_id: m\n    region: r\n    timeout_seconds: 5\n",
         encoding="utf-8",
     )
+    profiles = tmp_path / "profiles"
+    profiles.mkdir()
+    (profiles / "dev.toml").write_text(
+        f'[models]\nrouting_file = "{routing}"\naws_profile = "debate-dev-bedrock-in-this-test"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("DEBATE_PROFILE_DIR", str(profiles))
+    monkeypatch.setenv("DEBATE_ENV", "dev")
+    monkeypatch.setenv("AWS_PROFILE", SHELL_PROFILE)
+    from debate_core.integrations.bedrock import first_call
 
-    status = first_call.main(["--routing-file", str(routing)])
+    # A developer's own `.env` must not decide which profile the probe reads.
+    monkeypatch.setattr(
+        first_call, "load_settings", functools.partial(load_settings, env_file=tmp_path / "absent.env")
+    )
+    return routing
+
+
+def test_first_call_takes_its_profile_and_routing_file_from_settings(
+    probe_settings: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from debate_core.integrations.bedrock import first_call
+
+    asked: list[tuple[list[str], str | None]] = []
+
+    async def fake_run(policies: Mapping[str, RoutingPolicy], **options: Any) -> list[first_call.Finding]:
+        asked.append((list(policies), options.get("aws_profile")))
+        return []
+
+    monkeypatch.setattr(first_call, "run_first_call", fake_run)
+
+    assert first_call.main([]) == 0
+    assert asked == [([probe_settings.name], "debate-dev-bedrock-in-this-test")]
+    assert capsys.readouterr().out.splitlines()[0] == (
+        "Signed with AWS profile debate-dev-bedrock-in-this-test (models.aws_profile, DEBATE_ENV=dev)."
+    )
+
+
+def test_first_call_probes_every_routing_file_it_is_given(
+    probe_settings: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from debate_core.integrations.bedrock import first_call
+
+    other = tmp_path / "model_routing.other.yaml"
+    other.write_text(probe_settings.read_text(encoding="utf-8"), encoding="utf-8")
+    asked: list[list[str]] = []
+
+    async def fake_run(policies: Mapping[str, RoutingPolicy], **_: Any) -> list[first_call.Finding]:
+        asked.append(list(policies))
+        return []
+
+    monkeypatch.setattr(first_call, "run_first_call", fake_run)
+
+    first_call.main(["--routing-file", str(probe_settings), "--routing-file", str(other)])
+
+    assert asked == [[probe_settings.name, other.name]]
+
+
+def test_first_call_table_is_markdown_the_report_can_hold(
+    probe_settings: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from debate_core.integrations.bedrock import first_call
+
+    canned = [
+        first_call.Finding(
+            ("dev.yaml high_volume", "prod.yaml high_volume"),
+            "geo.provider-model",
+            "toolChoice any",
+            "refused",
+            "a | b",
+        ),
+        first_call.Finding(
+            ("prod.yaml rerank",), "provider-reranker", "rerank two documents", "not tried", "x"
+        ),
+    ]
+
+    async def fake_run(policies: Mapping[str, RoutingPolicy], **_: Any) -> list[first_call.Finding]:
+        return canned
+
+    monkeypatch.setattr(first_call, "run_first_call", fake_run)
+
+    status = first_call.main(["--routing-file", str(probe_settings)])
 
     assert status == 1  # a probe that could not run is not a finding
-    assert capsys.readouterr().out.splitlines() == [
-        "| Class | Called as | Probe | Outcome | Detail |",
+    assert capsys.readouterr().out.splitlines()[2:] == [
+        "| Routes | Called as | Probe | Outcome | Detail |",
         "|---|---|---|---|---|",
-        "| high_volume | `geo.provider-model` | toolChoice any | refused | a \\| b |",
-        "| rerank | `provider-reranker` | rerank two documents | not tried | x |",
+        "| dev.yaml high_volume, prod.yaml high_volume | `geo.provider-model` | toolChoice any | refused "
+        "| a \\| b |",
+        "| prod.yaml rerank | `provider-reranker` | rerank two documents | not tried | x |",
+        "",
+        "0 requests accepted and billed, 0 input and 0 output tokens; 1 refused.",
     ]

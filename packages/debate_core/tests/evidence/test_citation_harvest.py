@@ -39,7 +39,9 @@ OPENGRAPH: Final = CitationFieldSource.OPENGRAPH
 BYLINE: Final = CitationFieldSource.BYLINE
 HEURISTIC: Final = CitationFieldSource.HEURISTIC
 
-NEWS_URL: Final = "https://www.dailymeridian.example/science/2026/09/14/mammoth-revival-years-away?utm_source=newsletter"
+NEWS_URL: Final = (
+    "https://www.dailymeridian.example/science/2026/09/14/mammoth-revival-years-away?utm_source=newsletter"
+)
 NEWS_CANONICAL: Final = "https://www.dailymeridian.example/science/2026/09/14/mammoth-revival-years-away"
 THINK_TANK_URL: Final = "https://www.harwell-institute.example/research/opportunity-cost-of-de-extinction"
 GOVERNMENT_URL: Final = "https://www.fosw.example.gov/news/2026/06/agency-announces-grants"
@@ -96,7 +98,7 @@ def test_the_news_page_states_its_cite_in_json_ld_meta_tags_opengraph_and_a_byli
 
 
 def test_a_job_title_after_a_byline_is_not_a_credential() -> None:
-    """"By Dana Whitfield, Science Correspondent" is a byline, not an author bio (ac3)."""
+    """ "By Dana Whitfield, Science Correspondent" is a byline, not an author bio (ac3)."""
     found = harvested_fixture("extraction/news-article.html", NEWS_URL)
 
     assert found.author_credentials == ()
@@ -186,7 +188,10 @@ def test_json_ld_job_title_and_affiliation_are_credentials_naming_the_author() -
     found = harvested(head=script)
 
     assert values(found.author_credentials) == [
-        ("Jane Smith, Professor of Hydrology, University of Example; Ana Ruiz, Example Lab, Example U", JSON_LD)
+        (
+            "Jane Smith, Professor of Hydrology, University of Example; Ana Ruiz, Example Lab, Example U",
+            JSON_LD,
+        )
     ]
 
 
@@ -236,7 +241,9 @@ def test_a_byline_without_links_is_split_into_names_before_the_first_comma() -> 
 
 
 def test_byline_links_name_the_authors() -> None:
-    body = '<div class="byline">By <a href="/a">Jane Smith</a> &amp; <a href="/b">Lee Park</a> | Updated</div>'
+    body = (
+        '<div class="byline">By <a href="/a">Jane Smith</a> &amp; <a href="/b">Lee Park</a> | Updated</div>'
+    )
 
     assert values(harvested(body).authors) == [(("Jane Smith", "Lee Park"), BYLINE)]
 
@@ -313,7 +320,9 @@ def test_a_relative_canonical_is_resolved_and_a_non_http_one_dropped() -> None:
 
 
 def test_dois_come_from_the_metadata_and_the_url_never_the_body_text() -> None:
-    head = '<meta name="citation_doi" content="10.5555/first"><meta name="prism.doi" content="10.5555/second">'
+    head = (
+        '<meta name="citation_doi" content="10.5555/first"><meta name="prism.doi" content="10.5555/second">'
+    )
     body = "<p>See also https://doi.org/10.5555/in-the-body.</p>"
 
     found = harvested(body, head, url="https://journal.example/doi/10.5555/third")
@@ -417,3 +426,10 @@ def test_an_offset_is_kept_only_to_name_the_day() -> None:
     assert stated is not None
     assert stated.moment.tzinfo is UTC
     assert stated.moment.astimezone(timezone(timedelta(hours=-4))).date() == stated.calendar_date
+
+
+def test_a_bio_must_name_the_author_as_whole_words() -> None:
+    """An agency byline "AP" is not named by a bio about an "APPLE" grower."""
+    body = '<div class="byline">By AP</div><div class="bio"><p>The APPLE growers are a co-op.</p></div>'
+
+    assert harvested(body).author_credentials == ()

@@ -43,6 +43,8 @@ from debate_core.domain import (
 )
 from debate_core.domain.discovery import CandidateResult, ProviderQuery
 from debate_core.domain.model_contracts import ModelParams, ModelPrompt, ModelProvider, TaskClass
+from debate_core.retrieval.extraction import UnsupportedContentType
+from debate_core.retrieval.fetch_types import HttpStatusError
 from debate_core.testing.fakes.all_ports import build_fake_ports
 from debate_core.testing.fakes.clock_and_ids import FAKE_EPOCH, FixedClock, SequentialIdGenerator
 from debate_core.testing.fakes.model_router import ScriptedModelRouter
@@ -519,9 +521,13 @@ def test_the_fetcher_serves_what_was_registered_and_404s_the_rest() -> None:
     assert found.byte_size == len(b"<html>body</html>")
     assert found.fetched_at == FAKE_EPOCH
 
+    # As the real fetcher answers a 404 (PM amendment 2026-10-21): the classifier decides NOT_FOUND.
     missing = run(fetcher.fetch("https://example.org/gone"))
     assert missing.status_code == 404
-    assert missing.access_status is AccessStatus.NOT_FOUND
+    assert missing.access_status is AccessStatus.UNKNOWN
+    assert isinstance(missing.error, HttpStatusError)
+    assert missing.error.status_code == 404
+    assert missing.error.message == "example.org answered HTTP 404"
     assert fetcher.requested_urls == ["https://example.org/a", "https://example.org/gone"]
 
 
@@ -549,8 +555,16 @@ def test_the_extractor_splits_paragraphs_and_refuses_what_it_cannot_read() -> No
     assert extracted.metadata_hints.canonical_url == "https://example.org/a"
 
     pdf = fetcher.add("https://example.org/a.pdf", b"%PDF-1.7", content_type="application/pdf")
-    with pytest.raises(ValueError, match="does not handle application/pdf"):
+    with pytest.raises(UnsupportedContentType, match="declared 'application/pdf'"):
         FakeContentExtractor().extract(pdf)
+
+
+def test_a_registered_error_status_carries_the_error_the_real_fetcher_attaches() -> None:
+    fetcher = FakeArticleFetcher()
+    refused = fetcher.add("https://example.org/members", b"<html>Subscribe</html>", status_code=403)
+    assert isinstance(refused.error, HttpStatusError)
+    assert refused.error.status_code == 403
+    assert refused.body == b"<html>Subscribe</html>"
 
 
 # --------------------------------------------------------------------------------------------

@@ -6,13 +6,20 @@
 | Spec | [`plan_specs/v1/e32-argument-landscape/t24-unlabelled-plan-affs.yaml`](../../plan_specs/v1/e32-argument-landscape/t24-unlabelled-plan-affs.yaml) |
 | Epic / release | `v1-e32-argument-landscape` / `v1.2` |
 | Branch | `task/v1-e32-t24-unlabelled-plan-affs` |
-| Session status | PARTIAL <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
-**Built as ruled on 2026-10-26.** ac1 and ac2 pass, and so does the node's criterion. **ac3 is the
-operator's dry run on hspolicy26 and is NOT RUN, so the Goal stays `InProgress`.** It needs one cache
-re-read of about 205 to 305 s, then the dry run ([Operator follow-ups](#operator-follow-ups)).
+**Built as ruled on 2026-10-26, and every criterion passes, so the Goal is `Succeeded`.**
+
+**On hspolicy26 after the operator's re-read** ([below](#the-real-store-after-the-re-read-2026-10-26)):
+* **Unidentified rounds fall from 669 to 313 of 2,192** (14.3%).
+* `TRANSITION_PLAN_TEXT` identifies 334 rounds and `TRANSITION_PLAN_CARRY` 23.
+* `PLAN_TEXT`, `TEAM_CARRY` and `PLACED_CARD` are unchanged (1,172, 254 and 57).
+* The K-aff carry was refused in 7 rounds.
+* The control is 30 rounds: `TEAM_CARRY` 28, `KRITIKAL_AFF_MARKER` 2.
+* The widened method sentence adds 3 `KRITIKAL_AFF_MARKER` rounds (31 to 34).
+* Nothing was written, and no scan hit is new.
 
 * **The reader.** In every affirmative file, a plan text under `Thus the plan`, `Thus plan`, inline
   `Thus the plan:` or a bare `Thus` is read with t09's shape and vocabulary, the resolutional rule
@@ -45,7 +52,8 @@ re-read of about 205 to 305 s, then the dry run ([Operator follow-ups](#operator
 * [Decisions](#decisions-and-assumptions) 3 and 4: the control counts any aff t09's rule calls
   different, and the carry treats a conflicting round as t09 does. Both can move the real numbers from
   the counts' simulation;
-* [the operator block](#operator-follow-ups) for ac3.
+* [the real store](#the-real-store-after-the-re-read-2026-10-26): the control (30) is larger than the
+  counts' 15 for the reason Decision 3 gives.
 
 ### The counts that went to the PM (2026-10-26, before the build)
 
@@ -78,7 +86,7 @@ re-read of about 205 to 305 s, then the dry run ([Operator follow-ups](#operator
 
 | Node | Status | Notes |
 |---|---|---|
-| unlabelled-plan-affs | Built; ac3 waits for the operator | The counts (2026-10-26), the PM's rulings (2026-10-26), then the reader, the method sentence, the rule, the cache, the report's rows, the scripts and the guide |
+| unlabelled-plan-affs | Done | The counts (2026-10-26), the PM's rulings (2026-10-26), then the reader, the method sentence, the rule, the cache, the report's rows, the scripts and the guide; the operator's re-read and the dry run |
 
 ## Acceptance criteria
 
@@ -86,7 +94,64 @@ re-read of about 205 to 305 s, then the dry run ([Operator follow-ups](#operator
 |---|---|---|
 | ac1: counts before building, read-only: where the 256 files' plan texts sit, and which affs their advantages point to, sent to the PM with a proposed rule | PASS | [The counts](#the-counts-hspolicy26-through-2026-10-20-taxonomy-130), sent 2026-10-26 with the proposed rule. The PM ruled the same day ([below](#the-pms-rulings-applied)). Nothing was built before the ruling |
 | ac2: after the ruling, on synthetic fixtures, the rule identifies an unlabelled plan's aff, refuses a round whose own plan text names another, and the method table counts the new method's rounds; tests shown failing first | PASS | `test_the_method_table_matches_the_hand_written_golden_file` against [`method_table.md`](../../tests/fixtures/landscape/transition_plan_affs/method_table.md), hand-written from the fixture's [README table](../../tests/fixtures/landscape/transition_plan_affs/README.md). The fixture's readings go through the real `build_aff_assignments`. It identifies three rounds by their own plan text and one by carry. It refuses EE (an unnamed t09 plan text of its own), HH and CC (t09's plan text, and t09's carry, naming another aff) and DD (two affs). The table counts `TRANSITION_PLAN_TEXT` 3 and `TRANSITION_PLAN_CARRY` 1. Red first: [below](#checks-shown-failing-for-their-reason) |
-| ac3: the operator's dry run on hspolicy26 before and after: rounds with no identified aff, by method | NOT RUN | The operator's run. "Before" is on record: 669 of 2,192 by the method table in [the base](#the-base), from t17's dry run of 2026-10-25 and reproduced by this session's read-only pass of 2026-10-26. "After" needs the cache re-read and the dry run ([Operator follow-ups](#operator-follow-ups)) |
+| ac3: the operator's dry run on hspolicy26 before and after: rounds with no identified aff, by method | PASS | Before: 669 of 2,192, by the method table in [the base](#the-base) (t17's dry run of 2026-10-25, reproduced by this session's read-only pass of 2026-10-26). After: the operator's re-read (226.7 s), then `landscape_dry_run_by_section.py --caselist hspolicy26 --snapshot 2026-10-20` (73.1 s) → **313 of 2,192**, by method [below](#the-real-store-after-the-re-read-2026-10-26) |
+
+## The real store after the re-read (2026-10-26)
+
+hspolicy26, parser `2026.10.20-docx-6`, through 2026-10-20, taxonomy 1.3.0.
+
+**The operator's re-read** ([Operator follow-ups](#operator-follow-ups) step 1). No `DEBATE_*` variable
+was set and no `caselist pull` was running.
+
+| Step | Result | Runtime |
+|---|---|---|
+| `assign_landscape_affs.py plan-texts` | 1,770 sources, 0 cached, 1,770 parsed, 0 refused, 0 unread, cache written. **t09's verdicts unchanged:** NAMES 950, CONFLICTING 7, UNNAMED 2, NONE 811. **Plan texts under `Thus`:** NAMES 470, UNNAMED 47, CONFLICTING 0 documents, **420 of the naming ones with no plan text t09 reads**. K-aff markers: 31 documents, 29 with no plan text, 25 teams (28, 26 and 22 under t17's sentence) | 226.7 s |
+| `landscape_dry_run_by_section.py`, no `--publish` (run by the session) | Nothing written, 7 files planned. The lines below | 73.1 s |
+
+**The dry run.** The session ran it as the block in step 2 says, after the guards, under `perl -e
+'alarm 115'` on the interpreter.
+* At load 5 it finished well inside the limit, and no worker was left.
+* The 19 files under `~/.debate-research/dev/landscape/` and `reports/` had the same SHA-256 before and
+  after.
+
+**How affirmative rounds are identified, before and after:**
+
+| Method | Before (t17, 2026-10-25) | **After** |
+|---|---|---|
+| `PLAN_TEXT` | 1,172 | 1,172 |
+| `TEAM_CARRY` | 254 | 254 |
+| `PLACED_CARD` | 57 | 57 |
+| `KRITIKAL_AFF_MARKER` | 31 | **34** |
+| `KRITIKAL_AFF_CARRY` | 9 | **5** |
+| `TRANSITION_PLAN_TEXT` | | **334** |
+| `TRANSITION_PLAN_CARRY` | | **23** |
+| Not identified | 669 of 2,192 | **313 of 2,192** (14.3%) |
+| Of those, the K aff not carried in: the round's own file reads an advantage | 17 | **0** |
+| Identified another way, with a K-aff marker in a file (t17's control) | 5 rounds, 5 files | 5 rounds, 5 files: `PLAN_TEXT` 3, `TEAM_CARRY` 2 |
+| The K aff not carried in: the round's own file holds a plan text under `Thus` naming a policy aff | | **7** |
+| Identified another way, against a plan text under `Thus` naming another aff (the control) | | **30: `TEAM_CARRY` 28, `KRITIKAL_AFF_MARKER` 2** |
+
+* **No existing assignment moved.** `PLAN_TEXT`, `TEAM_CARRY` and `PLACED_CARD` have the same counts
+  (ruling 2). The rows add up: 1,879 identified and 313 not, 2,192.
+* **Against the counts' simulation** (327 own, 23 carried, 319 left):
+  * 334 own: the simulation's 327 from the open rounds, and the 7 rounds whose K-aff carry is now
+    refused (ruling 3), which were K affs before and so were never among the 669;
+  * 23 carried, the same;
+  * 313 left: the simulation's 319, less 6 open rounds the K aff now takes, 3 by the widened method
+    sentence and 3 by carry.
+* **t17's 17 advantage refusals are no longer unidentified.** Their plan texts under `Thus` identify
+  them, as Decision 5 expected.
+* **The K-aff group:** 39 rounds by 22 teams (40 by 19 before), 34 by their own marker and 5 by carry.
+  * The widened method sentence added 3 marker rounds, the 3 files the counts found.
+  * The carry is 9 − 7 + 3 = 5: 2 of t17's 9 carried rounds remain, and 3 open rounds are newly carried
+    into. I did not count which teams the 3 belong to.
+* **The control is 30, not the counts' 15.** The 2 `KRITIKAL_AFF_MARKER` rounds are the counts' 2. The
+  28 `TEAM_CARRY` rounds include the counts' 13 with another top-level aff, and the rounds whose plan
+  text names a sibling mechanism of the carried one (Decision 3). All keep their aff.
+* **K families:** settler colonialism 2 files (2 teams), feminism 2 (2), and cap, racial capitalism,
+  neoliberalism, disability, Buddhism and ontology 1 each.
+* **The scan:** 9 hits, 0 not yet accepted, the same as t17's: 1 in report.md's plank table, 8 in
+  `top_cards.csv`. None is in the method table. Its new rows hold counts and method names only.
 | unlabelled-plan-affs node: `uv run pytest packages/debate_core/tests/arguments/landscape` | PASS | `.venv/bin/python -m pytest packages/debate_core/tests/arguments/landscape` under `perl -e 'alarm 115'` → 916 passed in 9.99 s |
 
 ## The PM's rulings, applied
@@ -496,8 +561,8 @@ before the build.
 * **`tests/fixtures/landscape/transition_plan_affs/`** (new, by hand).
 * **`scripts/assign_landscape_affs.py`, `scripts/landscape_dry_run_by_section.py`.**
 * **`docs/guides/landscape-taxonomy.md`.**
-* **The spec:** the PM's rulings as a comment above `acceptanceCriteria`. The Goal's phase stays
-  `InProgress` (ac3).
+* **The spec:** the PM's rulings as a comment above `acceptanceCriteria`, and the Goal's phase
+  (`Succeeded`).
 * This report.
 
 ## Deviations from the spec
@@ -553,6 +618,10 @@ before the build.
    federal-actor shape loses nothing.
 
 ## Operator follow-ups
+
+**Done on 2026-10-26:** step 1 by the operator (226.7 s), then step 2 by the session (73.1 s, nothing
+written). The output is [above](#the-real-store-after-the-re-read-2026-10-26). The blocks are kept as
+they were run.
 
 **ac3: the cache re-read, then the dry run.** Local only: it writes under
 `~/.debate-research/dev/landscape/` alone, publishes nothing and writes to no bucket. It prints counts

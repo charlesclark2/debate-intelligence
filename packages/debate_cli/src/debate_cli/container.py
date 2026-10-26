@@ -747,6 +747,7 @@ class ServiceContainer:
             writer=DocxEvidenceFileWriter(snapshots=blobs, parser=parser),
             quality=self.file_quality(),
             parser_version=parser.parser_version,
+            profile_version=parser.profile_version,
             files_dir=self.files_dir,
             clock=self.clock(),
         )

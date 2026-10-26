@@ -401,6 +401,26 @@ def test_files_build_refuses_a_store_another_parser_made_naming_both_versions(wo
     assert error["details"]["recipe_errors"] == []
 
 
+def test_files_build_refuses_a_store_another_style_profile_made_naming_both_profiles(world: Planted) -> None:
+    """Every row of the occurrence table restamped with another profile, as its parse would have written."""
+    table = world.data_dir / "parsed" / world.corpus.caselist / DOCX_PARSER_VERSION / "occurrences.jsonl"
+    rows = [json.loads(line) for line in table.read_text(encoding="utf-8").splitlines()]
+    assert rows
+    table.write_text(
+        "".join(json.dumps({**row, "profile_version": "2026.11.02-verbatim-2"}) + "\n" for row in rows),
+        encoding="utf-8",
+    )
+    result = invoke("--json", "files", "build", str(world.corpus.recipe))
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    error = envelope(result)["error"]
+    assert error["code"] == "STORE_PARSED_BY_ANOTHER_VERSION"
+    assert "2026.11.02-verbatim-2" in error["message"]
+    assert DebateDocxParser().profile_version in error["message"]
+    assert f"debate-research caselist parse --caselist {world.corpus.caselist}" in error["hint"]
+    assert error["details"]["recipe_errors"] == []
+
+
 def test_files_build_refuses_an_out_inside_a_git_working_tree(world: Planted, tmp_path: Path) -> None:
     checkout = tmp_path / "checkout"
     (checkout / ".git").mkdir(parents=True)

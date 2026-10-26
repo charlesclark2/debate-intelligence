@@ -546,3 +546,11 @@ class ParsedStore(Protocol):
         (:func:`~debate_core.application.caselist.occurrence_table_guard.fingerprint_stamps`).
         """
         ...
+
+    async def read_occurrence_profiles(self, caselist: str, version: str) -> frozenset[str] | None:
+        """The style profile version of every row of `occurrences.jsonl`, or `None` when it is absent.
+
+        Read without the record's model, as :meth:`read_occurrence_stamps` is (`v1-e33-t09`,
+        :func:`~debate_core.application.caselist.occurrence_table_guard.profile_stamps`).
+        """
+        ...

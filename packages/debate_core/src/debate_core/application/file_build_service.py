@@ -6,10 +6,10 @@
    :class:`~debate_core.application.file_recipes.RecipeError`.
 2. **Refuses a draft** unless the build allows one; a file built from a draft says DRAFT in its header.
 3. **Refuses a store another build parsed** (PM amendment 2026-10-19). The writer finds each card by
-   re-parsing its source with the running parser, so a store of another parser or fingerprint version
-   would give `OCCURRENCE_MISMATCH` for every card. Before anything is resolved, every caselist the
-   recipe reads is compared with the running build, and one refusal names both versions and the
-   re-parse.
+   re-parsing its source with the running parser, so a store of another parser, fingerprint or style
+   profile version (`v1-e33-t09`) would give `OCCURRENCE_MISMATCH` for every card. Before anything is
+   resolved, every caselist the recipe reads is compared with the running build, and one refusal
+   names every version that differs, both values of each, and the re-parse.
 4. **Refuses an output directory inside a git working tree** (PM amendment 2026-10-21): a built file
    holds card text and its sidecar names who disclosed each card, and neither is ever committed.
 5. **Resolves** every card to one occurrence, listing every error at once.
@@ -127,7 +127,8 @@ class BuildRefusalCode(StrEnum):
     """`status: draft`, and the build was not told to allow one."""
 
     STORE_PARSED_BY_ANOTHER_VERSION = "STORE_PARSED_BY_ANOTHER_VERSION"
-    """A caselist the recipe reads was parsed, or fingerprinted, by another build (ac8)."""
+    """A caselist the recipe reads was parsed, fingerprinted or read through a style profile by another
+    build (ac8, `v1-e33-t09`)."""
 
     STORE_NOT_PARSED = "STORE_NOT_PARSED"
     """A caselist the recipe reads has no parsed store on this machine, or no occurrence table."""
@@ -257,8 +258,8 @@ class FileBuildService:
     """Builds one recipe into a file, its sidecar and its quality report, or says why it will not.
 
     `files_dir` is where built files go by default (`<files_dir>/built/<topic>/`). `parser_version`
-    is the running parser's, the one the writer and the quality check read with. `clock` stamps the
-    sidecar's `built_at`; the `.docx` carries no time.
+    and `profile_version` are the running parser's and its style profile's, which the writer and the
+    quality check read with. `clock` stamps the sidecar's `built_at`; the `.docx` carries no time.
     """
 
     def __init__(
@@ -271,6 +272,7 @@ class FileBuildService:
         writer: EvidenceFileWriter,
         quality: FileQualityService,
         parser_version: str,
+        profile_version: str,
         files_dir: Path,
         clock: Callable[[], datetime],
     ) -> None:
@@ -279,6 +281,7 @@ class FileBuildService:
         self._writer = writer
         self._quality = quality
         self._parser_version = parser_version
+        self._profile_version = profile_version
         self._files_dir = files_dir
         self._clock = clock
         self._resolver = RecipeResolver(
@@ -397,8 +400,7 @@ class FileBuildService:
         """One refusal for every caselist the recipe reads that this build did not parse, or `None`.
 
         A caselist's store is the version of its newest directory, which the store lists by parser
-        version and then generation. It must be this build's parser version, and its occurrence table
-        must be stamped with this build's fingerprint version and no other.
+        version and then generation. :meth:`_versions_that_differ` compares it with this build.
         """
         other: list[str] = []
         unparsed: list[str] = []
@@ -412,27 +414,14 @@ class FileBuildService:
                 reparse.append(caselist)
                 continue
             newest = directories[-1]
-            parsed_by = parse_version_directory(newest)[0]
-            if parsed_by != self._parser_version:
-                other.append(
-                    f"{caselist} was parsed by parser {parsed_by}, and this build's parser is "
-                    f"{self._parser_version}"
-                )
-                reparse.append(caselist)
-                continue
-            stamps = await self._store.read_occurrence_stamps(caselist, newest)
-            if stamps is None:
+            differs = await self._versions_that_differ(caselist, newest)
+            if differs is None:
                 unparsed.append(
                     f"{caselist} {newest} has no occurrence table (a removal deletes it until the next parse)"
                 )
                 reparse.append(caselist)
-                continue
-            stamped = sorted(stamps - {FINGERPRINT_VERSION})
-            if stamped:
-                other.append(
-                    f"{caselist}'s occurrence table is stamped {', '.join(stamped)}, and this build's "
-                    f"fingerprint version is {FINGERPRINT_VERSION}"
-                )
+            elif differs:
+                other.extend(differs)
                 reparse.append(caselist)
         if not reparse:
             return None
@@ -441,6 +430,41 @@ class FileBuildService:
         )
         reason = "this machine's parsed store was not built by this build" if other else "a store is missing"
         return BuildRefusal(code, f"{reason}: {'; '.join(other + unparsed)}", _reparse_hint(reparse))
+
+    async def _versions_that_differ(self, caselist: str, newest: str) -> list[str] | None:
+        """Each of the parser, fingerprint and style profile versions of `newest` that is not this build's.
+
+        `newest` must be this build's parser version, its occurrence table stamped with this build's
+        fingerprint version and no other, and every row of it read through this build's style profile
+        (`v1-e33-t09`): a profile change under one parser version writes a new generation, and the
+        running parser does not find its cards where that generation says they are. Each that
+        differs is named with both values. `None` when `newest` is this build's parser version and
+        has no occurrence table.
+        """
+        differs: list[str] = []
+        parsed_by = parse_version_directory(newest)[0]
+        if parsed_by != self._parser_version:
+            differs.append(
+                f"{caselist} was parsed by parser {parsed_by}, and this build's parser is "
+                f"{self._parser_version}"
+            )
+        stamps = await self._store.read_occurrence_stamps(caselist, newest)
+        if stamps is None:
+            return differs or None
+        stamped = sorted(stamps - {FINGERPRINT_VERSION})
+        if stamped:
+            differs.append(
+                f"{caselist}'s occurrence table is stamped {', '.join(stamped)}, and this build's "
+                f"fingerprint version is {FINGERPRINT_VERSION}"
+            )
+        profiles = await self._store.read_occurrence_profiles(caselist, newest)
+        read_through = sorted((profiles or frozenset()) - {self._profile_version})
+        if read_through:
+            differs.append(
+                f"{caselist}'s occurrence table was read through style profile {', '.join(read_through)}, "
+                f"and this build's style profile is {self._profile_version}"
+            )
+        return differs
 
     async def _missing_sources(self, resolved: ResolvedRecipe) -> tuple[CardProblem, ...]:
         """Each card whose source is not in the blob store, with the `store get` that fetches it."""

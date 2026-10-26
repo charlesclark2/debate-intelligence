@@ -319,6 +319,16 @@ def test_mapping_a_plain_throttle_or_outage_is_an_error_not_a_block(status_code:
     assert classify(response(status_code, b""), None).status is ERROR
 
 
+def test_mapping_a_refusal_whose_body_is_not_html_is_read_for_headers_only() -> None:
+    image = b"\x89PNG\r\n\x1a\n_cf_chl_opt Just a moment..."
+    plain = classify(response(403, image, content_type="image/png"), None)
+    flagged = classify(
+        response(403, image, content_type="image/png", headers={"cf-mitigated": "challenge"}), None
+    )
+    assert (plain.status, plain.evidence.marker) == (BLOCKED, None)
+    assert (flagged.status, marker_id(flagged)) == (BLOCKED, "cloudflare-mitigated-header")
+
+
 @pytest.mark.parametrize(
     ("status_code", "words"),
     [
@@ -621,6 +631,8 @@ def test_marker_rules_version_is_on_every_result() -> None:
         classifier.classify(response(200, page()), text_of_words(3)),
     ]
     assert {decision.rules_version for decision in outcomes} == {"paywall_rules.test-9"}
+    assert classifier.rules_version == "paywall_rules.test-9"
+    assert AccessClassifier().rules_version == RULES_VERSION
 
 
 def test_marker_rules_from_another_file_are_the_ones_used() -> None:
@@ -831,9 +843,12 @@ def test_truncation_an_unusable_declared_length_is_ignored(word_count: object) -
     assert decision.evidence.declared_words is None
 
 
-def test_truncation_malformed_json_ld_is_ignored() -> None:
-    head = '<script type="application/ld+json">{"wordCount": 5000,</script>'
-    assert classify(response(200, page(head=head)), text_of_words(150)).status is ACCESSIBLE
+@pytest.mark.parametrize("block", ['{"wordCount": 5000,', '[1, "wordCount", null]', '"wordCount: 5000"'])
+def test_truncation_malformed_json_ld_is_ignored(block: str) -> None:
+    head = f'<script type="application/ld+json">{block}</script>'
+    decision = classify(response(200, page(head=head)), text_of_words(150))
+    assert decision.status is ACCESSIBLE
+    assert decision.evidence.declared_words is None
 
 
 def test_truncation_thresholds_are_configurable() -> None:

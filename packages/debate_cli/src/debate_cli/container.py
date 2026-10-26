@@ -23,7 +23,8 @@ and :meth:`ServiceContainer.verify_manifest`, which `debate-research verify` run
 :meth:`ServiceContainer.landscape_run`, which `debate-research landscape report` runs
 (`v1-e32-t05-landscape-cli`); and :meth:`ServiceContainer.file_build`,
 :meth:`ServiceContainer.file_quality` and :meth:`ServiceContainer.file_suggest`, which
-`debate-research files build`, `files check` and `files suggest` run (`v1-e33-t03-file-build-cli`). The import
+`debate-research files build`, `files check` and `files suggest` run (`v1-e33-t03-file-build-cli`), and
+:meth:`ServiceContainer.file_publish`, which `files publish` runs (`v1-e33-t05-file-publish`). The import
 commands also read archives and place manifests through it (:meth:`ServiceContainer.read_archive`,
 :meth:`ServiceContainer.archive_digest`, :meth:`ServiceContainer.evidence_object_path`), so no
 command imports an adapter (`v1-e01-t13-composition-root-cleanup`). The rest of V1's services and
@@ -188,6 +189,7 @@ from debate_core.application.evidence_sync import (
 )
 from debate_core.application.evidence_verifier import EvidenceVerifier
 from debate_core.application.file_build_service import FileBuildService
+from debate_core.application.file_publish_service import FilePublishService
 from debate_core.application.file_quality_service import FileQualityService
 from debate_core.application.file_suggest_service import FileSuggestService
 from debate_core.application.landscape_run import LandscapeRunService
@@ -279,6 +281,7 @@ SERVICE_NAMES: Final[tuple[str, ...]] = (
     "evidence_profile_check",
     "evidence_sync",
     "file_build",
+    "file_publish",
     "file_quality",
     "file_suggest",
     "openev_import",
@@ -647,6 +650,22 @@ class ServiceContainer:
             parser_version=parser.parser_version,
             files_dir=self.files_dir,
             clock=self.clock(),
+        )
+
+    def file_publish(self) -> FilePublishService:
+        """Publish built files that pass their quality checks to this environment's bucket (`v1-e33-t05`).
+
+        The gate runs :meth:`file_quality`, the check `files build` and `files check` run, over this
+        machine's blob store; the recipes are looked for under :attr:`files_dir`. The bucket is
+        :meth:`_evidence_bucket`, signed with the everyday evidence profile, which may write `files/`,
+        and built only when a file is uploaded or looked up: a dry run builds no client. Raises
+        :class:`EvidenceStoreNotConfigured` then, when this environment names no bucket.
+        """
+        return self.singleton("file_publish", self._build_file_publish)
+
+    def _build_file_publish(self) -> FilePublishService:
+        return FilePublishService(
+            bucket=self._evidence_bucket, quality=self.file_quality(), files_dir=self.files_dir
         )
 
     def file_suggest(self, *, config_dir: Path) -> FileSuggestService:

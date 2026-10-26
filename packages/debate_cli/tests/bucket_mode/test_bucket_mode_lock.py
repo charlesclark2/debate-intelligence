@@ -201,6 +201,7 @@ BUCKET_WRITING: Final = {
     "landscape report",
     "tub index publish",
     "store sync",
+    "files publish",
 }
 """Commands that write to an evidence bucket, in some mode of theirs (ADR-0020 (4) and the PM's ruling 2)."""
 
@@ -317,6 +318,14 @@ def restore_run_state(world: World) -> Command:
     )
 
 
+def files_publish(world: World) -> Command:
+    """`v1-e33-t05`'s publish of a `.docx` with no quality report: refused by its gate, inside the lock."""
+    built = world.root / "built" / "synthetic-file.docx"
+    built.parent.mkdir(parents=True, exist_ok=True)
+    built.write_bytes(b"not checked")
+    return lambda: world.run("files", "publish", "--env", "dev", str(built))
+
+
 def running(*arguments: str) -> Callable[[World], Command]:
     return lambda world: lambda: world.run(*arguments)
 
@@ -331,6 +340,7 @@ COMMANDS: Final[dict[str, Callable[[World], Command]]] = {
     "caselist unsuppress": unsuppress,
     "caselist remove": remove,
     "caselist restore-run-state": restore_run_state,
+    "files publish": files_publish,
 }
 """Each bucket-writing command but the pull and the seed, by the name it takes the lock under: its setup,
 then the command. `landscape report --publish` has its own world (`test_landscape_command.py`)."""

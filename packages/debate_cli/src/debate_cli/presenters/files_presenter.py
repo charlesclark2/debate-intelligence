@@ -1,4 +1,4 @@
-"""How `debate-research files build`, `files check` and `files suggest` show their results (`v1-e33-t03`).
+"""How `debate-research files build`, `check`, `suggest` and `publish` show results (`v1-e33-t03`, `t05`).
 
 Each function takes a service's result and returns a :class:`Rendered`: the `--json` payload, the table
 a person reads, and the :class:`~debate_cli.output.CommandFailure` the outcome is reported as when it
@@ -11,10 +11,12 @@ and each check's PASS, WARN or FAIL. Never card text, a school or a team code: n
 
 ## Exit codes
 
-* `0`: built (or checked) and every check passed or only warned; a draft was written.
+* `0`: built (or checked) and every check passed or only warned; a draft was written; every file was
+  published, already published (`SKIPPED`), or, in a dry run, would be.
 * `1`: the build was refused after reading the recipe and the store (an invalid or unresolved recipe,
   a store another build parsed, a missing source, a card the writer could not copy), or a check
-  FAILed. A FAIL keeps the files, which the payload names.
+  FAILed. A FAIL keeps the files, which the payload names. For `files publish`, a file was refused,
+  each named with its reason and the checks that failed.
 * `2`: the command line asked for what is refused before anything is read: a draft without
   `--allow-draft`, an output directory inside a git working tree; for `files suggest`, a caselist,
   snapshot, position or side the landscape does not have, or a draft path that is taken or inside a
@@ -36,6 +38,7 @@ from debate_core.application.file_build_service import (
     FileCheckResult,
     UnattributedCard,
 )
+from debate_core.application.file_publish_service import PublishOutcome, PublishResult, PublishStatus
 from debate_core.application.file_suggest_service import SuggestResult
 from debate_core.evidence.file_checks.report import CheckStatus, FileQualityReport
 
@@ -43,6 +46,7 @@ __all__ = [
     "Rendered",
     "build_rendered",
     "check_rendered",
+    "publish_rendered",
     "refused_request",
     "suggest_rendered",
     "unattributed_lines",
@@ -178,6 +182,87 @@ def suggest_rendered(result: SuggestResult) -> Rendered:
         ),
     )
     return Rendered(payload, display)
+
+
+def publish_rendered(result: PublishResult, *, environment: str, bucket: str) -> Rendered:
+    """`files publish`: each file's status and prefix, and, when any was refused, every refusal."""
+    counts = {str(status): 0 for status in PublishStatus}
+    for one in result.outcomes:
+        counts[str(one.status)] += 1
+    payload: dict[str, JsonValue] = {
+        "environment": environment,
+        "bucket": bucket,
+        "dry_run": result.dry_run,
+        "counts": dict(counts),
+        "files": [_outcome_payload(one) for one in result.outcomes],
+    }
+    verb = "Dry run: would publish to" if result.dry_run else "Published to"
+    warned = [
+        f"{one.slug}: {', '.join(str(check) for check in one.warned_checks)}"
+        for one in result.outcomes
+        if one.warned_checks
+    ]
+    display = TableSpec(
+        columns=["File", "Status", "Prefix, or why refused"],
+        rows=[[one.docx.name, str(one.status), _where(one)] for one in result.outcomes],
+        title=f"{verb} the {environment} evidence bucket {bucket}",
+        caption=", ".join(f"{count} {status}" for status, count in counts.items() if count)
+        + (f". Warned, not blocked: {'; '.join(warned)}" if warned else ""),
+    )
+    refused = result.refused
+    if not refused:
+        return Rendered(payload, display)
+    codes = {str(one.refusal.code) for one in refused if one.refusal is not None}
+    failure = CommandFailure(
+        code=codes.pop() if len(codes) == 1 else "FILES_REFUSED",
+        message="\n".join(
+            [f"{len(refused)} of {len(result.outcomes)} built file(s) refused; nothing of them was uploaded:"]
+            + [f"  {one.docx.name}: {_why(one)}" for one in refused]
+        ),
+        exit_code=ExitCode.DOMAIN_FAILURE,
+        details=payload,
+        hint=refused[0].refusal.hint if len(refused) == 1 and refused[0].refusal is not None else None,
+        panel_details={"refused": len(refused), **{key: value for key, value in counts.items() if value}},
+    )
+    return Rendered(payload, display, failure)
+
+
+def _outcome_payload(outcome: PublishOutcome) -> dict[str, JsonValue]:
+    refusal = outcome.refusal
+    return {
+        "file": str(outcome.docx),
+        "slug": outcome.slug,
+        "status": str(outcome.status),
+        "keys": list(outcome.keys),
+        "written": list(outcome.written),
+        "skipped": list(outcome.skipped),
+        "warned_checks": [str(one) for one in outcome.warned_checks],
+        "refusal": None
+        if refusal is None
+        else {
+            "code": str(refusal.code),
+            "message": refusal.message,
+            "hint": refusal.hint,
+            "failing_checks": [str(one) for one in refusal.failing_checks],
+        },
+    }
+
+
+def _where(outcome: PublishOutcome) -> str:
+    if outcome.refusal is not None:
+        return str(outcome.refusal.code)
+    return outcome.keys[0].rsplit("/", 1)[0] + "/" if outcome.keys else ""
+
+
+def _why(outcome: PublishOutcome) -> str:
+    refusal = outcome.refusal
+    assert refusal is not None
+    checks = (
+        f" (failing: {', '.join(str(one) for one in refusal.failing_checks)})"
+        if refusal.failing_checks
+        else ""
+    )
+    return f"[{refusal.code}] {refusal.message}{checks}"
 
 
 def refused_request(refused: Exception, *, known: Sequence[str], hint: str | None) -> CommandFailure:

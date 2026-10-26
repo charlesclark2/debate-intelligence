@@ -55,23 +55,28 @@ def require_aws_sdk() -> None:
 
 
 def bedrock_model_router(
-    policy: RoutingPolicy, *, render_prompt: PromptRenderer = refuse_unregistered_prompt
+    policy: RoutingPolicy,
+    *,
+    aws_profile: str | None = None,
+    render_prompt: PromptRenderer = refuse_unregistered_prompt,
 ) -> ModelRouter:
-    """The Bedrock router for a validated routing policy; a `RealRouterFactory`.
+    """The Bedrock router for a validated routing policy, signed with `aws_profile`; a `RealRouterFactory`.
 
-    Raises :class:`BedrockNotInstalledError`, a configuration error naming `debate-core[aws]`,
-    when boto3 is not installed. Nothing is sent and no credential is read until the first call.
+    `build_model_router` passes `aws_profile` from `models.aws_profile` (v1-e05-t08). Raises
+    :class:`BedrockNotInstalledError`, a configuration error naming `debate-core[aws]`, when boto3
+    is not installed. Nothing is sent and no credential is read until the first call.
     """
     require_aws_sdk()
     from debate_core.integrations.bedrock.router import BedrockModelRouter  # noqa: PLC0415 - needs boto3
 
-    return BedrockModelRouter(policy, render_prompt=render_prompt)
+    return BedrockModelRouter(policy, aws_profile=aws_profile, render_prompt=render_prompt)
 
 
 def bedrock_router_factory(registry: PromptRegistry) -> RealRouterFactory:
     """The `real_router` for `build_model_router`: Bedrock, sending each prompt as `registry` renders it.
 
     This is what lets record and live mode send a structured call (v1-e05-t04-prompt-registry).
-    The SDK is still not imported until the factory is called with a routing policy.
+    The profile is not bound here: `build_model_router` passes `models.aws_profile` when it calls
+    the factory. The SDK is still not imported until then.
     """
     return functools.partial(bedrock_model_router, render_prompt=registry.render)

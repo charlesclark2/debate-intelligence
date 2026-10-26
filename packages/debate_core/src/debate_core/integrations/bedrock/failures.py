@@ -85,7 +85,7 @@ EXPIRED_CREDENTIAL_CODES: Final = frozenset(
 )
 """Response codes that mean the credentials were valid once and are not any more."""
 
-_LOGIN_HINT: Final = "log in again, e.g. `aws sso login` for the profile AWS_PROFILE names"
+_LOGIN_HINT: Final = "log in again: `aws sso login --profile` and the profile models.aws_profile names"
 _GRANT_HINT: Final = (
     "the role needs bedrock:InvokeModel on this model or inference profile, and the model must be "
     "enabled in the account"
@@ -122,8 +122,12 @@ def translate_bedrock_error(error: BaseException, target: str, *, attempts: int 
         return ModelAccessDenied(
             PROVIDER,
             target,
-            "the AWS profile this run names is not defined in this machine's AWS config",
-            hint="set AWS_PROFILE to a profile that is",
+            "the AWS profile models.aws_profile names is not defined in this machine's AWS config",
+            hint=(
+                "set models.aws_profile to a profile this machine's AWS config defines, or add the "
+                "profile to it: docs/runbooks/bedrock-access.md says how. It is not an expired "
+                "session, and logging in changes nothing"
+            ),
         )
     if isinstance(error, BotoCoreError):
         return ModelUnavailableError(PROVIDER, target, _short(str(error)))

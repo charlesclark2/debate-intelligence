@@ -27,8 +27,9 @@ falls back to a real model, or from one mode to another.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Protocol
 
 from debate_core.application.ports.model_router import ModelRouter
 from debate_core.application.ports.providers import Clock
@@ -45,8 +46,18 @@ from debate_core.integrations.models.routing_policy import RoutingPolicy
 
 __all__ = ["RealRouterFactory", "build_model_router"]
 
-type RealRouterFactory = Callable[[RoutingPolicy], ModelRouter]
-"""Builds the real router for a validated routing policy: `bedrock_router_factory(registry)`."""
+
+class RealRouterFactory(Protocol):
+    """Builds the real router for a validated routing policy: `bedrock_router_factory(registry)`.
+
+    `aws_profile` is `models.aws_profile`, the profile every call the router makes is signed with
+    (v1-e05-t08). It is passed here, from the settings, so that no composition root can leave it out
+    and have the router signed with whatever `AWS_PROFILE` the shell holds.
+    """
+
+    def __call__(self, policy: RoutingPolicy, *, aws_profile: str | None) -> ModelRouter:
+        """The router for `policy`, signed with `aws_profile`."""
+        ...
 
 
 def build_model_router(
@@ -92,7 +103,10 @@ def build_model_router(
             field="models.provider",
         )
     return RecordReplayModelRouter(
-        real_router(policy), mode=model_mode, cassette_dir=cassettes, environ=environ
+        real_router(policy, aws_profile=settings.models.aws_profile),
+        mode=model_mode,
+        cassette_dir=cassettes,
+        environ=environ,
     )
 
 

@@ -185,8 +185,10 @@ env -i HOME="${HOME}" PATH="${AGENT_PATH}" DEBATE_ENV="${AGENT_ENV}" sh -c 'deba
 ```
 
 It adds one row for each profile to the report, `Evidence profile`, and reads this Mac's AWS
-config and asks AWS one question for each profile that is defined: who it is signed in as. What a
-row says:
+config and asks AWS one question for each profile that is defined: who it is signed in as. A build
+from `v1-e05-t08` on also adds a `Model profile` row for `models.aws_profile`, the profile model calls
+are signed with. That row never changes the exit code, and the weekly pull needs no model; setting
+the profile up is [bedrock-access.md](bedrock-access.md). What an evidence row says:
 
 | The row says | Means | Exit |
 |---|---|---|

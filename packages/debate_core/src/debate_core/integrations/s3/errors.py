@@ -183,6 +183,12 @@ Named in the hint of every refusal and of a profile that is not defined, as a pa
 repository: it is the same on every machine and says nothing about the one the command ran on.
 """
 
+_PROFILES_LISTED_IN: Final = {
+    "models.aws_profile": "docs/runbooks/bedrock-access.md lists the Bedrock profiles",
+}
+"""Where a profile named by a setting other than the evidence ones is listed. `doctor --evidence-profiles`
+asks who `models.aws_profile` is through this package's STS adapter (`v1-e05-t08`)."""
+
 #: Pulls the response code out of the message `boto3` wraps a failed transfer in. `upload_file` and
 #: `download_file` run inside boto3's transfer manager, which turns a `ClientError` raised in one of
 #: its worker threads into :class:`~boto3.exceptions.S3UploadFailedError` with the original text —
@@ -374,13 +380,13 @@ def _profile_not_configured(profile: str | None, call: S3Call) -> StoreProfileNo
     """The configuration error for a profile the AWS config does not define, naming its setting."""
     setting = call.setting_that_named_the_profile
     correct = f"set {setting} to" if setting else "name"
+    listed = _PROFILES_LISTED_IN.get(setting or "", f"{GRANTS_ARE_LISTED_IN} lists the evidence profiles")
     return StoreProfileNotConfigured(
         profile,
         setting=setting,
         hint=(
             f"{correct} a profile this machine's AWS config defines, or add the profile to it: "
-            f"{GRANTS_ARE_LISTED_IN} lists the evidence profiles and how they are added. It is not an "
-            "expired session, and logging in changes nothing"
+            f"{listed} and how they are added. It is not an expired session, and logging in changes nothing"
         ),
     )
 

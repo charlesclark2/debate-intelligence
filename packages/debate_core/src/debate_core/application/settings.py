@@ -1111,11 +1111,31 @@ class ModelSettings(SettingsGroup):
             "prod values are set by v1-e01-t09-dev-prerelease-channel."
         ),
     )
+    aws_profile: str | None = Field(
+        default=None,
+        description=(
+            "Profile in the operator's shared AWS config that every Bedrock call is signed with, from "
+            "the bedrock_profile_name Terraform output (debate-dev-bedrock / debate-prod-bedrock, "
+            "v1-e05-t08). The Bedrock client is built from this and never from AWS_PROFILE. None uses "
+            "botocore's credential chain with AWS_PROFILE ignored, which is what a role on an "
+            "instance or a task is."
+        ),
+    )
 
     @field_validator("routing_file")
     @classmethod
     def _expand(cls, value: Path) -> Path:
         return Path(os.path.expandvars(str(value))).expanduser()
+
+    @field_validator("aws_profile")
+    @classmethod
+    def _blank_is_none(cls, value: str | None) -> str | None:
+        """An empty value is no profile, as it is for `storage.s3.aws_profile`: an environment
+        variable can override the committed profile but never remove it, so a run with a role of its
+        own sets `DEBATE_MODELS__AWS_PROFILE=`."""
+        if value is not None and not value.strip():
+            return None
+        return value
 
 
 class ArticleSettings(SettingsGroup):

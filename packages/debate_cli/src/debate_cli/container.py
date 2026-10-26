@@ -181,7 +181,11 @@ from debate_core.application.caselist_sync import (
     FullArchiveRotation,
     why_no_search_index_stage,
 )
-from debate_core.application.evidence_profiles import ConfiguredProfile, EvidenceProfileCheck
+from debate_core.application.evidence_profiles import (
+    MODEL_PROFILE_SETTING,
+    ConfiguredProfile,
+    EvidenceProfileCheck,
+)
 from debate_core.application.evidence_sync import (
     EvidenceSyncService,
     SyncJournal,
@@ -1300,9 +1304,10 @@ class ServiceContainer:
     def evidence_profile_check(self) -> EvidenceProfileCheck:
         """Build the check of every evidence profile this environment is configured with (`v1-e34-t22`).
 
-        The everyday profile, when the settings name one, and the takedown profile, when
-        `DEBATE_REMOVAL_PROFILE` is set. An environment with neither, which is what `test` is,
-        has nothing to check. Building the check asks nothing and reads no AWS
+        The everyday profile, when the settings name one, the takedown profile, when
+        `DEBATE_REMOVAL_PROFILE` is set, and the profile Bedrock calls are signed with,
+        `models.aws_profile`, when the settings name one (`v1-e05-t08`). An environment with none,
+        which is what `test` is, has nothing to check. Building the check asks nothing and reads no AWS
         config: each profile's adapter is built when the check is run.
         """
         return self.singleton("evidence_profile_check", self._build_evidence_profile_check)
@@ -1318,6 +1323,10 @@ class ServiceContainer:
                 ConfiguredProfile(
                     setting=_REMOVAL_PROFILE_SETTING, name=settings.removal_profile, for_takedowns=True
                 )
+            )
+        if settings.models.aws_profile:
+            configured.append(
+                ConfiguredProfile(setting=MODEL_PROFILE_SETTING, name=settings.models.aws_profile)
             )
         return EvidenceProfileCheck(
             profiles=configured,

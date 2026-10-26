@@ -55,6 +55,10 @@ routing_file = "config/model_routing.dev.yaml"
 # Raising it above 2.0 fails test_settings_environments.py; change the documented cap first
 # (docs/process/branching-and-environments.md).
 budget_usd_daily = 2.0
+# The AWS profile every Bedrock call is signed with, never AWS_PROFILE (v1-e05-t08): the SSO profile
+# of DebateDevBedrockInvoker, as `terraform -chdir=infrastructure/envs/dev output bedrock_profile_name`
+# reports it, written here for the same reason as storage.s3.aws_profile. A name, not a secret.
+aws_profile = "debate-dev-bedrock"
 
 [caselist]
 # The E34 gate of docs/policies/caselist-data-use.md. Off by default in

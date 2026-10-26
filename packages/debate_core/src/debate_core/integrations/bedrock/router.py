@@ -17,9 +17,13 @@ profile, region and parameters all come from there, and none is written in this 
 
 ## Credentials
 
-Only from botocore's standard chain: `AWS_PROFILE` and the shared config (an SSO session), the
-environment, an instance or container role. The client is built with a region and a timeout and
-nothing else, so no key, account id or profile name can be written into this code or a test.
+From the profile `models.aws_profile` names (v1-e05-t08-bedrock-invoke-access): the SSO profile of
+the environment's `Debate<Env>BedrockInvoker` permission set, which the composition root passes in
+as `aws_profile`. Never from `AWS_PROFILE`: the client's session reads no profile from the
+environment, so a shell holding the evidence profile, or the other environment's, cannot decide
+which role a model call is made as. With no profile the credentials come from the rest of botocore's
+chain: the environment's keys, the config's default, an instance or container role. No key, account
+id or profile name is written into this code.
 
 ## Retries
 
@@ -40,6 +44,7 @@ keeps one per region and timeout, built on first use.
 from __future__ import annotations
 
 import asyncio
+import functools
 import json
 import random
 import re
@@ -49,6 +54,7 @@ from datetime import UTC, datetime
 from typing import Any, Final, Protocol, cast
 
 import boto3
+import botocore.session
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 from pydantic import BaseModel, ValidationError
@@ -135,6 +141,14 @@ class BedrockRuntimeClient(Protocol):
 type ClientFactory = Callable[[str, float], BedrockRuntimeClient]
 """Builds the client for a region and a read timeout in seconds. Tests pass one holding a Stubber."""
 
+_NO_PROFILE_FROM_THE_ENVIRONMENT: Final = {"profile": (None, None, None, None)}
+"""botocore's `profile` session variable with no environment variable behind it.
+
+By default botocore reads the profile from `AWS_DEFAULT_PROFILE` and `AWS_PROFILE`
+(`BOTOCORE_DEFAUT_SESSION_VARIABLES`); a session built with this reads it from nowhere but the
+`profile` it is given.
+"""
+
 type Sleep = Callable[[float], Awaitable[None]]
 """Waits the given number of seconds between attempts."""
 
@@ -160,16 +174,21 @@ def client_config(timeout_seconds: float) -> Config:
     )
 
 
-def build_bedrock_runtime_client(region: str, timeout_seconds: float) -> BedrockRuntimeClient:
-    """A `bedrock-runtime` client for `region`, with credentials from the standard chain.
+def build_bedrock_runtime_client(
+    region: str, timeout_seconds: float, *, profile: str | None = None
+) -> BedrockRuntimeClient:
+    """A `bedrock-runtime` client for `region`, signed with `profile` and never with `AWS_PROFILE`.
 
-    A new :class:`boto3.session.Session`, given a region and nothing else: the credentials are
-    whatever botocore's chain finds (`AWS_PROFILE`, the environment, a role), resolved at the first
-    call. A profile `AWS_PROFILE` names that the config lacks fails here, translated like any other
-    failure (:mod:`debate_core.integrations.bedrock.failures`).
+    A new :class:`boto3.session.Session` over a botocore session that reads no profile from the
+    environment (module docstring, "Credentials"). `profile` is `models.aws_profile`; with none, the
+    credentials are what the rest of botocore's chain finds. A profile the AWS config lacks fails
+    here, translated like any other failure (:mod:`debate_core.integrations.bedrock.failures`).
     """
     try:
-        session = boto3.session.Session(region_name=region)
+        settings_only = botocore.session.Session(
+            session_vars=_NO_PROFILE_FROM_THE_ENVIRONMENT, profile=profile
+        )
+        session = boto3.session.Session(botocore_session=settings_only, region_name=region)
         # boto3-stubs is installed for s3 only, so every other service's client is Unknown to the
         # type checker; narrowed to this line, and typed by the Protocol it is returned as.
         return session.client(  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
@@ -229,9 +248,10 @@ class BedrockModelRouter:
 
     `render_prompt` turns a registered prompt into text: the prompt registry's `render`
     (v1-e05-t04-prompt-registry, through `bedrock_router_factory`). Without one the default refuses,
-    so `generate_structured` sends nothing. `client_factory`
-    builds a client per region and read timeout (the standard credential chain by default; a
-    Stubber-holding client in tests). `sleep` and `jitter` are the backoff's wait and its random
+    so `generate_structured` sends nothing. `aws_profile` is the profile every client is signed
+    with, `models.aws_profile`. `client_factory` builds a client per region and read timeout
+    (:func:`build_bedrock_runtime_client` with `aws_profile` by default; a Stubber-holding client in
+    tests, which then ignores `aws_profile`). `sleep` and `jitter` are the backoff's wait and its random
     part, injected so a test can count waits without taking them.
     """
 
@@ -239,8 +259,9 @@ class BedrockModelRouter:
         self,
         policy: RoutingPolicy,
         *,
+        aws_profile: str | None = None,
         render_prompt: PromptRenderer = refuse_unregistered_prompt,
-        client_factory: ClientFactory = build_bedrock_runtime_client,
+        client_factory: ClientFactory | None = None,
         clock: Clock | None = None,
         sleep: Sleep = asyncio.sleep,
         jitter: Jitter = full_jitter,
@@ -251,7 +272,9 @@ class BedrockModelRouter:
             raise ValueError("the backoff needs a positive base no larger than its cap")
         self._policy = policy
         self._render_prompt = render_prompt
-        self._client_factory = client_factory
+        self._client_factory: ClientFactory = client_factory or functools.partial(
+            build_bedrock_runtime_client, profile=aws_profile
+        )
         self._clock = clock
         self._sleep = sleep
         self._jitter = jitter

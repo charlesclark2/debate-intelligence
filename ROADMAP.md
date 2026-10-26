@@ -63,7 +63,7 @@ v2.3's extension work.
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 49 | 45 | 240 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 108 | 82 | 498 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 45 | 28 | 260 |
-| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 3 | 108 |
+| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 4 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 22 | 13 | 154 |
@@ -345,7 +345,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [Lossless card writer](plan_specs/v1/e33-file-builder/t02-lossless-card-writer.yaml) `v1-e33-t02-lossless-card-writer` | Succeeded | 3 | 15.0 |
 | [`debate-research files` commands](plan_specs/v1/e33-file-builder/t03-file-build-cli.yaml) `v1-e33-t03-file-build-cli` | Succeeded | 4 | 10.0 |
 | [Built-file quality checks](plan_specs/v1/e33-file-builder/t04-file-quality-checks.yaml) `v1-e33-t04-file-quality-checks` | Succeeded | 2 | 11.0 |
-| [Publish built files to S3](plan_specs/v1/e33-file-builder/t05-file-publish.yaml) `v1-e33-t05-file-publish` | Pending | 3 | 9.0 |
+| [Publish built files to S3](plan_specs/v1/e33-file-builder/t05-file-publish.yaml) `v1-e33-t05-file-publish` | InProgress | 3 | 9.0 |
 | [A recipe can name a camp (OpenEv) card](plan_specs/v1/e33-file-builder/t06-camp-pins.yaml) `v1-e33-t06-camp-pins` | Succeeded | 1 | 2.0 |
 | [A camp occurrence row carries its camp path's digest, so a camp-path withdrawal stops it before a rebuild](plan_specs/v1/e33-file-builder/t07-camp-path-on-occurrence-rows.yaml) `v1-e33-t07-camp-path-on-occurrence-rows` | Pending | 1 | 2.0 |
 | [Built files carry no provenance line; the sidecar keeps the provenance](plan_specs/v1/e33-file-builder/t08-provenance-line-one-function.yaml) `v1-e33-t08-provenance-line-one-function` | Succeeded | 0 | 1.0 |
@@ -362,7 +362,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 |---|---|---|---|
 | [URL canonicalization and identifier detection](plan_specs/v1/e04-article-retrieval/t01-url-canonicalization.yaml) `v1-e04-t01-url-canonicalization` | Succeeded | 1 | 7.0 |
 | [Polite HTTP fetcher](plan_specs/v1/e04-article-retrieval/t02-http-fetcher.yaml) `v1-e04-t02-http-fetcher` | Succeeded | 4 | 10.0 |
-| [Access-status and paywall detection](plan_specs/v1/e04-article-retrieval/t03-access-status.yaml) `v1-e04-t03-access-status` | Pending | 2 | 6.0 |
+| [Access-status and paywall detection](plan_specs/v1/e04-article-retrieval/t03-access-status.yaml) `v1-e04-t03-access-status` | Succeeded | 2 | 6.0 |
 | [Readable-text extraction (HTML + PDF)](plan_specs/v1/e04-article-retrieval/t04-content-extraction.yaml) `v1-e04-t04-content-extraction` | Succeeded | 2 | 8.5 |
 | [ArticleService orchestration](plan_specs/v1/e04-article-retrieval/t05-article-service.yaml) `v1-e04-t05-article-service` | Pending | 3 | 8.5 |
 | [`debate-research fetch` command and recorded fixtures](plan_specs/v1/e04-article-retrieval/t06-fetch-command.yaml) `v1-e04-t06-fetch-command` | Pending | 2 | 7.5 |

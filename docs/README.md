@@ -17,6 +17,7 @@ regenerates it on `dev` ([`v1-e01-t16`](../plan_specs/v1/e01-repo-foundation/t16
 | [architecture/ports-and-adapters.md](architecture/ports-and-adapters.md) | The ten ports, the constructor-injection pattern, and how to add an adapter |
 | [data/2026-27-tournament-schedule.md](data/2026-27-tournament-schedule.md) | The 2026-27 season's tournaments as given on 2026-09-30: the seed for `site/content/tournaments.yaml`, which is now the source of record |
 | [data/academic-case-sources.md](data/academic-case-sources.md) | Candidate claims and sources for the website home page's academic case, and why some kinds of finding are not used |
+| [data/built-file-metadata.md](data/built-file-metadata.md) | Published built files under the evidence bucket's files/ prefix: the key layout, the metadata.json contract the V2 debate tub indexes, and the lookups by source, school or team for takedowns |
 | [data/caselist-backfill-2026-09.md](data/caselist-backfill-2026-09.md) | Counts from the one-off caselist and camp-file backfill (`v1-e30-t06`), recorded by the operator; aggregates only |
 | [data/caselist-parse-report.md](data/caselist-parse-report.md) | Counts from the operator-run full-corpus caselist parse, per caselist and environment |
 | [data/caselist-removal-requests.md](data/caselist-removal-requests.md) | The register of caselist and OpenEv removal requests, one row per request id; no school, team code, filename or name |

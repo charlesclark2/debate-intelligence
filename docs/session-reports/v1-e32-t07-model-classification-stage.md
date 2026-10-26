@@ -406,9 +406,63 @@ Paste the model line and the `cards … counted` line back for `first-run-policy
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-25
 
 **Notes:**
+
+The model stage built the right way round: counted before anything is spent, scrubbed before
+anything is sent, and gated on the policy rather than on good intentions.
+1. **ac1 to ac3 and the node's criterion pass.**
+   * The tests were red against a refuse-nothing skeleton: 33 failed. The 19 that failed through the
+     scripted router's `KeyError` are honestly separated from the 14 that failed at their own
+     assertions.
+   * All 21 mutants were caught, M21 at its own assertion on a second run.
+2. **ac4 and ac5 are NOT RUN, as the brief said.** They wait on the policy's open question 4, on
+   `v1-e05-t08`'s Bedrock access, and on the coach's labels. ac4's LD half also waits on `v1-e32-t06`.
+   The PR merges `--partial`.
+3. **The count is what the PM asked for.**
+   * 58,299 cards, 39,516 distinct fingerprints, and $2.76 to $3.60 for all of them.
+   * The stage-one counts match t21's to the card.
+   * The first scan's 32 team-code words in headings were found and fixed (`sent_headings`) before the
+     report, which is the scan doing its job.
+4. **Rulings on the seven questions:**
+   1. **`max_model_items`: (a), 2,000 a run.** The first live run is small enough for the coach to
+      check.
+   2. **Ordering: most shared first,** revisited after `v1-e32-t26`.
+   3. **Below-threshold cards: (a), send them, as built.** The review threshold is the line the report
+      counts at, and a tag keyword alone (0.5) is not a match the report trusts. The policy's rule 3
+      is reworded in the PM batch that follows ("items the deterministic stage could not place at or
+      above the review threshold"), with the coach's approval on merge, before any live run.
+   4. **The labelled set: 60 Policy plus 30 LD.** Policy is t21's 60-card sample, labelled once.
+      Thirty LD de-extinction cards are drawn the way t21 drew Policy's, after `v1-e32-t06` is
+      released and the first snapshot after the mid-November tournaments is in.
+   5. **Effort:** not changed now. `high_volume` is shared, and the whole backlog costs under $4 at
+      its default. A per-prompt effort setting is filed as an E05 follow-up.
+   6. **The policy's two citations:** recorded in the same PM batch's policy version, with rule 3's
+      wording.
+   7. **The cassettes' retention: yes.** The PM adds `<data dir>/landscape/model-cassettes/` to the
+      removal runbook and to `v1-e30-t28`'s amendment.
+5. **Deviations 1 to 5 accepted:**
+   * cards only;
+   * real cassettes under the data directory, never committed (policy condition 6);
+   * the excerpt from the parsed store's `evidence_text`, which corrects t21's note;
+   * `landscape evaluate`, classified as writing no bucket;
+   * t21's two scrub functions moved out of the scikit-learn module unchanged.
+6. **Decisions 1 to 9 accepted:**
+   * a static schema with the id checked after, so one bad id costs one card, not a batch;
+   * no role asked;
+   * refusals cached as MODEL results placing nothing;
+   * the echo check over the tag as well, and by words;
+   * batches of 20;
+   * `none` ignoring cached MODEL results;
+   * the live gate reading row 4;
+   * a provider error stopping the stage after caching;
+   * tokens per run in `--json`.
+7. **The affected set** (241 files, about half the suite) is left to the PR's `ci` under agreement 10.
+   The application suite (3,798 tests), the landscape, models and architecture tests, the CLI's pinned
+   lists and the static checks passed.
+
+No re-review is needed. The PM records the evaluation and the live run when the operator runs them.

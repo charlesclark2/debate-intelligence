@@ -43,6 +43,7 @@ import argparse
 import asyncio
 import copy
 import json
+import re
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -90,6 +91,10 @@ NOT_TRIED: Final = "not tried"
 _PROMPT: Final = ModelPrompt(prompt_id="bedrock.first-call", prompt_version="1.0.0")
 _USER_TEXT: Final = "Call the ProbeAnswer tool once, with colour set to blue. Do not write anything else."
 _STRUCTURED_TEXT: Final = 'Reply with the JSON object {"colour": "blue"} and nothing else.'
+
+_ACCOUNT_ID: Final = re.compile(r"(?<!\d)\d{12}(?!\d)")
+"""An AWS account id. Bedrock's AccessDenied message names the caller's role and the resource by
+ARN, both carrying one, and the table is pasted into a committed report, which may hold none."""
 
 
 class ProbeAnswer(BaseModel):
@@ -271,7 +276,7 @@ def _json_text(schema: dict[str, Any]) -> str:
 
 
 def render_table(findings: Sequence[Finding]) -> str:
-    """The findings as the Markdown table the session report records."""
+    """The findings as the Markdown table the session report records, with any account id masked."""
     rows = ["| Routes | Called as | Probe | Outcome | Detail |", "|---|---|---|---|---|"]
     for finding in findings:
         cells = (
@@ -281,7 +286,8 @@ def render_table(findings: Sequence[Finding]) -> str:
             finding.outcome,
             finding.detail,
         )
-        rows.append("| " + " | ".join(cell.replace("|", "\\|") for cell in cells) + " |")
+        masked = (_ACCOUNT_ID.sub("<account-id>", cell).replace("|", "\\|") for cell in cells)
+        rows.append("| " + " | ".join(masked) + " |")
     return "\n".join(rows)
 
 

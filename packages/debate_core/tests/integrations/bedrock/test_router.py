@@ -1310,3 +1310,23 @@ def test_first_call_table_is_markdown_the_report_can_hold(
         "",
         "0 requests accepted and billed, 0 input and 0 output tokens; 1 refused.",
     ]
+
+
+def test_first_call_table_masks_the_account_id_bedrocks_refusal_names() -> None:
+    """Bedrock's AccessDenied names the caller's role and the resource by ARN; the table goes into a
+    committed report, which may hold no account id (v1-e05-t08: forbidden)."""
+    from debate_core.integrations.bedrock import first_call
+
+    refusal = (
+        "User: arn:aws:sts::111122223333:assumed-role/AWSReservedSSO_DebateDevBedrockInvoker_ab/someone "
+        "is not authorized to perform: bedrock:InvokeModel on resource: "
+        "arn:aws:bedrock:test-region-1:111122223333:inference-profile/geo.provider-model"
+    )
+    finding = first_call.Finding(
+        ("dev.yaml high_volume",), "geo.provider-model", "toolChoice any", "refused", refusal
+    )
+
+    table = first_call.render_table([finding])
+
+    assert "111122223333" not in table
+    assert "arn:aws:sts::<account-id>:assumed-role" in table

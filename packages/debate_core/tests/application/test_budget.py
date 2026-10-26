@@ -32,8 +32,8 @@ from debate_core.application.budget import (
 from debate_core.application.errors import ModelUnavailableError
 from debate_core.application.model_errors import ValidationPolicy
 from debate_core.application.ports.model_router import ModelRouter
-from debate_core.application.structured_output import StructuredOutputGuard, validate_model_output
 from debate_core.application.settings import Settings, load_settings
+from debate_core.application.structured_output import StructuredOutputGuard, validate_model_output
 from debate_core.domain.model_contracts import (
     EmbeddingResponse,
     ModelParams,

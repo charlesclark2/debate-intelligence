@@ -10,6 +10,7 @@ Nothing here reaches AWS: moto answers botocore in-process and sockets are disab
 
 from __future__ import annotations
 
+import dataclasses
 import functools
 import json
 import os
@@ -29,6 +30,7 @@ import debate_cli.commands.landscape as landscape_module
 import debate_cli.container as container_module
 from debate_cli.app import create_app
 from debate_cli.exit_codes import ExitCode
+from debate_core.application.landscape_model_evaluation import FormatEvaluation
 from debate_core.application.landscape_model_stage import ModelClassificationStage, ParsedStoreCardTexts
 from debate_core.application.landscape_report import CIRCUIT_WIDE_FILES, SCHOOL_VIEW_FILES
 from debate_core.application.landscape_run import BUNDLE_FILES, LandscapeRunService, PositionClassifier
@@ -44,6 +46,7 @@ from debate_core.application.sync_runs import (
     SyncRunOutcome,
     SyncRunRecord,
 )
+from debate_core.arguments.landscape.model_stage import NameScan
 from debate_core.domain.model_contracts import ModelParams, ModelPrompt, ModelResponse, TaskClass
 from debate_core.integrations.landscape.classification_store import review_queue_path
 from debate_core.integrations.landscape.yaml_taxonomy_repository import YamlTaxonomyRepository
@@ -923,3 +926,128 @@ def test_publish_in_bucket_mode_is_refused_while_another_runner_holds_the_lock(
     assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.stdout
     assert _error(result)["code"] == "RUN_LOCK_HELD"
     assert _keys(buckets, DEV_BUCKET) == [RUN_LOCK], "nothing published"
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e32-t07: `landscape evaluate` (ac4), over a stub evaluation: the service is tested in
+# debate_core's test_landscape_model_stage.py; this is the handler's gate, exit codes and JSON.
+# ------------------------------------------------------------------------------------------------
+
+
+def _evaluated(**changes: Any) -> FormatEvaluation:
+    base = FormatEvaluation(
+        caselist=CASELIST,
+        event="POLICY",
+        topic_id=SYNTHETIC_RUN_TOPIC,
+        taxonomy_version="1.0.0",
+        prompt_version="1.0.0",
+        snapshot=None,
+        labelled=30,
+        found=30,
+        asked=30,
+        calls=2,
+        counted=20,
+        correct=18,
+        placed_below_threshold=6,
+        placed_labelled_none=1,
+        sent=NameScan(texts=2),
+        cassettes=NameScan(texts=2),
+    )
+    return dataclasses.replace(base, **changes)
+
+
+@pytest.fixture
+def sample_files(tmp_path: Path) -> tuple[Path, Path]:
+    sample = tmp_path / "coach-sample.csv"
+    sample.write_text("sample_row,position\n1,spending-da\n", encoding="utf-8")
+    rows = tmp_path / "coach-sample.jsonl"
+    rows.write_text('{"schema": "local-classifier-sample-1"}\n', encoding="utf-8")
+    return sample, rows
+
+
+def _stub_evaluation(monkeypatch: pytest.MonkeyPatch, result: FormatEvaluation) -> list[bool]:
+    asked: list[bool] = []
+
+    class Stub:
+        async def evaluate(
+            self, caselist: str, sample: Any, rows: Any, *, snapshot: Any = None
+        ) -> FormatEvaluation:
+            return result
+
+    def build(self: container_module.ServiceContainer, *, config_dir: Path, record: bool) -> Stub:
+        asked.append(record)
+        return Stub()
+
+    monkeypatch.setattr(container_module.ServiceContainer, "landscape_evaluation", build)
+    return asked
+
+
+def evaluate(world: SyntheticRun, sample_files: tuple[Path, Path], *arguments: str) -> Result:
+    sample, rows = sample_files
+    command = [
+        "--json",
+        "landscape",
+        "evaluate",
+        "--config-dir",
+        str(world.config_dir),
+        "--caselist",
+        CASELIST,
+    ]
+    return runner.invoke(
+        create_app(), [*command, "--sample", str(sample), "--sample-rows", str(rows), *arguments]
+    )
+
+
+def test_evaluate_meeting_the_bar_with_clean_scans_exits_0_and_counts_it(
+    world: SyntheticRun, sample_files: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    asked = _stub_evaluation(monkeypatch, _evaluated())
+
+    result = evaluate(world, sample_files)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    data = _data(result)
+    assert (data["counted"], data["correct"], data["accuracy"], data["meets_target"]) == (20, 18, 0.9, True)
+    assert data["scan"]["cassettes"] == {
+        "texts": 2,
+        "schools": 0,
+        "team_codes": 0,
+        "other_names": 0,
+        "clean": True,
+    }
+    assert asked == [False]
+
+
+@pytest.mark.parametrize(
+    "changes", [{"correct": 16}, {"counted": 0, "correct": 0}, {"cassettes": NameScan(texts=2, team_codes=1)}]
+)
+def test_evaluate_under_the_bar_or_with_a_name_in_a_cassette_exits_1(
+    world: SyntheticRun,
+    sample_files: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    changes: dict[str, Any],
+) -> None:
+    _stub_evaluation(monkeypatch, _evaluated(**changes))
+
+    result = evaluate(world, sample_files)
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    assert _error(result)["code"] == "EVALUATION_BELOW_BAR"
+
+
+def test_evaluate_record_is_refused_while_the_policy_leaves_question_four_open(
+    world: SyntheticRun, sample_files: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    asked = _stub_evaluation(monkeypatch, _evaluated())
+    checkout = tmp_path / "checkout"
+    (checkout / "docs" / "policies").mkdir(parents=True)
+    (checkout / "docs" / "policies" / "caselist-data-use.md").write_text(
+        "| 4 | The provider's no-retention terms | **Open** | Operator | E32 gate |\n", encoding="utf-8"
+    )
+    monkeypatch.setattr(landscape_module, "find_repository_root", lambda *_: checkout)
+
+    result = evaluate(world, sample_files, "--model-mode", "record")
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    assert _error(result)["code"] == "MODEL_USE_NOT_YET_ALLOWED"
+    assert asked == []

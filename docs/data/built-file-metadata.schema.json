@@ -1,0 +1,307 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "Event": {
+      "description": "The debate event a caselist covers.\n\nUnlike the caselist slug, this really is closed: the three high-school events the platform\nsupports decide which sides are legal and which file conventions apply.",
+      "enum": [
+        "LD",
+        "POLICY",
+        "PF"
+      ],
+      "title": "Event",
+      "type": "string"
+    },
+    "PublishedObject": {
+      "additionalProperties": false,
+      "description": "One object published beside the metadata: its name under the prefix, size and SHA-256.",
+      "properties": {
+        "name": {
+          "description": "The object's name under the file's prefix.",
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "bytes": {
+          "description": "Its size.",
+          "minimum": 0,
+          "title": "Bytes",
+          "type": "integer"
+        },
+        "sha256": {
+          "description": "SHA-256 of its bytes, as uploaded.",
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "bytes",
+        "sha256"
+      ],
+      "title": "PublishedObject",
+      "type": "object"
+    },
+    "PublishedSource": {
+      "additionalProperties": false,
+      "description": "One source a published file has cards from, as its sidecar names it.",
+      "properties": {
+        "caselist": {
+          "description": "Caselist slug, or `openev` for a camp file.",
+          "pattern": "^(?:[a-z]+[0-9]{2}|openev)$",
+          "title": "Caselist",
+          "type": "string"
+        },
+        "snapshot": {
+          "description": "The first snapshot listing the occurrence, as the sidecar records it; a camp release.",
+          "minLength": 1,
+          "title": "Snapshot",
+          "type": "string"
+        },
+        "source_sha256": {
+          "description": "SHA-256 of the source file, as the sidecar records it.",
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "caselist",
+        "snapshot",
+        "source_sha256"
+      ],
+      "title": "PublishedSource",
+      "type": "object"
+    },
+    "Side": {
+      "description": "The side a disclosed file was read on.\n\nLD and Policy debate affirmative and negative; Public Forum debates pro and con. `UNKNOWN` is\nlegal for every event and is what the importer records when a filename cannot be parsed —\na file is never dropped for having an unreadable name (v1-e30-t03 ac1).",
+      "enum": [
+        "AFF",
+        "NEG",
+        "PRO",
+        "CON",
+        "UNKNOWN"
+      ],
+      "title": "Side",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "`metadata.json`: what a published built file is, how it was checked, and every source it cites.",
+  "properties": {
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "description": "The metadata's shape: 1.",
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "key_prefix": {
+      "description": "The prefix of the file's objects: files/<topic>/<side>/<position>/<slug>/<hash12>/.",
+      "minLength": 1,
+      "title": "Key Prefix",
+      "type": "string"
+    },
+    "slug": {
+      "description": "The built file's name without `.docx`.",
+      "maxLength": 100,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "title": "Slug",
+      "type": "string"
+    },
+    "title": {
+      "description": "The recipe's title.",
+      "minLength": 1,
+      "title": "Title",
+      "type": "string"
+    },
+    "topic": {
+      "description": "The recipe's topic id.",
+      "maxLength": 64,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "title": "Topic",
+      "type": "string"
+    },
+    "format": {
+      "$ref": "#/$defs/Event",
+      "description": "The event: POLICY, LD or PF."
+    },
+    "caselist": {
+      "description": "The recipe's own caselist, which unpinned cards came from.",
+      "pattern": "^(?:[a-z]+[0-9]{2}|openev)$",
+      "title": "Caselist",
+      "type": "string"
+    },
+    "position": {
+      "description": "The recipe's position id.",
+      "maxLength": 64,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "title": "Position",
+      "type": "string"
+    },
+    "side": {
+      "$ref": "#/$defs/Side",
+      "description": "The side the file is for."
+    },
+    "card_count": {
+      "description": "Cards in the file, as its sidecar lists them.",
+      "minimum": 0,
+      "title": "Card Count",
+      "type": "integer"
+    },
+    "recipe_hash": {
+      "description": "The recipe's canonical hash (v1-e33-t01), as the sidecar records it.",
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Recipe Hash",
+      "type": "string"
+    },
+    "recipe_status": {
+      "const": "ready",
+      "description": "Always ready: a file built from a draft recipe is never published.",
+      "title": "Recipe Status",
+      "type": "string"
+    },
+    "builder_version": {
+      "description": "Version of the writer that built the file.",
+      "minLength": 1,
+      "title": "Builder Version",
+      "type": "string"
+    },
+    "parser_version": {
+      "description": "Version of the parser the quality checks re-read it with.",
+      "minLength": 1,
+      "title": "Parser Version",
+      "type": "string"
+    },
+    "style_profile_version": {
+      "description": "Version of the style profile it was checked against.",
+      "minLength": 1,
+      "title": "Style Profile Version",
+      "type": "string"
+    },
+    "fingerprint_version": {
+      "description": "Version of the fingerprints the checks recomputed.",
+      "minLength": 1,
+      "title": "Fingerprint Version",
+      "type": "string"
+    },
+    "checker_version": {
+      "description": "Version of the quality checks.",
+      "minLength": 1,
+      "title": "Checker Version",
+      "type": "string"
+    },
+    "quality_status": {
+      "const": "PASS",
+      "description": "Always PASS: nothing else is published.",
+      "title": "Quality Status",
+      "type": "string"
+    },
+    "quality_warnings": {
+      "description": "How many check results warned. A warning never blocks.",
+      "minimum": 0,
+      "title": "Quality Warnings",
+      "type": "integer"
+    },
+    "warned_checks": {
+      "default": [],
+      "description": "The checks with at least one warning, in the report's order.",
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Warned Checks",
+      "type": "array"
+    },
+    "built_at": {
+      "description": "When the file was built, from its sidecar; UTC.",
+      "title": "Built At",
+      "type": "string"
+    },
+    "docx_sha256": {
+      "description": "SHA-256 of the published `.docx`.",
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Docx Sha256",
+      "type": "string"
+    },
+    "objects": {
+      "description": "The four objects published before this one: .docx, sidecar, quality report, recipe.",
+      "items": {
+        "$ref": "#/$defs/PublishedObject"
+      },
+      "title": "Objects",
+      "type": "array"
+    },
+    "sources": {
+      "description": "Every source the sidecar names, once per caselist, snapshot and SHA-256, sorted.",
+      "items": {
+        "$ref": "#/$defs/PublishedSource"
+      },
+      "title": "Sources",
+      "type": "array"
+    },
+    "caselists": {
+      "description": "The caselists of `sources`, sorted, once each.",
+      "items": {
+        "pattern": "^(?:[a-z]+[0-9]{2}|openev)$",
+        "type": "string"
+      },
+      "title": "Caselists",
+      "type": "array"
+    },
+    "source_sha256s": {
+      "description": "The SHA-256s of `sources`, sorted, once each.",
+      "items": {
+        "maxLength": 64,
+        "minLength": 64,
+        "pattern": "^[0-9a-f]{64}$",
+        "type": "string"
+      },
+      "title": "Source Sha256S",
+      "type": "array"
+    },
+    "provenance_mode": {
+      "const": "FILE_IMPORT",
+      "default": "FILE_IMPORT",
+      "description": "Always FILE_IMPORT: no card is platform-verified.",
+      "title": "Provenance Mode",
+      "type": "string"
+    }
+  },
+  "required": [
+    "key_prefix",
+    "slug",
+    "title",
+    "topic",
+    "format",
+    "caselist",
+    "position",
+    "side",
+    "card_count",
+    "recipe_hash",
+    "recipe_status",
+    "builder_version",
+    "parser_version",
+    "style_profile_version",
+    "fingerprint_version",
+    "checker_version",
+    "quality_status",
+    "quality_warnings",
+    "built_at",
+    "docx_sha256",
+    "objects",
+    "sources",
+    "caselists",
+    "source_sha256s"
+  ],
+  "title": "BuiltFileMetadata",
+  "type": "object"
+}

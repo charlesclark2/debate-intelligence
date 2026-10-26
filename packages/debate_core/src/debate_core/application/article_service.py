@@ -294,7 +294,7 @@ class ArticleService:
         identity = rel_canonical.canonical_url if rel_canonical is not None else key
         stored = known if identity == key else await self._articles.find_by_canonical_url(identity)
         article_id = stored.article_id if stored is not None else self._id_generator.new_id()
-        snapshot, reused = await self._publisher_snapshot(article_id, fetched, content, identity)
+        snapshot, reused = await self._publisher_snapshot(article_id, fetched, content)
         article = await self._save_readable(
             stored, article_id, identity, content, urls=(url, target, fetched.final_url, identity)
         )
@@ -343,7 +343,7 @@ class ArticleService:
         return next((snapshot for snapshot in snapshots if snapshot.provenance_mode is provenance), None)
 
     async def _publisher_snapshot(
-        self, article_id: str, fetched: FetchResult, content: ExtractedContent, identity: str
+        self, article_id: str, fetched: FetchResult, content: ExtractedContent
     ) -> tuple[SourceSnapshot, bool]:
         """The newest publisher snapshot when its text is unchanged, else a new one (not yet saved)."""
         newest = await self._newest(article_id, ProvenanceMode.PUBLISHER_RETRIEVED)
@@ -353,7 +353,7 @@ class ArticleService:
             article_id=article_id,
             raw_bytes=fetched.body,
             extracted_text=content.text,
-            canonical_url=identity,
+            canonical_url=fetched.final_url,
             retrieved_at=fetched.fetched_at,
             extractor_version=f"{content.extractor_name}/{content.extractor_version}",
             provenance_mode=ProvenanceMode.PUBLISHER_RETRIEVED,

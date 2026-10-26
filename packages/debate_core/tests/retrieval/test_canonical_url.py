@@ -803,6 +803,7 @@ def test_rel_canonical_rules_are_stable_storable_values() -> None:
         "same_site",
         "amp_cache_origin",
         "cross_site_refused",
+        "site_root_refused",
     }
     assert RelCanonicalRule("amp_cache_origin") is RelCanonicalRule.AMP_CACHE_ORIGIN
 

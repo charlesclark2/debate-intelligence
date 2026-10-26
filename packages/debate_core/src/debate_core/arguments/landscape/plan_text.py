@@ -48,6 +48,14 @@ text that names none, `NONE` when it holds no plan text at all, and `UNREAD` for
 not be parsed. Only `NAMES` identifies a round (`PLAN_TEXT`); `NONE` is the only verdict a team's aff
 may be carried into (:mod:`~debate_core.arguments.landscape.aff_assignment`).
 
+**Plan texts under a transition label** (`v1-e32-t24`, the PM's rulings of 2026-10-26,
+:func:`read_transition_plan_texts`). Most affirmative files t09 reads as `NONE` hold their plan text
+under `Thus the plan`, `Thus plan` or a bare `Thus` (:data:`TRANSITION_PLAN_LABELS`), or inline as `Thus
+the plan:`. Those are read beside t09's, in the same pass and cache, and kept apart from them, so no
+verdict of t09's changes: only a paragraph that has t09's shape and is not card text is read, named by
+the same vocabulary. `Therefore` is left out. They identify a round only where t09's plan texts leave
+it open (:mod:`~debate_core.arguments.landscape.aff_assignment`).
+
 **K-aff markers** (`v1-e32-t17`) are read from the same paragraphs, in the same pass and cache, when
 the topic has a K-aff config (:class:`PlanTextVocabulary`'s `kritikal`; the reading is
 :func:`~debate_core.arguments.landscape.kritikal_aff.read_kritikal_markers`), and the vocabulary's
@@ -78,6 +86,7 @@ from debate_core.domain.style_profile import StructuralUnit
 __all__ = [
     "JOINING_WORDS",
     "PLAN_TEXT_LABELS",
+    "TRANSITION_PLAN_LABELS",
     "DocumentPlanText",
     "Paragraph",
     "PlanTextParagraph",
@@ -89,6 +98,7 @@ __all__ = [
     "plan_text_words",
     "read_back_plan_texts",
     "read_plan_texts",
+    "read_transition_plan_texts",
     "sheet_plan_texts",
 ]
 
@@ -107,13 +117,20 @@ PLAN_TEXT_LABELS: Final = frozenset(
     }
 )
 """Headings that label a plan text, as t01's normalizer writes them (`v1-e32-t09`'s counts)."""
+TRANSITION_PLAN_LABELS: Final = frozenset({"thus the plan", "thus plan", "thus"})
+"""Transition labels over a plan text that t09's labels miss, as t01's normalizer writes them
+(`v1-e32-t24`)."""
 
-_RULE_VERSION: Final = "plan-text-3"
+_RULE_VERSION: Final = "plan-text-4"
 """Bumped when how a plan text is found or read changes, so a cached reading is read again."""
 _LONGEST_LABEL_WORDS: Final = 6
 _INLINE_LABEL: Final = re.compile(
     r"^\s*(?:the\s+)?(?:plan(?:\s+text)?|pt)\s*[:\-\u2013\u2014]\s*\S", re.IGNORECASE
 )
+_TRANSITION_INLINE_LABEL: Final = re.compile(r"^\s*thus\s*,?\s+the\s+plan\s*:\s*\S", re.IGNORECASE)
+"""Inline `Thus the plan:` (`v1-e32-t24`): its colon only, as the counts read it."""
+_NOT_PLAN_TEXT_UNITS: Final = frozenset({StructuralUnit.EVIDENCE, StructuralUnit.CITE})
+"""Card text, which a transition label never stands over as a plan text (`v1-e32-t24`)."""
 _FEDERAL_ACTOR: Final = re.compile(r"(?<!fifty) (?:usfg|federal government|united states) ")
 """A federal actor, as words; `the fifty United States` is the states, not the federal government."""
 _SHOULD: Final = " should "
@@ -240,7 +257,10 @@ class PlanTextVocabulary:
             ]
         )
         self._digest = hashlib.sha256(
-            json.dumps([_RULE_VERSION, pairs, rule, kritikal_rules(kritikal)], sort_keys=True).encode()
+            json.dumps(
+                [_RULE_VERSION, pairs, rule, kritikal_rules(kritikal), sorted(TRANSITION_PLAN_LABELS)],
+                sort_keys=True,
+            ).encode()
         ).hexdigest()
 
     def __repr__(self) -> str:
@@ -332,6 +352,36 @@ def read_plan_texts(
     return tuple(found)
 
 
+def read_transition_plan_texts(
+    paragraphs: tuple[Paragraph, ...], in_cards: frozenset[int], vocabulary: PlanTextVocabulary
+) -> tuple[PlanTextParagraph, ...]:
+    """Each plan text under a transition label, in file order (`v1-e32-t24`, the PM's rulings of 2026-10-26).
+
+    The paragraph under `Thus the plan`, `Thus plan` or a bare `Thus`, or an inline `Thus the plan:`, read
+    only when it has t09's shape and is not card text. A paragraph t09's own labels read is left to t09.
+    """
+    found: list[PlanTextParagraph] = []
+    written = [one for one in paragraphs if one.text.strip()]
+    for position, one in enumerate(written):
+        if _TRANSITION_INLINE_LABEL.match(one.text):
+            if _shaped(one.text):
+                found.append(_kept_of(one, one, in_cards, vocabulary))
+            continue
+        if not _is_transition_label(one.text) or position + 1 >= len(written):
+            continue
+        plan = written[position + 1]
+        if (
+            plan.unit not in _NOT_PLAN_TEXT_UNITS
+            and not _is_label(plan.text)
+            and not _is_transition_label(plan.text)
+            and not _is_inline(plan.text)
+            and not _TRANSITION_INLINE_LABEL.match(plan.text)
+            and _shaped(plan.text)
+        ):
+            found.append(_kept_of(one, plan, in_cards, vocabulary))
+    return tuple(found)
+
+
 def document_plan_text(
     found: tuple[PlanTextParagraph, ...], vocabulary: PlanTextVocabulary
 ) -> DocumentPlanText:
@@ -381,6 +431,12 @@ def plan_text_words(
 
 def _is_label(text: str) -> bool:
     return len(text.split()) <= _LONGEST_LABEL_WORDS and normalize_heading(text).text in PLAN_TEXT_LABELS
+
+
+def _is_transition_label(text: str) -> bool:
+    return (
+        len(text.split()) <= _LONGEST_LABEL_WORDS and normalize_heading(text).text in TRANSITION_PLAN_LABELS
+    )
 
 
 def _is_inline(text: str) -> bool:

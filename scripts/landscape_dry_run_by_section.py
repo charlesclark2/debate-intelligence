@@ -10,6 +10,9 @@ dry run without `--publish`, and prints only counts:
 * the affirmative rounds by identification method, and the kritikal affirmatives (`v1-e32-t17`): rounds
   by own marker and by carry, those the advantage guard refused, the control (rounds another method
   identifies whose files hold a marker) and the K families in the K-aff files' headings, by id;
+* per DA and advantage kind, the impact rows, those with a scenario and the scenario names withheld, and
+  the documents with no scenario heading and no role label (`v1-e32-t14`, under the coach's scenario
+  lists of `v1-e32-t22`), never a name;
 * the CPs' planks: how many, under how many CPs, in how many groups by the advantage they solve, how many
   withheld for naming a school, and where every plank found went;
 * the scan's hits by file, report.md's section (its nearest heading, and each CP's plank table apart) and
@@ -89,6 +92,13 @@ def report_lines(result: LandscapeRunResult) -> list[str]:
             )
             + "."
         )
+    lines += [
+        f"Scenarios, {one.kind.value} ({one.positions} positions): {one.impact_rows} impact rows, "
+        f"{one.rows_with_scenario} with a scenario, {one.withheld_names} names withheld; "
+        f"{one.unstructured_documents} of {one.documents} documents with no scenario heading and no role "
+        "label."
+        for one in result.report.chain_coverage
+    ]
     texts = result.report.texts
     if texts is None:
         lines.append("Planks: no analytic texts were read.")

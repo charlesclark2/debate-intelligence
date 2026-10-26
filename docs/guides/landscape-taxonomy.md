@@ -46,6 +46,7 @@ the review queue that matching leaves for you (`v1-e32-t02`).
 | `description` | Optional. A sentence for you; never card text |
 | `events` | `generic.yaml` only: the events the position applies to, e.g. `[POLICY]` |
 | `deprecated`, `merged_into` | How a position is retired ([below](#retire-or-merge-a-position)) |
+| `scenarios`, `not_scenarios` | DAs and advantages only, optional: your names for its scenarios, and the heading words that are no scenario ([below](#your-scenario-lists)) |
 
 A topic file has at least twelve positions that are not retired, and so does `generic.yaml`.
 
@@ -257,7 +258,7 @@ when they disagree, so a report always says which version it counted under.
 | Change | Bump | Example |
 |---|---|---|
 | Wording that moves no count: a label, a description, tag keywords | Patch | `1.0.0` → `1.0.1` |
-| Anything that can move a count: an alias added or removed, a position added, split, merged or retired | Minor | `1.0.0` → `1.1.0` |
+| Anything that can move a count: an alias added or removed, a position added, split, merged or retired, a scenario list edited | Minor | `1.0.0` → `1.1.0` |
 | A rebuild: re-seeding the topic, or a new resolution under the same topic id | Major | `1.1.0` → `2.0.0` |
 
 An edit to `generic.yaml` bumps its own version, and also the version of every topic of the events
@@ -582,9 +583,8 @@ team wrote down, under the heading that places the card (`Midterms DA`), so noth
 * **A scenario** is a heading under the position: `Scenario 1: Dome`, a named heading such as `Dome`, or
   the words beside an impact or internal-link label (`Dome impact`). A name is shown only when two or
   more teams use it under the position, and never when it holds a word of a caselist school, team code
-  or tournament. `Dome` and `Golden dome` are two names until a scenario vocabulary merges them (the
-  PM's plan after 2026-11-01: the session report of v1-e32-t14 lists every name two or more teams use,
-  as the seed).
+  or tournament. `Dome` and `Golden dome` are two names until your scenario list for the position
+  merges them ([below](#your-scenario-lists)).
 * **The internal link** under an impact card is the nearest card above it, under the same position
   heading, that a heading or its tag labels an internal link. When none is, the card directly above
   the impact card in its block is shown as "the card above it in the file": where it sits, not a claim
@@ -593,6 +593,43 @@ team wrote down, under the heading that places the card (`Midterms DA`), so noth
 Each kind says how many of its documents carry no scenario heading and no role label, and how many
 rows show a scenario, an internal link or the card above. A team that labels its blocks is what fills
 these sections; most 1AC advantages carry no label at all.
+
+### Your scenario lists
+
+A DA or advantage may carry your list of its scenarios (`v1-e32-t22`). Where it does, the report names
+that position's scenarios with your names and nothing else; a position with no list keeps the rule
+above. Taxonomy 1.4.0 seeds a list on each DA and advantage where two or more teams used the same
+heading words on hspolicy26 (through 2026-10-20), one entry per set of words, with the teams and
+documents beside each as a comment:
+
+```yaml
+  - id: midterms-da
+    ...
+    scenarios:
+      - {name: dome, forms: [dome]}                     # 15 teams (32 documents)
+      - {name: golden dome, forms: [golden dome]}       # 5 teams (7 documents)
+      - {name: too early, forms: [too early]}           # 2 teams (2 documents)
+    not_scenarios: []
+```
+
+* **`name`** is what the report prints. **`forms`** are the heading words it is filed under, written as
+  the report reads them: lowercase words, the words of a `Scenario 1: Dome` heading after its number, a
+  named heading such as `Golden dome`, or the words beside an impact label (`Dome impact` is `dome`).
+* **Merge** forms that are one scenario under one name. The report then counts the teams of every form
+  together, so two forms one team each can show as a scenario two teams read:
+  `- {name: Golden dome, forms: [dome, golden dome]}`.
+* **Rename** by changing `name`. Sentence case, as a label is: `Golden dome`, not `Golden Dome`.
+* **Drop** heading words that are no scenario (an answer filed without a marker, such as `too early`) by
+  moving the form from `scenarios` to `not_scenarios`: `not_scenarios: [too early]`. A heading of those
+  words then counts as no scenario heading at all, and names nothing.
+* **Words not on the list show no scenario** for a position that has one. A new name teams start using
+  after the seed shows nothing until you add it.
+* **Never write** a school, a team code or a tournament's word, in a name or a form: the report withholds
+  a name holding one anyway, and counts it. Never change or remove an `id`. A form is listed once per
+  position, and a name once.
+* **A list edit moves counts,** so once the file's version is released it comes with a minor bump
+  ([Bump `taxonomy_version`](#bump-taxonomy_version)); 1.4.0 is not released yet, so the seed's edit needs
+  none. Check it with `uv run pytest tests/config`.
 
 ## The review queue and your decisions
 

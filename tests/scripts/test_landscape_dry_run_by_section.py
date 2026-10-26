@@ -1,5 +1,7 @@
 """`scripts/landscape_dry_run_by_section.py`: a dry run's counts and its hits by section (`v1-e32-t16`).
 
+The scenario lines per kind are `v1-e32-t22`'s, from the golden report.md's impact-card sections.
+
 Over the synthetic caselist's report (`tests/fixtures/landscape/synthetic_caselist`, its README's
 "Planks"), rendered as the run renders it, with two hits placed by hand: one in the States CP's texts
 table, one in its plank table. Every expected line was written by hand from that README and the golden
@@ -55,6 +57,10 @@ def test_the_dry_run_prints_the_planks_and_the_scans_hits_by_section_and_counts_
         "Affirmative rounds by method: PLACED_CARD 4; not identified 3 of 7.",
         "Kritikal affirmatives: no K-aff markers were read.",
         "Plans under Thus: none were read.",
+        "Scenarios, advantage (2 positions): 3 impact rows, 1 with a scenario, 0 names withheld; 1 of 6 "
+        "documents with no scenario heading and no role label.",
+        "Scenarios, da (4 positions): 4 impact rows, 1 with a scenario, 1 names withheld; 2 of 6 documents "
+        "with no scenario heading and no role label.",
         "Planks: 8 under 1 CPs, in 3 groups by what they solve, 7 rows shown, 1 withheld for naming a "
         "school.",
         "  states-cp: 8 planks, 6 teams, 3 groups, 1 withheld",
@@ -66,8 +72,8 @@ def test_the_dry_run_prints_the_planks_and_the_scans_hits_by_section_and_counts_
         "  report.md | Counterplan planks: plank table | school: 1 (1 not yet accepted)",
         "Hits in report.md's plank tables: 1.",
     ]
-    # Counts only: no hit's term or line, and no text or plank.
-    for words in ("XX", "Sample", "sample", "Expand", "fifty states"):
+    # Counts only: no hit's term or line, no text or plank, and no scenario name.
+    for words in ("XX", "Sample", "sample", "Expand", "fifty states", "economic collapse", "recession"):
         assert not any(words in line for line in lines)
 
 

@@ -14,9 +14,13 @@
 # 1.3.0 (2026-10-25, the PM's ruling 1 on v1-e32-t17's counts): kritikal-aff, one generic kritikal
 # affirmative, with no alias and no keyword. kritikal_affs/policy-2026-27-nhi.yaml says when a file names
 # it: a K-aff marker in a file with no plan text.
+# 1.4.0 (2026-10-26, v1-e32-t22): scenario lists on eleven DAs and advantages, seeded from v1-e32-t14's
+# names two or more teams use (its session report, hspolicy26 through 2026-10-20), each name its own
+# one form until the coach merges, renames or drops them. A position with a list shows only the coach's
+# names; the others keep t14's rule. docs/guides/landscape-taxonomy.md says how to edit a list.
 schema_version: 1
 topic_id: policy-2026-27-nhi
-taxonomy_version: 1.3.0
+taxonomy_version: 1.4.0
 event: POLICY
 positions:
 
@@ -166,6 +170,11 @@ positions:
     kind: advantage
     side: aff
     aliases: [adv costs, costs adv, advantage costs, costs advantage, adv cost, cost advantage, cost adv, costs]
+    # The seed: v1-e32-t14's names two or more teams use here, teams (documents) beside each.
+    scenarios:
+      - {name: dedev, forms: [dedev]}                # 2 teams (2 documents)
+      - {name: isolationism, forms: [isolationism]}  # 2 teams (2 documents)
+    not_scenarios: []
   - id: coverage-advantage
     label: Coverage advantage
     kind: advantage
@@ -176,16 +185,31 @@ positions:
     kind: advantage
     side: aff
     aliases: [adv disease, disease advantage, advantage disease, disease adv, disease]
+    # The seed: v1-e32-t14's names two or more teams use here, teams (documents) beside each.
+    scenarios:
+      - {name: clog, forms: [clog]}                    # 2 teams (2 documents)
+      - {name: court curbing, forms: [court curbing]}  # 2 teams (2 documents)
+    not_scenarios: []
   - id: inequality-advantage
     label: Inequality advantage
     kind: advantage
     side: aff
     aliases: [adv inequality, inequality adv, advantage inequality, inequality advantage, inequality]
+    # The seed: v1-e32-t14's names two or more teams use here, teams (documents) beside each.
+    scenarios:
+      - {name: inequality, forms: [inequality]}  # 2 teams (2 documents)
+    not_scenarios: []
   - id: economy-advantage
     label: Economy advantage
     kind: advantage
     side: aff
     aliases: [adv economy, advantage economy, economy advantage, economy adv, adv econ, econ adv, econ advantage, economy, econ]
+    # The seed: v1-e32-t14's names two or more teams use here, teams (documents) beside each.
+    scenarios:
+      - {name: costs rising, forms: [costs rising]}                          # 4 teams (7 documents)
+      - {name: contention the advantage, forms: [contention the advantage]}  # 3 teams (4 documents)
+      - {name: debt, forms: [debt]}                                          # 3 teams (3 documents)
+    not_scenarios: []
   - id: growth-advantage
     label: Growth advantage
     kind: advantage
@@ -248,21 +272,52 @@ positions:
     kind: da
     side: neg
     aliases: [midterms da, da midterms, midterms disad, midterms]
+    # The seed: v1-e32-t14's names two or more teams use here, teams (documents) beside each.
+    scenarios:
+      - {name: dome, forms: [dome]}                                          # 15 teams (32 documents)
+      - {name: golden dome, forms: [golden dome]}                            # 5 teams (7 documents)
+      - {name: dems win, forms: [dems win]}                                  # 3 teams (4 documents)
+      - {name: iran, forms: [iran]}                                          # 3 teams (4 documents)
+      - {name: polycrisis, forms: [polycrisis]}                              # 3 teams (8 documents)
+      - {name: china coop, forms: [china coop]}                              # 2 teams (7 documents)
+      - {name: corruption, forms: [corruption]}                              # 2 teams (3 documents)
+      - {name: dem win crushes trumpism, forms: [dem win crushes trumpism]}  # 2 teams (5 documents)
+      - {name: democracy, forms: [democracy]}                                # 2 teams (2 documents)
+      - {name: dome arms racing, forms: [dome arms racing]}                  # 2 teams (2 documents)
+      - {name: other issues, forms: [other issues]}                          # 2 teams (2 documents)
+      - {name: too early, forms: [too early]}                                # 2 teams (2 documents)
+      - {name: trump steals, forms: [trump steals]}                          # 2 teams (3 documents)
+      - {name: warming, forms: [warming]}                                    # 2 teams (2 documents)
+    not_scenarios: []
   - id: pharma-da
     label: Pharma DA
     kind: da
     side: neg
     aliases: [pharma da, da pharma]
+    # The seed: v1-e32-t14's names two or more teams use here, teams (documents) beside each.
+    scenarios:
+      - {name: china, forms: [china]}      # 3 teams (4 documents)
+      - {name: biotech, forms: [biotech]}  # 2 teams (3 documents)
+    not_scenarios: []
   - id: economy-da
     label: Economy DA
     kind: da
     side: neg
     aliases: [econ da, da econ, economy da, da economy]
+    # The seed: v1-e32-t14's names two or more teams use here, teams (documents) beside each.
+    scenarios:
+      - {name: decline, forms: [decline]}  # 2 teams (8 documents)
+      - {name: econ, forms: [econ]}        # 2 teams (3 documents)
+    not_scenarios: []
   - id: irs-da
     label: IRS DA
     kind: da
     side: neg
     aliases: [irs da, da irs, irs tradeoff da, da irs tradeoff]
+    # The seed: v1-e32-t14's names two or more teams use here, teams (documents) beside each.
+    scenarios:
+      - {name: terrorism, forms: [terrorism]}  # 7 teams (14 documents)
+    not_scenarios: []
   - id: stocks-da
     label: Stocks DA
     kind: da
@@ -278,6 +333,10 @@ positions:
     kind: da
     side: neg
     aliases: [capital flight da, da capital flight]
+    # The seed: v1-e32-t14's names two or more teams use here, teams (documents) beside each.
+    scenarios:
+      - {name: dollar, forms: [dollar]}  # 2 teams (3 documents)
+    not_scenarios: []
   - id: federalism-da
     label: Federalism DA
     kind: da
@@ -293,6 +352,10 @@ positions:
     kind: da
     side: neg
     aliases: [court clog da, da court clog, clog da, da clog]
+    # The seed: v1-e32-t14's names two or more teams use here, teams (documents) beside each.
+    scenarios:
+      - {name: emerging tech, forms: [emerging tech]}  # 2 teams (3 documents)
+    not_scenarios: []
   - id: taxes-da
     label: Taxes DA
     kind: da
@@ -318,6 +381,11 @@ positions:
     kind: da
     side: neg
     aliases: [medical devices da, da medical devices, da devices, devices da]
+    # The seed: v1-e32-t14's names two or more teams use here, teams (documents) beside each.
+    scenarios:
+      - {name: augmentation, forms: [augmentation]}                                # 4 teams (5 documents)
+      - {name: augmentation innovation key, forms: [augmentation innovation key]}  # 2 teams (3 documents)
+    not_scenarios: []
   - id: innovation-da
     label: Innovation DA
     kind: da

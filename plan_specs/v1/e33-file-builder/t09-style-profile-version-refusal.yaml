@@ -24,7 +24,9 @@ spec:
     differs and the re-parse, before any card is resolved.
   priority: 3
   constraints:
-    packages: [debate_core.application, packages/debate_core/tests, debate_cli, packages/debate_cli/tests]
+    # PM ruling 2026-10-26, from the review (Deviation 1): the parsed-store port's two
+    # implementations.
+    packages: [debate_core.application, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, debate_core.integrations, debate_core.testing]
     forbidden:
       - Network or AWS access in any test
   context:

@@ -57,7 +57,8 @@ spec:
         volume passes 70% used says so in its summary, by test with a stubbed volume; the
         record's own fields are unchanged.
 status:
-  phase: InProgress
+  # PM record 2026-10-26: ac2's hand run, 20261026T040426Z.
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

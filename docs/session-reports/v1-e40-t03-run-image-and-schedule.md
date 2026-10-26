@@ -884,3 +884,16 @@ Added by the PM. Nothing above is changed, and this section is not a review.
   definitions now run it, and the schedule is still `DISABLED`.
 * **ac2's hand run** (the cutover's step 5) started at about 03:59 UTC on 2026-10-26 as run
   `20261026T035957Z`. Its outcome is recorded with `v1-e40-t06`'s.
+
+## PM record, 2026-10-26
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+* **ac2's hand run** on the `v1.1.0-dev.155` image recorded itself as run `20261026T040426Z` and
+  stopped `EssentialContainerExited` with exit code `0`. Its record has the Mac runs' shape: `caselist
+  runs --remote --last 3` lists it in the same columns as the Mac's run of 2026-10-22, with no
+  skipped or unreadable record. The details are recorded with `v1-e40-t06`'s.
+* Its `incomplete` outcome comes from a false drift in bucket mode, filed as `v1-e40-t13` (p1), and
+  not from the image or the schedule.
+* The cutover's step 8 enabled the run's schedule (`PLAN OK`, `0 added, 1 changed, 0 destroyed`).
+* **The Goal is `Succeeded`.**

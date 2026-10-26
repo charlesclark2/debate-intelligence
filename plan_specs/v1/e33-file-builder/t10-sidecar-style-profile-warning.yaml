@@ -1,0 +1,74 @@
+# TASK v1-e33-t10-sidecar-style-profile-warning - files check and files publish warn when a built file's style profile is not the running one
+# Epic: E33 Evidence File Builder | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e33-t10-sidecar-style-profile-warning
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e33-file-builder
+  annotations:
+    debate/title: "files check and files publish warn when a built file's style profile is not the running one"
+spec:
+  # Filed by the PM, 2026-10-26, from v1-e33-t09's follow-up 1, accepted by the PM (2026-10-26).
+  description: >-
+    A built file's sidecar records `style_profile_version` (`domain/file_provenance.py`).
+    `check_sidecar` (`evidence/file_checks/structure.py`) warns when the sidecar's parser
+    version is not the running parser's, but says nothing about the profile. So a file built
+    under one profile and checked or published by a build with another gets per-card
+    `evidence-identity` failures with no word on the cause, the symptom v1-e33-t09 removed from
+    `files build`. Add a WARN beside the parser one, naming both profiles, in `files check` and
+    in `files publish`'s re-check.
+  priority: 3
+  constraints:
+    packages: [debate_core.evidence, debate_core.application, packages/debate_core/tests, packages/debate_cli/tests]
+    forbidden:
+      - Turning the warning into a refusal in this task
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e33-t09-style-profile-version-refusal
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A sidecar with another style profile gives one WARN naming both, in `files check`
+        and `files publish`'s re-check; the same profile gives none; tests shown failing
+        first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e33-t10-sidecar-style-profile-warning-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e33-file-builder
+spec:
+  description: >-
+    Warn on a sidecar's other style profile, beside the parser warning.
+  goalRef:
+    name: v1-e33-t10-sidecar-style-profile-warning
+  graph:
+    nodes:
+      - id: sidecar-profile-warning
+        kind: Task
+        name: Sidecar style profile warning
+        description: >-
+          Warn on a sidecar's other style profile, beside the parser warning.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: File check tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/evidence/file_checks/test_structure.py]
+status:
+  phase: Pending

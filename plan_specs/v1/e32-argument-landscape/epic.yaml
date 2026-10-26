@@ -642,5 +642,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e32-t26-review-queue-proxy-ordering
+    - id: t27
+      kind: Task
+      name: 'Branches and mechanisms in the DA sections, counted first'
+      description: >-
+        Branches and mechanisms in the DA sections, counted first.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t27-branches-and-mechanisms-counted-first.yaml
+        goalRef: v1-e32-t27-branches-and-mechanisms-counted-first
+      dependsOn:
+      - t22
+      - t25
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t27-branches-and-mechanisms-counted-first reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t27-branches-and-mechanisms-counted-first
 status:
   phase: Pending

@@ -103,7 +103,8 @@ spec:
         The Mac's schedule is off, a second runner is refused by the lock, and the runbooks
         give the fallback; prod follows at promotion (operator).
 status:
-  phase: InProgress
+  # PM record 2026-10-26: ac1 accepted with the comparison's one difference explained; prod follows at the promotion (v1-e40-t11).
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -37,7 +37,9 @@ spec:
     The CLI's two pinned integration lists change with it.
   priority: 1
   constraints:
-    packages: [debate_cli.commands.fetch, tests/fixtures/http, tests/integration]
+    # PM ruling 2026-10-26, from the review: ArticleFetch in core, the composition root, the fetch
+    # result schema, build_cassettes.py, the lock's debate-cli lines and the smoke check.
+    packages: [debate_cli.commands.fetch, tests/fixtures/http, tests/integration, debate_core.application, debate_cli, packages/debate_cli/tests, uv.lock, scripts, packages/debate_core/schemas, tests/smoke]
     forbidden:
       - Live network calls in CI (cassettes replay only; recording is a manual, documented step)
       - Cassettes containing cookies, auth headers, or full copies of paywalled article bodies
@@ -61,7 +63,9 @@ spec:
     - id: ac3
       description: >-
         At least seven cassettes (news, think-tank, .gov, open-access PDF, paywalled, robots-disallowed,
-        404) exist under tests/fixtures/http/ with a README recording source, date and scrub rules.
+        404) exist under tests/fixtures/http/ with a README recording how each was made and the scrub
+        rules. (PM amendment 2026-10-26: synthetic, per the 2026-10-25 amendment, so no source or
+        date.)
     - id: ac4
       description: >-
         --json output validates against a published schema and --paste creates a USER_SUPPLIED snapshot

@@ -1,0 +1,87 @@
+# TASK v1-e40-t13-bucket-mode-report-counts-held-sources - In bucket mode, the report stage counts a source the bucket holds at its manifest digest as present
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t13-bucket-mode-report-counts-held-sources
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "In bucket mode, the report stage counts a source the bucket holds at its manifest digest as present"
+spec:
+  # Filed by the PM, 2026-10-26, from the cutover's first dev cloud run (run 20261026T040426Z) and the PM's drift check (2026-10-26).
+  description: >-
+    The first dev cloud run ended `incomplete` with `CASELIST_DRIFT` on `openev 2026-ld
+    (something missing)`, and retention kept that night's camp download, though nothing was
+    wrong: the bucket held all 3 of the snapshot's sources and its manifest, in sync. A cloud
+    run's working copy is restored from the bucket's manifests and parsed store, without raw
+    sources. The run held only the camp file it downloaded that night; the other two were
+    imported earlier as unsupported types, so no parse ever fetched them. The report stage
+    compares the working copy's files with the bucket, counts the two as missing, and calls it a
+    person's drift. It recurs whenever a run touches a snapshot whose raw sources it does not
+    all hold, such as a new file joining an existing OpenEv camp. In bucket mode, the report
+    stage and retention count a source as present when the bucket holds it with the manifest's
+    digest, read from a listing or a head request, never a download. A source the bucket lacks,
+    or holds with other bytes, is still a person's drift. The Mac's local mode is unchanged.
+  priority: 1
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, docs/runbooks]
+    forbidden:
+      - Downloading a raw source to decide whether it is present
+      - Counting a source with another digest as present
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e40-t06-cutover
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Against moto, a bucket-mode working copy missing raw sources the bucket holds at the
+        manifest's digests reports the snapshot in sync, releases its download from
+        retention and records the run `completed`; a source missing from the bucket or held
+        with another digest still drifts; local mode is unchanged; tests shown failing
+        first.
+    - id: ac2
+      description: >-
+        The first dev cloud run after the merge that touches a snapshot whose raw sources it
+        does not all hold records no drift for it, read from its record (operator).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t13-bucket-mode-report-counts-held-sources-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    Count a source the bucket holds at its manifest digest as present in bucket mode.
+  goalRef:
+    name: v1-e40-t13-bucket-mode-report-counts-held-sources
+  graph:
+    nodes:
+      - id: bucket-mode-report
+        kind: Task
+        name: Bucket-mode report stage
+        description: >-
+          Count a source the bucket holds at its manifest digest as present in bucket
+          mode.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Caselist sync tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, drift]
+status:
+  phase: Pending

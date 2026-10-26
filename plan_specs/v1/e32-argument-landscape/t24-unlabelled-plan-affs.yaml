@@ -30,7 +30,9 @@ spec:
     new ids, under v1-e32-t08's lock.
   priority: 1
   constraints:
-    packages: [debate_core.arguments, debate_core.application, packages/debate_core/tests, tests/fixtures/landscape, config/landscape, tests/config, docs/guides]
+    # PM ruling 2026-10-26, from the review: the method enum and the dry run's plan-text lines and
+    # their test.
+    packages: [debate_core.arguments, debate_core.application, packages/debate_core/tests, tests/fixtures/landscape, config/landscape, tests/config, docs/guides, debate_core.domain, scripts, tests/scripts]
     forbidden:
       - A placement read from a team's name, school or team code
       - An aff assigned into a round whose own plan text names another aff

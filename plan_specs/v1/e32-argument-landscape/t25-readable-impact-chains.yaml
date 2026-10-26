@@ -27,7 +27,8 @@ spec:
     never beside a school or team code.
   priority: 2
   constraints:
-    packages: [debate_core.arguments, debate_core.application, packages/debate_core/tests, tests/fixtures/landscape, docs/guides]
+    # PM context 2026-10-26: the dry run's counts-only line per kind and its test.
+    packages: [debate_core.arguments, debate_core.application, packages/debate_core/tests, tests/fixtures/landscape, docs/guides, scripts, tests/scripts]
     forbidden:
       - A school or team code beside a quoted tag (policy 1.13)
       - Network or AWS access in any test

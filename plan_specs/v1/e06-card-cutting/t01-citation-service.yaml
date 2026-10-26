@@ -28,7 +28,9 @@ spec:
     Crossref search/discovery is v1-e07-t03 (v1.4); this task only does DOI lookups for citation.
   priority: 1
   constraints:
-    packages: [debate_core.application, debate_core.evidence, debate_core.integrations]
+    # PM ruling 2026-10-26 (question 1): the harvester and the shared JSON-LD walk live in
+    # debate_core.retrieval, which evidence may not import.
+    packages: [debate_core.application, debate_core.evidence, debate_core.integrations, debate_core.retrieval, packages/debate_core/tests]
     forbidden:
       - LLM-generated or LLM-guessed author, credential, publication or date values
       - Marking a field verified when its only source is a heuristic (e.g. URL slug date)
@@ -103,13 +105,14 @@ spec:
           Parse citation_*, article:*, JSON-LD and OpenGraph tags plus byline patterns from the snapshot's raw
           HTML (read via SnapshotStore) into candidate fields with source tags.
         dependsOn: [citation-model]
-        outputs: [packages/debate_core/src/debate_core/evidence/citation_harvest.py]
+        # PM ruling 2026-10-26 (question 1): the harvester and its test live in debate_core.retrieval.
+        outputs: [packages/debate_core/src/debate_core/retrieval/citation_harvest.py]
         estimatedEffort: 3h
         acceptanceCriteria:
           - type: test_passes
             name: Harvester fixture tests pass
             command: uv
-            args: [run, pytest, packages/debate_core/tests/evidence/test_citation_harvest.py]
+            args: [run, pytest, packages/debate_core/tests/retrieval/test_citation_harvest.py]
       - id: crossref-doi
         kind: Task
         name: Crossref DOI lookup client

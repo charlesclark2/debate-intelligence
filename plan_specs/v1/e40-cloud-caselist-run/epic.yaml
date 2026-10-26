@@ -303,5 +303,42 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e40-t12-held-upload-records-reach-the-bucket
+    - id: t13
+      kind: Task
+      name: 'In bucket mode, the report stage counts a source the bucket holds at its manifest digest as present'
+      description: >-
+        In bucket mode, the report stage counts a source the bucket holds at its manifest
+        digest as present.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t13-bucket-mode-report-counts-held-sources.yaml
+        goalRef: v1-e40-t13-bucket-mode-report-counts-held-sources
+      dependsOn:
+      - t06
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t13-bucket-mode-report-counts-held-sources reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t13-bucket-mode-report-counts-held-sources
+    - id: t14
+      kind: Task
+      name: 'The deploy script''s region test, which failed once under load, made deterministic'
+      description: >-
+        The deploy script's region test, which failed once under load, made deterministic.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t14-deploy-script-region-test-under-load.yaml
+        goalRef: v1-e40-t14-deploy-script-region-test-under-load
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t14-deploy-script-region-test-under-load reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t14-deploy-script-region-test-under-load
 status:
   phase: Pending

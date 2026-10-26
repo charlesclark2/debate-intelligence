@@ -14,6 +14,7 @@ Write the command function in its own module (one module per command), then regi
 
     def register_commands(app: typer.Typer) -> None:
         app.command("verify")(verify.verify)
+    app.command("fetch")(fetch.fetch)
 
 The function's docstring is its `--help` text.
 
@@ -54,6 +55,7 @@ from debate_cli.commands import (
     caselist_seed,
     config,
     doctor,
+    fetch,
     files,
     landscape,
     store,
@@ -69,6 +71,7 @@ def register_commands(app: typer.Typer) -> None:
     """Attach every command and command group to the root application."""
     app.command("doctor")(doctor.doctor)
     app.command("verify")(verify.verify)
+    app.command("fetch")(fetch.fetch)
 
     configuration = command_group("config", "Inspect the settings this installation runs with.")
     configuration.command("show")(config.show)

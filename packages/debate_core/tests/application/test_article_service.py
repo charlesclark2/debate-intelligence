@@ -350,6 +350,7 @@ def test_the_articles_settings_defaults_are_the_classifiers_and_extractors_own()
     settings = ArticleSettings()
     assert access_thresholds(settings) == AccessThresholds()
     assert settings.html_fallback_minimum_characters == html_extractor.DEFAULT_MINIMUM_CHARACTERS == 250
+    assert settings.html_max_bytes == html_extractor.DEFAULT_MAX_BYTES == 10 * 1024 * 1024
     assert settings.pdf_max_bytes == pdf_extractor.DEFAULT_MAX_BYTES == 50 * 1024 * 1024
     assert settings.pdf_max_pages == pdf_extractor.DEFAULT_MAX_PAGES == 500
     assert settings.pdf_max_stream_bytes == pdf_extractor.DEFAULT_MAX_STREAM_BYTES == 20_000_000

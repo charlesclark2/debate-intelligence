@@ -1,0 +1,34 @@
+{
+  "cassette_version": 1,
+  "kind": "government",
+  "url": "https://www.fosw.example.gov/news/2026/06/agency-announces-grants",
+  "made_from": "v1-e04-t04's hand-written federal press release (the Federal Office of Synthetic Wildlife is invented and imitates no real agency), served as a 200",
+  "interactions": [
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://www.fosw.example.gov/robots.txt"
+      },
+      "response": {
+        "status_code": 200,
+        "headers": {
+          "content-type": "text/plain; charset=utf-8"
+        },
+        "body_text": "User-agent: *\nAllow: /\n"
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://www.fosw.example.gov/news/2026/06/agency-announces-grants"
+      },
+      "response": {
+        "status_code": 200,
+        "headers": {
+          "content-type": "text/html; charset=utf-8"
+        },
+        "body_file": "extraction/gov-press-release.html"
+      }
+    }
+  ]
+}

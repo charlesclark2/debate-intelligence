@@ -14,7 +14,8 @@ runs (`v1-e29-t05-evidence-sync-cli`); :meth:`ServiceContainer.caselist_import`,
 :meth:`ServiceContainer.caselist_token_store` and :meth:`ServiceContainer.opencaselist_client`,
 which `debate-research caselist auth` runs (`v1-e34-t01-caselist-api-client`);
 and :meth:`ServiceContainer.verify_manifest`, which `debate-research verify` runs
-(`v1-e03-t06-verify-command`); and :meth:`ServiceContainer.caselist_sync`, which
+(`v1-e03-t06-verify-command`); and :meth:`ServiceContainer.article_fetch`, which
+`debate-research fetch` runs (`v1-e04-t06-fetch-command`); and :meth:`ServiceContainer.caselist_sync`, which
 `debate-research caselist pull` and the weekly launchd agent run (`v1-e34-t02-scheduled-sync`), recorded by
 :meth:`ServiceContainer.caselist_sync_monitor` and read back by
 :meth:`ServiceContainer.caselist_sync_history` (`v1-e34-t03-sync-monitoring`); and
@@ -130,11 +131,13 @@ import sys
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING, Final, cast
+from typing import TYPE_CHECKING, Any, Final, cast
 
 from debate_cli.exit_codes import codes_exit_as_a_retrieval_failure
 from debate_core.application.aff_assignment import AffAssignmentService
 from debate_core.application.analytic_texts import AnalyticTextService
+from debate_core.application.article_fetch import ArticleFetch
+from debate_core.application.article_service import ArticleService
 from debate_core.application.caselist.bucket_run import BucketRun
 from debate_core.application.caselist.evidence_listing import (
     LocalEvidence,
@@ -265,6 +268,7 @@ from debate_core.integrations.models.factory import build_model_router
 from debate_core.integrations.models.model_mode import ModelMode
 from debate_core.integrations.models.prompt_registry import DEFAULT_PROMPT_DIRECTORY, PromptRegistry
 from debate_core.integrations.models.routing_policy import RoutingPolicy
+from debate_core.retrieval.extraction import ContentTypeDispatcher
 
 if TYPE_CHECKING:  # pragma: no cover - imported for the type checker only; see the factories
     from mypy_boto3_s3.client import S3Client
@@ -286,6 +290,7 @@ __all__ = [
 ]
 
 SERVICE_NAMES: Final[tuple[str, ...]] = (
+    "article_fetch",
     "bucket_write_guard",
     "caselist_import",
     "caselist_parse",
@@ -946,6 +951,66 @@ class ServiceContainer:
         )
         articles = SqliteArticleRepository(self.database)
         return VerifyManifest(verifier=EvidenceVerifier(articles=articles, snapshots=snapshots, clock=clock))
+
+    def article_fetch(self) -> ArticleFetch:
+        """Build `debate-research fetch` over the polite HTTP fetcher and this data directory (`v1-e04-t06`).
+
+        ArticleService gets :class:`~debate_core.integrations.http_fetcher.HttpArticleFetcher` from
+        `settings.http`, a content-type dispatcher over the HTML and PDF extractors with the limits in
+        `settings.articles`, `settings.articles` itself, and `http.max_response_bytes` as the most
+        pasted text it stores: no more than a fetch would read. Articles and snapshot records go to the
+        SQLite file and the blobs to the store under `storage.data_dir`, the ones `verify` reads.
+
+        The fetcher's transport is the network in every real run. A test that replays recorded
+        responses registers its transport under `"article_fetch_transport"` before the command runs,
+        and every other piece of this wiring stays as it is.
+        """
+        return self.singleton("article_fetch", self._build_article_fetch)
+
+    def _build_article_fetch(self) -> ArticleFetch:
+        # Imported here: httpx (`http`) and the extraction libraries (`extraction`) are optional
+        # dependencies of debate-core, and `--help` should not pay for them. See the module docstring.
+        from debate_cli import package_version
+        from debate_core.integrations.html_extractor import TrafilaturaExtractor
+        from debate_core.integrations.http_fetcher import HttpArticleFetcher
+        from debate_core.integrations.pdf_extractor import PdfExtractor
+
+        settings = self.settings
+        limits = settings.articles
+        clock = _PortClock(self.clock())
+        ids = _PortIdGenerator()
+        snapshots = SnapshotService(
+            blobs=FsSnapshotStore(settings.storage.data_dir), clock=clock, id_generator=ids
+        )
+        fetcher = HttpArticleFetcher(
+            settings.http,
+            version=package_version(),
+            clock=clock,
+            # A test's replay transport, or None: the network. `Any`, because this module may not name
+            # httpx, even for the type checker (the import contracts in the workspace root).
+            transport=cast(Any, self._instances.get("article_fetch_transport")),
+        )
+        extractor = ContentTypeDispatcher(
+            html=TrafilaturaExtractor(
+                minimum_characters=limits.html_fallback_minimum_characters, max_bytes=limits.html_max_bytes
+            ),
+            pdf=PdfExtractor(
+                max_bytes=limits.pdf_max_bytes,
+                max_pages=limits.pdf_max_pages,
+                max_stream_bytes=limits.pdf_max_stream_bytes,
+            ),
+        )
+        service = ArticleService(
+            articles=SqliteArticleRepository(self.database),
+            snapshots=snapshots,
+            fetcher=fetcher,
+            extractor=extractor,
+            clock=clock,
+            id_generator=ids,
+            settings=limits,
+            max_user_text_bytes=settings.http.max_response_bytes,
+        )
+        return ArticleFetch(articles=service, snapshots=snapshots, connection=fetcher)
 
     def caselist_import(self) -> CaselistImportService:
         """Build the weekly-archive importer over this environment's local evidence store.

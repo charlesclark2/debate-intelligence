@@ -67,7 +67,7 @@ spec:
         --json output validates against a published schema and --paste creates a USER_SUPPLIED snapshot
         only after attestation.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -68,6 +68,8 @@ WIRED_INTEGRATIONS = [
     "debate_core.integrations.cognito",
     "debate_core.integrations.docx_file_writer.writer",
     "debate_core.integrations.docx_parser",
+    "debate_core.integrations.html_extractor",
+    "debate_core.integrations.http_fetcher",
     "debate_core.integrations.landscape.analytic_text_store",
     "debate_core.integrations.landscape.classification_store",
     "debate_core.integrations.landscape.plan_text_store",
@@ -86,6 +88,7 @@ WIRED_INTEGRATIONS = [
     "debate_core.integrations.models.prompt_registry",
     "debate_core.integrations.models.routing_policy",
     "debate_core.integrations.opencaselist",
+    "debate_core.integrations.pdf_extractor",
     "debate_core.integrations.s3",
     "debate_core.integrations.s3.fencing",
     "debate_core.integrations.s3.run_lock_object",
@@ -212,7 +215,7 @@ def test_an_integration_that_does_not_import_fails_doctor_naming_each_one(
     assert error["exit_code"] == ExitCode.DOMAIN_FAILURE
     for module in s3_and_opencaselist_do_not_import:
         assert module in error["message"]
-    assert "5 of the 29 integrations" in error["message"]
+    assert "5 of the 32 integrations" in error["message"]
     assert error["details"]["integrations_import"] is False
     assert error["details"]["integrations_failed"] == {
         OPENCASELIST: f"ModuleNotFoundError: no module named {OPENCASELIST!r}",

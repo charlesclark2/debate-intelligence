@@ -17,7 +17,9 @@ dependencies = [
     # (v1-e01-t17); `python -m debate_cli.installation` checks it after every channel install.
     # `tub`, with `aws`: the coach's `tub users` commands, which reach the pilot's user pool and
     # audit log through debate_core.integrations.cognito and cloudwatch_audit (v1-e39-t05).
-    "debate-core[aws,docx,http,opencaselist,tub]",
+    # `extraction`, with `http`: `fetch`, whose article fetcher reads pages with the HTML and PDF
+    # extractors (trafilatura, readability-lxml, pypdf; v1-e04-t06).
+    "debate-core[aws,docx,extraction,http,opencaselist,tub]",
     "rich>=13.9",
     "typer>=0.15",
 ]

@@ -428,9 +428,50 @@ Please reply with: Q1 A, B or C; Q2 A or B; and any FYI you want changed.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-25
 
 **Notes:**
+
+A publish gate that refuses on the exact bytes it uploads, and a session that stopped at the policy
+line instead of writing past it.
+1. **ac1 to ac4, ac6 and ac8 pass. ac7 passes as amended.**
+   * The gate was red against a refuse-nothing copy: 8 failed, with the 16 passes explained.
+   * One mutant per gate step was caught, and the "report status PASS" step got its own test when
+     only a message assertion caught it.
+   * Idempotence, the put-and-head digest checks and a dry run that builds no bucket client are each
+     tested with moto.
+   * `metadata.json` validates against the committed schema.
+2. **The rulings of 2026-10-25 are applied as given.**
+   * **Q1 B:** `find_by_disclosure(school, team_code)` reads the published sidecars, red first, with
+     three mutants caught, no case folding, and a test that no `metadata.json` holds a school or team
+     code.
+   * **Q2 A, and FYIs 1 to 3.**
+   * The PM amends ac6 and ac7 (with `side`) in the next batch, and fixes the evidence-store layout
+     doc's `files/` examples there.
+3. **Deviations accepted:**
+   * the writer's one `recipe_status` line;
+   * the schema export script, as for its siblings;
+   * `--env`, `--confirm-prod`, `--recipes` and `--json`.
+
+   The PM adds `debate_core.integrations` and `scripts` to `constraints.packages` in that batch.
+4. **Accepted as made:**
+   * the gate's order, with the draft check ahead of the quality status;
+   * `RECIPE_STATUS_UNRECORDED` until a rebuild;
+   * the re-checked report uploaded for the exact bytes;
+   * the recipe rendered from the model, so comments are dropped;
+   * kebab-case slugs refused rather than rewritten;
+   * the lock held for the whole non-dry run, with every key under `files/`;
+   * no builder version bump;
+   * no IAM grant needed, as read from `operator_access.tf`;
+   * no school or team code anywhere but the sidecar, by test.
+5. **ac5 is the operator's.** Synthetic samples go to dev after the cloud cutover's step 9, and the
+   first coach-approved real files to prod. The PM records both, and the session writes
+   `docs/data/file-publish-log.md` from the output.
+6. **The affected set** (211 files) reached the two-minute alarm and is left to the PR's `ci` under
+   agreement 10. The changed areas, the CLI's command and bucket-mode suites and the static checks
+   passed, before and after the rulings.
+
+The PR merges `--partial`, with the phase `InProgress`, until ac5. No re-review is needed.

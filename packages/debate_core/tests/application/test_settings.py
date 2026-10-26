@@ -532,6 +532,8 @@ def test_the_committed_profiles_give_dev_and_prod_different_everything() -> None
 
     assert development.storage.data_dir != production.storage.data_dir
     assert development.models.routing_file != production.models.routing_file
+    assert development.models.budget_usd_daily is not None
+    assert production.models.budget_usd_daily is not None
     assert development.models.budget_usd_daily < production.models.budget_usd_daily
 
 

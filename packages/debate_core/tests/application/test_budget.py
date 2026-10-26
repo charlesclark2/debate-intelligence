@@ -88,7 +88,9 @@ models:
 VALID: Mapping[str, JsonValue] = {"paragraph_id": 3, "start_offset": 0, "end_offset": 42}
 INVALID: Mapping[str, JsonValue] = {"paragraph_id": "the third", "start_offset": 0, "end_offset": 42}
 
-WARMING = ModelPrompt(prompt_id="example.select-passage", prompt_version="1.0.0", variables={"tag": "Warming kills"})
+WARMING = ModelPrompt(
+    prompt_id="example.select-passage", prompt_version="1.0.0", variables={"tag": "Warming kills"}
+)
 """Its variables are `{"tag":"Warming kills"}` as compact JSON: 23 bytes."""
 
 WARMING_CEILING = 0.000523
@@ -130,7 +132,9 @@ def policy() -> RoutingPolicy:
         )
 
     def scoring(model_id: str) -> ModelRoute:
-        return ModelRoute(provider=ModelProvider.BEDROCK, model_id=model_id, region="us-east-1", timeout_seconds=30)
+        return ModelRoute(
+            provider=ModelProvider.BEDROCK, model_id=model_id, region="us-east-1", timeout_seconds=30
+        )
 
     return RoutingPolicy(
         routes={
@@ -165,7 +169,11 @@ class MeteredRouter:
         answer, input_tokens, output_tokens = self.planned.pop(0)
         usage = ModelUsage(input_tokens=input_tokens, output_tokens=output_tokens, latency_ms=10.0)
         output = validate_model_output(
-            schema, None if answer is None else dict(answer), prompt=prompt, model_id=route.model_id, usage=usage
+            schema,
+            None if answer is None else dict(answer),
+            prompt=prompt,
+            model_id=route.model_id,
+            usage=usage,
         )
         return ModelResponse[schema](
             output=output,
@@ -188,7 +196,9 @@ class MeteredRouter:
     async def rerank(self, query: str, documents: Sequence[str]) -> RerankResponse:
         self.calls.append("rerank")
         return RerankResponse(
-            results=tuple(RerankResult(index=index, relevance_score=-index) for index in range(len(documents))),
+            results=tuple(
+                RerankResult(index=index, relevance_score=-index) for index in range(len(documents))
+            ),
             route=policy().resolve(TaskClass.RERANK),
             usage=ModelUsage(latency_ms=10.0),
             invoked_at=LATE_EVENING,
@@ -217,7 +227,9 @@ def metered_chain(
     )
 
 
-def earlier_record(cost: float | None, *, run_id: str = "an-earlier-run", at: datetime = LATE_EVENING) -> UsageRecord:
+def earlier_record(
+    cost: float | None, *, run_id: str = "an-earlier-run", at: datetime = LATE_EVENING
+) -> UsageRecord:
     return UsageRecord(
         run_id=run_id,
         prompt_id="example.select-passage",
@@ -316,9 +328,9 @@ async def test_the_day_is_the_local_date_of_the_clock(log: UsageLog, pricing: Mo
             TaskClass.HIGH_VOLUME, WARMING, ContractPassage
         )
     next_morning = FixedClock(LATE_EVENING + timedelta(hours=10))
-    await metered_chain(delegate, log, pricing, BudgetLimits(per_day_usd=2.0), clock=next_morning).generate_structured(
-        TaskClass.HIGH_VOLUME, WARMING, ContractPassage
-    )
+    await metered_chain(
+        delegate, log, pricing, BudgetLimits(per_day_usd=2.0), clock=next_morning
+    ).generate_structured(TaskClass.HIGH_VOLUME, WARMING, ContractPassage)
 
     assert len(delegate.calls) == 1
 
@@ -328,7 +340,9 @@ async def test_the_day_is_the_local_date_of_the_clock(log: UsageLog, pricing: Mo
 # ---------------------------------------------------------------------------------------------
 
 
-async def test_an_unpriced_model_is_refused_naming_it_when_a_limit_is_set(log: UsageLog, pricing: ModelPricing) -> None:
+async def test_an_unpriced_model_is_refused_naming_it_when_a_limit_is_set(
+    log: UsageLog, pricing: ModelPricing
+) -> None:
     delegate = MeteredRouter([(VALID, 1, 1)])
     guard = metered_chain(delegate, log, pricing, BudgetLimits(per_day_usd=100.0))
 
@@ -339,7 +353,9 @@ async def test_an_unpriced_model_is_refused_naming_it_when_a_limit_is_set(log: U
     assert delegate.calls == []
 
 
-async def test_a_route_with_no_output_cap_is_refused_when_a_limit_is_set(log: UsageLog, pricing: ModelPricing) -> None:
+async def test_a_route_with_no_output_cap_is_refused_when_a_limit_is_set(
+    log: UsageLog, pricing: ModelPricing
+) -> None:
     delegate = MeteredRouter([(VALID, 1, 1)])
     guard = metered_chain(delegate, log, pricing, BudgetLimits(per_run_usd=100.0))
 
@@ -349,7 +365,9 @@ async def test_a_route_with_no_output_cap_is_refused_when_a_limit_is_set(log: Us
     assert delegate.calls == []
 
 
-async def test_without_a_limit_the_guard_neither_prices_nor_refuses(log: UsageLog, pricing: ModelPricing) -> None:
+async def test_without_a_limit_the_guard_neither_prices_nor_refuses(
+    log: UsageLog, pricing: ModelPricing
+) -> None:
     delegate = MeteredRouter([(VALID, 1, 1)])
 
     await metered_chain(delegate, log, pricing, BudgetLimits()).generate_structured(
@@ -397,7 +415,9 @@ async def test_embed_and_rerank_are_held_to_the_budget_too(log: UsageLog, pricin
 # ---------------------------------------------------------------------------------------------
 
 
-def test_ceiling_of_a_structured_call_is_its_output_cap_and_its_variables_bytes(pricing: ModelPricing) -> None:
+def test_ceiling_of_a_structured_call_is_its_output_cap_and_its_variables_bytes(
+    pricing: ModelPricing,
+) -> None:
     ceiling = RoutePricing(policy(), pricing).structured_ceiling(TaskClass.HIGH_VOLUME, WARMING, None)
 
     assert (ceiling.model_id, ceiling.usd) == ("test.haiku", pytest.approx(WARMING_CEILING))
@@ -405,7 +425,9 @@ def test_ceiling_of_a_structured_call_is_its_output_cap_and_its_variables_bytes(
 
 def test_ceiling_counts_bytes_not_characters_and_a_call_s_own_output_cap(pricing: ModelPricing) -> None:
     # {"tag":"Débat"} is 15 characters and 16 UTF-8 bytes: $0.000016. A 50-token cap: $0.00025.
-    prompt = ModelPrompt(prompt_id="example.select-passage", prompt_version="1.0.0", variables={"tag": "Débat"})
+    prompt = ModelPrompt(
+        prompt_id="example.select-passage", prompt_version="1.0.0", variables={"tag": "Débat"}
+    )
 
     ceiling = RoutePricing(policy(), pricing).structured_ceiling(
         TaskClass.HIGH_VOLUME, prompt, ModelParams(max_tokens=50)
@@ -422,7 +444,9 @@ def test_ceiling_of_an_embedding_and_a_rerank(pricing: ModelPricing) -> None:
 
 
 def test_ceiling_of_an_unpriced_model_says_why() -> None:
-    ceiling = RoutePricing(policy(), ModelPricing({})).structured_ceiling(TaskClass.HIGH_VOLUME, WARMING, None)
+    ceiling = RoutePricing(policy(), ModelPricing({})).structured_ceiling(
+        TaskClass.HIGH_VOLUME, WARMING, None
+    )
 
     assert (ceiling.model_id, ceiling.usd) == ("test.haiku", None)
     assert ceiling.unpriced_reason is not None
@@ -480,9 +504,16 @@ class GatedRouter(MeteredRouter):
         return await super().generate_structured(task_class, prompt, schema, params)
 
 
-def guard_over(delegate: ModelRouter, limits: BudgetLimits, pricer: FixedPricer, ledger: StillLedger) -> BudgetGuard:
+def guard_over(
+    delegate: ModelRouter, limits: BudgetLimits, pricer: FixedPricer, ledger: StillLedger
+) -> BudgetGuard:
     return BudgetGuard(
-        delegate, limits=limits, pricer=pricer, ledger=ledger, run_id=RUN, clock=FixedClock(LATE_EVENING),
+        delegate,
+        limits=limits,
+        pricer=pricer,
+        ledger=ledger,
+        run_id=RUN,
+        clock=FixedClock(LATE_EVENING),
         local_zone=CHICAGO,
     )
 
@@ -538,7 +569,9 @@ async def test_a_finished_or_failed_call_lets_go_of_its_hold() -> None:
 
 async def test_the_guard_asks_the_ledger_for_this_run_on_the_local_day() -> None:
     ledger = StillLedger()
-    guard = guard_over(MeteredRouter([(VALID, 1, 1)]), BudgetLimits(per_run_usd=1.0), FixedPricer(0.01), ledger)
+    guard = guard_over(
+        MeteredRouter([(VALID, 1, 1)]), BudgetLimits(per_run_usd=1.0), FixedPricer(0.01), ledger
+    )
 
     await guard.generate_structured(TaskClass.HIGH_VOLUME, WARMING, ContractPassage)
 
@@ -546,8 +579,18 @@ async def test_the_guard_asks_the_ledger_for_this_run_on_the_local_day() -> None
 
 
 async def test_spend_exactly_at_the_limit_is_allowed_and_a_cent_more_is_not() -> None:
-    at_limit = guard_over(MeteredRouter([(VALID, 1, 1)]), BudgetLimits(per_run_usd=0.05), FixedPricer(0.01), StillLedger(run_usd=0.04))
-    over = guard_over(MeteredRouter([(VALID, 1, 1)]), BudgetLimits(per_run_usd=0.05), FixedPricer(0.02), StillLedger(run_usd=0.04))
+    at_limit = guard_over(
+        MeteredRouter([(VALID, 1, 1)]),
+        BudgetLimits(per_run_usd=0.05),
+        FixedPricer(0.01),
+        StillLedger(run_usd=0.04),
+    )
+    over = guard_over(
+        MeteredRouter([(VALID, 1, 1)]),
+        BudgetLimits(per_run_usd=0.05),
+        FixedPricer(0.02),
+        StillLedger(run_usd=0.04),
+    )
 
     await at_limit.generate_structured(TaskClass.HIGH_VOLUME, WARMING, ContractPassage)
     with pytest.raises(BudgetExceededError):

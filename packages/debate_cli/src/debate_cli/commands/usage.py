@@ -43,9 +43,7 @@ def usage(
     ctx: typer.Context,
     day: Annotated[
         str | None,
-        typer.Option(
-            "--date", metavar="YYYY-MM-DD", help="The local day to summarize. Default: today."
-        ),
+        typer.Option("--date", metavar="YYYY-MM-DD", help="The local day to summarize. Default: today."),
     ] = None,
 ) -> None:
     """Show one day's model calls, tokens and estimated cost, by prompt and model."""

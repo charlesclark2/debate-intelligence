@@ -299,16 +299,17 @@ class BedrockModelRouter:
         request = converse_request(route, rendered.user, rendered.system, schema)
         invoked_at = self._now()
         response, latency_ms = await self._send(route, task_class, "converse", request)
-        output = _structured_output(response, schema, prompt, route)
-        usage = response.get("usage", {})
+        reported = response.get("usage", {})
+        usage = ModelUsage(
+            input_tokens=reported.get("inputTokens"),
+            output_tokens=reported.get("outputTokens"),
+            latency_ms=latency_ms,
+        )
+        output = _structured_output(response, schema, prompt, route, usage)
         return ModelResponse[schema](
             output=output,
             route=route,
-            usage=ModelUsage(
-                input_tokens=usage.get("inputTokens"),
-                output_tokens=usage.get("outputTokens"),
-                latency_ms=latency_ms,
-            ),
+            usage=usage,
             prompt_id=prompt.prompt_id,
             prompt_version=prompt.prompt_version,
             provider_request_id=_request_id(response),
@@ -420,12 +421,17 @@ class BedrockModelRouter:
 
 
 def _structured_output[OutputT: BaseModel](
-    response: Mapping[str, Any], schema: type[OutputT], prompt: ModelPrompt, route: ResolvedRoute
+    response: Mapping[str, Any],
+    schema: type[OutputT],
+    prompt: ModelPrompt,
+    route: ResolvedRoute,
+    usage: ModelUsage,
 ) -> OutputT:
     """The schema instance the model's call of the tool carries, or `InvalidModelOutput`.
 
     The tool's input is validated by :func:`~debate_core.application.structured_output.validate_model_output`,
-    strictly, like every router's; the error names the problems and never the model's words.
+    strictly, like every router's; the error names the problems and never the model's words. It
+    carries `usage`, the call's tokens: an invalid answer was still billed (v1-e05-t07).
     """
     name = tool_name_for(schema)
     stop_reason = response.get("stopReason")
@@ -437,6 +443,7 @@ def _structured_output[OutputT: BaseModel](
             describe_problems((problem,)),
             model_id=route.model_id,
             problems=(problem,),
+            usage=usage,
         )
 
     message = _as_mapping(_as_mapping(response.get("output")).get("message"))
@@ -462,7 +469,9 @@ def _structured_output[OutputT: BaseModel](
                 msg=f"the model called the {name} tool {len(ours)} times; one answer was asked for",
             )
         )
-    return validate_model_output(schema, ours[0].get("input"), prompt=prompt, model_id=route.model_id)
+    return validate_model_output(
+        schema, ours[0].get("input"), prompt=prompt, model_id=route.model_id, usage=usage
+    )
 
 
 def _invoke(route: ResolvedRoute, body: Mapping[str, Any]) -> dict[str, Any]:

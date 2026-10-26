@@ -52,8 +52,20 @@ def no_inherited_settings(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 
 
 def settings_with(tmp_path: Path, **models: object) -> Settings:
-    """The test profile, with `models` overriding its model settings and no `.env` file."""
-    return load_settings(environment="test", overrides={"models": models}, env_file=tmp_path / "no.env")
+    """The test profile, with `models` overriding its model settings and no `.env` file.
+
+    No budget limit unless `models` sets one, and a data directory of the test's own: the profile's
+    $0 daily limit refuses every live call to a model with no price, and a live call is logged
+    under the data directory (v1-e05-t07).
+    """
+    return load_settings(
+        environment="test",
+        overrides={
+            "models": {"budget_usd_daily": None} | models,
+            "storage": {"data_dir": str(tmp_path / "data")},
+        },
+        env_file=tmp_path / "no.env",
+    )
 
 
 class RealRouterSpy:

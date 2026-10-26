@@ -35,13 +35,69 @@ CHICAGO = ZoneInfo("America/Chicago")
 LATE_EVENING = datetime(2026, 9, 18, 3, 30, tzinfo=UTC)
 """22:30 on 2026-09-17 in Chicago: "today" for a command run then."""
 
-DAY_FILE = """\
-{"run_id": "r1", "prompt_id": "landscape.classify-position", "prompt_version": "1.0.0", "model_id": "test.haiku", "attempt": 1, "input_tokens": 1200, "output_tokens": 300, "latency_ms": 900.0, "estimated_cost_usd": 0.0027, "recorded_at": "2026-09-17T15:00:00Z"}
-{"run_id": "r1", "prompt_id": "model.repair", "prompt_version": "1.0.0", "model_id": "test.haiku", "attempt": 2, "input_tokens": 1500, "output_tokens": 200, "latency_ms": 950.0, "estimated_cost_usd": 0.0025, "recorded_at": "2026-09-17T15:00:01Z"}
-{"run_id": "r2", "prompt_id": "landscape.classify-position", "prompt_version": "1.0.0", "model_id": "test.haiku", "attempt": 1, "input_tokens": 800, "output_tokens": 100, "latency_ms": 700.0, "estimated_cost_usd": 0.0013, "recorded_at": "2026-09-17T16:00:00Z"}
-{"run_id": "r2", "prompt_id": "landscape.classify-position", "prompt_version": "1.0.0", "model_id": "anthropic.claude-sonnet-5-5", "attempt": 1, "input_tokens": 1000, "output_tokens": 50, "latency_ms": 1200.0, "estimated_cost_usd": null, "recorded_at": "2026-09-17T16:00:01Z"}
-{"run_id": "r2", "prompt_id": null, "prompt_version": null, "model_id": "amazon.titan-embed-text-v2:0", "attempt": 1, "input_tokens": 400, "output_tokens": null, "latency_ms": 80.0, "estimated_cost_usd": 0.00008, "recorded_at": "2026-09-17T16:00:02Z"}
-"""
+DAY_LINES: list[dict[str, Any]] = [
+    {
+        "run_id": "r1",
+        "prompt_id": "landscape.classify-position",
+        "prompt_version": "1.0.0",
+        "model_id": "test.haiku",
+        "attempt": 1,
+        "input_tokens": 1200,
+        "output_tokens": 300,
+        "latency_ms": 900.0,
+        "estimated_cost_usd": 0.0027,
+        "recorded_at": "2026-09-17T15:00:00Z",
+    },
+    {
+        "run_id": "r1",
+        "prompt_id": "model.repair",
+        "prompt_version": "1.0.0",
+        "model_id": "test.haiku",
+        "attempt": 2,
+        "input_tokens": 1500,
+        "output_tokens": 200,
+        "latency_ms": 950.0,
+        "estimated_cost_usd": 0.0025,
+        "recorded_at": "2026-09-17T15:00:01Z",
+    },
+    {
+        "run_id": "r2",
+        "prompt_id": "landscape.classify-position",
+        "prompt_version": "1.0.0",
+        "model_id": "test.haiku",
+        "attempt": 1,
+        "input_tokens": 800,
+        "output_tokens": 100,
+        "latency_ms": 700.0,
+        "estimated_cost_usd": 0.0013,
+        "recorded_at": "2026-09-17T16:00:00Z",
+    },
+    {
+        "run_id": "r2",
+        "prompt_id": "landscape.classify-position",
+        "prompt_version": "1.0.0",
+        "model_id": "anthropic.claude-sonnet-5-5",
+        "attempt": 1,
+        "input_tokens": 1000,
+        "output_tokens": 50,
+        "latency_ms": 1200.0,
+        "estimated_cost_usd": None,
+        "recorded_at": "2026-09-17T16:00:01Z",
+    },
+    {
+        "run_id": "r2",
+        "prompt_id": None,
+        "prompt_version": None,
+        "model_id": "amazon.titan-embed-text-v2:0",
+        "attempt": 1,
+        "input_tokens": 400,
+        "output_tokens": None,
+        "latency_ms": 80.0,
+        "estimated_cost_usd": 8e-05,
+        "recorded_at": "2026-09-17T16:00:02Z",
+    },
+]
+DAY_FILE = "".join(json.dumps(line) + "\n" for line in DAY_LINES)
 """Five calls on 2026-09-17: three to test.haiku (one a repair), one to an unpriced model, one embedding."""
 
 EXPECTED_GROUPS = [
@@ -267,4 +323,6 @@ def test_max_cost_below_zero_is_a_usage_error(settings: Settings) -> None:
 def test_max_cost_is_the_limit_the_router_s_budget_guard_is_built_with(settings: Settings) -> None:
     limited = with_max_cost(settings, 0.05)
 
-    assert budget_limits(limited) == BudgetLimits(per_run_usd=0.05, per_day_usd=settings.models.budget_usd_daily)
+    assert budget_limits(limited) == BudgetLimits(
+        per_run_usd=0.05, per_day_usd=settings.models.budget_usd_daily
+    )

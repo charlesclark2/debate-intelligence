@@ -19,29 +19,38 @@ Replay and the fake router make no call, so nothing here wraps them.
 
 from __future__ import annotations
 
+import json
 import time
 from collections.abc import Callable, Sequence
+from typing import Final
 
 from pydantic import BaseModel
 
 from debate_core.application.budget import CallCeiling
+from debate_core.application.errors import InvalidModelOutput
 from debate_core.application.ports.model_router import ModelRouter
 from debate_core.application.ports.providers import Clock
+from debate_core.application.structured_output import REPAIR_PROMPT_ID
 from debate_core.domain.model_contracts import (
     EmbeddingResponse,
     ModelParams,
     ModelPrompt,
     ModelResponse,
+    ModelUsage,
     RerankResponse,
     TaskClass,
 )
 from debate_core.integrations.models.routing_policy import RoutingPolicy
-from debate_core.integrations.models.usage import ModelPricing, UsageLog
+from debate_core.integrations.models.usage import ModelPricing, UsageLog, UsageRecord, search_units
 
 __all__ = ["RoutePricing", "UsageRecordingRouter"]
 
 type Timer = Callable[[], float]
 """Seconds from an arbitrary start, `time.perf_counter` by default."""
+
+FIRST_ATTEMPT: Final = 1
+REPAIR_ATTEMPT: Final = 2
+"""The attempt a `model.repair` call is: the structured-output guard repairs a call exactly once."""
 
 
 class UsageRecordingRouter:
@@ -76,13 +85,94 @@ class UsageRecordingRouter:
         schema: type[OutputT],
         params: ModelParams | None = None,
     ) -> ModelResponse[OutputT]:
-        return await self._delegate.generate_structured(task_class, prompt, schema, params)
+        """The delegate's answer; its usage is logged whether the answer validated or not.
+
+        A repair is recorded as what was sent, `model.repair`, as attempt 2. A call that got no
+        answer (refused, throttled, unreachable) reported no usage and is not logged.
+        """
+        attempt = REPAIR_ATTEMPT if prompt.prompt_id == REPAIR_PROMPT_ID else FIRST_ATTEMPT
+        started = self._timer()
+        try:
+            response = await self._delegate.generate_structured(task_class, prompt, schema, params)
+        except InvalidModelOutput as invalid:
+            if invalid.model_id is not None:
+                self._record_structured(prompt, invalid.model_id, invalid.usage, attempt, started)
+            raise
+        self._record_structured(prompt, response.route.model_id, response.usage, attempt, started)
+        return response
 
     async def embed(self, texts: Sequence[str]) -> EmbeddingResponse:
-        return await self._delegate.embed(texts)
+        started = self._timer()
+        response = await self._delegate.embed(texts)
+        model_id = response.route.model_id
+        input_tokens = response.usage.input_tokens
+        self._append(
+            None,
+            model_id,
+            FIRST_ATTEMPT,
+            input_tokens,
+            None,
+            started,
+            self._pricing.embedding_cost(model_id, input_tokens),
+        )
+        return response
 
     async def rerank(self, query: str, documents: Sequence[str]) -> RerankResponse:
-        return await self._delegate.rerank(query, documents)
+        started = self._timer()
+        response = await self._delegate.rerank(query, documents)
+        model_id = response.route.model_id
+        usage = response.usage
+        self._append(
+            None,
+            model_id,
+            FIRST_ATTEMPT,
+            usage.input_tokens,
+            usage.output_tokens,
+            started,
+            self._pricing.rerank_cost(model_id, len(documents)),
+        )
+        return response
+
+    def _record_structured(
+        self, prompt: ModelPrompt, model_id: str, usage: ModelUsage | None, attempt: int, started: float
+    ) -> None:
+        input_tokens = usage.input_tokens if usage is not None else None
+        output_tokens = usage.output_tokens if usage is not None else None
+        self._append(
+            prompt,
+            model_id,
+            attempt,
+            input_tokens,
+            output_tokens,
+            started,
+            self._pricing.structured_cost(model_id, input_tokens, output_tokens),
+        )
+
+    def _append(
+        self,
+        prompt: ModelPrompt | None,
+        model_id: str,
+        attempt: int,
+        input_tokens: int | None,
+        output_tokens: int | None,
+        started: float,
+        cost: float | None,
+    ) -> None:
+        latency_ms = max(0.0, (self._timer() - started) * 1000)
+        self._log.append(
+            UsageRecord(
+                run_id=self.run_id,
+                prompt_id=prompt.prompt_id if prompt is not None else None,
+                prompt_version=prompt.prompt_version if prompt is not None else None,
+                model_id=model_id,
+                attempt=attempt,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                latency_ms=latency_ms,
+                estimated_cost_usd=cost,
+                recorded_at=self._clock.now(),
+            )
+        )
 
 
 class RoutePricing:
@@ -103,12 +193,45 @@ class RoutePricing:
         self, task_class: TaskClass, prompt: ModelPrompt, params: ModelParams | None
     ) -> CallCeiling:
         route = self._policy.resolve(task_class, params)
-        return CallCeiling(model_id=route.model_id, usd=0.0)
+        model_id = route.model_id
+        price = self._pricing.price_for(model_id)
+        if price is None or price.input_usd_per_1k_tokens is None or price.output_usd_per_1k_tokens is None:
+            return self._unpriced(model_id, "input and output price per 1K tokens")
+        if route.max_tokens is None:
+            return CallCeiling(
+                model_id=model_id,
+                usd=None,
+                unpriced_reason=(
+                    f"its {task_class.value} route sets no max_tokens, so its output has no ceiling"
+                ),
+            )
+        variables = json.dumps(prompt.variables, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        input_bound = len(variables.encode("utf-8"))
+        usd = (
+            input_bound * price.input_usd_per_1k_tokens + route.max_tokens * price.output_usd_per_1k_tokens
+        ) / 1000
+        return CallCeiling(model_id=model_id, usd=usd)
 
     def embedding_ceiling(self, texts: Sequence[str]) -> CallCeiling:
-        route = self._policy.resolve(TaskClass.EMBEDDINGS)
-        return CallCeiling(model_id=route.model_id, usd=0.0)
+        model_id = self._policy.resolve(TaskClass.EMBEDDINGS).model_id
+        price = self._pricing.price_for(model_id)
+        if price is None or price.input_usd_per_1k_tokens is None:
+            return self._unpriced(model_id, "input price per 1K tokens")
+        input_bound = sum(len(text.encode("utf-8")) for text in texts)
+        return CallCeiling(model_id=model_id, usd=input_bound * price.input_usd_per_1k_tokens / 1000)
 
     def rerank_ceiling(self, query: str, documents: Sequence[str]) -> CallCeiling:
-        route = self._policy.resolve(TaskClass.RERANK)
-        return CallCeiling(model_id=route.model_id, usd=0.0)
+        model_id = self._policy.resolve(TaskClass.RERANK).model_id
+        price = self._pricing.price_for(model_id)
+        if price is None or price.usd_per_1k_search_units is None:
+            return self._unpriced(model_id, "price per 1K search units")
+        return CallCeiling(
+            model_id=model_id, usd=search_units(len(documents)) * price.usd_per_1k_search_units / 1000
+        )
+
+    def _unpriced(self, model_id: str, needed: str) -> CallCeiling:
+        return CallCeiling(
+            model_id=model_id,
+            usd=None,
+            unpriced_reason=f"{self._pricing.source} has no {needed} for it",
+        )

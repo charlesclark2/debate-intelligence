@@ -557,10 +557,14 @@ async def test_structured_output_that_fails_the_schema_is_invalid_output(stubbed
     assert raised.value.__context__ is None
 
 
-async def test_an_invalid_answer_carries_the_usage_of_the_call_that_produced_it(stubbed: StubbedBedrock) -> None:
+async def test_an_invalid_answer_carries_the_usage_of_the_call_that_produced_it(
+    stubbed: StubbedBedrock,
+) -> None:
     """An invalid answer was still a billed call: its tokens go with the error, for usage telemetry and
     the budget guard, so a repaired call's first attempt is counted (v1-e05-t07)."""
-    stubbed.add_converse([{"text": "Paragraph four."}], stop_reason="end_turn", input_tokens=640, output_tokens=25)
+    stubbed.add_converse(
+        [{"text": "Paragraph four."}], stop_reason="end_turn", input_tokens=640, output_tokens=25
+    )
     stubbed.add_answer({"paragraph_id": "the fourth", "start_offset": 10, "end_offset": 90}, input_tokens=700)
 
     with pytest.raises(InvalidModelOutput) as no_tool_call:

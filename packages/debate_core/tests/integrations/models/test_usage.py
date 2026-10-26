@@ -95,8 +95,10 @@ models:
 VALID: Mapping[str, JsonValue] = {"paragraph_id": 3, "start_offset": 0, "end_offset": 42}
 INVALID: Mapping[str, JsonValue] = {"paragraph_id": "the third", "start_offset": 0, "end_offset": 42}
 
-SENTINEL = "Sentinel Northbrook Debate Okafor standing in for card and student text"
-"""Invented words a call's variables and documents carry; no usage record may repeat any of them."""
+SENTINEL = "Sentinelword Northbrookhigh Okaforteam standing in for card, school and student words"
+"""Invented text a call's variables and documents carry; no usage record may repeat its invented words."""
+
+INVENTED_WORDS = ("Sentinelword", "Northbrookhigh", "Okaforteam")
 
 
 @pytest.fixture
@@ -141,14 +143,18 @@ def policy() -> RoutingPolicy:
             timeout_seconds=30,
         )
 
-    scoring = {"provider": ModelProvider.BEDROCK, "region": "us-east-1", "timeout_seconds": 30}
+    def scoring(model_id: str) -> ModelRoute:
+        return ModelRoute(
+            provider=ModelProvider.BEDROCK, model_id=model_id, region="us-east-1", timeout_seconds=30
+        )
+
     return RoutingPolicy(
         routes={
             TaskClass.HIGH_VOLUME: generative("test.haiku", 100),
             TaskClass.COMPLEX_REASONING: generative("test.unpriced", 100),
             TaskClass.DEEP_AUDIT: generative("test.haiku", None),
-            TaskClass.EMBEDDINGS: ModelRoute(model_id="test.embed", **scoring),
-            TaskClass.RERANK: ModelRoute(model_id="test.rerank", **scoring),
+            TaskClass.EMBEDDINGS: scoring("test.embed"),
+            TaskClass.RERANK: scoring("test.rerank"),
         }
     )
 
@@ -188,7 +194,11 @@ class MeteredRouter:
         answer, input_tokens, output_tokens = self._next(prompt.prompt_id)
         usage = ModelUsage(input_tokens=input_tokens, output_tokens=output_tokens, latency_ms=850.0)
         output = validate_model_output(
-            schema, None if answer is None else dict(answer), prompt=prompt, model_id=route.model_id, usage=usage
+            schema,
+            None if answer is None else dict(answer),
+            prompt=prompt,
+            model_id=route.model_id,
+            usage=usage,
         )
         return ModelResponse[schema](
             output=output,
@@ -211,7 +221,9 @@ class MeteredRouter:
     async def rerank(self, query: str, documents: Sequence[str]) -> RerankResponse:
         self._next("rerank")
         return RerankResponse(
-            results=tuple(RerankResult(index=index, relevance_score=-index) for index in range(len(documents))),
+            results=tuple(
+                RerankResult(index=index, relevance_score=-index) for index in range(len(documents))
+            ),
             route=self.routing.resolve(TaskClass.RERANK),
             usage=ModelUsage(latency_ms=850.0),
             invoked_at=LATE_EVENING,
@@ -493,7 +505,10 @@ async def test_record_a_call_still_invalid_after_its_repair_logs_both_and_its_er
 
     with pytest.raises(ModelOutputError) as raised:
         await guard.generate(
-            TaskClass.HIGH_VOLUME, example_prompt(), ContractPassage, policy=ValidationPolicy(fail_closed=True)
+            TaskClass.HIGH_VOLUME,
+            example_prompt(),
+            ContractPassage,
+            policy=ValidationPolicy(fail_closed=True),
         )
 
     assert [(line["attempt"], line["input_tokens"]) for line in lines(log.path_for(date(2026, 9, 17)))] == [
@@ -532,7 +547,9 @@ async def test_record_of_embed_and_rerank_calls_names_no_prompt(log: UsageLog, p
     assert [line["estimated_cost_usd"] for line in written] == [pytest.approx(0.0003), pytest.approx(0.006)]
 
 
-async def test_record_of_an_unpriced_model_has_a_null_cost_not_zero(log: UsageLog, pricing: ModelPricing) -> None:
+async def test_record_of_an_unpriced_model_has_a_null_cost_not_zero(
+    log: UsageLog, pricing: ModelPricing
+) -> None:
     router = recorder(MeteredRouter([(VALID, 2000, 400)]), log, pricing)
 
     await router.generate_structured(
@@ -565,7 +582,9 @@ async def test_record_nothing_for_a_call_that_got_no_answer(log: UsageLog, prici
     assert not log.path_for(date(2026, 9, 17)).exists()
 
 
-async def test_record_never_holds_prompt_variables_or_document_text(log: UsageLog, pricing: ModelPricing) -> None:
+async def test_record_never_holds_prompt_variables_or_document_text(
+    log: UsageLog, pricing: ModelPricing
+) -> None:
     router = recorder(MeteredRouter([(VALID, 10, 10), (None, 10, None), (None, None, None)]), log, pricing)
 
     await router.generate_structured(TaskClass.HIGH_VOLUME, example_prompt(SENTINEL), ContractPassage)
@@ -574,7 +593,7 @@ async def test_record_never_holds_prompt_variables_or_document_text(log: UsageLo
 
     text = log.path_for(date(2026, 9, 17)).read_text(encoding="utf-8")
     assert len(text.splitlines()) == 3
-    assert not any(word in text for word in SENTINEL.split()), text
+    assert [word for word in INVENTED_WORDS if word.lower() in text.lower()] == [], text
 
 
 async def test_record_lines_stay_whole_when_calls_and_threads_append_at_once(
@@ -662,22 +681,57 @@ def test_record_ledger_refuses_a_line_it_cannot_read_rather_than_skip_its_cost(l
 
 def test_record_summary_groups_by_prompt_and_model_and_keeps_unpriced_calls_apart() -> None:
     records = [
-        record(prompt_id="landscape.classify", model_id="test.haiku", input_tokens=100, output_tokens=10,
-               estimated_cost_usd=0.25),
-        record(prompt_id="model.repair", model_id="test.haiku", attempt=2, input_tokens=50, output_tokens=5,
-               estimated_cost_usd=0.125),
-        record(prompt_id="landscape.classify", model_id="test.haiku", input_tokens=200, output_tokens=20,
-               estimated_cost_usd=0.5),
-        record(prompt_id="landscape.classify", model_id="test.unpriced", input_tokens=300, output_tokens=30,
-               estimated_cost_usd=None),
-        record(prompt_id=None, prompt_version=None, model_id="test.embed", input_tokens=400, output_tokens=None,
-               estimated_cost_usd=0.0625),
+        record(
+            prompt_id="landscape.classify",
+            model_id="test.haiku",
+            input_tokens=100,
+            output_tokens=10,
+            estimated_cost_usd=0.25,
+        ),
+        record(
+            prompt_id="model.repair",
+            model_id="test.haiku",
+            attempt=2,
+            input_tokens=50,
+            output_tokens=5,
+            estimated_cost_usd=0.125,
+        ),
+        record(
+            prompt_id="landscape.classify",
+            model_id="test.haiku",
+            input_tokens=200,
+            output_tokens=20,
+            estimated_cost_usd=0.5,
+        ),
+        record(
+            prompt_id="landscape.classify",
+            model_id="test.unpriced",
+            input_tokens=300,
+            output_tokens=30,
+            estimated_cost_usd=None,
+        ),
+        record(
+            prompt_id=None,
+            prompt_version=None,
+            model_id="test.embed",
+            input_tokens=400,
+            output_tokens=None,
+            estimated_cost_usd=0.0625,
+        ),
     ]
 
     summary = summarize(date(2026, 9, 17), records)
 
     assert [
-        (g.prompt_id, g.model_id, g.calls, g.input_tokens, g.output_tokens, g.estimated_cost_usd, g.unpriced_calls)
+        (
+            g.prompt_id,
+            g.model_id,
+            g.calls,
+            g.input_tokens,
+            g.output_tokens,
+            g.estimated_cost_usd,
+            g.unpriced_calls,
+        )
         for g in summary.groups
     ] == [
         (None, "test.embed", 1, 400, 0, 0.0625, 0),
@@ -726,11 +780,15 @@ async def test_record_build_model_router_logs_real_calls_in_live_and_record_mode
 ) -> None:
     settings = bedrock_settings(tmp_path)
     delegate = MeteredRouter([(VALID, 2000, 400)], routing=RoutingPolicy.from_settings(settings))
+
+    def real_router(policy: RoutingPolicy, *, aws_profile: str | None) -> ModelRouter:
+        return delegate
+
     router = build_model_router(
         settings,
         mode=mode,
         environ={},
-        real_router=lambda _policy, *, aws_profile: delegate,  # pyright: ignore[reportUnknownLambdaType]
+        real_router=real_router,
         cassette_dir=tmp_path / "cassettes",
         clock=FixedClock(LATE_EVENING),
         run_id="run-from-the-factory",
@@ -752,13 +810,15 @@ async def test_record_build_model_router_logs_real_calls_in_live_and_record_mode
 async def test_record_build_model_router_logs_nothing_on_replay_or_the_fake(tmp_path: Path) -> None:
     settings = bedrock_settings(tmp_path)
     cassettes = tmp_path / "cassettes"
+
+    def real_router(policy: RoutingPolicy, *, aws_profile: str | None) -> ModelRouter:
+        return MeteredRouter([(VALID, 2000, 400)], routing=policy)
+
     recording = build_model_router(
         settings,
         mode="record",
         environ={},
-        real_router=lambda _policy, *, aws_profile: MeteredRouter(  # pyright: ignore[reportUnknownLambdaType]
-            [(VALID, 2000, 400)], routing=_policy
-        ),
+        real_router=real_router,
         cassette_dir=cassettes,
         clock=FixedClock(LATE_EVENING),
         usage_log=UsageLog.for_data_dir(settings.storage.data_dir, local_zone=CHICAGO),

@@ -19,16 +19,22 @@ the fake router answers from fixtures, so neither costs anything or logs anythin
 
 from __future__ import annotations
 
+import fcntl
 import logging
+import os
+import threading
+from collections import defaultdict
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, tzinfo
 from pathlib import Path
-from typing import Final, Self
+from typing import Any, Final, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+import yaml
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from debate_core.application.budget import Spend, local_day
+from debate_core.application.budget import Spend, UnreadableUsageLog, local_day
+from debate_core.application.settings import ConfigurationError
 from debate_core.domain.base import UtcDatetime
 
 __all__ = [
@@ -63,7 +69,7 @@ def search_units(documents: int) -> int:
     Cohere also splits a document longer than its chunk size into several, each counted; that is
     not known before the call, and is left out.
     """
-    return 0
+    return -(-documents // DOCUMENTS_PER_SEARCH_UNIT)
 
 
 class UsageRecord(BaseModel):
@@ -98,6 +104,9 @@ class ModelPrice(BaseModel):
 
     @model_validator(mode="after")
     def _a_price_has_provenance(self) -> Self:
+        priced = (self.input_usd_per_1k_tokens, self.output_usd_per_1k_tokens, self.usd_per_1k_search_units)
+        if any(price is not None for price in priced) and (self.as_of is None or self.source is None):
+            raise ValueError("a price needs `as_of` and `source` beside it: the day it was read, and where")
         return self
 
 
@@ -106,37 +115,94 @@ class PricingFile(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    version: int
+    version: Literal[1]
     models: dict[str, ModelPrice]
 
 
 class ModelPricing:
     """The pricing table: what a call to each model costs, or `None` with a warning."""
 
-    def __init__(self, prices: Mapping[str, ModelPrice], *, source: str = "config/model_pricing.yaml") -> None:
+    def __init__(
+        self, prices: Mapping[str, ModelPrice], *, source: str = "config/model_pricing.yaml"
+    ) -> None:
         self._prices = dict(prices)
         self.source = source
         """Where the prices were read, for messages."""
+        self._warned: set[str] = set()
 
     @classmethod
     def load(cls, path: Path) -> Self:
-        """Read `path`. A missing file prices nothing; an invalid one is a `ConfigurationError`."""
-        return cls({}, source=str(path))
+        """Read `path`. A missing file prices nothing; an invalid one is a `ConfigurationError`.
+
+        A missing file is not an error because an unpriced model is not one either: every call costs
+        `null`, with a warning naming the file, and a run with a budget limit refuses the call.
+        """
+        source = str(path)
+        try:
+            text = path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return cls({}, source=f"{path} (not found)")
+        except OSError as error:
+            raise ConfigurationError(f"could not read {path}: {error}", source=source) from error
+        try:
+            # safe_load: a pricing file is data, and nothing in it may construct a Python object.
+            document: Any = yaml.safe_load(text)
+        except yaml.YAMLError as error:
+            raise ConfigurationError(f"{path} is not valid YAML: {error}", source=source) from error
+        try:
+            table = PricingFile.model_validate(document)
+        except ValidationError as error:
+            first = error.errors()[0]
+            dotted = ".".join(str(part) for part in first["loc"])
+            raise ConfigurationError(
+                f"{path}: {dotted or 'the file'}: {first['msg']}", field=dotted or None, source=source
+            ) from error
+        return cls(table.models, source=source)
 
     def price_for(self, model_id: str) -> ModelPrice | None:
         """`model_id`'s entry, or `None` when the file has none."""
         return self._prices.get(model_id)
 
-    def structured_cost(self, model_id: str, input_tokens: int | None, output_tokens: int | None) -> float | None:
+    def structured_cost(
+        self, model_id: str, input_tokens: int | None, output_tokens: int | None
+    ) -> float | None:
         """A generative call's cost, or `None`, with a warning, when it cannot be priced."""
-        return None
+        price = self._prices.get(model_id)
+        if price is None or price.input_usd_per_1k_tokens is None or price.output_usd_per_1k_tokens is None:
+            return self._unpriced(model_id, "input and output price per 1K tokens")
+        if input_tokens is None or output_tokens is None:
+            return None
+        return (
+            input_tokens * price.input_usd_per_1k_tokens + output_tokens * price.output_usd_per_1k_tokens
+        ) / 1000
 
     def embedding_cost(self, model_id: str, input_tokens: int | None) -> float | None:
         """An embedding call's cost, or `None`, with a warning, when it cannot be priced."""
-        return None
+        price = self._prices.get(model_id)
+        if price is None or price.input_usd_per_1k_tokens is None:
+            return self._unpriced(model_id, "input price per 1K tokens")
+        if input_tokens is None:
+            return None
+        return input_tokens * price.input_usd_per_1k_tokens / 1000
 
     def rerank_cost(self, model_id: str, documents: int) -> float | None:
         """A rerank call's cost, or `None`, with a warning, when it cannot be priced."""
+        price = self._prices.get(model_id)
+        if price is None or price.usd_per_1k_search_units is None:
+            return self._unpriced(model_id, "price per 1K search units")
+        return search_units(documents) * price.usd_per_1k_search_units / 1000
+
+    def _unpriced(self, model_id: str, needed: str) -> None:
+        """No cost, and a warning the first time a model is found without one: never a guess."""
+        if model_id not in self._warned:
+            self._warned.add(model_id)
+            logger.warning(
+                "model %s has no %s in %s; its calls are logged with cost null",
+                model_id,
+                needed,
+                self.source,
+                extra={"model_id": model_id},
+            )
         return None
 
 
@@ -163,28 +229,73 @@ class UsageSummary:
 
     @property
     def calls(self) -> int:
+        """Every call of the day."""
         return sum(group.calls for group in self.groups)
 
     @property
     def input_tokens(self) -> int:
+        """Every input token reported."""
         return sum(group.input_tokens for group in self.groups)
 
     @property
     def output_tokens(self) -> int:
+        """Every output token reported."""
         return sum(group.output_tokens for group in self.groups)
 
     @property
     def estimated_cost_usd(self) -> float:
-        return sum(group.estimated_cost_usd for group in self.groups)
+        """The priced calls' cost."""
+        return sum((group.estimated_cost_usd for group in self.groups), 0.0)
 
     @property
     def unpriced_calls(self) -> int:
+        """The calls with no cost, which `estimated_cost_usd` leaves out."""
         return sum(group.unpriced_calls for group in self.groups)
 
 
 def summarize(day: date, records: Iterable[UsageRecord]) -> UsageSummary:
-    """`records` grouped by prompt id and model id, in that order."""
-    return UsageSummary(day=day, groups=())
+    """`records` grouped by prompt id and model id, sorted by them, embed and rerank calls first.
+
+    A token a provider did not report counts as none; a call with no cost is counted apart, in
+    `unpriced_calls`, rather than as free.
+    """
+    totals: dict[tuple[str | None, str], list[float]] = defaultdict(lambda: [0, 0, 0, 0.0, 0])
+    for record in records:
+        group = totals[(record.prompt_id, record.model_id)]
+        group[0] += 1
+        group[1] += record.input_tokens or 0
+        group[2] += record.output_tokens or 0
+        if record.estimated_cost_usd is None:
+            group[4] += 1
+        else:
+            group[3] += record.estimated_cost_usd
+    return UsageSummary(
+        day=day,
+        groups=tuple(
+            UsageGroup(
+                prompt_id=prompt_id,
+                model_id=model_id,
+                calls=int(calls),
+                input_tokens=int(input_tokens),
+                output_tokens=int(output_tokens),
+                estimated_cost_usd=cost,
+                unpriced_calls=int(unpriced),
+            )
+            for (prompt_id, model_id), (calls, input_tokens, output_tokens, cost, unpriced) in sorted(
+                totals.items(), key=lambda item: (item[0][0] or "", item[0][1])
+            )
+        ),
+    )
+
+
+@dataclass(slots=True)
+class _Tail:
+    """How far one day file has been read, and what the lines read so far cost."""
+
+    offset: int = 0
+    lines: int = 0
+    day_usd: float = 0.0
+    run_usd: dict[str, float] = field(default_factory=dict[str, float])
 
 
 class UsageLog:
@@ -195,6 +306,8 @@ class UsageLog:
         """Where the day files are: `<data_dir>/usage`."""
         self.local_zone = local_zone
         """The zone a record's day is read in; this machine's when `None`."""
+        self._lock = threading.Lock()
+        self._tails: dict[Path, _Tail] = {}
 
     @classmethod
     def for_data_dir(cls, data_dir: Path, *, local_zone: tzinfo | None = None) -> Self:
@@ -210,17 +323,91 @@ class UsageLog:
         return local_day(record.recorded_at, self.local_zone)
 
     def append(self, record: UsageRecord) -> Path:
-        """Add `record` to its day's file, as one line, safely beside other writers; return the file."""
-        return self.path_for(self.day_of(record))
+        """Add `record` to its day's file, as one line, safely beside other writers; return the file.
+
+        The line is written with one `write` to a file opened for appending, under an exclusive
+        `flock`, so calls in parallel, threads, and other processes on this machine never
+        interleave their lines.
+        """
+        path = self.path_for(self.day_of(record))
+        line = (record.model_dump_json() + "\n").encode("utf-8")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        descriptor = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX)
+            written = 0
+            while written < len(line):
+                written += os.write(descriptor, line[written:])
+        finally:
+            os.close(descriptor)  # which releases the lock
+        return path
 
     def read(self, day: date) -> tuple[UsageRecord, ...]:
-        """Every record of `day`, in the order written; none when there is no file."""
-        return ()
+        """Every record of `day`, in the order written; none when there is no file.
+
+        Raises :class:`~debate_core.application.budget.UnreadableUsageLog` naming the file and line
+        of a line that is not a record.
+        """
+        path = self.path_for(day)
+        try:
+            data = path.read_bytes()
+        except FileNotFoundError:
+            return ()
+        except OSError as error:
+            raise UnreadableUsageLog(str(path), str(error)) from error
+        return tuple(_parsed(path, number, raw) for number, raw in enumerate(data.splitlines(), start=1))
 
     def summary(self, day: date) -> UsageSummary:
         """`day`'s records, summarized."""
         return summarize(day, self.read(day))
 
     def spent(self, run_id: str, day: date) -> Spend:
-        """What `run_id` and `day` have spent, from the lines written so far."""
-        return Spend(run_usd=0.0, day_usd=0.0)
+        """What `run_id` and `day` have spent, from the lines written so far.
+
+        Each file is read once, from where the last read stopped, so a long run does not read its
+        day again for every call; lines another process appended since count too. A run's spend is
+        every line of it in any file this log has read; a line with no cost adds nothing. Raises
+        :class:`~debate_core.application.budget.UnreadableUsageLog` for a line that is not a record:
+        what was spent is then unknown.
+        """
+        with self._lock:
+            path = self.path_for(day)
+            self._tails.setdefault(path, _Tail())
+            for tailed, tail in self._tails.items():
+                _catch_up(tailed, tail)
+            run_usd = sum((tail.run_usd.get(run_id, 0.0) for tail in self._tails.values()), 0.0)
+            return Spend(run_usd=run_usd, day_usd=self._tails[path].day_usd)
+
+
+def _catch_up(path: Path, tail: _Tail) -> None:
+    """Read the whole lines appended to `path` since `tail` last read it, and add up their cost.
+
+    Every new line is parsed before any is counted, so a bad line counts none of them and the
+    next read starts from the same place.
+    """
+    try:
+        with path.open("rb") as file:
+            file.seek(tail.offset)
+            data = file.read()
+    except FileNotFoundError:
+        return
+    except OSError as error:
+        raise UnreadableUsageLog(str(path), str(error)) from error
+    end = data.rfind(b"\n") + 1  # a line still being written is left for the next read
+    records = [
+        _parsed(path, tail.lines + number, raw) for number, raw in enumerate(data[:end].splitlines(), start=1)
+    ]
+    for record in records:
+        cost = record.estimated_cost_usd or 0.0
+        tail.day_usd += cost
+        tail.run_usd[record.run_id] = tail.run_usd.get(record.run_id, 0.0) + cost
+    tail.offset += end
+    tail.lines += len(records)
+
+
+def _parsed(path: Path, number: int, raw: bytes) -> UsageRecord:
+    try:
+        return UsageRecord.model_validate_json(raw)
+    except ValidationError as error:
+        reason = error.errors()[0]["msg"]
+        raise UnreadableUsageLog(f"{path}, line {number}", f"it is not a usage record ({reason})") from None

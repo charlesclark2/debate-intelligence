@@ -261,11 +261,15 @@ class StructuredOutputGuard:
             except InvalidModelOutput as invalid:
                 problems = _described(invalid.problems)
                 model_id = invalid.model_id
+                usage = invalid.usage
             else:
                 problems = tuple(check(response.output)) if check is not None else ()
+                usage = response.usage
                 if not problems:
                     attempts.append(
-                        OutputAttempt(number, attempt_prompt.prompt_id, attempt_prompt.prompt_version)
+                        OutputAttempt(
+                            number, attempt_prompt.prompt_id, attempt_prompt.prompt_version, usage=usage
+                        )
                     )
                     if number > 1:
                         _log(logging.INFO, "structured output repaired", prompt, attempts)
@@ -275,7 +279,7 @@ class StructuredOutputGuard:
                 model_id = response.route.model_id
             attempts.append(
                 OutputAttempt.refused(
-                    number, attempt_prompt.prompt_id, attempt_prompt.prompt_version, problems
+                    number, attempt_prompt.prompt_id, attempt_prompt.prompt_version, problems, usage=usage
                 )
             )
             _log(logging.WARNING, "structured output failed validation", prompt, attempts)
@@ -357,6 +361,9 @@ def validate_model_output[OutputT: BaseModel](
     gave: the input of its tool call, or `None` when it never called the tool. It is validated as
     JSON in strict mode with extra keys forbidden at every depth.
 
+    `usage` is what the call that produced the answer used. A refused answer was still a billed
+    call, so the error carries it, for usage telemetry and the budget guard (v1-e05-t07).
+
     The error is raised outside the `except`, so it carries no chained `ValidationError`, whose
     text quotes the answer.
     """
@@ -378,6 +385,7 @@ def validate_model_output[OutputT: BaseModel](
         describe_problems(problems),
         model_id=model_id,
         problems=problems,
+        usage=usage,
     )
 
 

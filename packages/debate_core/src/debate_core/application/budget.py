@@ -26,7 +26,9 @@ Without any limit the guard checks nothing and asks nothing; the composition roo
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import threading
+from collections.abc import Generator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime, tzinfo
 from typing import Protocol
@@ -228,6 +230,8 @@ class BudgetGuard:
         self._ledger = ledger
         self._clock = clock
         self._local_zone = local_zone
+        self._lock = threading.Lock()
+        self._held_usd = 0.0
 
     async def generate_structured[OutputT: BaseModel](
         self,
@@ -236,10 +240,49 @@ class BudgetGuard:
         schema: type[OutputT],
         params: ModelParams | None = None,
     ) -> ModelResponse[OutputT]:
-        return await self._delegate.generate_structured(task_class, prompt, schema, params)
+        if not self.limits.enforced:
+            return await self._delegate.generate_structured(task_class, prompt, schema, params)
+        with self._admitted(self._pricer.structured_ceiling(task_class, prompt, params)):
+            return await self._delegate.generate_structured(task_class, prompt, schema, params)
 
     async def embed(self, texts: Sequence[str]) -> EmbeddingResponse:
-        return await self._delegate.embed(texts)
+        if not self.limits.enforced:
+            return await self._delegate.embed(texts)
+        with self._admitted(self._pricer.embedding_ceiling(texts)):
+            return await self._delegate.embed(texts)
 
     async def rerank(self, query: str, documents: Sequence[str]) -> RerankResponse:
-        return await self._delegate.rerank(query, documents)
+        if not self.limits.enforced:
+            return await self._delegate.rerank(query, documents)
+        with self._admitted(self._pricer.rerank_ceiling(query, documents)):
+            return await self._delegate.rerank(query, documents)
+
+    @contextmanager
+    def _admitted(self, ceiling: CallCeiling) -> Generator[None, None, None]:
+        """Refuse the call, or hold its ceiling until it is over, however it ends.
+
+        The check and the hold are one step under a lock, with nothing awaited between them, so two
+        calls started together cannot both pass a check only one of them fits.
+        """
+        if ceiling.usd is None:
+            raise UnpricedModelError(ceiling.model_id, ceiling.unpriced_reason)
+        with self._lock:
+            spend = self._ledger.spent(self.run_id, local_day(self._clock.now(), self._local_zone))
+            for limit_name, limit_usd, spent_usd in (
+                ("per-run", self.limits.per_run_usd, spend.run_usd),
+                ("per-day", self.limits.per_day_usd, spend.day_usd),
+            ):
+                if limit_usd is not None and spent_usd + self._held_usd + ceiling.usd > limit_usd:
+                    raise BudgetExceededError(
+                        limit_name=limit_name,
+                        limit_usd=limit_usd,
+                        spent_usd=spent_usd + self._held_usd,
+                        ceiling_usd=ceiling.usd,
+                        model_id=ceiling.model_id,
+                    )
+            self._held_usd += ceiling.usd
+        try:
+            yield
+        finally:
+            with self._lock:
+                self._held_usd -= ceiling.usd

@@ -40,4 +40,8 @@ MaxCost = Annotated[
 
 def with_max_cost(settings: Settings, max_cost: float | None) -> Settings:
     """`settings` with `--max-cost` as the per-run limit; unchanged when the option was not given."""
-    return settings
+    if max_cost is None:
+        return settings
+    return settings.model_copy(
+        update={"models": settings.models.model_copy(update={"budget_usd_per_run": max_cost})}
+    )

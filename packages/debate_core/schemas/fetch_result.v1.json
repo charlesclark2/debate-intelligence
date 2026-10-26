@@ -1,0 +1,773 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "debate-research fetch --json output",
+  "description": "One JSON object on stdout per run. Exit 0: the page is ACCESSIBLE, or pasted text was stored as USER_SUPPLIED; the report is under data. Exit 3: any other access status, with the report and no snapshot under error.details, or a fetcher that could not run. Exit 1: the URL names no source, or pasted text was not attested or was rejected; nothing was stored. Exit 2: usage error.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "command",
+    "data",
+    "error"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "status": {
+      "enum": [
+        "ok",
+        "error"
+      ]
+    },
+    "command": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "data": true,
+    "error": true
+  },
+  "oneOf": [
+    {
+      "title": "Readable, or pasted text stored (exit 0)",
+      "properties": {
+        "status": {
+          "const": "ok"
+        },
+        "data": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/FetchReport"
+            },
+            {
+              "properties": {
+                "snapshot": {
+                  "$ref": "#/$defs/SnapshotSummary"
+                }
+              },
+              "anyOf": [
+                {
+                  "properties": {
+                    "access_status": {
+                      "const": "ACCESSIBLE"
+                    }
+                  }
+                },
+                {
+                  "properties": {
+                    "provenance_mode": {
+                      "const": "USER_SUPPLIED"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "error": {
+          "type": "null"
+        }
+      }
+    },
+    {
+      "title": "Not accessible (exit 3)",
+      "properties": {
+        "status": {
+          "const": "error"
+        },
+        "data": {
+          "type": "null"
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "code",
+            "message",
+            "exit_code",
+            "details",
+            "hint"
+          ],
+          "properties": {
+            "code": {
+              "const": "SOURCE_NOT_ACCESSIBLE"
+            },
+            "message": {
+              "type": "string"
+            },
+            "exit_code": {
+              "const": 3
+            },
+            "details": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/FetchReport"
+                },
+                {
+                  "properties": {
+                    "access_status": {
+                      "not": {
+                        "const": "ACCESSIBLE"
+                      }
+                    },
+                    "snapshot": {
+                      "type": "null"
+                    },
+                    "provenance_mode": {
+                      "type": "null"
+                    }
+                  }
+                }
+              ]
+            },
+            "hint": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "title": "Refused: no source URL, unattested or rejected text (exit 1)",
+      "properties": {
+        "status": {
+          "const": "error"
+        },
+        "data": {
+          "type": "null"
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "code",
+            "message",
+            "exit_code",
+            "details",
+            "hint"
+          ],
+          "properties": {
+            "code": {
+              "enum": [
+                "INVALID_SOURCE_URL",
+                "USER_TEXT_NOT_ATTESTED",
+                "USER_TEXT_REJECTED"
+              ]
+            },
+            "message": {
+              "type": "string"
+            },
+            "exit_code": {
+              "const": 1
+            },
+            "details": {
+              "type": "object"
+            },
+            "hint": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "title": "Usage error (exit 2)",
+      "properties": {
+        "status": {
+          "const": "error"
+        },
+        "data": {
+          "type": "null"
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "code",
+            "message",
+            "exit_code",
+            "details",
+            "hint"
+          ],
+          "properties": {
+            "code": {
+              "const": "USAGE_ERROR"
+            },
+            "message": {
+              "type": "string"
+            },
+            "exit_code": {
+              "const": 2
+            },
+            "details": {
+              "type": "object"
+            },
+            "hint": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "title": "The fetcher could not run (exit 3)",
+      "properties": {
+        "status": {
+          "const": "error"
+        },
+        "data": {
+          "type": "null"
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "code",
+            "message",
+            "exit_code",
+            "details",
+            "hint"
+          ],
+          "properties": {
+            "code": {
+              "const": "PROVIDER_UNAVAILABLE"
+            },
+            "message": {
+              "type": "string"
+            },
+            "exit_code": {
+              "const": 3
+            },
+            "details": {
+              "type": "object"
+            },
+            "hint": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "AccessEvidence": {
+      "additionalProperties": false,
+      "description": "What a decision rests on. Counts, codes and ids only; never page text.",
+      "properties": {
+        "status_code": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The response's status, when one arrived.",
+          "title": "Status Code"
+        },
+        "fetch_error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The fetch error's `kind`, when there was one.",
+          "title": "Fetch Error"
+        },
+        "extraction_refusal": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The extraction error's type name.",
+          "title": "Extraction Refusal"
+        },
+        "marker": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MatchedMarker"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "extracted_characters": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Extracted Characters"
+        },
+        "extracted_words": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Extracted Words"
+        },
+        "declared_words": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The page's declared article length.",
+          "title": "Declared Words"
+        },
+        "declared_length_source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DeclaredLengthSource"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "thresholds": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AccessThresholds"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The thresholds the truncation heuristic used, when it ran."
+        }
+      },
+      "title": "AccessEvidence",
+      "type": "object"
+    },
+    "AccessStatus": {
+      "description": "Whether a source's full text could legitimately be retrieved.\n\nThe retrieval layer (E04) classifies every fetch into exactly one of these. There is no\n\"partially readable\" state: a metered or truncated page is `PAYWALLED`, never `ACCESSIBLE`,\nand nothing in the platform attempts to work around an access control.",
+      "enum": [
+        "UNKNOWN",
+        "ACCESSIBLE",
+        "PAYWALLED",
+        "BLOCKED",
+        "ROBOTS_DISALLOWED",
+        "NOT_FOUND",
+        "UNSUPPORTED_TYPE",
+        "ERROR"
+      ],
+      "title": "AccessStatus",
+      "type": "string"
+    },
+    "AccessThresholds": {
+      "additionalProperties": false,
+      "description": "The truncation heuristic's two numbers; ArticleService (v1-e04-t05) passes them from settings.",
+      "properties": {
+        "minimum_characters": {
+          "default": 500,
+          "description": "Fewer extracted characters than this is too little to be an article.",
+          "minimum": 1,
+          "title": "Minimum Characters",
+          "type": "integer"
+        },
+        "truncation_ratio": {
+          "default": 0.5,
+          "description": "Fewer extracted words than this share of the declared length is a truncated page.",
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Truncation Ratio",
+          "type": "number"
+        }
+      },
+      "title": "AccessThresholds",
+      "type": "object"
+    },
+    "ArticleIdentifiers": {
+      "additionalProperties": false,
+      "description": "External identifiers for one source, used to deduplicate results across providers.\n\nEvery field is optional: a news article usually has none of them, a journal article usually has\nseveral. Provider-specific payloads do not belong here — adapters keep those in their own\nresult types (E07).",
+      "properties": {
+        "doi": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Bare lowercase DOI, for example 10.1038/nature12373.",
+          "title": "Doi"
+        },
+        "arxiv_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "arXiv identifier, e.g. 2301.00234.",
+          "title": "Arxiv Id"
+        },
+        "pmid": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "PubMed identifier, digits only.",
+          "title": "Pmid"
+        },
+        "openalex_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "OpenAlex work id, e.g. W2741809807.",
+          "title": "Openalex Id"
+        },
+        "semantic_scholar_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Semantic Scholar paper id.",
+          "title": "Semantic Scholar Id"
+        }
+      },
+      "title": "ArticleIdentifiers",
+      "type": "object"
+    },
+    "DeclaredLengthSource": {
+      "description": "Where a page's declared article length was read.",
+      "enum": [
+        "json_ld_word_count",
+        "json_ld_article_body"
+      ],
+      "title": "DeclaredLengthSource",
+      "type": "string"
+    },
+    "MarkerCategory": {
+      "description": "What a matched marker says about the page.",
+      "enum": [
+        "paywall",
+        "challenge"
+      ],
+      "title": "MarkerCategory",
+      "type": "string"
+    },
+    "MatchedMarker": {
+      "additionalProperties": false,
+      "description": "The marker that decided a page.",
+      "properties": {
+        "category": {
+          "$ref": "#/$defs/MarkerCategory"
+        },
+        "marker_id": {
+          "description": "The rule's id, or `extractor-is-accessible-for-free`.",
+          "minLength": 1,
+          "title": "Marker Id",
+          "type": "string"
+        },
+        "pattern": {
+          "description": "What the rule looks for, or the extractor's description.",
+          "minLength": 1,
+          "title": "Pattern",
+          "type": "string"
+        }
+      },
+      "required": [
+        "category",
+        "marker_id",
+        "pattern"
+      ],
+      "title": "MatchedMarker",
+      "type": "object"
+    },
+    "ProvenanceMode": {
+      "description": "Where a snapshot's or card's text came from.\n\nThis travels from the snapshot onto every card cut from it, so a reader can always tell\npublisher-retrieved evidence from text a person supplied.",
+      "enum": [
+        "PUBLISHER_RETRIEVED",
+        "USER_SUPPLIED",
+        "PASTED",
+        "FILE_IMPORT"
+      ],
+      "title": "ProvenanceMode",
+      "type": "string"
+    },
+    "SnapshotSummary": {
+      "additionalProperties": false,
+      "description": "The stored snapshot a report names: ids, hashes, versions and counts, no text.",
+      "properties": {
+        "snapshot_id": {
+          "title": "Snapshot Id",
+          "type": "string"
+        },
+        "provenance_mode": {
+          "$ref": "#/$defs/ProvenanceMode",
+          "description": "PUBLISHER_RETRIEVED, or USER_SUPPLIED for pasted text."
+        },
+        "access_status": {
+          "$ref": "#/$defs/AccessStatus",
+          "description": "The status recorded on the snapshot."
+        },
+        "sha256": {
+          "description": "SHA-256 of the raw bytes, as stored.",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "normalized_text_hash": {
+          "description": "SHA-256 of the normalized text.",
+          "title": "Normalized Text Hash",
+          "type": "string"
+        },
+        "paragraph_count": {
+          "description": "Paragraphs in the normalized text, as stored.",
+          "minimum": 0,
+          "title": "Paragraph Count",
+          "type": "integer"
+        },
+        "extractor_version": {
+          "title": "Extractor Version",
+          "type": "string"
+        },
+        "normalizer_version": {
+          "title": "Normalizer Version",
+          "type": "string"
+        },
+        "content_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Content Type"
+        },
+        "byte_size": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Byte Size"
+        },
+        "retrieved_at": {
+          "format": "date-time",
+          "title": "Retrieved At",
+          "type": "string"
+        },
+        "reused": {
+          "description": "Whether the snapshot was already stored before this run.",
+          "title": "Reused",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "snapshot_id",
+        "provenance_mode",
+        "access_status",
+        "sha256",
+        "normalized_text_hash",
+        "paragraph_count",
+        "extractor_version",
+        "normalizer_version",
+        "content_type",
+        "byte_size",
+        "retrieved_at",
+        "reused"
+      ],
+      "title": "SnapshotSummary",
+      "type": "object"
+    },
+    "FetchReport": {
+      "additionalProperties": false,
+      "description": "One run of `debate-research fetch`: the article, its access status and the snapshot, if any.",
+      "properties": {
+        "correlation_id": {
+          "title": "Correlation Id",
+          "type": "string"
+        },
+        "requested_url": {
+          "description": "The URL as given (the source URL, for pasted text).",
+          "title": "Requested Url",
+          "type": "string"
+        },
+        "canonical_url": {
+          "description": "The identity key the article is stored under.",
+          "title": "Canonical Url",
+          "type": "string"
+        },
+        "final_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The URL that answered, after redirects; null when nothing was fetched.",
+          "title": "Final Url"
+        },
+        "article_id": {
+          "title": "Article Id",
+          "type": "string"
+        },
+        "title": {
+          "description": "The article's stored title: the page's own, or its URL when it gave none.",
+          "title": "Title",
+          "type": "string"
+        },
+        "identifiers": {
+          "$ref": "#/$defs/ArticleIdentifiers"
+        },
+        "access_status": {
+          "$ref": "#/$defs/AccessStatus"
+        },
+        "reason": {
+          "description": "One sentence for a person: why this status, or why no fetch was needed.",
+          "title": "Reason",
+          "type": "string"
+        },
+        "rules_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The paywall marker rules that classified the page.",
+          "title": "Rules Version"
+        },
+        "evidence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AccessEvidence"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What the classification rests on; null when nothing was classified."
+        },
+        "fetched": {
+          "description": "Whether the publisher was asked.",
+          "title": "Fetched",
+          "type": "boolean"
+        },
+        "provenance_mode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProvenanceMode"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The snapshot's provenance; null with no snapshot."
+        },
+        "snapshot": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SnapshotSummary"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The stored snapshot; null for every status but ACCESSIBLE."
+        }
+      },
+      "required": [
+        "correlation_id",
+        "requested_url",
+        "canonical_url",
+        "final_url",
+        "article_id",
+        "title",
+        "identifiers",
+        "access_status",
+        "reason",
+        "rules_version",
+        "evidence",
+        "fetched",
+        "provenance_mode",
+        "snapshot"
+      ],
+      "title": "FetchReport",
+      "type": "object"
+    }
+  }
+}

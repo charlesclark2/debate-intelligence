@@ -180,3 +180,61 @@ for. His one question was why the affirmative side shows a single aff. The first
 every plan under `single-payer-aff`, the topic's one aff position at 1.1.0. The mechanisms that
 split it come from his plan-text sheet (`v1-e32-t09`'s ac3). He filled that sheet's 131 clusters
 on 2026-10-24, and a later taxonomy version applies them.
+
+## The model stage, counted before its first run (`v1-e32-t07`)
+
+Read-only, on 2026-10-25, with no model call: hspolicy26's parsed store through 2026-10-20 (version
+`2026.10.20-docx-6`, 3,825 sources on `policy-2026-27-nhi`), placed by stage one from scratch with an
+empty in-memory cache, and the model stage's candidates captured instead of sent. 38.5 s to place, 54.5 s
+in all. The live run that ac5 records waits on the data-use policy's open question 4.
+
+| Stage one, cards (taxonomy 1.2.0, threshold 0.6) | Count |
+|---|---|
+| All cards | 126,681 |
+| Counted (ALIAS 39,302, INHERITED 21,303, OVERRIDE 2,803, TAG_KEYWORD at 0.6 or more 86) | 63,494 |
+| Decided to name no position (OVERRIDE, no position) | 4,888 |
+| Placed below the threshold (a tag keyword alone, 0.5) | 1,371 |
+| Unplaced | 56,928 |
+| **Would reach the model** (unplaced and below the threshold) | **58,299** |
+
+Cards read alike share a fingerprint, and the stage asks about each fingerprint once:
+
+| | Count |
+|---|---|
+| Distinct fingerprints among the 58,299 cards | 39,516 |
+| Fingerprints standing for one card | 32,432 |
+| for 2, 3, 4, 5 cards | 3,798; 1,445; 684; 370 |
+| for 6 to 9 cards | 520 |
+| for 10 or more cards | 267 |
+
+The stage asks in its order, the most shared first. What a run capped at N fingerprints would place
+(cards, of the 58,299):
+
+| First N fingerprints | 100 | 250 | 500 | 1,000 | 2,000 | 5,000 | all 39,516 |
+|---|---|---|---|---|---|---|---|
+| Cards they stand for | 3,749 | 5,618 | 7,610 | 10,415 | 14,413 | 21,699 | 58,299 |
+| Calls, at 20 a batch | 5 | 13 | 25 | 50 | 100 | 250 | 1,977 |
+
+**Prompt size**, measured on the candidates from sources whose digest starts with `0` or `1`, about an
+eighth (6,676 candidates, 6,599 with evidence text), rendered by the prompt registry exactly as the
+stage sends them:
+
+* the system turn, holding the merged taxonomy's 102 active positions: 12,329 characters a call;
+* the user turn: 19,512 characters a call of 20 cards; one card's JSON is 892 characters at the median,
+  1,017 at the 90th percentile and 1,884 at most;
+* scaled to all 39,516 candidates: 1,977 calls, 24.4 million system and 38.6 million user characters.
+
+**The scan of the sampled prompt inputs** found no school of the caselist and no team-code word of
+three or more letters (0 of 6,676). A first count, before headings lost team-code words, found 32
+items with a code word in a heading; the stage now takes code words out of headings as it does out of
+tags, cites and excerpts.
+
+**Estimated cost** at dev routing (`high_volume`: Claude Haiku 5.5), taking a token as 4 characters and
+the first-party list price of $0.10 a million input and $0.50 a million output tokens (Bedrock's price
+for the model was not read; `budget_usd_daily` is $2 in dev). Output is 60 tokens an answer, or at most
+the route's 2,048-token cap a call when the model's default thinking fills it.
+
+| | Input tokens | Output tokens | Cost |
+|---|---|---|---|
+| First 2,000 fingerprints (100 calls) | 0.79 million | 0.12 to 0.20 million | $0.14 to $0.18 |
+| All 39,516 (1,977 calls) | 15.7 million | 2.4 to 4.05 million | $2.76 to $3.60 |

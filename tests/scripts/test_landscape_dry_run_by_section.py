@@ -10,6 +10,7 @@ report.md. Every school, team code and text here is invented.
 
 from __future__ import annotations
 
+import dataclasses
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -18,6 +19,7 @@ from typing import Any
 from debate_core.application.landscape_report import LandscapeReportService
 from debate_core.application.landscape_run import ScanResult
 from debate_core.application.landscape_scan import ScanHit, ScanKind
+from debate_core.domain.landscape import Taxonomy
 from debate_core.domain.landscape_report import KritikalAffs, KritikalFamilyCount, TransitionPlans
 from debate_core.testing.landscape_report import read_synthetic_caselist, synthetic_staleness
 
@@ -61,6 +63,10 @@ def test_the_dry_run_prints_the_planks_and_the_scans_hits_by_section_and_counts_
         "documents with no scenario heading and no role label.",
         "Scenarios, da (4 positions): 4 impact rows, 1 with a scenario, 1 names withheld; 2 of 6 documents "
         "with no scenario heading and no role label.",
+        "Scenario words no list holds, advantage: 0 that two or more teams use under a position with a "
+        "list, 0 of them holding a caselist word.",
+        "Scenario words no list holds, da: 0 that two or more teams use under a position with a list, 0 of "
+        "them holding a caselist word.",
         "Planks: 8 under 1 CPs, in 3 groups by what they solve, 7 rows shown, 1 withheld for naming a "
         "school.",
         "  states-cp: 8 planks, 6 teams, 3 groups, 1 withheld",
@@ -136,3 +142,28 @@ def test_the_dry_run_prints_the_transition_plan_rows_counts_only() -> None:
         "Plans under Thus: the K-aff carry refused in 7 rounds; 15 rounds identified another way hold one "
         "naming another aff; by method: KRITIKAL_AFF_MARKER 2, TEAM_CARRY 13."
     )
+
+
+def test_the_dry_run_counts_the_scenario_words_no_list_holds_and_never_prints_them() -> None:
+    # The PM's ruling of 2026-10-26 on `v1-e32-t22`. With these lists, `economic collapse` (XX, QQ) is
+    # under the Costs advantage and `cedarvale crash` (JJ, YY, a school's word) under the Spending DA,
+    # and neither list holds it; `debt crisis` is one team's.
+    lists = {
+        "costs-advantage": {"scenarios": [{"name": "Rising costs", "forms": ["drug prices"]}]},
+        "spending-da": {"scenarios": [{"name": "Downturn", "forms": ["recession"]}]},
+    }
+    inputs = read_synthetic_caselist(FIXTURE)
+    document = inputs.taxonomy.model_dump()
+    document["positions"] = [{**one, **lists.get(one["id"], {})} for one in document["positions"]]
+    listed = dataclasses.replace(inputs, taxonomy=Taxonomy.model_validate(document))
+    result = _result()
+    result.report = LandscapeReportService().build(listed, synthetic_staleness())
+    lines = script.report_lines(result)
+    assert [line for line in lines if line.startswith("Scenario words no list holds")] == [
+        "Scenario words no list holds, advantage: 1 that two or more teams use under a position with a "
+        "list, 0 of them holding a caselist word.",
+        "Scenario words no list holds, da: 1 that two or more teams use under a position with a list, 1 of "
+        "them holding a caselist word.",
+    ]
+    for words in ("economic collapse", "cedarvale", "debt crisis", "Rising costs", "Downturn"):
+        assert not any(words in line for line in lines)

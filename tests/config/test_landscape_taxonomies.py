@@ -335,9 +335,9 @@ def one_position(**fields: Any) -> Taxonomy:
             "team code",
         ),
         (
-            "a name in a scenario name",
-            {"scenarios": [{"name": "Dome Avery Quinlan", "forms": ["dome"]}]},
-            "name",
+            "a school in a capitalized scenario name",
+            {"scenarios": [{"name": "Crash at Sample Academy", "forms": ["crash"]}]},
+            "school",
         ),
         (
             "a school in a scenario name",
@@ -371,6 +371,8 @@ def test_the_personal_data_check_passes_scenario_vocabulary() -> None:
             {"name": "Golden dome", "forms": ["dome", "golden dome"]},
             {"name": "AI arms race", "forms": ["ai arms race"]},
             {"name": "dem win crushes trumpism", "forms": ["dem win crushes trumpism"]},
+            {"name": "War with China", "forms": ["war with china"]},
+            {"name": "Golden Dome arms race", "forms": ["dome arms race"]},
         ],
         not_scenarios=["too early", "other issues"],
     )

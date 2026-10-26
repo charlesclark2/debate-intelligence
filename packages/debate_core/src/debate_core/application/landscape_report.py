@@ -1133,6 +1133,8 @@ class _LinkChains:
                 RoleGap(role=role, positions=sum((one, role) not in filled for one in listed))
                 for role in CHAIN_ROLES[kind]
             ),
+            unlisted_words=0,
+            unlisted_words_withheld=0,
         )
 
 

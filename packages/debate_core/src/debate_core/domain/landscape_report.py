@@ -304,9 +304,21 @@ class ChainCoverage(DomainModel):
         description="Scenario names two or more teams use, withheld for a school, team code or tournament.",
     )
     roles_without_card: tuple[RoleGap, ...] = Field(description="One per role of the kind, in role order.")
+    unlisted_words: int = Field(
+        ge=0,
+        description=(
+            "Scenario words two or more teams use under a position with the coach's list that the list does "
+            "not hold (`v1-e32-t22`): counted for the dry run, never shown."
+        ),
+    )
+    unlisted_words_withheld: int = Field(
+        ge=0, description="Of those, the words holding a word of a caselist school, team code or tournament."
+    )
 
     @model_validator(mode="after")
     def _check_counts(self) -> Self:
+        if self.unlisted_words_withheld > self.unlisted_words:
+            raise ValueError("unlisted words holding a caselist word are among the unlisted words")
         if self.unstructured_documents > self.documents:
             raise ValueError("unstructured documents are among the documents")
         if max(self.rows_with_scenario, self.rows_with_internal_link + self.rows_with_card_above) > (

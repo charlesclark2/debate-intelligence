@@ -158,3 +158,43 @@ def test_a_list_on_one_position_leaves_the_others_alone() -> None:
     report = _report(_fixture_lists())
     assert _scenarios(report, "spending-da") == [None, None, "recession"]
     assert _withheld(report) == {"advantage": 0, "da": 1}
+
+
+# ------------------------------------------------------------------------------------------------
+# Words a list does not hold, counted for the dry run (the PM's ruling of 2026-10-26)
+# ------------------------------------------------------------------------------------------------
+
+
+def _unlisted(report: LandscapeReport) -> dict[str, tuple[int, int]]:
+    return {
+        one.kind.value: (one.unlisted_words, one.unlisted_words_withheld) for one in report.chain_coverage
+    }
+
+
+def test_words_two_teams_use_that_a_list_does_not_hold_are_counted_per_kind() -> None:
+    # Costs: `economic collapse` (XX, QQ) is not on the list; `debt crisis` (VV) is not either, but one
+    # team uses it. Spending: `cedarvale crash` (JJ, YY) is not on the list, and holds a school's word.
+    report = _report(
+        {
+            "costs-advantage": {"scenarios": [{"name": "Rising costs", "forms": ["drug prices"]}]},
+            "spending-da": {"scenarios": [{"name": "Downturn", "forms": ["recession"]}]},
+        }
+    )
+    assert _unlisted(report) == {"advantage": (1, 0), "da": (1, 1)}
+
+
+def test_a_drop_only_list_counts_the_words_it_does_not_hold() -> None:
+    # `recession` (QQ, ZZ) is neither listed nor dropped; the dropped `cedarvale crash` is not counted.
+    assert _unlisted(_report({"spending-da": {"not_scenarios": ["cedarvale crash"]}})) == {
+        "advantage": (0, 0),
+        "da": (1, 0),
+    }
+
+
+def test_listed_and_dropped_words_are_not_unlisted() -> None:
+    assert _unlisted(_report(_fixture_lists())) == {"advantage": (0, 0), "da": (0, 0)}
+
+
+def test_a_position_without_a_list_has_no_unlisted_words() -> None:
+    # Without a list, `economic collapse`, `recession` and `cedarvale crash` are t14's names, not unlisted.
+    assert _unlisted(_report({})) == {"advantage": (0, 0), "da": (0, 0)}

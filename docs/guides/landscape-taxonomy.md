@@ -586,13 +586,33 @@ team wrote down, under the heading that places the card (`Midterms DA`), so noth
   or tournament. `Dome` and `Golden dome` are two names until your scenario list for the position
   merges them ([below](#your-scenario-lists)).
 * **The internal link** under an impact card is the nearest card above it, under the same position
-  heading, that a heading or its tag labels an internal link. When none is, the card directly above
-  the impact card in its block is shown as "the card above it in the file": where it sits, not a claim
-  about what it does.
+  heading, that a heading or its tag labels an internal link.
 
-Each kind says how many of its documents carry no scenario heading and no role label, and how many
-rows show a scenario, an internal link or the card above. A team that labels its blocks is what fills
-these sections; most 1AC advantages carry no label at all.
+**What each impact runs through** names every impact card's rank by the first of these it has, and
+says in brackets where the name came from, so you can judge it:
+
+1. `(scenario)`: its scenario name, yours where your list covers the position;
+2. `(internal link)`: its labelled internal link's tag;
+3. `(tag)`: the impact card's own tag;
+4. `(card above)`: the tag of the card directly above it in its block, when that card is no impact
+   card itself. This is where the card sits in the file, not a claim about what it does.
+
+```text
+* Rank 1: Golden dome (scenario)
+* Rank 2: Deficits spike interest rates (internal link)
+* Rank 3: Extinction from a debt crisis (tag)
+```
+
+A rank none of these names is left out rather than shown empty, and the position says how many were
+("Ranks left out, with no scenario, internal link, tag or card above to name them: 1."). A tag or a
+card above holding a word of a caselist school, team code or tournament is withheld like a scenario
+name, and the next source names the rank.
+
+Each kind says how many of its documents carry no scenario heading and no role label, how many ranks
+each source names and how many are left out, and how many scenario names and tags were withheld. On
+hspolicy26 nearly every impact card has a tag, so most ranks without a scenario or a labelled internal
+link are named by their own tag. A team that labels its blocks is what fills the scenario and internal
+link; most 1AC advantages carry no label at all.
 
 ### Your scenario lists
 

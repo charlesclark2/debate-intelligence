@@ -36,8 +36,9 @@ source the file's sidecar names, once per caselist, snapshot and SHA-256, and `s
 ## Personal data
 
 None. The school and team code a sidecar records are not copied here: the data-use policy names the
-provenance sidecar as a place they may live, and not this file (the PM's question in this task's
-session report). Titles, topics and positions are the coach's; slugs and caselist slugs name no team.
+provenance sidecar as a place they may live, and not this file, so a lookup by school or team code
+reads the published sidecars instead (PM ruling 2026-10-25, `v1-e33-t05`). Titles, topics and
+positions are the coach's; slugs and caselist slugs name no team.
 """
 
 from __future__ import annotations

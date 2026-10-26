@@ -1,4 +1,4 @@
-<!-- docs-index: Published built files under the evidence bucket's files/ prefix: the key layout, the metadata.json contract the V2 debate tub indexes, and the lookup by source for takedowns -->
+<!-- docs-index: Published built files under the evidence bucket's files/ prefix: the key layout, the metadata.json contract the V2 debate tub indexes, and the lookups by source, school or team for takedowns -->
 # Published built files: `files/` and `metadata.json`
 
 What `debate-research files publish` puts in an evidence bucket, object by object, and the
@@ -97,14 +97,15 @@ The model refuses metadata whose flattened arrays are not exactly what `sources`
 `key_prefix` is not the one its fields make, whose objects are not the four in order, or whose
 `recipe_status` or `quality_status` is anything else.
 
-### No school, no team code, for now
+### No school, no team code
 
-`sources[]` does not yet carry a `school` or `team_code`, and there are no `schools` or `team_codes`
-arrays. The data-use policy's "Where personal data is allowed to live" names a built file's provenance
-sidecar and not a `metadata.json` beside it, so those fields wait for the PM's ruling (this task's
-session report). The sidecar in the same prefix holds both for every disclosed card.
+`sources[]` carries no `school` or `team_code`, and there are no `schools` or `team_codes` arrays. The
+data-use policy's "Where personal data is allowed to live" names a built file's provenance sidecar
+and not a `metadata.json` beside it, and the PM ruled on 2026-10-25 that it stays that way: the
+sidecar in the same prefix holds both for every disclosed card, and a lookup by them reads it. The V2
+tub indexes school and team code from the sidecars, which it reads anyway to show provenance.
 
-## Finding the files built from a source
+## Finding the files built from a source, a school or a team
 
 A removal request names a source by its SHA-256 (data-use policy, Removal). The takedown lookup,
 `FilePublishService.find_by_source(source_sha256)`, lists `files/`, reads every `metadata.json`, and
@@ -112,6 +113,15 @@ returns the `key_prefix` of every file whose `source_sha256s` holds it. Every so
 names is in its `sources[]`, which a test checks against the published sidecar, so the lookup misses
 none. A `metadata.json` it cannot read is returned beside the matches as unreadable, for a person to
 look at, rather than passed over.
+
+By a school, a team code or both (PM ruling 2026-10-25),
+`FilePublishService.find_by_disclosure(school=…, team_code=…)` lists `files/`, reads every
+`<slug>.docx.provenance.json`, and returns the prefix of every file with a card whose disclosure names
+them, both on one card when both are given. It reads the sidecar because the policy names the sidecar
+as the record a removal request is matched against (Attribution rule 3). The match is exact, as
+disclosed: no case folding, no expansion. A sidecar whose file's `metadata.json` never landed is read
+too, since its cards are in the bucket all the same, and a sidecar it cannot read is returned as
+unreadable. The result names prefixes and keys only.
 
 Flagging and withdrawing the files found is `v1-e30-t07`'s and `v2-e35-t05`'s; this task makes them
 findable.

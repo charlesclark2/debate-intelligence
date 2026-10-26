@@ -57,7 +57,10 @@ A dry run plans and stops: it never builds a bucket client, and names every key 
 
 :meth:`FilePublishService.find_by_source` reads every `metadata.json` under `files/` and returns the
 published files with a card from a source SHA-256: what a takedown (`v1-e30-t07`, `v2-e35-t05`)
-flags. Nothing here deletes.
+flags. :meth:`FilePublishService.find_by_disclosure` finds them by a school, a team code or both,
+over the published provenance sidecars instead (PM ruling 2026-10-25): the data-use policy names the
+sidecar as a place those may live, and as what a removal request is matched against (Attribution rule
+3), and `metadata.json` holds neither. Nothing here deletes.
 
 ## What a result never holds
 
@@ -92,7 +95,11 @@ from debate_core.domain.built_file_metadata import (
     published_sources,
 )
 from debate_core.domain.caselist import Event, Side
-from debate_core.domain.file_provenance import FileProvenanceManifest, provenance_sidecar_name
+from debate_core.domain.file_provenance import (
+    PROVENANCE_SIDECAR_SUFFIX,
+    FileProvenanceManifest,
+    provenance_sidecar_name,
+)
 from debate_core.domain.file_recipe import FileRecipe, RecipeStatus, render_location
 from debate_core.evidence.file_checks.report import (
     CheckStatus,
@@ -116,6 +123,7 @@ __all__ = [
     "PublishStatus",
     "PublishedObjectMismatch",
     "SourceLookup",
+    "DisclosureLookup",
     "built_files_in",
     "published_recipe",
 ]
@@ -262,6 +270,15 @@ class SourceLookup:
     """Keys of `metadata.json` objects this build could not read: a takedown looks at each by hand."""
 
 
+@dataclass(frozen=True, slots=True)
+class DisclosureLookup:
+    """The key prefix of every published file with a card a school or team disclosed. Names neither."""
+
+    found: tuple[str, ...]
+    unreadable: tuple[str, ...] = ()
+    """Keys of provenance sidecars this build could not read: a takedown looks at each by hand."""
+
+
 def built_files_in(path: Path) -> tuple[Path, ...]:
     """`path` itself when it is a file; else every `*.docx` directly in it, by name, hidden ones left out."""
     if path.is_file():
@@ -355,6 +372,39 @@ class FilePublishService:
                 if source_sha256 in metadata.source_sha256s:
                     found.append(FoundBuiltFile(key_prefix=metadata.key_prefix, metadata=metadata))
         return SourceLookup(found=tuple(found), unreadable=tuple(unreadable))
+
+    async def find_by_disclosure(
+        self, *, school: str | None = None, team_code: str | None = None
+    ) -> DisclosureLookup:
+        """Every published file whose sidecar has a card disclosed by `school`, `team_code`, or both.
+
+        Read over the `.provenance.json` objects under `files/`, sidecars of files whose `metadata.json`
+        never landed included, since their cards are in the bucket all the same. Matched exactly as
+        disclosed, never folded or expanded. With both, one card must name both. The result names
+        prefixes and keys only.
+        """
+        if school is None and team_code is None:
+            raise ValueError("find_by_disclosure is asked for a school, a team code, or both")
+        bucket = self._bucket()
+        found: list[str] = []
+        unreadable: list[str] = []
+        listing = await bucket.list_objects(FILES_PREFIX)
+        sidecars = [one.key for one in listing if one.key.endswith(f".docx{PROVENANCE_SIDECAR_SUFFIX}")]
+        with tempfile.TemporaryDirectory(prefix="files-lookup-") as scratch:
+            for index, key in enumerate(sidecars):
+                landed = Path(scratch) / f"{index}.json"
+                await bucket.get_file(key, landed)
+                manifest = _read_manifest(landed.read_bytes())
+                if manifest is None:
+                    unreadable.append(key)
+                    continue
+                if any(
+                    (school is None or card.school == school)
+                    and (team_code is None or card.team_code == team_code)
+                    for card in manifest.cards
+                ):
+                    found.append(key.rsplit("/", 1)[0] + "/")
+        return DisclosureLookup(found=tuple(found), unreadable=tuple(unreadable))
 
     # -- the gate ---------------------------------------------------------------------------------
 

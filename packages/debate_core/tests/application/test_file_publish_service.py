@@ -747,6 +747,77 @@ def test_the_published_recipe_is_the_same_bytes_whenever_the_file_is_published(w
     assert staged[0].bodies == staged[1].bodies
 
 
+#: A third team, at the first team's school: a lookup by school finds both, by team code only one.
+MAPLE_ZB: Final = SyntheticDisclosure(
+    school="Maple Grove",
+    team_code="ZB",
+    side=Side.NEG,
+    tournament="Lakeshore Classic",
+    round="Round 2",
+    path="Maple Grove/ZB/neg-lakeshore-r2.docx",
+)
+
+
+def published_three_files(world: World) -> tuple[str, str, str]:
+    """Three files: Maple Grove QX's card alone, Cedar Hollow ZaLu's beside QX's, Maple Grove ZB's alone."""
+    qx, zalu, zb = world.add(SOURCE_ONE), world.add(SOURCE_TWO, CEDAR), world.add(SOURCE_THREE, MAPLE_ZB)
+    first = world.built({"fingerprint": qx}, name="first-file")
+    second = world.built({"fingerprint": zalu}, {"fingerprint": qx}, name="second-file")
+    third = world.built({"fingerprint": zb}, name="third-file")
+    for docx in (first, second, third):
+        world.publish(docx)
+    return prefix_of(first, "first-file"), prefix_of(second, "second-file"), prefix_of(third, "third-file")
+
+
+def by_disclosure(world: World, **asked: str) -> list[str]:
+    lookup = asyncio.run(world.service().find_by_disclosure(**asked))
+    assert lookup.unreadable == ()
+    return list(lookup.found)
+
+
+def test_find_by_source_school_or_team_reads_the_sidecars_and_finds_exactly_their_files(world: World) -> None:
+    """PM ruling 2026-10-25 (Q1 B): a school or team code is looked up over the published sidecars."""
+    first, second, third = published_three_files(world)
+
+    assert by_disclosure(world, school="Maple Grove") == [first, second, third]
+    assert by_disclosure(world, school="Cedar Hollow") == [second]
+    assert by_disclosure(world, team_code="QX") == [first, second]
+    assert by_disclosure(world, team_code="ZB") == [third]
+    assert by_disclosure(world, school="Maple Grove", team_code="ZB") == [third]
+    assert by_disclosure(world, school="Cedar Hollow", team_code="QX") == []
+
+
+def test_find_by_source_school_or_team_finds_none_for_an_unknown_one_and_names_none_in_metadata(
+    world: World,
+) -> None:
+    published_three_files(world)
+
+    assert by_disclosure(world, school="Birch Valley") == []
+    assert by_disclosure(world, team_code="QQ") == []
+    assert by_disclosure(world, school="maple grove") == [], "as disclosed: no case folding"
+    for key in world.object_keys():
+        if key.endswith("/metadata.json"):
+            assert b"Maple Grove" not in world.body(key) and b"ZaLu" not in world.body(key)
+
+
+def test_find_by_source_school_or_team_reports_a_sidecar_it_cannot_read(world: World) -> None:
+    first, _, _ = published_three_files(world)
+    broken = (
+        "files/synthetic-topic/aff/synthetic-position/other-file/0123456789ab/other-file.docx.provenance.json"
+    )
+    world.client.put_object(Bucket=world.bucket_name, Key=broken, Body=b"{}")
+
+    lookup = asyncio.run(world.service().find_by_disclosure(team_code="QX"))
+
+    assert first in lookup.found
+    assert lookup.unreadable == (broken,)
+
+
+def test_find_by_source_school_or_team_needs_one_of_them(world: World) -> None:
+    with pytest.raises(ValueError, match="a school, a team code, or both"):
+        asyncio.run(world.service().find_by_disclosure())
+
+
 def test_find_by_source_over_an_empty_files_prefix_finds_nothing(world: World) -> None:
     lookup = asyncio.run(world.service().find_by_source("1" * 64))
     assert (lookup.found, lookup.unreadable) == ((), ())

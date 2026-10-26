@@ -712,6 +712,7 @@ class DocxEvidenceFileWriter:
             position=recipe.position,
             side=str(recipe.side),
             recipe_hash=resolved.recipe_hash,
+            recipe_status=recipe.status,
             builder_version=FILE_BUILDER_VERSION,
             parser_version=self._parser.parser_version,
             style_profile_version=self._parser.profile_version,

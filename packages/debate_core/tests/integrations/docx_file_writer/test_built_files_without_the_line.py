@@ -13,7 +13,8 @@ disclosure on record. Each test builds the same request again and compares:
   other paragraph, run and style byte for byte, and every other part of the package too;
 * **the sidecar**, byte for byte, but for `docx_sha256`, which is the new file's own hash, and
   `builder_version`, now the running writer's: `2026.10.22-file-writer-3` when this was written,
-  `2026.10.24-file-writer-4` since `v1-e33-t03`, which changes a draft recipe's bytes alone.
+  `2026.10.24-file-writer-4` since `v1-e33-t03`, which changes a draft recipe's bytes alone; and the
+  one line `v1-e33-t05` adds after `recipe_hash`, `"recipe_status": "ready",`, the recipe's status.
 
 The header's last sentence pointed the reader below each cite, to the line. It goes with the line,
 rather than pointing to the sidecar, because a download of the file carries no sidecar (PM ruling,
@@ -323,8 +324,12 @@ def test_the_sidecar_is_the_recorded_one_byte_for_byte_but_the_files_own_hash_an
     assert recorded.sidecar.count(old_hash.encode()) == 1
     assert json.loads(recorded.sidecar)["builder_version"] == RECORDED_VERSION
     assert recorded.sidecar.count(RECORDED_VERSION.encode()) == 1
-    expected = recorded.sidecar.replace(old_hash.encode(), new_hash.encode()).replace(
-        RECORDED_VERSION.encode(), BUILDER_VERSION.encode()
+    recipe_hash_line = f'  "recipe_hash": "{json.loads(recorded.sidecar)["recipe_hash"]}",\n'.encode()
+    assert recorded.sidecar.count(recipe_hash_line) == 1
+    expected = (
+        recorded.sidecar.replace(old_hash.encode(), new_hash.encode())
+        .replace(RECORDED_VERSION.encode(), BUILDER_VERSION.encode())
+        .replace(recipe_hash_line, recipe_hash_line + b'  "recipe_status": "ready",\n')
     )
     assert built.manifest_json == expected
     assert [entry.provenance_line for entry in built.manifest.cards] == list(LINES[name].values())

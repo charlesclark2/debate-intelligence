@@ -370,6 +370,15 @@
       ],
       "title": "FileProvenanceEntry",
       "type": "object"
+    },
+    "RecipeStatus": {
+      "description": "Whether a recipe is ready to build. `files suggest` (`v1-e33-t03`) writes drafts.",
+      "enum": [
+        "draft",
+        "ready"
+      ],
+      "title": "RecipeStatus",
+      "type": "string"
     }
   },
   "additionalProperties": false,
@@ -425,6 +434,18 @@
       "pattern": "^[0-9a-f]{64}$",
       "title": "Recipe Hash",
       "type": "string"
+    },
+    "recipe_status": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RecipeStatus"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The recipe's status, ready or draft (v1-e33-t05); None in a sidecar written before it was recorded, which files publish refuses."
     },
     "builder_version": {
       "description": "Version of the writer that built the file.",

@@ -26,6 +26,13 @@ disclosure, so its disclosure digest, school, team code, side, tournament and ro
 only a camp card names a camp. The camp fields are additions: a sidecar written before them has
 none of their keys and still validates.
 
+## The recipe's status (`v1-e33-t05`)
+
+`recipe_status` is the status of the recipe the file was built from, `ready` or `draft`, so that
+`files publish` can refuse a file built from a draft whatever its quality (PM amendment 2026-10-24).
+A sidecar written before it has no such key and still validates; `files publish` refuses it until
+it is rebuilt, because it cannot tell which the recipe was.
+
 ## Never verified
 
 A card read out of somebody else's file has not been through the platform's verification pipeline.
@@ -46,7 +53,7 @@ from debate_core.domain.base import DomainModel, NonEmptyText, Sha256Hex
 from debate_core.domain.caselist import Event
 from debate_core.domain.debate_files import CardCompleteness, FontSizeSpan, FormattingSpan
 from debate_core.domain.enums import ProvenanceMode, VerificationStatus
-from debate_core.domain.file_recipe import CAMP_STORE, TagAuthor
+from debate_core.domain.file_recipe import CAMP_STORE, RecipeStatus, TagAuthor
 from debate_core.domain.schema_export import JSON_SCHEMA_DIALECT
 
 __all__ = [
@@ -250,6 +257,13 @@ class FileProvenanceManifest(DomainModel):
     position: NonEmptyText = Field(description="The recipe's position id.")
     side: NonEmptyText = Field(description="The side the file is for.")
     recipe_hash: Sha256Hex = Field(description="The recipe's canonical hash (v1-e33-t01).")
+    recipe_status: RecipeStatus | None = Field(
+        default=None,
+        description=(
+            "The recipe's status, ready or draft (v1-e33-t05); None in a sidecar written before it was "
+            "recorded, which files publish refuses."
+        ),
+    )
     builder_version: NonEmptyText = Field(description="Version of the writer that built the file.")
     parser_version: NonEmptyText = Field(description="Version of the parser that located the cards.")
     style_profile_version: NonEmptyText = Field(description="Version of the style profile it used.")

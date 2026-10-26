@@ -280,7 +280,8 @@ def test_mapping_of_error_statuses_with_a_plain_body(status_code: int, expected:
     decision = classify(response(status_code, page(title="Error")), None)
     assert decision.status is expected
     assert decision.evidence.status_code == status_code
-    assert str(status_code) in decision.reason
+    assert decision.evidence.fetch_error == "http_status"
+    assert decision.reason.startswith("The server") and str(status_code) in decision.reason
 
 
 @pytest.mark.parametrize("status_code", [401, 403, 429, 503])

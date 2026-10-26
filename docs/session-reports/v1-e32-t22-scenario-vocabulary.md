@@ -82,6 +82,12 @@ On [the questions](#questions-for-the-pm), as the PM wrote them:
   * New passing names: `War with China`, `Golden Dome arms race`.
   * The guide says both changes.
 
+**The PM's ruling on the coach's read (2026-10-26): proceed with the one-level edit.** The coach edits
+the seed at one level. For the Midterms DA, the impacts are named and the branch words (`dems win`,
+`republicans win`) go to `not_scenarios`. For the Economy DA, `decline` and `econ` go to
+`not_scenarios`. The counts for branches and mechanisms become a new E32 task ([Follow-up
+work](#follow-up-work)).
+
 ## The coach's edit (step 3)
 
 **The file**, in this worktree:
@@ -445,6 +451,27 @@ if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset i
 4. **No publish.** The republish follows the cloud cutover.
 
 ## Follow-up work
+
+* **The coach's two needs that scenarios do not cover** (the coach's read of the seed, 2026-10-26).
+  The PM files them as a new E32 task in the next batch; nothing is built here.
+  * **Branches.** The Midterms DA has two outcomes, Dems win and Republicans win, each with its own
+    impacts. A scenario is one flat name per impact card, so a card under `dems win > dome impact`
+    shows the branch (the named heading wins over the words beside an impact label) or, with the branch
+    dropped, the impact. It never shows both.
+  * **The mechanism.** For the Economy DA the coach wants what causes the decline from the DA's thesis
+    (plan, link, internal link, impact), not `decline` or `econ`. That is the link chain (t14's chain
+    table, t25's readable chains), not a scenario name. Some Economy DAs may be different DAs by link
+    (taxes, stocks, debt), which is a taxonomy question.
+  * **The new task, counts first** (working agreement 7), read-only, on hspolicy26 through 2026-10-20,
+    counts only:
+    * (a) per DA, the documents that nest an impact or named heading under another named heading below
+      the position (branch over impact), and the outer headings two or more teams use;
+    * (b) for the Economy DA, the documents that label a link or internal link, grouped by the link
+      card's tag words, to see whether the mechanism can be read from labels or needs the model stage
+      (v1-e32-t07).
+
+    Then three options: a two-level scenario (branch, then impact) in the taxonomy; the mechanism as a
+    named link per DA (with t25); or splitting DAs by link.
 
 * **v1-e32-t25** names each impact rank by the coach's scenario name first. It reads
   `ImpactCard.scenario`, which now holds the coach's name where a list exists.

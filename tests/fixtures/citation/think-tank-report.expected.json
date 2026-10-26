@@ -1,0 +1,27 @@
+{
+  "kind": "think tank",
+  "page": "extraction/think-tank-report.html",
+  "content_type": "text/html; charset=utf-8",
+  "retrieved_url": "https://www.harwell-institute.example/research/opportunity-cost-of-de-extinction",
+  "provenance_mode": "PUBLISHER_RETRIEVED",
+  "article": {
+    "canonical_url": "https://www.harwell-institute.example/research/opportunity-cost-of-de-extinction",
+    "title": "The Opportunity Cost of De-Extinction",
+    "doi": null
+  },
+  "doi": null,
+  "crossref": "no_doi",
+  "citation": {
+    "authors": {"value": ["Marcus Ellery", "Hana Okafor"], "source": "json_ld", "verified": true},
+    "author_credentials": {"value": "Marcus Ellery is a senior fellow at the Harwell Institute. Hana Okafor directs its biodiversity program.", "source": "byline", "verified": true},
+    "title": {"value": "The Opportunity Cost of De-Extinction", "source": "json_ld", "verified": true},
+    "publication": {"value": "Harwell Institute", "source": "json_ld", "verified": true},
+    "published_at": {"value": "2026-03-03T00:00:00Z", "source": "json_ld", "verified": true},
+    "canonical_url": {"value": "https://www.harwell-institute.example/research/opportunity-cost-of-de-extinction", "source": "meta_tag", "verified": true},
+    "accessed_at": {"value": "2026-10-26T15:00:00Z", "source": "heuristic", "verified": false}
+  },
+  "short_cite": "Ellery et al. 26",
+  "full_cite": "Ellery et al. 26 [Marcus Ellery and Hana Okafor (Marcus Ellery is a senior fellow at the Harwell Institute. Hana Okafor directs its biodiversity program.); \"The Opportunity Cost of De-Extinction\"; Harwell Institute; March 3, 2026; https://www.harwell-institute.example/research/opportunity-cost-of-de-extinction; accessed October 26, 2026]",
+  "unverified_fields": ["accessed_at"],
+  "missing_fields": []
+}

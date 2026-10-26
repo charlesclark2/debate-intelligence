@@ -1,0 +1,27 @@
+{
+  "kind": "journal",
+  "page": "citation/journal-article-landing.html",
+  "content_type": "text/html; charset=utf-8",
+  "retrieved_url": "https://journal.synthetic-conservation.example/doi/10.5555/jscs.2026.0012",
+  "provenance_mode": "PUBLISHER_RETRIEVED",
+  "article": {
+    "canonical_url": "https://journal.synthetic-conservation.example/doi/10.5555/jscs.2026.0012",
+    "title": "Moral Hazard and the Return of Lost Species",
+    "doi": "10.5555/jscs.2026.0012"
+  },
+  "doi": "10.5555/jscs.2026.0012",
+  "crossref": "found",
+  "citation": {
+    "authors": {"value": ["Rhea Okonkwo-Hale", "Tomas Lindqvist"], "source": "crossref", "verified": true},
+    "author_credentials": {"value": "Rhea Okonkwo-Hale, Department of Ecology, University of Synthetic Studies", "source": "crossref", "verified": true},
+    "title": {"value": "Moral Hazard and the Return of Lost Species", "source": "crossref", "verified": true},
+    "publication": {"value": "Journal of Synthetic Conservation Studies", "source": "crossref", "verified": true},
+    "published_at": {"value": "2026-04-20T00:00:00Z", "source": "crossref", "verified": true},
+    "canonical_url": {"value": "https://journal.synthetic-conservation.example/doi/10.5555/jscs.2026.0012", "source": "meta_tag", "verified": true},
+    "accessed_at": {"value": "2026-10-26T15:00:00Z", "source": "heuristic", "verified": false}
+  },
+  "short_cite": "Okonkwo-Hale et al. 26",
+  "full_cite": "Okonkwo-Hale et al. 26 [Rhea Okonkwo-Hale and Tomas Lindqvist (Rhea Okonkwo-Hale, Department of Ecology, University of Synthetic Studies); \"Moral Hazard and the Return of Lost Species\"; Journal of Synthetic Conservation Studies; April 20, 2026; https://journal.synthetic-conservation.example/doi/10.5555/jscs.2026.0012; accessed October 26, 2026]",
+  "unverified_fields": ["accessed_at"],
+  "missing_fields": []
+}

@@ -38,7 +38,6 @@ Raw strings as the page states them, unverified: the title from the article's JS
 from __future__ import annotations
 
 import codecs
-import json
 import re
 from collections.abc import Iterator
 from importlib.metadata import version
@@ -62,6 +61,7 @@ from debate_core.retrieval.extraction import (
     document_kind,
 )
 from debate_core.retrieval.fetch_types import FetchResult
+from debate_core.retrieval.json_ld import json_ld_nodes, json_ld_types
 
 __all__ = ["DEFAULT_MAX_BYTES", "DEFAULT_MINIMUM_CHARACTERS", "HTML_RULES_VERSION", "TrafilaturaExtractor"]
 
@@ -293,23 +293,11 @@ def _visible_characters(tree: HtmlElement) -> int:
 
 def _json_ld_nodes(tree: HtmlElement) -> Iterator[dict[str, Any]]:
     """Every top-level JSON-LD node on the page, `@graph` members included; malformed blocks skipped."""
-    for script in tree.iter("script"):
-        if (script.get("type") or "").strip().lower() != "application/ld+json" or not script.text:
-            continue
-        try:
-            parsed: object = json.loads(script.text)
-        except ValueError:
-            continue
-        for node in cast(list[object], parsed) if isinstance(parsed, list) else [parsed]:
-            if isinstance(node, dict):
-                typed = cast(dict[str, Any], node)
-                yield typed
-                graph = typed.get("@graph")
-                if isinstance(graph, list):
-                    members = cast(list[object], graph)
-                    yield from (
-                        cast(dict[str, Any], member) for member in members if isinstance(member, dict)
-                    )
+    return json_ld_nodes(
+        script.text
+        for script in tree.iter("script")
+        if (script.get("type") or "").strip().lower() == "application/ld+json" and script.text
+    )
 
 
 def _paywall_marker(tree: HtmlElement, json_ld: list[dict[str, Any]]) -> str | None:
@@ -341,7 +329,7 @@ def _metadata_hints(
     tree: HtmlElement, json_ld: list[dict[str, Any]], final_url: str
 ) -> UnverifiedMetadataHints:
     none: dict[str, Any] = {}
-    article = next((node for node in json_ld if _ARTICLE_TYPES & _types(node)), none)
+    article = next((node for node in json_ld if _ARTICLE_TYPES & json_ld_types(node)), none)
     title_element = tree.find(".//title")
     return UnverifiedMetadataHints(
         title=_first(
@@ -357,15 +345,6 @@ def _metadata_hints(
         site_name=_first(_meta(tree, "property", "og:site_name"), *_names(article.get("publisher"))),
         canonical_url=_canonical(tree, final_url),
     )
-
-
-def _types(node: dict[str, Any]) -> set[str]:
-    declared = node.get("@type")
-    if isinstance(declared, str):
-        return {declared}
-    if isinstance(declared, list):
-        return {item for item in cast(list[object], declared) if isinstance(item, str)}
-    return set()
 
 
 def _string(value: object) -> str | None:

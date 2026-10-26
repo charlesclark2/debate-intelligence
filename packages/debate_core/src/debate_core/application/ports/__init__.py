@@ -27,6 +27,7 @@ and the local filesystem while V2 runs the same use cases on DynamoDB, S3 and Be
 | `DiscoveryProviders` | `providers` | The enabled discovery sources and their health (E08) |
 | `ArticleFetcher` | `providers` | HTTP retrieval |
 | `ContentExtractor` | `providers` | Readable-text extraction |
+| `DoiMetadataSource` | `doi_metadata` | A DOI's registered metadata, for cites: Crossref (E06) |
 | `ModelRouter` | `model_router` | Every LLM call: structured generation, embeddings, rerank |
 | `Clock` | `providers` | The current time |
 | `IdGenerator` | `providers` | New entity ids |

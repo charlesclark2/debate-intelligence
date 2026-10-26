@@ -90,14 +90,13 @@ given to the classifier, which ArticleService (v1-e04-t05) builds from settings.
 from __future__ import annotations
 
 import functools
-import json
 import re
-from collections.abc import Iterator, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from html.parser import HTMLParser
 from importlib import resources
-from typing import Annotated, Any, Final, Literal, Self, cast
+from typing import Annotated, Final, Literal, Self
 
 from pydantic import AfterValidator, Field, model_validator
 
@@ -126,6 +125,7 @@ from debate_core.retrieval.fetch_types import (
     TransportError,
     UnsupportedScheme,
 )
+from debate_core.retrieval.json_ld import json_ld_nodes
 
 __all__ = [
     "EXTRACTOR_MARKER_ID",
@@ -731,7 +731,7 @@ def _matches(marker: Marker, page: _PageSignals) -> bool:
 def _declared_length(json_ld: tuple[str, ...]) -> tuple[int, DeclaredLengthSource] | None:
     """The longest length the page's JSON-LD declares, and where it was read; None when it declares none."""
     best: tuple[int, DeclaredLengthSource] | None = None
-    for node in _json_ld_nodes(json_ld):
+    for node in json_ld_nodes(json_ld):
         for words, source in (
             (_word_count(node.get("wordCount")), DeclaredLengthSource.JSON_LD_WORD_COUNT),
             (_body_words(node.get("articleBody")), DeclaredLengthSource.JSON_LD_ARTICLE_BODY),
@@ -739,25 +739,6 @@ def _declared_length(json_ld: tuple[str, ...]) -> tuple[int, DeclaredLengthSourc
             if words is not None and (best is None or words > best[0]):
                 best = (words, source)
     return best
-
-
-def _json_ld_nodes(blocks: tuple[str, ...]) -> Iterator[dict[str, Any]]:
-    """Every top-level JSON-LD node, `@graph` members included; a block that is not JSON is skipped."""
-    for block in blocks:
-        try:
-            parsed: object = json.loads(block)
-        except ValueError:
-            continue
-        for node in cast(list[object], parsed) if isinstance(parsed, list) else [parsed]:
-            if isinstance(node, dict):
-                typed = cast(dict[str, Any], node)
-                yield typed
-                graph = typed.get("@graph")
-                if isinstance(graph, list):
-                    members = cast(list[object], graph)
-                    yield from (
-                        cast(dict[str, Any], member) for member in members if isinstance(member, dict)
-                    )
 
 
 def _word_count(value: object) -> int | None:

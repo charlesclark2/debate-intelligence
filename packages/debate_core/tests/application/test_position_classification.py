@@ -1,4 +1,4 @@
-"""PositionClassificationService: the cache and the review queue (`v1-e32-t02` ac4, ac5).
+"""PositionClassificationService: the cache, the review queue and the model stage (`v1-e32-t02`, `t07`).
 
 * **The cache.** A second run over an unchanged reading places nothing (every key a hit, the
   matcher's `place` never called). A weekly window places only what no earlier run placed, and a
@@ -10,6 +10,14 @@
   hand-counted documents, teams, cards and candidates, a heading one team used is left out and
   counted, and the coach's decisions become overrides that place the heading on the next run.
 
+* **The model stage** (`v1-e32-t07`, every test named `model`). Only cards stage one left unplaced or
+  below the threshold are sent, once per fingerprint, the most shared first, at most `max_items` of
+  them; an unknown or retired id, a rationale repeating twelve consecutive words of the card, and an
+  answer naming no position leave the card in the review queue; results name their prompt and model,
+  a second run asks nothing, and a prompt version bump asks again about MODEL results only. A card
+  sends no school, team code, tournament or digest, and only the first 120 words of its evidence.
+  The routers are scripted fakes; no test reaches a model.
+
 Every expected count and row here was worked out by hand from the reading below (working
 agreement 6). Every school, team, heading and tag is invented.
 """
@@ -17,20 +25,29 @@ agreement 6). Every school, team, heading and tag is invented.
 from __future__ import annotations
 
 import io
-from collections.abc import Sequence
+import json
+from collections.abc import Collection, Mapping, Sequence
 from datetime import date
 from pathlib import Path
 from typing import Any
 
 import pytest
+from pydantic import BaseModel
 
 from debate_core.application.caselist.evidence_listing import LocalEvidence
+from debate_core.application.errors import ModelUnavailableError
+from debate_core.application.landscape_model_stage import (
+    CLASSIFY_POSITION_PROMPT_ID,
+    CLASSIFY_POSITION_VERSION,
+    ModelClassificationStage,
+)
 from debate_core.application.landscape_seeding import SeedReading, read_seed_sources
 from debate_core.application.ports.classification_store import CachedClassification
 from debate_core.application.position_classification import (
     ClassificationRun,
     PositionClassificationService,
 )
+from debate_core.application.structured_output import StructuredOutputGuard
 from debate_core.arguments.landscape.matcher import PositionMatcher
 from debate_core.arguments.landscape.review_queue import (
     REVIEW_QUEUE_COLUMNS,
@@ -47,6 +64,7 @@ from debate_core.domain.landscape_classification import (
     OverrideRules,
     PositionRole,
 )
+from debate_core.domain.model_contracts import ModelParams, ModelPrompt, ModelResponse, TaskClass
 from debate_core.integrations.landscape.classification_store import (
     LocalClassificationStore,
     review_queue_path,
@@ -54,6 +72,8 @@ from debate_core.integrations.landscape.classification_store import (
 from debate_core.integrations.landscape.yaml_taxonomy_repository import YamlTaxonomyRepository
 from debate_core.integrations.local import BLOB_DIRECTORY, FsEvidenceObjectStore
 from debate_core.integrations.local.parsed_store import LocalParsedStore
+from debate_core.integrations.models.prompt_registry import PromptRegistry, load_prompt_file
+from debate_core.testing.fakes.model_router import ScriptedModelResponse, ScriptedModelRouter
 from debate_core.testing.fakes.suppression import empty_suppression_list
 from debate_core.testing.landscape_store import PlantedCard, PlantedCaselist
 
@@ -683,3 +703,567 @@ async def test_cache_and_review_over_the_planted_store_through_a_snapshot(tmp_pa
         (f"{early}:card:0", "spending-da", ClassificationMethod.ALIAS),
         (f"{early}:card:3", "spending-da", ClassificationMethod.INHERITED),
     ]
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e32-t07: the model stage
+#
+# Worked by hand from FIRST, SECOND and THIRD. Stage one leaves six cards needing review: 1:2
+# (`spending cliff da`, "Cliff nears"), 1:3 and 2:2 (`fed key`, "Federal action key", one fingerprint),
+# 2:1 (`AT: Spending Cliff DA`, "No cliff"), 2:3 (`solo heading`, "Midterm swing", TAG_KEYWORD at 0.5)
+# and 3:0 (`spending cliff da` > `impact`, "Recession"). So five fingerprints reach the model, the
+# shared one first because it stands for two cards. Every other card is placed at or above 0.6, and no
+# section is ever sent.
+# ------------------------------------------------------------------------------------------------
+
+MODEL_REPOSITORY = Path(__file__).resolve().parents[4]
+MODEL_ID = "fake-model"
+LEFTOVER_TAGS = {"cliff nears", "federal action key", "no cliff", "midterm swing", "recession"}
+"""The five tags stage one leaves for the model, as the prompt reads them: lowercase words."""
+
+ANSWERS: dict[str, tuple[str | None, float, str]] = {
+    "cliff nears": ("spending-da", 0.9, "a fiscal cliff story told as a spending disadvantage"),
+    "federal action key": ("states-cp", 0.8, "argues only the federal government can act, against states"),
+    "no cliff": ("spending-da", 0.85, "denies the disadvantage's fiscal cliff"),
+    "midterm swing": ("election-da", 0.7, "an election disadvantage about the midterms"),
+    "recession": ("spending-da", 0.4, "an impact that could serve several positions"),
+}
+"""What the answering router says about each leftover tag: position, confidence, rationale."""
+
+
+@pytest.fixture(scope="module")
+def prompts() -> PromptRegistry:
+    return PromptRegistry.load(MODEL_REPOSITORY / "prompts")
+
+
+class AnsweringRouter(ScriptedModelRouter):
+    """Answers each `landscape.classify_position` batch card by card from its tag, and keeps every batch."""
+
+    def __init__(
+        self,
+        answers: Mapping[str, tuple[str | None, float, str]] | None = None,
+        responses: Sequence[ScriptedModelResponse] = (),
+    ) -> None:
+        super().__init__(responses, model_id=MODEL_ID)
+        self.answers = dict(ANSWERS if answers is None else answers)
+        self.batches: list[list[dict[str, Any]]] = []
+
+    async def generate_structured[OutputT: BaseModel](
+        self,
+        task_class: TaskClass,
+        prompt: ModelPrompt,
+        schema: type[OutputT],
+        params: ModelParams | None = None,
+    ) -> ModelResponse[OutputT]:
+        if prompt.prompt_id == CLASSIFY_POSITION_PROMPT_ID and self.answers:
+            items = json.loads(str(prompt.variables["items"]))
+            self.batches.append(items)
+            self.enqueue(
+                {
+                    "answers": [
+                        {
+                            "item": item["item"],
+                            "position_id": self.answers[item["tag"]][0],
+                            "confidence": self.answers[item["tag"]][1],
+                            "rationale": self.answers[item["tag"]][2],
+                        }
+                        for item in items
+                    ]
+                }
+            )
+        return await super().generate_structured(task_class, prompt, schema, params)
+
+    @property
+    def tags(self) -> list[set[str]]:
+        return [{item["tag"] for item in batch} for batch in self.batches]
+
+
+class Evidence:
+    """Evidence texts by (source number, card number); a card not listed has none."""
+
+    def __init__(self, texts: Mapping[tuple[int, int], str] | None = None) -> None:
+        self._texts = {
+            (f"{number:x}".rjust(64, "0"), card * 3): text for (number, card), text in (texts or {}).items()
+        }
+        self.asked: list[dict[str, set[int]]] = []
+
+    async def evidence_texts(
+        self, caselist: str, version: str, wanted: Mapping[str, Collection[int]]
+    ) -> Mapping[tuple[str, int], str]:
+        self.asked.append({sha: set(indexes) for sha, indexes in wanted.items()})
+        return {key: text for key, text in self._texts.items() if key[1] in wanted.get(key[0], ())}
+
+
+def stage(
+    router: ScriptedModelRouter,
+    registry: PromptRegistry,
+    *,
+    evidence: Evidence | None = None,
+    max_items: int = 100,
+    batch_size: int = 20,
+    prompt_version: str = CLASSIFY_POSITION_VERSION,
+) -> ModelClassificationStage:
+    return ModelClassificationStage(
+        StructuredOutputGuard(router, registry),
+        evidence or Evidence(),
+        prompt_version=prompt_version,
+        max_items=max_items,
+        batch_size=batch_size,
+    )
+
+
+async def model_run(
+    data_dir: Path,
+    repo: YamlTaxonomyRepository,
+    model: ModelClassificationStage,
+    *sources: SeedSource,
+) -> ClassificationRun:
+    service = PositionClassificationService(
+        taxonomies=repo, store=LocalClassificationStore(data_dir), model_stage=model
+    )
+    return await service.classify(reading(*sources))
+
+
+ALIASED = source(
+    7,
+    ONE,
+    (("1NC", "Spending DA"), "Deficits rise"),
+    (("1NC", "Spending DA", "Link"), "Plan spends"),
+    (("Sample Plan",), "Plan solves"),
+    (("States CP",), "States solve"),
+)
+
+
+@pytest.mark.anyio
+async def test_model_stage_asks_nothing_when_every_card_carries_an_alias(
+    tmp_path: Path, prompts: PromptRegistry
+) -> None:
+    router = ScriptedModelRouter()
+    found = await model_run(tmp_path, repository(taxonomy()), stage(router, prompts), ALIASED)
+
+    assert router.calls == []
+    assert (found.counts.model_items, found.counts.model_calls, found.counts.model_candidates) == (0, 0, 0)
+    assert {one.method for one in found.classifications if one.item_kind is ItemKind.CARD} == {
+        ClassificationMethod.ALIAS,
+        ClassificationMethod.INHERITED,
+    }
+
+
+@pytest.mark.anyio
+async def test_model_stage_asks_only_about_cards_stage_one_left_unplaced_or_below_the_threshold(
+    tmp_path: Path, prompts: PromptRegistry
+) -> None:
+    router = AnsweringRouter()
+    found = await model_run(tmp_path, repository(taxonomy()), stage(router, prompts), FIRST, SECOND, THIRD)
+
+    assert len(router.calls) == 1
+    assert router.tags == [LEFTOVER_TAGS]
+    assert router.batches[0][0]["tag"] == "federal action key"
+    assert [item["item"] for item in router.batches[0]] == ["item-1", "item-2", "item-3", "item-4", "item-5"]
+    counts = found.counts
+    assert (counts.model_candidates, counts.model_items, counts.model_calls, counts.model_held_back) == (
+        5,
+        5,
+        1,
+        0,
+    )
+    assert router.calls[0].task_class is TaskClass.HIGH_VOLUME
+
+
+@pytest.mark.anyio
+async def test_model_results_name_prompt_and_model_and_replace_stage_ones_for_their_cards(
+    tmp_path: Path, prompts: PromptRegistry
+) -> None:
+    found = await model_run(
+        tmp_path, repository(taxonomy()), stage(AnsweringRouter(), prompts), FIRST, SECOND, THIRD
+    )
+
+    assert methods(found) == {
+        "1:0": ("spending-da", "ALIAS", 1.0),
+        "1:1": ("spending-da", "INHERITED", 0.9),
+        "1:2": ("spending-da", "MODEL", 0.9),
+        "1:3": ("states-cp", "MODEL", 0.8),
+        "2:0": ("sample-aff", "ALIAS", 1.0),
+        "2:1": ("spending-da", "MODEL", 0.85),
+        "2:2": ("states-cp", "MODEL", 0.8),
+        "2:3": ("election-da", "MODEL", 0.7),
+        "3:0": ("spending-da", "MODEL", 0.4),
+        "3:1": ("spending-da", "ALIAS", 1.0),
+    }
+    model = [one for one in found.classifications if one.method is ClassificationMethod.MODEL]
+    assert {(one.prompt_id, one.prompt_version, one.model_id) for one in model} == {
+        (CLASSIFY_POSITION_PROMPT_ID, CLASSIFY_POSITION_VERSION, MODEL_ID)
+    }
+    roles = {f"{int(one.source_sha256, 16)}:{(one.first_element_index or 0) // 3}": one.role for one in model}
+    assert roles["2:1"] is PositionRole.ANSWERS
+    assert roles["1:2"] is PositionRole.READS
+    assert found.counts.cards_by_method == {"ALIAS": 3, "INHERITED": 1, "MODEL": 6}
+    assert (found.counts.cards_counted, found.counts.cards_below_threshold) == (9, 1)
+    assert found.prompt_version == CLASSIFY_POSITION_VERSION
+    assert found.review_queue.counts.queued_cards == 1
+
+
+@pytest.mark.anyio
+async def test_model_a_second_run_over_an_unchanged_snapshot_makes_no_model_call(
+    tmp_path: Path, prompts: PromptRegistry, placements: list[str]
+) -> None:
+    repo = repository(taxonomy())
+    first = await model_run(tmp_path, repo, stage(AnsweringRouter(), prompts), FIRST, SECOND, THIRD)
+    placements.clear()
+    router = ScriptedModelRouter()
+    second = await model_run(tmp_path, repo, stage(router, prompts), FIRST, SECOND, THIRD)
+
+    assert router.calls == []
+    assert placements == []
+    assert (second.counts.model_hits, second.counts.model_candidates, second.counts.model_items) == (5, 0, 0)
+    assert second.counts.cache_written is False
+    assert second.classifications == first.classifications
+
+
+def bumped(registry: PromptRegistry, tmp_path: Path) -> PromptRegistry:
+    """The committed prompts and `landscape.classify_position` at 1.1.0, the same text under a new version."""
+    text = (MODEL_REPOSITORY / "prompts" / "landscape" / "classify_position.md").read_text(encoding="utf-8")
+    text = text.replace("version: 1.0.0\nstatus:", "version: 1.1.0\nstatus:", 1).replace(
+        "changelog:\n",
+        "changelog:\n  - version: 1.1.0\n    date: 2026-10-26\n    summary: A test's bump.\n",
+        1,
+    )
+    path = tmp_path / "classify_position@1.1.0.md"
+    path.write_text(text, encoding="utf-8")
+    return PromptRegistry([*registry.prompts, load_prompt_file(path)])
+
+
+@pytest.mark.anyio
+async def test_model_a_prompt_version_bump_asks_again_about_model_results_only(
+    tmp_path: Path, prompts: PromptRegistry, placements: list[str]
+) -> None:
+    repo = repository(taxonomy())
+    data = tmp_path / "data"
+    await model_run(data, repo, stage(AnsweringRouter(), prompts), FIRST, SECOND, THIRD)
+    placements.clear()
+    router = AnsweringRouter()
+    again = await model_run(
+        data, repo, stage(router, bumped(prompts, tmp_path), prompt_version="1.1.0"), FIRST, SECOND, THIRD
+    )
+
+    assert placements == []
+    assert router.tags == [LEFTOVER_TAGS]
+    assert {
+        one.prompt_version for one in again.classifications if one.method is ClassificationMethod.MODEL
+    } == {"1.1.0"}
+    kept = {entry.prompt_version for entry in await LocalClassificationStore(data).read(CASELIST)}
+    assert kept == {"none", "1.1.0"}
+
+
+CLIFF_EVIDENCE = (
+    "Analysts warn that the looming fiscal cliff would force deep cuts across every federal program"
+)
+
+
+@pytest.mark.anyio
+async def test_model_a_rationale_repeating_twelve_words_of_the_evidence_goes_to_the_review_queue(
+    tmp_path: Path, prompts: PromptRegistry
+) -> None:
+    evidence = Evidence(
+        {
+            (
+                1,
+                2,
+            ): CLIFF_EVIDENCE
+        }
+    )
+    twelve = "that the looming fiscal cliff would force deep cuts across every federal"
+    router = AnsweringRouter({**ANSWERS, "cliff nears": ("spending-da", 0.9, f"it says {twelve}")})
+    found = await model_run(
+        tmp_path, repository(taxonomy()), stage(router, prompts, evidence=evidence), FIRST, SECOND, THIRD
+    )
+
+    assert methods(found)["1:2"] == (None, None, 0.0)
+    assert found.counts.model_refused == {"ECHOES_EVIDENCE": 1}
+    assert found.counts.cards_by_method["UNPLACED"] == 1
+    assert found.review_queue.counts.queued_cards == 2
+
+
+@pytest.mark.anyio
+async def test_model_a_rationale_repeating_eleven_words_of_the_evidence_is_accepted(
+    tmp_path: Path, prompts: PromptRegistry
+) -> None:
+    evidence = Evidence(
+        {
+            (
+                1,
+                2,
+            ): CLIFF_EVIDENCE
+        }
+    )
+    eleven = "that the looming fiscal cliff would force deep cuts across every"
+    router = AnsweringRouter({**ANSWERS, "cliff nears": ("spending-da", 0.9, f"it says {eleven} part")})
+    found = await model_run(
+        tmp_path, repository(taxonomy()), stage(router, prompts, evidence=evidence), FIRST, SECOND, THIRD
+    )
+
+    assert methods(found)["1:2"] == ("spending-da", "MODEL", 0.9)
+    assert found.counts.model_refused == {}
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("position_id", "why"),
+    [("made-up-da", "invented"), ("util-criterion", "another topic's"), ("Spending DA", "not an id at all")],
+)
+async def test_model_an_unknown_position_id_goes_to_the_review_queue(
+    tmp_path: Path, prompts: PromptRegistry, position_id: str, why: str
+) -> None:
+    router = AnsweringRouter({**ANSWERS, "midterm swing": (position_id, 0.95, "an election argument")})
+    found = await model_run(tmp_path, repository(taxonomy()), stage(router, prompts), FIRST, SECOND, THIRD)
+
+    assert methods(found)["2:3"] == ("election-da", "TAG_KEYWORD", 0.5), why
+    assert found.counts.model_refused == {"UNKNOWN_POSITION": 1}
+    assert found.counts.cards_below_threshold == 2
+
+
+@pytest.mark.anyio
+async def test_model_a_retired_position_id_goes_to_the_review_queue(
+    tmp_path: Path, prompts: PromptRegistry
+) -> None:
+    retiring = taxonomy(
+        positions=[
+            *taxonomy().model_dump(mode="json")["positions"],
+            {"id": "old-da", "label": "Old DA", "kind": "da", "side": "neg", "deprecated": True},
+        ]
+    )
+    router = AnsweringRouter({**ANSWERS, "recession": ("old-da", 0.95, "an old disadvantage's impact")})
+    found = await model_run(tmp_path, repository(retiring), stage(router, prompts), FIRST, SECOND, THIRD)
+
+    assert methods(found)["3:0"] == (None, None, 0.0)
+    assert found.counts.model_refused == {"UNKNOWN_POSITION": 1}
+
+
+@pytest.mark.anyio
+async def test_model_an_answer_naming_no_position_leaves_the_card_in_the_review_queue(
+    tmp_path: Path, prompts: PromptRegistry
+) -> None:
+    router = AnsweringRouter({**ANSWERS, "recession": (None, 0.9, "a generic impact")})
+    found = await model_run(tmp_path, repository(taxonomy()), stage(router, prompts), FIRST, SECOND, THIRD)
+
+    assert methods(found)["3:0"] == (None, None, 0.0)
+    assert found.counts.model_refused == {"NO_POSITION": 1}
+    assert found.counts.cards_by_method["UNPLACED"] == 1
+
+
+@pytest.mark.anyio
+async def test_model_refused_answers_are_cached_and_not_asked_about_again(
+    tmp_path: Path, prompts: PromptRegistry
+) -> None:
+    repo = repository(taxonomy())
+    refusing = AnsweringRouter({**ANSWERS, "recession": ("made-up-da", 0.9, "a guess")})
+    first = await model_run(tmp_path, repo, stage(refusing, prompts), FIRST, SECOND, THIRD)
+    router = ScriptedModelRouter()
+    second = await model_run(tmp_path, repo, stage(router, prompts), FIRST, SECOND, THIRD)
+
+    assert router.calls == []
+    assert methods(second)["3:0"] == methods(first)["3:0"] == (None, None, 0.0)
+
+
+@pytest.mark.anyio
+async def test_model_max_items_asks_about_the_most_shared_cards_first_and_holds_the_rest_back(
+    tmp_path: Path, prompts: PromptRegistry
+) -> None:
+    router = AnsweringRouter()
+    repo = repository(taxonomy())
+    found = await model_run(tmp_path, repo, stage(router, prompts, max_items=2), FIRST, SECOND, THIRD)
+
+    assert len(router.batches) == 1
+    assert len(router.batches[0]) == 2
+    assert router.batches[0][0]["tag"] == "federal action key"
+    counts = found.counts
+    assert (counts.model_candidates, counts.model_items, counts.model_held_back) == (5, 2, 3)
+    cached = [
+        entry
+        for entry in await LocalClassificationStore(tmp_path).read(CASELIST)
+        if entry.prompt_version != "none"
+    ]
+    assert len(cached) == 2
+
+    rest = AnsweringRouter()
+    after = await model_run(tmp_path, repo, stage(rest, prompts, max_items=100), FIRST, SECOND, THIRD)
+    assert len(rest.batches[0]) == 3
+    assert (after.counts.model_hits, after.counts.model_items, after.counts.model_held_back) == (2, 3, 0)
+
+
+@pytest.mark.anyio
+async def test_model_max_items_zero_asks_nothing_and_holds_every_candidate_back(
+    tmp_path: Path, prompts: PromptRegistry
+) -> None:
+    router = ScriptedModelRouter()
+    found = await model_run(
+        tmp_path, repository(taxonomy()), stage(router, prompts, max_items=0), FIRST, SECOND, THIRD
+    )
+
+    assert router.calls == []
+    assert (found.counts.model_items, found.counts.model_held_back) == (0, 5)
+
+
+@pytest.mark.anyio
+async def test_model_batches_hold_at_most_batch_size_cards(tmp_path: Path, prompts: PromptRegistry) -> None:
+    router = AnsweringRouter()
+    found = await model_run(
+        tmp_path, repository(taxonomy()), stage(router, prompts, batch_size=2), FIRST, SECOND, THIRD
+    )
+
+    assert [len(batch) for batch in router.batches] == [2, 2, 1]
+    assert set().union(*router.tags) == LEFTOVER_TAGS
+    assert found.counts.model_calls == 3
+
+
+@pytest.mark.anyio
+async def test_model_a_batch_leaving_a_card_unanswered_is_repaired_once_then_refused_and_cached(
+    tmp_path: Path, prompts: PromptRegistry
+) -> None:
+    partial = {
+        "answers": [
+            {"item": "item-1", "position_id": "states-cp", "confidence": 0.8, "rationale": "a reason"}
+        ]
+    }
+    router = ScriptedModelRouter([partial, partial], model_id=MODEL_ID)
+    repo = repository(taxonomy())
+    found = await model_run(tmp_path, repo, stage(router, prompts), FIRST, SECOND, THIRD)
+
+    assert [call.prompt.prompt_id for call in router.calls] == [CLASSIFY_POSITION_PROMPT_ID, "model.repair"]
+    assert found.counts.model_refused == {"BATCH_REFUSED": 5}
+    assert found.counts.model_calls == 2
+    assert methods(found)["1:3"] == (None, None, 0.0)
+    again = ScriptedModelRouter()
+    await model_run(tmp_path, repo, stage(again, prompts), FIRST, SECOND, THIRD)
+    assert again.calls == []
+
+
+@pytest.mark.anyio
+async def test_model_an_unreachable_model_keeps_the_answered_batches_and_names_the_error(
+    tmp_path: Path, prompts: PromptRegistry
+) -> None:
+    class StopsOnTheSecondBatch(AnsweringRouter):
+        async def generate_structured[OutputT: BaseModel](
+            self,
+            task_class: TaskClass,
+            prompt: ModelPrompt,
+            schema: type[OutputT],
+            params: ModelParams | None = None,
+        ) -> ModelResponse[OutputT]:
+            if self.batches:
+                raise ModelUnavailableError("fake", MODEL_ID)
+            return await super().generate_structured(task_class, prompt, schema, params)
+
+    found = await model_run(
+        tmp_path,
+        repository(taxonomy()),
+        stage(StopsOnTheSecondBatch(), prompts, batch_size=2),
+        FIRST,
+        SECOND,
+        THIRD,
+    )
+
+    assert found.counts.model_interrupted == "ModelUnavailableError"
+    assert found.counts.model_items == 2
+    cached = [
+        entry
+        for entry in await LocalClassificationStore(tmp_path).read(CASELIST)
+        if entry.prompt_version != "none"
+    ]
+    assert len(cached) == 2
+
+
+@pytest.mark.anyio
+async def test_model_a_dry_run_stage_counts_and_asks_nothing(tmp_path: Path, prompts: PromptRegistry) -> None:
+    router = ScriptedModelRouter()
+    evidence = Evidence()
+    found = await model_run(
+        tmp_path,
+        repository(taxonomy()),
+        stage(router, prompts, evidence=evidence, max_items=3).planning(),
+        FIRST,
+        SECOND,
+        THIRD,
+    )
+
+    assert router.calls == []
+    assert evidence.asked == []
+    assert (found.counts.model_items, found.counts.model_held_back) == (3, 2)
+
+
+# ------------------------------------------------------------------------------------------------
+# What a card sends
+# ------------------------------------------------------------------------------------------------
+
+
+NAMED = SeedSource(
+    sha256=f"{11:x}".rjust(64, "0"),
+    teams=(
+        SeedTeam(identity="maple/ab", side=Side.NEG, names=("Maple Grove", "AB", "Lakeside Invitational")),
+    ),
+    cards=(
+        SeedCard(
+            tag="Maple Grove AB says Cedar Ridge cannot win the deficit debate",
+            section_path=("Maple Grove AB 1NC", "Cedar Ridge KL Cliff"),
+            first_element_index=0,
+            short_cite="Thornbury 24 Maple Grove AB",
+        ),
+    ),
+)
+NAMED_EVIDENCE = " ".join(
+    [
+        "Cedar Ridge students and Maple Grove debaters with code KL watched the Lakeside Invitational",
+        *(f"word{n}" for n in range(200)),
+    ]
+)
+
+
+@pytest.mark.anyio
+async def test_model_a_card_sends_no_school_team_code_tournament_digest_or_whole_evidence(
+    tmp_path: Path, prompts: PromptRegistry
+) -> None:
+    router = AnsweringRouter({})
+    router.enqueue(
+        {
+            "answers": [
+                {"item": "item-1", "position_id": "spending-da", "confidence": 0.7, "rationale": "a cliff"}
+            ]
+        }
+    )
+    named = SeedReading(
+        caselist=CASELIST,
+        version="2026.10.20-docx-6",
+        topic_id=TOPIC,
+        entries=1,
+        parsed=1,
+        parsed_off_topic=0,
+        sources=(NAMED,),
+        caselist_names={"Maple Grove": ("AB",), "Cedar Ridge": ("KL",)},
+    )
+    service = PositionClassificationService(
+        taxonomies=repository(taxonomy()),
+        store=LocalClassificationStore(tmp_path),
+        model_stage=stage(router, prompts, evidence=Evidence({(11, 0): NAMED_EVIDENCE})),
+    )
+    await service.classify(named)
+
+    assert len(router.calls) == 1
+    sent = json.dumps(router.calls[0].prompt.variables).casefold()
+    for name in (
+        "maple",
+        "grove",
+        "cedar",
+        "ridge",
+        "lakeside",
+        "invitational",
+        " ab ",
+        " kl ",
+        NAMED.sha256,
+    ):
+        assert name not in sent, name
+    item = json.loads(str(router.calls[0].prompt.variables["items"]))[0]
+    assert item["excerpt"].split()[:3] == ["students", "and", "debaters"]
+    assert len(item["excerpt"].split()) == 120
+    assert item["cite"] == "thornbury 24"
+    assert item["headings"] == ["cliff"]
+    assert set(item) == {"item", "headings", "under_an_answer_heading", "tag", "cite", "excerpt"}

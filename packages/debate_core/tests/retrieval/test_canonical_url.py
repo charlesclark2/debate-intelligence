@@ -21,6 +21,7 @@ from debate_core.retrieval.canonical_url import (
     RelCanonicalRule,
     apply_rel_canonical,
     canonicalize_url,
+    fetch_target_url,
 )
 from debate_core.retrieval.query_parameters import (
     AMP_QUERY_MARKERS,
@@ -804,3 +805,89 @@ def test_rel_canonical_rules_are_stable_storable_values() -> None:
         "cross_site_refused",
     }
     assert RelCanonicalRule("amp_cache_origin") is RelCanonicalRule.AMP_CACHE_ORIGIN
+
+
+# ---------------------------------------------------------------------------------------------
+# v1-e04-t05 (PM amendment 2026-10-19): the fetch target, and a site-root rel=canonical
+# ---------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        pytest.param("https://amp.theguardian.com/world/2020/mar/12/live", id="amp-host"),
+        pytest.param("https://www.example.org/report?utm_source=newsletter&id=7", id="tracking-parameters"),
+        pytest.param("HTTPS://WWW.Example.org/Report", id="case"),
+        pytest.param("https://t.co/AbC123xyz", id="encoded-wrapper"),
+        pytest.param("http://www.npr.org/2020/03/12/814848960/x", id="http"),
+    ],
+)
+def test_fetch_target_is_the_url_as_given(url: str) -> None:
+    assert fetch_target_url(f"  {url}\n") == url
+
+
+@pytest.mark.parametrize(
+    ("wrapped", "destination"),
+    [
+        pytest.param(
+            "https://www.google.com/url?sa=t&q=https%3A%2F%2Fwww.example.org%2Freport%3Futm_source"
+            "%3Dnewsletter%26id%3D7&usg=AOvVaw",
+            "https://www.example.org/report?utm_source=newsletter&id=7",
+            id="google-redirect",
+        ),
+        pytest.param(
+            "https://nam12.safelinks.protection.outlook.com/?url=https%3A%2F%2Fwww.google.com%2Furl%3Fq%3D"
+            "https%253A%252F%252Famp.example-news.co.uk%252Fworld%252Fgrid&data=05",
+            "https://amp.example-news.co.uk/world/grid",
+            id="nested-wrappers",
+        ),
+        pytest.param(
+            "https://www-example-org.cdn.ampproject.org/c/s/www.example.org/amp/story",
+            "https://www.example.org/amp/story",
+            id="amp-cache",
+        ),
+    ],
+)
+def test_fetch_target_of_a_link_wrapper_is_its_literal_destination(wrapped: str, destination: str) -> None:
+    assert fetch_target_url(wrapped) == destination
+
+
+def test_fetch_target_refuses_what_has_no_canonical_form() -> None:
+    with pytest.raises(InvalidUrlError):
+        fetch_target_url("ftp://files.example.org/report.pdf")
+
+
+@pytest.mark.parametrize(
+    "declared", ["https://www.example.org/", "https://www.example.org", "/", "https://example.org/"]
+)
+def test_rel_canonical_site_root_on_a_deeper_page_is_refused(declared: str) -> None:
+    decision = apply_rel_canonical("https://www.example.org/energy/grid-storage?utm_source=x", declared)
+    assert decision.rule is RelCanonicalRule.SITE_ROOT_REFUSED
+    assert not decision.accepted
+    assert decision.canonical_url == "https://www.example.org/energy/grid-storage"
+    assert decision.declared_url is not None
+    assert decision.declared_url.endswith("example.org/")
+
+
+def test_rel_canonical_site_root_from_an_amp_cache_page_is_refused() -> None:
+    decision = apply_rel_canonical(
+        "https://www-example-org.cdn.ampproject.org/c/s/www.example.org/story", "https://www.example.org/"
+    )
+    assert decision.rule is RelCanonicalRule.SITE_ROOT_REFUSED
+
+
+def test_rel_canonical_site_root_on_the_root_page_is_accepted() -> None:
+    decision = apply_rel_canonical("https://example.org/", "https://www.example.org/")
+    assert decision.rule is RelCanonicalRule.SAME_SITE
+    assert decision.canonical_url == "https://www.example.org/"
+
+
+def test_rel_canonical_root_with_a_query_is_not_the_site_root() -> None:
+    decision = apply_rel_canonical("https://www.example.org/news/x", "https://www.example.org/?p=123")
+    assert decision.rule is RelCanonicalRule.SAME_SITE
+    assert decision.canonical_url == "https://www.example.org/?p=123"
+
+
+def test_rel_canonical_another_sites_root_stays_a_cross_site_refusal() -> None:
+    decision = apply_rel_canonical("https://www.example.org/energy/grid-storage", "https://www.example.net/")
+    assert decision.rule is RelCanonicalRule.CROSS_SITE_REFUSED

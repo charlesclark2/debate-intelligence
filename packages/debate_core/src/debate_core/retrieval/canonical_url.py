@@ -77,6 +77,7 @@ __all__ = [
     "RelCanonicalRule",
     "apply_rel_canonical",
     "canonicalize_url",
+    "fetch_target_url",
 ]
 
 
@@ -424,6 +425,11 @@ def canonicalize_url(url: str) -> str:
     raise InvalidUrlError(f"URL nests more than {MAX_LINK_WRAPPERS} link wrappers: {url!r}")
 
 
+def fetch_target_url(url: str) -> str:
+    """The URL to request for `url`."""
+    return canonicalize_url(url)
+
+
 # ---------------------------------------------------------------------------------------------
 # rel=canonical
 # ---------------------------------------------------------------------------------------------
@@ -455,6 +461,9 @@ class RelCanonicalRule(StrEnum):
     CROSS_SITE_REFUSED = "cross_site_refused"
     """The declared canonical is on another site and no allow rule covers it (a syndication
     partner, a mirror, a wrapper's own page); refused, and the fetched URL stands."""
+
+    SITE_ROOT_REFUSED = "site_root_refused"
+    """The declared canonical is the site's root page and the page was not fetched from the root."""
 
 
 _ACCEPTING_RULES = frozenset({RelCanonicalRule.SAME_SITE, RelCanonicalRule.AMP_CACHE_ORIGIN})

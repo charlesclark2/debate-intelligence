@@ -401,6 +401,28 @@ Paste the model line and the `cards … counted` line back for `first-run-policy
 * **t21's note** that evidence text needs a re-parse is wrong for the parsed store (Deviation 3). A
   t21 follow-up measuring tags plus evidence could read it directly.
 
+## After the review: the PR's CI failure (test part 4 of 5)
+
+`test_restore_run_state.py::test_the_copy_holds_the_runs_state_and_the_data_directory_and_the_bucket_are_left_as_they_were`
+failed on PR #523 twice. The `debate.sqlite3-wal` and `-shm` files were in the data directory at the
+test's first snapshot and gone at its last. It is a latent bug in the test, which this branch's timing
+exposed:
+
+* **What leaves the files.** The seed's `seed-run-state --execute` copies the database through a
+  read-only connection (`VACUUM INTO`, `mode=ro`). When that connection closes last, SQLite leaves an
+  empty `-wal` and a `-shm` behind. `lsof` found no process holding the database.
+* **What removes them.** The test's own `rows(live / "debate.sqlite3")` opens the live database
+  read-write and closes it, after the first snapshot. The restore opens nothing.
+* **Why it depends on timing.** Whether the read-only connection closes last depends on when the
+  garbage collector reaches the pull's read-write connection.
+* **The measurements.** Under `-n 4` the test failed 4 of 6 runs on this branch, against 0 of 5 on
+  `origin/dev` and on this branch's bases. The order was then fixed by closing each command's
+  connection when the command ends, a change I measured with and reverted. In that order the old test
+  failed 3 of 3, and the fixed one passed.
+* **The fix** (test only): count the live rows before the first snapshot, and compare the copy's
+  rows to that count. With it, `packages/debate_cli/tests/bucket_mode` under `-n 6` gave 77 passed
+  in each of 3 runs.
+
 ## PM review
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in

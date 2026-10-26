@@ -82,6 +82,7 @@ import re
 import tempfile
 import tomllib
 from collections.abc import Callable, Iterator, Mapping
+from datetime import timedelta
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, Final, cast
@@ -123,6 +124,7 @@ __all__ = [
     "MAX_CASELIST_BULK_DOWNLOADS_PER_DAY",
     "MAX_CASELIST_DOWNLOADS_PER_MINUTE",
     "OPENCASELIST_API_BASE_URL",
+    "ArticleSettings",
     "CardFingerprintSettings",
     "CaselistTokenBackend",
     "ConfigurationError",
@@ -1116,6 +1118,74 @@ class ModelSettings(SettingsGroup):
         return Path(os.path.expandvars(str(value))).expanduser()
 
 
+class ArticleSettings(SettingsGroup):
+    """How ArticleService retrieves, classifies and extracts a source (`v1-e04-t05-article-service`).
+
+    Three kinds of value. `refetch_after_hours` is the re-fetch policy: a source retrieved more
+    recently than that is answered from its stored snapshot without asking the publisher again,
+    unless the caller asks for a refresh. The two `access_*` values are the access classifier's
+    truncation heuristic (`debate_core.retrieval.access.AccessThresholds`, v1-e04-t03), which
+    ArticleService builds from them. The `html_*` and `pdf_*` values are the extractors' fallback
+    minimum and limits (`debate_core.integrations.html_extractor` and `pdf_extractor`, v1-e04-t04),
+    which the composition root passes to them (v1-e04-t06). Every default is the value those tasks
+    chose as their own default.
+    """
+
+    refetch_after_hours: float = Field(
+        default=168.0,
+        gt=0,
+        le=24 * 365,
+        description=(
+            "A source whose last retrieval was readable and is younger than this is not fetched again; "
+            "its stored snapshot is the answer. `--refresh` fetches it anyway."
+        ),
+    )
+    access_minimum_characters: int = Field(
+        default=500,
+        ge=1,
+        le=1_000_000,
+        description="Fewer extracted characters than this is too little to be an article: ERROR.",
+    )
+    access_truncation_ratio: float = Field(
+        default=0.5,
+        gt=0,
+        le=1,
+        description=(
+            "Fewer extracted words than this share of the length the page declares is a truncated "
+            "page: PAYWALLED."
+        ),
+    )
+    html_fallback_minimum_characters: int = Field(
+        default=250,
+        ge=1,
+        le=1_000_000,
+        description="When trafilatura extracts fewer characters than this, the readability fallback runs.",
+    )
+    pdf_max_bytes: int = Field(
+        default=50 * 1024 * 1024,
+        ge=1024,
+        le=512 * 1024 * 1024,
+        description="A PDF larger than this is refused before it is parsed.",
+    )
+    pdf_max_pages: int = Field(
+        default=500,
+        ge=1,
+        le=100_000,
+        description="A PDF with more pages than this is refused before any is read.",
+    )
+    pdf_max_stream_bytes: int = Field(
+        default=20_000_000,
+        ge=1024,
+        le=512 * 1024 * 1024,
+        description="A PDF stream that expands past this many bytes is refused: the PDF-bomb ceiling.",
+    )
+
+    @property
+    def refetch_after(self) -> timedelta:
+        """`refetch_after_hours` as a duration."""
+        return timedelta(hours=self.refetch_after_hours)
+
+
 class Settings(BaseSettings):
     """Everything the platform was configured with for this run.
 
@@ -1162,6 +1232,7 @@ class Settings(BaseSettings):
     caselist: CaselistSettings = Field(default_factory=CaselistSettings)
     fingerprints: CardFingerprintSettings = Field(default_factory=CardFingerprintSettings)
     parse: ParseSettings = Field(default_factory=ParseSettings)
+    articles: ArticleSettings = Field(default_factory=ArticleSettings)
 
     @classmethod
     def settings_customise_sources(

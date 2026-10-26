@@ -84,7 +84,7 @@ spec:
         the fetched URL kept; no fetch is ever made to a guessed canonical host; both URLs
         are stored, by tests shown failing first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

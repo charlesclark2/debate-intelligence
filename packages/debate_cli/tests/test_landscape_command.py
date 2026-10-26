@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any
 import boto3
 import pytest
 from moto import mock_aws
+from pydantic import BaseModel
 from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from typer.testing import CliRunner, Result
 
@@ -28,11 +29,14 @@ import debate_cli.commands.landscape as landscape_module
 import debate_cli.container as container_module
 from debate_cli.app import create_app
 from debate_cli.exit_codes import ExitCode
+from debate_core.application.landscape_model_stage import ModelClassificationStage, ParsedStoreCardTexts
 from debate_core.application.landscape_report import CIRCUIT_WIDE_FILES, SCHOOL_VIEW_FILES
 from debate_core.application.landscape_run import BUNDLE_FILES, LandscapeRunService, PositionClassifier
 from debate_core.application.landscape_seeding import SeedReading
 from debate_core.application.ports.classification_store import ClassificationStore
 from debate_core.application.position_classification import ClassificationRun, PositionClassificationService
+from debate_core.application.settings import load_settings
+from debate_core.application.structured_output import StructuredOutputGuard
 from debate_core.application.sync_runs import (
     SYNC_RUN_LOG_FILENAME,
     StageEntry,
@@ -40,8 +44,13 @@ from debate_core.application.sync_runs import (
     SyncRunOutcome,
     SyncRunRecord,
 )
+from debate_core.domain.model_contracts import ModelParams, ModelPrompt, ModelResponse, TaskClass
 from debate_core.integrations.landscape.classification_store import review_queue_path
 from debate_core.integrations.landscape.yaml_taxonomy_repository import YamlTaxonomyRepository
+from debate_core.integrations.local.parsed_store import LocalParsedStore
+from debate_core.integrations.models.model_mode import ModelMode
+from debate_core.integrations.models.prompt_registry import PromptRegistry
+from debate_core.testing.fakes.model_router import ScriptedModelRouter
 from debate_core.testing.landscape_run import (
     SYNTHETIC_RUN_CASELIST,
     SYNTHETIC_RUN_TODAY,
@@ -253,11 +262,157 @@ def test_report_prints_counts_and_where_it_wrote_for_a_person(world: SyntheticRu
     assert "Scan: 0 hit(s), 0 not yet accepted." in result.stdout
 
 
-def test_a_model_mode_other_than_none_is_a_usage_error(world: SyntheticRun) -> None:
-    result = landscape(world, "--caselist", CASELIST, "--model-mode", "replay")
+def test_a_model_mode_the_command_does_not_offer_is_a_usage_error(world: SyntheticRun) -> None:
+    result = landscape(world, "--caselist", CASELIST, "--model-mode", "record")
 
     assert result.exit_code == ExitCode.USAGE_ERROR
     assert not (world.data_dir / "reports").exists()
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e32-t07: the model stage
+#
+# synthetic26 leaves 2 of its 9 cards unplaced (the run above), each its own fingerprint. The stage is
+# built over a scripted router that places every card it is asked about under spending-da at 0.8.
+# ------------------------------------------------------------------------------------------------
+
+
+class _PlacesEverything(ScriptedModelRouter):
+    async def generate_structured[OutputT: BaseModel](
+        self,
+        task_class: TaskClass,
+        prompt: ModelPrompt,
+        schema: type[OutputT],
+        params: ModelParams | None = None,
+    ) -> ModelResponse[OutputT]:
+        items = json.loads(str(prompt.variables["items"]))
+        self.enqueue(
+            {
+                "answers": [
+                    {
+                        "item": item["item"],
+                        "position_id": "spending-da",
+                        "confidence": 0.8,
+                        "rationale": "a reason",
+                    }
+                    for item in items
+                ]
+            }
+        )
+        return await super().generate_structured(task_class, prompt, schema, params)
+
+
+@pytest.fixture
+def model_router(monkeypatch: pytest.MonkeyPatch) -> _PlacesEverything:
+    router = _PlacesEverything(model_id="fake-model")
+    registry = PromptRegistry.load(Path(__file__).resolve().parents[3] / "prompts")
+
+    def stage(
+        self: container_module.ServiceContainer, mode: ModelMode, max_items: int, **_: object
+    ) -> ModelClassificationStage:
+        assert mode is ModelMode.REPLAY
+        return ModelClassificationStage(
+            StructuredOutputGuard(router, registry),
+            ParsedStoreCardTexts(LocalParsedStore(self.settings.storage.data_dir)),
+            max_items=max_items,
+        )
+
+    monkeypatch.setattr(container_module.ServiceContainer, "landscape_model_stage", stage)
+    return router
+
+
+def test_replay_runs_the_model_stage_on_the_unplaced_cards_and_counts_it(
+    world: SyntheticRun, model_router: _PlacesEverything
+) -> None:
+    result = landscape(world, "--caselist", CASELIST, "--no-publish", "--model-mode", "replay")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    data = _data(result)
+    assert (data["model_mode"], data["model_calls"]) == ("replay", 1)
+    assert data["classification"]["cards_by_method"] == {"ALIAS": 7, "MODEL": 2}
+    model = data["classification"]["model"]
+    assert (model["prompt_version"], model["asked"], model["held_back"], model["refused"]) == (
+        "1.0.0",
+        2,
+        0,
+        {},
+    )
+    assert len(model_router.calls) == 1
+
+
+def test_replay_over_its_card_limit_exits_1_after_caching_what_it_asked(
+    world: SyntheticRun, model_router: _PlacesEverything
+) -> None:
+    result = landscape(
+        world, "--caselist", CASELIST, "--no-publish", "--model-mode", "replay", "--max-model-items", "1"
+    )
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    error = _error(result)
+    assert (
+        error["code"],
+        error["details"]["sent"],
+        error["details"]["allowed"],
+        error["details"]["held_back"],
+    ) == (
+        "MODEL_BUDGET_EXCEEDED",
+        1,
+        1,
+        1,
+    )
+    assert review_queue_path(world.data_dir, CASELIST, SYNTHETIC_RUN_TOPIC).is_file()
+    assert not (world.data_dir / "reports").exists()
+
+    again = landscape(
+        world, "--caselist", CASELIST, "--no-publish", "--model-mode", "replay", "--max-model-items", "1"
+    )
+    assert again.exit_code == ExitCode.OK, again.output
+    model = _data(again)["classification"]["model"]
+    assert (model["asked"], model["cached"], model["held_back"]) == (1, 1, 0)
+    assert len(model_router.calls) == 2
+
+
+def test_a_dry_run_in_replay_asks_nothing_and_counts_what_it_would(
+    world: SyntheticRun, model_router: _PlacesEverything
+) -> None:
+    result = landscape(
+        world, "--caselist", CASELIST, "--dry-run", "--model-mode", "replay", "--max-model-items", "1"
+    )
+
+    assert result.exit_code == ExitCode.OK, result.output
+    model = _data(result)["classification"]["model"]
+    assert (model["asked"], model["held_back"], model["calls"]) == (1, 1, 0)
+    assert model_router.calls == []
+
+
+def test_live_is_refused_while_the_policy_leaves_question_four_open(
+    world: SyntheticRun, model_router: _PlacesEverything, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    checkout = tmp_path / "checkout"
+    (checkout / "docs" / "policies").mkdir(parents=True)
+    (checkout / "docs" / "policies" / "caselist-data-use.md").write_text(
+        "| 4 | The provider's no-retention terms | **Open** | Operator | E32 gate |\n", encoding="utf-8"
+    )
+    monkeypatch.setattr(landscape_module, "find_repository_root", lambda *_: checkout)
+
+    result = landscape(world, "--caselist", CASELIST, "--no-publish", "--model-mode", "live")
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    error = _error(result)
+    assert (error["code"], error["details"]["open_question"]) == ("MODEL_USE_NOT_YET_ALLOWED", 4)
+    assert model_router.calls == []
+    assert not (world.data_dir / "landscape").exists()
+
+
+def test_the_container_builds_the_model_stage_from_the_committed_prompt(world: SyntheticRun) -> None:
+    container = container_module.ServiceContainer(settings_loader=lambda: load_settings(environment="test"))
+    built = container.landscape_model_stage(ModelMode.REPLAY, 7)
+
+    assert (built.prompt_id, built.prompt_version, built.max_items) == (
+        "landscape.classify_position",
+        "1.0.0",
+        7,
+    )
 
 
 def test_out_inside_a_checkout_is_refused(world: SyntheticRun) -> None:

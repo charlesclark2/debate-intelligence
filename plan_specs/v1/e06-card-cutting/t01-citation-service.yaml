@@ -63,7 +63,7 @@ spec:
         source, and otherwise keeps the student's value, unverified and marked, rather than
         overwriting it.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

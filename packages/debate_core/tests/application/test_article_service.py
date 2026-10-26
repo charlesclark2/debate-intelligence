@@ -439,6 +439,11 @@ FAILURES: Mapping[str, tuple[FailureCase, AccessStatus, str]] = {
         AccessStatus.UNSUPPORTED_TYPE,
         "No extractor reads this document (declared 'image/png', bytes look like 'image/png')",
     ),
+    "plain-text-the-extractor-read": (
+        FailureCase(body=BODY, content_type="text/plain; charset=utf-8"),
+        AccessStatus.UNSUPPORTED_TYPE,
+        "No extractor reads this document (declared 'text/plain', bytes look like None)",
+    ),
     "encrypted-pdf": (
         FailureCase(body=PDF_BODY, content_type="application/pdf", refusal=EncryptedDocument()),
         AccessStatus.UNSUPPORTED_TYPE,

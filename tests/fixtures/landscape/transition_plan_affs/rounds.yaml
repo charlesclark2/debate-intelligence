@@ -1,0 +1,37 @@
+schools:
+  Ashgrove Fictional: [AA, BB, CC]
+  Birchwood Fictional: [DD, EE, FF, HH]
+kritikal_position: kritikal-aff
+rounds:
+- {team: AA, side: AFF, tournament: Fictional Invitational, round: R1, files: [a1]}
+- {team: AA, side: AFF, tournament: Imaginary Classic, round: R1, files: [a2]}
+- {team: AA, side: AFF, tournament: Pretend Open, round: R1, files: [a3]}
+- {team: AA, side: AFF, tournament: Make-Believe Cup, round: R1, files: [a4]}
+- {team: BB, side: AFF, tournament: Fictional Invitational, round: R1, files: [b1]}
+- {team: BB, side: AFF, tournament: Imaginary Classic, round: R1, files: [b2]}
+- {team: BB, side: AFF, tournament: Pretend Open, round: R1, files: [b3]}
+- {team: CC, side: AFF, tournament: Fictional Invitational, round: R1, files: [c1]}
+- {team: CC, side: AFF, tournament: Imaginary Classic, round: R1, files: [c2]}
+- {team: DD, side: AFF, tournament: Fictional Invitational, round: R1, files: [d1, d2]}
+- {team: EE, side: AFF, tournament: Fictional Invitational, round: R1, files: [e1, e2]}
+- {team: FF, side: AFF, tournament: Fictional Invitational, round: R1, files: [f1]}
+- {team: HH, side: AFF, tournament: Fictional Invitational, round: R1, files: ['01', '02']}
+- {team: HH, side: NEG, tournament: Imaginary Classic, round: R1, files: ['03']}
+files:
+  a1: {t09: NONE, marker: true}
+  a2: {t09: NONE, thus: single-payer-aff}
+  a3: {t09: NONE}
+  a4: {t09: NONE, thus: single-payer-aff, cards: [costs-advantage]}
+  b1: {t09: NONE, thus: global-budgets-aff}
+  b2: {t09: NONE}
+  b3: {t09: NONE, thus: UNNAMED}
+  c1: {t09: public-option-aff}
+  c2: {t09: NONE, thus: single-payer-aff}
+  d1: {t09: NONE, thus: single-payer-aff}
+  d2: {t09: NONE, thus: public-option-aff}
+  e1: {t09: UNNAMED}
+  e2: {t09: NONE, thus: single-payer-aff}
+  f1: {t09: NONE, thus: public-option-aff, marker: true}
+  '01': {t09: public-option-aff}
+  '02': {t09: NONE, thus: single-payer-aff}
+  '03': {t09: NONE, thus: single-payer-aff, cards: [cap-k]}

@@ -66,6 +66,7 @@ __all__ = [
     "AssignedAff",
     "AssignmentCounts",
     "KritikalSignals",
+    "TransitionPlanInputs",
     "assign_affs",
 ]
 
@@ -108,6 +109,17 @@ class KritikalSignals:
     advantage_rounds: frozenset[str] = field(repr=False)
     """Round keys whose own files carry a card t02 placed under an advantage (READS, at or above the
     review threshold): t15's placement."""
+
+
+@dataclass(frozen=True, slots=True)
+class TransitionPlanInputs:
+    """What the landscape report is given of the plan texts under a transition label (`v1-e32-t24`)."""
+
+    refused_kritikal_carry: frozenset[str] = field(repr=False)
+    """Round keys the K aff was not carried into because their own file holds such a plan text naming a
+    policy aff."""
+    control_rounds: frozenset[str] = field(repr=False)
+    """Round keys another method identifies whose own file holds such a plan text naming another aff."""
 
 
 @dataclass(frozen=True, slots=True)

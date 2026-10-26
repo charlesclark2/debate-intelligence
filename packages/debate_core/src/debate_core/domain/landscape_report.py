@@ -89,6 +89,7 @@ __all__ = [
     "ReportHeader",
     "RoleGap",
     "TopCard",
+    "TransitionPlans",
     "UnassignedAdvantageReads",
     "UnclassifiedSummary",
 ]
@@ -471,6 +472,31 @@ class KritikalAffs(DomainModel):
         return self
 
 
+class TransitionPlans(DomainModel):
+    """The method table's rows for plan texts under a transition label (`v1-e32-t24`, the PM's rulings of
+    2026-10-26). The rounds they identify are counted by method with the others."""
+
+    refused_kritikal_carry: int = Field(
+        ge=0,
+        description="Affirmative rounds the K aff was not carried into because their own file holds such a "
+        "plan text naming a policy aff.",
+    )
+    control_rounds: int = Field(
+        ge=0,
+        description="Affirmative rounds another method identifies whose own file holds such a plan text "
+        "naming another aff: kept as they are.",
+    )
+    control_by_method: dict[AffMethod, int] = Field(
+        default_factory=dict[AffMethod, int], description="Those rounds by the method that identified them."
+    )
+
+    @model_validator(mode="after")
+    def _check_counts(self) -> Self:
+        if sum(self.control_by_method.values()) != self.control_rounds:
+            raise ValueError("every control round has the method that identified it")
+        return self
+
+
 class UnclassifiedSummary(DomainModel):
     """What the report could not count (ac3): cards, and rounds by side."""
 
@@ -576,4 +602,9 @@ class LandscapeReport(DomainModel):
     kritikal_affs: KritikalAffs | None = Field(
         default=None,
         description="`v1-e32-t17`'s kritikal affirmatives; None when the run read no K-aff markers.",
+    )
+    transition_plans: TransitionPlans | None = Field(
+        default=None,
+        description="`v1-e32-t24`'s method-table rows for plan texts under a transition label; None when the "
+        "run read none.",
     )

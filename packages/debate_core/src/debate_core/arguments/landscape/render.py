@@ -23,7 +23,9 @@ id; cards by rank). Nothing here computes a count; the service did.
   affirmative rounds with no assigned aff (`v1-e32-t15`). No other file has them. Then the kritikal
   affirmatives (`v1-e32-t17`): the K-aff rounds by marker and by carry, the rounds the advantage guard
   refused, the K families the K-aff files' headings name, and the rounds still unidentified; the method
-  table under Unclassified adds the refusals and the marker control. No marker's words are shown.
+  table under Unclassified adds the refusals and the marker control. No marker's words are shown. The
+  table also counts the rounds a plan text under `Thus` identifies (`v1-e32-t24`), with the K-aff carries
+  refused for one and the rounds identified another way against one.
   After its header and a contents list, its sections come in three parts (`v1-e32-t20`, from the
   coach's read of 2026-10-25): **Affirmative** (the aff side's positions with their impact blocks, then
   the advantages by aff and the kritikal affirmatives), **Negative** (the negative's positions with
@@ -76,6 +78,8 @@ from debate_core.arguments.landscape.aff_assignment import (
     KRITIKAL_AFF_MARKER_METHOD,
     PLAN_TEXT_METHOD,
     TEAM_CARRY_METHOD,
+    TRANSITION_PLAN_CARRY_METHOD,
+    TRANSITION_PLAN_TEXT_METHOD,
 )
 from debate_core.domain.landscape import PositionKind, PositionSide
 from debate_core.domain.landscape_report import (
@@ -215,6 +219,10 @@ _METHOD_LABELS: Final = {
     TEAM_CARRY_METHOD: "The team's other rounds name the aff",
     KRITIKAL_AFF_MARKER_METHOD: "A file of the round holds a K-aff marker and no plan text",
     KRITIKAL_AFF_CARRY_METHOD: "The team's other rounds are assigned to the kritikal affirmative",
+    TRANSITION_PLAN_TEXT_METHOD: (
+        "The round's plan text under `Thus the plan`, `Thus plan` or `Thus` names the aff"
+    ),
+    TRANSITION_PLAN_CARRY_METHOD: "The team's other rounds name the aff by a plan text under `Thus`",
 }
 PLANK_TABLE_HEADER: Final = "| Solves | Rank | Teams | Plank |"
 """The header of a CP's plank table in report.md (`v1-e32-t16`), which the scan's section counts look for."""
@@ -1304,6 +1312,17 @@ def _unclassified_section(report: LandscapeReport) -> list[str]:
             f"{kritikal.refused_by_advantage:,} |",
             f"| Identified another way, with a K-aff marker in a file of the round (a control: "
             f"{_count(kritikal.control_files, 'file')}) | {kritikal.control_rounds:,} |",
+        ]
+    transition = report.transition_plans
+    if transition is not None:
+        by_method = ", ".join(
+            f"`{method}` {count:,}" for method, count in transition.control_by_method.items()
+        )
+        lines += [
+            "| The kritikal affirmative not carried in: the round's own file holds a plan text under `Thus` "
+            f"naming a policy aff | {transition.refused_kritikal_carry:,} |",
+            "| Identified another way, with a plan text under `Thus` in a file of the round naming another "
+            f"aff (a control{': ' + by_method if by_method else ''}) | {transition.control_rounds:,} |",
         ]
     lines += ["", _TITLES_NOT_READ, ""]
     return lines

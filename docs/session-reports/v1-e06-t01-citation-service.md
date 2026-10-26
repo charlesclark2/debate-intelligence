@@ -21,19 +21,20 @@ writes "Lastname YY" and the full cite line and names every unverified and missi
 `re_resolve` keeps a student's changed field unless it equals the derived value (ac5, shown failing
 first). Every criterion passed and the Goal is `Succeeded`.
 
-Three things to look at first, all in **Deviations** and **Decisions**: the harvester lives in
-`debate_core.retrieval`, not `debate_core.evidence`, because the layers contract forces it; the
-accessed date and the retrieved-URL fallback are recorded as `heuristic`, because no
-`CitationFieldSource` names the platform's own retrieval record; and an organization-issued page
-with no named author (the government fixture) can never have a fully verified cite under E02's
-required fields.
+The PM ruled on the three open questions on 2026-10-26 (quoted under **Deviations** and
+**Decisions**). The harvester and its test live in `debate_core.retrieval`, and the test was moved
+to `packages/debate_core/tests/retrieval/test_citation_harvest.py`. One criterion is affected: the
+`page-metadata` node's command, as the spec still writes it, names the test's old path. It passes at
+the new path, and the PM amends the command in the next batch. The accessed date and the
+retrieved-URL fallback are accepted as `heuristic` for this task, and a `retrieval` source goes to
+`v1-e06-t02`. Organization authors and refilling an emptied field are also deferred to `v1-e06-t02`.
 
 ## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
 | `citation-model` | Done (already present) | `domain/citation.py` already held `CitationField[T]` (value, source, verified, raw), `Citation` and `is_fully_verified` from E02. Nothing was changed. |
-| `page-metadata` | Done | `debate_core/retrieval/citation_harvest.py` (see Deviations for the package), on the shared JSON-LD walk `retrieval/json_ld.py`. Red: 30 failed, 14 passed against a skeleton (`b5f3ff0`); green: 45 passed. |
+| `page-metadata` | Done | `debate_core/retrieval/citation_harvest.py`, on the shared JSON-LD walk `retrieval/json_ld.py`; its test is `tests/retrieval/test_citation_harvest.py` (PM ruling; see Deviations). Red: 30 failed, 14 passed against a skeleton (`b5f3ff0`); green: 45 passed. |
 | `crossref-doi` | Done | Port `application/ports/doi_metadata.py`; adapter `integrations/crossref_doi.py`; synthetic respx answer. Red: 22 failed, 3 passed (`4f0c32e`); green: 25 passed. |
 | `merge-and-format` | Done | `application/citation_service.py`. Red: 74 failed, 7 passed (`602e565`). ac5 red with everything else implemented: 3 failed, 78 passed (`dfc7f31`); green: 81 passed (`82e339e`). |
 
@@ -43,11 +44,11 @@ required fields.
 |---|---|---|
 | ac1: each fixture page (news, think tank, government, journal) has every field's value, source and verified flag as its expected JSON | PASS | `uv run pytest packages/debate_core/tests/application/test_citation_service.py` → 81 passed. `test_every_cite_field_has_the_value_source_and_flag_the_fixture_expects` runs the four kinds plus an open-access PDF and a USER_SUPPLIED case, against `tests/fixtures/citation/<case>.expected.json`, written by hand before the service existed. |
 | ac2: a DOI is fetched once, cached by DOI and preferred for title, container, date and authors; failures degrade without raising | PASS | Same run: `test_a_doi_is_looked_up_once_however_many_times_its_cite_is_resolved` (1 request for 3 resolutions over two snapshots), `test_crossref_is_preferred_to_the_pages_own_meta_tags`, `test_crossref_wins_over_every_page_source`, and degradation on ConnectError, ReadTimeout, 500, 429, non-JSON, a failed envelope and 404 (`PAGE_METADATA_OF_THE_JOURNAL`, written by hand). `test_crossref_doi.py` → 25 passed: the file cache outlives the client, an unreadable cache file is refetched, a failure caches nothing. |
-| ac3: credentials only from an explicit bio, JSON-LD `jobTitle`/`affiliation` or Crossref affiliation; otherwise missing with no qualification in the cite | PASS | `test_citation_harvest.py` → 45 passed: no credential from a byline's job title (the news page's "Science Correspondent"), from `citation_author_institution`, from a `description`, or from a bio naming no author. `test_citation_service.py`: Crossref affiliations, Crossref over a bio, a deposit with no affiliation leaving the bio, and a news cite with no parenthetical. |
+| ac3: credentials only from an explicit bio, JSON-LD `jobTitle`/`affiliation` or Crossref affiliation; otherwise missing with no qualification in the cite | PASS | `tests/retrieval/test_citation_harvest.py` → 45 passed: no credential from a byline's job title (the news page's "Science Correspondent"), from `citation_author_institution`, from a `description`, or from a bio naming no author. `test_citation_service.py`: Crossref affiliations, Crossref over a bio, a deposit with no affiliation leaving the bio, and a news cite with no parenthetical. |
 | ac4: `format_cite` gives the short cite ("Smith 26") and the full line with accessed date, and flags unverified fields | PASS | `test_each_fixture_cite_formats_as_the_fixture_expects` (six cases, hand-written lines), plus last-name, "et al.", "ND", no-author, stated-day and provenance-note cases. `FormattedCite.unverified_fields` / `missing_fields`. |
 | ac5: a student's changed field is verified on re-resolution only when it equals the derived value; otherwise kept, unverified and marked | PASS | Run red first: with `keep_student_edits` overwriting, 3 failed, 78 passed (`dfc7f31`). Green: 81 passed (`82e339e`). Tested end to end through `CardEditService` and the edit log: a differing value kept and named in `student_fields`; a value equal to the derivation verified, after which the card verifies again; a value equal to a heuristic stays unverified; only changed fields kept; a never-edited card takes the derived cite whole. |
 | Node `citation-model`: `artifact_exists` `domain/citation.py` contains `class CitationField` | PASS | `grep -c "class CitationField" packages/debate_core/src/debate_core/domain/citation.py` → 1 |
-| Node `page-metadata`: `uv run pytest packages/debate_core/tests/evidence/test_citation_harvest.py` | PASS | 45 passed in 1.43s (the file is at the spec's path; see Deviations) |
+| Node `page-metadata`: harvester fixture tests pass | PASS at the path the PM ruled | `uv run pytest packages/debate_core/tests/retrieval/test_citation_harvest.py` → 45 passed in 2.16s. The command as the spec still writes it, with `tests/evidence/`, now names a moved file and finds nothing. It passed there (45 passed in 1.43s) before the PM's ruling of 2026-10-26 moved the file. The PM amends the command in the next batch. |
 | Node `crossref-doi`: `uv run pytest packages/debate_core/tests/integrations/test_crossref_doi.py` | PASS | 25 passed in 1.37s |
 | Node `merge-and-format`: `uv run pytest packages/debate_core/tests/application/test_citation_service.py` | PASS | 81 passed in 1.88s |
 | Node `merge-and-format`: `uv run pyright packages/debate_core` | PASS | 0 errors, 0 warnings, 0 informations (17.7 s) |
@@ -58,7 +59,8 @@ required fields.
 ### Mutation run (agreement 8)
 
 22 mutants over `citation_service.py`, `citation_harvest.py` and `crossref_doi.py`. Each was planted
-on a committed tree, run against the three test files (`-n 0 -p no:randomly`), and restored with
+on a committed tree, run against the three test files (`-n 0 -p no:randomly`; the harvester's was
+still at `tests/evidence/` then, with the same contents), and restored with
 `git checkout`, with `git diff --quiet` confirming each restore. Every run set
 `HYPOTHESIS_STORAGE_DIRECTORY` to a fresh empty directory. These suites have no Hypothesis
 properties, so no catch here depends on a replayed example. All 22 were caught. One was at first
@@ -94,7 +96,7 @@ not planted, because ruff had reformatted its target; it was rewritten and run a
 | Command | Result |
 |---|---|
 | `uv run scripts/affected_tests.py` (list only), then `pytest --collect-only` over it | 200 of 525 files, 5,644 tests. That is past the two-minute line, so it was not run and is left to the PR's `ci` check (PM ruling of 2026-10-19). After the last commit, which edits `pyproject.toml`, the whole selection counts as affected anyway. |
-| `.venv/bin/python -m pytest -m "not slow and not live"` over the changed modules' tests and the always-run list: `tests/retrieval/`, `test_citation_harvest.py`, `test_citation_service.py`, `test_article_service.py`, `test_card_edit_service.py`, `test_port_conformance.py`, `test_snapshot_service.py`, `test_html_extractor.py`, `test_pdf_extractor.py`, `tests/integration/test_fetch_cli.py`, `tests/fixtures/test_cassette_hygiene.py`, `test_doctor.py`, `test_installation.py`, `test_app.py`, `test_help_rendering.py`, `tests/architecture/`, `tests/specs/` | 1620 passed in 23.79s |
+| `.venv/bin/python -m pytest -m "not slow and not live"` over the changed modules' tests and the always-run list: `tests/retrieval/`, `test_citation_harvest.py` (then under `tests/evidence/`), `test_citation_service.py`, `test_article_service.py`, `test_card_edit_service.py`, `test_port_conformance.py`, `test_snapshot_service.py`, `test_html_extractor.py`, `test_pdf_extractor.py`, `tests/integration/test_fetch_cli.py`, `tests/fixtures/test_cassette_hygiene.py`, `test_doctor.py`, `test_installation.py`, `test_app.py`, `test_help_rendering.py`, `tests/architecture/`, `tests/specs/` | 1620 passed in 23.79s |
 | The httpx-logger suites in one process, `-n 0 -p no:randomly`: `integrations/discovery/`, `test_http_fetcher.py`, `integrations/opencaselist/`, then `test_crossref_doi.py`, `test_citation_service.py`; and again in the reverse order | 825 passed (3.83 s); 825 passed (1.92 s) |
 | `uv run --frozen ruff check .` / `ruff format --check .` | All checks passed / 1461 files already formatted |
 | `uv run --frozen pyright` (whole repo, as CI) | 0 errors, 0 warnings, 0 informations |
@@ -104,6 +106,7 @@ not planted, because ruff had reformatted its target; it was rewritten and run a
 | `uv run --frozen python scripts/docs_index.py --check-descriptions` (after this report was written) | All 53 indexed documents under docs/ have a description |
 | `uv run --frozen python scripts/check_command_blocks.py --base origin/dev` | OK: no `#` comments in 504 shell code blocks in 180 Markdown files (1 session report changed) |
 | `pytest tests/docs tests/scripts/test_check_command_blocks.py tests/scripts/test_docs_index.py` | 191 passed in 2.77s |
+| After the PM's rulings (test moved, report updated): `pytest -m "not slow and not live" packages/debate_core/tests/retrieval tests/architecture tests/specs tests/docs tests/scripts/test_check_command_blocks.py tests/scripts/test_docs_index.py`; `ruff check .`; `check_command_blocks.py --base origin/dev`; `docs_index.py --check-descriptions`; `validate_specs.py` | 1351 passed in 8.20s; all checks passed; OK (504 blocks); all 53 documents described; OK, and `--require-succeeded` Succeeded |
 
 ## Files changed
 
@@ -116,7 +119,7 @@ not planted, because ruff had reformatted its target; it was rewritten and run a
   to the table in `ports/__init__.py`'s docstring.
 * **`debate_core.integrations`**: `crossref_doi.py` is the client, `FileDoiCache` and
   `InMemoryDoiCache`. In `html_extractor.py` the JSON-LD walk now calls `retrieval.json_ld`.
-* **Tests**: `tests/evidence/test_citation_harvest.py`, `tests/integrations/test_crossref_doi.py`,
+* **Tests**: `tests/retrieval/test_citation_harvest.py`, `tests/integrations/test_crossref_doi.py`,
   `tests/application/test_citation_service.py`, `tests/retrieval/test_json_ld.py`.
 * **Fixtures** (`tests/fixtures/citation/`): one new synthetic page (`journal-article-landing.html`),
   one synthetic Crossref answer under `10.5555`, six hand-written `<case>.expected.json` files, the
@@ -136,10 +139,12 @@ not planted, because ruff had reformatted its target; it was rewritten and run a
    `canonicalize_url`. `retrieval` ("the pure procedures that turn a URL and fetched bytes into an
    article") is where both already live. Both modules are outside the spec's
    `constraints.packages`; the walker's place was the PM's instruction, and the harvester follows it.
-   **The test file stays at the spec's path**, `packages/debate_core/tests/evidence/test_citation_harvest.py`,
-   so the `page-metadata` node's command runs as written. Its docstring says why. If the PM amends
-   the node's output to `retrieval/citation_harvest.py`, the test belongs in `tests/retrieval/`, and
-   moving it is a one-line `git mv`.
+   **PM ruling, 2026-10-26:** "Yes. The harvester stays at retrieval/citation_harvest.py. git mv its
+   test to packages/debate_core/tests/retrieval/ and use that path in the report's evidence. Record
+   it under Deviations. The PM amends the node's output, its command and constraints.packages (adding
+   debate_core.retrieval) in the next batch." The test was moved with `git mv` to
+   `packages/debate_core/tests/retrieval/test_citation_harvest.py`, and its docstring says why. Until
+   the amendment lands, the node's command as written names the old path; see Acceptance criteria.
 2. **"Recorded fixture pages" are synthetic** (the E04 amendment of 2026-10-25 and the PM's note for
    this task). Three are t04's pages, unchanged. One page, a journal landing page with `citation_*`
    tags, was added, because t04's journal sample is a PDF and has no meta tags. The fixture README
@@ -156,8 +161,11 @@ not planted, because ruff had reformatted its target; it was rewritten and run a
   the timestamp. The accessed date is not a required field, so it never holds a card back, but every
   cite lists it in `unverified_fields`. The same applies to the URL of last resort, when a page
   declares no canonical URL: the retrieved URL, canonicalized, is `heuristic`. So an open-access PDF
-  cite has an unverified `canonical_url`, and a card cut from a PDF cannot reach VERIFIED. This is a
-  question for the PM (Follow-up work 1).
+  cite has an unverified `canonical_url`, and a card cut from a PDF cannot reach VERIFIED.
+  **PM ruling, 2026-10-26:** "Accepted as built for this task: the accessed date, and the retrieved
+  URL when the page names no canonical one, are recorded as heuristic and unverified. The PM amends
+  v1-e06-t02 to add a retrieval source, verified for publisher-retrieved snapshots. That covers the
+  enum, the schema export and ac1's list. t02 is where VERIFIED is decided."
 * **What "verified" means.** A value is verified when its source is anything but `heuristic` and the
   snapshot is PUBLISHER_RETRIEVED. Under any other provenance nothing is verified, Crossref
   included. The text could be anything, so a DOI in its URL proves nothing about it. The provenance
@@ -180,7 +188,10 @@ not planted, because ruff had reformatted its target; it was rewritten and run a
   so an older unverified value the service itself wrote is not mistaken for a student's. On an
   edited card, a stored field marked verified is an older derivation (a changed field cannot arrive
   verified), and the derivation replaces it. A field the student emptied cannot be told from one
-  never resolved, so it is derived again. Saving and re-verifying the card is the caller's step
+  never resolved, so it is derived again. **PM ruling, 2026-10-26:** "accepted for t01. It conflicts
+  with the intent of ac5, so the PM amends v1-e06-t02: clearing a field is recorded as a student
+  edit, and re-resolution never refills it." `test_a_field_the_student_emptied_is_derived_again` pins
+  this task's behaviour, so t02's change will show up as that test failing. Saving and re-verifying the card is the caller's step
   (CardService, `v1-e06-t02`), as the service returns a `CitationResolution`.
 * **Crossref caching.** Found works are cached in `<storage.data_dir>/crossref/<sha256(doi)>.json`.
   A 404 and a failure are not cached, so they are asked again next time. The contact email goes as
@@ -189,7 +200,7 @@ not planted, because ruff had reformatted its target; it was rewritten and run a
 * **Short cite.** The first author's last name, with " et al." for more than one author. Without an
   author it falls back to the publication, then the title, then `[no author]`; without a date it
   ends "ND". "Smith, Jane" and "Jane Smith Jr." both give Smith. Team conventions are `v1-e06-t03`'s.
-* **No composition-root wiring.** No command uses the service yet, so `debate_cli.container` is
+* **No composition-root wiring** (the PM agreed on 2026-10-26: "The CLI wiring stays for t02 or t06"). No command uses the service yet, so `debate_cli.container` is
   unchanged, and so are the pinned integration lists in `test_doctor.py` and `test_installation.py`.
   `cut` (`v1-e06-t06`) or CardService (`v1-e06-t02`) builds `crossref_doi_client(...)` over a
   `FileDoiCache(data_dir / CROSSREF_CACHE_DIRECTORY)`.
@@ -200,18 +211,23 @@ None. No command in this session needed the network, credentials or more than tw
 
 ## Follow-up work
 
-1. **A source for the platform's own retrieval record** (PM; an E02 domain change). Add a
-   `CitationFieldSource` such as `retrieval` for the accessed date and the retrieved URL. It would be
-   verified for PUBLISHER_RETRIEVED snapshots, and a PDF's or a canonical-less page's URL would stop
-   holding cards UNVERIFIED. It changes the enum, the schema export and ac1's list, so it is not
-   this task's to make.
-2. **Organization-issued sources** (PM, `v1-e06-t02`). A press release that names no person has
-   `authors` missing, and `authors` is a required field (`REQUIRED_CITATION_FIELDS`), so its card can
-   never be VERIFIED. Debate cites usually give the agency as the author. Whether a publication may
-   stand in for an author is a domain decision.
-3. **Wiring** (`v1-e06-t02` / `v1-e06-t06`): build the Crossref client and file cache in the
+1. **A `retrieval` source for the platform's own retrieval record**: ruled into `v1-e06-t02` by the
+   PM's amendment. It is verified for publisher-retrieved snapshots and covers the enum, the schema
+   export and ac1's list. Then the accessed date, and a PDF's or a canonical-less page's URL, stop
+   holding cards UNVERIFIED.
+2. **Organization-issued sources**: deferred to `v1-e06-t02` by the PM's amendment. A press release
+   that names no person has `authors` missing, and `authors` is a required field, so today its card
+   can never be VERIFIED. **PM ruling:** "When a page names no person, the issuing organization may
+   stand as the author, marked as an organization author. My lean is yes, because that is debate
+   convention; t02 decides with a test."
+3. **An emptied cite field is a student edit**: ruled into `v1-e06-t02` by the PM's amendment.
+   Re-resolution never refills it (Decisions, ac5).
+4. **Spec amendment, next batch (PM)**: the `page-metadata` node's output becomes
+   `retrieval/citation_harvest.py`, its command `tests/retrieval/test_citation_harvest.py`, and
+   `constraints.packages` adds `debate_core.retrieval`.
+5. **Wiring** (`v1-e06-t02` / `v1-e06-t06`): build the Crossref client and file cache in the
    composition root. The doctor and installation tests' pinned integration lists change then.
-4. **Org names in the short cite** (`v1-e06-t03`). A JSON-LD or Crossref organization author ("Synthetic
+6. **Org names in the short cite** (`v1-e06-t03`). A JSON-LD or Crossref organization author ("Synthetic
    Consortium") gives "Consortium" as its last name, because the cite cannot tell a person from an
    organization. Format profiles may want the name whole.
 

@@ -3,9 +3,9 @@
 The harvester is :mod:`debate_core.retrieval.citation_harvest`, not a module of
 `debate_core.evidence`: it reads JSON-LD through the walk it shares with the access classifier and
 the HTML extractor (:mod:`debate_core.retrieval.json_ld`), and the layers contract keeps
-`debate_core.evidence` from importing `debate_core.retrieval`. This file stays at the path the task
-spec's `page-metadata` node names, so that node's command runs as written (session report,
-Deviations).
+`debate_core.evidence` from importing `debate_core.retrieval`. The task spec named
+`debate_core.evidence` for both; the PM ruled on 2026-10-26 that the harvester and this file live in
+retrieval (session report, Deviations).
 
 Every expectation below is written by hand from the page it is about (working agreement 6). The four
 pages are t04's synthetic news, think-tank and government samples, served at the addresses t06's

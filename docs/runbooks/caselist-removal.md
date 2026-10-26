@@ -857,6 +857,11 @@ if [ -d "$DIR" ]; then ls "$DIR"; rm -r "$DIR"; echo "deleted: $DIR"; else echo 
 Success looks like the directory's files listed and `deleted: …`, or `nothing to delete: …` where
 the comparison never ran. In the request's register entry, record that it was deleted, with no path.
 
+**The model stage's cassettes** (`v1-e32-t07`), once the operator has recorded them, hold scrubbed
+excerpts of real cards under `<data dir>/landscape/model-cassettes/` on this machine only. After
+`DONE` for a removal that touched a caselist, delete that caselist's recordings there too, and tell
+the PM, since the evaluation is then recorded again (PM ruling, 2026-10-25).
+
 ## The annual purge: landscape school views
 
 The data-use policy's annual purge runs each September for the season that has just aged out

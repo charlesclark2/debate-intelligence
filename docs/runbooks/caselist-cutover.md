@@ -96,13 +96,19 @@ AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output caselis
 TOPIC=$(AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output -raw caselist_alert_topic_arn)
 aws sns list-subscriptions-by-topic --profile debate-admin --region us-east-1 --topic-arn "$TOPIC" --query 'Subscriptions[].SubscriptionArn' --output text
 BUCKET=$(AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output -raw evidence_bucket_name)
-aws s3api list-objects-v2 --profile debate-dev-evidence --bucket "$BUCKET" --prefix reports/sync/run-lock.json --query 'KeyCount' --output text
+aws s3api list-objects-v2 --profile debate-dev-evidence --bucket "$BUCKET" --prefix reports/sync/run-lock.json --query 'length(Contents || `[]`)' --output text
 ```
 Success looks like `"DISABLED"`, `false`, an ARN ending `:debate-dev-caselist-run-alerts:<id>` (not
 `PendingConfirmation`), and `0`: no lock object, so the bucket is not seeded. A `1` on the last line
 means the bucket is already seeded: stop and tell the PM.
 
 ## Step 1 — The Mac's last scheduled run
+
+**The last run may be an earlier week's** (PM ruling, 2026-10-25). The dev cutover of 2026-10-25 took
+the Mac's run of 2026-10-22 as its last: its record said `completed` with nothing pending and no
+pending-work file, so the steps from step 2 on ran that evening and the cloud's first scheduled run
+was the next Wednesday. The check below is what decides, not the date: run its "After the run" block
+against whichever run is the newest, and go on only on its success line.
 
 ADR-0020 (4) step 2. The Mac's agent runs on Wednesday 2026-10-28 at 06:00 as it always has. It
 publishes only with an AWS session, so sign in on **Tuesday evening**, and check its OpenCaselist
@@ -162,7 +168,8 @@ Mac can run is one with the lock; the agent's plist rewritten without its `--cas
 loaded; the seed.
 
 **The release.** The newest dev pre-release containing this task's merge. Set `TAG` in this shell;
-later blocks read it and stop if it is empty.
+later blocks read it and stop if it is empty. `TAG` is always written `${TAG}` before a `:`, because zsh reads
+`$TAG:c…` as a modifier on the variable (found in the cutover of 2026-10-25).
 
 **Operator command** (expected runtime ~1 min)
 Where: `$WT`
@@ -171,7 +178,7 @@ cd "$WT"
 gh release list --repo charlesclark2/debate-intelligence --limit 3 --json tagName,createdAt --jq '.[] | .tagName + " " + .createdAt'
 TAG="$(gh release list --repo charlesclark2/debate-intelligence --limit 1 --json tagName --jq '.[0].tagName')"
 git fetch origin tag "$TAG" --no-tags
-git cat-file -e "$TAG:ops/caselist_run/compare_cloud_run.py" && git show "$TAG:config/profiles/dev.toml" | grep -c -E '^(run_state = "bucket"|sync_caselists = )' && echo "TAG=$TAG has the cutover" || echo "STOP: $TAG has no v1-e40-t06; use a release after its merge"
+git cat-file -e "${TAG}:ops/caselist_run/compare_cloud_run.py" && git show "${TAG}:config/profiles/dev.toml" | grep -c -E '^(run_state = "bucket"|sync_caselists = )' && echo "TAG=$TAG has the cutover" || echo "STOP: $TAG has no v1-e40-t06; use a release after its merge"
 ```
 Success looks like `2`, then `TAG=<tag> has the cutover`.
 

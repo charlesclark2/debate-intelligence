@@ -284,5 +284,24 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e40-t11-run-home-moved-holder
+    - id: t12
+      kind: Task
+      name: 'A held upload a cloud task records reaches the bucket, not only its working copy'
+      description: >-
+        A held upload a cloud task records reaches the bucket, not only its working copy.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t12-held-upload-records-reach-the-bucket.yaml
+        goalRef: v1-e40-t12-held-upload-records-reach-the-bucket
+      dependsOn:
+      - t06
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t12-held-upload-records-reach-the-bucket reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t12-held-upload-records-reach-the-bucket
 status:
   phase: Pending

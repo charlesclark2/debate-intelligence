@@ -29,6 +29,12 @@ spec:
     lacks, named for the PM; the PM reads the plan before the apply. Data-use policy 1.18 names
     the task's working copy. The four imports are operator runs, at most one a day, with counts
     in docs/data.
+    (PM amendment 2026-10-25, from v1-e34-t34's review.) t34 imports a backfile as its own dated
+    snapshot (`manifests/<slug>/<date>.jsonl`), not under `full/`. The task's storage covers t34's
+    free-space estimate with its 25% headroom: about 30 GB for hspolicy25 and 33 GB for hsld25. A
+    failed import alerts the coach through the run's alert topic, as a failed weekly run does. Running
+    the import again, with no download and no budget, is a backfile's rebuild after a whole-file
+    removal, so the same task definition runs it, and the removal runbook names it.
   priority: 2
   constraints:
     packages: [infrastructure, ops, docs/runbooks, docs/data, debate_core.application, packages/debate_core/tests, tests/smoke]

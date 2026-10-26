@@ -38,7 +38,9 @@ spec:
     rather than `NOT_FOUND` with no error.
   priority: 1
   constraints:
-    packages: [debate_core.application]
+    # PM amendment 2026-10-25, from the PM's review (Deviations 1 and 2): fetch_target_url and the
+    # site-root rel=canonical rule in retrieval, and the fakes answering as the real adapters do.
+    packages: [debate_core.application, debate_core.retrieval, debate_core.testing]
     forbidden:
       - Importing httpx, trafilatura or filesystem code in the service (ports only)
       - Creating a snapshot for PAYWALLED, BLOCKED, ROBOTS_DISALLOWED, NOT_FOUND or ERROR outcomes

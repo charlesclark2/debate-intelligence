@@ -1,0 +1,84 @@
+# TASK v1-e40-t12-held-upload-records-reach-the-bucket - A held upload a cloud task records reaches the bucket, not only its working copy
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t12-held-upload-records-reach-the-bucket
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "A held upload a cloud task records reaches the bucket, not only its working copy"
+spec:
+  # Filed by the PM, 2026-10-25, from v1-e34-t34's follow-up, accepted by the PM (2026-10-25).
+  description: >-
+    When an importer meets an upload at a path a removal holds, it refuses it and records the
+    held upload in the data directory's suppression files, and the removal runbook's "run the
+    removal again" finds held uploads through that record and the download inbox. In a cloud
+    task, the weekly run (ADR-0020) and v1-e40-t09's backfile import alike, the working copy and
+    its inbox vanish when the task stops, so the record is lost and a later removal run does not
+    see the held upload. Count first, read-only: what the held-upload record holds, where each
+    reader looks for it, and whether the run-state bundle already carries it. Then make the
+    record reach the bucket under the run's lock, through the run-state bundle or the
+    suppression list's own prefix, and make the removal and `caselist status` read it there in
+    bucket mode. Tested with moto: a held upload met in one task is seen by a removal run from
+    another machine.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, docs/runbooks, docs/adr]
+    forbidden:
+      - A school, team code or path in a key or object metadata (data-use policy rule 3)
+      - A bucket write outside the run's lock
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e40-t06-cutover
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Counts first: what the record holds, its readers, and whether the bundle carries it,
+        sent to the PM with the proposed place in the bucket.
+    - id: ac2
+      description: >-
+        Against moto, a held upload one task records is found by a removal run and by
+        `caselist status` from another data directory in bucket mode; tests shown failing
+        first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t12-held-upload-records-reach-the-bucket-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    Find where the held-upload record lives and who reads it, then keep it in the bucket.
+  goalRef:
+    name: v1-e40-t12-held-upload-records-reach-the-bucket
+  graph:
+    nodes:
+      - id: held-upload-records
+        kind: Task
+        name: Held upload records
+        description: >-
+          Find where the held-upload record lives and who reads it, then keep it in the
+          bucket.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Caselist tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, held]
+status:
+  phase: Pending

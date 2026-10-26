@@ -100,7 +100,7 @@ cd "$WT"
 gh release list --repo charlesclark2/debate-intelligence --limit 3 --json tagName,createdAt --jq '.[] | .tagName + " " + .createdAt'
 TAG="$(gh release list --repo charlesclark2/debate-intelligence --limit 1 --json tagName --jq '.[0].tagName')"
 git fetch origin tag "$TAG" --no-tags
-git cat-file -e "$TAG:packages/debate_core/src/debate_core/integrations/sns/__init__.py" && echo "TAG=$TAG has the sns notifier" || echo "STOP: $TAG has no sns notifier; use a release after v1-e40-t05's merge"
+git cat-file -e "${TAG}:packages/debate_core/src/debate_core/integrations/sns/__init__.py" && echo "TAG=$TAG has the sns notifier" || echo "STOP: $TAG has no sns notifier; use a release after v1-e40-t05's merge"
 ```
 
 **The dry run**, which builds and checks the image offline and pushes nothing (Docker Desktop must be

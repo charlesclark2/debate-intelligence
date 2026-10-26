@@ -25,6 +25,16 @@ spec:
     government, open-access PDF, paywalled, robots-disallowed and 404 pages, recorded once with a
     documented script and scrubbed of cookies and tracking headers. A `--paste` path for
     USER_SUPPLIED text is exposed with an attestation prompt. Card cutting (`cut`) is E06.
+    (PM amendment 2026-10-25, from the PM's reviews of v1-e04-t03, t04 and t05.) The fixtures are
+    synthetic pages and documents served as recorded responses, built as t03's and t04's are: nothing
+    is recorded from a real site and committed, since a real article is someone else's text. ac3's
+    README records how each was made instead of a source and date. How the pipeline classifies real
+    pages is measured in place by v1-e04-t07, never committed. The composition root builds
+    `ContentTypeDispatcher(html=TrafilaturaExtractor(...), pdf=PdfExtractor(...))` and
+    `HttpArticleFetcher` from `settings.articles` (with a new setting for the HTML extractor's
+    `max_bytes`), passes `max_user_text_bytes=settings.http.max_response_bytes` and `refresh` from
+    `--refresh`, and maps `InvalidSourceUrl`, `UserTextNotAttested` and `UserTextRejected` to exit 1.
+    The CLI's two pinned integration lists change with it.
   priority: 1
   constraints:
     packages: [debate_cli.commands.fetch, tests/fixtures/http, tests/integration]

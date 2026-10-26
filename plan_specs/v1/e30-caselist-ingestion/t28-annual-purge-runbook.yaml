@@ -38,7 +38,9 @@ spec:
     for each caselist whose season is purged (the removal runbook gained the same line); reads which
     caselists are backfiles from the build's `caselist.backfile_caselists` setting (v1-e34-t34)
     rather than from slugs or dates; and checks that no working copy restored on the operator's
-    machine (`caselist restore-run-state`) is left over from a step.
+    machine (`caselist restore-run-state`) is left over from a step. It also deletes
+    `<data dir>/landscape/model-cassettes/` entries recorded from a purged season's cards
+    (v1-e32-t07's question 7).
   priority: 3
   constraints:
     packages: [docs/runbooks, tests/docs]

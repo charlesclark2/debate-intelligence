@@ -20,7 +20,9 @@ with a text under it (a tag, an analytic, an undertag or an unstyled paragraph),
 * **Advocacy statement:** `Advocacy` or `Advocacy statement` as a label; inline `Advocacy:` or `Advocacy
   statement:`; the sentence `Our advocacy is` or `Our advocacy statement is`.
 * **The 1AC:** the sentence `The 1AC is`.
-* **Method:** `Method` as a label; inline `Method:`; the sentence `Our method is`. Left out: `Methods`,
+* **Method:** `Method` as a label; inline `Method:`; the sentence `The`, `Our` or `My` with `method` or
+  `methodology`, then `is`, `will` or `should` (widened by `v1-e32-t24`, the PM's ruling of 2026-10-26:
+  0 of 1,205 control files hold it). Left out: `Methods`,
   which heads a policy aff's study block (8 of 8 control files with it had a plan text naming an aff).
 
 ## The K families (:func:`heading_families`)
@@ -73,14 +75,16 @@ __all__ = [
 
 ADVOCACY_LABELS: Final = frozenset({"advocacy", "advocacy statement"})
 METHOD_LABELS: Final = frozenset({"method"})
-_RULE_VERSION: Final = "kritikal-aff-1"
+_RULE_VERSION: Final = "kritikal-aff-2"
 """Bumped when how a marker or a family is found changes, so a cached reading is read again."""
 _SEPARATOR: Final = r"\s*[:\-–—]\s*(?=\S)"
 _ADVOCACY_INLINE: Final = re.compile(r"^\s*advocacy(?:\s+statement)?" + _SEPARATOR, re.IGNORECASE)
 _ADVOCACY_SENTENCE: Final = re.compile(r"^\s*our\s+advocacy(?:\s+statement)?\s+is\b", re.IGNORECASE)
 _THE_1AC_SENTENCE: Final = re.compile(r"^\s*the\s+1ac\s+is\b", re.IGNORECASE)
 _METHOD_INLINE: Final = re.compile(r"^\s*method" + _SEPARATOR, re.IGNORECASE)
-_METHOD_SENTENCE: Final = re.compile(r"^\s*our\s+method\s+is\b", re.IGNORECASE)
+_METHOD_SENTENCE: Final = re.compile(
+    r"^\s*(?:the|our|my)\s+method(?:ology)?\s+(?:is|will|should)\b", re.IGNORECASE
+)
 _HEADING_UNITS: Final = frozenset({StructuralUnit.POCKET, StructuralUnit.HAT, StructuralUnit.BLOCK})
 _NOT_TEXT_UNITS: Final = frozenset({StructuralUnit.EVIDENCE, StructuralUnit.CITE})
 

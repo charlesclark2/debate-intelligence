@@ -155,6 +155,35 @@ def test_an_our_method_is_sentence_and_an_inline_method_label_are_markers() -> N
     ]
 
 
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "The method is a refusal of the frame",
+        "Our methodology is a refusal of the frame",
+        "My method will refuse the frame",
+        "Our method should be read as a refusal",
+        "the methodology should be read first",
+    ],
+)
+def test_the_widened_method_sentence_is_a_marker(sentence: str) -> None:  # `v1-e32-t24`, the PM's ruling 4
+    assert kinds((TAG, sentence)) == [(KritikalMarkerKind.METHOD, TextForm.SENTENCE, 0)]
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "A method is a refusal of the frame",
+        "Their method is a refusal of the frame",
+        "Our methods are refusals",
+        "Our method was a refusal",
+        "The method of the study is a survey",
+        "Our method, which refuses, is ours",
+    ],
+)
+def test_other_method_sentences_are_not_markers(sentence: str) -> None:
+    assert kinds((TAG, sentence)) == []
+
+
 @pytest.mark.parametrize("label", ["Methods", "Methodology", "Method mutual aid", "Study methods"])
 def test_methods_and_other_method_words_are_not_markers(label: str) -> None:
     assert kinds((BLOCK, label), (ANALYTIC, "The study surveyed four states")) == []

@@ -304,6 +304,47 @@ The difference comes from two places:
 
 No unidentified round holds a marker file beside a file with a plan text of its own.
 
+### After the coach's K families (2026-10-25)
+
+**The coach's edit** was committed on its own as "The coach's K families" (`bb2e248`), after
+`uv run pytest tests/config` passed (60 passed).
+* Families went from 20 to 19: colonialism was merged into settler colonialism, which took its phrases.
+* Phrases went from 51 to 54: `wilderson` under antiblackness, `zizek` under psychoanalysis, and
+  `heteronormativity` under queer theory.
+* No school, team code or tournament word was added. The two new names are scholars, beside the Lacan
+  and Nietzsche already listed.
+
+**The operator then ran the two local blocks.** Both checked for a `DEBATE_*` variable and a `caselist
+pull` first. Nothing was published or written to a bucket.
+
+| Step | Result | Runtime |
+|---|---|---|
+| `assign_landscape_affs.py plan-texts --caselist hspolicy26 --snapshot 2026-10-20` | 1,770 sources, 0 cached, 1,770 parsed, 0 refused, 0 unread, cache written. The edit changed the cache's key. Verdicts unchanged: NAMES 950, CONFLICTING 7, UNNAMED 2, NONE 811. K-aff markers unchanged: 28 documents, 26 with no plan text, 22 teams | 304.7 s |
+| `landscape_dry_run_by_section.py --caselist hspolicy26 --snapshot 2026-10-20` | Taxonomy 1.3.0, nothing written, 7 files planned | 79.2 s |
+
+**The method table** is unchanged from the first dry run:
+
+| Method | Aff rounds |
+|---|---|
+| `PLAN_TEXT` | 1,172 |
+| `TEAM_CARRY` | 254 |
+| `PLACED_CARD` | 57 |
+| `KRITIKAL_AFF_MARKER` | 31 |
+| `KRITIKAL_AFF_CARRY` | 9 |
+| Not identified | 669 of 2,192 |
+| Of those, the K aff not carried in: the round's own file reads an advantage | 17 |
+| Identified another way, with a K-aff marker in a file (the control) | 5 rounds, 5 files: `PLAN_TEXT` 3, `TEAM_CARRY` 2 |
+
+* **The K-aff group:** 40 rounds by 19 teams, 31 by their own marker and 9 by carry. Unchanged.
+* **The families line, in the coach's terms:** settler colonialism 2 files (2 teams), cap 1 file (1
+  team), feminism 1 file (1 team), Buddhism 1 file (1 team).
+* **What moved from the earlier dry run:** only the families line. The file counted under colonialism
+  before now counts under settler colonialism, which goes from 1 file and 1 team to 2 and 2. Colonialism
+  is no longer a family.
+  * Nothing else moved: rounds, methods, refusals, the control, the planks and the scan (9 hits, 0 not
+    yet accepted, none in the Kritikal affirmatives section) are as before.
+  * No K-aff file's heading names `wilderson`, `zizek` or `heteronormativity`.
+
 ## The counts (hspolicy26, through 2026-10-20, taxonomy 1.2.0)
 
 ### How they were read
@@ -635,7 +676,9 @@ up the refill or the dry run.
 
 **Done on 2026-10-25:** steps 2 and 3, the refill (37.6 + 221.7 + 412.9 s) and the dry run (71.8 s),
 with `tests/config` first (60 passed). The output is
-[above](#the-real-store-after-the-refill-2026-10-25). Step 1, the coach's edit, is still to come.
+[above](#the-real-store-after-the-refill-2026-10-25). **Step 1, the coach's edit, done the same day:**
+`tests/config` passed, the edit was committed (`bb2e248`), and the plan-text step and the dry run were
+run again ([after the coach's K families](#after-the-coachs-k-families-2026-10-25)).
 
 1. **The coach's K families.** The file is
    `~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t17-kritikal-affirmatives/config/landscape/kritikal_affs/policy-2026-27-nhi.yaml`.

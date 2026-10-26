@@ -276,9 +276,53 @@ under agreement 10. It is not a hand-off.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-26
 
 **Notes:**
+
+The command that closes E04's chain, built to the 2026-10-25 amendment: synthetic cassettes, the real
+pipeline behind a replay transport, and attestation that can't be skipped by accident.
+1. **ac1 to ac4 and every node criterion pass.**
+   * ac1's snapshot is read back from the data directory's SQLite file, with the SHA-256 of the
+     sample's own bytes.
+   * ac2 checks no snapshot row and no blob for four statuses. The robots page is never requested.
+   * Every `--json` run is validated against the committed schema, which refuses a mismatch.
+   * Attestation is shown storing on the flag or a "y", and refusing on "n", an empty answer,
+     `--json` and stdin.
+2. **Mutants: 20, with 19 caught.** The survivor (exit 3 decided by a missing snapshot) is equivalent
+   by t05's invariant, and is honestly called that. The cassette faults and the planted debug log are
+   caught by the hygiene and log tests.
+3. **Deviations accepted:**
+   * The packages: the PM adds `debate_core.application`, `debate_cli`, `uv.lock`, `scripts`,
+     `packages/debate_core/schemas` and `tests/smoke` in the next batch. `ArticleFetch` belongs in
+     core.
+   * The schema beside `verify_result.v1.json`, with `export_schemas.py --check` guarding drift.
+   * `build_cassettes.py`, named for what it does.
+   * The end-to-end tests in process, with only the transport replaced through the container's seam,
+     and the installed binary covered by the smoke check on the no-request paths.
+   * **`uv.lock` edited by hand** is accepted because the change is debate-cli's own two lines,
+     `uv lock --check` passes on it and fails on the old one, and CI's `uv sync --locked` checks it
+     again. A lock edited by hand stays the exception.
+   * ac3's wording: the PM amends it to match the README.
+   * No teaser to truncate, with the 200-word rule enforced instead.
+4. **Decisions 1 to 15 accepted,** including:
+   * `SOURCE_NOT_ACCESSIBLE` with the status in the details;
+   * exit 3 for a retrieval only;
+   * the prompt only where a person can answer, defaulting to no;
+   * the paragraph count from a re-hashed snapshot;
+   * the classifier's evidence in the report, never page text;
+   * `fetch` classified as never writing a bucket;
+   * the honest note that one exploratory run preceded the expectations, whose values came from t03's
+     and t04's hand-written files.
+5. **Follow-ups:**
+   * A `--reported-status` for pasted text is filed by the PM (E04, p3).
+   * t07 drives its measurement through `fetch --json`.
+   * The stale docstring line goes to whoever next edits that test.
+6. **The affected set** is the whole selection (`pyproject.toml`), left to the PR's `ci` under
+   agreement 10. The groups run within the line, the one real import-linter failure (fixed in
+   `c03f972`), and both process orders with `test_http_fetcher.py` are on record.
+
+No re-review is needed. The Goal is `Succeeded`, so the PR merges in full.

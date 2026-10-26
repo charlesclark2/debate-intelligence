@@ -225,6 +225,17 @@ def _print_plan_texts(read: _Read) -> None:
         )
     for position_id, count in sorted(named.items(), key=lambda item: (-item[1], item[0])):
         print(f"  names {position_id}: {count} documents, {len(by_aff[position_id])} teams")
+    under = Counter(found.verdict.value for found in read.run.transition.values())
+    bare = sum(
+        1
+        for sha, found in read.run.transition.items()
+        if found.verdict is PlanTextVerdict.NAMES and read.run.verdicts[sha].verdict is PlanTextVerdict.NONE
+    )
+    print(
+        f"Plan texts under Thus: NAMES {under[PlanTextVerdict.NAMES.value]}, UNNAMED "
+        f"{under[PlanTextVerdict.UNNAMED.value]}, CONFLICTING {under[PlanTextVerdict.CONFLICTING.value]} "
+        f"documents; {bare} naming an aff with no plan text t09 reads."
+    )
     if read.reads_kritikal:
         marked = {sha for sha, found in read.run.kritikal.items() if found.markers}
         bare = {sha for sha in marked if read.run.verdicts[sha].verdict is PlanTextVerdict.NONE}
@@ -281,6 +292,13 @@ async def _assign(arguments: argparse.Namespace) -> int:
         print(
             f"K aff: {len(found.kritikal.marker_sources)} affirmative documents hold a marker; the carry "
             f"refused by the advantage guard in {len(counts.refused_by_advantage)} rounds."
+        )
+    if found.transition is not None:
+        print(
+            f"Plans under Thus: the K-aff carry refused in {len(counts.refused_by_transition_plan)} rounds; "
+            f"{counts.transition_conflicting} rounds conflicting; their carry refused into "
+            f"{counts.transition_carry_refused} rounds; {len(counts.transition_control)} rounds identified "
+            "another way hold one naming another aff."
         )
     print(f"Runtime {time.perf_counter() - started:.1f} s.")
     return 0

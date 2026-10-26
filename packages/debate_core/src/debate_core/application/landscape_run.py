@@ -563,6 +563,7 @@ class LandscapeRunService:
                 aff_assignments=assignments,
                 analytic_texts=texts.inputs if texts is not None else None,
                 kritikal_affs=affs.kritikal,
+                transition_plans=affs.transition,
                 snapshot_topics=snapshot_topics,
                 topic_range=topic_range,
             ),

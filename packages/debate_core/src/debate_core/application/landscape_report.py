@@ -123,6 +123,7 @@ from debate_core.application.landscape_staleness import (
 )
 from debate_core.application.landscape_trends import landscape_trends
 from debate_core.application.ports.parsed_store import OccurrenceRecord
+from debate_core.arguments.landscape.aff_assignment import TransitionPlanInputs
 from debate_core.arguments.landscape.analytic_texts import (
     AnalyticTextInputs,
     TextGroup,
@@ -187,6 +188,7 @@ from debate_core.domain.landscape_report import (
     ReportHeader,
     RoleGap,
     TopCard,
+    TransitionPlans,
     UnclassifiedSummary,
 )
 from debate_core.domain.landscape_schools import SchoolView
@@ -325,6 +327,9 @@ class LandscapeReportInputs:
     kritikal_affs: KritikalAffInputs | None = field(default=None, repr=False)
     """`v1-e32-t17`'s K-aff markers, the K families of each file's headings and the rounds the advantage
     guard refused; None when the run read none, and the report has no kritikal-affirmative group."""
+    transition_plans: TransitionPlanInputs | None = field(default=None, repr=False)
+    """`v1-e32-t24`'s K-aff carries refused for a plan text under a transition label, and the rounds
+    identified another way against one; None when the run read none, and the method table has no such rows."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -636,8 +641,34 @@ class LandscapeReportService:
                 assigned={one: (found.position_id, found.method) for one, found in assigned.items()},
                 placed_card_rounds=placed_card_rounds,
             ),
+            transition_plans=None
+            if inputs.transition_plans is None
+            else _transition_plans(
+                inputs.transition_plans,
+                set(aff_rounds),
+                {one: found.method for one, found in assigned.items()},
+            ),
         )
         return report, counted
+
+
+def _transition_plans(
+    inputs: TransitionPlanInputs, affirmative: set[str], methods: Mapping[str, str]
+) -> TransitionPlans:
+    """`v1-e32-t24`'s rows: the K-aff carries refused for a plan text under a transition label, and the
+    control.
+
+    Only affirmative rounds in range count. A control round is named by the method that identified it, a
+    placed card's when no method assigned it.
+    """
+    control = inputs.control_rounds & affirmative
+    return TransitionPlans(
+        refused_kritikal_carry=len(inputs.refused_kritikal_carry & affirmative),
+        control_rounds=len(control),
+        control_by_method=dict(
+            sorted(Counter(methods.get(one, PLACED_CARD_METHOD) for one in control).items())
+        ),
+    )
 
 
 def _landscape_texts(

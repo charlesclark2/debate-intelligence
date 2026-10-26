@@ -14,6 +14,8 @@ from debate_core.arguments.landscape.aff_assignment import (
     KRITIKAL_AFF_MARKER_METHOD,
     PLAN_TEXT_METHOD,
     TEAM_CARRY_METHOD,
+    TRANSITION_PLAN_CARRY_METHOD,
+    TRANSITION_PLAN_TEXT_METHOD,
     AffRound,
     AssignedAff,
     AssignmentCounts,
@@ -408,3 +410,271 @@ def test_without_k_aff_signals_a_marker_round_stays_unidentified() -> None:
     found, counts = assign_affs(rounds(("r1", "team-a", ("d1",))), {"d1": NONE}, {}, WORDS)
     assert found == ()
     assert (counts.unidentified, counts.refused_by_advantage) == (1, ())
+
+
+# ------------------------------------------------------------------------------------------------
+# Plan texts under a transition label (`v1-e32-t24`, the PM's rulings of 2026-10-26)
+# ------------------------------------------------------------------------------------------------
+#
+# A round every method above leaves open, every file of it without a plan text t09 reads, reads the aff
+# its plan texts under `Thus the plan`, `Thus plan` or `Thus` name (`TRANSITION_PLAN_TEXT`); two affs are
+# a conflict and name nothing. A team carries it by t09's rule and guard (`TRANSITION_PLAN_CARRY`). The K
+# aff is never carried into a round whose own file holds such a plan text naming a policy aff. No
+# assignment above moves; a round another method identifies against its own such plan text is counted.
+# `transition` holds each document's verdict over its plan texts under a transition label.
+
+
+def transition_assigned(
+    specs: list[AffRound],
+    plan_texts: dict[str, DocumentPlanText],
+    transition: dict[str, DocumentPlanText],
+    *,
+    markers: set[str] | None = None,
+    advantages: set[str] | None = None,
+    placed: dict[str, frozenset[str]] | None = None,
+) -> tuple[dict[str, tuple[str, str]], AssignmentCounts]:
+    signals = (
+        None
+        if markers is None
+        else KritikalSignals(KRITIKAL, frozenset(markers), frozenset(advantages or set()))
+    )
+    found, counts = assign_affs(specs, plan_texts, placed or {}, WORDS, signals, transition)
+    return {one.round_key: (one.position_id, one.method) for one in found}, counts
+
+
+def test_a_round_whose_transition_plan_text_names_an_aff_reads_it() -> None:
+    found, counts = transition_assigned(rounds(("r1", "team-a", ("d1",))), {"d1": NONE}, {"d1": NAMES_SAMPLE})
+    assert found == {"r1": (SAMPLE, TRANSITION_PLAN_TEXT_METHOD)}
+    assert (counts.unidentified, counts.by_method) == (0, {TRANSITION_PLAN_TEXT_METHOD: 1})
+
+
+def test_a_file_with_no_transition_plan_text_beside_one_naming_an_aff_does_not_stop_it() -> None:
+    found, _ = transition_assigned(
+        rounds(("r1", "team-a", ("d1", "d2"))), {"d1": NONE, "d2": NONE}, {"d1": NONE, "d2": NAMES_SAMPLE}
+    )
+    assert found == {"r1": (SAMPLE, TRANSITION_PLAN_TEXT_METHOD)}
+
+
+def test_a_plan_text_t09_reads_outweighs_a_transition_plan_text_in_its_own_round() -> None:
+    found, _ = transition_assigned(
+        rounds(("r1", "team-a", ("d1", "d2"))),
+        {"d1": NAMES_OTHER, "d2": NONE},
+        {"d1": NONE, "d2": NAMES_SAMPLE},
+    )
+    assert found == {"r1": (OTHER, PLAN_TEXT_METHOD)}
+
+
+def test_never_into_a_round_whose_own_file_holds_a_plan_text_t09_reads_or_was_unread() -> None:
+    specs = rounds(
+        ("r1", "team-a", ("d1", "d2")),
+        ("r2", "team-b", ("d3", "d4")),
+        ("r3", "team-c", ("d5", "d6")),
+        ("r4", "team-d", ("d7", "d8")),
+    )
+    plan_texts = {
+        "d1": NONE,
+        "d2": UNNAMED,
+        "d3": NONE,
+        "d4": CONFLICTING,
+        "d5": NONE,
+        "d6": UNREAD,
+        "d7": NONE,
+    }
+    transition = {"d1": NAMES_SAMPLE, "d3": NAMES_SAMPLE, "d5": NAMES_SAMPLE, "d7": NAMES_SAMPLE}
+    found, counts = transition_assigned(specs, plan_texts, transition)
+    assert found == {}
+    assert counts.unidentified == 4
+
+
+def test_two_affs_named_across_a_rounds_files_are_a_conflict_and_name_nothing() -> None:
+    found, counts = transition_assigned(
+        rounds(("r1", "team-a", ("d1", "d2"))),
+        {"d1": NONE, "d2": NONE},
+        {"d1": NAMES_SAMPLE, "d2": NAMES_OTHER},
+    )
+    assert found == {}
+    assert (counts.unidentified, counts.transition_conflicting) == (1, 1)
+
+
+def test_a_file_whose_transition_plan_texts_conflict_names_nothing() -> None:
+    found, counts = transition_assigned(
+        rounds(("r1", "team-a", ("d1", "d2"))),
+        {"d1": NONE, "d2": NONE},
+        {"d1": CONFLICTING, "d2": NAMES_SAMPLE},
+    )
+    assert found == {}
+    assert counts.transition_conflicting == 1
+
+
+def test_a_parent_and_its_child_across_a_rounds_files_name_the_child() -> None:
+    found, _ = transition_assigned(
+        rounds(("r1", "team-a", ("d1", "d2"))),
+        {"d1": NONE, "d2": NONE},
+        {"d1": NAMES_SAMPLE, "d2": NAMES_CHILD},
+    )
+    assert found == {"r1": (CHILD, TRANSITION_PLAN_TEXT_METHOD)}
+
+
+def test_an_unnamed_transition_plan_text_identifies_nothing() -> None:
+    found, counts = transition_assigned(rounds(("r1", "team-a", ("d1",))), {"d1": NONE}, {"d1": UNNAMED})
+    assert found == {}
+    assert (counts.unidentified, counts.transition_conflicting) == (1, 0)
+
+
+def test_a_round_t02_placed_under_an_aff_is_left_to_the_report() -> None:
+    found, counts = transition_assigned(
+        rounds(("r1", "team-a", ("d1",))),
+        {"d1": NONE},
+        {"d1": NAMES_SAMPLE},
+        placed={"r1": frozenset({SAMPLE})},
+    )
+    assert found == {}
+    assert counts.placed_only == 1
+
+
+def test_a_team_carry_keeps_its_round_and_a_transition_plan_naming_another_aff_is_counted() -> None:
+    specs = rounds(("r1", "team-a", ("d1",)), ("r2", "team-a", ("d2",)), ("r3", "team-a", ("d3",)))
+    found, counts = transition_assigned(
+        specs,
+        {"d1": NAMES_SAMPLE, "d2": NONE, "d3": NONE},
+        {"d1": NONE, "d2": NAMES_OTHER, "d3": NAMES_CHILD},
+    )
+    assert found == {
+        "r1": (SAMPLE, PLAN_TEXT_METHOD),
+        "r2": (SAMPLE, TEAM_CARRY_METHOD),
+        "r3": (SAMPLE, TEAM_CARRY_METHOD),
+    }
+    assert counts.transition_control == ("r2",)
+
+
+def test_a_team_carries_a_transition_plans_aff_into_its_rounds_with_no_plan_text() -> None:
+    specs = rounds(
+        ("r1", "team-a", ("d1",)),
+        ("r2", "team-a", ("d2",)),
+        ("r3", "team-a", ("d3",)),
+        ("r4", "team-a", ("d4",)),
+        ("r5", "team-b", ("d5",)),
+    )
+    plan_texts = {"d1": NONE, "d2": NONE, "d3": NONE, "d4": UNNAMED, "d5": NONE}
+    transition = {"d1": NAMES_SAMPLE, "d2": NONE, "d3": UNNAMED, "d4": NONE, "d5": NONE}
+    found, counts = transition_assigned(specs, plan_texts, transition)
+    assert found == {
+        "r1": (SAMPLE, TRANSITION_PLAN_TEXT_METHOD),
+        "r2": (SAMPLE, TRANSITION_PLAN_CARRY_METHOD),
+    }
+    assert (counts.transition_carry_refused, counts.unidentified) == (2, 3)
+
+
+def test_a_team_naming_two_affs_by_transition_plans_carries_nothing() -> None:
+    specs = rounds(("r1", "team-a", ("d1",)), ("r2", "team-a", ("d2",)), ("r3", "team-a", ("d3",)))
+    found, _ = transition_assigned(
+        specs, {"d1": NONE, "d2": NONE, "d3": NONE}, {"d1": NAMES_SAMPLE, "d2": NAMES_OTHER, "d3": NONE}
+    )
+    assert found == {"r1": (SAMPLE, TRANSITION_PLAN_TEXT_METHOD), "r2": (OTHER, TRANSITION_PLAN_TEXT_METHOD)}
+
+
+def test_a_team_with_a_conflicting_round_carries_nothing() -> None:
+    specs = rounds(("r1", "team-a", ("d1",)), ("r2", "team-a", ("d2", "d3")), ("r3", "team-a", ("d4",)))
+    plan_texts = {"d1": NONE, "d2": NONE, "d3": NONE, "d4": NONE}
+    transition = {"d1": NAMES_SAMPLE, "d2": NAMES_SAMPLE, "d3": NAMES_OTHER, "d4": NONE}
+    found, _ = transition_assigned(specs, plan_texts, transition)
+    assert found == {"r1": (SAMPLE, TRANSITION_PLAN_TEXT_METHOD)}
+    specs = rounds(("r1", "team-a", ("d1",)), ("r2", "team-a", ("d2",)), ("r3", "team-a", ("d3",)))
+    found, _ = transition_assigned(
+        specs, {"d1": NONE, "d2": CONFLICTING, "d3": NONE}, {"d1": NAMES_SAMPLE, "d2": NONE, "d3": NONE}
+    )
+    assert found == {"r1": (SAMPLE, TRANSITION_PLAN_TEXT_METHOD)}
+
+
+def test_a_team_naming_the_resolutional_aff_and_a_transition_aff_carries_the_other() -> None:
+    specs = rounds(("r1", "team-a", ("d1",)), ("r2", "team-a", ("d2",)), ("r3", "team-a", ("d3",)))
+    found, _ = transition_assigned(
+        specs, {"d1": NONE, "d2": NONE, "d3": NONE}, {"d1": NAMES_NATIONAL, "d2": NAMES_SAMPLE, "d3": NONE}
+    )
+    assert found == {
+        "r1": (NATIONAL, TRANSITION_PLAN_TEXT_METHOD),
+        "r2": (SAMPLE, TRANSITION_PLAN_TEXT_METHOD),
+        "r3": (SAMPLE, TRANSITION_PLAN_CARRY_METHOD),
+    }
+
+
+def test_a_round_no_readable_team_disclosed_reads_its_own_transition_plan_and_is_never_carried_into() -> None:
+    specs = rounds(("r1", None, ("d1",)), ("r2", None, ("d2",)))
+    found, _ = transition_assigned(specs, {"d1": NONE, "d2": NONE}, {"d1": NAMES_SAMPLE, "d2": NONE})
+    assert found == {"r1": (SAMPLE, TRANSITION_PLAN_TEXT_METHOD)}
+
+
+def test_the_k_aff_is_never_carried_into_a_round_holding_a_transition_plan_naming_a_policy_aff() -> None:
+    specs = rounds(
+        ("r1", "team-a", ("d1",)),
+        ("r2", "team-a", ("d2",)),
+        ("r3", "team-a", ("d3",)),
+        ("r4", "team-a", ("d4",)),
+    )
+    plan_texts = {"d1": NONE, "d2": NONE, "d3": NONE, "d4": NONE}
+    transition = {"d1": NONE, "d2": NAMES_SAMPLE, "d3": CONFLICTING, "d4": UNNAMED}
+    found, counts = transition_assigned(specs, plan_texts, transition, markers={"d1"})
+    assert found == {
+        "r1": (KRITIKAL, KRITIKAL_AFF_MARKER_METHOD),
+        "r2": (SAMPLE, TRANSITION_PLAN_TEXT_METHOD),
+        "r4": (KRITIKAL, KRITIKAL_AFF_CARRY_METHOD),
+    }
+    assert counts.refused_by_transition_plan == ("r2", "r3")
+    assert counts.transition_conflicting == 1
+
+
+def test_the_advantage_guard_counts_its_refusals_first() -> None:
+    specs = rounds(("r1", "team-a", ("d1",)), ("r2", "team-a", ("d2",)))
+    found, counts = transition_assigned(
+        specs, {"d1": NONE, "d2": NONE}, {"d1": NONE, "d2": NAMES_SAMPLE}, markers={"d1"}, advantages={"r2"}
+    )
+    assert found == {
+        "r1": (KRITIKAL, KRITIKAL_AFF_MARKER_METHOD),
+        "r2": (SAMPLE, TRANSITION_PLAN_TEXT_METHOD),
+    }
+    assert (counts.refused_by_advantage, counts.refused_by_transition_plan) == (("r2",), ())
+
+
+def test_a_round_with_its_own_k_aff_marker_stays_a_k_aff_and_is_counted() -> None:
+    found, counts = transition_assigned(
+        rounds(("r1", "team-a", ("d1",))), {"d1": NONE}, {"d1": NAMES_SAMPLE}, markers={"d1"}
+    )
+    assert found == {"r1": (KRITIKAL, KRITIKAL_AFF_MARKER_METHOD)}
+    assert counts.transition_control == ("r1",)
+
+
+def test_a_k_aff_team_reading_a_transition_plan_carries_neither() -> None:
+    specs = rounds(("r1", "team-a", ("d1",)), ("r2", "team-a", ("d2",)), ("r3", "team-a", ("d3",)))
+    plan_texts = {"d1": NONE, "d2": NONE, "d3": NONE}
+    found, _ = transition_assigned(
+        specs, plan_texts, {"d1": NONE, "d2": NAMES_SAMPLE, "d3": NONE}, markers={"d1"}, advantages={"r3"}
+    )
+    assert found == {
+        "r1": (KRITIKAL, KRITIKAL_AFF_MARKER_METHOD),
+        "r2": (SAMPLE, TRANSITION_PLAN_TEXT_METHOD),
+    }
+
+
+def test_the_control_counts_only_a_disagreeing_aff() -> None:
+    specs = rounds(("r1", "team-a", ("d1", "d2")), ("r2", "team-b", ("d3", "d4")), ("r3", "team-c", ("d5",)))
+    plan_texts = {"d1": NAMES_SAMPLE, "d2": NONE, "d3": NAMES_SAMPLE, "d4": NONE, "d5": NONE}
+    transition = {"d1": NONE, "d2": NAMES_CHILD, "d3": NONE, "d4": NAMES_NATIONAL, "d5": NAMES_OTHER}
+    found, counts = transition_assigned(specs, plan_texts, transition, placed={"r3": frozenset({SAMPLE})})
+    assert found == {"r1": (SAMPLE, PLAN_TEXT_METHOD), "r2": (SAMPLE, PLAN_TEXT_METHOD)}
+    assert counts.transition_control == ("r3",)
+
+
+def test_without_transition_readings_nothing_is_read_or_refused() -> None:
+    specs = rounds(("r1", "team-a", ("d1",)), ("r2", "team-a", ("d2",)))
+    found, counts = assign_affs(
+        specs, {"d1": NONE, "d2": NONE}, {}, WORDS, KritikalSignals(KRITIKAL, frozenset({"d1"}), frozenset())
+    )
+    assert {one.round_key: one.method for one in found} == {
+        "r1": KRITIKAL_AFF_MARKER_METHOD,
+        "r2": KRITIKAL_AFF_CARRY_METHOD,
+    }
+    assert (counts.refused_by_transition_plan, counts.transition_conflicting, counts.transition_control) == (
+        (),
+        0,
+        (),
+    )

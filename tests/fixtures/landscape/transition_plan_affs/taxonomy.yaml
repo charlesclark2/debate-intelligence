@@ -1,0 +1,29 @@
+topic_id: synthetic-policy-topic
+taxonomy_version: 1.3.0
+event: POLICY
+positions:
+- id: single-payer-aff
+  label: Single payer
+  kind: aff
+  side: aff
+- id: global-budgets-aff
+  label: Global budgets
+  kind: aff
+  side: aff
+  parent: single-payer-aff
+- id: public-option-aff
+  label: Public option
+  kind: aff
+  side: aff
+- id: kritikal-aff
+  label: Kritikal affirmative
+  kind: aff
+  side: aff
+- id: costs-advantage
+  label: Costs advantage
+  kind: advantage
+  side: aff
+- id: cap-k
+  label: Cap K
+  kind: k
+  side: neg

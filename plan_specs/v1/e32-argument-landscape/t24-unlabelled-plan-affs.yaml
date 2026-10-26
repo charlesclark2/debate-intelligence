@@ -43,6 +43,25 @@ spec:
     - kind: TaskRef
       name: v1-e32-t15-advantages-per-aff
       relation: dependsOn
+  # PM rulings on ac1's counts, 2026-10-26 (session report, "Questions for the PM", 1-4):
+  # 1. The rule as proposed: in a file t09 reads as NONE, a plan text under `Thus the plan`, `Thus plan`,
+  #    inline `Thus the plan:` or a bare `Thus`, with t09's shape and vocabulary (resolutional rule
+  #    included); only into rounds every existing method leaves open, every file NONE; a round naming
+  #    two affs is conflicting and gets nothing; a carry by t09's rule and guard. `Therefore` and
+  #    unlabelled analytics left out; no advantage rule; no taxonomy bump; the plan-text rule version
+  #    moves.
+  # 2. Methods TRANSITION_PLAN_TEXT and TRANSITION_PLAN_CARRY, two rows in the method table;
+  #    TEAM_CARRY's 254 do not change.
+  # 3. Option (b) for t17's K-aff carry only: KRITIKAL_AFF_CARRY is refused into a round whose own file
+  #    holds one of these plan texts naming a policy aff, as its advantage guard refuses; those rounds
+  #    fall to TRANSITION_PLAN_TEXT. KRITIKAL_AFF_MARKER rounds and TEAM_CARRY rounds stay as they are,
+  #    counted in a control row. The refused K-aff carries get their own row; the refusal is tested
+  #    failing first.
+  # 4. t17's method sentence widened to `The`, `Our` or `My` + `method` or `methodology` + `is`, `will`
+  #    or `should`, a marker-list change in t17's reader, riding the same plan-text re-read.
+  # v1-e32-t22 bumps the taxonomy to 1.4.0 beside this task; if it merges first, its taxonomy comes in
+  # the merge from dev, and ac3's operator block re-reads the plan texts (and the classifications) and
+  # runs the dry run, before and after by method. Local only, no publish.
   acceptanceCriteria:
     - id: ac1
       description: >-
@@ -58,7 +77,7 @@ spec:
         The operator's dry run on hspolicy26 before and after: rounds with no identified
         aff, by method (operator).
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

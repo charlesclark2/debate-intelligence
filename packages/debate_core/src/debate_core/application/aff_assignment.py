@@ -56,6 +56,7 @@ from debate_core.arguments.landscape.aff_assignment import (
     AffRound,
     AssignmentCounts,
     KritikalSignals,
+    TransitionPlanInputs,
     assign_affs,
 )
 from debate_core.arguments.landscape.kritikal_aff import KritikalAffConfig, KritikalAffInputs, KritikalReading
@@ -107,6 +108,9 @@ class AffAssignmentRun:
     """The plan-text reading the assignments were made from, when :class:`AffAssignmentService` read it."""
     kritikal: KritikalAffInputs | None = field(default=None, repr=False)
     """What the report's K-aff group is counted from (`v1-e32-t17`); None when the topic reads no K aff."""
+    transition: TransitionPlanInputs | None = field(default=None, repr=False)
+    """What the report's method table counts of the plan texts under a transition label (`v1-e32-t24`); None
+    when none were read."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,6 +119,7 @@ class AffAssignmentsForReport:
 
     assignments: tuple[AffAssignment, ...] = field(repr=False)
     kritikal: KritikalAffInputs | None = field(default=None, repr=False)
+    transition: TransitionPlanInputs | None = field(default=None, repr=False)
 
 
 class AffAssignmentService:
@@ -173,6 +178,7 @@ class AffAssignmentService:
             resolutional=self._taxonomies.resolutional_plan_words(taxonomy.topic_id),
             kritikal=self._taxonomies.kritikal_aff(taxonomy.topic_id),
             kritikal_readings=plan_texts.kritikal,
+            transition_plan_texts=plan_texts.transition,
         )
         return dataclasses.replace(built, plan_texts=plan_texts)
 
@@ -200,8 +206,11 @@ class AffAssignmentService:
             resolutional=self._taxonomies.resolutional_plan_words(taxonomy.topic_id),
             kritikal=self._taxonomies.kritikal_aff(taxonomy.topic_id),
             kritikal_readings=plan_texts.kritikal,
+            transition_plan_texts=plan_texts.transition,
         )
-        return AffAssignmentsForReport(assignments=built.assignments, kritikal=built.kritikal)
+        return AffAssignmentsForReport(
+            assignments=built.assignments, kritikal=built.kritikal, transition=built.transition
+        )
 
     async def _read_plan_texts(
         self, reading: SeedReading, taxonomy: Taxonomy, *, writes: bool
@@ -237,6 +246,7 @@ def build_aff_assignments(
     review_threshold: float = DEFAULT_REVIEW_THRESHOLD,
     kritikal: KritikalAffConfig | None = None,
     kritikal_readings: Mapping[str, KritikalReading] | None = None,
+    transition_plan_texts: Mapping[str, DocumentPlanText] | None = None,
 ) -> AffAssignmentRun:
     """Every affirmative round in range assigned its aff where a signal names one, with counts.
 
@@ -291,6 +301,7 @@ def build_aff_assignments(
         {one: frozenset(found) for one, found in placed.items()},
         PlanTextVocabulary(taxonomy, resolutional),
         signals,
+        transition_plan_texts,
     )
     keys = {one.round_key for one in assigned} | set(placed)
     return AffAssignmentRun(
@@ -311,6 +322,12 @@ def build_aff_assignments(
             },
             families={one.id: one.label for one in kritikal.families},
             refused_by_advantage=frozenset(counts.refused_by_advantage),
+        ),
+        transition=None
+        if transition_plan_texts is None
+        else TransitionPlanInputs(
+            refused_kritikal_carry=frozenset(counts.refused_by_transition_plan),
+            control_rounds=frozenset(counts.transition_control),
         ),
     )
 

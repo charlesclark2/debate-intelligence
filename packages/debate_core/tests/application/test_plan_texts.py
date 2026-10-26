@@ -375,3 +375,62 @@ async def test_the_cache_holds_no_word_of_a_k_aff_file(world: World) -> None:
     # A marker's kind (`ADVOCACY`) and a family's id (`cap`) are kept; no word of the file is.
     for word in ("refusal", "pedagogy", "invented", "frame", "capitalism", "role of the ballot", "1ac"):
         assert word not in written
+
+
+# ------------------------------------------------------------------------------------------------
+# Plan texts under a transition label (`v1-e32-t24`, the PM's rulings of 2026-10-26)
+# ------------------------------------------------------------------------------------------------
+
+
+def transition_affirmative(label: str, plan: str = NAMED_PLAN) -> bytes:
+    return build_docx(
+        "".join(
+            [
+                paragraph_xml(run_xml("Advantage One"), style="Heading3"),
+                paragraph_xml(run_xml(label), style="Analytic"),
+                paragraph_xml(run_xml(plan), style="Analytic"),
+                paragraph_xml(run_xml("Costs rise"), style="Heading4"),
+                paragraph_xml(
+                    run_xml("Sample 26", character_style="Style13ptBold") + run_xml(" invented cite")
+                ),
+                paragraph_xml(run_xml("An invented body of evidence that goes on.", underline="single")),
+            ]
+        )
+    )
+
+
+@pytest.mark.anyio
+async def test_a_plan_text_under_thus_is_read_and_cached_beside_t09s_and_changes_no_t09_verdict(
+    world: World,
+) -> None:
+    thus = world.plant(transition_affirmative("Thus the plan:"))
+    therefore = world.plant(transition_affirmative("Therefore"))
+    named = world.plant(affirmative(NAMED_PLAN))
+    run = await world.service().read(CASELIST, [thus, therefore, named], vocabulary())
+    assert run.verdicts[thus.sha256] == DocumentPlanText(PlanTextVerdict.NONE)
+    assert run.verdicts[named.sha256] == DocumentPlanText(PlanTextVerdict.NAMES, "sample-plan-aff")
+    assert run.transition == {
+        thus.sha256: DocumentPlanText(PlanTextVerdict.NAMES, "sample-plan-aff"),
+        therefore.sha256: DocumentPlanText(PlanTextVerdict.NONE),
+        named.sha256: DocumentPlanText(PlanTextVerdict.NONE),
+    }
+    again = await world.service().read(CASELIST, [thus, therefore, named], vocabulary())
+    assert (again.counts.parsed, again.counts.cache_written) == (0, False)
+    assert again.transition == run.transition
+
+
+@pytest.mark.anyio
+async def test_a_source_the_parser_refused_has_no_transition_verdict(world: World) -> None:
+    refused = world.plant(b"not a docx")
+    run = await world.service().read(CASELIST, [refused], vocabulary())
+    assert run.verdicts[refused.sha256] == DocumentPlanText(PlanTextVerdict.UNREAD)
+    assert run.transition == {}
+
+
+@pytest.mark.anyio
+async def test_the_cache_holds_no_word_of_a_transition_plan_text(world: World) -> None:
+    await world.service().read(CASELIST, [world.plant(transition_affirmative("Thus"))], vocabulary())
+    written = world.cache_file.read_text(encoding="utf-8").casefold()
+    for word in ("thus", "sample plan", "federal government", "costs rise", "invented"):
+        assert word not in written
+    assert '"transition_paragraphs":[{' in written

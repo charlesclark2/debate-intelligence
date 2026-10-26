@@ -42,6 +42,7 @@ from debate_core.application.landscape_staleness import STALE_BANNER_HEADING
 from debate_core.application.ports.classification_store import ClassificationStore
 from debate_core.application.position_classification import ClassificationRun, PositionClassificationService
 from debate_core.application.sync_runs import SYNC_RUN_LOG_FILENAME, StageEntry, SyncRunLog, SyncRunRecord
+from debate_core.arguments.landscape.aff_assignment import TransitionPlanInputs
 from debate_core.arguments.landscape.analytic_texts import AnalyticTextInputs, CounterplanActors, text_digest
 from debate_core.arguments.landscape.kritikal_aff import KritikalAffInputs
 from debate_core.domain.caselist import Side
@@ -368,9 +369,11 @@ async def test_without_the_run_log_the_same_store_reads_as_current(world: Synthe
 class _PlanTextFor:
     """Assigns `aff-two`'s round the single payer aff, as `v1-e32-t09` would from its plan text."""
 
-    def __init__(self, kritikal: KritikalAffInputs | None = None) -> None:
+    def __init__(self, kritikal: KritikalAffInputs | None = None, *, transition: bool = False) -> None:
         self.asked: list[tuple[date, int, str, bool]] = []
         self.kritikal = kritikal
+        self.transition = transition
+        """Hand on transition-plan inputs naming every assigned round as the control (`v1-e32-t24`)."""
 
     async def assignments(
         self,
@@ -382,13 +385,20 @@ class _PlanTextFor:
         writes: bool,
     ) -> AffAssignmentsForReport:
         self.asked.append((through, len(classifications), taxonomy.taxonomy_version, writes))
+        assignments = tuple(
+            AffAssignment(round_id=round_id(one), position_id="single-payer-aff", method="PLAN_TEXT")
+            for one in reading.disclosures
+            if one.side is Side.AFF and one.tournament == "Thistle Open"
+        )
         return AffAssignmentsForReport(
-            assignments=tuple(
-                AffAssignment(round_id=round_id(one), position_id="single-payer-aff", method="PLAN_TEXT")
-                for one in reading.disclosures
-                if one.side is Side.AFF and one.tournament == "Thistle Open"
-            ),
+            assignments=assignments,
             kritikal=self.kritikal,
+            transition=TransitionPlanInputs(
+                refused_kritikal_carry=frozenset(),
+                control_rounds=frozenset(one.round_id for one in assignments),
+            )
+            if self.transition
+            else None,
         )
 
 
@@ -407,6 +417,19 @@ async def test_the_aff_seam_passes_the_k_aff_inputs_to_the_report(world: Synthet
     assert with_inputs.report.kritikal_affs is not None
     assert (with_inputs.report.kritikal_affs.rounds, with_inputs.report.kritikal_affs.control_files) == (0, 0)
     assert without.report.kritikal_affs is None
+
+
+async def test_the_aff_seam_passes_the_transition_plan_inputs_to_the_report(world: SyntheticRun) -> None:
+    # `v1-e32-t24`: the seam only carries them. The world's plan-text rounds stand in for the control.
+    plain = await _run(_service(world, aff_assignments=_PlanTextFor()), dry_run=True)
+    with_inputs = await _run(_service(world, aff_assignments=_PlanTextFor(transition=True)), dry_run=True)
+
+    assert plain.report.transition_plans is None
+    found = with_inputs.report.transition_plans
+    assert found is not None
+    planned = {one.method: one.rounds for one in with_inputs.report.aff_identification}["PLAN_TEXT"]
+    assert (found.refused_kritikal_carry, found.control_by_method) == (0, {"PLAN_TEXT": planned})
+    assert planned > 0
 
 
 async def test_the_aff_seam_passes_t09s_assignments_to_the_report(world: SyntheticRun) -> None:

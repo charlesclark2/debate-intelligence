@@ -24,8 +24,21 @@ method that named it, and otherwise under an aff a card in the round was placed 
    card names another, and its rounds do not disagree) carries it into its other open rounds by step
    2's guard, every document `NONE`, and never into a round whose own file reads an advantage (a card
    t02 placed under one, READS, at or above the review threshold: t15's placement). Such a round stays
-   unidentified and its key is counted (:attr:`AssignmentCounts.refused_by_advantage`).
-5. **Otherwise nothing.** A round no signal identifies is not assigned, and the report shows it as
+   unidentified and its key is counted (:attr:`AssignmentCounts.refused_by_advantage`). Given transition
+   readings (`v1-e32-t24`, the PM's ruling 3 of 2026-10-26), never into a round whose own file holds a
+   plan text under a transition label naming a policy aff either: that round is left to step 5, and its
+   key is counted (:attr:`AssignmentCounts.refused_by_transition_plan`).
+5. **`TRANSITION_PLAN_TEXT`** (`v1-e32-t24`, given each document's verdict over its plan texts under
+   `Thus the plan`, `Thus plan` or `Thus`). A round the steps above leave open, not conflicting and not
+   placed, every document of which has no plan text t09 reads (`NONE`), reads the aff those plan texts
+   name. Two affs named, or a document whose own such plan texts conflict, are a conflict: nothing is
+   assigned.
+6. **`TRANSITION_PLAN_CARRY`.** A team with a round step 5 identified, whose assigned and placed affs
+   narrow to one and whose rounds neither disagree nor conflict, carries it into its other open rounds by
+   step 2's guard, every document `NONE`, and only where no document holds a plan text under a transition
+   label either. Rounds another step identified against their own such plan text naming another aff are
+   kept as they are and counted (:attr:`AssignmentCounts.transition_control`).
+7. **Otherwise nothing.** A round no signal identifies is not assigned, and the report shows it as
    unidentified. A round t02 placed under an aff and no plan text names is left to the report's
    `PLACED_CARD`.
 
@@ -47,10 +60,13 @@ __all__ = [
     "KRITIKAL_AFF_MARKER_METHOD",
     "PLAN_TEXT_METHOD",
     "TEAM_CARRY_METHOD",
+    "TRANSITION_PLAN_CARRY_METHOD",
+    "TRANSITION_PLAN_TEXT_METHOD",
     "AffRound",
     "AssignedAff",
     "AssignmentCounts",
     "KritikalSignals",
+    "TransitionPlanInputs",
     "assign_affs",
 ]
 
@@ -58,7 +74,10 @@ PLAN_TEXT_METHOD: Final = "PLAN_TEXT"
 TEAM_CARRY_METHOD: Final = "TEAM_CARRY"
 KRITIKAL_AFF_MARKER_METHOD: Final = "KRITIKAL_AFF_MARKER"
 KRITIKAL_AFF_CARRY_METHOD: Final = "KRITIKAL_AFF_CARRY"
+TRANSITION_PLAN_TEXT_METHOD: Final = "TRANSITION_PLAN_TEXT"
+TRANSITION_PLAN_CARRY_METHOD: Final = "TRANSITION_PLAN_CARRY"
 _UNREAD: Final = DocumentPlanText(PlanTextVerdict.UNREAD)
+_NO_PLAN_TEXT: Final = DocumentPlanText(PlanTextVerdict.NONE)
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,6 +112,17 @@ class KritikalSignals:
 
 
 @dataclass(frozen=True, slots=True)
+class TransitionPlanInputs:
+    """What the landscape report is given of the plan texts under a transition label (`v1-e32-t24`)."""
+
+    refused_kritikal_carry: frozenset[str] = field(repr=False)
+    """Round keys the K aff was not carried into because their own file holds such a plan text naming a
+    policy aff."""
+    control_rounds: frozenset[str] = field(repr=False)
+    """Round keys another method identifies whose own file holds such a plan text naming another aff."""
+
+
+@dataclass(frozen=True, slots=True)
 class AssignmentCounts:
     rounds: int
     by_method: dict[str, int]
@@ -107,6 +137,16 @@ class AssignmentCounts:
     teams_disagreeing: int
     refused_by_advantage: tuple[str, ...] = ()
     """Round keys a K aff was not carried into because their own file reads an advantage, sorted."""
+    refused_by_transition_plan: tuple[str, ...] = ()
+    """Round keys a K aff was not carried into because their own file holds a plan text under a transition
+    label naming a policy aff (`v1-e32-t24`), sorted."""
+    transition_conflicting: int = 0
+    """Open rounds whose plan texts under a transition label name two affs, left unassigned (`v1-e32-t24`)."""
+    transition_carry_refused: int = 0
+    """Open rounds of a team carrying a transition plan's aff, refused because of their own plan text."""
+    transition_control: tuple[str, ...] = ()
+    """Round keys another method identifies whose own file holds a plan text under a transition label
+    naming another aff (`v1-e32-t24`): kept as they are, and counted. Sorted."""
 
 
 def assign_affs(
@@ -115,6 +155,7 @@ def assign_affs(
     placed: Mapping[str, frozenset[str]],
     vocabulary: PlanTextVocabulary,
     kritikal: KritikalSignals | None = None,
+    transition: Mapping[str, DocumentPlanText] | None = None,
 ) -> tuple[tuple[AssignedAff, ...], AssignmentCounts]:
     """Each round's aff by plan text, then by its team's other rounds, in round-key order, with counts.
 
@@ -175,7 +216,13 @@ def assign_affs(
                 carrying.add(one.team or "")
                 continue
             refused += 1
+    transition_readings = transition or {}
+
+    def transition_of(one: AffRound) -> list[DocumentPlanText]:
+        return [transition_readings.get(document, _NO_PLAN_TEXT) for document in one.documents]
+
     refused_by_advantage: list[str] = []
+    refused_by_transition: list[str] = []
     if kritikal is not None:
         open_rounds = [
             one
@@ -203,10 +250,85 @@ def assign_affs(
                 refused += 1
             elif one.round_key in kritikal.advantage_rounds:
                 refused_by_advantage.append(one.round_key)
+            elif transition is not None and _names_an_aff(transition_of(one)):
+                refused_by_transition.append(one.round_key)
             else:
                 assigned[one.round_key] = AssignedAff(
                     one.round_key, kritikal.position_id, KRITIKAL_AFF_CARRY_METHOD
                 )
+    transition_conflicting: set[str] = set()
+    transition_refused = 0
+    control: list[str] = []
+    if transition is not None:
+        open_rounds = [
+            one
+            for one in rounds
+            if one.round_key not in assigned
+            and not placed.get(one.round_key)
+            and one.round_key not in conflicting
+        ]
+        reading: set[str] = set()
+        for one in open_rounds:
+            if not no_plan_text(one):
+                continue
+            found = transition_of(one)
+            named = vocabulary.narrowest(_named(found))
+            if len(named) > 1 or any(each.verdict is PlanTextVerdict.CONFLICTING for each in found):
+                transition_conflicting.add(one.round_key)
+            elif named:
+                assigned[one.round_key] = AssignedAff(one.round_key, named[0], TRANSITION_PLAN_TEXT_METHOD)
+                if one.team is not None:
+                    reading.add(one.team)
+        team_affs: defaultdict[str, set[str]] = defaultdict(set)
+        split = set(disagreeing)
+        for one in rounds:
+            if one.team is None:
+                continue
+            if one.round_key in assigned:
+                team_affs[one.team].add(assigned[one.round_key].position_id)
+            team_affs[one.team].update(placed.get(one.round_key, frozenset()))
+            if one.round_key in transition_conflicting:
+                split.add(one.team)
+        carried_transition = {
+            team: narrowed[0]
+            for team in reading
+            if team not in split and len(narrowed := vocabulary.narrowest(team_affs[team])) == 1
+        }
+        for one in open_rounds:
+            if (
+                one.round_key in assigned
+                or one.round_key in transition_conflicting
+                or one.team not in carried_transition
+            ):
+                continue
+            if not no_plan_text(one) or any(
+                each.verdict is not PlanTextVerdict.NONE for each in transition_of(one)
+            ):
+                transition_refused += 1
+                continue
+            assigned[one.round_key] = AssignedAff(
+                one.round_key, carried_transition[one.team], TRANSITION_PLAN_CARRY_METHOD
+            )
+
+        def known_otherwise(one: AffRound) -> set[str]:
+            """The round's aff as another method identified it: its assignment, or its placed cards."""
+            found = assigned.get(one.round_key)
+            if found is None:
+                return set(placed.get(one.round_key, frozenset[str]()))
+            if found.method in (TRANSITION_PLAN_TEXT_METHOD, TRANSITION_PLAN_CARRY_METHOD):
+                return set()
+            return {found.position_id}
+
+        for one in rounds:
+            known = known_otherwise(one)
+            if not known:
+                continue
+            found = transition_of(one)
+            named = _named(found)
+            if any(each.verdict is PlanTextVerdict.CONFLICTING for each in found) or (
+                named and len(vocabulary.narrowest(known | named)) > len(vocabulary.narrowest(known))
+            ):
+                control.append(one.round_key)
     ordered = tuple(assigned[key] for key in sorted(assigned))
     return ordered, AssignmentCounts(
         rounds=len(rounds),
@@ -218,4 +340,16 @@ def assign_affs(
         teams_carrying=len(carrying),
         teams_disagreeing=len(disagreeing),
         refused_by_advantage=tuple(sorted(refused_by_advantage)),
+        refused_by_transition_plan=tuple(sorted(refused_by_transition)),
+        transition_conflicting=len(transition_conflicting),
+        transition_carry_refused=transition_refused,
+        transition_control=tuple(sorted(control)),
     )
+
+
+def _named(found: Sequence[DocumentPlanText]) -> set[str]:
+    return {each.position_id for each in found if each.verdict is PlanTextVerdict.NAMES and each.position_id}
+
+
+def _names_an_aff(found: Sequence[DocumentPlanText]) -> bool:
+    return any(each.verdict in (PlanTextVerdict.NAMES, PlanTextVerdict.CONFLICTING) for each in found)

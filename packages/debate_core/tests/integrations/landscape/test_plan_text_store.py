@@ -100,6 +100,7 @@ def test_a_reading_has_no_field_for_text() -> None:
         "paragraphs",
         "kritikal_markers",
         "heading_families",
+        "transition_paragraphs",
     }
     assert set(CachedKritikalMarker.model_fields) == {"kind", "form", "element_index", "unit"}
     assert set(CachedPlanTextParagraph.model_fields) == {

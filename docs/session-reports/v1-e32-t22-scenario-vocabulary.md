@@ -10,9 +10,10 @@
 
 ## Summary
 
-**Stopped at step 3 of the PM's order, as briefed: the seed is written and waits for the coach's
-edit.** The Goal stays `InProgress`, because ac2 (the coach's edited seed committed and used by the next
-report) needs that edit, then the operator's refill and dry run.
+**Stopped after step 4, as ruled: the coach's edit is committed on its own (`9dfa0cc`), and the
+operator's refill and dry run are next** ([Operator follow-ups](#operator-follow-ups)). The Goal stays
+`InProgress`: ac2's second half, "the next report uses it", is that dry run, which only the operator
+runs.
 
 **What is built (ac1, PASS):**
 * **The list.** A DA or advantage in the taxonomy may carry `scenarios` (each a `name` and its `forms`)
@@ -88,7 +89,36 @@ the seed at one level. For the Midterms DA, the impacts are named and the branch
 `not_scenarios`. The counts for branches and mechanisms become a new E32 task ([Follow-up
 work](#follow-up-work)).
 
-## The coach's edit (step 3)
+## The coach's edit, as committed (2026-10-26)
+
+`9dfa0cc`, the coach's edit alone, at one level as the PM ruled:
+* **Midterms DA.**
+  * Merged: `golden dome` (`golden dome`, `dome`, `dome arms racing`) and `warming` (`warming`, and two
+    forms the coach added, `global warming` and `climate change`).
+  * Kept: `iran`, `polycrisis`, `china coop`, `corruption`, `democracy`.
+  * Dropped: `dems win`, `dem win crushes trumpism`, `trump`, `trump steals`, `too early`,
+    `other issues`.
+  * `republicans win`, named in the ruling, is not dropped. It was never in the seed (fewer than two
+    teams used it). If teams use it, the dry run's unlisted-words line counts it.
+* **Economy DA.** `decline` and `econ` are dropped. The coach's first save edited the Economy
+  advantage instead. Asked, the coach chose to keep that edit and have the session also move the DA's
+  two, so that one change in the commit is the session's, at the coach's word.
+* **Economy advantage.** `costs rising` and `contention the advantage` are dropped; `debt` is kept.
+* **Medical devices DA.** Both names are dropped (`augmentation`, `augmentation innovation key`).
+* **Disease advantage.** `clog` gains the form `court clog`; `court curbing` is kept.
+* **Unchanged:** IRS, Pharma, Capital flight and Court clog DAs; Costs and Inequality advantages.
+
+**In all:** 11 lists, 18 scenarios, 23 forms, 12 dropped. All names stay lowercase.
+
+**Checks:**
+* `tests/config`: 77 passed, before and after the Economy DA's move.
+* A read-only screen of all 53 names and forms against 5,126 hspolicy26 disclosures: 0 hold a school,
+  team code or tournament word.
+* The landscape smoke and CLI tests, `tests/config` and the dry run's test: 124 passed.
+* Some count comments no longer line up, or describe the seed's entry rather than the merged one. They
+  are comments, read by nobody's code, and were committed as the coach left them.
+
+## The coach's edit (step 3), as briefed
 
 **The file**, in this worktree:
 
@@ -127,14 +157,14 @@ runs the affected tests, and gives the operator the refill and dry-run blocks dr
 
 | Node | Status | Notes |
 |---|---|---|
-| scenario-vocabulary | Built; ac2 open | In order:<br>1. hand-written fixture and goldens (`1c5b830`);<br>2. tests, red against a skeleton (`2f66fcd`);<br>3. the rule, the domain model and the service (`cb66760`);<br>4. 20 mutants;<br>5. the seed at 1.4.0, the dry run's scenario lines and the guide (`0dffac7`);<br>6. the PM's rulings: the unlisted-words count and capitals in names, red (`981b0de`), then green (`e7f5103`), then 7 mutants.<br>Next: the coach's edit, then the operator's refill and dry run |
+| scenario-vocabulary | Built; ac2 open | In order:<br>1. hand-written fixture and goldens (`1c5b830`);<br>2. tests, red against a skeleton (`2f66fcd`);<br>3. the rule, the domain model and the service (`cb66760`);<br>4. 20 mutants;<br>5. the seed at 1.4.0, the dry run's scenario lines and the guide (`0dffac7`);<br>6. the PM's rulings: the unlisted-words count and capitals in names, red (`981b0de`), then green (`e7f5103`), then 7 mutants.<br>7. the coach's edit, committed alone (`9dfa0cc`).<br>Next: the operator's refill and dry run |
 
 ## Acceptance criteria
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
 | ac1: a position's scenario list merges heading forms under one name and drops listed non-scenarios; positions without a list keep t14's rule, matching hand-written golden files; the taxonomy bump passes the released-ids check; tests shown failing first | PASS | **Goldens:** `tests/fixtures/landscape/scenario_vocabulary/` (`1c5b830`, before any code): `test_the_impact_sections_match_the_hand_written_golden`, `test_impact_cards_csv_matches_the_hand_written_golden` and `test_the_rest_of_report_md_is_the_report_without_a_list` pass. **Merged:** `Rising costs` (`drug prices` + `debt crisis`, one team each) shows on ranks 2 and 3. **Dropped:** `economic collapse` names nothing, and `a5` becomes a document with no scenario heading (2 of 6). **Without a list:** the Spending DA keeps `recession` and 1 withheld. **The lock:** `test_the_committed_taxonomies_keep_every_released_id` passes at 1.4.0. The `scenario-list-added` and `form-dropped-as-no-scenario` cases are refused unbumped and pass bumped. On a scratch copy with 1.3.0 locked, the seed at 1.3.0 is refused (`changed-without-bump`) and at 1.4.0 passes. **Red:** [below](#checks-shown-failing-for-their-reason) |
-| ac2: the coach's edited seed for policy-2026-27-nhi is committed and the next report uses it (operator for the coach's edit) | NOT RUN | Waits for the coach's edit ([step 3](#the-coachs-edit-step-3)), then the operator's refill and dry run under 1.4.0 ([follow-ups](#operator-follow-ups)). No session can make the coach's edit |
+| ac2: the coach's edited seed for policy-2026-27-nhi is committed and the next report uses it (operator for the coach's edit) | NOT RUN | **Committed:** `9dfa0cc` ([the edit](#the-coachs-edit-as-committed-2026-10-26)). **The next report uses it:** waits for the operator's refill and dry run under 1.4.0 ([follow-ups](#operator-follow-ups) 2 and 3) |
 | scenario-vocabulary: `uv run pytest packages/debate_core/tests/arguments/landscape` | PASS | **877 passed in 5.32s** (load average 8.1) |
 
 ### Checks shown failing for their reason
@@ -379,11 +409,11 @@ The first round:
 
 ## Operator follow-ups
 
-**Not yet.** These follow the coach's edit and its commit on this branch, in the PM's order. They are
-drafted here so the PM can review them with the rest (working agreement 11). They follow t17's blocks,
-with the version and the success lines changed.
+**Now.** The coach's edit is committed (`9dfa0cc`), so steps 2 and 3 are next. They follow t17's
+blocks, with the version and the success lines changed.
 
-1. **The coach's edit,** [above](#the-coachs-edit-step-3). After it, from the task worktree:
+1. **The coach's edit: done.** `tests/config` passed (77), and the edit is committed alone. For a later
+   edit, from the task worktree:
 
 ```bash
 cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t22-scenario-vocabulary
@@ -394,7 +424,9 @@ uv run pytest tests/config
 ```
 
    **Success looks like:** every test passed, with 0 failed. A failure names the position and the form
-   or name. The session then commits the edit on its own and runs the affected tests.
+   or name.
+
+   Steps 2 and 3 run from the same worktree, after the `cd` above.
 
 2. **Refill the three caches under taxonomy 1.4.0.** The bump re-keys t17's caches.
    * Expected runtime: about 12 minutes (t17's refill: 37.6 + 221.7 + 412.9 s).
@@ -430,18 +462,19 @@ if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset i
    * `Dry run of hspolicy26 through 2026-10-20, taxonomy 1.4.0: nothing written; 7 files planned.`;
    * a `Scenarios, advantage (… positions): …` line and a `Scenarios, da (… positions): …` line, each
      with its impact rows above zero.
-     * t14's build had 43 advantage and 44 DA impact rows, 0 and 13 with a scenario, and 2 and 2 names
-       withheld.
-     * The unedited seed would give the same rows with a scenario, and withheld 1 and 0 (the
-       [summary](#summary)).
-     * The coach's merges and drops move the rows with a scenario. Drops can also move the documents
-       with no scenario heading: t14 had 676 of 1,164 for advantages and 251 of 662 for DAs;
+     * For comparison, t14's build had 43 advantage and 44 DA impact rows, 0 and 13 of them with a
+       scenario, and 2 and 2 names withheld.
+     * Under the coach's lists, **names withheld: advantage 1, DA 0.** The Stagnation advantage has no
+       list and keeps its one. The Midterms DA's and Disease advantage's withheld words are not on their
+       lists, so they are no names those positions show. No name or form on a list holds a caselist word.
+     * Rows with a scenario move: merges can add rows (`golden dome`), and drops remove some (the
+       Economy DA's, the Medical devices DA's). I give no expected number for them.
+     * Documents with no scenario heading can only rise from t14's 676 of 1,164 (advantage) and 251 of
+       662 (DA), since a dropped named heading is no scenario heading;
    * a `Scenario words no list holds, advantage: …` line and one for `da`.
-     * On the unedited seed they count exactly the words t14 withheld under a listed position: DA 2
-       (Midterms) and advantage 1 (Disease), each holding a caselist word.
-     * A merge or rename moves nothing. A dropped form is held by the list, so dropping does not add
-       one, though a heading further in may then name a card and surface other words.
-     * Later, new words teams use raise them;
+     * At least advantage 1 and DA 2, every one of those holding a caselist word: the words t14
+       withheld under the Disease advantage and the Midterms DA.
+     * More only where a drop lets a heading further in name a card with words its list lacks;
    * the scan lines, with **no hit** in report.md's `Advantages: impact cards` or `Disadvantages: impact
      cards` sections: those hold the scenario names.
 

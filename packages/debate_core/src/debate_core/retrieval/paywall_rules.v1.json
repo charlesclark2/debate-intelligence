@@ -1,0 +1,191 @@
+{
+  "version": "paywall_rules.v1",
+  "description": "Markers the access classifier (v1-e04-t03) reads in a fetched page. A challenge marker makes the page BLOCKED, a paywall marker makes it PAYWALLED; challenge markers are tried first, and within a list the first marker that matches is the one recorded. schema.org isAccessibleForFree is not here: the HTML extractor (v1-e04-t04) reads it and refuses the page, and the classifier maps that refusal. Any change to this file is a new version: a new file name, version and pinned hash (debate_core/tests/retrieval/test_access.py).",
+  "challenge_markers": [
+    {
+      "id": "cloudflare-mitigated-header",
+      "kind": "header",
+      "name": "cf-mitigated",
+      "contains": "challenge",
+      "description": "Cloudflare sets cf-mitigated: challenge on a response that is a challenge instead of the page."
+    },
+    {
+      "id": "cloudflare-interstitial-title",
+      "kind": "title",
+      "equals": "just a moment...",
+      "description": "The title of Cloudflare's browser-check interstitial."
+    },
+    {
+      "id": "cloudflare-attention-required-title",
+      "kind": "title",
+      "equals": "attention required! | cloudflare",
+      "description": "The title of Cloudflare's block and CAPTCHA page."
+    },
+    {
+      "id": "cloudflare-challenge-options-script",
+      "kind": "inline_script",
+      "contains": "_cf_chl_opt",
+      "description": "The options object Cloudflare's challenge page sets before loading the challenge."
+    },
+    {
+      "id": "datadome-captcha-script",
+      "kind": "script_src",
+      "contains": "captcha-delivery.com",
+      "description": "DataDome serves its CAPTCHA from captcha-delivery.com, only on a block page."
+    },
+    {
+      "id": "perimeterx-captcha-element",
+      "kind": "class_or_id",
+      "token": "px-captcha",
+      "description": "The element HUMAN (PerimeterX) renders its press-and-hold challenge into."
+    },
+    {
+      "id": "incapsula-incident-text",
+      "kind": "visible_text",
+      "phrase": "incapsula incident id",
+      "description": "Imperva Incapsula's block page names the incident for the site's support desk."
+    },
+    {
+      "id": "access-denied-title",
+      "kind": "title",
+      "equals": "access denied",
+      "description": "The title of Akamai's and many servers' block pages."
+    }
+  ],
+  "paywall_markers": [
+    {
+      "id": "content-tier-locked-meta",
+      "kind": "meta",
+      "name": "article:content_tier",
+      "content": "locked",
+      "description": "Open Graph article content tier: the article is for subscribers."
+    },
+    {
+      "id": "content-tier-metered-meta",
+      "kind": "meta",
+      "name": "article:content_tier",
+      "content": "metered",
+      "description": "Open Graph article content tier: the article counts against a meter."
+    },
+    {
+      "id": "piano-tinypass-script",
+      "kind": "script_src",
+      "contains": "tinypass.com",
+      "description": "Piano's metering and paywall script, from its Tinypass host."
+    },
+    {
+      "id": "piano-cdn-tinypass-script",
+      "kind": "script_src",
+      "contains": "piano.io/api/tinypass",
+      "description": "Piano's metering and paywall script, from its own CDN."
+    },
+    {
+      "id": "poool-script",
+      "kind": "script_src",
+      "contains": "poool.fr",
+      "description": "Poool's paywall script."
+    },
+    {
+      "id": "laterpay-script",
+      "kind": "script_src",
+      "contains": "laterpay.net",
+      "description": "LaterPay's pay-per-article script."
+    },
+    {
+      "id": "pelcro-script",
+      "kind": "script_src",
+      "contains": "js.pelcro.com",
+      "description": "Pelcro's subscription and paywall script."
+    },
+    {
+      "id": "steady-paywall-script",
+      "kind": "script_src",
+      "contains": "steadyhq.com",
+      "description": "Steady's membership paywall loader."
+    },
+    {
+      "id": "piano-modal-overlay",
+      "kind": "class_or_id",
+      "token": "tp-modal",
+      "description": "The overlay Piano draws over a metered or locked article."
+    },
+    {
+      "id": "piano-backdrop-overlay",
+      "kind": "class_or_id",
+      "token": "tp-backdrop",
+      "description": "The backdrop behind Piano's overlay."
+    },
+    {
+      "id": "leaky-paywall-message",
+      "kind": "class_or_id",
+      "token": "leaky_paywall_message_wrap",
+      "description": "The subscribe message the Leaky Paywall WordPress plugin puts in place of the article."
+    },
+    {
+      "id": "paywall-element",
+      "kind": "class_or_id",
+      "token": "paywall",
+      "description": "An element whose class or id is exactly paywall."
+    },
+    {
+      "id": "regwall-element",
+      "kind": "class_or_id",
+      "token": "regwall",
+      "description": "An element whose class or id is exactly regwall, a registration wall."
+    },
+    {
+      "id": "subscribe-to-continue-reading-text",
+      "kind": "visible_text",
+      "phrase": "subscribe to continue reading",
+      "description": "A subscribe-to-continue overlay."
+    },
+    {
+      "id": "subscribe-to-keep-reading-text",
+      "kind": "visible_text",
+      "phrase": "subscribe to keep reading",
+      "description": "A subscribe-to-continue overlay."
+    },
+    {
+      "id": "subscribe-to-read-the-full-article-text",
+      "kind": "visible_text",
+      "phrase": "subscribe to read the full article",
+      "description": "A subscribe-to-continue overlay."
+    },
+    {
+      "id": "subscribers-only-text",
+      "kind": "visible_text",
+      "phrase": "this article is for subscribers only",
+      "description": "A hard paywall's notice."
+    },
+    {
+      "id": "free-article-limit-text",
+      "kind": "visible_text",
+      "phrase": "you've reached your free article limit",
+      "description": "A meter's notice that the free articles are used up."
+    },
+    {
+      "id": "free-articles-limit-text",
+      "kind": "visible_text",
+      "phrase": "you have reached your limit of free articles",
+      "description": "A meter's notice that the free articles are used up."
+    },
+    {
+      "id": "register-to-continue-reading-text",
+      "kind": "visible_text",
+      "phrase": "create a free account to continue reading",
+      "description": "A registration wall."
+    },
+    {
+      "id": "log-in-to-continue-reading-text",
+      "kind": "visible_text",
+      "phrase": "log in to continue reading",
+      "description": "A login wall."
+    },
+    {
+      "id": "sign-in-to-continue-reading-text",
+      "kind": "visible_text",
+      "phrase": "sign in to continue reading",
+      "description": "A login wall."
+    }
+  ]
+}

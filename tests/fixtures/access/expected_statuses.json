@@ -1,0 +1,74 @@
+{
+  "open-article": {
+    "file": "open-article.html",
+    "status_code": 200,
+    "headers": {},
+    "extracted": true,
+    "status": "ACCESSIBLE",
+    "marker_id": null,
+    "declared_words": 280
+  },
+  "metered-paywall": {
+    "file": "metered-paywall.html",
+    "status_code": 200,
+    "headers": {},
+    "extracted": true,
+    "status": "PAYWALLED",
+    "marker_id": "piano-tinypass-script",
+    "declared_words": null
+  },
+  "hard-paywall": {
+    "file": "hard-paywall.html",
+    "status_code": 200,
+    "headers": {},
+    "extracted": true,
+    "status": "PAYWALLED",
+    "marker_id": "extractor-is-accessible-for-free",
+    "declared_words": null
+  },
+  "challenge-page": {
+    "file": "challenge-page.html",
+    "status_code": 403,
+    "headers": {},
+    "extracted": false,
+    "status": "BLOCKED",
+    "marker_id": "cloudflare-interstitial-title",
+    "declared_words": null
+  },
+  "challenge-page-with-header": {
+    "file": "challenge-page.html",
+    "status_code": 403,
+    "headers": {"cf-mitigated": "challenge"},
+    "extracted": false,
+    "status": "BLOCKED",
+    "marker_id": "cloudflare-mitigated-header",
+    "declared_words": null
+  },
+  "not-found": {
+    "file": "not-found.html",
+    "status_code": 404,
+    "headers": {},
+    "extracted": false,
+    "status": "NOT_FOUND",
+    "marker_id": null,
+    "declared_words": null
+  },
+  "truncated-teaser": {
+    "file": "truncated-teaser.html",
+    "status_code": 200,
+    "headers": {},
+    "extracted": true,
+    "status": "PAYWALLED",
+    "marker_id": null,
+    "declared_words": 1450
+  },
+  "registration-wall": {
+    "file": "registration-wall.html",
+    "status_code": 200,
+    "headers": {},
+    "extracted": true,
+    "status": "PAYWALLED",
+    "marker_id": "register-to-continue-reading-text",
+    "declared_words": null
+  }
+}

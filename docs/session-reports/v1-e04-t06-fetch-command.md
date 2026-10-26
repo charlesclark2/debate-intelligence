@@ -271,6 +271,25 @@ under agreement 10. It is not a hand-off.
    ("the container does not wire the parser yet") predates this task and is stale. I left it and
    noted the lxml overlap below it.
 
+## After review: the pull request's CI (#533)
+
+Two `test` parts failed, each on one test in `tests/scripts/test_stamp_build.py`:
+`test_stamp_sets_both_versions_and_pins_debate_core` (part 2) and
+`test_stamp_refuses_a_pyproject_it_cannot_edit_unambiguously` (part 5). Both pin the CLI's
+`"debate-core[aws,docx,http,opencaselist,tub]"` requirement as a literal, and adding the `extraction`
+extra changed it. `scripts/stamp_build.py` itself handles any extras. I missed this pinned literal in
+the session because the whole selection was affected and left to CI. Fixed:
+
+* both literals now name `aws,docx,extraction,http,opencaselist,tub`;
+* the CLI README's sentence on what an installed build requires, which had the same stale list.
+
+`git grep` for the old literal now finds only `test_installation.py`'s deliberate
+"dropping the extraction extra" case. `.venv/bin/python -m pytest -q -n 0 -p no:randomly tests/scripts/test_stamp_build.py`
+→ `22 passed`. This task's own test files → `111 passed`, no warnings. A
+`SocketBlockedError` for `socket.getaddrinfo` in part 5's log failed no test. This task's tests make
+no socket call; tests that check the block on purpose exist in `test_federated_dedupe.py` and
+`test_federated_ranking.py`.
+
 ## PM review
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in

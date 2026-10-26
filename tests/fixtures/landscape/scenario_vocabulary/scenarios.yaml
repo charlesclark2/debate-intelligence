@@ -1,0 +1,8 @@
+# The scenario lists v1-e32-t22's golden files add to the synthetic caselist's taxonomy
+# (../synthetic_caselist/taxonomy.yaml), by position id, as a topic's taxonomy file writes them. Every
+# other position keeps no list, so v1-e32-t14's rule. README.md works out the expected report by hand.
+costs-advantage:
+  scenarios:
+    - name: Rising costs
+      forms: [drug prices, debt crisis]
+  not_scenarios: [economic collapse]

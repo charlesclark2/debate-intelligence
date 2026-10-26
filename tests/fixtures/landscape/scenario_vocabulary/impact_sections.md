@@ -1,0 +1,126 @@
+#### Advantages: impact cards
+
+Advantage documents with no labelled impact: 3 of 6 (50.0%).
+
+Advantage documents with no scenario heading and no role label: 2 of 6 (33.3%).
+
+* Impact rows: 3; with a scenario two or more teams name: 2.
+* With a labelled internal link: 0 of 3 rows; with none: 3, of which 1 shows the card above it in the file.
+* Scenario names withheld for holding a word of a caselist school, team code or tournament: 0.
+* Positions with no labelled card, by role: uniqueness 2 of 2, link 2 of 2, internal link 1 of 2, impact 1 of 2, harms 2 of 2, inherency 2 of 2, solvency 1 of 2.
+
+**Costs advantage** (`costs-advantage`)
+
+| Rank | Teams | Tag | Cite | Scenario |
+|---|---|---|---|---|
+| 1 | 1 | 2. Extinction from economic collapse | Okafor 25 |  |
+| 2 | 1 | Bulk purchasing lowers drug prices | Haddad 23 | Rising costs |
+| 3 | 1 | Extinction from a debt crisis | Okafor 26 | Rising costs |
+
+What each impact runs through:
+
+* Rank 1: no labelled internal link. Card above it in the file: Single payer cuts administrative costs
+* Rank 2: no labelled internal link.
+* Rank 3: no labelled internal link.
+
+Link chain:
+
+| Role | Teams | Tag | Cite |
+|---|---|---|---|
+| Uniqueness |  | no labelled card |  |
+| Link |  | no labelled card |  |
+| Internal link |  | no labelled card |  |
+| Impact | 1 | 2. Extinction from economic collapse | Okafor 25 |
+| Harms |  | no labelled card |  |
+| Inherency |  | no labelled card |  |
+| Solvency | 1 | Single payer solves within a year | Reyes 25 |
+
+**Innovation advantage** (`innovation-advantage`): no labelled impact card.
+
+Link chain:
+
+| Role | Teams | Tag | Cite |
+|---|---|---|---|
+| Uniqueness |  | no labelled card |  |
+| Link |  | no labelled card |  |
+| Internal link | 1 | Single payer frees capital for research | Moreau 25 |
+| Impact |  | no labelled card |  |
+| Harms |  | no labelled card |  |
+| Inherency |  | no labelled card |  |
+| Solvency |  | no labelled card |  |
+
+#### Disadvantages: impact cards
+
+DA documents with no labelled impact: 2 of 6 (33.3%).
+
+DA documents with no scenario heading and no role label: 2 of 6 (33.3%).
+
+* Impact rows: 4; with a scenario two or more teams name: 1.
+* With a labelled internal link: 1 of 4 rows; with none: 3, of which 0 show the card above it in the file.
+* Scenario names withheld for holding a word of a caselist school, team code or tournament: 1.
+* Positions with no labelled card, by role: uniqueness 3 of 4, link 2 of 4, internal link 3 of 4, impact 2 of 4.
+
+**Spending DA** (`spending-da`)
+
+| Rank | Teams | Tag | Cite | Scenario |
+|---|---|---|---|---|
+| 1 | 2 | Debt ceiling fights are near | Ruiz 26 |  |
+| 2 | 1 | Spending triggers a debt spiral | Ito 26 |  |
+| 3 | 1 | Rate spikes cause a recession | Park 26 | recession |
+
+What each impact runs through:
+
+* Rank 1: no labelled internal link.
+* Rank 2: no labelled internal link.
+* Rank 3: Internal link: Deficits spike interest rates
+
+Link chain:
+
+| Role | Teams | Tag | Cite |
+|---|---|---|---|
+| Uniqueness | 1 | Spending is at a record high now | Ito 25 |
+| Link | 2 | Spending triggers a debt spiral | Ito 26 |
+| Internal link | 1 | Deficits spike interest rates | Lee 26 |
+| Impact | 2 | Debt ceiling fights are near | Ruiz 26 |
+
+**Midterms DA** (`election-da`): no labelled impact card.
+
+Link chain:
+
+| Role | Teams | Tag | Cite |
+|---|---|---|---|
+| Uniqueness |  | no labelled card |  |
+| Link | 1 | The link: reform polls badly | Ward 26 |
+| Internal link |  | no labelled card |  |
+| Impact |  | no labelled card |  |
+
+**Hospital closures DA** (`hospital-closures-da`)
+
+| Rank | Teams | Tag | Cite | Scenario |
+|---|---|---|---|---|
+| 1 | 1 | Rural hospitals close under single payer | Duarte 26 |  |
+
+What each impact runs through:
+
+* Rank 1: no labelled internal link.
+
+Link chain:
+
+| Role | Teams | Tag | Cite |
+|---|---|---|---|
+| Uniqueness |  | no labelled card |  |
+| Link |  | no labelled card |  |
+| Internal link |  | no labelled card |  |
+| Impact | 1 | Rural hospitals close under single payer | Duarte 26 |
+
+**Provider strikes DA** (`provider-strikes-da`): no labelled impact card.
+
+Link chain:
+
+| Role | Teams | Tag | Cite |
+|---|---|---|---|
+| Uniqueness |  | no labelled card |  |
+| Link |  | no labelled card |  |
+| Internal link |  | no labelled card |  |
+| Impact |  | no labelled card |  |
+

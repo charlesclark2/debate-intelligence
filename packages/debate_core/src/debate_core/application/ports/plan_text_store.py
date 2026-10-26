@@ -23,11 +23,19 @@ from typing import NamedTuple, Protocol, runtime_checkable
 
 from pydantic import Field
 
+from debate_core.arguments.landscape.kritikal_aff import KritikalMarkerKind
 from debate_core.domain.base import DomainModel, NonEmptyText, Sha256Hex
 from debate_core.domain.landscape import PositionId
+from debate_core.domain.landscape_texts import TextForm
 from debate_core.domain.style_profile import StructuralUnit
 
-__all__ = ["CachedPlanText", "CachedPlanTextParagraph", "PlanTextKey", "PlanTextStore"]
+__all__ = [
+    "CachedKritikalMarker",
+    "CachedPlanText",
+    "CachedPlanTextParagraph",
+    "PlanTextKey",
+    "PlanTextStore",
+]
 
 
 class PlanTextKey(NamedTuple):
@@ -48,6 +56,16 @@ class CachedPlanTextParagraph(DomainModel):
     named: tuple[PositionId, ...]
 
 
+class CachedKritikalMarker(DomainModel):
+    """One K-aff marker of a source, as :class:`~debate_core.arguments.landscape.kritikal_aff.KritikalMarker`:
+    its kind, how it was written, where it is and its unit. Never its words (`v1-e32-t17`)."""
+
+    kind: KritikalMarkerKind
+    form: TextForm
+    element_index: int = Field(ge=0)
+    unit: StructuralUnit
+
+
 class CachedPlanText(DomainModel):
     """One source's reading under one key: a line of the caselist's plan-text cache."""
 
@@ -56,6 +74,10 @@ class CachedPlanText(DomainModel):
     vocabulary_digest: Sha256Hex
     readable: bool = Field(description="False when the parser refused the source.")
     paragraphs: tuple[CachedPlanTextParagraph, ...] = ()
+    kritikal_markers: tuple[CachedKritikalMarker, ...] = ()
+    heading_families: tuple[PositionId, ...] = Field(
+        default=(), description="The K families the source's headings name, by id (`v1-e32-t17`)."
+    )
 
     @property
     def key(self) -> PlanTextKey:

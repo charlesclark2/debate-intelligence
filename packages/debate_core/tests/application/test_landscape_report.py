@@ -30,6 +30,7 @@ from debate_core.application.landscape_report import (
 )
 from debate_core.application.landscape_staleness import assess_staleness
 from debate_core.application.ports.parsed_store import OccurrenceRecord
+from debate_core.arguments.landscape.kritikal_aff import KritikalAffInputs
 from debate_core.arguments.landscape.seeding import SeedCard, SeedSource, SeedTeam
 from debate_core.domain.card_occurrence import ClusterMembership
 from debate_core.domain.caselist import Disclosure, Event, RoundLabel, Side
@@ -45,6 +46,7 @@ from debate_core.domain.landscape_classification import (
 from debate_core.domain.landscape_report import (
     AdvantagesByAff,
     AffAssignment,
+    KritikalAffs,
     LandscapeReport,
     PositionStats,
     UnassignedAdvantageReads,
@@ -1456,3 +1458,182 @@ def test_advantages_a_taxonomy_with_no_advantage_has_no_section() -> None:
 def test_advantages_a_cut_off_below_one_is_refused() -> None:
     with pytest.raises(ValueError, match="at least one advantage"):
         LandscapeReportService(advantages_per_aff=0)
+
+
+# ------------------------------------------------------------------------------------------------
+# Kritikal affirmatives (`v1-e32-t17`)
+# ------------------------------------------------------------------------------------------------
+#
+# Over `tests/fixtures/landscape/kritikal_affs/`, whose README holds the table every expected number
+# here was counted from by hand, and whose `report_section.md` and `method_table.md` were written by
+# hand from it.
+
+KRITIKAL = REPO / "tests" / "fixtures" / "landscape" / "kritikal_affs"
+
+
+def _kritikal_inputs(*, with_kritikal: bool = True) -> LandscapeReportInputs:
+    """The fixture's rounds as disclosures, its files' cards as classifications, the assignments, and the
+    K-aff inputs: marker files, each file's heading families, and the rounds the advantage guard refused.
+
+    Without them, as a run with no K-aff config, no round is assigned the K aff either."""
+    table = yaml.safe_load((KRITIKAL / "rounds.yaml").read_text(encoding="utf-8"))
+    taxonomy = Taxonomy.model_validate(
+        yaml.safe_load((KRITIKAL / "taxonomy.yaml").read_text(encoding="utf-8"))
+    )
+    school_of = {code: school for school, codes in table["schools"].items() for code in codes}
+    disclosures: list[Disclosure] = []
+    assignments: list[AffAssignment] = []
+    refused: set[str] = set()
+    for row in table["rounds"]:
+        school, code, side = school_of[row["team"]], row["team"], Side(row["side"])
+        for name in row["files"]:
+            disclosures.append(
+                Disclosure(
+                    caselist=SYNTHETIC_CASELIST,
+                    event=Event.POLICY,
+                    school=school,
+                    team_code=code,
+                    side=side,
+                    tournament=row["tournament"],
+                    round_label=RoundLabel(raw=row["round"], normalized=row["round"]),
+                    snapshot=SECOND,
+                    source_path=f"{school}/{school} {code}/{code}-{side.value}-{row['round']}-{name}.docx",
+                    source_sha256=name * 32,
+                )
+            )
+        if row.get("assigned") and (with_kritikal or row["assigned"] != table["kritikal"]["position_id"]):
+            assignments.append(
+                AffAssignment(
+                    round_id=round_id(disclosures[-1]), position_id=row["assigned"], method=row["method"]
+                )
+            )
+        if row.get("refused_by_advantage"):
+            refused.add(round_id(disclosures[-1]))
+    classifications = [
+        PositionClassification(
+            item_id=f"{name * 32}:card:{index}",
+            item_kind=ItemKind.CARD,
+            source_sha256=name * 32,
+            first_element_index=index,
+            position_id=position,
+            role=PositionRole.READS,
+            method=ClassificationMethod.ALIAS,
+            confidence=1.0,
+            rationale="synthetic fixture: placed as the fixture table says",
+            taxonomy_version=taxonomy.taxonomy_version,
+            prompt_version="none",
+        )
+        for name, cards in table["files"].items()
+        for index, position in enumerate(cards)
+    ]
+    found = table["kritikal"]
+    kritikal = KritikalAffInputs(
+        position_id=found["position_id"],
+        marker_sources=frozenset(name * 32 for name in found["marker_files"]),
+        heading_families={name * 32: tuple(families) for name, families in found["heading_families"].items()},
+        families=dict(found["families"]),
+        refused_by_advantage=frozenset(refused),
+    )
+    return LandscapeReportInputs(
+        caselist=SYNTHETIC_CASELIST,
+        through=SECOND,
+        taxonomy=taxonomy,
+        overrides=OverrideRules(topic_id=taxonomy.topic_id, overrides=()),
+        parser_version="2026.10.20-docx-6",
+        classifications=classifications,
+        disclosures=disclosures,
+        cards=(),
+        aff_assignments=tuple(assignments),
+        kritikal_affs=kritikal if with_kritikal else None,
+    )
+
+
+def _kritikal(inputs: LandscapeReportInputs | None = None) -> KritikalAffs:
+    report = LandscapeReportService().build(inputs or _kritikal_inputs(), synthetic_staleness())
+    assert report.kritikal_affs is not None
+    return report.kritikal_affs
+
+
+def _kritikal_report_md(inputs: LandscapeReportInputs | None = None) -> str:
+    return (
+        LandscapeReportService()
+        .bundle(inputs or _kritikal_inputs(), synthetic_staleness())
+        .files["report.md"]
+    )
+
+
+def test_kritikal_report_md_section_matches_the_hand_written_golden_file() -> None:
+    report_md = _kritikal_report_md()
+    start = report_md.index("## Kritikal affirmatives\n")
+    following = re.compile(r"\n#{1,2} ").search(report_md, start)
+    assert following is not None
+    assert report_md[start : following.start() + 1] == (KRITIKAL / "report_section.md").read_text(
+        encoding="utf-8"
+    )
+
+
+def test_kritikal_method_table_matches_the_hand_written_golden_file() -> None:
+    report_md = _kritikal_report_md()
+    start = report_md.index("How affirmative rounds were identified:\n")
+    end = report_md.index("not read this season.\n", start) + len("not read this season.\n")
+    assert report_md[start:end] == (KRITIKAL / "method_table.md").read_text(encoding="utf-8")
+
+
+def test_kritikal_the_group_sits_in_the_affirmative_part_after_the_advantages_by_aff() -> None:
+    report_md = _kritikal_report_md()
+    affirmative, negative = report_md.index("# Affirmative\n"), report_md.index("# Negative\n")
+    advantages, kritikal = (
+        report_md.index("## Advantages by affirmative\n"),
+        report_md.index("## Kritikal affirmatives\n"),
+    )
+    assert affirmative < advantages < kritikal < negative
+
+
+def test_kritikal_rounds_by_marker_and_by_carry_with_their_teams() -> None:
+    found = _kritikal()
+    assert (found.position_id, found.rounds, found.teams, found.by_marker, found.by_carry) == (
+        "kritikal-aff",
+        3,
+        2,
+        2,
+        1,
+    )
+
+
+def test_kritikal_the_rounds_the_advantage_guard_refused_are_counted_and_stay_unidentified() -> None:
+    report = LandscapeReportService().build(_kritikal_inputs(), synthetic_staleness())
+    assert report.kritikal_affs is not None
+    assert report.kritikal_affs.refused_by_advantage == 1
+    assert report.unclassified.aff_rounds_unidentified == 2
+
+
+def test_kritikal_families_count_only_the_k_aff_files_headings_ordered_by_files_teams_then_config() -> None:
+    families = [(one.family_id, one.files, one.teams) for one in _kritikal().families]
+    assert families == [("cap", 3, 2), ("settler-colonialism", 1, 1), ("afropessimism", 1, 1)]
+
+
+def test_kritikal_the_control_counts_marker_files_in_rounds_identified_another_way() -> None:
+    found = _kritikal()
+    assert (found.control_files, found.control_rounds) == (2, 2)
+
+
+def test_kritikal_the_control_rounds_by_the_method_that_identified_them() -> None:
+    # CC's round by its plan text, EE's by a placed card: what option (b) would move is the TEAM_CARRY share.
+    assert _kritikal().control_by_method == {"PLACED_CARD": 1, "PLAN_TEXT": 1}
+
+
+def test_kritikal_the_k_aff_is_an_affirmative_position_with_its_rounds() -> None:
+    report = LandscapeReportService().build(_kritikal_inputs(), synthetic_staleness())
+    row = next(one for one in report.positions if one.position_id == "kritikal-aff")
+    assert (row.kind, row.rounds, row.teams, row.aff_rounds) == (PositionKind.AFF, 3, 2, 3)
+
+
+def test_kritikal_without_k_aff_inputs_there_is_no_group_and_no_extra_rows() -> None:
+    inputs = _kritikal_inputs(with_kritikal=False)
+    report = LandscapeReportService().build(inputs, synthetic_staleness())
+    assert report.kritikal_affs is None
+    report_md = _kritikal_report_md(inputs)
+    assert "## Kritikal affirmatives" not in report_md
+    assert "not carried in" not in report_md
+    assert "(a control:" not in report_md
+    assert "KRITIKAL_AFF" not in report_md

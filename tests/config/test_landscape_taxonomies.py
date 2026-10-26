@@ -20,6 +20,9 @@
   shaped like a team code or naming a school is refused.
 * **The CP texts' actors** (`analytic_texts/<topic id>.yaml`, `v1-e32-t11`) load with the taxonomies,
   and the same check runs over their phrases: an actor is a word the teams' CP texts hold.
+* **The K-aff position and its K families** (`kritikal_affs/<topic id>.yaml`, `v1-e32-t17`) load with
+  the taxonomies, and the same check runs over the families' labels and phrases: a phrase is a word the
+  teams' headings hold.
 * **Nothing else is in the directory** but the release lock (`released.yaml`, `v1-e32-t08`, checked
   in `test_landscape_released_ids.py`), so the seeding CSV and the review queue, which hold real
   headings, cannot be committed beside the files by mistake.
@@ -37,18 +40,21 @@ import pytest
 
 from debate_core.arguments.landscape.analytic_texts import CounterplanActors
 from debate_core.arguments.landscape.headings import normalize_heading
+from debate_core.arguments.landscape.kritikal_aff import KritikalAffConfig, KritikalFamily
 from debate_core.arguments.landscape.plan_text import ResolutionalPlanWords
 from debate_core.domain.landscape import Taxonomy
 from debate_core.domain.landscape_classification import OverrideRules
 from debate_core.integrations.landscape.released_ids import RELEASED_FILE
 from debate_core.integrations.landscape.yaml_taxonomy_repository import (
     ANALYTIC_TEXT_DIRECTORY,
+    KRITIKAL_AFF_DIRECTORY,
     OVERRIDE_DIRECTORY,
     PLAN_TEXT_DIRECTORY,
     TAXONOMY_DIRECTORY,
     TOPICS_FILE,
     YamlTaxonomyRepository,
     load_analytic_text_file,
+    load_kritikal_aff_file,
     load_override_file,
     load_plan_text_file,
     load_taxonomy_file,
@@ -59,6 +65,7 @@ TAXONOMY_FILES = sorted((CONFIG / TAXONOMY_DIRECTORY).glob("*.yaml"))
 OVERRIDE_FILES = sorted((CONFIG / OVERRIDE_DIRECTORY).glob("*.yaml"))
 PLAN_TEXT_FILES = sorted((CONFIG / PLAN_TEXT_DIRECTORY).glob("*.yaml"))
 ANALYTIC_TEXT_FILES = sorted((CONFIG / ANALYTIC_TEXT_DIRECTORY).glob("*.yaml"))
+KRITIKAL_AFF_FILES = sorted((CONFIG / KRITIKAL_AFF_DIRECTORY).glob("*.yaml"))
 MINIMUM_ACTIVE_POSITIONS = 12
 
 SHORT_WORDS = frozenset(
@@ -142,6 +149,21 @@ def analytic_text_findings(actors: CounterplanActors) -> list[str]:
     return findings
 
 
+def kritikal_aff_findings(config: KritikalAffConfig) -> list[str]:
+    """Every family label or phrase of a K-aff file shaped like a team code or naming a school."""
+    findings: list[str] = []
+    where = f"the K families of {config.topic_id}"
+    for family in config.families:
+        for phrase in family.phrases:
+            findings += _heading_findings(where, phrase)
+        findings += [
+            f"{where}: {word!r} names a school"
+            for word in re.findall(r"[a-z]+", " ".join((family.label, *family.phrases)).casefold())
+            if word in SCHOOL_WORDS
+        ]
+    return findings
+
+
 # ------------------------------------------------------------------------------------------------
 # The committed files
 # ------------------------------------------------------------------------------------------------
@@ -201,6 +223,11 @@ def test_no_cp_text_actor_names_a_team_a_school_or_a_person(path: Path) -> None:
     assert analytic_text_findings(load_analytic_text_file(path)) == []
 
 
+@pytest.mark.parametrize("path", KRITIKAL_AFF_FILES, ids=lambda path: path.stem)
+def test_no_k_family_names_a_team_a_school_or_a_person(path: Path) -> None:
+    assert kritikal_aff_findings(load_kritikal_aff_file(path)) == []
+
+
 def test_the_directory_holds_only_the_topic_map_taxonomies_overrides_plan_texts_and_release_lock() -> None:
     found = sorted(str(path.relative_to(CONFIG)) for path in CONFIG.rglob("*") if path.is_file())
     allowed = [
@@ -210,6 +237,7 @@ def test_the_directory_holds_only_the_topic_map_taxonomies_overrides_plan_texts_
         *(f"{OVERRIDE_DIRECTORY}/{path.name}" for path in OVERRIDE_FILES),
         *(f"{PLAN_TEXT_DIRECTORY}/{path.name}" for path in PLAN_TEXT_FILES),
         *(f"{ANALYTIC_TEXT_DIRECTORY}/{path.name}" for path in ANALYTIC_TEXT_FILES),
+        *(f"{KRITIKAL_AFF_DIRECTORY}/{path.name}" for path in KRITIKAL_AFF_FILES),
     ]
     assert found == sorted(allowed)
 
@@ -330,3 +358,29 @@ def test_the_cp_text_actor_check_passes_actors() -> None:
         topic_id="policy-sample-topic", cp_text_actors=("fifty states", "50 states", "usfg", "hhs", "cms")
     )
     assert analytic_text_findings(actors) == []
+
+
+@pytest.mark.parametrize(
+    ("phrase", "expected"),
+    [("qx", "shaped like a team code"), ("sample academy", "names a school")],
+)
+def test_the_k_family_check_refuses(phrase: str, expected: str) -> None:
+    config = KritikalAffConfig(
+        topic_id="policy-sample-topic",
+        position_id="sample-kritikal-aff",
+        families=(KritikalFamily(id="cap", label="Capitalism", phrases=("cap", phrase)),),
+    )
+    (finding,) = kritikal_aff_findings(config)
+    assert expected in finding
+
+
+def test_the_k_family_check_passes_k_vocabulary() -> None:
+    config = KritikalAffConfig(
+        topic_id="policy-sample-topic",
+        position_id="sample-kritikal-aff",
+        families=(
+            KritikalFamily(id="cap", label="Capitalism", phrases=("cap", "capitalism")),
+            KritikalFamily(id="settler-colonialism", label="Settler colonialism", phrases=("set col",)),
+        ),
+    )
+    assert kritikal_aff_findings(config) == []

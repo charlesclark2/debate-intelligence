@@ -56,6 +56,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Final, Protocol
 
+from debate_core.application.aff_assignment import AffAssignmentsForReport
 from debate_core.application.analytic_texts import AnalyticTextsForReport
 from debate_core.application.caselist.backfiles import refuse_a_landscape
 from debate_core.application.caselist.evidence_listing import LocalEvidence
@@ -94,7 +95,7 @@ from debate_core.arguments.landscape.analytic_texts import CounterplanActors
 from debate_core.arguments.landscape.review_queue import DEFAULT_REVIEW_THRESHOLD, ReviewRow
 from debate_core.domain.landscape import Taxonomy
 from debate_core.domain.landscape_classification import OverrideRules, PositionClassification
-from debate_core.domain.landscape_report import AffAssignment, LandscapeCard, LandscapeReport
+from debate_core.domain.landscape_report import LandscapeCard, LandscapeReport
 from debate_core.domain.landscape_schools import SchoolView
 from debate_core.domain.landscape_trends import LandscapeTrends
 
@@ -217,7 +218,7 @@ class AffAssignmentsFromReading(Protocol):
         classifications: Sequence[PositionClassification],
         taxonomy: Taxonomy,
         writes: bool,
-    ) -> Sequence[AffAssignment]: ...
+    ) -> AffAssignmentsForReport: ...
 
 
 class AnalyticTextsFromReading(Protocol):
@@ -446,19 +447,18 @@ class LandscapeRunService:
             )
         if classified.counts.model_items > self._max_model_items:
             raise ModelBudgetExceeded(classified.counts.model_items, self._max_model_items)
-        assignments = (
-            tuple(
-                await self._aff.assignments(
-                    reading=reading,
-                    through=snapshot,
-                    classifications=classified.classifications,
-                    taxonomy=taxonomy,
-                    writes=not request.dry_run,
-                )
+        affs = (
+            await self._aff.assignments(
+                reading=reading,
+                through=snapshot,
+                classifications=classified.classifications,
+                taxonomy=taxonomy,
+                writes=not request.dry_run,
             )
             if self._aff is not None
-            else ()
+            else AffAssignmentsForReport(assignments=())
         )
+        assignments = affs.assignments
         overrides = self._taxonomies.overrides(resolved.topic.id)
         texts = (
             await self._texts.report_inputs(
@@ -505,6 +505,7 @@ class LandscapeRunService:
                 cards=cards,
                 aff_assignments=assignments,
                 analytic_texts=texts.inputs if texts is not None else None,
+                kritikal_affs=affs.kritikal,
                 snapshot_topics=snapshot_topics,
                 topic_range=topic_range,
             ),

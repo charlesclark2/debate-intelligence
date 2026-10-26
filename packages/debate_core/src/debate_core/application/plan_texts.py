@@ -35,9 +35,15 @@ from debate_core.application.caselist.publish_plan import local_blob_key
 from debate_core.application.ports.debate_files import DebateFileParser
 from debate_core.application.ports.parsed_store import PipelineFailureReason
 from debate_core.application.ports.plan_text_store import (
+    CachedKritikalMarker,
     CachedPlanText,
     CachedPlanTextParagraph,
     PlanTextStore,
+)
+from debate_core.arguments.landscape.kritikal_aff import (
+    KritikalMarker,
+    KritikalReading,
+    read_kritikal_markers,
 )
 from debate_core.arguments.landscape.matcher import tag_words
 from debate_core.arguments.landscape.plan_text import (
@@ -90,6 +96,8 @@ class PlanTextRun:
     readings: dict[str, tuple[PlanTextParagraph, ...]] = field(repr=False)
     """What was read of each readable source's plan texts, by digest."""
     counts: PlanTextCounts
+    kritikal: dict[str, KritikalReading] = field(default_factory=dict[str, KritikalReading], repr=False)
+    """Each readable source's K-aff markers and heading families, by digest (`v1-e32-t17`)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,7 +159,8 @@ class PlanTextService:
             if isinstance(result, ParsedDocument):
                 paragraphs, in_cards = paragraphs_of(result)
                 found = read_plan_texts(paragraphs, in_cards, vocabulary)
-                written[sha] = _entry(sha, parser_version, vocabulary.digest, found)
+                markers = read_kritikal_markers(paragraphs, vocabulary.kritikal)
+                written[sha] = _entry(sha, parser_version, vocabulary.digest, found, markers)
             elif isinstance(result, ParseFailure):
                 written[sha] = CachedPlanText(
                     source_sha256=sha,
@@ -167,6 +176,7 @@ class PlanTextService:
         held = {**cached, **written}
         verdicts: dict[str, DocumentPlanText] = {}
         readings: dict[str, tuple[PlanTextParagraph, ...]] = {}
+        kritikal: dict[str, KritikalReading] = {}
         for sha in sorted(wanted):
             entry = held.get(sha)
             if entry is None or not entry.readable:
@@ -174,6 +184,10 @@ class PlanTextService:
                 continue
             readings[sha] = tuple(_paragraph(one) for one in entry.paragraphs)
             verdicts[sha] = document_plan_text(readings[sha], vocabulary)
+            kritikal[sha] = KritikalReading(
+                markers=tuple(_marker(one) for one in entry.kritikal_markers),
+                heading_families=entry.heading_families,
+            )
         refused = sum(1 for sha in wanted if (entry := held.get(sha)) is not None and not entry.readable)
         return PlanTextRun(
             parser_version=parser_version,
@@ -189,6 +203,7 @@ class PlanTextService:
                 verdicts=dict(sorted(Counter(one.verdict.value for one in verdicts.values()).items())),
                 cache_written=changed,
             ),
+            kritikal=kritikal,
         )
 
     async def words(
@@ -283,7 +298,11 @@ class _UnwrittenPlanTexts:
 
 
 def _entry(
-    sha: str, parser_version: str, vocabulary_digest: str, found: Sequence[PlanTextParagraph]
+    sha: str,
+    parser_version: str,
+    vocabulary_digest: str,
+    found: Sequence[PlanTextParagraph],
+    kritikal: KritikalReading,
 ) -> CachedPlanText:
     return CachedPlanText(
         source_sha256=sha,
@@ -302,7 +321,16 @@ def _entry(
             )
             for one in found
         ),
+        kritikal_markers=tuple(
+            CachedKritikalMarker(kind=one.kind, form=one.form, element_index=one.element_index, unit=one.unit)
+            for one in kritikal.markers
+        ),
+        heading_families=kritikal.heading_families,
     )
+
+
+def _marker(one: CachedKritikalMarker) -> KritikalMarker:
+    return KritikalMarker(kind=one.kind, form=one.form, element_index=one.element_index, unit=one.unit)
 
 
 def _paragraph(one: CachedPlanTextParagraph) -> PlanTextParagraph:

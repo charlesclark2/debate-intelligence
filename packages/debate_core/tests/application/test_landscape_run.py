@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from debate_core.application.aff_assignment import AffAssignmentsForReport
 from debate_core.application.analytic_texts import AnalyticTextCounts, AnalyticTextsForReport, QuotedTextsRun
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.suppression import RecordedSuppressionList
@@ -42,6 +43,7 @@ from debate_core.application.ports.classification_store import ClassificationSto
 from debate_core.application.position_classification import ClassificationRun, PositionClassificationService
 from debate_core.application.sync_runs import SYNC_RUN_LOG_FILENAME, StageEntry, SyncRunLog, SyncRunRecord
 from debate_core.arguments.landscape.analytic_texts import AnalyticTextInputs, CounterplanActors, text_digest
+from debate_core.arguments.landscape.kritikal_aff import KritikalAffInputs
 from debate_core.domain.caselist import Side
 from debate_core.domain.landscape import Taxonomy
 from debate_core.domain.landscape_classification import OverrideRules, PositionClassification, PositionRole
@@ -366,8 +368,9 @@ async def test_without_the_run_log_the_same_store_reads_as_current(world: Synthe
 class _PlanTextFor:
     """Assigns `aff-two`'s round the single payer aff, as `v1-e32-t09` would from its plan text."""
 
-    def __init__(self) -> None:
+    def __init__(self, kritikal: KritikalAffInputs | None = None) -> None:
         self.asked: list[tuple[date, int, str, bool]] = []
+        self.kritikal = kritikal
 
     async def assignments(
         self,
@@ -377,13 +380,33 @@ class _PlanTextFor:
         classifications: Sequence[PositionClassification],
         taxonomy: Taxonomy,
         writes: bool,
-    ) -> Sequence[AffAssignment]:
+    ) -> AffAssignmentsForReport:
         self.asked.append((through, len(classifications), taxonomy.taxonomy_version, writes))
-        return [
-            AffAssignment(round_id=round_id(one), position_id="single-payer-aff", method="PLAN_TEXT")
-            for one in reading.disclosures
-            if one.side is Side.AFF and one.tournament == "Thistle Open"
-        ]
+        return AffAssignmentsForReport(
+            assignments=tuple(
+                AffAssignment(round_id=round_id(one), position_id="single-payer-aff", method="PLAN_TEXT")
+                for one in reading.disclosures
+                if one.side is Side.AFF and one.tournament == "Thistle Open"
+            ),
+            kritikal=self.kritikal,
+        )
+
+
+async def test_the_aff_seam_passes_the_k_aff_inputs_to_the_report(world: SyntheticRun) -> None:
+    # The seam only carries them: the K aff here is the world's one aff, and no round is assigned to it.
+    kritikal = KritikalAffInputs(
+        position_id="single-payer-aff",
+        marker_sources=frozenset(),
+        heading_families={},
+        families={},
+        refused_by_advantage=frozenset(),
+    )
+    with_inputs = await _run(_service(world, aff_assignments=_PlanTextFor(kritikal)), dry_run=True)
+    without = await _run(_service(world, aff_assignments=_PlanTextFor()), dry_run=True)
+
+    assert with_inputs.report.kritikal_affs is not None
+    assert (with_inputs.report.kritikal_affs.rounds, with_inputs.report.kritikal_affs.control_files) == (0, 0)
+    assert without.report.kritikal_affs is None
 
 
 async def test_the_aff_seam_passes_t09s_assignments_to_the_report(world: SyntheticRun) -> None:

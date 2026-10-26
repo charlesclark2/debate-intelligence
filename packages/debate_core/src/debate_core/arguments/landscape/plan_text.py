@@ -48,6 +48,11 @@ text that names none, `NONE` when it holds no plan text at all, and `UNREAD` for
 not be parsed. Only `NAMES` identifies a round (`PLAN_TEXT`); `NONE` is the only verdict a team's aff
 may be carried into (:mod:`~debate_core.arguments.landscape.aff_assignment`).
 
+**K-aff markers** (`v1-e32-t17`) are read from the same paragraphs, in the same pass and cache, when
+the topic has a K-aff config (:class:`PlanTextVocabulary`'s `kritikal`; the reading is
+:func:`~debate_core.arguments.landscape.kritikal_aff.read_kritikal_markers`), and the vocabulary's
+digest covers that config, so an edit to it reads every source again.
+
 Pure and deterministic: no I/O, no model, and nothing returned or logged holds a paragraph's text.
 """
 
@@ -63,6 +68,7 @@ from typing import Annotated, Final, Literal
 from pydantic import Field, StringConstraints
 
 from debate_core.arguments.landscape.headings import normalize_heading
+from debate_core.arguments.landscape.kritikal_aff import KritikalAffConfig, kritikal_rules
 from debate_core.arguments.landscape.matcher import tag_words
 from debate_core.domain.base import DomainModel
 from debate_core.domain.debate_files import ParsedDocument
@@ -102,7 +108,7 @@ PLAN_TEXT_LABELS: Final = frozenset(
 )
 """Headings that label a plan text, as t01's normalizer writes them (`v1-e32-t09`'s counts)."""
 
-_RULE_VERSION: Final = "plan-text-2"
+_RULE_VERSION: Final = "plan-text-3"
 """Bumped when how a plan text is found or read changes, so a cached reading is read again."""
 _LONGEST_LABEL_WORDS: Final = 6
 _INLINE_LABEL: Final = re.compile(
@@ -184,14 +190,27 @@ class ResolutionalPlanWords(DomainModel):
 class PlanTextVocabulary:
     """The words that name each aff of a taxonomy in a plan text, and how to choose among them."""
 
-    def __init__(self, taxonomy: Taxonomy, resolutional: ResolutionalPlanWords | None = None) -> None:
+    def __init__(
+        self,
+        taxonomy: Taxonomy,
+        resolutional: ResolutionalPlanWords | None = None,
+        kritikal: KritikalAffConfig | None = None,
+    ) -> None:
         self._taxonomy = taxonomy
+        self._kritikal = kritikal
         affs = [one for one in taxonomy.positions if one.kind is PositionKind.AFF]
         if resolutional is not None and not any(
             one.id == resolutional.position_id and not one.deprecated for one in affs
         ):
             raise ValueError(
                 f"the resolutional plan names {resolutional.position_id}, "
+                f"which is no active aff of {taxonomy.topic_id}"
+            )
+        if kritikal is not None and not any(
+            one.id == kritikal.position_id and not one.deprecated for one in affs
+        ):
+            raise ValueError(
+                f"the K-aff config names {kritikal.position_id}, "
                 f"which is no active aff of {taxonomy.topic_id}"
             )
         self._resolutional = resolutional
@@ -220,15 +239,24 @@ class PlanTextVocabulary:
                 sorted(resolutional.resolutional_words),
             ]
         )
-        self._digest = hashlib.sha256(json.dumps([_RULE_VERSION, pairs, rule]).encode()).hexdigest()
+        self._digest = hashlib.sha256(
+            json.dumps([_RULE_VERSION, pairs, rule, kritikal_rules(kritikal)], sort_keys=True).encode()
+        ).hexdigest()
 
     def __repr__(self) -> str:
         version = f"{self._taxonomy.topic_id} {self._taxonomy.taxonomy_version}"
         return f"PlanTextVocabulary({version}, {self._digest[:12]})"
 
     @property
+    def kritikal(self) -> KritikalAffConfig | None:
+        """The topic's K-aff position and families (`v1-e32-t17`); None when the topic reads no K aff."""
+        return self._kritikal
+
+    @property
     def digest(self) -> str:
-        """Changes with any word or the aff it names, and with the reading rules (:data:`_RULE_VERSION`)."""
+        """Changes with any word or the aff it names, with the reading rules (:data:`_RULE_VERSION`), and
+        with the K-aff config and rules (`v1-e32-t17`), whose markers are read and cached beside the plan
+        texts."""
         return self._digest
 
     def named(self, text: str) -> tuple[str, ...]:

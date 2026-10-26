@@ -20,12 +20,16 @@ id; cards by rank). Nothing here computes a count; the service did.
   count, with no overview text. The texts are in report.md only, never beside a school or team code.
   Under each aff `v1-e32-t09` assigned rounds to, and each mechanism under it, it lists the advantages
   those rounds read, with their teams, the cut-off and what it hides, and the advantage reads of the
-  affirmative rounds with no assigned aff (`v1-e32-t15`). No other file has them. After its header and
-  a contents list, its sections come in three parts (`v1-e32-t20`, from the coach's read of
-  2026-10-25): **Affirmative** (the aff side's positions with their impact blocks, then the advantages
-  by aff), **Negative** (the negative's positions with theirs, then the CP texts, alternatives and roles
-  of the ballot), and **Neither side** (positions either side reads, the overviews, which are counted on
-  both sides, the trends and what could not be counted). A part with no section has no heading.
+  affirmative rounds with no assigned aff (`v1-e32-t15`). No other file has them. Then the kritikal
+  affirmatives (`v1-e32-t17`): the K-aff rounds by marker and by carry, the rounds the advantage guard
+  refused, the K families the K-aff files' headings name, and the rounds still unidentified; the method
+  table under Unclassified adds the refusals and the marker control. No marker's words are shown.
+  After its header and a contents list, its sections come in three parts (`v1-e32-t20`, from the
+  coach's read of 2026-10-25): **Affirmative** (the aff side's positions with their impact blocks, then
+  the advantages by aff and the kritikal affirmatives), **Negative** (the negative's positions with
+  theirs, then the CP texts, alternatives and roles of the ballot), and **Neither side** (positions
+  either side reads, the overviews, which are counted on both sides, the trends and what could not be
+  counted). A part with no section has no heading.
 * **positions.csv** has the positions' rows for a spreadsheet, **top_cards.csv** each position's
   most-read cards, and **impact_cards.csv** each advantage's and DA's impact cards, with how many
   documents of each kind carry no labelled impact in its header block. **trends.csv** has each
@@ -67,7 +71,12 @@ from fractions import Fraction
 from itertools import groupby
 from typing import Final
 
-from debate_core.arguments.landscape.aff_assignment import PLAN_TEXT_METHOD, TEAM_CARRY_METHOD
+from debate_core.arguments.landscape.aff_assignment import (
+    KRITIKAL_AFF_CARRY_METHOD,
+    KRITIKAL_AFF_MARKER_METHOD,
+    PLAN_TEXT_METHOD,
+    TEAM_CARRY_METHOD,
+)
 from debate_core.domain.landscape import PositionKind, PositionSide
 from debate_core.domain.landscape_report import (
     CHAIN_ROLES,
@@ -204,6 +213,8 @@ _METHOD_LABELS: Final = {
     PLACED_CARD_METHOD: "A card in the round placed under the aff",
     PLAN_TEXT_METHOD: "The round's plan text names the aff",
     TEAM_CARRY_METHOD: "The team's other rounds name the aff",
+    KRITIKAL_AFF_MARKER_METHOD: "A file of the round holds a K-aff marker and no plan text",
+    KRITIKAL_AFF_CARRY_METHOD: "The team's other rounds are assigned to the kritikal affirmative",
 }
 PLANK_TABLE_HEADER: Final = "| Solves | Rank | Teams | Plank |"
 """The header of a CP's plank table in report.md (`v1-e32-t16`), which the scan's section counts look for."""
@@ -347,7 +358,11 @@ def render_markdown(report: LandscapeReport, trends: LandscapeTrends | None = No
     theirs (`v1-e32-t04`); without, the new section is `v1-e32-t03`'s.
     """
     parts = {
-        "Affirmative": [*_positions_section(report, PositionSide.AFF), *_advantages_section(report)],
+        "Affirmative": [
+            *_positions_section(report, PositionSide.AFF),
+            *_advantages_section(report),
+            *_kritikal_section(report),
+        ],
         "Negative": [
             *_positions_section(report, PositionSide.NEG),
             *_texts_sections(report),
@@ -597,6 +612,59 @@ def _advantages_section(report: LandscapeReport) -> list[str]:
             "their advantages are not counted under it."
         )
     return [*lines, ""]
+
+
+def _kritikal_section(report: LandscapeReport) -> list[str]:
+    """`v1-e32-t17`'s group: the K-aff rounds by method, the guard's refusals, the families, what is left."""
+    found = report.kritikal_affs
+    if found is None:
+        return []
+    summary = report.unclassified
+    lines = [
+        "## Kritikal affirmatives",
+        "",
+        f"Affirmative rounds assigned to {_cell(found.label)} (`{found.position_id}`): a file of the round "
+        "holds no plan text and a K-aff marker (a role of the ballot, an advocacy statement, `The 1AC is` or "
+        "a method label), or the team's other rounds are assigned to it. A round whose plan text names an "
+        "aff, or that another signal identifies, is not counted here. The markers are counted and never "
+        "quoted.",
+        "",
+    ]
+    if found.rounds:
+        lines.append(
+            f"{_count(found.rounds, 'affirmative round')} by {_count(found.teams, 'team')}: "
+            f"{found.by_marker:,} by a marker in the round's own file, {found.by_carry:,} carried from the "
+            "team's other rounds."
+        )
+    else:
+        lines.append("No affirmative round is assigned to it.")
+    lines.append("")
+    if found.refused_by_advantage == 1:
+        lines.append("1 round was not carried into because its own file reads an advantage.")
+    else:
+        lines.append(
+            f"{found.refused_by_advantage:,} rounds were not carried into because their own file reads an "
+            "advantage."
+        )
+    lines.append("")
+    if found.families:
+        listed = "; ".join(
+            f"{_cell(one.label)}, {_count(one.files, 'file')} ({_count(one.teams, 'team')})"
+            for one in found.families
+        )
+        lines.append(
+            "K families named in the K-aff files' headings, counted from their words and never placed: "
+            f"{listed}."
+        )
+    else:
+        lines.append("No K family is named in the K-aff files' headings.")
+    lines += [
+        "",
+        f"{_of(summary.aff_rounds_unidentified, summary.aff_rounds, 'affirmative rounds')} still have no "
+        "identified aff.",
+        "",
+    ]
+    return lines
 
 
 _ROLE_LABELS: Final = {
@@ -1228,7 +1296,16 @@ def _unclassified_section(report: LandscapeReport) -> list[str]:
         f"| {_METHOD_LABELS.get(one.method, one.method)} (`{one.method}`) | {one.rounds:,} |"
         for one in report.aff_identification
     ]
-    lines += [f"| Not identified | {summary.aff_rounds_unidentified:,} |", "", _TITLES_NOT_READ, ""]
+    lines.append(f"| Not identified | {summary.aff_rounds_unidentified:,} |")
+    kritikal = report.kritikal_affs
+    if kritikal is not None:
+        lines += [
+            "| Of those, the kritikal affirmative not carried in: the round's own file reads an advantage | "
+            f"{kritikal.refused_by_advantage:,} |",
+            f"| Identified another way, with a K-aff marker in a file of the round (a control: "
+            f"{_count(kritikal.control_files, 'file')}) | {kritikal.control_rounds:,} |",
+        ]
+    lines += ["", _TITLES_NOT_READ, ""]
     return lines
 
 

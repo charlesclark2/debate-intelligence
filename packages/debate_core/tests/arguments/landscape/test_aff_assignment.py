@@ -10,10 +10,14 @@ from __future__ import annotations
 from typing import Any
 
 from debate_core.arguments.landscape.aff_assignment import (
+    KRITIKAL_AFF_CARRY_METHOD,
+    KRITIKAL_AFF_MARKER_METHOD,
     PLAN_TEXT_METHOD,
     TEAM_CARRY_METHOD,
     AffRound,
     AssignedAff,
+    AssignmentCounts,
+    KritikalSignals,
     assign_affs,
 )
 from debate_core.arguments.landscape.plan_text import (
@@ -257,3 +261,150 @@ def test_assignments_come_in_round_key_order() -> None:
     specs = rounds(("r2", "team-a", ("d2",)), ("r1", "team-b", ("d1",)))
     found, _ = assign_affs(specs, {"d1": NAMES_SAMPLE, "d2": NAMES_OTHER}, {}, WORDS)
     assert found == (AssignedAff("r1", SAMPLE, PLAN_TEXT_METHOD), AssignedAff("r2", OTHER, PLAN_TEXT_METHOD))
+
+
+# ------------------------------------------------------------------------------------------------
+# Kritikal affirmatives (`v1-e32-t17`, the PM's rulings of 2026-10-25)
+# ------------------------------------------------------------------------------------------------
+#
+# A round no other signal identifies reads the K aff when none of its documents holds a plan text and
+# one holds a K-aff marker; a team whose only identified aff is the K aff carries it, by t09's carry rule
+# and guard, and never into a round whose own file reads an advantage.
+
+KRITIKAL = "sample-kritikal-aff"
+
+
+def kritikal_assigned(
+    specs: list[AffRound],
+    plan_texts: dict[str, DocumentPlanText],
+    markers: set[str],
+    *,
+    advantages: set[str] | None = None,
+    placed: dict[str, frozenset[str]] | None = None,
+) -> tuple[dict[str, tuple[str, str]], AssignmentCounts]:
+    signals = KritikalSignals(KRITIKAL, frozenset(markers), frozenset(advantages or set()))
+    found, counts = assign_affs(specs, plan_texts, placed or {}, WORDS, signals)
+    return {one.round_key: (one.position_id, one.method) for one in found}, counts
+
+
+def test_a_round_with_a_marker_file_and_no_plan_text_reads_the_k_aff() -> None:
+    found, counts = kritikal_assigned(rounds(("r1", "team-a", ("d1",))), {"d1": NONE}, {"d1"})
+    assert found == {"r1": (KRITIKAL, KRITIKAL_AFF_MARKER_METHOD)}
+    assert (counts.unidentified, counts.by_method) == (0, {KRITIKAL_AFF_MARKER_METHOD: 1})
+
+
+def test_a_marker_beside_a_file_with_no_marker_still_names_the_round() -> None:
+    found, _ = kritikal_assigned(rounds(("r1", "team-a", ("d1", "d2"))), {"d1": NONE, "d2": NONE}, {"d2"})
+    assert found == {"r1": (KRITIKAL, KRITIKAL_AFF_MARKER_METHOD)}
+
+
+def test_a_plan_text_naming_an_aff_outweighs_a_marker() -> None:
+    found, _ = kritikal_assigned(rounds(("r1", "team-a", ("d1",))), {"d1": NAMES_SAMPLE}, {"d1"})
+    assert found == {"r1": (SAMPLE, PLAN_TEXT_METHOD)}
+
+
+def test_a_marker_never_names_a_round_holding_a_plan_text_of_its_own_or_an_unread_file() -> None:
+    specs = rounds(
+        ("r1", "team-a", ("d1", "d2")),
+        ("r2", "team-b", ("d3", "d4")),
+        ("r3", "team-c", ("d5", "d6")),
+        ("r4", "team-d", ("d7",)),
+    )
+    plan_texts = {"d1": NONE, "d2": UNNAMED, "d3": NONE, "d4": UNREAD, "d5": NONE, "d6": CONFLICTING}
+    found, counts = kritikal_assigned(specs, plan_texts, {"d1", "d3", "d5", "d7"})
+    assert found == {}
+    assert counts.unidentified == 4
+
+
+def test_a_round_t02_placed_under_an_aff_is_left_to_the_report_whatever_its_markers() -> None:
+    found, counts = kritikal_assigned(
+        rounds(("r1", "team-a", ("d1",))), {"d1": NONE}, {"d1"}, placed={"r1": frozenset({SAMPLE})}
+    )
+    assert found == {}
+    assert (counts.placed_only, counts.unidentified) == (1, 0)
+
+
+def test_a_policy_carry_keeps_its_rounds_and_a_marker_does_not_take_them() -> None:
+    specs = rounds(("r1", "team-a", ("d1",)), ("r2", "team-a", ("d2",)))
+    found, _ = kritikal_assigned(specs, {"d1": NAMES_SAMPLE, "d2": NONE}, {"d2"})
+    assert found == {"r1": (SAMPLE, PLAN_TEXT_METHOD), "r2": (SAMPLE, TEAM_CARRY_METHOD)}
+
+
+def test_a_team_whose_only_aff_is_the_k_aff_carries_it_into_its_rounds_with_no_plan_text() -> None:
+    specs = rounds(("r1", "team-a", ("d1",)), ("r2", "team-a", ("d2",)), ("r3", "team-b", ("d3",)))
+    found, counts = kritikal_assigned(specs, {"d1": NONE, "d2": NONE, "d3": NONE}, {"d1"})
+    assert found == {
+        "r1": (KRITIKAL, KRITIKAL_AFF_MARKER_METHOD),
+        "r2": (KRITIKAL, KRITIKAL_AFF_CARRY_METHOD),
+    }
+    assert counts.unidentified == 1
+
+
+def test_the_k_aff_is_never_carried_into_a_round_whose_own_file_reads_an_advantage() -> None:
+    specs = rounds(("r1", "team-a", ("d1",)), ("r2", "team-a", ("d2",)), ("r3", "team-a", ("d3",)))
+    found, counts = kritikal_assigned(specs, {"d1": NONE, "d2": NONE, "d3": NONE}, {"d1"}, advantages={"r2"})
+    assert found == {
+        "r1": (KRITIKAL, KRITIKAL_AFF_MARKER_METHOD),
+        "r3": (KRITIKAL, KRITIKAL_AFF_CARRY_METHOD),
+    }
+    assert counts.refused_by_advantage == ("r2",)
+    assert counts.unidentified == 1
+
+
+def test_a_round_with_its_own_marker_reads_the_k_aff_even_when_it_reads_an_advantage() -> None:
+    found, counts = kritikal_assigned(
+        rounds(("r1", "team-a", ("d1",))), {"d1": NONE}, {"d1"}, advantages={"r1"}
+    )
+    assert found == {"r1": (KRITIKAL, KRITIKAL_AFF_MARKER_METHOD)}
+    assert counts.refused_by_advantage == ()
+
+
+def test_the_k_aff_carry_keeps_t09s_guard_and_counts_its_refusals() -> None:
+    specs = rounds(
+        ("r1", "team-a", ("d1",)),
+        ("r2", "team-a", ("d2",)),
+        ("r3", "team-a", ("d3",)),
+        ("r4", "team-a", ("d4",)),
+    )
+    found, counts = kritikal_assigned(specs, {"d1": NONE, "d2": UNNAMED, "d3": UNREAD, "d4": NONE}, {"d1"})
+    assert found == {
+        "r1": (KRITIKAL, KRITIKAL_AFF_MARKER_METHOD),
+        "r4": (KRITIKAL, KRITIKAL_AFF_CARRY_METHOD),
+    }
+    assert (counts.carry_refused, counts.unidentified) == (2, 2)
+
+
+def test_a_team_whose_rounds_disagree_reads_the_k_aff_by_its_own_marker_and_carries_nothing() -> None:
+    specs = rounds(
+        ("r1", "team-a", ("d1",)),
+        ("r2", "team-a", ("d2",)),
+        ("r3", "team-a", ("d3",)),
+        ("r4", "team-a", ("d4",)),
+    )
+    plan_texts = {"d1": NAMES_SAMPLE, "d2": NAMES_OTHER, "d3": NONE, "d4": NONE}
+    found, counts = kritikal_assigned(specs, plan_texts, {"d3"})
+    assert found == {
+        "r1": (SAMPLE, PLAN_TEXT_METHOD),
+        "r2": (OTHER, PLAN_TEXT_METHOD),
+        "r3": (KRITIKAL, KRITIKAL_AFF_MARKER_METHOD),
+    }
+    assert counts.unidentified == 1
+
+
+def test_a_team_with_a_conflicting_round_reads_the_k_aff_by_its_own_marker_and_carries_nothing() -> None:
+    specs = rounds(("r1", "team-a", ("d1",)), ("r2", "team-a", ("d2",)), ("r3", "team-a", ("d3",)))
+    found, counts = kritikal_assigned(specs, {"d1": CONFLICTING, "d2": NONE, "d3": NONE}, {"d2"})
+    assert found == {"r2": (KRITIKAL, KRITIKAL_AFF_MARKER_METHOD)}
+    assert counts.unidentified == 2
+
+
+def test_a_round_no_readable_team_disclosed_reads_its_own_marker_and_is_never_carried_into() -> None:
+    specs = rounds(("r1", None, ("d1",)), ("r2", None, ("d2",)))
+    found, _ = kritikal_assigned(specs, {"d1": NONE, "d2": NONE}, {"d1"})
+    assert found == {"r1": (KRITIKAL, KRITIKAL_AFF_MARKER_METHOD)}
+
+
+def test_without_k_aff_signals_a_marker_round_stays_unidentified() -> None:
+    found, counts = assign_affs(rounds(("r1", "team-a", ("d1",))), {"d1": NONE}, {}, WORDS)
+    assert found == ()
+    assert (counts.unidentified, counts.refused_by_advantage) == (1, ())

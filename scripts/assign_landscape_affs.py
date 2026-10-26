@@ -111,6 +111,8 @@ class _Read:
     """Each affirmative source's affirmative teams, as opaque identities."""
     run: PlanTextRun
     service: PlanTextService
+    reads_kritikal: bool = False
+    """Whether the topic has a K-aff config (`v1-e32-t17`), so the markers were read."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -184,7 +186,8 @@ async def _read(arguments: argparse.Namespace) -> _Read:
     )
     taxonomy = repository.taxonomy(resolved.topic.id)
     service = stores.plan_texts
-    vocabulary = PlanTextVocabulary(taxonomy, repository.resolutional_plan_words(resolved.topic.id))
+    kritikal = repository.kritikal_aff(resolved.topic.id)
+    vocabulary = PlanTextVocabulary(taxonomy, repository.resolutional_plan_words(resolved.topic.id), kritikal)
     run = await service.read(arguments.caselist, affirmative, vocabulary)
     return _Read(
         reading=reading,
@@ -195,6 +198,7 @@ async def _read(arguments: argparse.Namespace) -> _Read:
         teams=teams,
         run=run,
         service=service,
+        reads_kritikal=kritikal is not None,
     )
 
 
@@ -221,6 +225,14 @@ def _print_plan_texts(read: _Read) -> None:
         )
     for position_id, count in sorted(named.items(), key=lambda item: (-item[1], item[0])):
         print(f"  names {position_id}: {count} documents, {len(by_aff[position_id])} teams")
+    if read.reads_kritikal:
+        marked = {sha for sha, found in read.run.kritikal.items() if found.markers}
+        bare = {sha for sha in marked if read.run.verdicts[sha].verdict is PlanTextVerdict.NONE}
+        teams = {team for sha in bare for team in read.teams.get(sha, frozenset())}
+        print(
+            f"K-aff markers: {len(marked)} documents hold one, {len(bare)} of them with no plan text, "
+            f"by {len(teams)} teams."
+        )
 
 
 async def _plan_texts(arguments: argparse.Namespace) -> int:
@@ -265,6 +277,11 @@ async def _assign(arguments: argparse.Namespace) -> int:
         f"Carry refused into {counts.carry_refused} rounds; teams identified {found.identified_teams} of "
         f"{found.aff_teams}; {counts.teams_disagreeing} teams whose rounds disagree."
     )
+    if found.kritikal is not None:
+        print(
+            f"K aff: {len(found.kritikal.marker_sources)} affirmative documents hold a marker; the carry "
+            f"refused by the advantage guard in {len(counts.refused_by_advantage)} rounds."
+        )
     print(f"Runtime {time.perf_counter() - started:.1f} s.")
     return 0
 

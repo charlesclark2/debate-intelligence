@@ -22,6 +22,7 @@ from typing import Protocol, runtime_checkable
 
 from debate_core.application.errors import DomainError, NotFound
 from debate_core.arguments.landscape.analytic_texts import CounterplanActors
+from debate_core.arguments.landscape.kritikal_aff import KritikalAffConfig
 from debate_core.arguments.landscape.plan_text import ResolutionalPlanWords
 from debate_core.domain.landscape import Taxonomy, Topic, TopicMap
 from debate_core.domain.landscape_classification import OverrideRules
@@ -97,6 +98,14 @@ class TaxonomyRepository(Protocol):
 
     def cp_text_actors(self, topic_id: str) -> CounterplanActors | None:
         """The actors a CP text read by its place must name (`v1-e32-t11`); None with no such file.
+
+        Raises :class:`NoTaxonomyForTopic` for a topic with no taxonomy, or no such topic.
+        """
+        ...
+
+    def kritikal_aff(self, topic_id: str) -> KritikalAffConfig | None:
+        """The topic's K-aff position and its K families (`v1-e32-t17`); None with no such file, when the
+        topic reads no K aff.
 
         Raises :class:`NoTaxonomyForTopic` for a topic with no taxonomy, or no such topic.
         """

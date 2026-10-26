@@ -48,6 +48,23 @@ spec:
     - kind: TaskRef
       name: v1-e32-t11-negative-analytic-texts
       relation: dependsOn
+  # PM rulings on ac1's counts, 2026-10-25 (session report, "Questions for the PM", 1-4):
+  # 1. Option (a): one generic `kritikal-aff` position, kind aff, side aff, no aliases, identified by
+  #    a marker in a file with no plan text, as a new assignment method beside PLAN_TEXT and
+  #    TEAM_CARRY, shown as its own group in the Affirmative part, placed as t15's advantages-by-aff
+  #    section is. The group adds one line of counts: the K families named in the K-aff files'
+  #    headings, with files and teams; counts only, never a placement, nothing from tag words. The
+  #    taxonomy goes 1.2.0 -> 1.3.0 under t08's lock; the cache refill (classifications, plan texts,
+  #    analytic texts) is one operator block in the report. The publish after it waits for the cloud
+  #    cutover seed (no dev bucket writes before then); the local dry run does not.
+  # 2. Markers as proposed: t11's role-of-the-ballot labels; `Advocacy`, `Advocacy statement`, `Our
+  #    advocacy (statement) is`, inline `Advocacy:`; `The 1AC is`; `Method` alone, `Our method is`,
+  #    inline `Method:`. `Methods` is left out. The report's method table keeps the control count
+  #    (marker files among rounds identified otherwise).
+  # 3. Carry: yes, through t09's carry rule and guard, plus one guard: never carry a K aff into a
+  #    round whose own file carries an advantage (t15's placement). The method table counts K-aff
+  #    rounds by own marker, by carry, and refused by the advantage guard.
+  # 4. The unlabelled-plan policy affs are a follow-up task the PM files; t17 stays on K affs.
   acceptanceCriteria:
     - id: ac1
       description: >-
@@ -60,7 +77,7 @@ spec:
         as their own group and the rounds still unidentified, matching a hand-written golden
         file; tests shown failing first; a taxonomy change passes the released-ids check.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

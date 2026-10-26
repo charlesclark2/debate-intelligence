@@ -314,6 +314,11 @@ report shows which one did:
    round holds no plan text and a marker of a kritikal affirmative, and the round counts under the
    topic's one K-aff position, `kritikal-aff` ([below](#kritikal-affirmatives)).
 5. **The team's other K-aff rounds** (`KRITIKAL_AFF_CARRY`), as `TEAM_CARRY` carries a plan.
+6. **A plan text under `Thus`** (`TRANSITION_PLAN_TEXT`), for a round none of the above identifies and
+   none of whose files holds a plan text step 1 reads. Many teams write `Thus the plan:` over their plan
+   text instead of a plan label ([below](#plan-texts-under-thus)).
+7. **The team's other rounds, by such a plan text** (`TRANSITION_PLAN_CARRY`), as `TEAM_CARRY` carries
+   one.
 
 A round none of these identifies is counted as unidentified. The caselist's own round titles and cite
 entries are not read: this project does not take them from the site this season.
@@ -352,8 +357,9 @@ one of them holds a marker:
 * **an advocacy statement:** `Advocacy` or `Advocacy statement` over a paragraph, a paragraph opening
   `Advocacy:`, or a sentence opening `Our advocacy is`;
 * **`The 1AC is`,** opening a sentence;
-* **a method:** `Method` over a paragraph, a paragraph opening `Method:`, or a sentence opening `Our
-  method is`.
+* **a method:** `Method` over a paragraph, a paragraph opening `Method:`, or a sentence opening `The`,
+  `Our` or `My` with `method` or `methodology`, then `is`, `will` or `should` (`Our method is`, `The
+  methodology should`).
 
 `Methods` is not a marker: it heads a policy aff's study block.
 
@@ -362,8 +368,9 @@ lets a report quote.
 
 **The team's other rounds.** A team whose only identified aff is the K aff carries it into its other
 affirmative rounds with no plan text, as `TEAM_CARRY` does. It is never carried into a round whose
-own file reads an advantage: that round is a policy aff whose plan text has no label. A round refused
-that way stays unidentified, and the report counts it.
+own file reads an advantage, or holds a plan text under `Thus` naming a policy aff: that round is a
+policy aff. A round refused for an advantage stays unidentified unless its plan text under `Thus`
+identifies it, and the report counts both refusals.
 
 **What report.md shows.** **Kritikal affirmatives** comes after Advantages by affirmative. It gives:
 * the K-aff rounds and teams, by their own marker and by carry;
@@ -374,6 +381,30 @@ that way stays unidentified, and the report counts it.
 
 The method table under **Unclassified** adds the refused rounds and a control: the rounds another
 method identifies whose files hold a marker.
+
+### Plan texts under `Thus`
+
+On hspolicy26, most affirmative files whose plan text step 1 does not read hold it under `Thus the
+plan`, `Thus plan` or a bare `Thus`, or as a paragraph opening `Thus the plan:` (the PM's rulings of
+2026-10-26). The paragraph under one of these is read as step 1 reads a plan text:
+* it must read like a plan: `should` with a federal actor before it, never the fifty states;
+* it names an aff by the same aliases and tag keywords, and by the resolutional plan;
+* card text is never read as one.
+
+`Therefore`, `Hence` and `So` are not read: `Therefore` named another aff than the team's in 3 of the 6
+places it was checked. Neither is a `should` sentence under no label.
+
+**It never moves an aff.** It reads only rounds every step above leaves open, and only where no file
+holds a plan text step 1 reads. Two affs named in one round count as neither. Its carry follows
+`TEAM_CARRY`'s rules.
+
+**What report.md shows.** The method table counts its two methods with the others, and adds two rows:
+* the K-aff carries refused because the round's own file holds such a plan text naming a policy aff;
+* a control: rounds another method identifies whose own file holds such a plan text naming another
+  aff, by method. They keep the aff they have.
+
+The labels are not config. Changing them is a code change, and it makes the next run read every
+affirmative file again.
 
 **The families are yours to edit,** in `config/landscape/kritikal_affs/<topic id>.yaml`:
 * each family has an id, a label and its phrases, in lowercase words;

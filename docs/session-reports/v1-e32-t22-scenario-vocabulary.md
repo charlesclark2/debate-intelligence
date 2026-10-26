@@ -654,9 +654,50 @@ Reply with 1 (a) or (b), 2 yes/no, and any change to 3.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-26
 
 **Notes:**
+
+The coach's names now govern the scenario column, the seed changed nothing until the coach edited it,
+and the real store moved exactly as the report predicted.
+1. **ac1 passes.**
+   * The goldens were written by hand before any code (`a3d8cd2`) and matched first time.
+   * Red first twice: 38 failed against the first skeleton, 6 against the rulings' skeleton. The
+     passes on each skeleton are must-not-flag cases or refusals pydantic already makes, all named.
+   * 27 mutants, all caught, the PM's three among them.
+   * The released-ids check refuses the seed at 1.3.0 on a locked copy and passes it at 1.4.0.
+2. **ac2 passes.** The coach's edit is committed alone (`0fb8dc9`). The operator's refill and dry run
+   under 1.4.0 match every prediction:
+   * DA rows with a scenario fell from 13 to 9;
+   * names withheld are 1 and 0;
+   * DA documents with no scenario heading rose from 251 to 253;
+   * the words no list holds are 1 and 2, each holding a caselist word;
+   * no scan hit in the impact-card sections.
+
+   The report itself is local. It goes out with the one landscape republish after this merges.
+3. **The rulings are applied as written.** The unlisted-words line counts and never prints. Scenario
+   names may carry capitals and still refuse a school word or team-code shape.
+4. **Decision 10 accepted.** Counting each listed position's words against its own list is stricter
+   than the ruling's wording and more useful to the coach.
+5. **Deviations 1 and 2 accepted.** The PM adds `debate_core.domain`, `scripts` and `tests/scripts` to
+   `constraints.packages` in the next batch.
+6. **The Economy edit is accepted at the coach's word.** The coach kept the edit to the Economy
+   advantage, and the session moved the DA's two words. `republicans win` was never in the seed; the
+   unlisted-words line will count it if teams use it.
+7. **The sync onto `ad7f5a1` is accepted.** It resolved the conflicts with t24 by keeping both sides,
+   and the session read only the plan-text cache's keys and times. The `git fetch` is noted as self-reported. The rule stands:
+   network calls, read-only ones included, go to the operator.
+8. **The flaky deploy-script test** (`test_every_aws_call_is_made_as_the_deployer_profile_in_us_east_1`,
+   one failure under load) is filed by the PM as an E40 task (p3). This branch does not touch that
+   script.
+9. **Follow-up: branches and mechanisms.** The PM files these as a new E32 task (p2, after t22),
+   counts first, exactly as the report's (a) and (b) set out.
+10. **Two small slips, no action needed.** The decisions list numbers 10 before 7. The red commit's
+    message miscounts 13 and 8, where the counts were 12 and 9; the report gives the right figures.
+11. **The affected set** (258 files) is left to the PR's `ci` under agreement 10. The changed
+    directories and the always-run list passed (4,370), and the static checks are clean.
+
+No re-review is needed. The Goal is `Succeeded`. Sync, then the PR merges in full.

@@ -543,3 +543,104 @@ def test_with_nothing_configured_a_person_is_told_so(monkeypatch: pytest.MonkeyP
 
     assert exit_code == ExitCode.OK, shown
     assert "Evidence profiles none configured for this environment" in shown
+
+
+# ------------------------------------------------------------------------------------------------
+# The model profile, models.aws_profile (v1-e05-t08-bedrock-invoke-access, ac2)
+# ------------------------------------------------------------------------------------------------
+
+MODEL_PROFILE = "debate-dev-bedrock"
+MODEL_SETTING = "models.aws_profile"
+MODEL_ROLE = "AWSReservedSSO_DebateDevBedrockInvoker_00000000000000cc"
+
+
+def test_the_model_profile_is_reported_in_the_same_words_under_its_own_setting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DEBATE_MODELS__AWS_PROFILE", MODEL_PROFILE)
+    asked = who_each_profile_is(
+        monkeypatch, {EVERYDAY_PROFILE: SignedInAs(EVERYDAY_ROLE), MODEL_PROFILE: SignedInAs(MODEL_ROLE)}
+    )
+
+    exit_code, envelope = doctor("--evidence-profiles")
+    person_exit_code, shown = as_a_person_sees_it("--evidence-profiles")
+
+    assert exit_code == ExitCode.OK == person_exit_code, envelope
+    assert profiles_in(envelope)[1] == {
+        "setting": MODEL_SETTING,
+        "profile": MODEL_PROFILE,
+        "defined": True,
+        "session": "signed_in",
+        "permission_set": "DebateDevBedrockInvoker",
+        "summary": "defined, and signed in as DebateDevBedrockInvoker",
+        "hint": None,
+    }
+    assert asked[:2] == [EVERYDAY_PROFILE, MODEL_PROFILE]
+    assert (
+        "Model profile debate-dev-bedrock (models.aws_profile): defined, and signed in as "
+        "DebateDevBedrockInvoker"
+    ) in shown
+    assert not AN_ACCOUNT_OR_AN_ADDRESS.search(shown + json.dumps(envelope))
+
+
+def test_an_expired_model_session_is_reported_with_its_login(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DEBATE_MODELS__AWS_PROFILE", MODEL_PROFILE)
+    expired = StoreCredentialsExpired("not usable", hint=f"aws sso login --profile {MODEL_PROFILE}")
+    who_each_profile_is(
+        monkeypatch, {EVERYDAY_PROFILE: SignedInAs(EVERYDAY_ROLE), MODEL_PROFILE: CannotBeAsked(expired)}
+    )
+
+    exit_code, shown = as_a_person_sees_it("--evidence-profiles")
+
+    assert exit_code == ExitCode.OK, shown
+    assert (
+        "Model profile debate-dev-bedrock (models.aws_profile): defined; its session has expired or was "
+        "never started, so AWS cannot be asked which permission set it is (aws sso login --profile "
+        "debate-dev-bedrock)"
+    ) in shown
+
+
+def test_a_model_profile_the_aws_config_lacks_is_reported_with_its_fix_and_fails_nothing(
+    installation: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No command calls a model yet, and `doctor --evidence-profiles` is what the weekly run's
+    `--check` and `install.sh --check-launchd` run before the run starts: a model profile missing
+    from this machine's AWS config is said, with its fix, and stops nothing."""
+    monkeypatch.setenv("DEBATE_MODELS__AWS_PROFILE", MODEL_PROFILE)
+    who_each_profile_is(monkeypatch, {EVERYDAY_PROFILE: SignedInAs(EVERYDAY_ROLE)})
+
+    exit_code, envelope = doctor("--evidence-profiles")
+    person_exit_code, shown = as_a_person_sees_it("--evidence-profiles")
+
+    assert exit_code == ExitCode.OK == person_exit_code, envelope
+    model = profiles_in(envelope)[1]
+    assert (model["setting"], model["profile"], model["defined"], model["session"]) == (
+        MODEL_SETTING,
+        MODEL_PROFILE,
+        False,
+        "not_defined",
+    )
+    assert model["hint"].startswith("set models.aws_profile to a profile this machine's AWS config defines")
+    assert "docs/runbooks/bedrock-access.md" in model["hint"]
+    assert (
+        "Model profile debate-dev-bedrock (models.aws_profile): not defined in this machine's AWS config "
+        "(set models.aws_profile to a profile this machine's AWS config defines"
+    ) in shown
+    for forbidden in (str(installation), AWS_CONFIG_NAME, "/.aws"):
+        assert forbidden not in shown
+
+
+def test_an_evidence_profile_that_is_not_defined_still_fails_beside_a_missing_model_profile(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DEBATE_STORAGE__S3__AWS_PROFILE", MISSPELT_PROFILE)
+    monkeypatch.setenv("DEBATE_MODELS__AWS_PROFILE", MODEL_PROFILE)
+
+    exit_code, envelope = doctor("--evidence-profiles")
+
+    assert exit_code == ExitCode.DOMAIN_FAILURE
+    assert envelope["error"]["message"] == (
+        "AWS profile 'debate-dev-evidence-typo', named by storage.s3.aws_profile, is not defined in this "
+        "machine's AWS config, so every command that uses it will refuse to start."
+    )
+    assert [one["defined"] for one in profiles_in(envelope)] == [False, False]

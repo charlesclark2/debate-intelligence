@@ -233,7 +233,8 @@ the evidence bucket with, `storage.s3.aws_profile` and `DEBATE_REMOVAL_PROFILE` 
 whether this machine's AWS config defines it, and which permission set it is signed in as
 (`v1-e34-t22`). It fails on a profile that is not defined, with `STORE_PROFILE_NOT_CONFIGURED`,
 naming the profile and its setting; an expired session is reported as expired, with the login, and
-does not fail it. The option reads the AWS config and asks AWS who each defined profile is. Plain
+does not fail it. The profile Bedrock calls are signed with, `models.aws_profile`, is reported beside
+them in the same words, on a `Model profile` row, and never fails the check (`v1-e05-t08`). The option reads the AWS config and asks AWS who each defined profile is. Plain
 `doctor` does neither, which is why the installer and `validate-dev` can run it on a machine with
 no AWS config. `ops/launchd/install.sh --check-launchd` runs it under launchd, as the weekly agent
 will run. It names a permission set and never an account, a role's full identifier or the AWS

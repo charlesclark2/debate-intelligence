@@ -29,6 +29,12 @@ every build. With the option it loads settings, reads the AWS config, and makes 
 each profile that is defined (`GetCallerIdentity`, which needs no grant and changes nothing).
 `ops/launchd/install.sh --check-launchd` runs it under launchd, as the agent will run.
 
+**The model profile** (`v1-e05-t08`), `models.aws_profile`, the profile every Bedrock call is
+signed with, is checked beside them and reported in the same words, on a `Model profile` row. It
+never fails the check, even when it is not defined: no command calls a model yet, and this check is
+what the weekly run's `--check` and `ops/launchd/install.sh --check-launchd` run before a pull,
+which needs no model. A model profile that is not defined is said on its row, with its fix.
+
 It names a profile, the setting that holds its name and a permission set. Never an account, a
 role's full identifier, the address a session is started at, or where the AWS config is.
 
@@ -129,6 +135,7 @@ from debate_cli.context import cli_context, command_name
 from debate_cli.exit_codes import ExitCode
 from debate_cli.output import CommandFailure, JsonValue, TableSpec
 from debate_core.application.errors import StoreProfileNotConfigured, error_code_of_class
+from debate_core.application.evidence_profiles import MODEL_PROFILE_SETTING
 from debate_core.application.search_index_build import SearchIndexStoreNotReady
 from debate_core.evidence.normalization import NORMALIZER_VERSION, pinned_unicode_version
 
@@ -157,10 +164,11 @@ def doctor(
             "--evidence-profiles",
             help=(
                 "Also check each AWS profile this environment is configured to reach the evidence "
-                "bucket with: whether this machine's AWS config defines it, and which permission set "
-                "it is signed in as. Fails on a profile that is not defined; an expired session is "
-                "reported and does not fail. Reads the AWS config and asks AWS who each profile is; "
-                "without this option doctor does neither."
+                "bucket with, and the one Bedrock calls are signed with (models.aws_profile): whether "
+                "this machine's AWS config defines it, and which permission set it is signed in as. "
+                "Fails on an evidence profile that is not defined; an expired session, and the model "
+                "profile, are reported and do not fail. Reads the AWS config and asks AWS who each "
+                "profile is; without this option doctor does neither."
             ),
         ),
     ] = False,
@@ -441,7 +449,12 @@ def _evidence_profiles(report: Mapping[str, JsonValue]) -> list[Mapping[str, Jso
 
 
 def _profiles_not_defined(report: Mapping[str, JsonValue]) -> list[Mapping[str, JsonValue]]:
-    return [one for one in _evidence_profiles(report) if one["defined"] is False]
+    """The evidence profiles that are not defined. The model profile never fails the check."""
+    return [
+        one
+        for one in _evidence_profiles(report)
+        if one["defined"] is False and one["setting"] != MODEL_PROFILE_SETTING
+    ]
 
 
 def _failed_integrations(report: Mapping[str, JsonValue]) -> dict[str, str]:
@@ -507,12 +520,18 @@ def _profile_rows(report: Mapping[str, JsonValue]) -> list[list[str]]:
         return [["Evidence profiles", "none configured for this environment"]]
     return [
         [
-            "Evidence profile",
+            "Model profile" if one["setting"] == MODEL_PROFILE_SETTING else "Evidence profile",
             f"{one['profile']} ({one['setting']}): {one['summary']}"
-            + (f" ({one['hint']})" if one["hint"] and one["defined"] else ""),
+            + (f" ({one['hint']})" if one["hint"] and _fix_is_the_rows(one) else ""),
         ]
         for one in found
     ]
+
+
+def _fix_is_the_rows(one: Mapping[str, JsonValue]) -> bool:
+    """Whether a profile's fix follows its row: always for one that is defined, and for the model
+    profile, which never fails, so no panel under the table says it."""
+    return one["defined"] is True or one["setting"] == MODEL_PROFILE_SETTING
 
 
 def _search_index_rows(report: Mapping[str, JsonValue]) -> list[list[str]]:

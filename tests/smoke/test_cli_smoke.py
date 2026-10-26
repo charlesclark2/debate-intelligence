@@ -112,7 +112,12 @@ def test_doctor_checks_the_evidence_profiles_only_when_asked_and_fails_on_one_th
     `doctor` passes there, as every install and `validate-dev` need it to. With
     `--evidence-profiles` the same build fails on that profile, under the code a pull refused for
     the same reason records, naming the setting and no path. boto3 refuses the session before any
-    request, so the network guard, which fails this check on any attempt, stays silent."""
+    request, so the network guard, which fails this check on any attempt, stays silent.
+
+    An installed build's bundled `dev` profile also names `debate-dev-bedrock` as
+    `models.aws_profile` (`v1-e05-t08`), which this config does not define either. It is reported,
+    with its own fix, and fails nothing: the failure names the evidence profile alone. The
+    checkout's script, run outside the checkout, reads the built-in profile, which names none."""
     plain = data_of(installed_cli.run("--json", "doctor"))
     assert "evidence_profiles" not in plain
 
@@ -127,7 +132,7 @@ def test_doctor_checks_the_evidence_profiles_only_when_asked_and_fails_on_one_th
         "machine's AWS config, so every command that uses it will refuse to start."
     )
     assert "storage.s3.aws_profile" in error["hint"] and "aws sso login" not in error["hint"]
-    assert error["details"]["evidence_profiles"] == [
+    everyday = [
         {
             "setting": "storage.s3.aws_profile",
             "profile": "debate-dev-evidence",
@@ -138,6 +143,24 @@ def test_doctor_checks_the_evidence_profiles_only_when_asked_and_fails_on_one_th
             "hint": error["hint"],
         }
     ]
+    model = [
+        {
+            "setting": "models.aws_profile",
+            "profile": "debate-dev-bedrock",
+            "defined": False,
+            "session": "not_defined",
+            "permission_set": None,
+            "summary": "not defined in this machine's AWS config",
+            "hint": (
+                "set models.aws_profile to a profile this machine's AWS config defines, or add the profile "
+                "to it: docs/runbooks/bedrock-access.md lists the Bedrock profiles and how they are added. "
+                "It is not an expired session, and logging in changes nothing"
+            ),
+        }
+    ]
+    assert error["details"]["evidence_profiles"] == everyday + (
+        model if installed_cli.build.installed else []
+    )
     about_the_profile = f"{error['message']} {error['hint']}"
     assert str(installed_cli.home) not in about_the_profile and "/.aws" not in asked.stdout
 
@@ -247,6 +270,12 @@ def test_dev_and_prod_get_their_own_data_directory_routing_file_and_budget(
     assert Path(prod["models.routing_file"]).name == "model_routing.prod.yaml"
     assert (dev["models.budget_usd_daily"], prod["models.budget_usd_daily"]) == (2.0, 20.0)
     if installed_cli.build.installed:
+        # The bundled profiles name each environment's Bedrock profile (v1-e05-t08); the built-in
+        # ones, which the checkout's script reads out here, name none.
+        assert (dev["models.aws_profile"], prod["models.aws_profile"]) == (
+            "debate-dev-bedrock",
+            "debate-prod-bedrock",
+        )
         for routing in (dev["models.routing_file"], prod["models.routing_file"]):
             assert "_bundled_config" in routing, f"{routing} is not the configuration the build ships"
             assert not Path(routing).resolve().is_relative_to(REPO_ROOT)

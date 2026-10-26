@@ -241,3 +241,42 @@ def test_a_paywalled_page_can_then_be_stored_from_the_coachs_own_copy_as_user_su
     ((snapshot_id, _, provenance),) = stored_snapshots(data_dir)
     assert (snapshot_id, provenance) == (report["snapshot"]["snapshot_id"], "USER_SUPPLIED")
     assert replay.requested == ["https://www.harborreview.example/robots.txt", url]
+
+
+# --------------------------------------------------------------------------------------------
+# The composition root passes the settings through
+# --------------------------------------------------------------------------------------------
+
+
+def test_the_html_extractors_size_limit_comes_from_articles_html_max_bytes(
+    replay: ReplayTransport, data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The news page is 4,920 bytes: refused under a 4 KiB limit, read under the default."""
+    monkeypatch.setenv("DEBATE_ARTICLES__HTML_MAX_BYTES", "4096")
+
+    exit_code, document = fetch_json(load_cassette("news-article").url)
+
+    assert exit_code == 3
+    report = document["error"]["details"]
+    assert report["access_status"] == "ERROR"
+    assert report["evidence"]["extraction_refusal"] == "DocumentTooLarge"
+
+
+def test_pasted_text_is_bounded_by_http_max_response_bytes(
+    data_dir: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """2,100 bytes of text: rejected under a 2,048-byte limit, as a fetch of that size would be."""
+    monkeypatch.setenv("DEBATE_HTTP__MAX_RESPONSE_BYTES", "2048")
+    copy = tmp_path / "copy.txt"
+    copy.write_text(
+        "\n\n".join(["An invented paragraph about the basin council's vote. " * 10] * 4)[:2100],
+        encoding="utf-8",
+    )
+
+    exit_code, document = fetch_json(
+        "--paste", str(copy), "--source-url", "https://www.example.org/a", "--i-have-lawful-access"
+    )
+
+    assert exit_code == 1
+    assert document["error"]["code"] == "USER_TEXT_REJECTED"
+    assert "over the 2048-byte limit" in document["error"]["message"]

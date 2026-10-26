@@ -42,7 +42,7 @@ class DoiAuthor(DomainModel):
 
     @property
     def display_name(self) -> str | None:
-        """"Given Family", the family name alone, or the whole name; `None` when none is deposited."""
+        """ "Given Family", the family name alone, or the whole name; `None` when none is deposited."""
         if self.family is not None:
             return f"{self.given} {self.family}" if self.given is not None else self.family
         return self.name

@@ -120,7 +120,11 @@ def client_over(
 ) -> CrossrefDoiClient:
     settings = ProviderSettings(contact_email=SecretStr(email) if email is not None else None)
     return crossref_doi_client(
-        HttpSettings(), settings, version=VERSION, cache=cache or InMemoryDoiCache(), transport=served.transport()
+        HttpSettings(),
+        settings,
+        version=VERSION,
+        cache=cache or InMemoryDoiCache(),
+        transport=served.transport(),
     )
 
 
@@ -174,7 +178,7 @@ def test_a_deposit_with_a_name_given_whole_an_orcid_and_markup_in_its_title_is_m
     )
 
 
-def test_a_message_that_is_not_a_work_maps_to_nothing() -> None:
+def test_fields_in_a_shape_not_read_are_left_out() -> None:
     assert work_from_message({"title": "a string, not a list"}, requested_doi=DOI) == DoiWork(doi=DOI)
     assert work_from_message({"DOI": 7, "author": "x", "issued": {"date-parts": "x"}}, requested_doi=DOI) == (
         DoiWork(doi=DOI)

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -32,6 +33,7 @@ from debate_core.application.errors import ModelUnavailableError
 from debate_core.application.model_errors import ValidationPolicy
 from debate_core.application.ports.model_router import ModelRouter
 from debate_core.application.structured_output import StructuredOutputGuard, validate_model_output
+from debate_core.application.settings import Settings, load_settings
 from debate_core.domain.model_contracts import (
     EmbeddingResponse,
     ModelParams,
@@ -43,6 +45,7 @@ from debate_core.domain.model_contracts import (
     RerankResult,
     TaskClass,
 )
+from debate_core.integrations.models.factory import build_model_router
 from debate_core.integrations.models.prompt_registry import PromptRegistry, load_prompt_file
 from debate_core.integrations.models.routing_policy import ModelRoute, RoutingPolicy
 from debate_core.integrations.models.usage import ModelPricing, UsageLog, UsageRecord
@@ -619,3 +622,86 @@ def test_the_log_ledger_is_what_the_guard_reads(log: UsageLog) -> None:
 
     assert json.loads(log.path_for(THE_DAY).read_text(encoding="utf-8"))["estimated_cost_usd"] == 0.25
     assert log.spent(RUN, THE_DAY) == Spend(run_usd=0.25, day_usd=0.25)
+
+
+# ---------------------------------------------------------------------------------------------
+# Where the guard sits: built by build_model_router from the settings' limits
+# ---------------------------------------------------------------------------------------------
+
+EXAMPLE_ROUTING_FILE = REPOSITORY_ROOT / "config" / "model_routing.example.yaml"
+
+
+def bedrock_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, **models: object) -> Settings:
+    for name in list(os.environ):
+        if name.startswith("DEBATE_"):
+            monkeypatch.delenv(name, raising=False)
+    return load_settings(
+        environment="test",
+        overrides={
+            "models": {"provider": "bedrock", "routing_file": str(EXAMPLE_ROUTING_FILE)} | models,
+            "storage": {"data_dir": str(tmp_path / "data")},
+        },
+        env_file=tmp_path / "no.env",
+    )
+
+
+def factory_router(
+    settings: Settings, delegate: ModelRouter, mode: str, tmp_path: Path, pricing: Path | None
+) -> ModelRouter:
+    def real_router(routing: RoutingPolicy, *, aws_profile: str | None) -> ModelRouter:
+        return delegate
+
+    return build_model_router(
+        settings,
+        mode=mode,
+        environ={},
+        real_router=real_router,
+        cassette_dir=tmp_path / "cassettes",
+        clock=FixedClock(LATE_EVENING),
+        pricing_file=pricing,
+        usage_log=UsageLog.for_data_dir(settings.storage.data_dir, local_zone=CHICAGO),
+    )
+
+
+@pytest.mark.parametrize("mode", ["live", "record"])
+async def test_build_model_router_holds_a_real_router_to_the_settings_run_budget(
+    mode: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The example routing file sends high_volume to anthropic.claude-haiku-5-5 with 2048 max_tokens,
+    # priced here as test.haiku is: a ceiling of $0.000023 + $0.01024 = $0.010263, under $0.05.
+    # The first call reports $0.06 (as in ac3), so the second is refused before it is made.
+    pricing = tmp_path / "model_pricing.yaml"
+    pricing.write_text(
+        FIXTURE_PRICES + "  anthropic.claude-haiku-5-5:\n"
+        "    input_usd_per_1k_tokens: 0.001\n"
+        "    output_usd_per_1k_tokens: 0.005\n"
+        "    as_of: 2026-10-26\n"
+        "    source: https://pricing.example.test/bedrock\n",
+        encoding="utf-8",
+    )
+    settings = bedrock_settings(tmp_path, monkeypatch, budget_usd_per_run=0.05, budget_usd_daily=None)
+    delegate = MeteredRouter([(VALID, 50_000, 2_000), (VALID, 1, 1)])
+    router = factory_router(settings, delegate, mode, tmp_path, pricing)
+
+    await router.generate_structured(TaskClass.HIGH_VOLUME, WARMING, ContractPassage)
+    with pytest.raises(BudgetExceededError) as raised:
+        await router.generate_structured(TaskClass.HIGH_VOLUME, WARMING, ContractPassage)
+
+    assert delegate.calls == ["example.select-passage"]
+    assert (raised.value.limit_name, raised.value.model_id) == ("per-run", "anthropic.claude-haiku-5-5")
+    assert raised.value.ceiling_usd == pytest.approx(0.010263)
+
+
+async def test_the_test_profile_s_zero_daily_budget_refuses_a_live_call_to_an_unpriced_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The committed pricing file prices nothing yet, and the test profile's daily limit is $0."""
+    settings = bedrock_settings(tmp_path, monkeypatch)
+    delegate = MeteredRouter([(VALID, 1, 1)])
+
+    assert settings.models.budget_usd_daily == 0.0
+    with pytest.raises(UnpricedModelError, match="anthropic.claude-haiku-5-5"):
+        await factory_router(settings, delegate, "live", tmp_path, None).generate_structured(
+            TaskClass.HIGH_VOLUME, WARMING, ContractPassage
+        )
+    assert delegate.calls == []

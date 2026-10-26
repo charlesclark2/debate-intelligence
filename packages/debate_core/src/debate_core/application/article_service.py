@@ -450,8 +450,9 @@ class ArticleService:
         `attested` must be True: the caller states they have the right to this text (a subscription,
         a library copy). `reported_access_status` is recorded on the snapshot as the caller reports
         it, and on the article only when this call creates it; a status the platform measured is not
-        overwritten by a report. Raises :class:`UserTextNotAttested`, :class:`InvalidSourceUrl` or
-        :class:`UserTextRejected`, and then stores nothing.
+        overwritten by a report. `title` names the article only when this call creates it. Raises
+        :class:`UserTextNotAttested`, :class:`InvalidSourceUrl` or :class:`UserTextRejected`, and then
+        stores nothing.
         """
         started = self._clock.now()
         if attested is not True:
@@ -461,11 +462,29 @@ class ArticleService:
         correlation = correlation_id if correlation_id is not None else self._id_generator.new_id()
 
         known = await self._articles.find_by_canonical_url(key)
+        newest = None if known is None else await self._newest(known.article_id, ProvenanceMode.USER_SUPPLIED)
+        reused = newest is not None and _same_text(newest, text)
+        if newest is not None and reused:
+            snapshot = newest
+        else:
+            # The blobs first, as in retrieve: text the normalizer refuses leaves no article behind.
+            snapshot = await self._snapshots.create(
+                article_id=known.article_id if known is not None else self._id_generator.new_id(),
+                raw_bytes=text.encode("utf-8"),
+                extracted_text=text,
+                canonical_url=key,
+                retrieved_at=started,
+                extractor_version=USER_TEXT_EXTRACTOR_VERSION,
+                provenance_mode=ProvenanceMode.USER_SUPPLIED,
+                access_status=reported_access_status,
+                content_type=USER_TEXT_CONTENT_TYPE,
+                owner_id=owner_id,
+            )
         if known is None:
             now = self._clock.now()
             known = await self._articles.save(
                 Article(
-                    article_id=self._id_generator.new_id(),
+                    article_id=snapshot.article_id,
                     owner_id=owner_id,
                     canonical_url=key,
                     title=(title or "").strip() or key,
@@ -475,25 +494,8 @@ class ArticleService:
                     updated_at=now,
                 )
             )
-        newest = await self._newest(known.article_id, ProvenanceMode.USER_SUPPLIED)
-        reused = newest is not None and _same_text(newest, text)
-        if newest is not None and reused:
-            snapshot = newest
-        else:
-            snapshot = await self._articles.save_snapshot(
-                await self._snapshots.create(
-                    article_id=known.article_id,
-                    raw_bytes=text.encode("utf-8"),
-                    extracted_text=text,
-                    canonical_url=key,
-                    retrieved_at=started,
-                    extractor_version=USER_TEXT_EXTRACTOR_VERSION,
-                    provenance_mode=ProvenanceMode.USER_SUPPLIED,
-                    access_status=reported_access_status,
-                    content_type=USER_TEXT_CONTENT_TYPE,
-                    owner_id=owner_id,
-                )
-            )
+        if not reused:
+            snapshot = await self._articles.save_snapshot(snapshot)
         return self._finish(
             started,
             RetrievalOutcome(
@@ -522,7 +524,10 @@ class ArticleService:
             raise UserTextRejected("the text is blank")
         if len(text.strip()) < minimum:
             raise UserTextRejected(f"the text is under the {minimum}-character minimum for an article")
-        size = len(text.encode("utf-8"))
+        try:
+            size = len(text.encode("utf-8"))
+        except UnicodeEncodeError as error:
+            raise UserTextRejected("the text is not valid Unicode (it has a lone surrogate)") from error
         if size > self._max_user_text_bytes:
             raise UserTextRejected(
                 f"the text is {size} bytes, over the {self._max_user_text_bytes}-byte limit"

@@ -38,6 +38,7 @@ from debate_core.application.article_service import (
 from debate_core.application.settings import ArticleSettings
 from debate_core.application.snapshot_service import SnapshotService
 from debate_core.domain import AccessStatus, ProvenanceMode
+from debate_core.integrations import html_extractor, pdf_extractor
 from debate_core.retrieval import RelCanonicalRule
 from debate_core.retrieval.access import AccessThresholds
 from debate_core.retrieval.extraction import (
@@ -345,6 +346,16 @@ def test_the_classifier_thresholds_come_from_settings() -> None:
     assert run(lenient.service.retrieve(ARTICLE_URL)).access_status is AccessStatus.ACCESSIBLE
 
 
+def test_the_articles_settings_defaults_are_the_classifiers_and_extractors_own() -> None:
+    settings = ArticleSettings()
+    assert access_thresholds(settings) == AccessThresholds()
+    assert settings.html_fallback_minimum_characters == html_extractor.DEFAULT_MINIMUM_CHARACTERS == 250
+    assert settings.pdf_max_bytes == pdf_extractor.DEFAULT_MAX_BYTES == 50 * 1024 * 1024
+    assert settings.pdf_max_pages == pdf_extractor.DEFAULT_MAX_PAGES == 500
+    assert settings.pdf_max_stream_bytes == pdf_extractor.DEFAULT_MAX_STREAM_BYTES == 20_000_000
+    assert settings.refetch_after == timedelta(days=7)
+
+
 # --------------------------------------------------------------------------------------------
 # ac2: every other status, with its reason and no snapshot
 # --------------------------------------------------------------------------------------------
@@ -489,6 +500,9 @@ def test_failure_after_a_readable_retrieval_records_the_status_and_keeps_the_old
     assert second.article.access_status is AccessStatus.NOT_FOUND
     assert first.snapshot is not None
     assert run(world.articles.list_snapshots(first.article.article_id)) == (first.snapshot,)
+    # Its last retrieval was not readable, so the stored snapshot does not answer the next call.
+    run(world.service.retrieve(ARTICLE_URL))
+    assert world.fetcher.requested_urls == [ARTICLE_URL] * 3
 
 
 def test_failure_outcome_cannot_carry_a_publisher_snapshot() -> None:
@@ -613,6 +627,47 @@ def test_dedupe_compares_with_the_newest_snapshot_only() -> None:
     assert reverted.snapshot is not None
     assert reverted.snapshot not in (original.snapshot, changed.snapshot)
     assert not reverted.snapshot_reused
+
+
+def test_dedupe_finds_an_article_stored_under_its_rel_canonical() -> None:
+    world = build_world()
+    short_link = "https://www.example.org/s/8812"
+    canonical = "https://www.example.org/energy/2026/10/grid-storage"
+    for url in (short_link, canonical):
+        world.fetcher.add(url, BODY)
+        world.extractor.hints[url] = UnverifiedMetadataHints(canonical_url=canonical)
+
+    through_the_short_link = run(world.service.retrieve(short_link))
+    direct = run(world.service.retrieve(canonical))
+
+    assert through_the_short_link.article.canonical_url == canonical
+    # Found under the canonical URL before any fetch, so it was not fetched again.
+    assert world.fetcher.requested_urls == [short_link]
+    assert direct.article.article_id == through_the_short_link.article.article_id
+    assert direct.snapshot == through_the_short_link.snapshot
+    refreshed = run(world.service.retrieve(short_link, refresh=True))
+    assert refreshed.article.article_id == through_the_short_link.article.article_id
+    assert refreshed.snapshot_reused
+
+
+def test_dedupe_never_reuses_a_snapshot_made_under_another_normalizer_version() -> None:
+    world = build_world()
+    world.fetcher.add(ARTICLE_URL, BODY)
+    first = run(world.service.retrieve(ARTICLE_URL))
+    assert first.snapshot is not None
+    older = first.snapshot.evolve(
+        snapshot_id="0000000000000000000000AGED", normalizer_version="evidence-normalizer-v0"
+    )
+    world.clock.advance(timedelta(seconds=1))
+    run(world.articles.save_snapshot(older.evolve(retrieved_at=world.clock.now())))
+
+    again = run(world.service.retrieve(ARTICLE_URL, refresh=True))
+
+    # The newest snapshot holds the same text hash, but under rules this build does not run.
+    assert again.snapshot is not None
+    assert not again.snapshot_reused
+    assert again.snapshot.snapshot_id not in (first.snapshot.snapshot_id, "0000000000000000000000AGED")
+    assert again.snapshot.normalizer_version == "evidence-normalizer-v1"
 
 
 def test_dedupe_refresh_fetches_inside_the_refetch_age() -> None:
@@ -740,6 +795,9 @@ def test_user_text_without_a_source_url_stores_nothing(source_url: str) -> None:
             SHORT_BODY.decode(), "the text is under the 500-character minimum for an article", id="short"
         ),
         pytest.param(TEXT + "x" * 1000, "the text is 1551 bytes, over the 1500-byte limit", id="too-large"),
+        pytest.param(
+            TEXT + "\ud800", "the text is not valid Unicode (it has a lone surrogate)", id="lone-surrogate"
+        ),
     ],
 )
 def test_user_text_quality_gates_store_nothing(text: str, reason: str) -> None:

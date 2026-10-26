@@ -1,7 +1,7 @@
 ---
 prompt_id: landscape.classify_position
 version: 1.0.0
-status: draft
+status: released
 task_class: high_volume
 output_schema: debate_core.domain.landscape_classification.ModelPositionAnswers
 owner: v1-e32-argument-landscape

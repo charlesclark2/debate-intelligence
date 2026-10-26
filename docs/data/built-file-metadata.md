@@ -19,7 +19,7 @@ files/<topic>/<side>/<position>/<slug>/<recipe hash, first 12>/
     <slug>.docx                     the built file, the bytes the quality check passed
     <slug>.docx.provenance.json     its provenance sidecar, as files build wrote it
     <slug>.docx.quality.json        the quality report for these exact bytes, PASS
-    recipe.yaml                     the recipe, with no pin's school, team code, tournament or round
+    recipe.yaml                     the recipe, no pin naming a side, tournament, round, school or team
     metadata.json                   what the file is; written last
 ```
 
@@ -64,11 +64,11 @@ A file is published only when, in this order:
    `--recipes <dir>/<slug>.yaml`, and its hash is the sidecar's (`RECIPE_NOT_FOUND`,
    `RECIPE_CHANGED`).
 
-The published `recipe.yaml` is rendered from the recipe's model with every pin's `school`,
-`team_code`, `tournament` and `round` removed, and without the original's comments (PM amendment
-2026-10-19; data-use policy version 1.15). A pin keeps its caselist, source SHA-256, element index,
-snapshot and side, which name the card's source and paragraphs; the provenance sidecar beside it
-carries who disclosed it.
+The published `recipe.yaml` is rendered from the recipe's model with every pin's `side`,
+`tournament`, `round`, `school` and `team_code` removed, and without the original's comments (PM
+amendment 2026-10-19; data-use policy version 1.15, under which a published recipe "loses every such
+field"). A pin keeps its caselist, source SHA-256, element index and snapshot, which name the card's
+source and paragraphs; the provenance sidecar beside it carries who disclosed it.
 
 ## `metadata.json`
 

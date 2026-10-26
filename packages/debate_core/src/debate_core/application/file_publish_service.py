@@ -31,11 +31,13 @@ Nothing of a file is uploaded unless every step passes, and each refusal names w
 The bytes read in step 2 are the bytes uploaded, from a staging directory of this publish's own: a
 file rewritten while it is checked cannot be published in place of the one checked.
 
-## The recipe as published (PM amendment 2026-10-19)
+## The recipe as published (PM amendment 2026-10-19, data-use policy version 1.15)
 
-`recipe.yaml` is the recipe rendered from its model with every pin's `school`, `team_code`,
-`tournament` and `round` removed, and without the original's comments. A pin keeps its caselist,
-source SHA-256, element index, snapshot and side, and the provenance sidecar beside it carries the
+`recipe.yaml` is the recipe rendered from its model with every pin's `side`, `tournament`, `round`,
+`school` and `team_code` removed, and without the original's comments. The amendment names the last
+four; the policy says a published recipe "loses every such field", and its list of them begins with
+the side, so the side goes too (this task's session report, Deviations). A pin keeps its caselist,
+source SHA-256, element index and snapshot, and the provenance sidecar beside it carries the
 attribution. Before anything is uploaded, every card's pin is checked to name the sidecar's source
 and element for that card.
 
@@ -121,8 +123,8 @@ __all__ = [
 RECIPES_DIRECTORY: Final = "recipes"
 """Under the files directory: where recipes are, one directory per topic (`files suggest` writes there)."""
 
-STRIPPED_PIN_FIELDS: Final = ("school", "team_code", "tournament", "round")
-"""What a published recipe's pins never hold (PM amendment 2026-10-19, data-use policy version 1.15)."""
+STRIPPED_PIN_FIELDS: Final = ("side", "tournament", "round", "school", "team_code")
+"""What a published recipe's pins never hold: data-use policy 1.15's list (PM amendment 2026-10-19)."""
 
 
 class FileRefusalCode(StrEnum):

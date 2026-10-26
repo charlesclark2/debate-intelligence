@@ -9,7 +9,7 @@ one prefix of the evidence bucket, :func:`built_file_prefix`:
         <slug>.docx                     the built file
         <slug>.docx.provenance.json     its provenance sidecar (v1-e33-t02)
         <slug>.docx.quality.json        the quality report for these exact bytes (v1-e33-t04)
-        recipe.yaml                     the recipe, without any pin's school, team code, tournament or round
+        recipe.yaml                     the recipe, no pin naming a side, tournament, round, school or team
         metadata.json                   a BuiltFileMetadata, written last
 
 `docs/data/built-file-metadata.md` describes the layout and the contract for the V2 debate tub

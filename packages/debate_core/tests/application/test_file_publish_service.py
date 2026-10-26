@@ -652,11 +652,11 @@ def test_find_by_source_every_source_in_a_published_sidecar_is_in_its_metadata_s
 
 
 # ------------------------------------------------------------------------------------------------
-# ac7: the uploaded recipe holds no school, team code, tournament or round, and resolves the same
+# ac7: the uploaded recipe names no side, tournament, round, school or team, and resolves the same
 # ------------------------------------------------------------------------------------------------
 
 
-def test_the_uploaded_recipe_names_no_school_team_tournament_or_round_and_resolves_to_the_same_occurrences(
+def test_the_uploaded_recipe_names_no_side_tournament_round_school_or_team_and_resolves_the_same(
     world: World,
 ) -> None:
     one, two = world.add(SOURCE_ONE), world.add(SOURCE_TWO, CEDAR)
@@ -695,7 +695,6 @@ def test_the_uploaded_recipe_names_no_school_team_tournament_or_round_and_resolv
             "source_sha256": world.source_of(one),
             "element_index": 0,
             "snapshot": "2026-09-15",
-            "side": "AFF",
         },
         {"caselist": CASELIST, "source_sha256": world.source_of(two), "element_index": 0},
     ]
@@ -753,7 +752,7 @@ def test_find_by_source_over_an_empty_files_prefix_finds_nothing(world: World) -
     assert (lookup.found, lookup.unreadable) == ((), ())
 
 
-def test_pins_inside_hats_lose_their_school_team_tournament_and_round_too() -> None:
+def test_pins_inside_hats_lose_their_side_tournament_round_school_and_team_too() -> None:
     """A recipe with hats: every pin in every hat's blocks is stripped (PM amendment 2026-10-19)."""
     pin = {
         "caselist": CASELIST,
@@ -796,7 +795,7 @@ def test_pins_inside_hats_lose_their_school_team_tournament_and_round_too() -> N
     published = yaml.safe_load(published_recipe(recipe))
 
     pins = [item["pin"] for hat in published["structure"][0]["hats"] for item in hat["blocks"][0]["items"]]
-    assert pins == [{"caselist": CASELIST, "source_sha256": "a" * 64, "element_index": 3, "side": "NEG"}] * 2
+    assert pins == [{"caselist": CASELIST, "source_sha256": "a" * 64, "element_index": 3}] * 2
     assert load_recipe(published_recipe(recipe).decode("utf-8")).ok
 
 

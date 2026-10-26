@@ -60,7 +60,6 @@ from debate_core.retrieval.extraction import (
 )
 from debate_core.retrieval.fetch_types import (
     FetchError,
-    FetchErrorBase,
     FetchResult,
     HttpStatusError,
     NonPublicAddress,
@@ -80,7 +79,7 @@ HTML: Final = "text/html; charset=utf-8"
 PDF_BODY: Final = b"%PDF-1.7\n1 0 obj\n(subscribe to continue reading) Tj\n"
 
 RULES_VERSION: Final = "paywall_rules.v1"
-RULES_SHA256: Final = "PIN-ME"
+RULES_SHA256: Final = "87720ce3a0323299d062648366052032ab57f4b287065e3424316b79c3ae5e60"
 """The bundled rules file's hash. A change to the file without a new version fails here."""
 
 PROPERTY_SETTINGS = settings(
@@ -127,7 +126,9 @@ def response(
 ) -> FetchResult:
     """A response that arrived; a 4xx or 5xx carries the HttpStatusError the fetcher would attach."""
     error = (
-        HttpStatusError(url=URL, message=f"news.example.org answered {status_code}", status_code=status_code, attempts=1)
+        HttpStatusError(
+            url=URL, message=f"news.example.org answered {status_code}", status_code=status_code, attempts=1
+        )
         if status_code is not None and status_code >= 400
         else None
     )
@@ -144,7 +145,7 @@ def response(
     )
 
 
-def failure(error: FetchErrorBase) -> FetchResult:
+def failure(error: FetchError) -> FetchResult:
     """A fetch that produced no response, as the fetcher reports it."""
     robots = isinstance(error, RobotsDisallowed)
     return FetchResult.model_validate(
@@ -161,7 +162,9 @@ def failure(error: FetchErrorBase) -> FetchResult:
 
 def text_of_words(words: int, *, per_paragraph: int = 80) -> ExtractedContent:
     """Extracted text of exactly `words` five-letter words: 6 * words - (paragraphs) characters."""
-    sizes = [per_paragraph] * (words // per_paragraph) + ([words % per_paragraph] if words % per_paragraph else [])
+    sizes = [per_paragraph] * (words // per_paragraph) + (
+        [words % per_paragraph] if words % per_paragraph else []
+    )
     paragraphs = tuple(" ".join(["river"] * size) for size in sizes)
     return ExtractedContent(
         paragraphs=paragraphs,
@@ -196,14 +199,16 @@ def marker_id(decision: AccessDecision) -> str | None:
 # Status mapping (plan node status-mapping, ac1)
 # ---------------------------------------------------------------------------------------------
 
-FETCH_ERRORS: Final[list[tuple[FetchErrorBase, AccessStatus]]] = [
+FETCH_ERRORS: Final[list[tuple[FetchError, AccessStatus]]] = [
     (
         Timeout(url=URL, message="news.example.org went quiet", phase=TimeoutPhase.READ, limit_seconds=10),
         ERROR,
     ),
     (TooLarge(url=URL, message="news.example.org sent too much", limit_bytes=10, received_bytes=11), ERROR),
     (
-        TooManyRedirects(url=URL, message="news.example.org redirected too often", limit=5, redirect_chain=(URL,)),
+        TooManyRedirects(
+            url=URL, message="news.example.org redirected too often", limit=5, redirect_chain=(URL,)
+        ),
         ERROR,
     ),
     (
@@ -216,8 +221,14 @@ FETCH_ERRORS: Final[list[tuple[FetchErrorBase, AccessStatus]]] = [
         ROBOTS_DISALLOWED,
     ),
     (UnsupportedScheme(url=URL, message="news.example.org redirected to ftp", scheme="ftp"), ERROR),
-    (NonPublicAddress(url="http://127.0.0.1/admin", message="127.0.0.1 is not public", host="127.0.0.1"), ERROR),
-    (TransportError(url=URL, message="news.example.org refused the connection", reason="ConnectError"), ERROR),
+    (
+        NonPublicAddress(url="http://127.0.0.1/admin", message="127.0.0.1 is not public", host="127.0.0.1"),
+        ERROR,
+    ),
+    (
+        TransportError(url=URL, message="news.example.org refused the connection", reason="ConnectError"),
+        ERROR,
+    ),
 ]
 
 
@@ -228,7 +239,7 @@ def test_mapping_table_covers_every_fetch_error_type() -> None:
 
 
 @pytest.mark.parametrize(("error", "expected"), FETCH_ERRORS, ids=lambda value: getattr(value, "kind", ""))
-def test_mapping_of_each_fetch_error(error: FetchErrorBase, expected: AccessStatus) -> None:
+def test_mapping_of_each_fetch_error(error: FetchError, expected: AccessStatus) -> None:
     decision = classify(failure(error), None)
     assert decision.status is expected
     assert decision.evidence.fetch_error == error.kind
@@ -295,7 +306,10 @@ def test_mapping_a_403_with_a_paywall_overlay_is_paywalled() -> None:
 
 @pytest.mark.parametrize("status_code", [404, 410])
 def test_mapping_a_missing_page_with_a_site_wide_meter_is_not_found(status_code: int) -> None:
-    body = page(head='<script src="https://experience.tinypass.com/load"></script>', body="<p>Subscribe to keep reading</p>")
+    body = page(
+        head='<script src="https://experience.tinypass.com/load"></script>',
+        body="<p>Subscribe to keep reading</p>",
+    )
     assert classify(response(status_code, body), None).status is NOT_FOUND
 
 
@@ -306,7 +320,14 @@ def test_mapping_a_plain_throttle_or_outage_is_an_error_not_a_block(status_code:
 
 @pytest.mark.parametrize(
     ("status_code", "words"),
-    [(204, "no content"), (205, "no content"), (206, "partial"), (304, "304"), (300, "300"), (None, "no response")],
+    [
+        (204, "no content"),
+        (205, "no content"),
+        (206, "partial"),
+        (304, "304"),
+        (300, "300"),
+        (None, "no response"),
+    ],
 )
 def test_mapping_a_response_without_a_whole_document_is_an_error(status_code: int | None, words: str) -> None:
     decision = classify(response(status_code, page()), LONG_TEXT)
@@ -354,7 +375,9 @@ def test_mapping_table_covers_every_extraction_refusal() -> None:
 
 @pytest.mark.parametrize(("refusal", "expected"), REFUSALS, ids=lambda value: type(value).__name__)
 def test_mapping_of_each_extraction_refusal(refusal: ExtractionError, expected: AccessStatus) -> None:
-    body, content_type = (PDF_BODY, "application/pdf") if isinstance(refusal, EncryptedDocument) else (page(), HTML)
+    body, content_type = (
+        (PDF_BODY, "application/pdf") if isinstance(refusal, EncryptedDocument) else (page(), HTML)
+    )
     decision = classify(response(200, body, content_type=content_type), refusal)
     assert decision.status is expected
     assert decision.evidence.extraction_refusal == type(refusal).__name__
@@ -438,13 +461,19 @@ def planted(marker: Marker) -> tuple[bytes, dict[str, str]]:
         case HeaderMarker():
             return page(), {marker.name: f"managed {marker.contains}"}
         case ScriptSourceMarker():
-            return page(head=f'<script async src="https://static.example/{marker.contains}/v2/load.js"></script>'), {}
+            return page(
+                head=f'<script async src="https://static.example/{marker.contains}/v2/load.js"></script>'
+            ), {}
         case InlineScriptMarker():
-            return page(body=f"<script>(function(){{window.{marker.contains} = {{ray: 'X'}};}}());</script>"), {}
+            return page(
+                body=f"<script>(function(){{window.{marker.contains} = {{ray: 'X'}};}}());</script>"
+            ), {}
         case ClassOrIdMarker():
             return page(body=f'<div class="Overlay {marker.token.upper()} fade-in"><p>Hello.</p></div>'), {}
         case MetaMarker():
-            return page(head=f'<meta property="{marker.name.upper()}" content="{marker.content.upper()}">'), {}
+            return page(
+                head=f'<meta property="{marker.name.upper()}" content="{marker.content.upper()}">'
+            ), {}
         case TitleMarker():
             return page(title=f"  {marker.equals.upper()}  "), {}
         case VisibleTextMarker():
@@ -482,14 +511,22 @@ def test_marker_the_extractors_is_accessible_for_free_refusal_is_paywalled() -> 
 @pytest.mark.parametrize(
     ("head", "body", "expected_id"),
     [
-        ('<script src="https://experience.tinypass.com/xbuilder/experience/load?aid=X"></script>', "", "piano-tinypass-script"),
+        (
+            '<script src="https://experience.tinypass.com/xbuilder/experience/load?aid=X"></script>',
+            "",
+            "piano-tinypass-script",
+        ),
         ('<script src="https://cdn.piano.io/api/tinypass.min.js"></script>', "", "piano-cdn-tinypass-script"),
         ('<meta property="article:content_tier" content="locked">', "", "content-tier-locked-meta"),
         ('<meta name="article:content_tier" content="metered">', "", "content-tier-metered-meta"),
         ("", '<div id="paywall"></div>', "paywall-element"),
         ("", '<section class="tp-modal tp-active"></section>', "piano-modal-overlay"),
         ("", "<p>Subscribe to continue reading</p>", "subscribe-to-continue-reading-text"),
-        ("", "<p>You\N{RIGHT SINGLE QUOTATION MARK}ve reached your <b>free article</b> limit.</p>", "free-article-limit-text"),
+        (
+            "",
+            "<p>You\N{RIGHT SINGLE QUOTATION MARK}ve reached your <b>free article</b> limit.</p>",
+            "free-article-limit-text",
+        ),
         ("", "<p>Sign in to\ncontinue   reading</p>", "sign-in-to-continue-reading-text"),
     ],
 )
@@ -537,7 +574,8 @@ def test_marker_the_extractors_refusal_is_recorded_before_the_rules() -> None:
 
 def test_marker_a_header_marker_applies_to_a_pdf_body() -> None:
     decision = classify(
-        response(200, PDF_BODY, content_type="application/pdf", headers={"cf-mitigated": "challenge"}), LONG_TEXT
+        response(200, PDF_BODY, content_type="application/pdf", headers={"cf-mitigated": "challenge"}),
+        LONG_TEXT,
     )
     assert decision.status is BLOCKED
     assert marker_id(decision) == "cloudflare-mitigated-header"
@@ -580,8 +618,12 @@ def test_marker_rules_from_another_file_are_the_ones_used() -> None:
     rules = PaywallRules(
         version="paywall_rules.test-1",
         description="One marker of each list.",
-        challenge_markers=(TitleMarker(id="custom-challenge", description="A test title.", equals="hold on"),),
-        paywall_markers=(ClassOrIdMarker(id="custom-wall", description="A test class.", token="members-only"),),
+        challenge_markers=(
+            TitleMarker(id="custom-challenge", description="A test title.", equals="hold on"),
+        ),
+        paywall_markers=(
+            ClassOrIdMarker(id="custom-wall", description="A test class.", token="members-only"),
+        ),
     )
     classifier = AccessClassifier(rules=rules)
     walled = classifier.classify(response(200, page(body='<div class="members-only"></div>')), LONG_TEXT)
@@ -596,12 +638,29 @@ def test_marker_rules_from_another_file_are_the_ones_used() -> None:
     "change",
     [
         {"paywall_markers": [{"id": "x", "kind": "class_or_id", "token": "Paywall", "description": "d"}]},
-        {"paywall_markers": [{"id": "x", "kind": "visible_text", "phrase": "two  spaces", "description": "d"}]},
+        {
+            "paywall_markers": [
+                {"id": "x", "kind": "visible_text", "phrase": "two  spaces", "description": "d"}
+            ]
+        },
         {"paywall_markers": [{"id": "x", "kind": "script_src", "contains": " pad", "description": "d"}]},
         {"paywall_markers": [{"id": "X_1", "kind": "class_or_id", "token": "a", "description": "d"}]},
         {"paywall_markers": [{"id": "x", "kind": "selector", "token": "a", "description": "d"}]},
-        {"paywall_markers": [{"id": "x", "kind": "class_or_id", "token": "a", "description": "d", "weight": 2}]},
-        {"paywall_markers": [{"id": "cloudflare-interstitial-title", "kind": "class_or_id", "token": "a", "description": "d"}]},
+        {
+            "paywall_markers": [
+                {"id": "x", "kind": "class_or_id", "token": "a", "description": "d", "weight": 2}
+            ]
+        },
+        {
+            "paywall_markers": [
+                {
+                    "id": "cloudflare-interstitial-title",
+                    "kind": "class_or_id",
+                    "token": "a",
+                    "description": "d",
+                }
+            ]
+        },
         {"paywall_markers": []},
         {"version": " "},
     ],
@@ -692,7 +751,12 @@ def test_truncation_takes_the_longest_declared_length() -> None:
     head = (
         '<script type="application/ld+json">'
         + json.dumps(
-            {"@graph": [{"@type": "WebPage", "wordCount": 100}, {"@type": "NewsArticle", "wordCount": "2,000"}]}
+            {
+                "@graph": [
+                    {"@type": "WebPage", "wordCount": 100},
+                    {"@type": "NewsArticle", "wordCount": "2,000"},
+                ]
+            }
         )
         + "</script>"
         + '<script type="application/ld+json">'
@@ -705,13 +769,17 @@ def test_truncation_takes_the_longest_declared_length() -> None:
 
 
 @pytest.mark.parametrize(("extracted", "expected"), [(499, PAYWALLED), (500, ACCESSIBLE), (501, ACCESSIBLE)])
-def test_truncation_boundary_is_the_ratio_of_the_declared_length(extracted: int, expected: AccessStatus) -> None:
+def test_truncation_boundary_is_the_ratio_of_the_declared_length(
+    extracted: int, expected: AccessStatus
+) -> None:
     decision = classify(response(200, page(word_count=1000)), text_of_words(extracted))
     assert decision.status is expected
 
 
 @pytest.mark.parametrize(("characters", "expected"), [(499, ERROR), (500, ACCESSIBLE), (501, ACCESSIBLE)])
-def test_truncation_without_a_declared_length_the_minimum_decides(characters: int, expected: AccessStatus) -> None:
+def test_truncation_without_a_declared_length_the_minimum_decides(
+    characters: int, expected: AccessStatus
+) -> None:
     paragraph = ("x" * (characters - 1)) + "."
     content = ExtractedContent(
         paragraphs=(paragraph,),
@@ -726,7 +794,9 @@ def test_truncation_without_a_declared_length_the_minimum_decides(characters: in
 
 
 @pytest.mark.parametrize(("word_count", "expected"), [(None, ERROR), (900, PAYWALLED)])
-def test_truncation_an_empty_extraction_is_never_accessible(word_count: int | None, expected: AccessStatus) -> None:
+def test_truncation_an_empty_extraction_is_never_accessible(
+    word_count: int | None, expected: AccessStatus
+) -> None:
     """t04's empty extraction: no paragraphs, 0 characters, fallback_used true."""
     empty = text_of_words(0)
     assert (empty.quality.character_count, empty.quality.fallback_used) == (0, True)
@@ -768,7 +838,12 @@ def test_truncation_thresholds_are_configurable() -> None:
 
 @pytest.mark.parametrize(
     "values",
-    [{"minimum_characters": 0}, {"truncation_ratio": 0}, {"truncation_ratio": 1.5}, {"minimum_characters": -1}],
+    [
+        {"minimum_characters": 0},
+        {"truncation_ratio": 0},
+        {"truncation_ratio": 1.5},
+        {"minimum_characters": -1},
+    ],
 )
 def test_truncation_thresholds_refuse_nonsense(values: dict[str, float]) -> None:
     with pytest.raises(ValidationError):

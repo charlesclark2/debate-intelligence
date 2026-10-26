@@ -297,16 +297,18 @@ def assign_affs(
             assigned[one.round_key] = AssignedAff(
                 one.round_key, carried_transition[one.team], TRANSITION_PLAN_CARRY_METHOD
             )
+
+        def known_otherwise(one: AffRound) -> set[str]:
+            """The round's aff as another method identified it: its assignment, or its placed cards."""
+            found = assigned.get(one.round_key)
+            if found is None:
+                return set(placed.get(one.round_key, frozenset[str]()))
+            if found.method in (TRANSITION_PLAN_TEXT_METHOD, TRANSITION_PLAN_CARRY_METHOD):
+                return set()
+            return {found.position_id}
+
         for one in rounds:
-            known = (
-                {assigned[one.round_key].position_id}
-                if one.round_key in assigned
-                and assigned[one.round_key].method
-                not in (TRANSITION_PLAN_TEXT_METHOD, TRANSITION_PLAN_CARRY_METHOD)
-                else set(placed.get(one.round_key, frozenset()))
-                if one.round_key not in assigned
-                else set()
-            )
+            known = known_otherwise(one)
             if not known:
                 continue
             found = transition_of(one)

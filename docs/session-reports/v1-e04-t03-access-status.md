@@ -291,9 +291,60 @@ request's `ci` check, not handed to the operator.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-25
 
 **Notes:**
+
+A classifier that errs the right way: ACCESSIBLE only for a whole 2xx document with no marker and
+enough text, and every decision says why.
+1. **ac1 to ac4 and every node criterion pass.**
+   * The tests were red against a skeleton: 128 failed, with the 44 passes explained one by one. The
+     skeleton's leading-space bug was found by its own test.
+   * The two table-completeness tests, over t02's `FetchError` union and t04's refusals, are the
+     right guard: a ninth error or a new refusal fails until it is mapped.
+   * The hash-pinned, versioned rules file meets ac4 exactly.
+2. **Mutants: 21.** The one first-pass survivor (`>= 400` to `> 400`) was killed by a sharper test,
+   not explained away. Every property was checked on a cold database, and its generation statistics
+   are reported. Re-weighting the mapping property after 93% of cases fell in "any other status" is a
+   good catch.
+3. **Rulings:**
+   * **An encrypted PDF is UNSUPPORTED_TYPE,** as proposed: the platform will not read that form of
+     document, and a retry changes nothing. Add the clause to the enum's docstring in the same line
+     of change.
+   * **A metered page is PAYWALLED even when the full text was served.** That is accepted, as the
+     enum's own rule and the conservative side of the spec's forbidden list. A metered site's free
+     articles go through t05/t06's user-supplied-text path. How often this happens on real pages is
+     part of the measurement below.
+4. **Deviations 1 to 3 accepted:**
+   * `html.parser` under the import contract, fuzzed before it was chosen;
+   * the thresholds as a constructor value for t05 to build from settings, as t04 did with its
+     limits;
+   * synthetic samples only.
+5. **Accepted as made:**
+   * the declared length from JSON-LD `wordCount` and `articleBody`, largest wins, and nothing ever
+     estimated;
+   * the units kept apart (words to words, characters to characters);
+   * the mapping's choices (401 and 402, 403 with a marker, 451, 429 and 503, 404 and 410 whatever
+     the page carries, 206 and the other non-documents);
+   * the order of checks on a 2xx;
+   * the left-out reCAPTCHA, hCaptcha and Cloudflare scripts;
+   * decoding for markers only;
+   * reasons quoting only the platform's own words;
+   * UNKNOWN refused;
+   * the small JSON-LD walk copied rather than imported across the boundary.
+6. **Follow-ups:**
+   * The real-page measurement joins the E04 measurement the PM files from `v1-e04-t04`'s review, in
+     place and never committed. It covers false PAYWALLED and BLOCKED decisions, metered sites'
+     free articles, the UNDETERMINED joins and refused PDFs.
+   * Exposing the declared word count as a t04 hint is optional, for t05 to take if it touches that
+     adapter.
+   * The `access` quoted-word edge is noted for t01's selection work.
+7. **The affected set** (45 files) stopped at 97% with no failure, and is left to the PR's `ci` under
+   agreement 10. Retrieval, the extractor, the architecture and spec checks and the always-run list
+   passed: 1,172 tests.
+
+No re-review is needed. The Goal is `Succeeded`, so the PR merges in full once the docstring clause is
+committed.

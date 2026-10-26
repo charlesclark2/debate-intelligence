@@ -10,7 +10,7 @@
 
 ## Summary
 
-**Stopped after step 4, as ruled: the coach's edit is committed on its own (`9dfa0cc`), and the
+**Stopped after step 4, as ruled: the coach's edit is committed on its own (`0fb8dc9`), and the
 operator's refill and dry run are next** ([Operator follow-ups](#operator-follow-ups)). The Goal stays
 `InProgress`: ac2's second half, "the next report uses it", is that dry run, which only the operator
 runs.
@@ -28,9 +28,9 @@ runs.
   1.3.0 locked, the check refuses this seed at 1.3.0.
 
 **How it was checked:**
-* The goldens were written by hand and committed before any code (`1c5b830`), and matched on the first
+* The goldens were written by hand and committed before any code (`a3d8cd2`), and matched on the first
   run.
-* The tests ran red against a skeleton that changes nothing: 38 failed (`2f66fcd`).
+* The tests ran red against a skeleton that changes nothing: 38 failed (`f3da863`).
 * All 20 mutants were caught, the PM's three among them.
 
 **The seed** is t14's table: 31 names that two or more teams use, on 11 DAs and advantages. Each name
@@ -51,7 +51,7 @@ show. Only the Stagnation advantage's 1, which has no list, is still counted. Th
 * a scenario name may carry capitals after its first word;
 * the two Deviations stand, and the PM adds the packages in the next batch.
 
-The new tests were run red first (6 failed, `981b0de`), and 7 more mutants were all caught.
+The new tests were run red first (6 failed, `2268e60`), and 7 more mutants were all caught.
 
 ## The PM's rulings (2026-10-26)
 
@@ -68,7 +68,7 @@ On [the questions](#questions-for-the-pm), as the PM wrote them:
    word. Update the `tests/config` check, its refusing cases and the guide.
 
 **What changed for them:**
-* **The count** (`981b0de` red, `e7f5103` green). `ChainCoverage` gains `unlisted_words` and
+* **The count** (`2268e60` red, `fd22d2b` green). `ChainCoverage` gains `unlisted_words` and
   `unlisted_words_withheld`. Per listed position, these are t14's words, with its dropped forms
   skipped, that the list does not hold and two or more teams use, and how many of them hold a caselist
   word. Positions without a list count nothing.
@@ -89,9 +89,43 @@ the seed at one level. For the Midterms DA, the impacts are named and the branch
 `not_scenarios`. The counts for branches and mechanisms become a new E32 task ([Follow-up
 work](#follow-up-work)).
 
+## The sync onto dev (2026-10-26)
+
+**Why.** The operator's refill stopped at its second step with `Refused: line 1 of the hspolicy26
+plan-text cache is not a reading: 1 errors`. The classification step had finished under 1.4.0:
+3,825 sources, 63,494 cards counted, 41.2 s.
+* v1-e32-t24 merged into `dev` (`b3273fb`) while this task was open, and it adds
+  `transition_paragraphs` to a plan-text reading.
+* At 00:56 a refill run with t24's code rewrote the shared cache,
+  `~/.debate-research/dev/landscape/plan_texts/hspolicy26.jsonl` (1,770 lines), in that form.
+* This branch's reader refuses a field it does not know, so it stopped at line 1. It parsed nothing
+  and wrote nothing.
+* I read only the cache's keys and times to find this, never its contents.
+
+**The sync.** The operator ran `scripts/task sync v1-e32-t22-scenario-vocabulary`. It rebased the
+branch onto `ad7f5a1` (dev with t24 and v1-e04-t06); the branch was never pushed, so nothing was
+pushed.
+* Two commits conflicted, in `scripts/landscape_dry_run_by_section.py` and its test. t24 added a "Plans
+  under Thus" line, its test and an import at the same places as this task's scenario lines.
+* Each conflict kept both sides, t24's first.
+* The red commit (`2268e60`) still fails its two dry-run tests, for the same reason as before.
+* Every commit id in this report is the rebased one. The task started from `af7052e` on dev.
+
+**After it:**
+* `uv sync --offline --all-packages` (dev added the CLI's `extraction` extra, already installed);
+* `scripts/make_landscape_fixture.py` reproduces the committed fixtures byte for byte;
+* the affected set is now 258 of 522 files, still over two minutes;
+* the changed directories and the always-run list: **4,370 passed in 80.90s**, at load average 19.0;
+* ruff format and check, pyright bare (0 errors), lint-imports (18 kept), the handler check (66),
+  validate_specs and the command-block check are all clean.
+
+**A hand-off I should have made.** To compare with dev I ran `git fetch` in the session. It only
+updated the local `origin/dev` ref, but it is a network call, which the PM's rule of 2026-10-22 gives
+to the operator even when it is read-only.
+
 ## The coach's edit, as committed (2026-10-26)
 
-`9dfa0cc`, the coach's edit alone, at one level as the PM ruled:
+`0fb8dc9`, the coach's edit alone, at one level as the PM ruled:
 * **Midterms DA.**
   * Merged: `golden dome` (`golden dome`, `dome`, `dome arms racing`) and `warming` (`warming`, and two
     forms the coach added, `global warming` and `climate change`).
@@ -157,19 +191,19 @@ runs the affected tests, and gives the operator the refill and dry-run blocks dr
 
 | Node | Status | Notes |
 |---|---|---|
-| scenario-vocabulary | Built; ac2 open | In order:<br>1. hand-written fixture and goldens (`1c5b830`);<br>2. tests, red against a skeleton (`2f66fcd`);<br>3. the rule, the domain model and the service (`cb66760`);<br>4. 20 mutants;<br>5. the seed at 1.4.0, the dry run's scenario lines and the guide (`0dffac7`);<br>6. the PM's rulings: the unlisted-words count and capitals in names, red (`981b0de`), then green (`e7f5103`), then 7 mutants.<br>7. the coach's edit, committed alone (`9dfa0cc`).<br>Next: the operator's refill and dry run |
+| scenario-vocabulary | Built; ac2 open | In order:<br>1. hand-written fixture and goldens (`a3d8cd2`);<br>2. tests, red against a skeleton (`f3da863`);<br>3. the rule, the domain model and the service (`b5b379d`);<br>4. 20 mutants;<br>5. the seed at 1.4.0, the dry run's scenario lines and the guide (`ca3adea`);<br>6. the PM's rulings: the unlisted-words count and capitals in names, red (`2268e60`), then green (`fd22d2b`), then 7 mutants.<br>7. the coach's edit, committed alone (`0fb8dc9`).<br>Next: the operator's refill and dry run |
 
 ## Acceptance criteria
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| ac1: a position's scenario list merges heading forms under one name and drops listed non-scenarios; positions without a list keep t14's rule, matching hand-written golden files; the taxonomy bump passes the released-ids check; tests shown failing first | PASS | **Goldens:** `tests/fixtures/landscape/scenario_vocabulary/` (`1c5b830`, before any code): `test_the_impact_sections_match_the_hand_written_golden`, `test_impact_cards_csv_matches_the_hand_written_golden` and `test_the_rest_of_report_md_is_the_report_without_a_list` pass. **Merged:** `Rising costs` (`drug prices` + `debt crisis`, one team each) shows on ranks 2 and 3. **Dropped:** `economic collapse` names nothing, and `a5` becomes a document with no scenario heading (2 of 6). **Without a list:** the Spending DA keeps `recession` and 1 withheld. **The lock:** `test_the_committed_taxonomies_keep_every_released_id` passes at 1.4.0. The `scenario-list-added` and `form-dropped-as-no-scenario` cases are refused unbumped and pass bumped. On a scratch copy with 1.3.0 locked, the seed at 1.3.0 is refused (`changed-without-bump`) and at 1.4.0 passes. **Red:** [below](#checks-shown-failing-for-their-reason) |
-| ac2: the coach's edited seed for policy-2026-27-nhi is committed and the next report uses it (operator for the coach's edit) | NOT RUN | **Committed:** `9dfa0cc` ([the edit](#the-coachs-edit-as-committed-2026-10-26)). **The next report uses it:** waits for the operator's refill and dry run under 1.4.0 ([follow-ups](#operator-follow-ups) 2 and 3) |
+| ac1: a position's scenario list merges heading forms under one name and drops listed non-scenarios; positions without a list keep t14's rule, matching hand-written golden files; the taxonomy bump passes the released-ids check; tests shown failing first | PASS | **Goldens:** `tests/fixtures/landscape/scenario_vocabulary/` (`a3d8cd2`, before any code): `test_the_impact_sections_match_the_hand_written_golden`, `test_impact_cards_csv_matches_the_hand_written_golden` and `test_the_rest_of_report_md_is_the_report_without_a_list` pass. **Merged:** `Rising costs` (`drug prices` + `debt crisis`, one team each) shows on ranks 2 and 3. **Dropped:** `economic collapse` names nothing, and `a5` becomes a document with no scenario heading (2 of 6). **Without a list:** the Spending DA keeps `recession` and 1 withheld. **The lock:** `test_the_committed_taxonomies_keep_every_released_id` passes at 1.4.0. The `scenario-list-added` and `form-dropped-as-no-scenario` cases are refused unbumped and pass bumped. On a scratch copy with 1.3.0 locked, the seed at 1.3.0 is refused (`changed-without-bump`) and at 1.4.0 passes. **Red:** [below](#checks-shown-failing-for-their-reason) |
+| ac2: the coach's edited seed for policy-2026-27-nhi is committed and the next report uses it (operator for the coach's edit) | NOT RUN | **Committed:** `0fb8dc9` ([the edit](#the-coachs-edit-as-committed-2026-10-26)). **The next report uses it:** waits for the operator's refill and dry run under 1.4.0 ([follow-ups](#operator-follow-ups) 2 and 3) |
 | scenario-vocabulary: `uv run pytest packages/debate_core/tests/arguments/landscape` | PASS | **877 passed in 5.32s** (load average 8.1) |
 
 ### Checks shown failing for their reason
 
-**The goldens before the code.** They were committed in `1c5b830`, worked out by hand in the fixture's
+**The goldens before the code.** They were committed in `a3d8cd2`, worked out by hand in the fixture's
 README from t14's README and goldens: no list, then the one list on the Costs advantage.
 * The Costs advantage's three rows. Rank 1 shows no scenario (its only labelled copy is under
   `scenario 1 economic collapse`, which is dropped). Ranks 2 and 3 show `Rising costs` (`KK` and `VV`).
@@ -180,7 +214,7 @@ README from t14's README and goldens: no list, then the one list on the Costs ad
 
 The base golden's How-to-read bullet was edited by hand in the same commit.
 
-**Red against a skeleton** (`2f66fcd`). The skeleton has the fields, `Scenario`, `card_scenario`'s
+**Red against a skeleton** (`f3da863`). The skeleton has the fields, `Scenario`, `card_scenario`'s
 `not_scenarios` parameter and `scenario_name`, and they do nothing. The run covered the domain, rule,
 vocabulary and render tests and `tests/config`: **38 failed, 341 passed**. (The commit message says 13
 rule and 8 service failures. The counts are 12 and 9.)
@@ -238,7 +272,7 @@ rule and 8 service failures. The counts are 12 and 9.)
 
 ### After the PM's rulings
 
-**Red against a skeleton** (`981b0de`). The skeleton has `ChainCoverage`'s two fields, filled with 0,
+**Red against a skeleton** (`2268e60`). The skeleton has `ChainCoverage`'s two fields, filled with 0,
 the dry run with no line for them, and the config check unchanged. The run covered `tests/config`, the
 vocabulary suite and the dry-run script's test: **6 failed, 91 passed**.
 
@@ -270,7 +304,7 @@ tests.
 
 ## Before the report (working agreement 10)
 
-The first round ran on `0dffac7`. After the rulings, on `e7f5103`:
+The first round ran on `ca3adea`. After the rulings, on `fd22d2b`:
 * `uv run scripts/affected_tests.py` chose the same 253 of 515 files from 22 changed files, still over
   two minutes, so the pull request's `ci` runs them.
 * The changed directories and the always-run list (the same 21 paths as below): **4,284 passed in
@@ -409,7 +443,7 @@ The first round:
 
 ## Operator follow-ups
 
-**Now.** The coach's edit is committed (`9dfa0cc`), so steps 2 and 3 are next. They follow t17's
+**Now.** The coach's edit is committed (`0fb8dc9`), so steps 2 and 3 are next. They follow t17's
 blocks, with the version and the success lines changed.
 
 1. **The coach's edit: done.** `tests/config` passed (77), and the edit is committed alone. For a later
@@ -428,7 +462,9 @@ uv run pytest tests/config
 
    Steps 2 and 3 run from the same worktree, after the `cd` above.
 
-2. **Refill the three caches under taxonomy 1.4.0.** The bump re-keys t17's caches.
+2. **Refill the three caches under taxonomy 1.4.0, again after the sync.** The bump re-keys t17's
+   caches. The first run (2026-10-26) classified, then refused the plan-text cache t24's format had
+   rewritten ([the sync](#the-sync-onto-dev-2026-10-26)); the whole block runs again.
    * Expected runtime: about 12 minutes (t17's refill: 37.6 + 221.7 + 412.9 s).
    * **Local only:** it writes under `~/.debate-research/dev/landscape/` alone: the classification cache
      and review queue, the plan-text cache, and the analytic-text cache. Nothing is published, and

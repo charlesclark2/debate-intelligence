@@ -20,6 +20,7 @@ regenerates it on `dev` ([`v1-e01-t16`](../plan_specs/v1/e01-repo-foundation/t16
 | [data/built-file-metadata.md](data/built-file-metadata.md) | Published built files under the evidence bucket's files/ prefix: the key layout, the metadata.json contract the V2 debate tub indexes, and the lookups by source, school or team for takedowns |
 | [data/caselist-backfile-seasons.md](data/caselist-backfile-seasons.md) | Earlier seasons' caselists as backfiles (`v1-e34-t34`): what the API serves from 2021-22 on, complete-archive sizes, and each import's counts; aggregates only |
 | [data/caselist-backfill-2026-09.md](data/caselist-backfill-2026-09.md) | Counts from the one-off caselist and camp-file backfill (`v1-e30-t06`), recorded by the operator; aggregates only |
+| [data/caselist-cloud-run-comparison.md](data/caselist-cloud-run-comparison.md) | The cutover's comparison of a dev cloud run with the Mac's offline reproduction of its parse and index: counts only (v1-e40-t06) |
 | [data/caselist-parse-report.md](data/caselist-parse-report.md) | Counts from the operator-run full-corpus caselist parse, per caselist and environment |
 | [data/caselist-removal-requests.md](data/caselist-removal-requests.md) | The register of caselist and OpenEv removal requests, one row per request id; no school, team code, filename or name |
 | [data/caselist-sync-runs.md](data/caselist-sync-runs.md) | Counts from each weekly `caselist pull`, recorded by the operator; aggregates only |

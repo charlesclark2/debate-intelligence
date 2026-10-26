@@ -62,13 +62,13 @@ v2.3's extension work.
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 50 | 45 | 242 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 108 | 83 | 498 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 46 | 32 | 262 |
-| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 15 | 6 | 113 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 48 | 32 | 266 |
+| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 16 | 7 | 114 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 22 | 13 | 154 |
-| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 18 | 13 | 76 |
-| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 1 | 12 | 2 | 34 |
+| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 19 | 13 | 78 |
+| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 1 | 14 | 4 | 38 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -338,6 +338,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [Policy affs whose plan text has no label, identified by the plan or the advantages](plan_specs/v1/e32-argument-landscape/t24-unlabelled-plan-affs.yaml) `v1-e32-t24-unlabelled-plan-affs` | Succeeded | 2 | 4.0 |
 | [What each impact runs through, named in words a debater uses](plan_specs/v1/e32-argument-landscape/t25-readable-impact-chains.yaml) `v1-e32-t25-readable-impact-chains` | Pending | 1 | 3.0 |
 | [The review queue ordered by the local proxy model, which places nothing](plan_specs/v1/e32-argument-landscape/t26-review-queue-proxy-ordering.yaml) `v1-e32-t26-review-queue-proxy-ordering` | Pending | 1 | 3.0 |
+| [Branches and mechanisms in the DA sections, counted first](plan_specs/v1/e32-argument-landscape/t27-branches-and-mechanisms-counted-first.yaml) `v1-e32-t27-branches-and-mechanisms-counted-first` | Pending | 2 | 4.0 |
 
 #### [E33 — Evidence File Builder](plan_specs/v1/e33-file-builder/epic.yaml)
 
@@ -352,6 +353,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [A camp occurrence row carries its camp path's digest, so a camp-path withdrawal stops it before a rebuild](plan_specs/v1/e33-file-builder/t07-camp-path-on-occurrence-rows.yaml) `v1-e33-t07-camp-path-on-occurrence-rows` | Pending | 1 | 2.0 |
 | [Built files carry no provenance line; the sidecar keeps the provenance](plan_specs/v1/e33-file-builder/t08-provenance-line-one-function.yaml) `v1-e33-t08-provenance-line-one-function` | Succeeded | 0 | 1.0 |
 | [files build refuses a store written under another style profile, as it refuses another parser version](plan_specs/v1/e33-file-builder/t09-style-profile-version-refusal.yaml) `v1-e33-t09-style-profile-version-refusal` | Succeeded | 1 | 1.0 |
+| [files check and files publish warn when a built file's style profile is not the running one](plan_specs/v1/e33-file-builder/t10-sidecar-style-profile-warning.yaml) `v1-e33-t10-sidecar-style-profile-warning` | Pending | 1 | 1.0 |
 
 
 ### v1.3 — URL → verified card
@@ -370,12 +372,13 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [`debate-research fetch` command and recorded fixtures](plan_specs/v1/e04-article-retrieval/t06-fetch-command.yaml) `v1-e04-t06-fetch-command` | Succeeded | 2 | 7.5 |
 | [How extraction and access classification behave on real pages, measured in place](plan_specs/v1/e04-article-retrieval/t07-real-page-measurement.yaml) `v1-e04-t07-real-page-measurement` | Pending | 1 | 2.0 |
 | [An Article found by its DOI and by a URL a snapshot was fetched from](plan_specs/v1/e04-article-retrieval/t08-article-lookup-by-identifier-and-fetched-url.yaml) `v1-e04-t08-article-lookup-by-identifier-and-fetched-url` | Pending | 1 | 3.0 |
+| [fetch --paste can report the access status of the user's own copy](plan_specs/v1/e04-article-retrieval/t09-reported-status-for-pasted-text.yaml) `v1-e04-t09-reported-status-for-pasted-text` | Pending | 1 | 1.0 |
 
 #### [E06 — Card Cutting, Citation & Export](plan_specs/v1/e06-card-cutting/epic.yaml)
 
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
-| [CitationService with per-field provenance](plan_specs/v1/e06-card-cutting/t01-citation-service.yaml) `v1-e06-t01-citation-service` | Pending | 1 | 9.0 |
+| [CitationService with per-field provenance](plan_specs/v1/e06-card-cutting/t01-citation-service.yaml) `v1-e06-t01-citation-service` | Succeeded | 1 | 9.0 |
 | [CardService pipeline](plan_specs/v1/e06-card-cutting/t02-card-service.yaml) `v1-e06-t02-card-service` | Pending | 3 | 10.0 |
 | [Card format profiles from team conventions](plan_specs/v1/e06-card-cutting/t03-format-profiles.yaml) `v1-e06-t03-format-profiles` | Pending | 2 | 9.5 |
 | [DOCX renderer](plan_specs/v1/e06-card-cutting/t04-docx-renderer.yaml) `v1-e06-t04-docx-renderer` | Pending | 3 | 11.0 |
@@ -500,6 +503,7 @@ Debaters search the team's evidence store from a school Chromebook or at home: a
 | [Open on OpenEv: a camp card links to its camp file](plan_specs/v1/e39-evidence-search-pilot/t16-open-on-openev.yaml) `v1-e39-t16-open-on-openev` | Pending | 1 | 3.0 |
 | [The landscape report and its school view on the pilot, for signed-in team members](plan_specs/v1/e39-evidence-search-pilot/t17-landscape-pages.yaml) `v1-e39-t17-landscape-pages` | Succeeded | 2 | 6.0 |
 | [Backfile seasons searchable on the pilot, without slowing its cold start](plan_specs/v1/e39-evidence-search-pilot/t18-backfiles-in-the-pilot-index.yaml) `v1-e39-t18-backfiles-in-the-pilot-index` | Pending | 2 | 4.0 |
+| [A rebuilt index identical to the published one records the suppression list it was checked against](plan_specs/v1/e39-evidence-search-pilot/t19-identical-rebuild-records-its-suppression-list.yaml) `v1-e39-t19-identical-rebuild-records-its-suppression-list` | Pending | 1 | 2.0 |
 
 
 ### v1.8 — Weekly caselist run in the cloud
@@ -512,16 +516,18 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 |---|---|---|---|
 | [ADR-0020: the weekly caselist run in the cloud, its credentials and its state](plan_specs/v1/e40-cloud-caselist-run/t01-cloud-run-adr.yaml) `v1-e40-t01-cloud-run-adr` | Succeeded | 2 | 3.0 |
 | [The caselist token in Secrets Manager, and a scheduled login that renews it](plan_specs/v1/e40-cloud-caselist-run/t02-secrets-token-store-and-login.yaml) `v1-e40-t02-secrets-token-store-and-login` | InProgress | 1 | 4.0 |
-| [The weekly run as a container on a schedule](plan_specs/v1/e40-cloud-caselist-run/t03-run-image-and-schedule.yaml) `v1-e40-t03-run-image-and-schedule` | InProgress | 1 | 4.0 |
+| [The weekly run as a container on a schedule](plan_specs/v1/e40-cloud-caselist-run/t03-run-image-and-schedule.yaml) `v1-e40-t03-run-image-and-schedule` | Succeeded | 1 | 4.0 |
 | [A cloud run keeps its state in the evidence bucket](plan_specs/v1/e40-cloud-caselist-run/t04-run-state-on-s3.yaml) `v1-e40-t04-run-state-on-s3` | InProgress | 1 | 5.0 |
 | [A failed or late cloud run emails the coach](plan_specs/v1/e40-cloud-caselist-run/t05-run-alerts.yaml) `v1-e40-t05-run-alerts` | Succeeded | 1 | 2.0 |
-| [Cut over: the cloud run takes the schedule and the Mac stops](plan_specs/v1/e40-cloud-caselist-run/t06-cutover.yaml) `v1-e40-t06-cutover` | InProgress | 4 | 2.0 |
+| [Cut over: the cloud run takes the schedule and the Mac stops](plan_specs/v1/e40-cloud-caselist-run/t06-cutover.yaml) `v1-e40-t06-cutover` | Succeeded | 4 | 2.0 |
 | [The evidence bucket itself refuses an unconditional write of the run lock](plan_specs/v1/e40-cloud-caselist-run/t07-lock-writes-conditional-at-the-bucket.yaml) `v1-e40-t07-lock-writes-conditional-at-the-bucket` | Pending | 1 | 1.0 |
 | [A week a killed run published is parsed by the next run, not left for the next import](plan_specs/v1/e40-cloud-caselist-run/t08-parse-owed.yaml) `v1-e40-t08-parse-owed` | Pending | 1 | 3.0 |
 | [The backfile imports run once each in the cloud, not on the operator's machine](plan_specs/v1/e40-cloud-caselist-run/t09-cloud-backfile-import.yaml) `v1-e40-t09-cloud-backfile-import` | Pending | 2 | 3.0 |
 | [A restored working copy that brings the raw sources a hand prod publish needs](plan_specs/v1/e40-cloud-caselist-run/t10-restore-with-sources.yaml) `v1-e40-t10-restore-with-sources` | Pending | 1 | 2.0 |
 | [The dev lock held for good when the weekly run's home moves to prod](plan_specs/v1/e40-cloud-caselist-run/t11-run-home-moved-holder.yaml) `v1-e40-t11-run-home-moved-holder` | Pending | 1 | 2.0 |
 | [A held upload a cloud task records reaches the bucket, not only its working copy](plan_specs/v1/e40-cloud-caselist-run/t12-held-upload-records-reach-the-bucket.yaml) `v1-e40-t12-held-upload-records-reach-the-bucket` | Pending | 1 | 3.0 |
+| [In bucket mode, the report stage counts a source the bucket holds at its manifest digest as present](plan_specs/v1/e40-cloud-caselist-run/t13-bucket-mode-report-counts-held-sources.yaml) `v1-e40-t13-bucket-mode-report-counts-held-sources` | Pending | 1 | 3.0 |
+| [The deploy script's region test, which failed once under load, made deterministic](plan_specs/v1/e40-cloud-caselist-run/t14-deploy-script-region-test-under-load.yaml) `v1-e40-t14-deploy-script-region-test-under-load` | Pending | 0 | 1.0 |
 
 
 ## V2

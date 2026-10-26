@@ -469,3 +469,14 @@ def test_paste_for_a_string_that_is_not_a_source_url_exits_one(world: World, tmp
     assert result.exit_code == ExitCode.DOMAIN_FAILURE
     assert envelope(result)["error"]["code"] == "INVALID_SOURCE_URL"
     assert world.snapshot_count() == 0
+
+
+def test_json_after_the_command_is_the_same_envelope_as_before_it(world: World) -> None:
+    """The spec writes `fetch <URL> [--refresh] [--json]`; the global `--json` works too."""
+    world.fetcher.add(URL, BODY)
+
+    after = envelope(invoke("fetch", URL, "--json"))
+    before = envelope(invoke("--json", "fetch", URL))
+
+    assert after["data"]["snapshot"]["snapshot_id"] == before["data"]["snapshot"]["snapshot_id"]
+    assert (after["command"], after["status"]) == ("fetch", "ok")

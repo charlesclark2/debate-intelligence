@@ -35,9 +35,11 @@ exits 1.
 
 ## `--json`
 
-One object on stdout, described by `packages/debate_core/schemas/fetch_result.v1.json`: the report
-under `data` on exit 0, the same report under `error.details` for a status that is not ACCESSIBLE.
-Neither ever contains page text or pasted text.
+Accepted after the command (`fetch <URL> --json`, as the spec writes it) as well as before it
+(`debate-research --json fetch <URL>`). One object on stdout, described by
+`packages/debate_core/schemas/fetch_result.v1.json`: the report under `data` on exit 0, the same
+report under `error.details` for a status that is not ACCESSIBLE. Neither ever contains page text or
+pasted text.
 """
 
 from __future__ import annotations
@@ -51,7 +53,7 @@ import typer
 
 from debate_cli.context import CliContext, cli_context, command_name
 from debate_cli.exit_codes import ExitCode
-from debate_cli.output import CommandFailure, JsonValue, TableSpec
+from debate_cli.output import CliOutput, CommandFailure, JsonValue, OutputMode, TableSpec
 from debate_core.application.article_fetch import SOURCE_NOT_ACCESSIBLE_CODE, ArticleFetch, FetchReport
 from debate_core.application.article_service import UserTextNotAttested
 from debate_core.domain import AccessStatus, ProvenanceMode
@@ -94,6 +96,9 @@ def fetch(
             help="With --paste: attest lawful access without a prompt. Required where none can be shown.",
         ),
     ] = False,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Write one machine-readable JSON object to stdout.")
+    ] = False,
 ) -> None:
     """Retrieve an article or open-access PDF into a hashed snapshot, or report why it cannot be used.
 
@@ -108,6 +113,8 @@ def fetch(
     3  PAYWALLED, BLOCKED, ROBOTS_DISALLOWED, NOT_FOUND, UNSUPPORTED_TYPE or ERROR; no snapshot stored
     """
     cli = cli_context(ctx)
+    if json_output and not cli.output.is_json:
+        cli.output = CliOutput(OutputMode.JSON, verbose=cli.output.verbose)
     _check_arguments(url, refresh=refresh, paste=paste, source_url=source_url, lawful_access=lawful_access)
     if paste is None or source_url is None:
         report = _run(_retrieve(cli.services.article_fetch(), str(url), refresh=refresh))

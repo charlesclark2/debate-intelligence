@@ -17,23 +17,20 @@ attribution, and `metadata.json`, last. The gate refuses a missing, stale or FAI
 built from a draft recipe (the sidecar now records the recipe's status), and a file that no longer
 passes when checked again. A warning never blocks. Publishing is idempotent and checks each object
 after it lands. In bucket mode it holds the run lock. A dry run builds no bucket client. The
-takedown lookup `find_by_source(source_sha256)` reads every published `metadata.json`.
-**The PM should look first at the two questions below**, which the relay prompt bundles:
-
-* the policy does not name `metadata.json` as a place a school or team code may live, so those
-  fields and the lookup by school or team code (half of ac6) are not built;
-* a published pin that needed its school or team code to tell two disclosures apart no longer
-  resolves (ac7).
+takedown lookups are `find_by_source(source_sha256)`, over every published `metadata.json`, and,
+since the PM's rulings of 2026-10-25, `find_by_disclosure(school, team_code)`, over every published
+provenance sidecar. `metadata.json` holds no school or team code. The rulings and what they amend are
+under Deviations.
 
 The Goal stays **InProgress**: ac5 and the coach's approval are operator steps after merge (the PR
-merges `--partial`), and ac6's school/team half waits on the policy ruling.
+merges `--partial`).
 
 ## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
-| `metadata-contract` | Done, partly | Model, key builder, generated schema, `docs/data/built-file-metadata.md`. No `school`/`team_code` in `sources[]`, no `schools`/`team_codes` arrays: question 1 |
-| `publish-service` | Done, partly | Gate, upload, idempotence, checksums, dry run, `find_by_source(source_sha256)`. No lookup by school or team code: question 1 |
+| `metadata-contract` | Done, as ruled | Model, key builder, generated schema, `docs/data/built-file-metadata.md`. No `school`/`team_code` in `sources[]` and no `schools`/`team_codes` arrays, by the PM's ruling on question 1 (B) |
+| `publish-service` | Done, as ruled | Gate, upload, idempotence, checksums, dry run, `find_by_source(source_sha256)` over `metadata.json`, and `find_by_disclosure(school, team_code)` over the published sidecars (ruling Q1 B) |
 | `publish-command` | Done | `files publish`, with `--env`, `--confirm-prod`, `--recipes`, `--json` (Decisions) |
 | `smoke-checks` | Done | `tests/smoke/test_files_publish.py`, plus a row in `tests/smoke/README.md` |
 | `operator-publish` | Not run | Operator, after merge: dev after the cutover's step 9, prod after the coach approves (Operator follow-ups) |
@@ -50,13 +47,13 @@ record the recipe's status, so the writer now writes `recipe_status` (commit `b3
 | ac3: idempotent (SKIPPED), checksums verified after upload, `--dry-run` calls no S3 (moto) | PASS | `test_publishing_an_unchanged_file_again_is_skipped_and_writes_nothing` (no new object version, no put); `test_an_object_that_lands_with_another_digest_stops_the_publish_before_the_metadata[lie_on_put, lie_on_head]`; `test_a_dry_run_lists_the_keys_and_never_builds_a_bucket_client` (bucket factory called 0 times), and the CLI dry run run without moto under the disabled socket |
 | ac4: `docs/data/built-file-metadata.md`; `tests/smoke/test_files_publish.py` dry-run publish in validate-dev | PASS | The document is committed. `uv run pytest tests/smoke/test_files_publish.py` → `2 passed in 5.14s`, through the harness's installed CLI. validate-dev runs it on `dev` after the merge |
 | ac5: operator publishes synthetic samples to dev and the first coach-approved files to prod, and records them in `docs/data/file-publish-log.md` | NOT RUN | Operator work after the merge (PM brief). The dev sequence was rehearsed here into a scratch data directory as far as a dry run, with a fake bucket name and no AWS config: 3 imports, 3 parses, 3 builds PASS, dry run `WOULD_PUBLISH`, 7 s |
-| ac6: a lookup by source sha256, school or team code returns exactly the files with cards from it; every sidecar source is in `sources[]` | PASS by source sha256; NOT RUN by school or team code | `uv run pytest …test_file_publish_service.py -k find_by_source` → `4 passed`: exactly the right prefixes for three sources over two files, none for an unknown source, an unreadable `metadata.json` reported, and the published sidecar's sources equal to `sources[]`. School and team code: question 1 |
-| ac7: the uploaded recipe holds no school, team code, tournament or round, and still resolves to the same occurrences, by test | PASS for pins that did not need the removed fields; FAIL for pins that did | `test_the_uploaded_recipe_names_no_side_tournament_round_school_or_team_and_resolves_the_same`: no attribution in the uploaded YAML, which loads and resolves to the same source, element and disclosure for every card. `test_pins_inside_hats_lose_their_side_tournament_round_school_and_team_too`. An ad-hoc run of the case `files suggest` writes such fields for (two teams, same bytes, same side): the original pin resolves, the published one gives `PIN_MISMATCH`. Question 2 |
+| ac6: a lookup by source sha256 (over `metadata.json`) or a school or team code (over the published provenance sidecars) returns exactly the files with cards from it; every sidecar source is in `sources[]` (wording as the PM amends it, ruling Q1 B) | PASS | `uv run pytest …test_file_publish_service.py -k find_by_source` → `8 passed`. By source: exactly the right prefixes for three sources over two files, none for an unknown source, an unreadable `metadata.json` reported, the published sidecar's sources equal to `sources[]`. By school or team (three files, three teams, two schools): exactly the right prefixes by school, by team code and by both on one card, none for an unknown school or team or a mismatched pair, no case folding, an unreadable sidecar reported, a call naming neither refused, and no school or team code in any `metadata.json`. Red first: the four new tests failed (`no attribute 'find_by_disclosure'`); three mutants (`and`→`or`, the unreadable report dropped, case folding) each caught |
+| ac7: the uploaded recipe holds no side, school, team code, tournament or round, every pin still names its card's source and element as the sidecar does, and it resolves to the same occurrences wherever no removed field was needed (wording as the PM amends it, ruling Q2 A and FYI 1) | PASS as amended | `test_the_uploaded_recipe_names_no_side_tournament_round_school_or_team_and_resolves_the_same`: no attribution in the uploaded YAML, which loads and resolves to the same source, element and disclosure for every card. `test_pins_inside_hats_lose_their_side_tournament_round_school_and_team_too`. An ad-hoc run of the case `files suggest` writes such fields for (two teams, same bytes, same side): the original pin resolves, the published one gives `PIN_MISMATCH`, which the amended wording allows. Before upload the service asserts every pin names the sidecar's source and element |
 | ac8: a non-PASS file is refused before any upload, and a warning alone never blocks, by tests shown failing first | PASS | Red run against a scratch copy of the service whose gate refuses nothing: **8 failed** (every refusal test), 16 passed (layout, idempotence, lookup, recipe, and the warning test, which a refuse-nothing gate also passes). Then one mutant per gate step, each caught by a behaviour test (table under Decisions). `test_a_warning_never_blocks_and_is_recorded_in_the_metadata`: a real `cite-present` WARN, PUBLISHED, `quality_warnings: 1` |
 | Node: metadata contract documented (`contentMatch: source_sha256s`) | PASS | `grep -c source_sha256s docs/data/built-file-metadata.md` → 2 |
 | Node: metadata model and key builder tests | PASS | `uv run pytest packages/debate_core/tests/domain/test_built_file_metadata.py` → `26 passed in 1.34s` |
-| Node: publish service tests (moto) | PASS | `uv run pytest packages/debate_core/tests/application/test_file_publish_service.py` → `28 passed in 3.33s` |
-| Node: source reverse lookup (moto) | PASS (by source sha256) | `… -k find_by_source` → `4 passed in 2.52s` |
+| Node: publish service tests (moto) | PASS | `uv run pytest packages/debate_core/tests/application/test_file_publish_service.py` → `32 passed in 4.08s` |
+| Node: source reverse lookup (moto) | PASS | `… -k find_by_source` → `8 passed in 2.87s` (source sha256, school, team code) |
 | Node: publish command tests | PASS | `uv run pytest packages/debate_cli/tests/commands/test_files.py -k publish` → `6 passed in 3.13s` |
 | Node: pyright on debate_cli | PASS | `uv run pyright packages/debate_cli` → `0 errors, 0 warnings, 0 informations` |
 | Node: publish smoke check | PASS | `uv run pytest tests/smoke/test_files_publish.py` → `2 passed in 5.14s` |
@@ -65,6 +62,14 @@ record the recipe's status, so the writer now writes `recipe_status` (commit `b3
 | Node: coach approves the first published real files | NOT RUN | A sign-off |
 
 ### Checks run before the report
+
+After the rulings (commit `f806c9f`, the lookup by school or team code), which changed
+`file_publish_service.py`, its tests and two documents: `test_file_publish_service.py` → `32
+passed in 4.08s`, `-k find_by_source` → `8 passed`, `test_built_file_metadata.py` → `26 passed`,
+`test_files.py -k publish` with `tests/smoke/test_files_publish.py` → `8 passed`, ruff and pyright on
+the changed files clean, `lint-imports` 18 kept, the schema `--check` up to date, links and docs
+descriptions OK. The affected set was already past two minutes and is the PR's `ci` check. The runs
+below are the first round's.
 
 * `uv run scripts/affected_tests.py` selects **211 files**. Run as one pytest under
   `perl -e 'alarm 115'` on the interpreter, it reached the alarm (`1:55.04 total`), so under
@@ -114,14 +119,33 @@ record the recipe's status, so the writer now writes `recipe_status` (commit `b3
 
 ## Deviations from the spec
 
+### The PM's rulings of 2026-10-25, quoted
+
+* **Q1: B.** "No policy change. Build the lookup by school or team code over the published
+  .provenance.json objects in files/, beside find_by_source(source_sha256) over metadata.json. Test
+  it with moto: exactly the right files, none for an unknown school or team, and an unreadable sidecar
+  reported. metadata.json keeps the source fields only. The PM amends ac6 in the next batch to: 'a
+  source sha256 (over metadata.json) or a school or team code (over the published provenance
+  sidecars)'." Built: `find_by_disclosure(school, team_code)`, commit `f806c9f`. ac6 is PASS as amended.
+* **Q2: A.** "Amend ac7's wording as you proposed, in the next batch. What's built and tested stands."
+* **FYI 1** (accepted): "Policy 1.15 governs, so side goes too, and the PM adds it to ac7."
+* **FYIs 2 and 3** (accepted): `--env`, `--confirm-prod`, `--recipes`, and `RECIPE_STATUS_UNRECORDED`.
+* **The evidence-store layout document's `files/` examples:** "the PM fixes them in the next
+  batch. Leave them." Left as they are.
+
+The spec still carries ac6's and ac7's old wording until the PM's next batch; this session does not
+edit acceptance criteria.
+
+### What differs from the spec as written
+
 1. **A published pin also loses its `side`.** The PM amendment of 2026-10-19 names `school`,
    `team_code`, `tournament` and `round`. Data-use policy version 1.15, approved 2026-10-24, says a
    published recipe "loses every such field", and its list is "a pin's side, tournament, round, and
    school and team code". The policy is later, stricter, and governs (agreement 7), so `side` goes
-   too (commit `c15dabb`). ac7's wording would want a matching amendment.
-2. **No `school`/`team_code` in `metadata.json`, and no lookup by them** (PM brief: stop before
-   building them). The spec's description, the `metadata-contract` node and ac6 ask for them; the
-   policy does not cover them. Question 1.
+   too (commit `c15dabb`). Accepted (FYI 1); the PM adds it to ac7.
+2. **No `school`/`team_code` in `metadata.json`; the lookup by them reads the sidecars.** The spec's
+   description, the `metadata-contract` node and ac6 put them in `metadata.json`; the policy does not
+   cover that, and the PM ruled B (Q1).
 3. **Outside `constraints.packages`:**
    * `debate_core.integrations.docx_file_writer/writer.py` (one line) and its tests: the PM
      amendment of 2026-10-24 says this task adds the recipe status to the sidecar, and the writer
@@ -132,6 +156,9 @@ record the recipe's status, so the writer now writes `recipe_status` (commit `b3
    `--confirm-prod` follow `tub index publish`, the precedent for a command that writes a bucket:
    `DEBATE_ENV` picks the bucket and `--env` confirms it. `--recipes` exists because a built file does
    not record where its recipe is (Decisions). `--json` follows the other `files` commands.
+   Accepted (FYIs 2 and 3).
+5. **ac7's "still resolves to the same occurrences"** holds only where no removed field was needed to
+   tell two disclosures apart. Ruled Q2 A: the wording is amended, what is built stands.
 
 ## Decisions and assumptions
 
@@ -312,20 +339,17 @@ listing matches the files approved: the node's custom criterion.
 
 ## Follow-up work
 
-* **`docs/architecture/evidence-store-layout.md`'s example keys for `files/`**
-  (`files/hsld26/2026-09-15/aff-warming-core.docx`, `….provenance.json`) predate this layout. Its
-  prefix table should name `files publish` and the five objects. Outside this task's packages; for the
-  PM to place (E33 close-out, or whoever next edits the layout).
-* **Lookup by school or team code**, once question 1 is ruled: either the metadata fields and arrays
-  (option A) or a lookup over the published sidecars (option B), in this task's next session.
-* **A published recipe as a rebuild input** (question 2): if the PM wants a published recipe to
+* **`docs/architecture/evidence-store-layout.md`'s example keys for `files/`** predate this layout:
+  the PM fixes them in the next batch (ruling of 2026-10-25), so they are left here.
+* **ac6's and ac7's wording**: the PM's next batch, as ruled.
+* **A published recipe as a rebuild input** (question 2, not chosen): if the PM wants a published recipe to
   rebuild the same file, the pin needs something that tells disclosures apart without naming them.
   A plain `disclosure_digest` would not do: it is an unkeyed digest of `<caselist>/<path>`, and the
   path names the team.
 
 ## PM questions (relay prompt)
 
-Paste the block below to the PM.
+Answered on 2026-10-25; the rulings are quoted under Deviations. The prompt as it was sent:
 
 ```text
 v1-e33-t05-file-publish: two questions, and three things I will proceed on unless told otherwise.

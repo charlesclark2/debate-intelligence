@@ -849,5 +849,22 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e01-t36-prerelease-superseded-commit
+    - id: t37
+      kind: Task
+      name: 'A CI check that every locked package''s licence is one the project accepts'
+      description: >-
+        A CI check that every locked package's licence is one the project accepts.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t37-licence-check-over-the-lock.yaml
+        goalRef: v1-e01-t37-licence-check-over-the-lock
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t37-licence-check-over-the-lock reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t37-licence-check-over-the-lock
 status:
   phase: Pending

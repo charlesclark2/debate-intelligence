@@ -43,6 +43,7 @@ import typer
 from debate_cli.commands import (
     caselist,
     caselist_auth,
+    caselist_backfile,
     caselist_cards,
     caselist_parse,
     caselist_pull,
@@ -74,6 +75,8 @@ def register_commands(app: typer.Typer) -> None:
     app.add_typer(configuration)
 
     disclosed_evidence = command_group("caselist", "Import, publish and check disclosed caselist evidence.")
+    disclosed_evidence.command("backfile-import")(caselist_backfile.backfile_import)
+    disclosed_evidence.command("backfile-survey")(caselist_backfile.backfile_survey)
     disclosed_evidence.command("cards")(caselist_cards.cards)
     disclosed_evidence.command("import")(caselist.import_archive)
     disclosed_evidence.command("import-openev")(caselist.import_openev)
@@ -105,11 +108,13 @@ def register_commands(app: typer.Typer) -> None:
     app.add_typer(argument_landscape)
 
     evidence_files = command_group(
-        "files", "Build evidence files from recipes, check built files, and draft recipes (E33)."
+        "files",
+        "Build evidence files from recipes, check built files, draft recipes, and publish built files (E33).",
     )
     evidence_files.command("build")(files.build)
     evidence_files.command("check")(files.check)
     evidence_files.command("suggest")(files.suggest)
+    evidence_files.command("publish")(files.publish)
     app.add_typer(evidence_files)
 
     evidence_store = command_group("store", "Move evidence between this machine and its bucket.")

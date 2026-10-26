@@ -7,16 +7,18 @@ Each answers from a script or a rule, never from the network, for the ports in
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from urllib.parse import urlsplit
 
-from debate_core.application.ports.providers import (
-    Clock,
-    ExtractedContent,
-    ExtractionQuality,
-    SourceMetadataHints,
-)
+from debate_core.application.ports.providers import Clock
 from debate_core.domain import AccessStatus
 from debate_core.domain.discovery import CandidateResult, ProviderQuery, ProviderResponse
-from debate_core.retrieval.fetch_types import FetchResult
+from debate_core.retrieval.extraction import (
+    ExtractedContent,
+    ExtractionQuality,
+    UnsupportedContentType,
+    UnverifiedMetadataHints,
+)
+from debate_core.retrieval.fetch_types import FetchError, FetchResult, HttpStatusError
 from debate_core.testing.fakes.clock_and_ids import FixedClock
 
 __all__ = ["FakeArticleFetcher", "FakeContentExtractor", "FakeSearchProvider"]
@@ -70,9 +72,12 @@ class FakeSearchProvider:
 class FakeArticleFetcher:
     """A fetcher that serves canned responses and 404s everything else.
 
-    Unknown URLs come back as a `NOT_FOUND` :class:`~debate_core.application.ports.providers.
-    FetchResult` rather than an exception, because that is what the port promises: a failed
-    retrieval is an answer the platform records, not a crash.
+    Unknown URLs come back as the real fetcher answers a 404 (PM amendment 2026-10-21, from
+    v1-e04-t02's review): a :class:`~debate_core.retrieval.fetch_types.FetchResult` with status 404,
+    an :class:`~debate_core.retrieval.fetch_types.HttpStatusError` and `access_status` `UNKNOWN`,
+    since only the access classifier (v1-e04-t03) turns a status into `NOT_FOUND`. It is a result
+    rather than an exception, because that is what the port promises: a failed retrieval is an
+    answer the platform records, not a crash.
     """
 
     def __init__(self, *, clock: Clock | None = None, elapsed_ms: float = 1.0) -> None:
@@ -87,12 +92,25 @@ class FakeArticleFetcher:
         url: str,
         body: bytes,
         *,
-        status_code: int = 200,
+        status_code: int | None = 200,
         content_type: str | None = "text/html; charset=utf-8",
         access_status: AccessStatus = AccessStatus.ACCESSIBLE,
         final_url: str | None = None,
+        error: FetchError | None = None,
     ) -> FetchResult:
-        """Register the response this fetcher returns for `url`, and return it."""
+        """Register the response this fetcher returns for `url`, and return it.
+
+        A 4xx or 5xx with no `error` given carries the `HttpStatusError` the real fetcher would
+        attach to it. A transport failure (`error` a `Timeout`, a `RobotsDisallowed`) takes
+        `status_code=None` and an empty body, as the result model requires.
+        """
+        if error is None and status_code is not None and status_code >= 400:
+            error = HttpStatusError(
+                url=final_url or url,
+                message=f"{_host(final_url or url)} answered HTTP {status_code}",
+                status_code=status_code,
+                attempts=1,
+            )
         response = FetchResult(
             requested_url=url,
             final_url=final_url or url,
@@ -103,6 +121,7 @@ class FakeArticleFetcher:
             elapsed_ms=self._elapsed_ms,
             fetched_at=self._clock.now(),
             access_status=access_status,
+            error=error,
         )
         self._responses[url] = response
         return response
@@ -118,12 +137,23 @@ class FakeArticleFetcher:
             status_code=404,
             elapsed_ms=self._elapsed_ms,
             fetched_at=self._clock.now(),
-            access_status=AccessStatus.NOT_FOUND,
+            access_status=AccessStatus.UNKNOWN,
+            error=HttpStatusError(
+                url=url, message=f"{_host(url)} answered HTTP 404", status_code=404, attempts=1
+            ),
         )
 
 
+def _host(url: str) -> str:
+    """The host, as the real fetcher's messages name it: never the whole URL."""
+    return urlsplit(url).hostname or "the server"
+
+
 class FakeContentExtractor:
-    """Splits a decoded body into paragraphs on blank lines.
+    """Splits a decoded body into paragraphs on blank lines, and refuses anything but text.
+
+    A body it does not read raises :class:`~debate_core.retrieval.extraction.UnsupportedContentType`,
+    the refusal the port names, so a service that catches the port's refusals catches this one.
 
     Deterministic and dependency-free, so a test that cares about what happens *around*
     extraction — snapshotting, hashing, cutting — does not need a real HTML sample or trafilatura.
@@ -142,14 +172,14 @@ class FakeContentExtractor:
     def extract(self, fetched: FetchResult) -> ExtractedContent:
         content_type = (fetched.content_type or "text/plain").split(";")[0].strip().lower()
         if not content_type.startswith("text/") and content_type != "application/xhtml+xml":
-            raise ValueError(f"{self._name} does not handle {content_type}")
+            raise UnsupportedContentType(fetched.content_type, None)
         text = fetched.body.decode("utf-8", errors="replace")
         paragraphs = tuple(block.strip() for block in text.split("\n\n") if block.strip())
         return ExtractedContent(
             paragraphs=paragraphs,
             extractor_name=self._name,
             extractor_version=self.version,
-            metadata_hints=SourceMetadataHints(canonical_url=fetched.final_url),
+            metadata_hints=UnverifiedMetadataHints(canonical_url=fetched.final_url),
             quality=ExtractionQuality(
                 character_count=sum(len(paragraph) for paragraph in paragraphs),
                 paragraph_count=len(paragraphs),

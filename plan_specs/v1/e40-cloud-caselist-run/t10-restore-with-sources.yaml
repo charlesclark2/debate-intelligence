@@ -1,0 +1,80 @@
+# TASK v1-e40-t10-restore-with-sources - A restored working copy that brings the raw sources a hand prod publish needs
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t10-restore-with-sources
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "A restored working copy that brings the raw sources a hand prod publish needs"
+spec:
+  # Filed by the PM, 2026-10-25, from v1-e40-t06's question 2 and the PM's ruling (a).
+  description: >-
+    `caselist restore-run-state` (v1-e40-t06) restores the run's manifests, database and run
+    state under the dev lock, but no raw sources, so a hand publish of a new week's sources to
+    prod from it has nothing to publish. Add `--with-sources`, optionally narrowed by caselist
+    and snapshot, that fetches the current `raw/` objects the restored manifests name, checks
+    each one's sha256, and writes only into the restored directory, under the command's existing
+    refusals. It prints counts only. The runbook's hand prod publish uses it and deletes the
+    copy after the step (data-use policy 1.18).
+  priority: 2
+  constraints:
+    packages: [debate_core.application, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, docs/runbooks, tests/smoke]
+    forbidden:
+      - A write outside the restored directory
+      - A source kept whose sha256 does not match its manifest
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e40-t06-cutover
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Against moto, `--with-sources` fetches exactly the sources the restored manifests
+        name, refuses a sha256 mismatch, writes nothing outside the directory, and keeps the
+        command's refusals; tests shown failing first.
+    - id: ac2
+      description: >-
+        The runbook's hand prod publish restores with sources, publishes and deletes the
+        copy; check_command_blocks and check_links pass.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t10-restore-with-sources-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    Let the restore fetch the raw sources its manifests name, checked, for a hand prod publish.
+  goalRef:
+    name: v1-e40-t10-restore-with-sources
+  graph:
+    nodes:
+      - id: restore-with-sources
+        kind: Task
+        name: Restore with sources
+        description: >-
+          Let the restore fetch the raw sources its manifests name, checked, for a hand
+          prod publish.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Caselist tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, run_state]
+status:
+  phase: Pending

@@ -57,6 +57,11 @@ class ArchivesResource:
         logger.info("OpenCaselist: listed %d archive(s) for %s", len(listings), slug)
         return sorted(listings, key=lambda item: (item.archive_date is None, item.archive_date, item.name))
 
+    async def declared_size(self, archive: ArchiveListing) -> int | None:
+        """The archive's size as the file host declares it, without fetching it (`v1-e34-t34`)."""
+        name = safe_inbox_name(archive.name, source_name=archive.name)
+        return await self._transport.declared_size(archive.url, operation=f"size of {name}", source_name=name)
+
     async def download(self, archive: ArchiveListing, inbox: Path) -> DownloadedFile:
         name = safe_inbox_name(archive.name, source_name=archive.name)
         # A complete archive has its own, larger ceiling; a weekly keeps the archive one (`v1-e34-t04`).

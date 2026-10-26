@@ -9,7 +9,10 @@ only the two parameters. The holder re-reads the suppression list through the sa
 and the access audit writes to the same audit stream as the account page (`v1-e39-t07`). The card
 download (`v1-e39-t08`) builds files with the E33 writer and its parser, reading each source from the
 evidence bucket through an `S3SnapshotStore` per `raw/` prefix (`raw/caselist/<slug>`, or a camp
-file's `raw/openev/<year>`), on the same client; it writes nothing anywhere. Routes
+file's `raw/openev/<year>`), on the same client; it writes nothing anywhere. The landscape pages
+(`v1-e39-t17`) read `reports/landscape/` through an `S3EvidenceObjectStore` on the same client, held
+by a :class:`~debate_core.application.tub.landscape_pages.LandscapeShelf` that renders each newest
+bundle once with :func:`~debate_api.landscape_markdown.render_bundle`. Routes
 ask `app.state.pilot` for the use cases and never import an adapter (the import contracts and
 `scripts/check_thin_handlers.py` hold them to that).
 
@@ -18,7 +21,8 @@ role): `ssm:GetParameter` on the two parameters, `logs:CreateLogStream` and `log
 its audit group, `s3:GetObject` under `reports/tub/search/` for the index, which the holder
 reads to a directory of its own in the function's ephemeral storage, `/tmp/tub-index`, and
 `s3:GetObject` on `manifests/_suppression/suppression-list.jsonl` and on current objects under `raw/`,
-for a download's sources. The Cognito
+for a download's sources, and `s3:ListBucket` limited to the prefix `reports/landscape/` with
+`s3:GetObject` under it, for the landscape pages. The Cognito
 calls need no IAM grant: the token-authorized ones send the student's access token through an
 unsigned client, and the OAuth endpoints take the client secret.
 """
@@ -33,6 +37,7 @@ from functools import partial
 from pathlib import Path
 
 from debate_api.configuration import PilotConfiguration, parse_cookie_keys
+from debate_api.landscape_markdown import render_bundle
 from debate_api.state import PilotServices
 from debate_core.application.card_download import CardDownloadService
 from debate_core.application.evidence_search import EvidenceSearchService
@@ -40,6 +45,7 @@ from debate_core.application.ports.persistence import SnapshotStore
 from debate_core.application.search_index_holder import SearchIndexHolder
 from debate_core.application.tub.access_audit import AccessAuditService
 from debate_core.application.tub.account_page import AccountPageService
+from debate_core.application.tub.landscape_pages import LandscapeShelf
 from debate_core.application.tub.sign_in import SignInService
 from debate_core.integrations.cloudwatch_audit import CloudWatchAuditSink, build_logs_client
 from debate_core.integrations.cognito import (
@@ -57,7 +63,12 @@ from debate_core.integrations.docx_parser.package import declared_document_bytes
 from debate_core.integrations.docx_parser.parser import DebateDocxParser
 from debate_core.integrations.local.search_index_reader import SqliteSearchIndexReader
 from debate_core.integrations.parameter_store import build_ssm_client, read_secure_parameter
-from debate_core.integrations.s3 import S3SearchIndexSource, S3SnapshotStore, build_s3_client
+from debate_core.integrations.s3 import (
+    S3EvidenceObjectStore,
+    S3SearchIndexSource,
+    S3SnapshotStore,
+    build_s3_client,
+)
 
 __all__ = ["INDEX_DIRECTORY_NAME", "build_pilot_services"]
 
@@ -152,6 +163,11 @@ def build_pilot_services(environ: Mapping[str, str]) -> PilotServices:
             card_cap=configuration.download_card_cap,
             source_xml_bytes=configuration.download_source_xml_bytes,
             document_size=declared_document_bytes,
+        ),
+        landscape=LandscapeShelf(
+            S3EvidenceObjectStore(bucket=configuration.evidence_bucket, client=s3),
+            prepare=render_bundle,
+            clock=_now,
         ),
         clock=_now,
     )

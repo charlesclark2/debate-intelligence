@@ -1048,3 +1048,81 @@ def test_the_client_refuses_to_build_where_the_network_is_forbidden(
 def test_the_api_base_url_must_be_https(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="https"):
         make_settings(tmp_path, api_base_url="http://api.opencaselist.example.invalid/v1")
+
+
+# ------------------------------------------------------------------------------------------------
+# The size of an archive, without its bytes (`v1-e34-t34`, the backfile survey)
+# ------------------------------------------------------------------------------------------------
+
+
+def complete_listing(day: int = 15) -> ArchiveListing:
+    name = f"{CASELIST}-all-2026-09-{day:02d}.zip"
+    return ArchiveListing(
+        caselist=CASELIST,
+        name=name,
+        kind=ArchiveKind.FULL,
+        archive_date=date(2026, 9, day),
+        url=f"{FILES}/weekly/{CASELIST}/{name}",
+    )
+
+
+def test_an_archive_size_is_a_head_request_with_no_token_and_no_body(
+    client: OpenCaselistClient, api: respx.MockRouter
+) -> None:
+    listing = complete_listing()
+    route = api.head(listing.url).respond(200, headers={"Content-Length": "5368709120"})
+    fetched = api.get(listing.url)
+
+    assert run(client.archive_size(listing)) == 5_368_709_120
+    assert route.call_count == 1
+    assert fetched.call_count == 0
+    assert "Cookie" not in route.calls.last.request.headers
+
+
+def test_an_archive_size_with_no_content_length_is_none(
+    client: OpenCaselistClient, api: respx.MockRouter
+) -> None:
+    listing = complete_listing()
+    api.head(listing.url).respond(200)
+
+    assert run(client.archive_size(listing)) is None
+
+
+def test_an_archive_size_the_file_host_refuses_is_unavailable(
+    client: OpenCaselistClient, api: respx.MockRouter
+) -> None:
+    listing = complete_listing()
+    route = api.head(listing.url).respond(403)
+
+    with pytest.raises(ArchiveUnavailable):
+        run(client.archive_size(listing))
+    assert route.call_count == 1
+
+
+def test_archive_sizes_are_paced_in_the_download_window_with_downloads(
+    tmp_path: Path,
+    token_store: CaselistTokenStore,
+    simulated: SimulatedTime,
+    api: respx.MockRouter,
+    inbox: Path,
+) -> None:
+    client = build_client(tmp_path, token_store, simulated, min_request_interval_seconds=0.5)
+    starts: list[float] = []
+    api.head(url__startswith=f"{FILES}/weekly/").mock(
+        side_effect=record_starts(
+            simulated, starts, lambda: httpx.Response(200, headers={"Content-Length": "9"})
+        )
+    )
+    api.get(url__startswith=f"{FILES}/weekly/").mock(
+        side_effect=record_starts(simulated, starts, archive_response)
+    )
+
+    async def survey_and_pull() -> None:
+        for day in range(1, 21):
+            await client.archive_size(complete_listing(day))
+            await client.download_archive(weekly_listing(day), inbox)
+
+    run(survey_and_pull())
+
+    assert len(starts) == 40
+    assert download_starts_within_any_window(starts) == 8

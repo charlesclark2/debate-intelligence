@@ -45,7 +45,9 @@ spec:
     `files check` and `FileBuildResult.failing_checks` give.
   priority: 2
   constraints:
-    packages: [debate_core.application, debate_core.domain, debate_cli, docs/data, tests/smoke]
+    # PM amendment 2026-10-25, from the PM's review (Deviation 3): the writer's recipe_status line,
+    # and the schema export script beside its siblings.
+    packages: [debate_core.application, debate_core.domain, debate_cli, docs/data, tests/smoke, debate_core.integrations, scripts]
     forbidden:
       - Uploading a file without a PASS quality report for the exact bytes being uploaded
       - Importing boto3/botocore in debate_core domain/ or application/ (S3 only via the blob-store port)
@@ -86,19 +88,23 @@ spec:
         and records the result (keys, counts, statuses; no team codes) in docs/data/file-publish-log.md.
     - id: ac6
       description: >-
-        Given a source sha256, school or team code, a lookup over published metadata.json objects returns
-        exactly the built files containing cards from that source (tested with moto), and every source in
-        a file's provenance sidecar appears in its metadata sources[].
+        (PM amendment 2026-10-25, ruling Q1 B: no school or team code in metadata.json.) Given a
+        source sha256 (over metadata.json) or a school or team code (over the published provenance
+        sidecars), a lookup returns exactly the built files containing cards from it (tested with
+        moto), and every source in a file's provenance sidecar appears in its metadata sources[].
     - id: ac7
       description: >-
-        (PM amendment 2026-10-19) The uploaded recipe holds no school, team code, tournament
-        or round in any pin, and still resolves to the same occurrences, by test.
+        (PM amendment 2026-10-19; amended 2026-10-25, ruling Q2 A and data-use policy 1.15) The
+        uploaded recipe holds no side, school, team code, tournament or round in any pin; every pin
+        still names the card's source and element as the sidecar records them; and the recipe
+        resolves to the same occurrences wherever no removed field was needed to tell two
+        disclosures apart, by test.
     - id: ac8
       description: >-
         (PM amendment 2026-10-21) A file whose quality status is not PASS is refused before
         any upload, and a warning alone never blocks, by tests shown failing first.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

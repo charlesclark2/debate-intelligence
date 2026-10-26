@@ -636,3 +636,17 @@ held-out score measures the alias table, not the cards that need placing.
 
 No re-review is needed. The coach's sample and its score are recorded by the PM when the operator
 runs them.
+
+## PM record, 2026-10-25
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+* **The coach sample is written** (operator follow-up 1, 2026-10-25, from `origin/dev` at
+  `e229387`): 60 unplaced cards from 60 documents, thresholds specified 0.000 and proxy 0.500;
+  `at-or-above-threshold` 30 of 12,752, `just-below-threshold` 20 of 22,089, `far-below-threshold` 10
+  of 21,820, every kind drawn as this report proposed; both files written under the data
+  directory, in 54.4 s.
+* **Still open, so the Goal stays `InProgress`:** the coach's labels (after 2026-11-01) and the
+  score. The proxy's review-queue ordering is filed as `v1-e32-t26`. Removal and the annual purge
+  now delete `<data dir>/landscape/local-classifier/<caselist>/` (the removal runbook, and
+  `v1-e30-t28`'s amendment).

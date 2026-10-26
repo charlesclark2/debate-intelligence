@@ -1,4 +1,4 @@
-"""`debate-research files build`, `files check` and `files suggest` through the CLI (`v1-e33-t03`).
+"""`debate-research files build`, `check`, `suggest` (`v1-e33-t03`) and `publish` (`v1-e33-t05`), by CLI.
 
 Each of t01's three example recipes is filed as one synthetic weekly archive
 (:mod:`tests.fixtures.file_builder.example_corpus`), imported with `caselist import` and parsed with
@@ -31,10 +31,13 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, Final
 
+import boto3
 import pytest
 import yaml
 from lxml import etree
+from moto import mock_aws
 from tests.fixtures.file_builder.example_corpus import EXAMPLES, ExampleCorpus, example_corpus
+from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
@@ -518,3 +521,208 @@ def test_files_check_fails_the_suppression_check_of_a_built_file_once_its_source
         one for one in report["results"] if one["check"] == "suppression" and one["status"] == "FAIL"
     ]
     assert "RM-2026-90" in finding["message"]
+
+
+# ------------------------------------------------------------------------------------------------
+# files publish (v1-e33-t05): the gate's refusals, the environment and bucket shown, a dry run with
+# no S3, and a publish to moto's dev bucket that a second run skips
+# ------------------------------------------------------------------------------------------------
+
+DEV_BUCKET: Final = "debate-dev-evidence-moto"
+PROD_BUCKET: Final = "debate-prod-evidence-moto"
+
+
+def as_dev(world: Planted, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, environment: str = "dev") -> None:
+    """The planted world's data directory under a dev and a prod profile of this test's own, local mode.
+
+    The built-in profiles name the evidence AWS profiles, so an AWS config of the test's own defines
+    them, with credentials that are the string `testing` and cannot reach an account.
+    """
+    profiles = tmp_path / "profiles"
+    profiles.mkdir(exist_ok=True)
+    for name, bucket in (("dev", DEV_BUCKET), ("prod", PROD_BUCKET)):
+        (profiles / f"{name}.toml").write_text(
+            f'[storage]\ndata_dir = "{world.data_dir}"\n'
+            f'[storage.s3]\nbucket = "{bucket}"\nregion = "us-east-1"\n'
+            '[caselist]\nrun_state = "local"\n'
+            f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.0\n',
+            encoding="utf-8",
+        )
+    evidence_profiles = ("debate-dev-evidence", "debate-prod-evidence")
+    config, credentials = tmp_path / "aws-config", tmp_path / "aws-credentials"
+    config.write_text("".join(f"[profile {one}]\nregion = us-east-1\n" for one in evidence_profiles))
+    credentials.write_text(
+        "".join(
+            f"[{one}]\naws_access_key_id = testing\naws_secret_access_key = testing\n"
+            for one in evidence_profiles
+        )
+    )
+    for name, value in {
+        "AWS_ACCESS_KEY_ID": "testing",
+        "AWS_SECRET_ACCESS_KEY": "testing",
+        "AWS_SESSION_TOKEN": "testing",
+        "AWS_DEFAULT_REGION": "us-east-1",
+        "AWS_EC2_METADATA_DISABLED": "true",
+        "AWS_CONFIG_FILE": str(config),
+        "AWS_SHARED_CREDENTIALS_FILE": str(credentials),
+    }.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.delenv("AWS_PROFILE", raising=False)
+    monkeypatch.setenv("DEBATE_PROFILE_DIR", str(profiles))
+    monkeypatch.setenv("DEBATE_ENV", environment)
+    monkeypatch.delenv("DEBATE_STORAGE__DATA_DIR", raising=False)
+
+
+@pytest.fixture
+def dev_bucket() -> Iterator[Any]:
+    """moto's dev and prod buckets, versioned like the real ones, for the whole of one test."""
+    with mock_aws():
+        client = boto3.client("s3", region_name="us-east-1")  # pyright: ignore[reportUnknownMemberType]
+        for bucket in (DEV_BUCKET, PROD_BUCKET):
+            client.create_bucket(Bucket=bucket)
+            client.put_bucket_versioning(Bucket=bucket, VersioningConfiguration={"Status": "Enabled"})
+        yield client
+
+
+def built_policy_file(world: Planted) -> Path:
+    built = invoke("--json", "files", "build", str(world.corpus.recipe))
+    assert built.exit_code == ExitCode.OK, built.output
+    return Path(envelope(built)["data"]["files"]["docx"])
+
+
+def keys_in(client: Any, bucket: str) -> list[str]:
+    return sorted(str(one["Key"]) for one in client.list_objects_v2(Bucket=bucket).get("Contents", []))
+
+
+def test_files_publish_dry_run_lists_the_five_keys_names_env_and_bucket_and_calls_no_s3(
+    world: Planted, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """No moto here: a dry run that built a bucket client and called it would fail on the disabled socket."""
+    docx = built_policy_file(world)
+    as_dev(world, monkeypatch, tmp_path)
+    recipes = str(world.corpus.recipe.parent)
+
+    result = invoke(
+        "--json", "files", "publish", "--env", "dev", str(docx), "--dry-run", "--recipes", recipes
+    )
+
+    assert result.exit_code == ExitCode.OK, result.output
+    data = envelope(result)["data"]
+    assert (data["environment"], data["bucket"], data["dry_run"]) == ("dev", DEV_BUCKET, True)
+    (one,) = data["files"]
+    assert one["status"] == "WOULD_PUBLISH"
+    sidecar = json.loads(docx.with_name(provenance_sidecar_name(docx.name)).read_text(encoding="utf-8"))
+    prefix = f"files/nhi/aff/politics-da/{POLICY}/{sidecar['recipe_hash'][:12]}/"
+    assert one["keys"] == [
+        f"{prefix}{POLICY}.docx",
+        f"{prefix}{POLICY}.docx.provenance.json",
+        f"{prefix}{POLICY}.docx.quality.json",
+        f"{prefix}recipe.yaml",
+        f"{prefix}metadata.json",
+    ]
+    assert one["written"] == []
+
+    shown = invoke("files", "publish", "--env", "dev", str(docx), "--dry-run", "--recipes", recipes)
+    table = " ".join(shown.stdout.split())
+    assert f"Dry run: would publish to the dev evidence bucket {DEV_BUCKET}" in table
+    assert "WOULD_PUBLISH" in table
+
+
+def test_files_publish_to_dev_publishes_then_skips_and_writes_only_under_files(
+    world: Planted, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, dev_bucket: Any
+) -> None:
+    docx = built_policy_file(world)
+    as_dev(world, monkeypatch, tmp_path)
+    arguments = (
+        "files",
+        "publish",
+        "--env",
+        "dev",
+        str(docx.parent),
+        "--recipes",
+        str(world.corpus.recipe.parent),
+    )
+
+    first = invoke("--json", *arguments)
+    assert first.exit_code == ExitCode.OK, first.output
+    (one,) = envelope(first)["data"]["files"]
+    assert one["status"] == "PUBLISHED" and len(one["written"]) == 5
+    keys = keys_in(dev_bucket, DEV_BUCKET)
+    assert keys == sorted(one["keys"])
+    assert all(key.startswith("files/nhi/aff/politics-da/") for key in keys)
+    assert keys_in(dev_bucket, PROD_BUCKET) == []
+
+    again = invoke(*arguments)
+    assert again.exit_code == ExitCode.OK, again.output
+    shown = " ".join(again.stdout.split())
+    assert f"Published to the dev evidence bucket {DEV_BUCKET}" in shown
+    assert "SKIPPED" in shown and "1 SKIPPED" in shown
+    for identity in ("Maple Grove", "Cedar Hollow", "ZaLu"):
+        assert identity not in first.stdout + again.stdout + again.stderr
+
+
+def test_files_publish_refuses_a_stale_or_failing_file_exit_1_naming_its_failing_checks(
+    world: Planted, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, dev_bucket: Any
+) -> None:
+    docx = built_policy_file(world)
+    docx.write_bytes(tamper(docx.read_bytes()))
+    as_dev(world, monkeypatch, tmp_path)
+    arguments = ("files", "publish", "--env", "dev", str(docx), "--recipes", str(world.corpus.recipe.parent))
+
+    stale = invoke("--json", *arguments)
+    assert stale.exit_code == ExitCode.DOMAIN_FAILURE, stale.output
+    assert envelope(stale)["error"]["code"] == "QUALITY_REPORT_STALE"
+
+    checked = invoke("--json", "files", "check", str(docx))
+    assert checked.exit_code == ExitCode.DOMAIN_FAILURE
+    failed = invoke("--json", *arguments)
+    assert failed.exit_code == ExitCode.DOMAIN_FAILURE, failed.output
+    error = envelope(failed)["error"]
+    assert error["code"] == "QUALITY_FAILED"
+    (refused,) = error["details"]["files"]
+    assert "evidence-identity" in refused["refusal"]["failing_checks"]
+    assert "evidence-identity" in error["message"]
+
+    panel = " ".join(invoke(*arguments).stderr.split())
+    assert "[QUALITY_FAILED]" in panel and "failing: " in panel and "evidence-identity" in panel
+    assert keys_in(dev_bucket, DEV_BUCKET) == []
+
+
+def test_files_publish_refuses_another_environment_and_prod_without_confirm_prod(
+    world: Planted, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    docx = built_policy_file(world)
+    as_dev(world, monkeypatch, tmp_path, environment="prod")
+
+    mismatch = invoke("--json", "files", "publish", "--env", "dev", str(docx))
+    assert envelope(mismatch)["error"]["code"] == "ENVIRONMENT_MISMATCH"
+    unconfirmed = invoke("--json", "files", "publish", "--env", "prod", str(docx))
+    assert unconfirmed.exit_code == ExitCode.DOMAIN_FAILURE
+    assert envelope(unconfirmed)["error"]["code"] == "CONFIRMATION_REQUIRED"
+    assert PROD_BUCKET in envelope(unconfirmed)["error"]["message"]
+    dry = invoke(
+        "--json", "files", "publish", "--env", "prod", str(docx), "--dry-run",
+        "--recipes", str(world.corpus.recipe.parent),
+    )  # fmt: skip
+    assert dry.exit_code == ExitCode.OK, dry.output
+    assert envelope(dry)["data"]["files"][0]["status"] == "WOULD_PUBLISH"
+
+
+def test_files_publish_of_a_directory_with_no_built_file_says_so(
+    world: Planted, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    empty = tmp_path / "nothing-built"
+    empty.mkdir()
+    as_dev(world, monkeypatch, tmp_path)
+
+    result = invoke("--json", "files", "publish", "--env", "dev", str(empty), "--dry-run")
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE
+    assert envelope(result)["error"]["code"] == "NO_BUILT_FILES"
+
+
+def test_files_publish_help_documents_its_exit_codes() -> None:
+    assert "publish" in invoke("files", "--help").stdout
+    help_text = " ".join(invoke("files", "publish", "--help").stdout.split())
+    for words in ("Exit 0:", "Exit 1:", "--dry-run", "--confirm-prod", "--recipes"):
+        assert words in help_text

@@ -525,8 +525,9 @@ Beside the report, each run writes the school view, `schools.md` and `schools.cs
 and team codes exactly as disclosed and nothing else. `schools.md` lists them twice: **By school**, each
 team's positions on each side, and **By position**, the negative's DAs, CPs, Ks and Ts and then the
 affirmative side's positions, each with every team that read it, its side and its rounds, most rounds
-first. Each team links to its public openCaselist page, where its disclosures are; `schools.csv` has the
-same link in its `team_page` column. The link is built from the caselist, the school and the team code
+first. In both lists each team links to its public openCaselist page, where its disclosures are, in a
+**Team page** column that reads the same for a team in either list; `schools.csv` has the same link in
+its `team_page` column. The link is built from the caselist, the school and the team code
 alone, as the student search's card page builds it, so a team whose school or team code is not one word
 of the page's address (a school with a space in it, say) has no link, and the view's **Team pages** row
 counts them. On hspolicy26 through 2026-10-20, all 475 team codes at 155 schools had one.

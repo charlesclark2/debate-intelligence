@@ -51,3 +51,12 @@ budget_usd_daily = 20.0
 # weekly cadence was agreed with the OpenCaselist maintainer. The cadence, the 8-per-minute
 # download rate and the 5-per-day bulk cap are the maintainer's and are not raised here.
 api_enabled = true
+
+# The backfiles (data-use policy 1.17, Permitted uses 8; v1-e34-t34): earlier seasons' complete
+# archives, imported once each by `caselist backfile-import`, never pulled by the weekly run, never
+# given a landscape or a per-school view, and kept by the annual purge. The four OpenCaselist serves
+# for 2021-22 on (docs/data/caselist-backfile-seasons.md), in the PM's order of 2026-10-25. Here too because prod is
+# published from dev's copy, so its landscape must refuse them as dev's does. PF keeps
+# weeklies only and 2021-22 to 2023-24 serve no archive, so neither is here. Never one of
+# sync_caselists: a profile naming a slug in both is refused at startup.
+backfile_caselists = ["hspolicy25", "hsld25", "hspolicy24", "hsld24"]

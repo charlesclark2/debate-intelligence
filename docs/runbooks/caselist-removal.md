@@ -340,6 +340,14 @@ DEBATE_ENV=dev uv run debate-research caselist parse --caselist hsld26 --publish
 It exits 0 and prints the rebuilt counts. The new aggregates leave out every source and disclosure
 the suppression list stops, which now includes this removal's.
 
+**A backfile listed there is rebuilt differently** (`v1-e34-t34`). A caselist in
+`caselist.backfile_caselists` (`hspolicy25`, `hsld25`, `hspolicy24`, `hsld24`) keeps its parsed store
+in the bucket, not on this Mac, so the parse above cannot rebuild it. Its rebuild is `caselist
+backfile-import` run again where backfile imports run, dry run first: it downloads nothing, restores
+the parsed store, and publishes the aggregates without this removal's file. It obeys the backfile
+no-import window, Tuesday 06:00 to Thursday 00:00 Chicago. That is about 2 h 10 min and 56 GB restored
+for all four ([caselist-backfiles.md, "A removal adds a rebuild"](caselist-backfiles.md#a-removal-adds-a-rebuild-for-each-backfile)).
+
 ## Step 6 — Verify dev
 
 First, the store and S3 agree and the sources are gone:
@@ -612,7 +620,8 @@ caselist's aggregates only when it imported something into that caselist that we
 imported nothing rebuilds nothing ([scheduled sync, the parse stage](caselist-scheduled-sync.md#the-parse-stage)).
 Rebuild each caselist whose `parsed/<caselist>/<version>/index.jsonl` the plan listed, `openev`
 included, from this Mac's own store for the environment (not a scratch store), with the everyday
-profile.
+profile. A backfile the plan listed is not rebuilt here but by `caselist backfile-import` run again,
+as step 5 says.
 
 **Operator command** (expected runtime a few minutes per caselist; nothing is parsed again)
 Where: a new terminal window, so no `DEBATE_STORAGE__DATA_DIR` from another step is set
@@ -827,6 +836,31 @@ there (`v1-e32-t13`'s Terraform change to `operator_access.tf`). Without it, `--
 `INCOMPLETE` with `STORE_ACCESS_DENIED` at the school views, after the suppression entries and the
 `raw/` and `parsed/` deletes and before anything on this machine. Running the same command again
 after the apply finishes it.
+
+### The local classifier's files (E32)
+
+`v1-e32-t21`'s comparison keeps a feature table, trained models and the coach's sample under
+`<data dir>/landscape/local-classifier/<caselist>/` on this machine only. They hold tags and
+headings derived from the caselist's cards. Its commands refuse a table whose sources a removal has
+reached, but nothing deletes the directory, so after `DONE` for a removal that touched a caselist,
+delete that caselist's directory here (PM ruling, 2026-10-25). Nothing of it is in a bucket. A coach
+sample deleted this way is drawn again with `scripts/compare_local_classifier.py features` and then
+`sample`; tell the PM if one was waiting to be labelled.
+
+**Operator command** (expected runtime a few seconds)
+Where: your Mac, anywhere. Change `hspolicy26` to the caselist the removal touched, and `dev` to
+`prod` for a prod removal.
+```bash
+DIR="$HOME/.debate-research/dev/landscape/local-classifier/hspolicy26"
+if [ -d "$DIR" ]; then ls "$DIR"; rm -r "$DIR"; echo "deleted: $DIR"; else echo "nothing to delete: $DIR"; fi
+```
+Success looks like the directory's files listed and `deleted: …`, or `nothing to delete: …` where
+the comparison never ran. In the request's register entry, record that it was deleted, with no path.
+
+**The model stage's cassettes** (`v1-e32-t07`), once the operator has recorded them, hold scrubbed
+excerpts of real cards under `<data dir>/landscape/model-cassettes/` on this machine only. After
+`DONE` for a removal that touched a caselist, delete that caselist's recordings there too, and tell
+the PM, since the evaluation is then recorded again (PM ruling, 2026-10-25).
 
 ## The annual purge: landscape school views
 

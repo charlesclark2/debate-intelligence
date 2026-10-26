@@ -33,6 +33,14 @@ spec:
     2021-22, the per-school landscape views of the season leaving the window, and expired noncurrent
     versions; it lists backfile seasons and their counts for the September review, and deletes none
     of them.
+    (PM amendment 2026-10-25, from v1-e32-t21's question 3, v1-e34-t34's ruling 2 and data-use
+    policy version 1.18.) The runbook also deletes `<data dir>/landscape/local-classifier/<caselist>/`
+    for each caselist whose season is purged (the removal runbook gained the same line); reads which
+    caselists are backfiles from the build's `caselist.backfile_caselists` setting (v1-e34-t34)
+    rather than from slugs or dates; and checks that no working copy restored on the operator's
+    machine (`caselist restore-run-state`) is left over from a step. It also deletes
+    `<data dir>/landscape/model-cassettes/` entries recorded from a purged season's cards
+    (v1-e32-t07's question 7).
   priority: 3
   constraints:
     packages: [docs/runbooks, tests/docs]

@@ -58,6 +58,7 @@ from typing import Final, Protocol
 
 from debate_core.application.aff_assignment import AffAssignmentsForReport
 from debate_core.application.analytic_texts import AnalyticTextsForReport
+from debate_core.application.caselist.backfiles import refuse_a_landscape
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.publish_plan import manifest_prefix, snapshot_of_manifest_key
 from debate_core.application.errors import DomainError, NotFound
@@ -376,8 +377,11 @@ class LandscapeRunService:
         stale_after_days: int = DEFAULT_STALE_AFTER_DAYS,
         review_threshold: float = DEFAULT_REVIEW_THRESHOLD,
         max_model_items: int = DEFAULT_MAX_MODEL_ITEMS,
+        backfile_caselists: Sequence[str] = (),
     ) -> None:
         self._taxonomies = taxonomies
+        # Never classified, never a per-school view (data-use policy 1.17, `v1-e34-t34`).
+        self._backfiles = tuple(backfile_caselists)
         self._config_dir = config_dir
         self._parsed = parsed_store
         self._local = local
@@ -403,6 +407,7 @@ class LandscapeRunService:
         )
 
     async def run(self, request: LandscapeRunRequest) -> LandscapeRunResult:
+        refuse_a_landscape(request.caselist, self._backfiles)
         snapshot = await self._snapshot(request.caselist, request.snapshot)
         resolved = self._taxonomies.resolve(request.caselist, snapshot)
         topics_file = str(self._config_dir / "topics.yaml")

@@ -77,6 +77,7 @@ __all__ = [
     "RelCanonicalRule",
     "apply_rel_canonical",
     "canonicalize_url",
+    "fetch_target_url",
 ]
 
 
@@ -424,6 +425,28 @@ def canonicalize_url(url: str) -> str:
     raise InvalidUrlError(f"URL nests more than {MAX_LINK_WRAPPERS} link wrappers: {url!r}")
 
 
+def fetch_target_url(url: str) -> str:
+    """The URL to request for `url`: as given, or the destination a link wrapper literally carries.
+
+    The canonical form is an identity key, never a fetch target (PM amendment 2026-10-19, for
+    ArticleService, v1-e04-t05). The URL is returned as given, surrounding whitespace aside, so no
+    content rule reaches the request: no tracking parameter is dropped and no host is guessed,
+    such as the `www.` host an `amp.` host canonicalizes to, which may not exist. The one thing taken
+    from canonicalization is unwrapping. A wrapper in `LINK_WRAPPERS` or an AMP cache in `AMP_CACHES`
+    whose destination is literally in it is replaced by that destination, decoded and otherwise as
+    written, nested wrappers included, as `canonicalize_url` unwinds them.
+
+    Raises `InvalidUrlError` for anything `canonicalize_url` refuses.
+    """
+    candidate = url.strip()
+    for _ in range(MAX_LINK_WRAPPERS + 1):
+        destination = _wrapped_destination(_parse(candidate))
+        if destination is None:
+            return candidate
+        candidate = destination
+    raise InvalidUrlError(f"URL nests more than {MAX_LINK_WRAPPERS} link wrappers: {url!r}")
+
+
 # ---------------------------------------------------------------------------------------------
 # rel=canonical
 # ---------------------------------------------------------------------------------------------
@@ -455,6 +478,12 @@ class RelCanonicalRule(StrEnum):
     CROSS_SITE_REFUSED = "cross_site_refused"
     """The declared canonical is on another site and no allow rule covers it (a syndication
     partner, a mirror, a wrapper's own page); refused, and the fetched URL stands."""
+
+    SITE_ROOT_REFUSED = "site_root_refused"
+    """The declared canonical is a site's root page (path `/`, no query) and the fetched page is not
+    one: a template that names the home page as every page's canonical, not a duplicate. Refused,
+    and the fetched URL stands (PM amendment 2026-10-19, from v1-e04-t01's review). Checked only for
+    a canonical another rule would accept, so another site's root stays CROSS_SITE_REFUSED."""
 
 
 _ACCEPTING_RULES = frozenset({RelCanonicalRule.SAME_SITE, RelCanonicalRule.AMP_CACHE_ORIGIN})
@@ -500,8 +529,10 @@ def apply_rel_canonical(fetched_url: str, html_canonical: str | None) -> RelCano
     `fetched_url` is the URL the bytes came from, after redirects (v1-e04-t02's final URL), and
     `html_canonical` the href of the page's `<link rel="canonical">` as written, possibly relative.
     A same-site canonical is accepted; a cross-site one only under an allow rule
-    (`RelCanonicalRule.AMP_CACHE_ORIGIN`). "Site" is the registrable domain of the host that served
-    the page, before any AMP or wrapper rule, because it is that host's HTML making the claim.
+    (`RelCanonicalRule.AMP_CACHE_ORIGIN`); and neither when it names the site's root page for a page
+    that is not the root (`RelCanonicalRule.SITE_ROOT_REFUSED`). "Site" is the registrable domain of
+    the host that served the page, before any AMP or wrapper rule, because it is that host's HTML
+    making the claim.
 
     Raises `InvalidUrlError` if `fetched_url` itself has no canonical form.
     """
@@ -513,10 +544,20 @@ def apply_rel_canonical(fetched_url: str, html_canonical: str | None) -> RelCano
         declared = canonicalize_url(_resolve_reference(fetched_url.strip(), html_canonical.strip()))
     except ValueError:
         return RelCanonicalDecision(fetched_canonical, RelCanonicalRule.UNUSABLE, None)
-    declared_site = _site(_parse(declared).host)
+    declared_parts = _parse(declared)
+    declared_site = _site(declared_parts.host)
     if _site(fetched.host) == declared_site:
-        return RelCanonicalDecision(declared, RelCanonicalRule.SAME_SITE, declared)
-    origin = _amp_cache_origin(fetched)
-    if origin is not None and _site(_parse(origin).host) == declared_site:
-        return RelCanonicalDecision(declared, RelCanonicalRule.AMP_CACHE_ORIGIN, declared)
-    return RelCanonicalDecision(fetched_canonical, RelCanonicalRule.CROSS_SITE_REFUSED, declared)
+        rule = RelCanonicalRule.SAME_SITE
+    else:
+        origin = _amp_cache_origin(fetched)
+        if origin is None or _site(_parse(origin).host) != declared_site:
+            return RelCanonicalDecision(fetched_canonical, RelCanonicalRule.CROSS_SITE_REFUSED, declared)
+        rule = RelCanonicalRule.AMP_CACHE_ORIGIN
+    if _is_site_root(declared_parts) and not _is_site_root(_parse(fetched_canonical)):
+        return RelCanonicalDecision(fetched_canonical, RelCanonicalRule.SITE_ROOT_REFUSED, declared)
+    return RelCanonicalDecision(declared, rule, declared)
+
+
+def _is_site_root(url: _Url) -> bool:
+    """The site's home page: path `/` and no query. `/?p=123` names a page, so it is not one."""
+    return url.path == "/" and not url.query

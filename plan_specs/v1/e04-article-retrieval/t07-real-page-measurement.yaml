@@ -1,0 +1,80 @@
+# TASK v1-e04-t07-real-page-measurement - How extraction and access classification behave on real pages, measured in place
+# Epic: E04 Article Retrieval & Extraction | Release: v1.3 (URL → verified card) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e04-t07-real-page-measurement
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e04-article-retrieval
+  annotations:
+    debate/title: "How extraction and access classification behave on real pages, measured in place"
+spec:
+  # Filed by the PM, 2026-10-25, from the follow-ups of v1-e04-t03 and v1-e04-t04, accepted by the PM (2026-10-25).
+  description: >-
+    Every E04 fixture is synthetic, so no one knows how the rules fare on real pages. Over a
+    sample of real public pages and open-access PDFs the coach chooses (news, think tanks,
+    government, journals), fetched by the operator with `debate-research fetch` under the
+    fetcher's usual limits, count: decisions per de-hyphenation join, with a hand check of the
+    UNDETERMINED ones; PDFs refused as unreadable under `strict=False`; pages refused by strict
+    HTML decoding; AccessStatus per page, with a hand check of every PAYWALLED and BLOCKED one,
+    metered sites' free articles included; and the HTML fallback's rate. Nothing fetched is
+    committed, and the record holds counts and hosts only. The counts go to the PM with any rule
+    change they suggest, each a task of its own.
+  priority: 3
+  constraints:
+    packages: [scripts, docs/data]
+    forbidden:
+      - A real page, PDF or its text committed to the repository
+      - A fetch that bypasses a paywall, login, robots rule or challenge
+      - A URL with a query string in the record
+  context:
+    - kind: TaskRef
+      name: v1-e04-t06-fetch-command
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A read-only script turns the operator's fetch outcomes into the counts above, tested
+        on synthetic outcomes.
+    - id: ac2
+      description: >-
+        The operator's run over the coach's sample is recorded in docs/data as counts and
+        hosts only, and sent to the PM (operator).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e04-t07-real-page-measurement-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e04-article-retrieval
+spec:
+  description: >-
+    Measure E04's rules on real pages the operator fetches, counting only.
+  goalRef:
+    name: v1-e04-t07-real-page-measurement
+  graph:
+    nodes:
+      - id: real-page-measurement
+        kind: Task
+        name: Real page measurement
+        description: >-
+          Measure E04's rules on real pages the operator fetches, counting only.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Script tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, -k, real_page]
+status:
+  phase: Pending

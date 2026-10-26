@@ -285,5 +285,23 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e05-t10-record-mode-keeps-invalid-answers
+    - id: t11
+      kind: Task
+      name: 'A prompt may set its own effort, so a classifier need not think at the route''s default'
+      description: >-
+        A prompt may set its own effort, so a classifier need not think at the route's
+        default.
+      inputs:
+        specRef: plan_specs/v1/e05-model-router/t11-per-prompt-effort.yaml
+        goalRef: v1-e05-t11-per-prompt-effort
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e05-t11-per-prompt-effort reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e05-t11-per-prompt-effort
 status:
   phase: Pending

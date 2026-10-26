@@ -171,6 +171,9 @@ class OpenCaselistClient:
     async def download_archive(self, archive: ArchiveListing, inbox: Path) -> DownloadedFile:
         return await self.archives.download(archive, inbox)
 
+    async def archive_size(self, archive: ArchiveListing) -> int | None:
+        return await self.archives.declared_size(archive)
+
     async def download_openev(self, file: OpenEvFile, inbox: Path) -> DownloadedFile:
         return await self.openev.download(file, inbox)
 

@@ -18,11 +18,16 @@ requires-python = ">=3.12,<3.13"
 # v1-e39-t08 adds debate-core's `docx` extra: the download builds Verbatim files with the E33 writer
 # and its parser, which read WordprocessingML with lxml. The image installs what uv.lock records here,
 # so without it the function would fail on its first download (as v1-e01-t17 found for the CLI).
+#
+# v1-e39-t17 adds markdown-it-py, which renders the landscape bundles' Markdown on the landscape
+# pages with raw HTML escaped. It was in uv.lock already, through rich, which debate-api does not
+# install, so the image would not have had it.
 dependencies = [
     "cryptography>=44",
     "debate-core[aws,docx,tub]",
     "fastapi>=0.115",
     "jinja2>=3.1",
+    "markdown-it-py>=4.0",
     "segno>=1.6",
     "uvicorn>=0.32",
 ]

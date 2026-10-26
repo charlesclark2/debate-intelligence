@@ -1,0 +1,79 @@
+# TASK v1-e32-t26-review-queue-proxy-ordering - The review queue ordered by the local proxy model, which places nothing
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t26-review-queue-proxy-ordering
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "The review queue ordered by the local proxy model, which places nothing"
+spec:
+  # Filed by the PM, 2026-10-25, from v1-e32-t21's recommendation, accepted by the PM (2026-10-25).
+  description: >-
+    v1-e32-t21 found its proxy model (tag words and headings, judged on held-out placed cards)
+    fit to order the landscape's review queue, not to place cards. Wiring it as a placement
+    stage needs the coach's labelled sample to reach 27 of 30 in the top stratum, 90% weighted
+    precision and no kind under 4 of 5, which is a later task. Order the review queue by the
+    proxy's confidence, highest first, and show its predicted position as a suggestion the
+    reviewer accepts or overrides. The model is trained and kept under the data directory as
+    t21's are, and refused when a removal has reached its table. Nothing is placed by it, and
+    the report's counts are unchanged.
+  priority: 3
+  constraints:
+    packages: [debate_core.arguments, debate_core.application, packages/debate_core/tests, scripts, tests/scripts, debate_cli, packages/debate_cli/tests, docs/guides]
+    forbidden:
+      - A card placed by the model
+      - A trained model, feature table or card text committed to the repository
+      - A school, team code or debater name as a feature
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e32-t21-local-classifier-comparison
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        On synthetic fixtures, the review queue is ordered by the proxy's confidence with
+        its suggestion shown, the report's placements and counts are unchanged, and a table
+        a removal has reached is refused; tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t26-review-queue-proxy-ordering-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    Order the review queue by the proxy model's confidence and show its suggestion, placing
+    nothing.
+  goalRef:
+    name: v1-e32-t26-review-queue-proxy-ordering
+  graph:
+    nodes:
+      - id: review-queue-ordering
+        kind: Task
+        name: Review queue ordering
+        description: >-
+          Order the review queue by the proxy model's confidence and show its suggestion,
+          placing nothing.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Landscape tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/landscape]
+status:
+  phase: Pending

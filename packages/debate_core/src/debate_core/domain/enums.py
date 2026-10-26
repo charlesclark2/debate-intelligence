@@ -60,7 +60,8 @@ class AccessStatus(StrEnum):
     """The URL does not resolve to a document (404/410)."""
 
     UNSUPPORTED_TYPE = "UNSUPPORTED_TYPE"
-    """The response was a content type the extractor cannot handle."""
+    """The response was a content type the extractor cannot handle, or an encrypted document the
+    platform will not read, whatever its declared type."""
 
     ERROR = "ERROR"
     """Retrieval failed for a transport or server reason."""

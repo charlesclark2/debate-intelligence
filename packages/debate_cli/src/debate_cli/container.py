@@ -23,7 +23,8 @@ and :meth:`ServiceContainer.verify_manifest`, which `debate-research verify` run
 :meth:`ServiceContainer.landscape_run`, which `debate-research landscape report` runs
 (`v1-e32-t05-landscape-cli`); and :meth:`ServiceContainer.file_build`,
 :meth:`ServiceContainer.file_quality` and :meth:`ServiceContainer.file_suggest`, which
-`debate-research files build`, `files check` and `files suggest` run (`v1-e33-t03-file-build-cli`). The import
+`debate-research files build`, `files check` and `files suggest` run (`v1-e33-t03-file-build-cli`), and
+:meth:`ServiceContainer.file_publish`, which `files publish` runs (`v1-e33-t05-file-publish`). The import
 commands also read archives and place manifests through it (:meth:`ServiceContainer.read_archive`,
 :meth:`ServiceContainer.archive_digest`, :meth:`ServiceContainer.evidence_object_path`), so no
 command imports an adapter (`v1-e01-t13-composition-root-cleanup`). The rest of V1's services and
@@ -188,6 +189,7 @@ from debate_core.application.evidence_sync import (
 )
 from debate_core.application.evidence_verifier import EvidenceVerifier
 from debate_core.application.file_build_service import FileBuildService
+from debate_core.application.file_publish_service import FilePublishService
 from debate_core.application.file_quality_service import FileQualityService
 from debate_core.application.file_suggest_service import FileSuggestService
 from debate_core.application.landscape_run import LandscapeRunService
@@ -251,6 +253,8 @@ from debate_core.integrations.models.routing_policy import RoutingPolicy
 if TYPE_CHECKING:  # pragma: no cover - imported for the type checker only; see the factories
     from mypy_boto3_s3.client import S3Client
 
+    from debate_core.application.caselist.backfile_import import BackfileImportService
+    from debate_core.application.caselist.backfile_survey import BackfileSurvey
     from debate_core.application.caselist_login import ScheduledLogin, SecretText, TabroomPasswordSecret
     from debate_core.integrations.docx_parser import DebateDocxParser
     from debate_core.integrations.opencaselist import CaselistTokenStore, OpenCaselistClient
@@ -279,6 +283,7 @@ SERVICE_NAMES: Final[tuple[str, ...]] = (
     "evidence_profile_check",
     "evidence_sync",
     "file_build",
+    "file_publish",
     "file_quality",
     "file_suggest",
     "openev_import",
@@ -598,6 +603,7 @@ class ServiceContainer:
             aff_assignments=affs,
             analytic_texts=texts,
             stale_after_days=settings.caselist.stale_after_days,
+            backfile_caselists=settings.caselist.backfile_caselists,
         )
 
     @property
@@ -647,6 +653,22 @@ class ServiceContainer:
             parser_version=parser.parser_version,
             files_dir=self.files_dir,
             clock=self.clock(),
+        )
+
+    def file_publish(self) -> FilePublishService:
+        """Publish built files that pass their quality checks to this environment's bucket (`v1-e33-t05`).
+
+        The gate runs :meth:`file_quality`, the check `files build` and `files check` run, over this
+        machine's blob store; the recipes are looked for under :attr:`files_dir`. The bucket is
+        :meth:`_evidence_bucket`, signed with the everyday evidence profile, which may write `files/`,
+        and built only when a file is uploaded or looked up: a dry run builds no client. Raises
+        :class:`EvidenceStoreNotConfigured` then, when this environment names no bucket.
+        """
+        return self.singleton("file_publish", self._build_file_publish)
+
+    def _build_file_publish(self) -> FilePublishService:
+        return FilePublishService(
+            bucket=self._evidence_bucket, quality=self.file_quality(), files_dir=self.files_dir
         )
 
     def file_suggest(self, *, config_dir: Path) -> FileSuggestService:
@@ -1526,6 +1548,7 @@ class ServiceContainer:
             # bundle after a publish that confirmed everything.
             state_written=self.bucket_run().state_written(),
             after_publish=self.bucket_run().after_publish if self._in_bucket_mode else None,
+            backfile_caselists=caselist.backfile_caselists,
         )
 
     def search_index_store_check(self) -> SearchIndexStoreCheck:
@@ -1772,6 +1795,68 @@ class ServiceContainer:
             tokens=lambda: self.caselist_token_store_on(CaselistTokenBackend.SECRETSMANAGER),
             notifier=self.sync_notifier(),
             environment=self.settings.environment.value,
+        )
+
+    def backfile_survey(self) -> BackfileSurvey:
+        """`caselist backfile-survey`: what the API serves for earlier seasons, over the API client.
+
+        Read-only (`v1-e34-t34`): listings and `HEAD` sizes, no download, no bucket, so no lock.
+        """
+        from debate_core.application.caselist.backfile_survey import BackfileSurvey
+
+        return self.singleton("backfile_survey", lambda: BackfileSurvey(self.opencaselist_client()))
+
+    def backfile_import(self, *, event_for_caselist: Callable[[str], Event | None]) -> BackfileImportService:
+        """`caselist backfile-import`: one backfile caselist, imported, parsed and published (`v1-e34-t34`).
+
+        Over the bucket's lock and state, and the very suppression list the weekly pull's importers
+        read: both copies as one, and a held upload recorded in this machine's copy, which the
+        everyday credential may write (the pull's rule, so that removal and holds reach a backfile
+        exactly as they reach the current season). Everything comes from settings, so the same build
+        runs it on the Mac and in the caselist image.
+        """
+        return self.singleton("backfile_import", lambda: self._build_backfile_import(event_for_caselist))
+
+    def _build_backfile_import(
+        self, event_for_caselist: Callable[[str], Event | None]
+    ) -> BackfileImportService:
+        # Imported here, not at module scope: lxml is loaded only by a command that needs the parser.
+        from debate_core.application.caselist.backfile_import import BackfileImportService
+        from debate_core.integrations.docx_parser import DebateDocxParser
+
+        settings = self.settings
+        # The E34 gate first: an installation that has not turned the API on refuses before any
+        # bucket adapter is built, as the survey and the pull do.
+        source = self.opencaselist_client()
+        bucket = bool(settings.storage.s3.bucket)
+        suppression: SuppressionList = self.local_suppression_list()
+        if bucket:
+            suppression = LocalFallbackSuppressionList(
+                self.suppression_list(), local=self.local_suppression_list()
+            )
+        return BackfileImportService(
+            caselist_settings=settings.caselist,
+            bucket_mode=self._in_bucket_mode,
+            source=source,
+            importer=CaselistImportService(
+                caselists=SqliteCaselistRepository(self.database),
+                blobs=FsSnapshotStore(settings.storage.data_dir),
+                suppression=suppression,
+            ),
+            local=self._local_evidence(),
+            read_full_archive=self.read_full_archive,
+            event_for_caselist=event_for_caselist,
+            inbox=self._inbox_directory(),
+            data_dir=settings.storage.data_dir,
+            bucket=self._evidence_bucket if bucket else None,
+            guard=self.bucket_write_guard(),
+            run_state=self.run_state if bucket else None,
+            seeded=(lambda: self.bucket_run_lock().bucket_is_seeded()) if bucket else None,
+            publisher=self.caselist_publish if bucket else None,
+            parse=lambda: self._build_caselist_parse(suppression),
+            parsed_publisher=self.parsed_publisher if bucket else None,
+            parsed_version=DebateDocxParser().parser_version,
+            clock=self.clock(),
         )
 
     def opencaselist_client(self) -> OpenCaselistClient:

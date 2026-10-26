@@ -33,7 +33,9 @@ spec:
     and Charlie add it to data-use policy 1.13's quotable texts.
   priority: 3
   constraints:
-    packages: [debate_core.application, debate_core.arguments, debate_core.domain, tests/fixtures/landscape, packages/debate_core/tests, docs/guides, config/landscape, tests/config]
+    # PM amendment 2026-10-25, from the PM's rulings on the build's questions (1): the K-aff file's
+    # loader, and the scripts that must read the run's vocabulary, with their tests.
+    packages: [debate_core.application, debate_core.arguments, debate_core.domain, tests/fixtures/landscape, packages/debate_core/tests, docs/guides, config/landscape, tests/config, debate_core.integrations, scripts, tests/scripts]
     forbidden:
       - A school, team code or debater's name in a circuit-wide file, log or commit
       - Card text, plan or counterplan text in a committed file or fixture (synthetic values only)

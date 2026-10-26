@@ -72,6 +72,14 @@ api_enabled = true
 # home moves to prod (ADR-0020 (7)).
 sync_caselists = ["hsld26", "hspolicy26", "hspf26"]
 
+# The backfiles (data-use policy 1.17, Permitted uses 8; v1-e34-t34): earlier seasons' complete
+# archives, imported once each by `caselist backfile-import`, never pulled by the weekly run, never
+# given a landscape or a per-school view, and kept by the annual purge. The four OpenCaselist serves
+# for 2021-22 on (docs/data/caselist-backfile-seasons.md), in the PM's order of 2026-10-25. PF keeps
+# weeklies only and 2021-22 to 2023-24 serve no archive, so neither is here. Never one of
+# sync_caselists: a profile naming a slug in both is refused at startup.
+backfile_caselists = ["hspolicy25", "hsld25", "hspolicy24", "hsld24"]
+
 # Where the weekly run keeps its state: the dev evidence bucket, from the cutover (ADR-0020 (3), (4),
 # v1-e40-t06). Every command that writes to the dev bucket takes the bucket's run lock, and a pull
 # restores its working copy from the bucket first. A bucket that has not been seeded refuses every

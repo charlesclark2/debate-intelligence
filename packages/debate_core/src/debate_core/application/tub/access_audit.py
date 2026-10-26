@@ -1,4 +1,4 @@
-"""The access records: a card page view, a copy, a download and a search (`v1-e39-t07`).
+"""The access records: a card page view, a copy, a download, a search (`v1-e39-t07`) and a landscape page.
 
 The data-use policy's E39 gate item 4: every access is audited, with the time, the account's
 subject, its role, the action and the card cluster ids, and nothing else. The records are
@@ -20,18 +20,25 @@ One per search, for its first page only: a next page is the same search. Nothing
 search that was refused, that had no search terms, or that the index could not answer. The record
 holds the number of results on the page, and nothing about the query: :meth:`AccessAuditService.
 searched` takes a session and a number, so a query, a filter or a cursor has no way in.
+
+## A landscape page (`v1-e39-t17`)
+
+Recorded before the page goes out, as a card page is: a record that cannot be written raises
+:class:`AccessNotRecorded` and the page is not sent. :meth:`AccessAuditService.landscape_viewed` takes
+the page's kind and its bundle's caselist and snapshot, so a school or a position has no way in.
 """
 
 from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Sequence
-from datetime import datetime
+from datetime import date, datetime
 
 from debate_core.application.errors import DomainError, StoreError
 from debate_core.application.ports.tub import AuditSink
 from debate_core.application.tub.audit import AuditAction, AuditRecord, card_reference
 from debate_core.application.tub.sessions import Session
+from debate_core.domain.landscape_pages import LandscapePage
 
 __all__ = ["AccessAuditService", "AccessNotRecorded"]
 
@@ -39,11 +46,12 @@ logger = logging.getLogger(__name__)
 
 
 class AccessNotRecorded(DomainError):
-    """The record of a card access could not be written, so the card was not sent."""
+    """The record of an access could not be written, so the card or the landscape page was not sent."""
 
     def __init__(self, action: AuditAction) -> None:
         self.action = action
-        super().__init__(f"a {action.value} record could not be written, so the card was not sent")
+        what = "page" if action is AuditAction.LANDSCAPE_VIEWED else "card"
+        super().__init__(f"a {action.value} record could not be written, so the {what} was not sent")
 
 
 class AccessAuditService:
@@ -78,6 +86,27 @@ class AccessAuditService:
             self._audit.record(record)
         except StoreError:
             logger.warning("tub audit: a %s record was not written", AuditAction.SEARCHED.value)
+
+    def landscape_viewed(
+        self, session: Session, page: LandscapePage, caselist: str | None = None, snapshot: date | None = None
+    ) -> None:
+        """Record a landscape page before it is sent; :class:`AccessNotRecorded` if it is not written."""
+        record = AuditRecord(
+            time=self._clock(),
+            action=AuditAction.LANDSCAPE_VIEWED,
+            actor_role=session.role,
+            actor_subject=session.subject,
+            caselist=caselist,
+            snapshot=snapshot,
+            page=page,
+        )
+        try:
+            self._audit.record(record)
+        except StoreError as problem:
+            logger.warning(
+                "tub audit: a %s record was not written, so the page was not sent", record.action.value
+            )
+            raise AccessNotRecorded(record.action) from problem
 
     def _card_access(self, action: AuditAction, session: Session, cards: Sequence[tuple[str, str]]) -> None:
         record = AuditRecord(

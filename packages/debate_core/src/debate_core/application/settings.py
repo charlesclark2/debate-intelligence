@@ -78,9 +78,11 @@ their `DEBATE_ENV` is a bug in the program.
 from __future__ import annotations
 
 import os
+import re
 import tempfile
 import tomllib
 from collections.abc import Callable, Iterator, Mapping
+from datetime import timedelta
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, Final, cast
@@ -105,7 +107,7 @@ from pydantic_settings import (
 )
 
 from debate_core.application.errors import DomainError
-from debate_core.domain.caselist import Event
+from debate_core.domain.caselist import CASELIST_SLUG_PATTERN, Event
 from debate_core.domain.model_contracts import ModelProvider
 
 __all__ = [
@@ -118,9 +120,11 @@ __all__ = [
     "PROFILE_DIRECTORY_VARIABLE",
     "PROFILE_SUBDIRECTORY",
     "SECRET_PLACEHOLDER",
+    "FIRST_BACKFILE_SEASON_START",
     "MAX_CASELIST_BULK_DOWNLOADS_PER_DAY",
     "MAX_CASELIST_DOWNLOADS_PER_MINUTE",
     "OPENCASELIST_API_BASE_URL",
+    "ArticleSettings",
     "CardFingerprintSettings",
     "CaselistTokenBackend",
     "ConfigurationError",
@@ -522,6 +526,12 @@ class ProviderSettings(SettingsGroup):
 MAX_CASELIST_DOWNLOADS_PER_MINUTE: Final = 10
 """The OpenCaselist maintainer's rate limit: file downloads per minute (policy clause 12)."""
 
+FIRST_BACKFILE_SEASON_START: Final = 2021
+"""The first season data-use policy 1.17 keeps as a backfile, 2021-22, by the year it starts.
+
+Seasons before it are not imported (Retention). A caselist slug ends in the two digits of the year
+its season starts: `hspolicy21` is 2021-22."""
+
 MAX_CASELIST_BULK_DOWNLOADS_PER_DAY: Final = 5
 """OpenCaselist's own ceiling on bulk archive downloads per user per day.
 
@@ -748,6 +758,16 @@ class CaselistSettings(SettingsGroup):
             'DEBATE_CASELIST__SYNC_CASELISTS=["hsld26","hspolicy26"].'
         ),
     )
+    backfile_caselists: tuple[str, ...] = Field(
+        default=(),
+        description=(
+            "Caselist slugs kept as backfiles (data-use policy 1.17, Permitted uses 8): earlier "
+            "seasons, from 2021-22 on, imported once from their complete archive by `caselist "
+            "backfile-import`. `caselist pull` and the weekly run never pull one, `landscape report` "
+            "never reads one, and the annual purge keeps them. Never one of sync_caselists. A list in "
+            'a profile file; JSON in the environment: DEBATE_CASELIST__BACKFILE_CASELISTS=["hspolicy25"].'
+        ),
+    )
     inbox_dir: Path | None = Field(
         default=None,
         description=(
@@ -897,7 +917,7 @@ class CaselistSettings(SettingsGroup):
             )
         return value
 
-    @field_validator("sync_caselists", mode="before")
+    @field_validator("sync_caselists", "backfile_caselists", mode="before")
     @classmethod
     def _one_slug_or_many(cls, value: object) -> object:
         """Accept a bare slug as well as a list, so `sync_caselists = "hsld26"` in a profile works.
@@ -906,6 +926,22 @@ class CaselistSettings(SettingsGroup):
         any validator here sees it, which is true of every list setting in this module.
         """
         return (value,) if isinstance(value, str) else value
+
+    @field_validator("backfile_caselists")
+    @classmethod
+    def _backfiles_from_2021_22_on(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        for slug in value:
+            if not re.fullmatch(CASELIST_SLUG_PATTERN, slug):
+                raise ValueError(f"{slug!r} is not a caselist slug")
+            if 2000 + int(slug[-2:]) < FIRST_BACKFILE_SEASON_START:
+                raise ValueError(
+                    f"{slug} is of a season before 2021-22, which data-use policy 1.17 does not import"
+                )
+        return value
+
+    def is_backfile(self, caselist: str) -> bool:
+        """Whether `caselist` is kept as a backfile: what pull, the landscape and the purge each ask."""
+        return caselist in self.backfile_caselists
 
     @field_validator("inbox_dir")
     @classmethod
@@ -938,6 +974,17 @@ class CaselistSettings(SettingsGroup):
         if value is None:
             return None
         return Path(os.path.expandvars(str(value))).expanduser().absolute()
+
+    @model_validator(mode="after")
+    def _a_backfile_is_never_pulled(self) -> CaselistSettings:
+        """A slug in both lists would be pulled weekly and classified: refused at startup (`v1-e34-t34`)."""
+        both = sorted(set(self.sync_caselists) & set(self.backfile_caselists))
+        if both:
+            raise ValueError(
+                f"caselist.backfile_caselists and caselist.sync_caselists both name {', '.join(both)}; "
+                "a backfile is never pulled by the weekly run"
+            )
+        return self
 
     @model_validator(mode="after")
     def _sns_needs_its_topic(self) -> CaselistSettings:
@@ -1071,6 +1118,74 @@ class ModelSettings(SettingsGroup):
         return Path(os.path.expandvars(str(value))).expanduser()
 
 
+class ArticleSettings(SettingsGroup):
+    """How ArticleService retrieves, classifies and extracts a source (`v1-e04-t05-article-service`).
+
+    Three kinds of value. `refetch_after_hours` is the re-fetch policy: a source retrieved more
+    recently than that is answered from its stored snapshot without asking the publisher again,
+    unless the caller asks for a refresh. The two `access_*` values are the access classifier's
+    truncation heuristic (`debate_core.retrieval.access.AccessThresholds`, v1-e04-t03), which
+    ArticleService builds from them. The `html_*` and `pdf_*` values are the extractors' fallback
+    minimum and limits (`debate_core.integrations.html_extractor` and `pdf_extractor`, v1-e04-t04),
+    which the composition root passes to them (v1-e04-t06). Every default is the value those tasks
+    chose as their own default.
+    """
+
+    refetch_after_hours: float = Field(
+        default=168.0,
+        gt=0,
+        le=24 * 365,
+        description=(
+            "A source whose last retrieval was readable and is younger than this is not fetched again; "
+            "its stored snapshot is the answer. `--refresh` fetches it anyway."
+        ),
+    )
+    access_minimum_characters: int = Field(
+        default=500,
+        ge=1,
+        le=1_000_000,
+        description="Fewer extracted characters than this is too little to be an article: ERROR.",
+    )
+    access_truncation_ratio: float = Field(
+        default=0.5,
+        gt=0,
+        le=1,
+        description=(
+            "Fewer extracted words than this share of the length the page declares is a truncated "
+            "page: PAYWALLED."
+        ),
+    )
+    html_fallback_minimum_characters: int = Field(
+        default=250,
+        ge=1,
+        le=1_000_000,
+        description="When trafilatura extracts fewer characters than this, the readability fallback runs.",
+    )
+    pdf_max_bytes: int = Field(
+        default=50 * 1024 * 1024,
+        ge=1024,
+        le=512 * 1024 * 1024,
+        description="A PDF larger than this is refused before it is parsed.",
+    )
+    pdf_max_pages: int = Field(
+        default=500,
+        ge=1,
+        le=100_000,
+        description="A PDF with more pages than this is refused before any is read.",
+    )
+    pdf_max_stream_bytes: int = Field(
+        default=20_000_000,
+        ge=1024,
+        le=512 * 1024 * 1024,
+        description="A PDF stream that expands past this many bytes is refused: the PDF-bomb ceiling.",
+    )
+
+    @property
+    def refetch_after(self) -> timedelta:
+        """`refetch_after_hours` as a duration."""
+        return timedelta(hours=self.refetch_after_hours)
+
+
 class Settings(BaseSettings):
     """Everything the platform was configured with for this run.
 
@@ -1117,6 +1232,7 @@ class Settings(BaseSettings):
     caselist: CaselistSettings = Field(default_factory=CaselistSettings)
     fingerprints: CardFingerprintSettings = Field(default_factory=CardFingerprintSettings)
     parse: ParseSettings = Field(default_factory=ParseSettings)
+    articles: ArticleSettings = Field(default_factory=ArticleSettings)
 
     @classmethod
     def settings_customise_sources(

@@ -147,8 +147,8 @@ def test_doctor_reports_the_environment_as_json() -> None:
     # manifest verifier (v1-e03-t06), the parse pipeline (v1-e31-t06), and the check of the
     # configured evidence profiles (v1-e34-t22), the search pilot's index build and publish
     # (v1-e39-t02), the coach's pilot accounts (v1-e39-t05), and the check of the stores the weekly
-    # index stage would find unparsed (v1-e34-t30), and the file builder's build, quality check and
-    # suggestion (v1-e33-t03) the last.
+    # index stage would find unparsed (v1-e34-t30), the file builder's build, quality check and
+    # suggestion (v1-e33-t03), and its publish (v1-e33-t05) the last.
     # A later epic adding one adds it here too: this is the list an operator reads to find out
     # what this installation is wired for.
     assert data["services"] == [
@@ -165,6 +165,7 @@ def test_doctor_reports_the_environment_as_json() -> None:
         "evidence_profile_check",
         "evidence_sync",
         "file_build",
+        "file_publish",
         "file_quality",
         "file_suggest",
         "openev_import",

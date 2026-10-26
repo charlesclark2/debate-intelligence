@@ -147,11 +147,19 @@ def test_doctor_checks_the_search_index_stores_only_when_asked_and_fails_on_one_
 ) -> None:
     """`v1-e34-t30`. `dev` names a bucket and keeps `caselist.refresh_search_index` on, so its weekly
     run has the search index stage, and nothing is parsed in this harness's data directory. Plain
-    `doctor` passes and says nothing of it. With `--search-index` the build fails on `openev`, the
-    one store the stage indexes when no caselist is configured, naming the command that parses it
-    and no path. With the setting off the check does not apply and passes."""
+    `doctor` passes and says nothing of it. With `--search-index` the build fails on every store the
+    stage indexes, the build's own `caselist.sync_caselists` and then `openev`, naming the command
+    that parses each and no path. With the setting off the check does not apply and passes.
+
+    The caselists are read from the build under test, not written here (PM fix 2026-10-25): an
+    installed pre-release carries `config/profiles/dev.toml`, which names the weekly run's caselists
+    since `v1-e40-t06`, while this checkout's console script, run from the scratch directory, falls
+    back to the built-in profile, which names none. Both must pass."""
     plain = data_of(installed_cli.run("--json", "doctor"))
     assert "search_index" not in plain
+    shown = data_of(installed_cli.run("--json", "config", "show"))
+    caselists = list(shown["settings"]["caselist.sync_caselists"])
+    stores = [*dict.fromkeys(caselists), "openev"]
 
     asked = installed_cli.run("--json", "doctor", "--search-index")
 
@@ -159,11 +167,10 @@ def test_doctor_checks_the_search_index_stores_only_when_asked_and_fails_on_one_
     error = asked.envelope()["error"]
     assert isinstance(error, dict)
     assert error["code"] == "SEARCH_INDEX_STORE_NOT_READY"
-    assert (
-        error["hint"] == "Run `debate-research caselist parse --caselist openev` before the next weekly run."
-    )
+    fixes = " and ".join(f"`debate-research caselist parse --caselist {store}`" for store in stores)
+    assert error["hint"] == f"Run {fixes} before the next weekly run."
     found = error["details"]["search_index"]
-    assert (found["applies"], found["caselists"], found["unparsed"]) == (True, [], ["openev"])
+    assert (found["applies"], found["caselists"], found["unparsed"]) == (True, caselists, stores)
     assert str(installed_cli.home) not in f"{error['message']} {error['hint']} {found}"
 
     turned_off = installed_cli.run(

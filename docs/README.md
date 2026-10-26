@@ -17,6 +17,8 @@ regenerates it on `dev` ([`v1-e01-t16`](../plan_specs/v1/e01-repo-foundation/t16
 | [architecture/ports-and-adapters.md](architecture/ports-and-adapters.md) | The ten ports, the constructor-injection pattern, and how to add an adapter |
 | [data/2026-27-tournament-schedule.md](data/2026-27-tournament-schedule.md) | The 2026-27 season's tournaments as given on 2026-09-30: the seed for `site/content/tournaments.yaml`, which is now the source of record |
 | [data/academic-case-sources.md](data/academic-case-sources.md) | Candidate claims and sources for the website home page's academic case, and why some kinds of finding are not used |
+| [data/built-file-metadata.md](data/built-file-metadata.md) | Published built files under the evidence bucket's files/ prefix: the key layout, the metadata.json contract the V2 debate tub indexes, and the lookups by source, school or team for takedowns |
+| [data/caselist-backfile-seasons.md](data/caselist-backfile-seasons.md) | Earlier seasons' caselists as backfiles (`v1-e34-t34`): what the API serves from 2021-22 on, complete-archive sizes, and each import's counts; aggregates only |
 | [data/caselist-backfill-2026-09.md](data/caselist-backfill-2026-09.md) | Counts from the one-off caselist and camp-file backfill (`v1-e30-t06`), recorded by the operator; aggregates only |
 | [data/caselist-parse-report.md](data/caselist-parse-report.md) | Counts from the operator-run full-corpus caselist parse, per caselist and environment |
 | [data/caselist-removal-requests.md](data/caselist-removal-requests.md) | The register of caselist and OpenEv removal requests, one row per request id; no school, team code, filename or name |
@@ -44,6 +46,7 @@ regenerates it on `dev` ([`v1-e01-t16`](../plan_specs/v1/e01-repo-foundation/t16
 | [process/task-workflow.md](process/task-workflow.md) | `scripts/task`: start → session → PM review → PR → finish |
 | [process/working-agreements.md](process/working-agreements.md) | Project rules: light CI, operator hand-off for long commands, doc locations, naming |
 | [runbooks/aws-account-baseline.md](runbooks/aws-account-baseline.md) | Building and verifying the AWS account baseline: identity, audit, budgets |
+| [runbooks/caselist-backfiles.md](runbooks/caselist-backfiles.md) | Importing earlier seasons' complete archives as backfiles (`caselist backfile-import`): when imports may run, the dry run and the import, the order, what each refusal means, and the rebuild a removal adds |
 | [runbooks/caselist-backfill.md](runbooks/caselist-backfill.md) | The one-off caselist and camp-file backfill: what `pull` fetches, what is imported by hand, and the day-by-day download plan |
 | [runbooks/caselist-cloud-credentials.md](runbooks/caselist-cloud-credentials.md) | The weekly cloud run's credentials: applying the key, the two secrets, the roles and the writer, writing the Tabroom password, the scheduled login, and logging in by hand |
 | [runbooks/caselist-cloud-run.md](runbooks/caselist-cloud-run.md) | The weekly cloud run's container: applying its network, cluster, repository and deployer, checking whether a new login ends the Mac's token, pushing its image, the login and run tasks with their schedules, a dry-run rehearsal, and one run by hand |

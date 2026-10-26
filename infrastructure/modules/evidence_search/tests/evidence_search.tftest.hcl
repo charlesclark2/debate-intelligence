@@ -12,8 +12,9 @@
 #
 #   ac2  the evidence buckets keep all four Block Public Access flags and no bucket policy grants
 #        CloudFront or the public (the evidence_bucket module, planned with the roots' inputs);
-#        the function's role reads only the three key patterns, writes nothing in the bucket,
-#        holds no delete on its log groups; the audit group keeps 400 days.
+#        the function's role reads only the four key patterns and lists only the landscape bundles
+#        (v1-e39-t17), writes nothing in the bucket, holds no delete on its log groups; the audit
+#        group keeps 400 days.
 #   ac3  the user pool: no self sign-up, TOTP required, email MFA offered, no SMS configuration,
 #        no attribute beyond the username and an optional email.
 #   ac5  the role against ADR-0019's role table entry by entry, the app log group and the two
@@ -217,8 +218,12 @@ variables {
   expected_role_table = {
     "s3:GetObject" = [
       "arn:aws:s3:::debate-dev-evidence-a7508de8/reports/tub/search/*",
+      "arn:aws:s3:::debate-dev-evidence-a7508de8/reports/landscape/*",
       "arn:aws:s3:::debate-dev-evidence-a7508de8/raw/*",
       "arn:aws:s3:::debate-dev-evidence-a7508de8/manifests/_suppression/suppression-list.jsonl",
+    ]
+    "s3:ListBucket" = [
+      "arn:aws:s3:::debate-dev-evidence-a7508de8",
     ]
     "kms:Decrypt" = [
       "arn:aws:kms:us-east-1:111122223333:key/mock-evidence-key",
@@ -257,7 +262,7 @@ run "function_role_is_the_adr_role_table_entry_by_entry" {
       } == {
       for action, resources in var.expected_role_table : action => toset(resources)
     }
-    error_message = "The function's role must grant exactly ADR-0019's role table: GetObject on the three key patterns, Decrypt on the bucket key, CreateLogStream and PutLogEvents on the audit and app groups, GetParameter on the two parameters. Nothing more, nothing less."
+    error_message = "The function's role must grant exactly ADR-0019's role table: GetObject on the four key patterns, ListBucket on the evidence bucket, Decrypt on the bucket key, CreateLogStream and PutLogEvents on the audit and app groups, GetParameter on the two parameters. Nothing more, nothing less."
   }
 
   assert {
@@ -284,13 +289,13 @@ run "function_role_is_the_adr_role_table_entry_by_entry" {
   }
 
   assert {
-    # The table's first row, said on its own: read three patterns, and not one write, list or
-    # version read in the bucket.
+    # The table's first rows, said on their own: read four patterns and list one prefix, and not
+    # one write or version read in the bucket.
     condition = toset(flatten([
       for statement in jsondecode(aws_iam_role_policy.function.policy).Statement :
       [for action in flatten([statement.Action]) : action if startswith(action, "s3:")]
-    ])) == toset(["s3:GetObject"])
-    error_message = "The role's only S3 action is GetObject: no GetObjectVersion, no list and no write in the evidence bucket."
+    ])) == toset(["s3:GetObject", "s3:ListBucket"])
+    error_message = "The role's only S3 actions are GetObject and ListBucket: no GetObjectVersion, no ListBucketVersions and no write in the evidence bucket."
   }
 
   assert {
@@ -337,6 +342,45 @@ run "function_role_is_the_adr_role_table_entry_by_entry" {
       ]
     ])) == 0
     error_message = "The role holds no Cognito permission: the self-service calls are authorised by the user's access token, the token endpoint by the client secret."
+  }
+}
+
+run "function_role_lists_only_the_landscape_bundles_and_reads_them" {
+  # v1-e39-t17: the landscape pages find each caselist's newest bundle by listing
+  # reports/landscape/, and read its report.md and schools.md. The listing is the role's only one.
+  assert {
+    condition = [
+      for statement in jsondecode(aws_iam_role_policy.function.policy).Statement :
+      try(statement.Condition, null) if contains(flatten([statement.Action]), "s3:ListBucket")
+      ] == [
+      { StringLike = { "s3:prefix" = ["reports/landscape/*"] } },
+    ]
+    error_message = "Exactly one statement grants ListBucket, and only for the prefix reports/landscape/ (s3:prefix), so the bucket root and every other prefix stay unlistable."
+  }
+
+  assert {
+    condition = alltrue([
+      for statement in jsondecode(aws_iam_role_policy.function.policy).Statement :
+      length(flatten([statement.Action])) == 1 && flatten([statement.Resource]) == [var.evidence_bucket_arn]
+      if contains(flatten([statement.Action]), "s3:ListBucket")
+    ])
+    error_message = "The ListBucket statement grants that action alone, on the evidence bucket alone."
+  }
+
+  assert {
+    condition = contains(flatten([
+      for statement in jsondecode(aws_iam_role_policy.function.policy).Statement :
+      flatten([statement.Resource]) if contains(flatten([statement.Action]), "s3:GetObject")
+    ]), "arn:aws:s3:::debate-dev-evidence-a7508de8/reports/landscape/*")
+    error_message = "The role reads the landscape bundles under reports/landscape/."
+  }
+
+  assert {
+    condition = !contains(flatten([
+      for statement in jsondecode(aws_iam_role_policy.function.policy).Statement :
+      flatten([statement.Resource]) if contains(flatten([statement.Action]), "s3:GetObject")
+    ]), "arn:aws:s3:::debate-dev-evidence-a7508de8/reports/*")
+    error_message = "The role reads reports/landscape/ and reports/tub/search/, never the whole of reports/."
   }
 }
 
@@ -756,6 +800,27 @@ run "managed_login_is_served_at_the_login_host" {
 # ---------------------------------------------------------------------------------------------
 # The function and the distribution (ADR-0019 (a)).
 # ---------------------------------------------------------------------------------------------
+
+run "web_adapter_never_logs_at_debug" {
+  # v1-e39-t17: the adapter (v1.1.0) logs a request's URL and headers only at debug, and a landscape
+  # page's path names a school. Nothing here may lower its level: no JSON format with an
+  # application log level, and no variable that sets a tracing level.
+  assert {
+    condition = (
+      aws_lambda_function.pilot.logging_config[0].log_format == "Text" &&
+      !contains(["DEBUG", "TRACE"], upper(coalesce(try(aws_lambda_function.pilot.logging_config[0].application_log_level, null), "unset")))
+    )
+    error_message = "The function logs as Text with no debug or trace application level, so the Web Adapter never logs a request's URL or headers."
+  }
+
+  assert {
+    condition = length(setintersection(
+      toset(keys(aws_lambda_function.pilot.environment[0].variables)),
+      toset(["RUST_LOG", "AWS_LAMBDA_LOG_LEVEL", "AWS_LAMBDA_LOG_FORMAT", "AWS_LWA_LOG_LEVEL"]),
+    )) == 0
+    error_message = "No environment variable may set the Web Adapter's log level or format."
+  }
+}
 
 run "function_has_the_settings_adr_0019_gives_it" {
   assert {

@@ -29,6 +29,14 @@ account no longer had a second factor it may sign in with (PM ruling, 2026-10-20
   is no field a query, a filter or a cursor could go into, and the cards a search found are not
   named, since they would say what it was about.
 
+## The landscape pages (`v1-e39-t17`, gate item 11)
+
+* `landscape-viewed`: one per landscape page view, written before the page goes out, under the card
+  page's rule. It names the page's kind (:class:`~debate_core.domain.landscape_pages.LandscapePage`)
+  and, for every page but the list of caselists, the bundle's caselist and snapshot. It never says
+  which school or which position a page was: the kind is all a record holds of where a member was
+  (the PM's ruling of 2026-10-25), as a search record holds none of its words.
+
 `docs/data/tub-audit-record.schema.json` is this shape as a JSON Schema; a test holds the two
 together.
 """
@@ -38,12 +46,14 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from enum import StrEnum
 from typing import Final
 
 from debate_core.application.tub.identity import Role
+from debate_core.domain.caselist import CASELIST_SLUG_PATTERN
 from debate_core.domain.file_recipe import RECIPE_STORE_PATTERN
+from debate_core.domain.landscape_pages import LandscapePage
 
 __all__ = [
     "AUDIT_FORMAT_VERSION",
@@ -57,7 +67,8 @@ __all__ = [
 AUDIT_FORMAT_VERSION: Final = 1
 """Raised when a field's meaning changes, so a reader of a 400-day-old record knows which it is.
 
-Still 1 after `v1-e39-t07`: it adds actions and the `cards` field, and changes no field's meaning."""
+Still 1 after `v1-e39-t07`, which adds actions and the `cards` field, and after `v1-e39-t17`, which adds
+`landscape-viewed` and its `caselist`, `snapshot` and `page`: neither changes a field's meaning."""
 
 CARD_REFERENCE_PATTERN: Final = "^" + RECIPE_STORE_PATTERN.strip("^$") + "/[0-9a-f]{64}$"
 """`hsld26/<64 hex>`: a card as the pilot addresses it, the store and the cluster id in it."""
@@ -66,6 +77,7 @@ MAX_DOWNLOAD_CARDS: Final = 30
 """The most cards one download holds (ADR-0019 (d), the download cart)."""
 
 _CARD_REFERENCE: Final = re.compile(CARD_REFERENCE_PATTERN)
+_CASELIST: Final = re.compile(CASELIST_SLUG_PATTERN)
 
 
 def card_reference(caselist: str, cluster_id: str) -> str:
@@ -95,6 +107,7 @@ class AuditAction(StrEnum):
     CARD_VIEWED = "card-viewed"
     CARD_COPIED = "card-copied"
     CARDS_DOWNLOADED = "cards-downloaded"
+    LANDSCAPE_VIEWED = "landscape-viewed"
 
 
 _ONE_CARD: Final = frozenset({AuditAction.CARD_VIEWED, AuditAction.CARD_COPIED})
@@ -115,6 +128,12 @@ class AuditRecord:
     """How many: accounts in a listing, or results on a search's first page."""
     cards: tuple[str, ...] = ()
     """The cards an access reached, each as :func:`card_reference` names it."""
+    caselist: str | None = None
+    """The caselist of the landscape bundle a page showed."""
+    snapshot: date | None = None
+    """The snapshot of the landscape bundle a page showed."""
+    page: LandscapePage | None = None
+    """Which kind of landscape page was shown, never which school or position."""
 
     def __post_init__(self) -> None:
         if self.count is not None and self.count < 0:
@@ -130,6 +149,21 @@ class AuditRecord:
             raise ValueError(f"a {self.action.value} record names no card")
         if self.action is AuditAction.SEARCHED and (self.count is None or self.account_subject is not None):
             raise ValueError("a searched record carries its result count, and no account")
+        self._check_landscape_fields()
+
+    def _check_landscape_fields(self) -> None:
+        bundle = (self.caselist, self.snapshot)
+        if self.action is not AuditAction.LANDSCAPE_VIEWED:
+            if self.page is not None or bundle != (None, None):
+                raise ValueError(f"a {self.action.value} record names no landscape page")
+            return
+        if self.page is None or self.count is not None or self.account_subject is not None:
+            raise ValueError("a landscape-viewed record names its page kind, and no count or account")
+        if self.page is LandscapePage.CASELISTS:
+            if bundle != (None, None):
+                raise ValueError("the list of caselists is no one bundle's page")
+        elif self.snapshot is None or self.caselist is None or _CASELIST.match(self.caselist) is None:
+            raise ValueError("a landscape page names its bundle's caselist and snapshot")
 
     def to_json(self) -> str:
         """The record as one line of JSON, keys sorted, with absent fields left out."""
@@ -147,4 +181,10 @@ class AuditRecord:
             fields["count"] = self.count
         if self.cards:
             fields["cards"] = list(self.cards)
+        if self.caselist is not None:
+            fields["caselist"] = self.caselist
+        if self.snapshot is not None:
+            fields["snapshot"] = self.snapshot.isoformat()
+        if self.page is not None:
+            fields["page"] = self.page.value
         return json.dumps(fields, sort_keys=True, separators=(",", ":"))

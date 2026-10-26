@@ -373,3 +373,13 @@ Thorough, and safe in the direction that matters.
 **After the merge:** the operator's three blocks, plan then apply then simulate, in dev and then
 prod. The PM reads each plan first. Until the apply, `remove --execute` stops `INCOMPLETE` at the
 school views, and running it again afterwards finishes it. No re-review is needed.
+
+## PM record, 2026-10-25
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+* **The removal profile's grant is applied in dev.** It went in with `v1-e40-t05`'s alerts apply on
+  2026-10-25: the operator printed the inline policy's diff, which was exactly the added
+  `DeleteLandscapeSchoolViews` statement and the listing prefix change, and the PM approved the
+  combined plan (`25 to add, 6 to change, 2 to destroy`). A removal in dev now reaches the school
+  views without stopping `INCOMPLETE`. Prod's apply comes with the pilot's promotion.

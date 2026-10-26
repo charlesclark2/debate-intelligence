@@ -3,5 +3,7 @@
 {% block main %}
 <h1>{{ heading }}</h1>
 <p>{{ message }}</p>
-<p><a href="/">Back to the search</a></p>
+{% if landscape is defined and landscape %}<p><a href="/landscape">Back to the landscape reports</a></p>
+{% else %}<p><a href="/">Back to the search</a></p>
+{% endif %}
 {% endblock %}

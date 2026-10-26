@@ -23,6 +23,10 @@ for the bucket's `raw/caselist/hsld26` and `raw/openev/2026`. Their cards are do
 :data:`CORPUS` like any other, so the real E33 writer builds a downloaded file from them, and the
 index is published under the running parser's version.
 
+The landscape pages (v1-e39-t17) read :class:`InMemoryLandscapeObjects`, which lists and reads the
+hand-written bundles under `fixtures/landscape/` as the bucket's `reports/landscape/` would; their own
+tests also put them in a moto bucket and read them through the real `S3EvidenceObjectStore`.
+
 Every name, address, code, secret, tag, cite and card here is synthetic. No test reaches a network:
 the app runs in-process through Starlette's test client.
 """
@@ -54,6 +58,7 @@ from starlette.testclient import TestClient
 from debate_api.app import create_app
 from debate_api.configuration import CookieKeys, PilotConfiguration
 from debate_api.cookies import SESSION_COOKIE, CookieSealer, session_payload
+from debate_api.landscape_markdown import render_bundle
 from debate_api.state import PilotServices
 from debate_core.application.card_download import (
     DEFAULT_DOWNLOAD_CARD_CAP,
@@ -64,6 +69,7 @@ from debate_core.application.card_download import (
 )
 from debate_core.application.errors import BlobIntegrityError, NotFound, StoreUnavailable
 from debate_core.application.evidence_search import EvidenceSearchService
+from debate_core.application.ports.evidence_store import ObjectInfo, ObjectKey
 from debate_core.application.ports.persistence import BlobKey, SnapshotStore
 from debate_core.application.ports.search_index import IndexedOccurrence, SearchDocument
 from debate_core.application.ports.suppression import disclosure_digest
@@ -74,6 +80,7 @@ from debate_core.application.tub.access_audit import AccessAuditService
 from debate_core.application.tub.account_page import AccountPageService
 from debate_core.application.tub.audit import AuditRecord
 from debate_core.application.tub.identity import AuthenticatorSecret, Role
+from debate_core.application.tub.landscape_pages import LandscapeObjects, LandscapeShelf
 from debate_core.application.tub.sessions import Session
 from debate_core.application.tub.sign_in import SignInService
 from debate_core.domain.caselist import SourceDocument, SourceFormat, SourceOrigin
@@ -432,6 +439,66 @@ class FakeAuditSink:
             raise StoreUnavailable("PutLogEvents", "debate-dev-tub-audit", "synthetic outage")
         audit_record_validator().validate(json.loads(record.to_json()))
         self.records.append(record)
+
+
+# --------------------------------------------------------------------------------------------
+# The landscape pages' synthetic bundles (v1-e39-t17)
+# --------------------------------------------------------------------------------------------
+
+LANDSCAPE_FIXTURES: Final = Path(__file__).resolve().parent / "fixtures" / "landscape"
+LANDSCAPE_PUBLISHED_AT: Final = datetime(2026, 10, 21, 6, 0, tzinfo=UTC)
+
+
+def landscape_fixture_objects() -> dict[str, bytes]:
+    """Every file under `fixtures/landscape/`, by the key it would have in the bucket."""
+    return {
+        f"reports/landscape/{path.relative_to(LANDSCAPE_FIXTURES).as_posix()}": path.read_bytes()
+        for path in sorted(LANDSCAPE_FIXTURES.rglob("*.md"))
+        if path.name != "README.md"
+    }
+
+
+class InMemoryLandscapeObjects(LandscapeObjects):
+    """The bucket's `reports/landscape/` in memory: listed and read as `S3EvidenceObjectStore` does.
+
+    `reads` counts each listing and each file read, and `failing` makes every call raise as an
+    unreachable bucket would.
+    """
+
+    def __init__(self, objects: Mapping[str, bytes] | None = None) -> None:
+        self.objects: dict[str, tuple[bytes, datetime]] = {
+            key: (content, LANDSCAPE_PUBLISHED_AT)
+            for key, content in (landscape_fixture_objects() if objects is None else objects).items()
+        }
+        self.listings = 0
+        self.reads: list[str] = []
+        self.failing = False
+
+    def put(self, key: str, content: bytes, at: datetime) -> None:
+        self.objects[key] = (content, at)
+
+    def delete(self, key: str) -> None:
+        del self.objects[key]
+
+    async def list_objects(self, prefix: str) -> tuple[ObjectInfo, ...]:
+        if self.failing:
+            raise StoreUnavailable("ListObjectsV2", prefix, "synthetic outage")
+        self.listings += 1
+        return tuple(
+            ObjectInfo(key=key, size=len(content), last_modified=at)
+            for key, (content, at) in sorted(self.objects.items())
+            if key.startswith(prefix)
+        )
+
+    async def get_file(self, key: ObjectKey, destination: Path) -> ObjectInfo:
+        if self.failing:
+            raise StoreUnavailable("GetObject", key, "synthetic outage")
+        if key not in self.objects:
+            raise NotFound("evidence object", key)
+        self.reads.append(key)
+        content, at = self.objects[key]
+        destination.write_bytes(content)
+        return ObjectInfo(key=key, size=len(content), last_modified=at)
 
 
 # --------------------------------------------------------------------------------------------
@@ -1017,8 +1084,10 @@ class PilotWorld:
         download_source_xml_bytes: int = DEFAULT_DOWNLOAD_SOURCE_XML_BYTES,
         download_fetch_bytes: int = DOWNLOAD_FETCH_MAX_BYTES,
         download_writer: WriterFactory | None = None,
+        landscape_objects: LandscapeObjects | None = None,
     ) -> None:
         self.clock = MutableClock()
+        self.landscape_objects = landscape_objects or InMemoryLandscapeObjects()
         self.index = corpus_index()
         self.index_source = InMemorySearchIndexSource()
         self.index_source.publish(self.index)
@@ -1098,6 +1167,7 @@ class PilotWorld:
                 source_xml_bytes=download_source_xml_bytes,
                 fetch_bytes=download_fetch_bytes,
             ),
+            landscape=LandscapeShelf(self.landscape_objects, prepare=render_bundle, clock=self.clock),
             clock=self.clock,
         )
         self.app = create_app(self.services)
@@ -1296,3 +1366,15 @@ def world() -> Iterator[PilotWorld]:
 @pytest.fixture
 def make_world() -> Callable[..., PilotWorld]:
     return PilotWorld
+
+
+@pytest.fixture
+def landscape_files() -> dict[str, bytes]:
+    """The synthetic bundles under `fixtures/landscape/`, by bucket key (`v1-e39-t17`)."""
+    return landscape_fixture_objects()
+
+
+@pytest.fixture
+def landscape_store() -> Callable[..., InMemoryLandscapeObjects]:
+    """:class:`InMemoryLandscapeObjects`, to build with other files than the fixtures'."""
+    return InMemoryLandscapeObjects

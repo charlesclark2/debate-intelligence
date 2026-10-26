@@ -861,3 +861,26 @@ Added by the PM. Nothing above is changed, and this section is not a review.
 * **ac1 is complete** (its CI part was recorded in the second review).
 * **Still open, so the Goal stays `InProgress`:** ac2's hand run (step 8), which is `v1-e40-t06`'s
   cutover step 5, after `v1-e40-t04`'s seed.
+
+## PM record, 2026-10-25
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+* **The run image `v1.1.0-dev.151`** was pushed for `v1-e40-t05`'s alerts on 2026-10-25, digest
+  `sha256:4f71910e12e8cabd71fbe572604801b9a280df6715a79304ee87db03a9305748`, and applied as the run's
+  task definition revision `3`.
+  * A first push from a shell that still held an older `TAG` (`v1.1.0-dev.138`) was caught from the
+    script's own message and checked with `ecr describe-images` before any apply. It was pushed
+    again with the tag set explicitly.
+* **Still open, so the Goal stays `InProgress`:** ac2's hand run, which is `v1-e40-t06`'s cutover.
+
+## PM record, 2026-10-25 (second)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+* **The run image `v1.1.0-dev.155`**,
+  `sha256:3438e18f792fd11f1f95431323fb1cd5c11a2756fb121b49508c0e0c743d5721`, was applied in the
+  cutover's step 4: `2 added, 4 changed, 2 destroyed`, `PLAN OK`. The run's and the login's task
+  definitions now run it, and the schedule is still `DISABLED`.
+* **ac2's hand run** (the cutover's step 5) started at about 03:59 UTC on 2026-10-26 as run
+  `20261026T035957Z`. Its outcome is recorded with `v1-e40-t06`'s.

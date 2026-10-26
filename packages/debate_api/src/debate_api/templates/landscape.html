@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Landscape reports · Team evidence search{% endblock %}
+{% block main %}
+<h1>Landscape reports</h1>
+<p class="help">What teams disclosed reading on each topic, from the newest weekly report. For the team only.</p>
+{% if bundles %}<ul class="landscape-caselists">
+{% for bundle in bundles %}<li><strong>{{ bundle.caselist }}</strong>, through {{ bundle.snapshot.isoformat() }}: <a href="/landscape/{{ bundle.caselist }}">the report</a>{% if bundle.school_view is not none %}, <a href="/landscape/{{ bundle.caselist }}/schools">positions by school</a>{% endif %}</li>
+{% endfor %}</ul>
+{% else %}<p>No landscape report has been published yet.</p>
+{% endif %}
+{% endblock %}

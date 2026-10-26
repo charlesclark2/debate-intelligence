@@ -4,17 +4,22 @@
 header analytic is the first paragraph a reader sees, so it is where the file says it was built from
 a recipe the coach has not marked ready. A ready recipe's header is unchanged, word for word.
 
+The sidecar records the recipe's status too (`v1-e33-t05`, PM amendment 2026-10-24), which is what
+`files publish` reads to refuse a file built from a draft.
+
 Every source is synthetic, built in memory with `debate_core.testing.docx_builder`.
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 import zipfile
 from datetime import UTC, datetime
 from io import BytesIO
 from typing import Final
 
+import pytest
 from lxml import etree
 
 from debate_core.application.ports.evidence_file_writer import BuiltEvidenceFile, FileBuildRequest
@@ -48,8 +53,8 @@ READY_HEADER: Final = (
 )
 
 
-def header_of(status: RecipeStatus) -> tuple[str | None, str]:
-    """The built file's first paragraph, its style and text, for the recipe built with `status`."""
+def built_with(status: RecipeStatus) -> BuiltEvidenceFile:
+    """The file the writer builds from a one-card recipe of `status`."""
     world = FileBuilderWorld(parser=PARSER)
     (card,) = asyncio.run(world.add_source(SOURCE))
     recipe = world.recipe([("Prices", [{"fingerprint": card.fingerprint}])])
@@ -59,6 +64,12 @@ def header_of(status: RecipeStatus) -> tuple[str | None, str]:
         writer.build(FileBuildRequest(world.resolve(recipe, {card.fingerprint: card}), BUILT_AT))
     )
     assert isinstance(built, BuiltEvidenceFile), built
+    return built
+
+
+def header_of(status: RecipeStatus) -> tuple[str | None, str]:
+    """The built file's first paragraph, its style and text, for the recipe built with `status`."""
+    built = built_with(status)
     with zipfile.ZipFile(BytesIO(built.docx)) as package:
         body = etree.fromstring(package.read("word/document.xml")).find(f"{W}body")
     assert body is not None
@@ -77,3 +88,10 @@ def test_a_draft_recipes_header_analytic_says_draft() -> None:
 
 def test_a_ready_recipes_header_analytic_is_unchanged() -> None:
     assert header_of(RecipeStatus.READY) == ("Analytic", READY_HEADER)
+
+
+@pytest.mark.parametrize("status", list(RecipeStatus))
+def test_the_sidecar_records_the_recipes_status(status: RecipeStatus) -> None:
+    built = built_with(status)
+    assert built.manifest.recipe_status is status
+    assert json.loads(built.manifest_json)["recipe_status"] == str(status)

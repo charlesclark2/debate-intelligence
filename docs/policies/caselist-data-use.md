@@ -3,12 +3,12 @@
 
 | | |
 |---|---|
-| Policy version | 1.17 |
-| Status | **Approved**, version 1.17, on the merge of its pull request (decided 2026-10-25). See [Approval](#approval). |
+| Policy version | 1.18 |
+| Status | **Approved**, version 1.18, on the merge of its pull request (decided 2026-10-25). See [Approval](#approval). |
 | Owner | Charlie Clark (product owner and head coach) |
 | Written by | v1-e30-t01-caselist-data-use-policy implementation session, 2026-09-19 |
 | Applies to | Everything the platform collects from OpenCaselist and OpenEv, and everything derived from it, in every environment |
-| Approved by | Charlie Clark, product owner and head coach, 2026-09-19 (versions 1.0 and 1.1), 2026-10-01 (versions 1.3 and 1.4), 2026-10-10 (versions 1.5 and 1.6), 2026-10-11 (version 1.7), 2026-10-13 (version 1.8), 2026-10-15 (version 1.9), 2026-10-19 (version 1.10), 2026-10-22 (versions 1.11 and 1.12) and 2026-10-24 (versions 1.13, 1.14 and 1.15) and 2026-10-25 (versions 1.16 and 1.17) |
+| Approved by | Charlie Clark, product owner and head coach, 2026-09-19 (versions 1.0 and 1.1), 2026-10-01 (versions 1.3 and 1.4), 2026-10-10 (versions 1.5 and 1.6), 2026-10-11 (version 1.7), 2026-10-13 (version 1.8), 2026-10-15 (version 1.9), 2026-10-19 (version 1.10), 2026-10-22 (versions 1.11 and 1.12) and 2026-10-24 (versions 1.13, 1.14 and 1.15) and 2026-10-25 (versions 1.16, 1.17 and 1.18) |
 | Next review | Start of the 2027-28 season, or sooner if a source's terms change |
 
 This is the policy that governs how the Debate Intelligence Platform collects, stores, uses and
@@ -37,8 +37,9 @@ a rule here, this policy is revised and re-approved before the affected work con
   and fingerprints, position classifications, argument landscape reports, and team files built
   from disclosed or camp cards.
 - Every place that data lives: the operator's laptop, the dev evidence bucket, the prod evidence
-  bucket, the weekly run's working copy in the team's AWS account while it runs (ADR-0020), the V1
-  CLI, and the V2 debate tub.
+  bucket, the weekly run's working copy in the team's AWS account while it runs (ADR-0020), a
+  one-off backfile import's working copy there while it runs, a working copy restored on the
+  operator's machine from a bucket for one step (version 1.18), the V1 CLI, and the V2 debate tub.
 - Everyone with access: the operator, coaches, and (from V2) the team's debaters.
 
 **Out of scope**
@@ -261,7 +262,10 @@ personal data about a minor (architecture proposal §14).
 
 **Where personal data is allowed to live** — and only here: the local evidence store on the
 operator's machine, the weekly cloud run's working copy of that store on its task's ephemeral
-storage while the run runs (ADR-0020), the `manifests/` prefix of the private dev and prod evidence
+storage while the run runs (ADR-0020), a one-off backfile import's working copy on its task's
+ephemeral storage while that task runs (version 1.18), a working copy restored on the operator's
+machine from a bucket for a comparison or a hand publish, for the length of that step (version
+1.18), the `manifests/` prefix of the private dev and prod evidence
 buckets (which holds the cloud run's run-state bundle, `manifests/_run-state/`), the
 provenance sidecar of a built file, a file recipe under the data directory's `files/` (version
 1.15), the per-school landscape view, and the student search pilot's
@@ -306,6 +310,8 @@ A **season** runs 1 August to 31 July and is labelled like `2026-27`.
 | The student search pilot's index (E39) | Until the next build replaces it | Superseded index versions, noncurrent versions included, deleted within 30 days, and at once after a removal (v1-e39-t07) |
 | The student search pilot's access audit (E39) | 400 days | Log retention, automatically |
 | The weekly cloud run's working copy (ADR-0020) | The length of one run | Fargate, when the task stops |
+| A one-off backfile import's working copy in the cloud (version 1.18) | The length of that task | Fargate, when the task stops |
+| A working copy restored on the operator's machine from a bucket, for a comparison or a hand publish (version 1.18) | The length of that step | The operator, at the end of the step, as the runbook that restores it says |
 | The weekly cloud run's run-state bundle (`manifests/_run-state/`, ADR-0020) | Same clock as the manifests it holds | With them; a removal rewrites it and purges its noncurrent versions at once |
 | Removal log and suppression list | Indefinitely — the suppression list must outlive the data it suppresses | — |
 | S3 noncurrent object versions | Lifecycle from v1-e29-t03: Standard-IA after 30 days, expire after 365 days in prod and 30 days in dev | Automatically |
@@ -483,11 +489,18 @@ published to prod.
 **Limits — all of them binding**
 
 1. **Corpus only.** Caselist archives and OpenEv files. No student account data, no Cognito or
-   user-pool data, no team-private files.
-2. **Operators only.** No student or general team access to dev, in V1 or V2.
+   user-pool data, no team-private files, except the pilot validation accounts of limit 2.
+2. **Operators only.** No student or general team access to dev, in V1 or V2, with one exception
+   that ends at the student search pilot's promotion to prod (version 1.18): **at most two pilot
+   validation students** may hold accounts in the dev pilot's user pool, created by the coach with
+   `tub users add`, to validate the pilot before prod. Their accounts hold what a prod account
+   holds and no more (E39 gate item 9), every item of the [E39 gate](#gates) holds on dev for them as
+   it would on prod, and their names are in no committed file. At the promotion the coach removes
+   both dev accounts (`tub users remove`), and the students move to prod accounts.
 3. **Three locations.** The dev evidence bucket, the operator's local store, and, while a dev cloud
-   run runs, its task's ephemeral storage, deleted when the task stops (ADR-0020). No exports, no
-   email attachments, no other buckets, no CI artefacts, no container images, no third-party tools.
+   run or a one-off backfile import runs, its task's ephemeral storage, deleted when the task stops
+   (ADR-0020, version 1.18). No exports, no email attachments, no other buckets, no CI artefacts,
+   no container images, no third-party tools.
 4. **Never CI data.** CI keeps synthetic fixtures only; the real corpus never reaches a CI runner
    (working agreements §1).
 5. **Same retention clock as prod**, with dev noncurrent versions expiring after 30 days.
@@ -653,7 +666,7 @@ before the thing it gates.
 
 ## Approval
 
-**Version 1.17 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
+**Version 1.18 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
 real corpus into dev, model classification over real disclosed text, and automated download (E34)
 are unblocked, each still subject to its own conditions in [Gates](#gates). Version 1.1 recorded
 the maintainer's confirmation of scheduled API downloads and the 10-per-minute rate limit.
@@ -817,16 +830,36 @@ changes [Permitted uses](#permitted-uses) (a new use 8), [Retention](#retention)
 before, so under [Review and change control](#review-and-change-control) it needs the coach's
 approval, and merging its pull request records the approval below. Nothing else changes.
 
+Version 1.18 names two working copies that the cloud cutover and the backfile imports make, and
+keeps each for one step only. A **working copy restored on the operator's machine** from a bucket,
+for the cutover's comparison or a hand publish to prod (`caselist restore-run-state`,
+`v1-e40-t06`), is kept for the length of that step and then deleted, as the runbook that restores it
+already does. A **one-off backfile import's working copy** on a cloud task's ephemeral storage
+(version 1.17's backfiles, imported in the cloud because the operator's machine lacks the space) is
+kept for the length of that task, as the weekly run's is. Both hold the same data as the stores they
+were restored from or import into, under the same rules. Charlie decided the cloud import on
+2026-10-25, and the PM adopted the restored copy's sentence from `v1-e40-t06`'s review. It changes
+[Scope](#scope), "Where personal data is allowed to live", [Retention](#retention) and the
+[Dev environment exception](#dev-environment-exception)'s limit 3. It names places data may live
+that the policy did not name before. Version 1.18 also lets at most two pilot
+validation students hold dev pilot accounts until the pilot's promotion to prod ([Dev environment
+exception](#dev-environment-exception) limits 1 and 2): Charlie decided it on 2026-10-25, after
+the PM found that two students he had given dev accounts to validate the pilot were outside limit 2
+as written. Every E39 gate item holds for them on dev, and their dev accounts are removed at the
+promotion. Both changes loosen the policy, so under
+[Review and change control](#review-and-change-control) it needs the coach's approval, and merging
+its pull request records the approval below. Nothing else changes.
+
 The standing rule for every future version: until this table records an approval of that version,
 nothing this policy governs may happen under it.
 
 | Field | Value |
 |---|---|
-| Policy version | 1.17 and 1.16 (2026-10-25); 1.15, 1.14 and 1.13 (2026-10-24); 1.12 and 1.11 (2026-10-22); 1.10 (2026-10-19); 1.9 (2026-10-15); 1.8 (2026-10-13); 1.7 (2026-10-11); 1.6 and 1.5 (2026-10-10); 1.4 and 1.3 approved 2026-10-01, 1.3 including version 1.2's correction to rule 3; 1.0 and 1.1 approved 2026-09-19 |
+| Policy version | 1.18, 1.17 and 1.16 (2026-10-25); 1.15, 1.14 and 1.13 (2026-10-24); 1.12 and 1.11 (2026-10-22); 1.10 (2026-10-19); 1.9 (2026-10-15); 1.8 (2026-10-13); 1.7 (2026-10-11); 1.6 and 1.5 (2026-10-10); 1.4 and 1.3 approved 2026-10-01, 1.3 including version 1.2's correction to rule 3; 1.0 and 1.1 approved 2026-09-19 |
 | Approved by | Charlie Clark |
 | Role | Product owner and head coach |
-| Approval date | 2026-10-25 (versions 1.17 and 1.16; 1.15, 1.14 and 1.13: 2026-10-24; 1.12 and 1.11: 2026-10-22; 1.10: 2026-10-19; 1.9: 2026-10-15; 1.8: 2026-10-13; 1.7: 2026-10-11; 1.5 and 1.6: 2026-10-10; 1.3 and 1.4: 2026-10-01; 1.0 and 1.1: 2026-09-19) |
-| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.17, including the [clause register](#clause-register) read 2026-09-19 and the [community disclosure norms](#community-disclosure-norms), both confirmed by Charlie |
+| Approval date | 2026-10-25 (versions 1.18, 1.17 and 1.16; 1.15, 1.14 and 1.13: 2026-10-24; 1.12 and 1.11: 2026-10-22; 1.10: 2026-10-19; 1.9: 2026-10-15; 1.8: 2026-10-13; 1.7: 2026-10-11; 1.5 and 1.6: 2026-10-10; 1.3 and 1.4: 2026-10-01; 1.0 and 1.1: 2026-09-19) |
+| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.18, including the [clause register](#clause-register) read 2026-09-19 and the [community disclosure norms](#community-disclosure-norms), both confirmed by Charlie |
 | Open questions resolved at approval | **5** — removal contact address is `ctcb57@gmail.com`. **7** — two-season retention stands. **8** — resolved by a PM spec change to v1-e29-t03 / v1-e30-t07. **2** (version 1.1) — maintainer confirmed scheduled API downloads at 10 file downloads per minute. **6** (version 1.10) — the school's activities director and IT approved the tool for students; no district review for the E39 pilot |
 | Open questions accepted as known gaps | **1** — OpenCaselist privacy page unread. **3** — OpenEv distribution and per-camp terms unread |
 | Open questions left open | **4** — Bedrock data-protection terms, an E32 gate. **6** — for the V2 tub only, if its scope goes beyond the pilot's |

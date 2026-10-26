@@ -1,0 +1,77 @@
+# TASK v1-e05-t11-per-prompt-effort - A prompt may set its own effort, so a classifier need not think at the route's default
+# Epic: E05 Model Router & Structured LLM Contracts | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e05-t11-per-prompt-effort
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e05-model-router
+  annotations:
+    debate/title: "A prompt may set its own effort, so a classifier need not think at the route's default"
+spec:
+  # Filed by the PM, 2026-10-25, from v1-e32-t07's question 5 and the PM's ruling (2026-10-25).
+  description: >-
+    The `high_volume` route sets no effort, so a classification prompt thinks at the model's
+    default, up to the route's output cap, and every other prompt on that route shares it. Let a
+    registered prompt declare an effort the router passes through where the model accepts one,
+    without changing the route for other prompts, recorded in the prompt lock and the call's
+    telemetry. Count first: which prompts use `high_volume`, and the output tokens a replayed
+    run of `landscape.classify_position` spends at each effort, from recorded fixtures. Send the
+    counts to the PM before changing any prompt's effort.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, packages/debate_core/tests, prompts, config, scripts]
+    forbidden:
+      - A real model call in a test
+      - Changing another prompt's effort in this task
+  context:
+    - kind: TaskRef
+      name: v1-e32-t07-model-classification-stage
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Counts first: the prompts on `high_volume` and the replayed token counts per effort,
+        sent to the PM.
+    - id: ac2
+      description: >-
+        A prompt's declared effort reaches the request and the telemetry, a prompt without
+        one keeps the route's, and the lock records it; tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e05-t11-per-prompt-effort-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e05-model-router
+spec:
+  description: >-
+    Let a prompt declare its effort, counted before any prompt changes.
+  goalRef:
+    name: v1-e05-t11-per-prompt-effort
+  graph:
+    nodes:
+      - id: per-prompt-effort
+        kind: Task
+        name: Per-prompt effort
+        description: >-
+          Let a prompt declare its effort, counted before any prompt changes.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Model router tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/models]
+status:
+  phase: Pending

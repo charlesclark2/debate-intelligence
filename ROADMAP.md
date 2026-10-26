@@ -60,15 +60,15 @@ v2.3's extension work.
 
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
-| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 49 | 45 | 240 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 108 | 82 | 498 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 41 | 26 | 248 |
-| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 2 | 108 |
+| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 50 | 45 | 242 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 108 | 83 | 498 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 46 | 28 | 262 |
+| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 15 | 4 | 113 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 22 | 13 | 154 |
-| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 18 | 12 | 76 |
-| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 1 | 8 | 1 | 24 |
+| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 18 | 13 | 76 |
+| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 1 | 12 | 2 | 34 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -129,6 +129,7 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 | [validate-dev is green again, and a red one is seen](plan_specs/v1/e01-repo-foundation/t34-validate-dev-green-again.yaml) `v1-e01-t34-validate-dev-green-again` | InProgress | 1 | 3.0 |
 | [CI's pyright covers tests/architecture and tests/smoke](plan_specs/v1/e01-repo-foundation/t35-pyright-scope-tests.yaml) `v1-e01-t35-pyright-scope-tests` | Pending | 1 | 1.0 |
 | [A dev pre-release for a commit dev has moved past with a workflow change is reported superseded, not failed](plan_specs/v1/e01-repo-foundation/t36-prerelease-superseded-commit.yaml) `v1-e01-t36-prerelease-superseded-commit` | Succeeded | 1 | 2.0 |
+| [A CI check that every locked package's licence is one the project accepts](plan_specs/v1/e01-repo-foundation/t37-licence-check-over-the-lock.yaml) `v1-e01-t37-licence-check-over-the-lock` | Pending | 0 | 2.0 |
 
 #### [E02 — Domain Core: Entities, Ports & Local Persistence](plan_specs/v1/e02-domain-core/epic.yaml)
 
@@ -284,7 +285,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [The weekly run names caselist parse --publish-only where a publish-only finishes the stage](plan_specs/v1/e34-caselist-sync/t31-pull-fix-text-publish-only.yaml) `v1-e34-t31-pull-fix-text-publish-only` | Pending | 2 | 2.0 |
 | [The staleness hook reports a caselist stale when its latest run failed](plan_specs/v1/e34-caselist-sync/t32-failed-run-reads-stale.yaml) `v1-e34-t32-failed-run-reads-stale` | Succeeded | 1 | 2.0 |
 | [A keychain failure under launchd names its cause, and clearing a token already gone is no error](plan_specs/v1/e34-caselist-sync/t33-keychain-errors-named.yaml) `v1-e34-t33-keychain-errors-named` | Pending | 1 | 2.0 |
-| [Earlier seasons' complete archives, from 2021-22 on, imported and parsed as backfiles](plan_specs/v1/e34-caselist-sync/t34-backfile-seasons-import.yaml) `v1-e34-t34-backfile-seasons-import` | Pending | 1 | 4.0 |
+| [Earlier seasons' complete archives, from 2021-22 on, imported and parsed as backfiles](plan_specs/v1/e34-caselist-sync/t34-backfile-seasons-import.yaml) `v1-e34-t34-backfile-seasons-import` | Succeeded | 1 | 4.0 |
 
 
 ### v1.2 — Argument landscape & file building
@@ -305,6 +306,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [A profile that may call Bedrock, and the model access its first call needs](plan_specs/v1/e05-model-router/t08-bedrock-invoke-access.yaml) `v1-e05-t08-bedrock-invoke-access` | Pending | 1 | 4.0 |
 | [Replay tolerates a new optional parameter, a refused model call is not retryable, and doctor can check the routing file](plan_specs/v1/e05-model-router/t09-replay-and-model-exit-codes.yaml) `v1-e05-t09-replay-and-model-exit-codes` | Pending | 2 | 3.0 |
 | [Record mode keeps an invalid answer, so a repaired call can be recorded live](plan_specs/v1/e05-model-router/t10-record-mode-keeps-invalid-answers.yaml) `v1-e05-t10-record-mode-keeps-invalid-answers` | Pending | 2 | 2.0 |
+| [A prompt may set its own effort, so a classifier need not think at the route's default](plan_specs/v1/e05-model-router/t11-per-prompt-effort.yaml) `v1-e05-t11-per-prompt-effort` | Pending | 1 | 2.0 |
 
 #### [E32 — Argument Landscape Reports](plan_specs/v1/e32-argument-landscape/epic.yaml)
 
@@ -321,7 +323,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [Each Policy affirmative round's plan, counted first, so the landscape names what affs read](plan_specs/v1/e32-argument-landscape/t09-policy-plan-texts.yaml) `v1-e32-t09-policy-plan-texts` | Succeeded | 1 | 5.0 |
 | [Impact cards per DA and advantage in the landscape report](plan_specs/v1/e32-argument-landscape/t10-impact-cards-per-position.yaml) `v1-e32-t10-impact-cards-per-position` | Succeeded | 1 | 4.0 |
 | [Counterplan texts, kritik alternatives and overviews in the landscape report](plan_specs/v1/e32-argument-landscape/t11-negative-analytic-texts.yaml) `v1-e32-t11-negative-analytic-texts` | Succeeded | 2 | 5.0 |
-| [The landscape command names the seven-file bundle and counts its trends and schools](plan_specs/v1/e32-argument-landscape/t12-landscape-cli-seven-files.yaml) `v1-e32-t12-landscape-cli-seven-files` | InProgress | 1 | 1.0 |
+| [The landscape command names the seven-file bundle and counts its trends and schools](plan_specs/v1/e32-argument-landscape/t12-landscape-cli-seven-files.yaml) `v1-e32-t12-landscape-cli-seven-files` | Succeeded | 1 | 1.0 |
 | [A removal and the annual purge reach the landscape bundles' school views](plan_specs/v1/e32-argument-landscape/t13-removal-reaches-landscape-school-views.yaml) `v1-e32-t13-removal-reaches-landscape-school-views` | Succeeded | 2 | 3.0 |
 | [Each DA's and advantage's scenarios and link chain, and what each impact card runs through](plan_specs/v1/e32-argument-landscape/t14-scenarios-and-link-chains.yaml) `v1-e32-t14-scenarios-and-link-chains` | Succeeded | 1 | 5.0 |
 | [The advantages each affirmative's teams read](plan_specs/v1/e32-argument-landscape/t15-advantages-per-aff.yaml) `v1-e32-t15-advantages-per-aff` | Succeeded | 1 | 3.0 |
@@ -331,7 +333,11 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [A dry run's scan refusal says nothing was written and gives the publish command](plan_specs/v1/e32-argument-landscape/t19-dry-run-scan-refusal-wording.yaml) `v1-e32-t19-dry-run-scan-refusal-wording` | Pending | 1 | 1.0 |
 | [report.md in two halves: every affirmative section together, then every negative one](plan_specs/v1/e32-argument-landscape/t20-report-sides-together.yaml) `v1-e32-t20-report-sides-together` | Succeeded | 1 | 2.0 |
 | [A local text classifier for the cards headings cannot place, compared before anything is wired](plan_specs/v1/e32-argument-landscape/t21-local-classifier-comparison.yaml) `v1-e32-t21-local-classifier-comparison` | InProgress | 1 | 5.0 |
-| [A coach-edited scenario vocabulary per DA and advantage](plan_specs/v1/e32-argument-landscape/t22-scenario-vocabulary.yaml) `v1-e32-t22-scenario-vocabulary` | Pending | 1 | 3.0 |
+| [A coach-edited scenario vocabulary per DA and advantage](plan_specs/v1/e32-argument-landscape/t22-scenario-vocabulary.yaml) `v1-e32-t22-scenario-vocabulary` | Pending | 2 | 3.0 |
+| [Team links on a school's page, as on a position's](plan_specs/v1/e32-argument-landscape/t23-school-page-team-links.yaml) `v1-e32-t23-school-page-team-links` | InProgress | 1 | 1.0 |
+| [Policy affs whose plan text has no label, identified by the plan or the advantages](plan_specs/v1/e32-argument-landscape/t24-unlabelled-plan-affs.yaml) `v1-e32-t24-unlabelled-plan-affs` | Pending | 2 | 4.0 |
+| [What each impact runs through, named in words a debater uses](plan_specs/v1/e32-argument-landscape/t25-readable-impact-chains.yaml) `v1-e32-t25-readable-impact-chains` | Pending | 1 | 3.0 |
+| [The review queue ordered by the local proxy model, which places nothing](plan_specs/v1/e32-argument-landscape/t26-review-queue-proxy-ordering.yaml) `v1-e32-t26-review-queue-proxy-ordering` | Pending | 1 | 3.0 |
 
 #### [E33 — Evidence File Builder](plan_specs/v1/e33-file-builder/epic.yaml)
 
@@ -339,9 +345,9 @@ Weekly argument-landscape reports show which positions are being read and with w
 |---|---|---|---|
 | [File recipe format](plan_specs/v1/e33-file-builder/t01-file-recipe-format.yaml) `v1-e33-t01-file-recipe-format` | Succeeded | 1 | 11.0 |
 | [Lossless card writer](plan_specs/v1/e33-file-builder/t02-lossless-card-writer.yaml) `v1-e33-t02-lossless-card-writer` | Succeeded | 3 | 15.0 |
-| [`debate-research files` commands](plan_specs/v1/e33-file-builder/t03-file-build-cli.yaml) `v1-e33-t03-file-build-cli` | InProgress | 4 | 10.0 |
+| [`debate-research files` commands](plan_specs/v1/e33-file-builder/t03-file-build-cli.yaml) `v1-e33-t03-file-build-cli` | Succeeded | 4 | 10.0 |
 | [Built-file quality checks](plan_specs/v1/e33-file-builder/t04-file-quality-checks.yaml) `v1-e33-t04-file-quality-checks` | Succeeded | 2 | 11.0 |
-| [Publish built files to S3](plan_specs/v1/e33-file-builder/t05-file-publish.yaml) `v1-e33-t05-file-publish` | Pending | 3 | 9.0 |
+| [Publish built files to S3](plan_specs/v1/e33-file-builder/t05-file-publish.yaml) `v1-e33-t05-file-publish` | InProgress | 3 | 9.0 |
 | [A recipe can name a camp (OpenEv) card](plan_specs/v1/e33-file-builder/t06-camp-pins.yaml) `v1-e33-t06-camp-pins` | Succeeded | 1 | 2.0 |
 | [A camp occurrence row carries its camp path's digest, so a camp-path withdrawal stops it before a rebuild](plan_specs/v1/e33-file-builder/t07-camp-path-on-occurrence-rows.yaml) `v1-e33-t07-camp-path-on-occurrence-rows` | Pending | 1 | 2.0 |
 | [Built files carry no provenance line; the sidecar keeps the provenance](plan_specs/v1/e33-file-builder/t08-provenance-line-one-function.yaml) `v1-e33-t08-provenance-line-one-function` | Succeeded | 0 | 1.0 |
@@ -358,10 +364,12 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 |---|---|---|---|
 | [URL canonicalization and identifier detection](plan_specs/v1/e04-article-retrieval/t01-url-canonicalization.yaml) `v1-e04-t01-url-canonicalization` | Succeeded | 1 | 7.0 |
 | [Polite HTTP fetcher](plan_specs/v1/e04-article-retrieval/t02-http-fetcher.yaml) `v1-e04-t02-http-fetcher` | Succeeded | 4 | 10.0 |
-| [Access-status and paywall detection](plan_specs/v1/e04-article-retrieval/t03-access-status.yaml) `v1-e04-t03-access-status` | Pending | 2 | 6.0 |
-| [Readable-text extraction (HTML + PDF)](plan_specs/v1/e04-article-retrieval/t04-content-extraction.yaml) `v1-e04-t04-content-extraction` | Pending | 2 | 8.5 |
+| [Access-status and paywall detection](plan_specs/v1/e04-article-retrieval/t03-access-status.yaml) `v1-e04-t03-access-status` | Succeeded | 2 | 6.0 |
+| [Readable-text extraction (HTML + PDF)](plan_specs/v1/e04-article-retrieval/t04-content-extraction.yaml) `v1-e04-t04-content-extraction` | Succeeded | 2 | 8.5 |
 | [ArticleService orchestration](plan_specs/v1/e04-article-retrieval/t05-article-service.yaml) `v1-e04-t05-article-service` | Pending | 3 | 8.5 |
 | [`debate-research fetch` command and recorded fixtures](plan_specs/v1/e04-article-retrieval/t06-fetch-command.yaml) `v1-e04-t06-fetch-command` | Pending | 2 | 7.5 |
+| [How extraction and access classification behave on real pages, measured in place](plan_specs/v1/e04-article-retrieval/t07-real-page-measurement.yaml) `v1-e04-t07-real-page-measurement` | Pending | 1 | 2.0 |
+| [An Article found by its DOI and by a URL a snapshot was fetched from](plan_specs/v1/e04-article-retrieval/t08-article-lookup-by-identifier-and-fetched-url.yaml) `v1-e04-t08-article-lookup-by-identifier-and-fetched-url` | Pending | 1 | 3.0 |
 
 #### [E06 — Card Cutting, Citation & Export](plan_specs/v1/e06-card-cutting/epic.yaml)
 
@@ -490,7 +498,7 @@ Debaters search the team's evidence store from a school Chromebook or at home: a
 | [An index that would drop most of the cards is never published](plan_specs/v1/e39-evidence-search-pilot/t14-index-shrink-guard.yaml) `v1-e39-t14-index-shrink-guard` | Succeeded | 1 | 3.0 |
 | [tub index prune: the runbook's prune of superseded index versions as one command](plan_specs/v1/e39-evidence-search-pilot/t15-tub-index-prune.yaml) `v1-e39-t15-tub-index-prune` | Pending | 1 | 2.0 |
 | [Open on OpenEv: a camp card links to its camp file](plan_specs/v1/e39-evidence-search-pilot/t16-open-on-openev.yaml) `v1-e39-t16-open-on-openev` | Pending | 1 | 3.0 |
-| [The landscape report and its school view on the pilot, for signed-in team members](plan_specs/v1/e39-evidence-search-pilot/t17-landscape-pages.yaml) `v1-e39-t17-landscape-pages` | Pending | 2 | 6.0 |
+| [The landscape report and its school view on the pilot, for signed-in team members](plan_specs/v1/e39-evidence-search-pilot/t17-landscape-pages.yaml) `v1-e39-t17-landscape-pages` | Succeeded | 2 | 6.0 |
 | [Backfile seasons searchable on the pilot, without slowing its cold start](plan_specs/v1/e39-evidence-search-pilot/t18-backfiles-in-the-pilot-index.yaml) `v1-e39-t18-backfiles-in-the-pilot-index` | Pending | 2 | 4.0 |
 
 
@@ -506,10 +514,14 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [The caselist token in Secrets Manager, and a scheduled login that renews it](plan_specs/v1/e40-cloud-caselist-run/t02-secrets-token-store-and-login.yaml) `v1-e40-t02-secrets-token-store-and-login` | InProgress | 1 | 4.0 |
 | [The weekly run as a container on a schedule](plan_specs/v1/e40-cloud-caselist-run/t03-run-image-and-schedule.yaml) `v1-e40-t03-run-image-and-schedule` | InProgress | 1 | 4.0 |
 | [A cloud run keeps its state in the evidence bucket](plan_specs/v1/e40-cloud-caselist-run/t04-run-state-on-s3.yaml) `v1-e40-t04-run-state-on-s3` | InProgress | 1 | 5.0 |
-| [A failed or late cloud run emails the coach](plan_specs/v1/e40-cloud-caselist-run/t05-run-alerts.yaml) `v1-e40-t05-run-alerts` | InProgress | 1 | 2.0 |
+| [A failed or late cloud run emails the coach](plan_specs/v1/e40-cloud-caselist-run/t05-run-alerts.yaml) `v1-e40-t05-run-alerts` | Succeeded | 1 | 2.0 |
 | [Cut over: the cloud run takes the schedule and the Mac stops](plan_specs/v1/e40-cloud-caselist-run/t06-cutover.yaml) `v1-e40-t06-cutover` | InProgress | 4 | 2.0 |
 | [The evidence bucket itself refuses an unconditional write of the run lock](plan_specs/v1/e40-cloud-caselist-run/t07-lock-writes-conditional-at-the-bucket.yaml) `v1-e40-t07-lock-writes-conditional-at-the-bucket` | Pending | 1 | 1.0 |
 | [A week a killed run published is parsed by the next run, not left for the next import](plan_specs/v1/e40-cloud-caselist-run/t08-parse-owed.yaml) `v1-e40-t08-parse-owed` | Pending | 1 | 3.0 |
+| [The backfile imports run once each in the cloud, not on the operator's machine](plan_specs/v1/e40-cloud-caselist-run/t09-cloud-backfile-import.yaml) `v1-e40-t09-cloud-backfile-import` | Pending | 2 | 3.0 |
+| [A restored working copy that brings the raw sources a hand prod publish needs](plan_specs/v1/e40-cloud-caselist-run/t10-restore-with-sources.yaml) `v1-e40-t10-restore-with-sources` | Pending | 1 | 2.0 |
+| [The dev lock held for good when the weekly run's home moves to prod](plan_specs/v1/e40-cloud-caselist-run/t11-run-home-moved-holder.yaml) `v1-e40-t11-run-home-moved-holder` | Pending | 1 | 2.0 |
+| [A held upload a cloud task records reaches the bucket, not only its working copy](plan_specs/v1/e40-cloud-caselist-run/t12-held-upload-records-reach-the-bucket.yaml) `v1-e40-t12-held-upload-records-reach-the-bucket` | Pending | 1 | 3.0 |
 
 
 ## V2

@@ -43,6 +43,8 @@ CLI_DOCUMENT_LIBRARIES = "The CLI reaches lxml only through debate_core.integrat
 API_DOCUMENT_LIBRARIES = "The API reaches lxml only through debate_core.integrations"
 SAFE_XML_PARSER = "The safe XML parser stays inside debate_core.integrations.discovery"
 CLI_SAFE_XML_PARSER = "The CLI reaches defusedxml only through debate_core.integrations.discovery"
+EXTRACTION_LIBRARIES = "The extraction libraries stay inside the HTML and PDF extractors"
+CLI_EXTRACTION_LIBRARIES = "The CLI reaches the extraction libraries only through debate_core.integrations"
 CORE_LAYERS = (
     "debate_core layers: integrations and testing above application above evidence and retrieval above domain"
 )
@@ -95,6 +97,16 @@ VIOLATIONS = [
         SAFE_XML_PARSER,
     ),
     Violation("debate_cli.commands.boundary_probe", "import defusedxml", CLI_SAFE_XML_PARSER),
+    # Only the two extractors read pages and PDFs (v1-e04-t04): not the layout rules in retrieval,
+    # not a use case, not another adapter, not a CLI command.
+    Violation("debate_core.retrieval.boundary_probe", "import pypdf", EXTRACTION_LIBRARIES),
+    Violation("debate_core.application.boundary_probe", "import trafilatura", EXTRACTION_LIBRARIES),
+    Violation(
+        "debate_core.integrations.discovery.boundary_probe",
+        "from readability import Document",
+        EXTRACTION_LIBRARIES,
+    ),
+    Violation("debate_cli.commands.boundary_probe", "from pypdf import PdfReader", CLI_EXTRACTION_LIBRARIES),
     # Retrieval is the pure layer of E04: fetching and parsing are adapters (PM ruling, v1-e04-t01).
     Violation("debate_core.retrieval.boundary_probe", "import boto3", AWS_SDK),
     Violation("debate_core.retrieval.boundary_probe", "import httpx", HTTP_CLIENT),

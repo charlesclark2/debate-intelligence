@@ -58,6 +58,12 @@ the moment one of them is fixed, and there is no account boundary here to make t
    directory without its own copy is silently linted with tflint's defaults; the checks script
    fails when a copy is missing or has drifted.
 5. Call it from `envs/dev` and `envs/prod` and run `scripts/terraform_checks.sh`.
+6. **In a module test, name each `for_each` instance by its literal key** in an assertion, rather
+   than iterating the whole map, when the resource has a deprecated attribute (an
+   `aws_cloudwatch_event_rule`'s `is_enabled`, for one). On Terraform 1.16 a failing assertion over
+   the whole map panics while rendering its message (`value has marks, so it cannot be serialized
+   as JSON`) instead of printing it, and under working agreement 8 a crash is not a clean catch
+   (`v1-e40-t05`, commit `ffa220a`).
 
 ## The public team website
 

@@ -167,3 +167,12 @@ A tidy, well-bounded change.
    the PR's `ci` under agreement 10. The changed package and the always-run list passed (1,204).
 5. **The note about `v1-e32-t11`** is right. If its sync conflicts in `landscape.py`, keep both
    sides.
+
+## PM record, 2026-10-25
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+* **ac2: done.** validate-dev's run `40174570850` on `dev` (2026-10-25 07:54 UTC, commit `e60bd8e`,
+  which contains this task's merge `ef2cd44`) concluded `success`, and so did run `40193904183` at
+  12:37 UTC. Its recorded tier runs the landscape smoke check.
+* Every criterion is met, so the Goal is set to `Succeeded` in the PM batch of 2026-10-25 (p).

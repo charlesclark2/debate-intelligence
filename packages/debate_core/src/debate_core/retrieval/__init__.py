@@ -12,6 +12,7 @@ from debate_core.retrieval.canonical_url import (
     RelCanonicalRule,
     apply_rel_canonical,
     canonicalize_url,
+    fetch_target_url,
 )
 from debate_core.retrieval.identifiers import ScholarlyIdentifiers, detect_identifiers
 from debate_core.retrieval.public_suffix import registrable_domain
@@ -24,5 +25,6 @@ __all__ = [
     "apply_rel_canonical",
     "canonicalize_url",
     "detect_identifiers",
+    "fetch_target_url",
     "registrable_domain",
 ]

@@ -6,14 +6,14 @@
 | Spec | [`plan_specs/v1/e32-argument-landscape/t22-scenario-vocabulary.yaml`](../../plan_specs/v1/e32-argument-landscape/t22-scenario-vocabulary.yaml) |
 | Epic / release | `v1-e32-argument-landscape` / `v1.2` |
 | Branch | `task/v1-e32-t22-scenario-vocabulary` |
-| Session status | PARTIAL <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
-**Stopped after step 4, as ruled: the coach's edit is committed on its own (`0fb8dc9`), and the
-operator's refill and dry run are next** ([Operator follow-ups](#operator-follow-ups)). The Goal stays
-`InProgress`: ac2's second half, "the next report uses it", is that dry run, which only the operator
-runs.
+**Complete. Every criterion passed, and the Goal is `Succeeded`.** The coach's edit is committed on its
+own (`0fb8dc9`). The operator's refill and dry run under 1.4.0 read it
+([the real store](#the-real-store-under-the-coachs-lists-2026-10-26)): every count landed where the
+report said it would, and the scan found no hit in the scenario sections.
 
 **What is built (ac1, PASS):**
 * **The list.** A DA or advantage in the taxonomy may carry `scenarios` (each a `name` and its `forms`)
@@ -88,6 +88,38 @@ the seed at one level. For the Midterms DA, the impacts are named and the branch
 `republicans win`) go to `not_scenarios`. For the Economy DA, `decline` and `econ` go to
 `not_scenarios`. The counts for branches and mechanisms become a new E32 task ([Follow-up
 work](#follow-up-work)).
+
+## The real store under the coach's lists (2026-10-26)
+
+**What ran:** the operator's refill and dry run ([Operator follow-ups](#operator-follow-ups) 2 and 3),
+on `2b24d43`, after [the sync](#the-sync-onto-dev-2026-10-26).
+* The guards passed; nothing was published.
+* The classification cache: 107,187 keys, 100% hits. The first, refused run had already written it
+  under 1.4.0.
+* The plan-text cache: 1,770 sources cached, 0 parsed. The analytic texts: 3,825 parsed, cache
+  written, 376.2 s. The dry run: 70.9 s.
+
+| Dry run line | Expected in this report | Measured |
+|---|---|---|
+| Taxonomy and writes | 1.4.0, nothing written | `taxonomy 1.4.0: nothing written; 7 files planned` |
+| Impact rows, advantage / DA | above zero (t14: 43 / 44) | 43 / 44 |
+| Rows with a scenario, advantage / DA | moved by the edit (t14: 0 / 13) | **0 / 9** |
+| Names withheld, advantage / DA | 1 / 0 | **1 / 0** |
+| Documents with no scenario heading and no role label | can only rise from 676 of 1,164 and 251 of 662 | **676 of 1,164; 253 of 662** |
+| Scenario words no list holds, advantage / DA | at least 1 / 2, each holding a caselist word | **1 (1 holding) / 2 (2 holding)** |
+| The scan in report.md's impact-card sections | no hit | **no hit.** 9 hits, all accepted earlier: 1 in a plank table, 8 in `top_cards.csv` |
+
+**What the coach's edit moved:**
+* **DA rows with a scenario fell from 13 to 9.** The dropped names (the Economy DA's `decline` and
+  `econ`, the Medical devices DA's two, the Midterms DA's answers and branch words) no longer name a
+  row. The merges keep `golden dome` on its rows.
+* **Two more DA documents have no scenario heading** (251 to 253): their only scenario heading was a
+  named heading the coach dropped.
+* **The words no list holds** are exactly the 3 t14 withheld under the Midterms DA and the Disease
+  advantage, each holding a caselist word. Nothing the coach dropped surfaced new words.
+
+The dry run prints counts and ids only, so which rows the 9 are is not on record here. It shows in
+report.md at the republish.
 
 ## The sync onto dev (2026-10-26)
 
@@ -191,14 +223,14 @@ runs the affected tests, and gives the operator the refill and dry-run blocks dr
 
 | Node | Status | Notes |
 |---|---|---|
-| scenario-vocabulary | Built; ac2 open | In order:<br>1. hand-written fixture and goldens (`a3d8cd2`);<br>2. tests, red against a skeleton (`f3da863`);<br>3. the rule, the domain model and the service (`b5b379d`);<br>4. 20 mutants;<br>5. the seed at 1.4.0, the dry run's scenario lines and the guide (`ca3adea`);<br>6. the PM's rulings: the unlisted-words count and capitals in names, red (`2268e60`), then green (`fd22d2b`), then 7 mutants.<br>7. the coach's edit, committed alone (`0fb8dc9`).<br>Next: the operator's refill and dry run |
+| scenario-vocabulary | Done | In order:<br>1. hand-written fixture and goldens (`a3d8cd2`);<br>2. tests, red against a skeleton (`f3da863`);<br>3. the rule, the domain model and the service (`b5b379d`);<br>4. 20 mutants;<br>5. the seed at 1.4.0, the dry run's scenario lines and the guide (`ca3adea`);<br>6. the PM's rulings: the unlisted-words count and capitals in names, red (`2268e60`), then green (`fd22d2b`), then 7 mutants.<br>7. the coach's edit, committed alone (`0fb8dc9`).<br>8. the sync onto `ad7f5a1`, the operator's refill and dry run under 1.4.0 |
 
 ## Acceptance criteria
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
 | ac1: a position's scenario list merges heading forms under one name and drops listed non-scenarios; positions without a list keep t14's rule, matching hand-written golden files; the taxonomy bump passes the released-ids check; tests shown failing first | PASS | **Goldens:** `tests/fixtures/landscape/scenario_vocabulary/` (`a3d8cd2`, before any code): `test_the_impact_sections_match_the_hand_written_golden`, `test_impact_cards_csv_matches_the_hand_written_golden` and `test_the_rest_of_report_md_is_the_report_without_a_list` pass. **Merged:** `Rising costs` (`drug prices` + `debt crisis`, one team each) shows on ranks 2 and 3. **Dropped:** `economic collapse` names nothing, and `a5` becomes a document with no scenario heading (2 of 6). **Without a list:** the Spending DA keeps `recession` and 1 withheld. **The lock:** `test_the_committed_taxonomies_keep_every_released_id` passes at 1.4.0. The `scenario-list-added` and `form-dropped-as-no-scenario` cases are refused unbumped and pass bumped. On a scratch copy with 1.3.0 locked, the seed at 1.3.0 is refused (`changed-without-bump`) and at 1.4.0 passes. **Red:** [below](#checks-shown-failing-for-their-reason) |
-| ac2: the coach's edited seed for policy-2026-27-nhi is committed and the next report uses it (operator for the coach's edit) | NOT RUN | **Committed:** `0fb8dc9` ([the edit](#the-coachs-edit-as-committed-2026-10-26)). **The next report uses it:** waits for the operator's refill and dry run under 1.4.0 ([follow-ups](#operator-follow-ups) 2 and 3) |
+| ac2: the coach's edited seed for policy-2026-27-nhi is committed and the next report uses it (operator for the coach's edit) | PASS | **Committed:** `0fb8dc9` ([the edit](#the-coachs-edit-as-committed-2026-10-26)). **The next report uses it:** the operator's dry run under 1.4.0 ([the real store](#the-real-store-under-the-coachs-lists-2026-10-26)). DA rows with a scenario 9, against t14's 13. Names withheld 1 and 0, and 1 and 2 words no list holds, as predicted from the lists. No scan hit in the scenario sections. The report is local: the republish follows the cloud cutover, by the PM's order |
 | scenario-vocabulary: `uv run pytest packages/debate_core/tests/arguments/landscape` | PASS | **877 passed in 5.32s** (load average 8.1) |
 
 ### Checks shown failing for their reason
@@ -443,8 +475,9 @@ The first round:
 
 ## Operator follow-ups
 
-**Now.** The coach's edit is committed (`0fb8dc9`), so steps 2 and 3 are next. They follow t17's
-blocks, with the version and the success lines changed.
+**Steps 1 to 3 are done** (2026-10-26): the edit, then, after the sync, the refill (36.2 + 24.8 + 376.2
+s) and the dry run (70.9 s). Results are [above](#the-real-store-under-the-coachs-lists-2026-10-26).
+What remains is the pull request after the PM's review, and the republish after the cloud cutover.
 
 1. **The coach's edit: done.** `tests/config` passed (77), and the edit is committed alone. For a later
    edit, from the task worktree:
@@ -518,6 +551,18 @@ if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset i
    records the counts here for ac2.
 
 4. **No publish.** The republish follows the cloud cutover.
+
+5. **The pull request, after the PM's review.** The branch must not be behind `origin/dev`, and dev moves
+   again after every merge (the docs-index refresh). So sync once more, then open the PR, from the task
+   worktree:
+
+```bash
+scripts/task sync v1-e32-t22-scenario-vocabulary
+```
+
+```bash
+scripts/task pr v1-e32-t22-scenario-vocabulary
+```
 
 ## Follow-up work
 

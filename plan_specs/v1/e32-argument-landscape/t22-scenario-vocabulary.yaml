@@ -51,7 +51,7 @@ spec:
         The coach's edited seed for policy-2026-27-nhi is committed and the next report uses
         it (operator for the coach's edit).
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

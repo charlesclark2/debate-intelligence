@@ -131,7 +131,7 @@ import sys
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING, Final, cast
+from typing import TYPE_CHECKING, Any, Final, cast
 
 from debate_cli.exit_codes import codes_exit_as_a_retrieval_failure
 from debate_core.application.aff_assignment import AffAssignmentService
@@ -271,7 +271,6 @@ from debate_core.integrations.models.routing_policy import RoutingPolicy
 from debate_core.retrieval.extraction import ContentTypeDispatcher
 
 if TYPE_CHECKING:  # pragma: no cover - imported for the type checker only; see the factories
-    import httpx
     from mypy_boto3_s3.client import S3Client
 
     from debate_core.application.caselist.backfile_import import BackfileImportService
@@ -987,7 +986,9 @@ class ServiceContainer:
             settings.http,
             version=package_version(),
             clock=clock,
-            transport=cast("httpx.AsyncBaseTransport | None", self._instances.get("article_fetch_transport")),
+            # A test's replay transport, or None: the network. `Any`, because this module may not name
+            # httpx, even for the type checker (the import contracts in the workspace root).
+            transport=cast(Any, self._instances.get("article_fetch_transport")),
         )
         extractor = ContentTypeDispatcher(
             html=TrafilaturaExtractor(

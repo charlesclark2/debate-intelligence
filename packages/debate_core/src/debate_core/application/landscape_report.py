@@ -178,6 +178,7 @@ from debate_core.domain.landscape_report import (
     DEFAULT_IMPACT_CARDS,
     DEFAULT_TOP_CARDS,
     IMPACT_KINDS,
+    LEAD_IN_ORDER,
     PLACED_CARD_METHOD,
     AffAssignment,
     AffIdentification,
@@ -188,6 +189,7 @@ from debate_core.domain.landscape_report import (
     ImpactCoverage,
     LandscapeCard,
     LandscapeReport,
+    NamedRows,
     PositionStats,
     ReportHeader,
     RoleGap,
@@ -1149,6 +1151,9 @@ class _LinkChains:
             ),
             unlisted_words=sum(self._unlisted[position_id][0] for position_id in listed),
             unlisted_words_withheld=sum(self._unlisted[position_id][1] for position_id in listed),
+            named_rows=tuple(NamedRows(source=source, rows=0) for source in LEAD_IN_ORDER),
+            rows_left_out=0,
+            withheld_tags=0,
         )
 
 

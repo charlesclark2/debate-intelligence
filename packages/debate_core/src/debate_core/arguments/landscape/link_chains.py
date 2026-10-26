@@ -67,13 +67,13 @@ Pure and deterministic: no model, no I/O.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Final, NamedTuple
 
 from debate_core.arguments.landscape.impacts import is_impact_card, is_impact_heading, tag_opening
 from debate_core.domain.caselist import Disclosure
 from debate_core.domain.landscape import Position, PositionKind
-from debate_core.domain.landscape_report import CHAIN_ROLES, ChainRole
+from debate_core.domain.landscape_report import CHAIN_ROLES, LEAD_IN_ORDER, ChainRole, LeadInSource
 
 __all__ = [
     "LINK_TAG_OPENINGS",
@@ -81,12 +81,14 @@ __all__ = [
     "NOT_A_LINK",
     "NOT_A_SCENARIO",
     "CardScenario",
+    "RankName",
     "SubHeading",
     "caselist_words",
     "card_roles",
     "card_scenario",
     "heading_roles",
     "is_withheld",
+    "rank_name",
     "scenario_name",
     "tag_role",
 ]
@@ -275,6 +277,20 @@ def scenario_name(position: Position, words: str | None) -> str | None:
         if words in scenario.forms:
             return scenario.name
     return None
+
+
+class RankName(NamedTuple):
+    """What names an impact row, and how many withheld texts were passed over to reach it."""
+
+    source: LeadInSource | None
+    """The first source that names it, or None: the row is left out."""
+    withheld: int
+    """Texts before it that hold a caselist word."""
+
+
+def rank_name(texts: Mapping[LeadInSource, str | None], words: frozenset[str]) -> RankName:
+    """The first of :data:`LEAD_IN_ORDER` with a text in `texts` that is not withheld (`v1-e32-t25`)."""
+    return RankName(source=None, withheld=0)
 
 
 def caselist_words(disclosures: Iterable[Disclosure]) -> frozenset[str]:

@@ -60,7 +60,7 @@ spec:
         `debate-research usage --date 2026-09-17` prints calls, tokens and cost grouped by prompt_id and
         model_id, and `--json` emits the same data machine-readably.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

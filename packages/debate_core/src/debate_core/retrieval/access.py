@@ -48,7 +48,7 @@ the first that answers decides:
    `isAccessibleForFree: false`, which t04 reads and refuses on): PAYWALLED.
 4. A paywall marker in an HTML page: PAYWALLED.
 5. Any other extraction refusal: UNSUPPORTED_TYPE for `UnsupportedContentType` and for
-   `EncryptedDocument` (proposed in the session report; the PM decides), ERROR for
+   `EncryptedDocument` (PM ruling, 2026-10-25), ERROR for
    `DocumentTooLarge`, `TooManyPages`, `UnreadableDocument` and any refusal not listed.
 6. No extraction at all: ERROR, since nothing says the text is complete.
 7. The truncation heuristic (below): PAYWALLED or ERROR.

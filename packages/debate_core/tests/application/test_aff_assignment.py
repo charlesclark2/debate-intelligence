@@ -36,6 +36,7 @@ from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.parse_workers import InProcessParseRunner
 from debate_core.application.caselist.suppression import RecordedSuppressionList
 from debate_core.application.landscape_report import LandscapeReportInputs, LandscapeReportService, round_id
+from debate_core.application.landscape_seeding import read_seed_sources
 from debate_core.application.plan_texts import PlanTextService
 from debate_core.arguments.landscape.kritikal_aff import (
     KritikalAffConfig,
@@ -223,9 +224,16 @@ families:
   - {id: cap, label: Capitalism, phrases: [cap, capitalism]}
 """
 KRITIKAL_FILE = "a K-aff file: an advocacy statement and no plan text"
+THUS_FILE = "a policy aff file: its plan text under `Thus the plan` and no label t09 reads"
 
 
 def _plan_file(plan: str | None) -> bytes:
+    if plan == THUS_FILE:
+        return build_docx(
+            paragraph_xml(run_xml("Advantage One"), style="Heading3")
+            + paragraph_xml(run_xml("Thus the plan:"), style="Analytic")
+            + paragraph_xml(run_xml(NAMED), style="Analytic")
+        )
     if plan == KRITIKAL_FILE:
         return build_docx(
             paragraph_xml(run_xml("1AC - Capitalism"), style="Heading2")
@@ -537,3 +545,53 @@ def test_kritikal_without_a_config_no_round_is_a_k_aff_and_there_are_no_inputs()
     found, _ = _kritikal_run(kritikal=None)
     assert {one.method for one in found.assignments} == {"PLAN_TEXT"}
     assert found.kritikal is None
+
+
+# ------------------------------------------------------------------------------------------------
+# Plan texts under a transition label (`v1-e32-t24`): the producer reads them and hands them on
+# ------------------------------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_the_producer_identifies_a_round_by_its_plan_text_under_thus_and_carries_it(
+    tmp_path: Path,
+) -> None:
+    service = producer(tmp_path, extra=(("Eight", THUS_FILE), ("Eight", None)))
+    run = await service.run(PRODUCER_CASELIST, date(2026, 9, 29))
+    assert sorted(
+        (one.method, one.position_id) for one in run.assignments if one.method.startswith("TRANSITION")
+    ) == [("TRANSITION_PLAN_CARRY", "sample-plan-aff"), ("TRANSITION_PLAN_TEXT", "sample-plan-aff")]
+    assert run.transition is not None
+    assert run.plan_texts is not None
+    named = [one for one in run.plan_texts.transition.values() if one.verdict is not PlanTextVerdict.NONE]
+    assert named == [DocumentPlanText(PlanTextVerdict.NAMES, "sample-plan-aff")]
+
+
+@pytest.mark.anyio
+async def test_the_runs_seam_hands_on_the_plan_texts_under_thus(tmp_path: Path) -> None:
+    service = producer(tmp_path, extra=(("Eight", THUS_FILE), ("Eight", None)))
+    data_dir, config_dir = tmp_path / "data", tmp_path / "config"
+    taxonomies = YamlTaxonomyRepository.load(config_dir)
+    resolved = taxonomies.resolve(PRODUCER_CASELIST, date(2026, 9, 29))
+    assert resolved is not None
+    objects = FsEvidenceObjectStore(data_dir)
+    blobs = FsEvidenceObjectStore(data_dir, subdirectory=Path("blobs"))
+    reading = await read_seed_sources(
+        store=LocalParsedStore(data_dir),
+        local=LocalEvidence(
+            objects=objects, blobs=blobs, object_path_for=objects.path_for, blob_path_for=blobs.path_for
+        ),
+        suppression=RecordedSuppressionList(local_suppression_list_file(data_dir)),
+        topic=resolved.topic,
+        caselist=PRODUCER_CASELIST,
+        through=date(2026, 9, 29),
+    )
+    found = await service.assignments(
+        reading=reading,
+        through=date(2026, 9, 29),
+        classifications=(),
+        taxonomy=taxonomies.taxonomy(resolved.topic.id),
+        writes=False,
+    )
+    assert found.transition is not None
+    assert {one.method for one in found.assignments} >= {"TRANSITION_PLAN_TEXT", "TRANSITION_PLAN_CARRY"}

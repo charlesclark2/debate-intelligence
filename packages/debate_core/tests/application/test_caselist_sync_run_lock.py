@@ -464,6 +464,34 @@ def test_the_background_thread_renews_until_released() -> None:
     assert store.object is not None and json.loads(store.object.body)["state"] == "free"
 
 
+def test_a_lease_taken_again_after_a_release_renews_again() -> None:
+    """`caselist backfile-import` takes and releases one lock for each of its steps (`v1-e34-t34`)."""
+    store = GatedStore()
+    lock = BucketRunLock(
+        store=store,
+        environment="dev",
+        clock=Clock(),
+        kind=HolderKind.MAC,
+        renew_every=timedelta(milliseconds=20),
+    )
+    lock.create(command="caselist backfile-import")
+    lock.start_renewing()
+    lock.release()
+
+    lock.take(command="caselist backfile-import")
+    lock.start_renewing()
+    before = store.replaced
+    deadline = datetime.now(UTC) + timedelta(seconds=5)
+    while store.replaced < before + 2 and datetime.now(UTC) < deadline:
+        threading.Event().wait(0.01)
+    renewed_again = store.replaced - before
+    lock.before_write("manifests/testcl25/full/2026-06-30.jsonl", renew=True)
+    lock.release()
+
+    assert renewed_again >= 2, "the second lease renews in the background, as the first did"
+    assert store.object is not None and json.loads(store.object.body)["state"] == "free"
+
+
 # ------------------------------------------------------------------------------------------------
 # The fence on a real client: every write asks first
 # ------------------------------------------------------------------------------------------------

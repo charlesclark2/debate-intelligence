@@ -260,6 +260,31 @@ class OpenCaselistTransport:
 
         return await self._with_retries(operation, attempt, download=True)
 
+    async def declared_size(self, url: str, *, operation: str, source_name: str) -> int | None:
+        """The size the file host declares for `url`, from a `HEAD` request: no body is fetched.
+
+        Paced as a download, in the same rolling window, although no file is sent: it is a request
+        for a file, and counting it there keeps a survey of a hundred archives under the
+        maintainer's limit whatever the file host takes it for (`v1-e34-t34`). `None` when the
+        answer carries no `Content-Length`.
+        """
+        if urlsplit(url).scheme != "https":
+            raise UnexpectedCaselistResponse(operation, "the file is not offered over https")
+        authenticated = self._is_api_url(url)
+
+        async def attempt() -> int | None:
+            request = self._build_request("HEAD", url, params=None, authenticated=authenticated)
+            request.headers["Accept-Encoding"] = "identity"
+            response = await self._client.send(request)
+            try:
+                self._raise_for_status(response, operation, authenticated, source_name=source_name)
+                return _content_length(response)
+            finally:
+                await response.aclose()
+                self._client.cookies.clear()
+
+        return await self._with_retries(operation, attempt, download=True)
+
     @property
     def full_archive_download_bytes(self) -> int:
         """The size ceiling a complete archive is downloaded under (`v1-e34-t04`)."""

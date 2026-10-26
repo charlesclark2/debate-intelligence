@@ -340,6 +340,14 @@ DEBATE_ENV=dev uv run debate-research caselist parse --caselist hsld26 --publish
 It exits 0 and prints the rebuilt counts. The new aggregates leave out every source and disclosure
 the suppression list stops, which now includes this removal's.
 
+**A backfile listed there is rebuilt differently** (`v1-e34-t34`). A caselist in
+`caselist.backfile_caselists` (`hspolicy25`, `hsld25`, `hspolicy24`, `hsld24`) keeps its parsed store
+in the bucket, not on this Mac, so the parse above cannot rebuild it. Its rebuild is `caselist
+backfile-import` run again where backfile imports run, dry run first: it downloads nothing, restores
+the parsed store, and publishes the aggregates without this removal's file. It obeys the backfile
+no-import window, Tuesday 06:00 to Thursday 00:00 Chicago. That is about 2 h 10 min and 56 GB restored
+for all four ([caselist-backfiles.md, "A removal adds a rebuild"](caselist-backfiles.md#a-removal-adds-a-rebuild-for-each-backfile)).
+
 ## Step 6 — Verify dev
 
 First, the store and S3 agree and the sources are gone:
@@ -612,7 +620,8 @@ caselist's aggregates only when it imported something into that caselist that we
 imported nothing rebuilds nothing ([scheduled sync, the parse stage](caselist-scheduled-sync.md#the-parse-stage)).
 Rebuild each caselist whose `parsed/<caselist>/<version>/index.jsonl` the plan listed, `openev`
 included, from this Mac's own store for the environment (not a scratch store), with the everyday
-profile.
+profile. A backfile the plan listed is not rebuilt here but by `caselist backfile-import` run again,
+as step 5 says.
 
 **Operator command** (expected runtime a few minutes per caselist; nothing is parsed again)
 Where: a new terminal window, so no `DEBATE_STORAGE__DATA_DIR` from another step is set

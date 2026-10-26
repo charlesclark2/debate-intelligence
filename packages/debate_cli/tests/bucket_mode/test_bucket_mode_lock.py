@@ -225,6 +225,7 @@ NEVER_WRITE_A_BUCKET: Final = {
     "files build",
     "files check",
     "files suggest",
+    "landscape evaluate",
     "store ls",
     "store get",
     "tub index build",

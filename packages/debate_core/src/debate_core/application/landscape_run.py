@@ -11,10 +11,16 @@ same use case. One run, for one caselist at one weekly snapshot (the newest unle
    (:func:`~debate_core.application.landscape_seeding.read_seed_sources`).
 3. **Classifies** them incrementally with `v1-e32-t02`'s cache
    (:class:`~debate_core.application.position_classification.PositionClassificationService`), which
-   writes the cache and the review queue. Until `v1-e32-t07` the stage is deterministic and the only
-   model mode is :attr:`LandscapeModelMode.NONE`, so the run's model budget is 0 items; a stage that
-   sent more is refused with :class:`ModelBudgetExceeded` after the queue is written and before the
-   report is, so nothing is written or published from it.
+   writes the cache and the review queue. Under :attr:`LandscapeModelMode.NONE` the stage is
+   deterministic and the run's model budget is 0 cards. Under `replay` or `live` (`v1-e32-t07`) a
+   :class:`~debate_core.application.landscape_model_stage.ModelClassificationStage` asks a model about
+   the cards stage one could not place surely, at most `max_model_items` of them in a run. A run that
+   held cards back over that limit, or whose stage sent more, is refused with
+   :class:`ModelBudgetExceeded`, and one whose model could not be reached partway with
+   :class:`~debate_core.application.landscape_model_stage.ModelStageInterrupted`: in both cases after
+   the cache and the queue hold what was answered, and before the report is written, so nothing is
+   written or published from it. The next run asks only about what is not cached yet. A dry run asks
+   nothing: it counts what a run would ask about and hold back.
 4. **Builds** `v1-e32-t03`'s bundle, with `v1-e32-t11`'s CP texts, alternatives, roles of the ballot and
    overview counts when a source of them is wired (the run's reading of each source's own paragraphs,
    cached as derived fields; a dry run writes no cache), with `v1-e32-t04`'s trends and per-school view
@@ -63,6 +69,11 @@ from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.publish_plan import manifest_prefix, snapshot_of_manifest_key
 from debate_core.application.errors import DomainError, NotFound
 from debate_core.application.landscape_bundle_files import REPORTS_PREFIX
+from debate_core.application.landscape_model_stage import (
+    DEFAULT_MAX_MODEL_ITEMS,
+    ModelClassificationStage,
+    ModelStageInterrupted,
+)
 from debate_core.application.landscape_report import (
     SCHOOL_VIEW_FILES,
     LandscapeReportInputs,
@@ -111,6 +122,7 @@ __all__ = [
     "LandscapeRunResult",
     "LandscapeRunService",
     "ModelBudgetExceeded",
+    "ModelStageFactory",
     "NoTopicMapping",
     "NothingToReport",
     "PlannedUpload",
@@ -139,17 +151,20 @@ BUNDLE_FILES: Final = (
 `schools.csv` and `schools.md` are `v1-e32-t04`'s per-school view, the only files naming schools and
 team codes: like the rest, they go to the local `reports/` directory and the private bucket only."""
 
-DEFAULT_MAX_MODEL_ITEMS: Final = 0
-"""With no model stage, a run may send no item to a model. `v1-e32-t07` sets the real bound."""
-
 DRY_RUN_QUEUE_LOCATION: Final = "(not written: dry run)"
 
 
 class LandscapeModelMode(StrEnum):
-    """`--model-mode` for a landscape run. `v1-e32-t07` adds `replay` and `live`."""
+    """`--model-mode` for a landscape run."""
 
     NONE = "none"
     """Deterministic classification only: no model is called, and no Bedrock access is needed."""
+
+    REPLAY = "replay"
+    """The model stage, answered from recorded cassettes: a card no cassette answers stops the run."""
+
+    LIVE = "live"
+    """The model stage, answered by the routed model. Real model calls, behind the data-use policy's gate."""
 
 
 class LandscapeRequestRefused(DomainError):
@@ -182,15 +197,24 @@ class NothingToReport(DomainError):
 
 
 class ModelBudgetExceeded(DomainError):
-    """The classification stage sent more items to the model than the run allows."""
+    """The classification stage had more cards for the model than the run allows: sent more, or held back."""
 
-    def __init__(self, sent: int, allowed: int) -> None:
-        super().__init__(
-            f"the classification stage sent {sent} item(s) to the model, over the run's limit of {allowed}; "
-            "the review queue is written, and no report was written or published"
-        )
+    def __init__(self, sent: int, allowed: int, held_back: int = 0) -> None:
+        if held_back:
+            message = (
+                f"the classification stage asked the model about {sent} card(s), the run's limit of "
+                f"{allowed}, and held {held_back} more back; the cache and the review queue hold what was "
+                "answered, no report was written or published, and the next run asks about the rest"
+            )
+        else:
+            message = (
+                f"the classification stage sent {sent} item(s) to the model, over the run's limit of "
+                f"{allowed}; the review queue is written, and no report was written or published"
+            )
+        super().__init__(message)
         self.sent = sent
         self.allowed = allowed
+        self.held_back = held_back
 
 
 class PublishedObjectMismatch(DomainError):
@@ -269,6 +293,8 @@ class LandscapeRunRequest:
     model_mode: LandscapeModelMode = LandscapeModelMode.NONE
     top_cards: int | None = None
     """Most-read cards per position; None for the report's default. `files suggest` asks for its `--top`."""
+    max_model_items: int | None = None
+    """Cards the model stage may ask about in this run; None for the service's limit."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -352,6 +378,9 @@ def report_key(caselist: str, snapshot: date, name: str) -> str:
 ClassifierFactory = Callable[[ClassificationStore], PositionClassifier]
 """Builds the classifier over the store a run may write: the cache, or a dry run's read-only view."""
 
+ModelStageFactory = Callable[[LandscapeModelMode, int], ModelClassificationStage]
+"""Builds the model stage for a `replay` or `live` run, asking about at most the given number of cards."""
+
 
 class LandscapeRunService:
     """One caselist's landscape report: resolve, classify, build, scan, write and publish."""
@@ -374,6 +403,7 @@ class LandscapeRunService:
         aff_assignments: AffAssignmentsFromReading | None = None,
         analytic_texts: AnalyticTextsFromReading | None = None,
         classifier: ClassifierFactory | None = None,
+        model_stage: ModelStageFactory | None = None,
         stale_after_days: int = DEFAULT_STALE_AFTER_DAYS,
         review_threshold: float = DEFAULT_REVIEW_THRESHOLD,
         max_model_items: int = DEFAULT_MAX_MODEL_ITEMS,
@@ -395,16 +425,35 @@ class LandscapeRunService:
         self._bucket = bucket
         self._aff = aff_assignments
         self._texts = analytic_texts
-        self._classifier: ClassifierFactory = classifier or self._deterministic
+        self._classifier = classifier
+        self._model_stage = model_stage
         self._stale_after_days = stale_after_days
         self._threshold = review_threshold
         self._max_model_items = max_model_items
 
-    def _deterministic(self, store: ClassificationStore) -> PositionClassifier:
-        """`v1-e32-t02`'s classifier, the only one until `v1-e32-t07`."""
+    def _classifier_for(self, store: ClassificationStore, request: LandscapeRunRequest) -> PositionClassifier:
+        """The classifier for `request`: stage one alone under `none`, with the model stage otherwise."""
+        if self._classifier is not None:
+            return self._classifier(store)
+        stage: ModelClassificationStage | None = None
+        if request.model_mode is not LandscapeModelMode.NONE:
+            if self._model_stage is None:
+                raise LandscapeRequestRefused(
+                    f"--model-mode {request.model_mode.value} needs a model stage, and this run was built "
+                    "without one; use --model-mode none"
+                )
+            stage = self._model_stage(request.model_mode, self._allowed(request))
+            if request.dry_run:
+                stage = stage.planning()
         return PositionClassificationService(
-            taxonomies=self._taxonomies, store=store, review_threshold=self._threshold
+            taxonomies=self._taxonomies, store=store, review_threshold=self._threshold, model_stage=stage
         )
+
+    def _allowed(self, request: LandscapeRunRequest) -> int:
+        """The cards a run may ask the model about: none under `none`, else the request's or the service's."""
+        if request.model_mode is LandscapeModelMode.NONE:
+            return 0
+        return self._max_model_items if request.max_model_items is None else request.max_model_items
 
     async def run(self, request: LandscapeRunRequest) -> LandscapeRunResult:
         refuse_a_landscape(request.caselist, self._backfiles)
@@ -439,14 +488,22 @@ class LandscapeRunService:
                 f"{snapshot.isoformat()}; parse the caselist first (`caselist parse`)"
             )
         store = _ReadOnlyClassifications(self._classifications) if request.dry_run else self._classifications
-        classified = await self._classifier(store).classify(reading)
+        classified = await self._classifier_for(store, request).classify(reading)
         if request.dry_run:
             # The read-only view dropped the cache write, so the counts must not report one.
             classified = dataclasses.replace(
                 classified, counts=dataclasses.replace(classified.counts, cache_written=False)
             )
-        if classified.counts.model_items > self._max_model_items:
-            raise ModelBudgetExceeded(classified.counts.model_items, self._max_model_items)
+        counts = classified.counts
+        if counts.model_interrupted is not None:
+            raise ModelStageInterrupted(
+                counts.model_interrupted,
+                sent=counts.model_items,
+                unanswered=counts.model_candidates - counts.model_items,
+            )
+        allowed = self._allowed(request)
+        if counts.model_items > allowed or (counts.model_held_back and not request.dry_run):
+            raise ModelBudgetExceeded(counts.model_items, allowed, counts.model_held_back)
         affs = (
             await self._aff.assignments(
                 reading=reading,

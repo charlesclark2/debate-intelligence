@@ -192,7 +192,13 @@ from debate_core.application.file_build_service import FileBuildService
 from debate_core.application.file_publish_service import FilePublishService
 from debate_core.application.file_quality_service import FileQualityService
 from debate_core.application.file_suggest_service import FileSuggestService
-from debate_core.application.landscape_run import LandscapeRunService
+from debate_core.application.landscape_model_evaluation import LandscapeModelEvaluationService
+from debate_core.application.landscape_model_stage import (
+    CLASSIFY_POSITION_PROMPT_ID,
+    ModelClassificationStage,
+    ParsedStoreCardTexts,
+)
+from debate_core.application.landscape_run import LandscapeModelMode, LandscapeRunService
 from debate_core.application.landscape_scan import ScanAcceptanceLog
 from debate_core.application.plan_texts import PlanTextService
 from debate_core.application.ports.archive import ArchiveEntry
@@ -211,8 +217,10 @@ from debate_core.application.settings import (
     RunStateMode,
     Settings,
     SyncNotifierKind,
+    find_repository_root,
 )
 from debate_core.application.snapshot_service import SnapshotService
+from debate_core.application.structured_output import StructuredOutputGuard
 from debate_core.application.sync_runs import (
     SYNC_RUN_LOG_FILENAME,
     SyncRunHistory,
@@ -223,6 +231,7 @@ from debate_core.application.tub.accounts import AccountAdministration
 from debate_core.application.verify_manifest import VerifyManifest
 from debate_core.domain import new_id
 from debate_core.domain.caselist import Event
+from debate_core.domain.model_contracts import ModelProvider
 from debate_core.integrations.landscape.analytic_text_store import LocalAnalyticTextStore
 from debate_core.integrations.landscape.classification_store import (
     LANDSCAPE_DIRECTORY,
@@ -248,6 +257,9 @@ from debate_core.integrations.local.suppression_list import (
     local_suppression_list_file,
 )
 from debate_core.integrations.local.version_directories import LocalVersionDirectories
+from debate_core.integrations.models.factory import build_model_router
+from debate_core.integrations.models.model_mode import ModelMode
+from debate_core.integrations.models.prompt_registry import DEFAULT_PROMPT_DIRECTORY, PromptRegistry
 from debate_core.integrations.models.routing_policy import RoutingPolicy
 
 if TYPE_CHECKING:  # pragma: no cover - imported for the type checker only; see the factories
@@ -340,6 +352,13 @@ def validating_routing(settings_loader: Callable[[], Settings]) -> Callable[[], 
     return load
 
 
+def _texts_under(directory: Path) -> list[str]:
+    """Every JSON file's text under `directory`, in name order: the cassettes a scan reads."""
+    if not directory.is_dir():
+        return []
+    return [path.read_text(encoding="utf-8") for path in sorted(directory.glob("*.json"))]
+
+
 class SettingsNotConfigured(RuntimeError):
     """Raised when a service needs settings and the container was built without a loader."""
 
@@ -384,6 +403,11 @@ is one directory."""
 
 SCAN_ACCEPTANCES_DIRECTORY: Final = "scan-acceptances"
 """Beside the classification cache: the scan hits the operator accepted, per caselist (`v1-e32-t05`)."""
+
+MODEL_CASSETTES_DIRECTORY: Final = "model-cassettes"
+"""Beside the classification cache: cassettes of the landscape model stage's calls on real cards
+(`v1-e32-t07`). They hold scrubbed excerpts of real evidence, so they are derived corpus data: kept under
+the data directory, never committed, and under its retention and removal."""
 
 _ECS_METADATA_VARIABLE: Final = "ECS_CONTAINER_METADATA_URI_V4"
 """Set by ECS in every task's containers: how the run lock tells the cloud run from the Mac."""
@@ -602,8 +626,71 @@ class ServiceContainer:
             bucket=self._evidence_bucket if with_bucket else None,
             aff_assignments=affs,
             analytic_texts=texts,
+            model_stage=lambda mode, max_items: self.landscape_model_stage(
+                ModelMode.REPLAY if mode is LandscapeModelMode.REPLAY else ModelMode.LIVE, max_items
+            ),
             stale_after_days=settings.caselist.stale_after_days,
             backfile_caselists=settings.caselist.backfile_caselists,
+        )
+
+    def landscape_evaluation(self, *, config_dir: Path, record: bool) -> LandscapeModelEvaluationService:
+        """The model stage measured against a coach's labels (`v1-e32-t07` ac4), over this machine's stores.
+
+        It replays, or with `record` records, the same cassettes a landscape run replays, under the data
+        directory, and scans every cassette of the prompt there after it has run.
+        """
+        mode = ModelMode.RECORD if record else ModelMode.REPLAY
+        data_dir = self.settings.storage.data_dir
+        cassettes = data_dir / LANDSCAPE_DIRECTORY / MODEL_CASSETTES_DIRECTORY
+        return LandscapeModelEvaluationService(
+            taxonomies=YamlTaxonomyRepository.load(config_dir),
+            parsed_store=LocalParsedStore(data_dir),
+            local=self._local_evidence(),
+            suppression=self.local_suppression_list(),
+            objects=FsEvidenceObjectStore(data_dir),
+            stage=lambda max_items: self.landscape_model_stage(mode, max_items, cassette_dir=cassettes),
+            cassette_texts=lambda: _texts_under(cassettes / CLASSIFY_POSITION_PROMPT_ID),
+        )
+
+    def landscape_model_stage(
+        self, mode: ModelMode, max_items: int, *, cassette_dir: Path | None = None
+    ) -> ModelClassificationStage:
+        """The landscape's model stage (`v1-e32-t07`): the prompt registry, a router for `mode`, the guard.
+
+        The router is :func:`~debate_core.integrations.models.factory.build_model_router`'s: the fixture
+        fake when `models.provider` is `fake`, and otherwise the record-and-replay router, over cassettes
+        kept under `<data dir>/landscape/model-cassettes/` unless `cassette_dir` names others. Real cards'
+        prompts are never committed (the data-use policy's model condition 6), so a replay of them reads
+        what this machine recorded. Record and live wrap the Bedrock router, imported only then. The
+        prompts are read from this checkout's `prompts/`; an installed build has none, and is refused.
+        """
+        settings = self.settings
+        root = find_repository_root()
+        if root is None or not (root / DEFAULT_PROMPT_DIRECTORY).is_dir():
+            raise ConfigurationError(
+                "the landscape's model stage reads its prompt from prompts/ in a source checkout, and this "
+                "run is not in one; run it from a checkout, or use --model-mode none",
+                field="models.provider",
+            )
+        registry = PromptRegistry.load(root / DEFAULT_PROMPT_DIRECTORY)
+        real_router = None
+        if mode is not ModelMode.REPLAY and settings.models.provider is not ModelProvider.FAKE:
+            # Imported here, not at module scope: only a record or live run needs the AWS SDK.
+            from debate_core.integrations.bedrock import bedrock_router_factory
+
+            real_router = bedrock_router_factory(registry)
+        router = build_model_router(
+            settings,
+            mode=mode,
+            real_router=real_router,
+            repository_root=root,
+            cassette_dir=cassette_dir
+            or settings.storage.data_dir / LANDSCAPE_DIRECTORY / MODEL_CASSETTES_DIRECTORY,
+        )
+        return ModelClassificationStage(
+            StructuredOutputGuard(router, registry),
+            ParsedStoreCardTexts(LocalParsedStore(settings.storage.data_dir)),
+            max_items=max_items,
         )
 
     @property

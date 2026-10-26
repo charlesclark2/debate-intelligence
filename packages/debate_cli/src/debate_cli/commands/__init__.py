@@ -105,6 +105,7 @@ def register_commands(app: typer.Typer) -> None:
         "landscape", "Argument landscape reports: what positions a caselist reads."
     )
     argument_landscape.command("report")(landscape.report)
+    argument_landscape.command("evaluate")(landscape.evaluate)
     app.add_typer(argument_landscape)
 
     evidence_files = command_group(

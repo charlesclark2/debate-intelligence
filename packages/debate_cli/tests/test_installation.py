@@ -76,9 +76,12 @@ def test_the_container_wires_these_integrations() -> None:
     # `landscape.yaml_taxonomy_repository` at module level for the landscape run (v1-e32-t05), with
     # `landscape.analytic_text_store` for its analytic texts (v1-e32-t11), and
     # `secrets_manager` inside the caselist secret factory (v1-e40-t02),
-    # `docx_file_writer.writer` inside the file build factory (v1-e33-t03), and `sns` inside
-    # sync_notifier (v1-e40-t05).
+    # `docx_file_writer.writer` inside the file build factory (v1-e33-t03), `sns` inside
+    # sync_notifier (v1-e40-t05), and for the landscape's model stage (v1-e32-t07) `models.factory`,
+    # `models.model_mode` and `models.prompt_registry` at module level, with `bedrock` inside its
+    # factory for a record or live run.
     assert wired_integrations() == (
+        "debate_core.integrations.bedrock",
         "debate_core.integrations.cloudwatch_audit",
         "debate_core.integrations.cognito",
         "debate_core.integrations.docx_file_writer.writer",
@@ -96,6 +99,9 @@ def test_the_container_wires_these_integrations() -> None:
         "debate_core.integrations.local.sqlite_caselist_repository",
         "debate_core.integrations.local.suppression_list",
         "debate_core.integrations.local.version_directories",
+        "debate_core.integrations.models.factory",
+        "debate_core.integrations.models.model_mode",
+        "debate_core.integrations.models.prompt_registry",
         "debate_core.integrations.models.routing_policy",
         "debate_core.integrations.opencaselist",
         "debate_core.integrations.s3",
@@ -234,7 +240,7 @@ def test_the_check_exits_zero_and_reports_json_for_this_checkout(capsys: pytest.
     report = json.loads(capsys.readouterr().out)
     assert report["complete"] is True
     assert report["covered"] is True
-    assert len(report["imported"]) == len(report["wired"]) == 25
+    assert len(report["imported"]) == len(report["wired"]) == 29
 
 
 # ---------------------------------------------------------------------------------------------
@@ -336,6 +342,8 @@ def test_dropping_the_aws_extra_leaves_the_s3_adapter_without_boto3() -> None:
         "debate_core.integrations.sns": {"boto3", "botocore"},
         # The bucket's run lock (v1-e40-t04) reads a conditional write's refusal off botocore's error.
         "debate_core.integrations.s3.run_lock_object": {"botocore"},
+        # The landscape model stage's live router (v1-e32-t07).
+        "debate_core.integrations.bedrock": {"boto3", "botocore"},
     }
 
 

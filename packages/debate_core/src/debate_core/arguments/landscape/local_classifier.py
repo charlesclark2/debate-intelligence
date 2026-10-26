@@ -54,7 +54,6 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
-import re
 from collections import Counter, defaultdict
 from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -64,10 +63,11 @@ from typing import Any, Final, TextIO, cast
 from sklearn.feature_extraction.text import TfidfVectorizer  # pyright: ignore[reportMissingTypeStubs]
 from sklearn.linear_model import LogisticRegression  # pyright: ignore[reportMissingTypeStubs]
 
-from debate_core.arguments.landscape.matcher import PositionMatcher, read_items, tag_words
+from debate_core.arguments.landscape.matcher import PositionMatcher, read_items
 from debate_core.arguments.landscape.review_queue import DEFAULT_REVIEW_THRESHOLD, needs_review
 from debate_core.arguments.landscape.seeding import SeedSource
 from debate_core.arguments.landscape.source_headings import CaselistNames
+from debate_core.arguments.landscape.tag_scrub import card_tag, code_words
 from debate_core.domain.landscape import Taxonomy
 from debate_core.domain.landscape_classification import ClassificationMethod, ClassificationResult, ItemKind
 
@@ -211,29 +211,6 @@ class FeatureRow:
     """The position the deterministic stage placed it under, when that is a label (:data:`LABEL_METHODS`)."""
 
 
-def card_tag(
-    tag: str | None,
-    own_names: Sequence[str],
-    caselist: CaselistNames,
-    codes: Collection[str] = frozenset(),
-) -> str | None:
-    """`tag` as words, without the disclosing teams' own names, any school of the caselist, or any word
-    of `codes`, the caselist's team codes as :func:`code_words` gives them.
-
-    A tag is free text, so a team code standing alone in it is taken out too, which a heading keeps
-    (`v1-e32-t01`): a code that is also an ordinary word costs a tag one word.
-    """
-    if tag is None:
-        return None
-    words = tag_words(tag)
-    for name in own_names:
-        phrase = tag_words(name)
-        if phrase:
-            words = " ".join(re.sub(rf"(?<!\S){re.escape(phrase)}(?!\S)", " ", words).split())
-    words = caselist.without_schools(words)
-    return " ".join(word for word in words.split() if word not in codes) or None
-
-
 def team_token(identity: str, salt: bytes) -> str:
     """A team's identity as a digest keyed by `salt`, equal for equal identities under one salt.
 
@@ -242,11 +219,6 @@ def team_token(identity: str, salt: bytes) -> str:
     caselist's schools.
     """
     return hashlib.blake2b(identity.encode(), key=salt, digest_size=12).hexdigest()
-
-
-def code_words(names: Mapping[str, Sequence[str]]) -> frozenset[str]:
-    """Every word of every team code of a caselist's schools (`school -> codes`), as a tag's words are."""
-    return frozenset(word for codes in names.values() for code in codes for word in tag_words(code).split())
 
 
 def _placement(result: ClassificationResult, review_threshold: float) -> str:

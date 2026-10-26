@@ -21,6 +21,12 @@ version it was placed under.
   method is deterministic and carries none of them, with `prompt_version` set to
   :data:`DETERMINISTIC_PROMPT_VERSION`, the literal `none` that the cache key and the report header
   use (the PM's amendment of 2026-10-22).
+* **What a model may say.** `v1-e32-t07` asks a model about a batch of cards and holds its answer to
+  :class:`ModelPositionAnswers`: per card, the batch's own item label, a position id or none, a
+  confidence and a short rationale. Nothing else: no role (that comes from the headings, as the
+  matcher's), and no tag, cite or evidence text. The id is any short text here, so that one unknown id
+  sends its card to the review queue rather than failing the batch; the stage checks every accepted
+  answer with :func:`checked_against`.
 * **No method, no position.** An item nothing placed has `method` None, `position_id` None and
   confidence 0, and goes to the review queue. An item the coach ruled names no position has
   `method` OVERRIDE and `position_id` None, and does not.
@@ -68,8 +74,11 @@ __all__ = [
     "RATIONALE_LIMIT",
     "ClassificationMethod",
     "ClassificationResult",
+    "MODEL_ITEM_PATTERN",
     "HeadingOverride",
     "ItemKind",
+    "ModelPositionAnswer",
+    "ModelPositionAnswers",
     "OverrideRules",
     "PositionClassification",
     "PositionRole",
@@ -288,6 +297,37 @@ def checked_against[ResultT: ClassificationResult](taxonomy: Taxonomy, result: R
         result.model_dump(include=set(ClassificationResult.model_fields))
     )
     return result
+
+
+# ------------------------------------------------------------------------------------------------
+# What a model may answer (`v1-e32-t07`)
+# ------------------------------------------------------------------------------------------------
+
+MODEL_ITEM_PATTERN: Final = r"^item-[1-9][0-9]*$"
+"""How a batch names its cards to the model: `item-1`, `item-2`... never a digest, path or heading."""
+
+
+class ModelPositionAnswer(DomainModel):
+    """The model's answer about one card of a batch: ids, a confidence and a rationale, nothing else."""
+
+    item: Annotated[str, Field(pattern=MODEL_ITEM_PATTERN)] = Field(
+        description="The batch's label of the card this answer is about, as the request named it."
+    )
+    position_id: Annotated[str, Field(min_length=1, max_length=80)] | None = Field(
+        description="One of the listed position ids, or null when the card argues none of them."
+    )
+    confidence: float = Field(ge=0.0, le=1.0, description="How sure the answer is, from 0 to 1.")
+    rationale: Annotated[NonEmptyText, Field(max_length=RATIONALE_LIMIT)] = Field(
+        description="Why, in the model's own words: never words copied from the card."
+    )
+
+
+class ModelPositionAnswers(DomainModel):
+    """`landscape.classify_position`'s output schema: one answer per card of the batch."""
+
+    answers: tuple[ModelPositionAnswer, ...] = Field(
+        description="Exactly one answer for every item of the request, in any order."
+    )
 
 
 # ------------------------------------------------------------------------------------------------

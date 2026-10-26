@@ -206,7 +206,7 @@ Conditions, all required:
    [gate on E32](#e32--model-classification-of-the-corpus).
 3. **Bounded excerpts, never whole documents.** Only items the deterministic stage could not match
    are sent, and each carries a heading path, tag, short cite and a bounded excerpt
-   (v1-e32-t02).
+   (v1-e32-t07, the model stage split from v1-e32-t02).
 4. **No identifiers in the prompt.** School names, team codes, debater names or initials,
    tournament and round labels and file paths are never part of a prompt, a cassette or a cached
    key that a prompt is built from.
@@ -568,7 +568,7 @@ first automated pull:
    [Sources and terms](#sources-and-terms) ([open question 4](#open-questions)). Until then,
    classification runs against synthetic fixtures only.
 3. A scan of the prompt inputs and cassettes for a sample run shows **no school name, team code or
-   debater name** (v1-e32-t02 acceptance criterion).
+   debater name** (v1-e32-t07 acceptance criterion ac4).
 4. The circuit-wide report is verified to contain **no team codes** before it is shared with the
    team.
 

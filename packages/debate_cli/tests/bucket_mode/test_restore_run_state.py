@@ -140,6 +140,10 @@ def test_the_copy_holds_the_runs_state_and_the_data_directory_and_the_bucket_are
     world: World, tmp_path: Path
 ) -> None:
     live = seeded(world)
+    # Counted before the snapshot: opening the live database read-write and closing it removes the
+    # empty `-wal` and `-shm` files that the seed's read-only `VACUUM INTO` connection leaves when it
+    # closes last, and that change is the test's own, not the restore's.
+    live_rows = rows(live / "debate.sqlite3")
     live_before = files(live)
     bucket_before = without_the_lock(world.everything())
     copy = tmp_path / "copy"
@@ -155,7 +159,7 @@ def test_the_copy_holds_the_runs_state_and_the_data_directory_and_the_bucket_are
     assert data["caselists"] == [CASELIST]
 
     assert files(copy / "objects" / "manifests") == files(live / "objects" / "manifests")
-    assert rows(copy / "debate.sqlite3") == rows(live / "debate.sqlite3")
+    assert rows(copy / "debate.sqlite3") == live_rows
     assert world.parsed_digests(copy) == world.parsed_digests(live)
     for name in STATE_FILES:
         assert (copy / name).exists() == (live / name).exists(), name

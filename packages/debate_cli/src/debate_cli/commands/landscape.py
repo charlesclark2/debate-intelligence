@@ -1,4 +1,4 @@
-"""`debate-research landscape report`: one caselist's argument landscape, written here and published.
+"""`debate-research landscape report` and `landscape evaluate`: the landscape, and its model stage measured.
 
 ::
 
@@ -61,18 +61,41 @@ the bucket. With `--publish` it asks the bucket which files would go up.
 `0` when the report was written (and published, when asked). `2` for an unknown caselist or snapshot,
 with the known ones, or a caselist and date `topics.yaml` maps to no topic with a taxonomy, naming
 the file to edit. `1` for a publish the scan holds back, a classification stage over its model
-budget (after writing the review queue, publishing nothing), or a report that cannot be built.
+budget or whose model stopped answering (after writing the cache and the review queue, publishing
+nothing), a live run the data-use policy does not yet allow, or a report that cannot be built.
 
 ## `--model-mode`
 
-Only `none` until `v1-e32-t07` adds the model stage: classification is deterministic, and no model is
-called.
+* `none` (the default): classification is deterministic, and no model is called.
+* `replay` and `live` (`v1-e32-t07`): the cards headings cannot place, or place below the review
+  threshold, go to `landscape.classify_position`, at most `--max-model-items` of them a run (one per
+  card fingerprint, the most shared first). `replay` answers from the cassettes this machine recorded
+  under `<data dir>/landscape/model-cassettes/`; `live` calls the routed model, and is refused until
+  the data-use policy records its open question 4 as answered (the E32 gate). A run that holds cards
+  back over the limit exits `1` after caching what it asked, so the next run asks about the rest.
+  `--json`'s `classification.model` counts what was asked, held back, refused and spent in tokens.
+
+## `landscape evaluate`
+
+::
+
+    debate-research landscape evaluate --caselist hspolicy26 --sample <coach CSV> --sample-rows <rows file>
+
+Measures the model stage against cards a coach labelled (`v1-e32-t07` ac4): `v1-e32-t21`'s coach
+sample, the filled CSV and the rows file written beside it. Every labelled card the store holds is asked
+about, and the command prints, for the caselist's format, how many of the cards a report would count
+name the coach's position (the bar is 85%), and what the scan of the prompt inputs and of the prompt's
+cassettes on this machine found: counts, never a name. `--model-mode replay` (the default) answers from
+those cassettes; `record`, once, after the data-use policy records its open question 4 as answered,
+makes the calls and writes them. It caches, writes and publishes no report. Exit `0` when the format
+meets the bar and both scans are clean, `1` otherwise.
 """
 
 from __future__ import annotations
 
 import asyncio
 from datetime import date
+from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Final, NoReturn
 
@@ -85,6 +108,12 @@ from debate_cli.context import CliContext, cli_context, command_name
 from debate_cli.exit_codes import ExitCode
 from debate_cli.output import CliOutput, CommandFailure, JsonValue, OutputMode
 from debate_core.application.errors import error_code_of
+from debate_core.application.landscape_model_evaluation import TARGET_ACCURACY, FormatEvaluation
+from debate_core.application.landscape_model_stage import (
+    DEFAULT_MAX_MODEL_ITEMS,
+    POLICY_QUESTION,
+    model_use_gate,
+)
 from debate_core.application.landscape_report import CIRCUIT_WIDE_FILES, SCHOOL_VIEW_FILES
 from debate_core.application.landscape_run import (
     LandscapeModelMode,
@@ -95,11 +124,23 @@ from debate_core.application.landscape_run import (
 )
 from debate_core.application.landscape_staleness import FailedSyncRun
 from debate_core.application.settings import Environment, Settings, find_repository_root
+from debate_core.arguments.landscape.model_stage import NameScan
 from debate_core.domain.landscape_trends import LandscapeTrends, TrendLabel
 
-__all__ = ["CIRCUIT_WIDE", "REPORT_HELP", "SCAN_NOTICE", "SCHOOL_VIEW", "report", "run_summary"]
+__all__ = [
+    "CIRCUIT_WIDE",
+    "REPORT_HELP",
+    "SCAN_NOTICE",
+    "SCHOOL_VIEW",
+    "EvaluationMode",
+    "evaluate",
+    "evaluation_summary",
+    "report",
+    "run_summary",
+]
 
 LANDSCAPE_CONFIG: Final = Path("config") / "landscape"
+POLICY_FILE: Final = Path("docs") / "policies" / "caselist-data-use.md"
 
 SCAN_NOTICE: Final = (
     "scan.hits quote report lines that may name a school or a team code. For this terminal only: "
@@ -154,8 +195,20 @@ def report(
     ] = None,
     model_mode: Annotated[
         LandscapeModelMode,
-        typer.Option("--model-mode", help="none: deterministic classification only, no model call."),
+        typer.Option(
+            "--model-mode",
+            help="none: deterministic only, no model call. replay: the model stage from recorded cassettes. "
+            "live: the model stage, calling the routed model (behind the data-use policy's gate).",
+        ),
     ] = LandscapeModelMode.NONE,
+    max_model_items: Annotated[
+        int | None,
+        typer.Option(
+            "--max-model-items",
+            min=0,
+            help=f"Cards the model stage may ask about in this run. Default: {DEFAULT_MAX_MODEL_ITEMS}.",
+        ),
+    ] = None,
     config_dir: Annotated[
         Path | None,
         typer.Option(
@@ -178,6 +231,8 @@ def report(
     refusal = _environment_refusal(
         settings, publish=publish, writing=publish and not dry_run, confirmed=confirm_prod
     )
+    if refusal is None and model_mode is LandscapeModelMode.LIVE and not dry_run:
+        refusal = _policy_refusal()
     if refusal is not None:
         _end(cli, ctx, refusal)
     request = LandscapeRunRequest(
@@ -188,6 +243,7 @@ def report(
         dry_run=dry_run,
         accept_scan_hits=accept_scan_hits,
         model_mode=model_mode,
+        max_model_items=max_model_items,
     )
     service = cli.services.landscape_run(config_dir=_config_dir(config_dir), with_bucket=publish)
     try:
@@ -209,9 +265,154 @@ def report(
 report.__doc__ = REPORT_HELP
 
 
+class EvaluationMode(StrEnum):
+    """`--model-mode` for an evaluation: replay the cassettes, or record them once."""
+
+    REPLAY = "replay"
+    RECORD = "record"
+
+
+def evaluate(
+    ctx: typer.Context,
+    caselist: Annotated[str, typer.Option("--caselist", help="Caselist slug, e.g. hspolicy26.")],
+    sample: Annotated[
+        Path, typer.Option("--sample", exists=True, dir_okay=False, help="The coach's filled sample CSV.")
+    ],
+    sample_rows: Annotated[
+        Path,
+        typer.Option("--sample-rows", exists=True, dir_okay=False, help="The rows file written beside it."),
+    ],
+    model_mode: Annotated[
+        EvaluationMode,
+        typer.Option("--model-mode", help="replay: from this machine's cassettes. record: call and record."),
+    ] = EvaluationMode.REPLAY,
+    snapshot: Annotated[
+        str | None, typer.Option("--snapshot", help="The weekly snapshot, YYYY-MM-DD. Default: the newest.")
+    ] = None,
+    config_dir: Annotated[
+        Path | None,
+        typer.Option("--config-dir", file_okay=False, help="The directory holding topics.yaml."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Write one machine-readable JSON object to stdout.")
+    ] = False,
+) -> None:
+    """Measure the landscape's model stage against cards a coach labelled."""
+    cli = cli_context(ctx)
+    if json_output and not cli.output.is_json:
+        cli.output = CliOutput(OutputMode.JSON, verbose=cli.output.verbose)
+    refusal = _policy_refusal() if model_mode is EvaluationMode.RECORD else None
+    if refusal is not None:
+        _end(cli, ctx, refusal)
+    service = cli.services.landscape_evaluation(
+        config_dir=_config_dir(config_dir), record=model_mode is EvaluationMode.RECORD
+    )
+    with sample.open(encoding="utf-8", newline="") as labels, sample_rows.open(encoding="utf-8") as rows:
+        result = asyncio.run(
+            service.evaluate(caselist, labels, rows, snapshot=_snapshot_date(snapshot) if snapshot else None)
+        )
+    payload = evaluation_summary(result)
+    passed = result.meets_target and result.sent.clean and result.cassettes.clean
+    if passed or not cli.output.is_json:
+        cli.output.success(command_name(ctx), payload, display=_evaluation_display(result))
+    if not passed:
+        _end(cli, ctx, _evaluation_failure(result, payload))
+
+
+def evaluation_summary(result: FormatEvaluation) -> dict[str, JsonValue]:
+    """`landscape evaluate`'s `data`: counts, the accuracy against the bar, and the two scans' counts."""
+    return {
+        "caselist": result.caselist,
+        "event": result.event,
+        "topic_id": result.topic_id,
+        "taxonomy_version": result.taxonomy_version,
+        "prompt_version": result.prompt_version,
+        "snapshot": _iso(result.snapshot),
+        "labelled": result.labelled,
+        "found": result.found,
+        "asked": result.asked,
+        "calls": result.calls,
+        "counted": result.counted,
+        "correct": result.correct,
+        "accuracy": result.accuracy,
+        "target": TARGET_ACCURACY,
+        "meets_target": result.meets_target,
+        "placed_below_threshold": result.placed_below_threshold,
+        "placed_labelled_none": result.placed_labelled_none,
+        "refused": dict(result.refused),
+        "input_tokens": result.input_tokens,
+        "output_tokens": result.output_tokens,
+        "interrupted": result.interrupted,
+        "scan": {
+            name: {
+                "texts": scan.texts,
+                "schools": scan.schools,
+                "team_codes": scan.team_codes,
+                "other_names": scan.other_names,
+                "clean": scan.clean,
+            }
+            for name, scan in (("prompt_inputs", result.sent), ("cassettes", result.cassettes))
+        },
+    }
+
+
+def _evaluation_display(result: FormatEvaluation) -> str:
+    accuracy = "n/a" if result.accuracy is None else f"{result.accuracy:.1%}"
+    return "\n".join(
+        [
+            f"{result.caselist} ({result.event}) on {result.topic_id} {result.taxonomy_version}, "
+            f"landscape.classify_position {result.prompt_version}.",
+            f"Labelled {result.labelled}, found {result.found}; asked about {result.asked} in "
+            f"{result.calls} call(s).",
+            f"Counted {result.counted}, correct {result.correct}: {accuracy} (bar {TARGET_ACCURACY:.0%}); "
+            f"{result.placed_below_threshold} placed below the threshold, {result.placed_labelled_none} "
+            "labelled none.",
+            f"Scan of the prompt inputs: {_scan_line(result.sent)}. Of the cassettes: "
+            f"{_scan_line(result.cassettes)}.",
+        ]
+    )
+
+
+def _scan_line(scan: NameScan) -> str:
+    return (
+        f"{scan.texts} text(s), {scan.schools} naming a school, {scan.team_codes} a team code, "
+        f"{scan.other_names} a tournament"
+    )
+
+
+def _evaluation_failure(result: FormatEvaluation, payload: dict[str, JsonValue]) -> CommandFailure:
+    if not (result.sent.clean and result.cassettes.clean):
+        message = "the scan found a school, team code or tournament in the prompt inputs or the cassettes"
+    else:
+        message = (
+            f"the model stage's accuracy is under the bar of {TARGET_ACCURACY:.0%}, or nothing was counted"
+        )
+    return CommandFailure(
+        code="EVALUATION_BELOW_BAR", message=message, exit_code=ExitCode.DOMAIN_FAILURE, details=payload
+    )
+
+
 def _end(cli: CliContext, ctx: typer.Context, failure: CommandFailure) -> NoReturn:
     cli.output.failure(failure, command=command_name(ctx))
     raise typer.Exit(code=failure.exit_code)
+
+
+def _policy_refusal() -> CommandFailure | None:
+    """A live model run waits on the data-use policy's open question 4: refused while it is open."""
+    root = find_repository_root()
+    policy = root / POLICY_FILE if root is not None else None
+    reason = model_use_gate(
+        policy.read_text(encoding="utf-8") if policy is not None and policy.is_file() else None
+    )
+    if reason is None:
+        return None
+    return CommandFailure(
+        code="MODEL_USE_NOT_YET_ALLOWED",
+        message=reason,
+        exit_code=ExitCode.DOMAIN_FAILURE,
+        details={"policy": str(POLICY_FILE), "open_question": POLICY_QUESTION},
+        hint="Use --model-mode replay or none until the policy records the answer.",
+    )
 
 
 def _config_dir(given: Path | None) -> Path:
@@ -375,6 +576,16 @@ def run_summary(result: LandscapeRunResult, settings: Settings) -> dict[str, Jso
                 "misses": counts.misses,
                 "written": counts.cache_written,
             },
+            "model": {
+                "prompt_version": result.classification.prompt_version,
+                "asked": counts.model_items,
+                "calls": counts.model_calls,
+                "cached": counts.model_hits,
+                "held_back": counts.model_held_back,
+                "refused": dict(counts.model_refused),
+                "input_tokens": counts.model_input_tokens,
+                "output_tokens": counts.model_output_tokens,
+            },
         },
         "review_queue": {
             "rows": queue.rows,
@@ -427,6 +638,19 @@ def run_summary(result: LandscapeRunResult, settings: Settings) -> dict[str, Jso
     }
 
 
+def _model_lines(result: LandscapeRunResult) -> list[str]:
+    """The model stage's line, when the run had one: asked, cached, held back, refused, tokens."""
+    if result.model_mode is LandscapeModelMode.NONE:
+        return []
+    counts = result.classification.counts
+    refused = ", ".join(f"{reason} {count}" for reason, count in counts.model_refused.items()) or "none"
+    return [
+        f"Model stage ({result.classification.prompt_version}): asked about {counts.model_items} card(s) in "
+        f"{counts.model_calls} call(s), {counts.model_hits} cached, {counts.model_held_back} held back; "
+        f"refused: {refused}; tokens {counts.model_input_tokens} in, {counts.model_output_tokens} out."
+    ]
+
+
 def _display(result: LandscapeRunResult, settings: Settings) -> str:
     counts = result.classification.counts
     header = result.report.header
@@ -444,6 +668,7 @@ def _display(result: LandscapeRunResult, settings: Settings) -> str:
         f"({_share(header.rounds_with_a_read, header.rounds)}); teams {header.teams}.",
         f"Affirmative rounds with no identified aff: {unclassified.aff_rounds_unidentified} of "
         f"{unclassified.aff_rounds}; aff assignments {result.aff_assignments}.",
+        *_model_lines(result),
         f"Review queue: {result.classification.review_queue.counts.rows} rows "
         f"({result.classification.review_queue_location}).",
         _trends_line(result.trends),

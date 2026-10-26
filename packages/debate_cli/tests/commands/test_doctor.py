@@ -63,6 +63,7 @@ def envelope_of(result: Result) -> dict[str, Any]:
 
 # Read by hand from debate_cli/container.py, as tests/test_installation.py does.
 WIRED_INTEGRATIONS = [
+    "debate_core.integrations.bedrock",
     "debate_core.integrations.cloudwatch_audit",
     "debate_core.integrations.cognito",
     "debate_core.integrations.docx_file_writer.writer",
@@ -80,6 +81,9 @@ WIRED_INTEGRATIONS = [
     "debate_core.integrations.local.sqlite_caselist_repository",
     "debate_core.integrations.local.suppression_list",
     "debate_core.integrations.local.version_directories",
+    "debate_core.integrations.models.factory",
+    "debate_core.integrations.models.model_mode",
+    "debate_core.integrations.models.prompt_registry",
     "debate_core.integrations.models.routing_policy",
     "debate_core.integrations.opencaselist",
     "debate_core.integrations.s3",
@@ -208,7 +212,7 @@ def test_an_integration_that_does_not_import_fails_doctor_naming_each_one(
     assert error["exit_code"] == ExitCode.DOMAIN_FAILURE
     for module in s3_and_opencaselist_do_not_import:
         assert module in error["message"]
-    assert "5 of the 25 integrations" in error["message"]
+    assert "5 of the 29 integrations" in error["message"]
     assert error["details"]["integrations_import"] is False
     assert error["details"]["integrations_failed"] == {
         OPENCASELIST: f"ModuleNotFoundError: no module named {OPENCASELIST!r}",

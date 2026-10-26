@@ -73,6 +73,7 @@ from debate_core.domain.model_contracts import (
     ModelParams,
     ModelPrompt,
     ModelResponse,
+    ModelUsage,
     RenderedPrompt,
     TaskClass,
 )
@@ -343,7 +344,12 @@ def repair_prompt(
 
 
 def validate_model_output[OutputT: BaseModel](
-    schema: type[OutputT], answer: object, *, prompt: ModelPrompt, model_id: str | None
+    schema: type[OutputT],
+    answer: object,
+    *,
+    prompt: ModelPrompt,
+    model_id: str | None,
+    usage: ModelUsage | None = None,
 ) -> OutputT:
     """`answer` as an instance of `schema`, validated strictly, or `InvalidModelOutput` without its values.
 

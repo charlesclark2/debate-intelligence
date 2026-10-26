@@ -1,8 +1,8 @@
 """Where every `debate-research` command is attached to the root application.
 
-V1 fills this package up over several epics — `verify` (E03), `fetch` (E04), `search` and `cut`
-(E08), `daily`, `config`, `store` (v1-e29-t05), `caselist` (E30, E34), `landscape` (E32),
-`files` (E33) and `tub` (E39) — so registration happens in one function,
+V1 fills this package up over several epics — `verify` (E03), `fetch` (E04), `usage` (E05),
+`search` and `cut` (E08), `daily`, `config`, `store` (v1-e29-t05), `caselist` (E30, E34), `landscape`
+(E32), `files` (E33) and `tub` (E39) — so registration happens in one function,
 :func:`register_commands`, rather than through decorators scattered across modules. Reading it
 tells you the whole surface.
 
@@ -61,6 +61,7 @@ from debate_cli.commands import (
     store,
     tub_index,
     tub_users,
+    usage,
     verify,
 )
 
@@ -72,6 +73,7 @@ def register_commands(app: typer.Typer) -> None:
     app.command("doctor")(doctor.doctor)
     app.command("verify")(verify.verify)
     app.command("fetch")(fetch.fetch)
+    app.command("usage")(usage.usage)
 
     configuration = command_group("config", "Inspect the settings this installation runs with.")
     configuration.command("show")(config.show)

@@ -90,6 +90,7 @@ def test_the_dev_budget_never_exceeds_the_documented_cap(no_dotenv: Path) -> Non
     committed = load_settings(environment="dev", env_file=no_dotenv).models.budget_usd_daily
     built_in = BUILTIN_PROFILES[Environment.DEV]["models"]["budget_usd_daily"]
 
+    assert committed is not None
     assert 0 < committed <= DEV_DAILY_BUDGET_CAP_USD
     assert 0 < built_in <= DEV_DAILY_BUDGET_CAP_USD
 

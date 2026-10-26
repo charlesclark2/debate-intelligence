@@ -268,6 +268,7 @@ from debate_core.integrations.models.factory import build_model_router
 from debate_core.integrations.models.model_mode import ModelMode
 from debate_core.integrations.models.prompt_registry import DEFAULT_PROMPT_DIRECTORY, PromptRegistry
 from debate_core.integrations.models.routing_policy import RoutingPolicy
+from debate_core.integrations.models.usage import UsageLog
 from debate_core.retrieval.extraction import ContentTypeDispatcher
 
 if TYPE_CHECKING:  # pragma: no cover - imported for the type checker only; see the factories
@@ -693,6 +694,8 @@ class ServiceContainer:
             mode=mode,
             real_router=real_router,
             repository_root=root,
+            clock=_PortClock(self.clock()),
+            usage_log=self.usage_log(),
             cassette_dir=cassette_dir
             or settings.storage.data_dir / LANDSCAPE_DIRECTORY / MODEL_CASSETTES_DIRECTORY,
         )
@@ -701,6 +704,11 @@ class ServiceContainer:
             ParsedStoreCardTexts(LocalParsedStore(settings.storage.data_dir)),
             max_items=max_items,
         )
+
+    def usage_log(self) -> UsageLog:
+        """This machine's model usage log, `<data dir>/usage/` (`v1-e05-t07`): what `usage` reads, and
+        what every real model call a command makes is recorded in and budgeted against."""
+        return UsageLog.for_data_dir(self.settings.storage.data_dir)
 
     @property
     def files_dir(self) -> Path:

@@ -1103,12 +1103,23 @@ class ModelSettings(SettingsGroup):
         ),
     )
     routing_file: Path = Field(description="YAML file mapping each model task class to a route.")
-    budget_usd_daily: float = Field(
-        default=0.0,
+    budget_usd_daily: float | None = Field(
+        default=None,
         ge=0,
         description=(
-            "Ceiling on model spend per day, in USD. Enforced by the E05 BudgetGuard; the dev and "
-            "prod values are set by v1-e01-t09-dev-prerelease-channel."
+            "Ceiling on model spend per local day, across every run on this machine, in USD; unset is "
+            "no limit. Enforced by the BudgetGuard (debate_core.application.budget, v1-e05-t07) "
+            "against the day's usage log; the dev and prod values are set by "
+            "v1-e01-t09-dev-prerelease-channel. With a limit, a model with no price in "
+            "config/model_pricing.yaml is refused rather than treated as free."
+        ),
+    )
+    budget_usd_per_run: float | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Ceiling on model spend by one run (one command), in USD; unset is no limit. A command's "
+            "--max-cost option sets it for that command (v1-e05-t07)."
         ),
     )
     aws_profile: str | None = Field(

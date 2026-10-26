@@ -40,6 +40,7 @@ from pydantic import ValidationError
 from pydantic_core import core_schema
 
 from debate_core.application.errors import InvalidModelOutput, OutputProblem
+from debate_core.domain.model_contracts import ModelUsage
 
 __all__ = [
     "MAX_LOCATION_PART_LENGTH",
@@ -126,6 +127,8 @@ class OutputAttempt:
     """How many problems the answer had; 0 when it validated."""
     problems: tuple[OutputProblem, ...] = ()
     """The first :data:`MAX_REPORTED_PROBLEMS` of them, without the answer's values."""
+    usage: ModelUsage | None = None
+    """What the attempt's model call used, valid or not (v1-e05-t07); `None` when the router reported none."""
 
     @property
     def valid(self) -> bool:
@@ -134,15 +137,22 @@ class OutputAttempt:
 
     @classmethod
     def refused(
-        cls, number: int, prompt_id: str, prompt_version: str, problems: Sequence[OutputProblem]
+        cls,
+        number: int,
+        prompt_id: str,
+        prompt_version: str,
+        problems: Sequence[OutputProblem],
+        *,
+        usage: ModelUsage | None = None,
     ) -> OutputAttempt:
-        """An attempt whose answer failed validation for `problems`."""
+        """An attempt whose answer failed validation for `problems`, having used `usage`."""
         return cls(
             number=number,
             prompt_id=prompt_id,
             prompt_version=prompt_version,
             error_count=max(len(problems), 1),
             problems=tuple(problems[:MAX_REPORTED_PROBLEMS]),
+            usage=usage,
         )
 
 

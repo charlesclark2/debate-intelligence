@@ -237,6 +237,7 @@ NEVER_WRITE_A_BUCKET: Final = {
     "tub users enable",
     "tub users remove",
     "tub users email-second-factor",
+    "usage",
 }
 """Commands that read a bucket at most. A Secrets Manager or Cognito write is not an evidence bucket's."""
 

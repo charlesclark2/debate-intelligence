@@ -38,7 +38,7 @@ spec:
         resolved, in the same refusal as a parser or fingerprint version, naming both
         profiles and the re-parse; tests shown failing first.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

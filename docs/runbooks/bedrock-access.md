@@ -317,6 +317,8 @@ probe could not run (access denied, or no answer). Send the PM the whole file,
   routing file does not resolve. That is a finding for the routing file's owner.
 * `the AWS profile models.aws_profile names is not defined`: step 4 was not run on this Mac.
 
+**What the models cost after that.** Every call a command makes in record or live mode is logged to `<data_dir>/usage/YYYY-MM-DD.jsonl`, priced from `config/model_pricing.yaml`, and refused before it is made when it could take the run or the day past `models.budget_usd_per_run` or `models.budget_usd_daily` (an unpriced model is refused whenever a limit is set); `debate-research usage --date YYYY-MM-DD` shows a day's calls, tokens and cost. The probe above calls the adapter directly and is not logged.
+
 ## Prod
 
 After the release carrying this task is promoted to `main`, from a worktree at `origin/main`, with the

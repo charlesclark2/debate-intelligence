@@ -6,12 +6,48 @@
 | Spec | [`plan_specs/v1/e32-argument-landscape/t24-unlabelled-plan-affs.yaml`](../../plan_specs/v1/e32-argument-landscape/t24-unlabelled-plan-affs.yaml) |
 | Epic / release | `v1-e32-argument-landscape` / `v1.2` |
 | Branch | `task/v1-e32-t24-unlabelled-plan-affs` |
-| Session status | IN PROGRESS <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | PARTIAL <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
-**The counts are taken and ready to send** ([the relay block](#questions-for-the-pm)). Nothing is built.
-The session stops here for the PM's ruling, as the PM's context asked.
+**Built as ruled on 2026-10-26.** ac1 and ac2 pass, and so does the node's criterion. **ac3 is the
+operator's dry run on hspolicy26 and is NOT RUN, so the Goal stays `InProgress`.** It needs one cache
+re-read of about 205 to 305 s, then the dry run ([Operator follow-ups](#operator-follow-ups)).
+
+* **The reader.** In every affirmative file, a plan text under `Thus the plan`, `Thus plan`, inline
+  `Thus the plan:` or a bare `Thus` is read with t09's shape and vocabulary, the resolutional rule
+  included. It is read beside t09's plan texts, in the same pass and cache, and kept apart from them, so
+  no verdict of t09's changes. Card text is never read as one. `Therefore` is left out.
+* **The methods** run after every existing one and move none of their rounds:
+  * `TRANSITION_PLAN_TEXT`: an open round, every file `NONE` under t09, whose plan texts under `Thus`
+    name one aff. Two affs are a conflict and get nothing.
+  * `TRANSITION_PLAN_CARRY`: by t09's carry rule and guard.
+* **t17's K-aff carry** (option (b), ruling 3) is refused into a round whose own file holds such a plan
+  text naming a policy aff. The refusal comes after its advantage guard, and the round then falls to
+  `TRANSITION_PLAN_TEXT`. `KRITIKAL_AFF_MARKER` and `TEAM_CARRY` rounds stay as they are.
+* **The method table** counts the two methods with the others and adds two rows: the refused K-aff
+  carries, and a control by method (rounds identified another way whose own file holds such a plan
+  text naming another aff).
+* **t17's method sentence** is widened to `The`, `Our` or `My` + `method` or `methodology` + `is`,
+  `will` or `should`.
+* **No taxonomy bump.** The plan-text rule version moves (`plan-text-4`, and t17's `kritikal-aff-2`),
+  so the first run re-reads every affirmative file once.
+* **Tests were shown failing first,** and the method table's golden is hand-written from a hand-written
+  fixture that runs the real assignment.
+  * 24 mutants: 23 caught at once.
+  * The survivor was an equivalent check. It and its twin were removed, and the check beside them was
+    mutated instead and caught.
+* **The affected set** (235 files) was too long at load 16 to 29. The test directories of what changed
+  and the always-run list ran instead ([below](#before-the-report-working-agreement-10)).
+
+**What to look at first:**
+* [the fixture's table](../../tests/fixtures/landscape/transition_plan_affs/README.md) and its golden;
+* [Decisions](#decisions-and-assumptions) 3 and 4: the control counts any aff t09's rule calls
+  different, and the carry treats a conflicting round as t09 does. Both can move the real numbers from
+  the counts' simulation;
+* [the operator block](#operator-follow-ups) for ac3.
+
+### The counts that went to the PM (2026-10-26, before the build)
 
 * **Most of these plan texts sit under one label that t09 does not read: `Thus the plan`.** Of t17's
   256 files (254 under taxonomy 1.3.0):
@@ -34,24 +70,153 @@ The session stops here for the PM's ruling, as the PM's context asked.
   * No assignment moves, and no taxonomy bump is needed.
 * **t17's method sentence** is in 3 no-plan files of the open rounds, 1 file of a K-aff round
   (already a K aff by another marker), and 0 of the 1,205 control files.
-* **For the PM to rule:** the label list, the method names, and what happens to 9 K-aff rounds and 13
-  `TEAM_CARRY` rounds whose own `Thus the plan` names a different aff. Under "never move" they stay as
-  they are. Also the method sentence.
+* **The PM's questions:** the label list, the method names, what happens to 9 K-aff rounds and 13
+  `TEAM_CARRY` rounds whose own `Thus the plan` names a different aff, and the method sentence. The PM
+  ruled on all four the same day ([below](#the-pms-rulings-applied)).
 
 ## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
-| unlabelled-plan-affs | In progress | The counts are taken (2026-10-26, below). The rule waits for the PM's ruling |
+| unlabelled-plan-affs | Built; ac3 waits for the operator | The counts (2026-10-26), the PM's rulings (2026-10-26), then the reader, the method sentence, the rule, the cache, the report's rows, the scripts and the guide |
 
 ## Acceptance criteria
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| ac1: counts before building, read-only: where the 256 files' plan texts sit, and which affs their advantages point to, sent to the PM with a proposed rule | PASS once relayed | [The counts](#the-counts-hspolicy26-through-2026-10-20-taxonomy-130). The [relay block](#questions-for-the-pm) holds the proposed rule and the questions. Nothing was built |
-| ac2: after the ruling, on synthetic fixtures, the rule identifies an unlabelled plan's aff, refuses a round whose own plan text names another, and the method table counts the new method's rounds; tests shown failing first | NOT RUN | Waits for the ruling |
-| ac3: the operator's dry run on hspolicy26 before and after: rounds with no identified aff, by method | NOT RUN | After the build. The "before" is on record: the method table in [the base](#the-base) |
-| unlabelled-plan-affs node: `uv run pytest packages/debate_core/tests/arguments/landscape` | NOT RUN | No code has changed yet |
+| ac1: counts before building, read-only: where the 256 files' plan texts sit, and which affs their advantages point to, sent to the PM with a proposed rule | PASS | [The counts](#the-counts-hspolicy26-through-2026-10-20-taxonomy-130), sent 2026-10-26 with the proposed rule. The PM ruled the same day ([below](#the-pms-rulings-applied)). Nothing was built before the ruling |
+| ac2: after the ruling, on synthetic fixtures, the rule identifies an unlabelled plan's aff, refuses a round whose own plan text names another, and the method table counts the new method's rounds; tests shown failing first | PASS | `test_the_method_table_matches_the_hand_written_golden_file` against [`method_table.md`](../../tests/fixtures/landscape/transition_plan_affs/method_table.md), hand-written from the fixture's [README table](../../tests/fixtures/landscape/transition_plan_affs/README.md). The fixture's readings go through the real `build_aff_assignments`. It identifies three rounds by their own plan text and one by carry. It refuses EE (an unnamed t09 plan text of its own), HH and CC (t09's plan text, and t09's carry, naming another aff) and DD (two affs). The table counts `TRANSITION_PLAN_TEXT` 3 and `TRANSITION_PLAN_CARRY` 1. Red first: [below](#checks-shown-failing-for-their-reason) |
+| ac3: the operator's dry run on hspolicy26 before and after: rounds with no identified aff, by method | NOT RUN | The operator's run. "Before" is on record: 669 of 2,192 by the method table in [the base](#the-base), from t17's dry run of 2026-10-25 and reproduced by this session's read-only pass of 2026-10-26. "After" needs the cache re-read and the dry run ([Operator follow-ups](#operator-follow-ups)) |
+| unlabelled-plan-affs node: `uv run pytest packages/debate_core/tests/arguments/landscape` | PASS | `.venv/bin/python -m pytest packages/debate_core/tests/arguments/landscape` under `perl -e 'alarm 115'` → 916 passed in 9.99 s |
+
+## The PM's rulings, applied
+
+The rulings are a PM-ruling comment above the spec's `acceptanceCriteria` (commit `027c284`).
+
+| Ruling | Where it is |
+|---|---|
+| 1. The rule as proposed: `Thus the plan`, `Thus plan`, inline `Thus the plan:`, a bare `Thus`, with t09's shape and vocabulary; only into open rounds, every file `NONE`; two affs are a conflict; a carry by t09's rule and guard. `Therefore` and unlabelled analytics left out, no advantage rule, no taxonomy bump, the rule version moves | `TRANSITION_PLAN_LABELS` and `read_transition_plan_texts` in `arguments/landscape/plan_text.py`, rule `plan-text-4`, with the label list in the vocabulary's digest. Steps 5 and 6 of `assign_affs` in `arguments/landscape/aff_assignment.py` |
+| 2. `TRANSITION_PLAN_TEXT` and `TRANSITION_PLAN_CARRY`, two rows in the method table; `TEAM_CARRY`'s 254 do not change | The two method constants and their labels in `render.py`. The readings are kept apart from t09's, so t09's verdicts, and with them `PLAN_TEXT` and `TEAM_CARRY`, cannot change |
+| 3. Option (b) for t17's K-aff carry only: refused into a round whose own file holds such a plan text naming a policy aff, which then falls to `TRANSITION_PLAN_TEXT`; marker rounds and `TEAM_CARRY` rounds stay, in a control row; the refusals on their own row, tested failing first | The `refused_by_transition_plan` branch of `KRITIKAL_AFF_CARRY`, after the advantage guard. `TransitionPlanInputs` carries the refused rounds and the control to the report (`TransitionPlans`), and the method table shows both rows |
+| 4. t17's method sentence widened, riding the same re-read | `_METHOD_SENTENCE` in `arguments/landscape/kritikal_aff.py`, rule `kritikal-aff-2` |
+| t22's 1.4.0 | Not merged when this report was written (`origin/dev` at `d0cc9c3`). If it merges first, the branch takes it in the sync, and the operator block adds the classification step |
+
+## What was built
+
+| Where | What |
+|---|---|
+| `arguments/landscape/plan_text.py` | `TRANSITION_PLAN_LABELS`; `read_transition_plan_texts`: the paragraph under a label of the list, or an inline `Thus the plan:`, read only with t09's shape and never from card text, named by t09's vocabulary. Rule `plan-text-4`; the label list is in the digest |
+| `arguments/landscape/kritikal_aff.py` | The widened method sentence; rule `kritikal-aff-2` |
+| `arguments/landscape/aff_assignment.py` | `TRANSITION_PLAN_TEXT` and `TRANSITION_PLAN_CARRY` (steps 5 and 6), the K-aff carry's refusal, the control, `TransitionPlanInputs`. New `AssignmentCounts` fields: `refused_by_transition_plan`, `transition_conflicting`, `transition_carry_refused`, `transition_control` |
+| `application/ports/plan_text_store.py`, `application/plan_texts.py` | The cache keeps each source's `transition_paragraphs` (place, unit, shape, digest, ids: no words). `PlanTextRun.transition` holds each source's verdict over them |
+| `application/aff_assignment.py` | `build_aff_assignments` takes the verdicts and returns `TransitionPlanInputs`. Both the producer and the run's seam pass the plan-text run's verdicts on |
+| `application/landscape_run.py`, `application/landscape_report.py`, `domain/landscape_report.py` | The run hands the inputs to the report. `TransitionPlans` holds the refused K-aff carries and the control by method, affirmative rounds in range only |
+| `arguments/landscape/render.py` | The two methods' labels and the two rows |
+| `scripts/assign_landscape_affs.py` | `plan-texts` prints the transition verdicts. `assign` prints the K-aff carries refused for one, the conflicts, the carry's refusals and the control |
+| `scripts/landscape_dry_run_by_section.py` | One line: the refused K-aff carries and the control by method |
+| `docs/guides/landscape-taxonomy.md` | Steps 6 and 7, "Plan texts under `Thus`", the widened method sentence and the K-aff carry's refusal |
+| `tests/fixtures/landscape/transition_plan_affs/` (new, by hand) | `README.md`, `taxonomy.yaml`, `rounds.yaml`, `method_table.md` |
+
+### Checks shown failing for their reason
+
+Each suite was run red before its code: against a skeleton that found nothing, or with its wiring line
+taken out and then restored byte for byte. Agreement 8: an attempt that failed before its assertions is
+not counted.
+
+| Suite | Red |
+|---|---|
+| `arguments/landscape/test_transition_plan_text.py` (the reader, new) | 17 failed, 19 passed, against a reader returning nothing. The 19 are the not-read cases (`Therefore`, unshaped, card text, t09's labels), the label constant, and t09's own plan texts unchanged |
+| `arguments/landscape/test_kritikal_aff.py` (the widened sentence) | 5 failed, 38 passed, against t17's sentence. The passes include the 6 forms that must stay unread |
+| `arguments/landscape/test_aff_assignment.py` (the rule) | 16 failed, 43 passed, against a rule that ignored the readings. Before any code I corrected one test of my own: it expected a transition carry where t09's `TEAM_CARRY` already carries the resolutional aff. It now names the resolutional aff by a transition reading. One more failed after the first code, on the carry's refusal count. The test read t09's guard right (a round with its own t09 plan text is refused too), and I fixed the code |
+| `application/test_plan_texts.py`, `integrations/landscape/test_plan_text_store.py` (the cache) | 3 failed, 23 passed, with the run's field as an empty skeleton. The refused-source case passes by construction |
+| `application/test_landscape_transition_plans.py` (the report, new) | 2 failed, 4 passed: the golden and the rows, with no rows rendered and no `transition_plans` counted. The 4 check the rule, which had been built and shown red in its own suite. Two earlier attempts failed at setup (file names not hex, then YAML reading `01` as an integer) and are not counted |
+| `application/test_landscape_run.py` (the seam) | 1 failed with the wiring line removed; passed with it restored byte for byte |
+| `application/test_aff_assignment.py` (the producer and the seam's hand-off) | 2 failed with both hand-off lines removed; restored and checked with `cmp`. One more failure after restoring came from my test miscounting distinct files (identical plans share a digest). I fixed the test |
+| `tests/scripts/test_assign_landscape_affs.py`, `test_landscape_dry_run_by_section.py` | 5 failed, 9 passed before the scripts printed the new lines |
+
+**The golden** matched on the first render.
+
+### Mutants
+
+There were 24 mutants on the six rules the PM named. Each:
+* was applied to one file, after a check that its text occurs exactly once;
+* ran the seven covering suites (253 tests) in a fresh process, with bytecode writing off, every
+  `__pycache__` cleared, and a new, empty `HYPOTHESIS_STORAGE_DIRECTORY` (no covering suite uses
+  Hypothesis);
+* was restored from a copy and compared byte for byte.
+
+They ran in batches of eight under `perl -e 'alarm 110'`, with `git status --porcelain` empty after each.
+Each run took 1.4 to 2.8 s at load 7 to 16.
+
+| Rule | Mutant | Failed |
+|---|---|---|
+| Label list | bare `Thus` dropped | 6 |
+| Label list | `Thus plan` dropped | 3 |
+| Label list | inline `Thus the plan:` not read | 1 |
+| Label list | no shape needed under a label | 3 |
+| Label list | card text read as a plan text | 2 |
+| Label list | a t09 label under a transition read as its plan | **survived**: equivalent, removed |
+| Label list (after the removal) | t09's inline label under a transition read as its plan | 1 |
+| `Therefore` left out | `therefore` added to the labels | 4 |
+| `Therefore` left out | inline `Therefore the plan:` read | 1 |
+| Conflicting round | two affs across files name one | 5 |
+| Conflicting round | a conflicting file ignored | 2 |
+| Conflicting round | a round with its own t09 plan text read | 3 |
+| Carry and guard | carried into a round with its own `Thus` plan text | 3 |
+| Carry and guard | carried into a round with its own t09 plan text | 1 |
+| Carry and guard | a team naming two affs carries | 3 |
+| Carry and guard | a conflicting round does not split the team | 1 |
+| Carry and guard | t09's disagreeing teams carry | 1 |
+| K-aff carry refusal | removed | 6 |
+| K-aff carry refusal | refused for an unnamed `Thus` plan text too | 1 |
+| K-aff carry refusal | before the advantage guard | 3 |
+| Widened sentence | `My` dropped | 1 |
+| Widened sentence | `should` dropped | 2 |
+| Widened sentence | `methodology` dropped | 2 |
+| Widened sentence | any word before `method` | 2 |
+| Control | a round agreeing at another level counted | 2 |
+
+**The survivor.** The reader refused a t09 label, and a transition label, as the paragraph under a
+transition label. Neither can ever have t09's shape (a label is at most 6 words from a fixed list), so
+the shape test already refuses both, and mutation could not tell the checks from their absence. Both
+were removed, with a comment saying why (agreement 8, commit `06154ae`; behaviour unchanged, so no
+rule-version bump). The check beside them, t09's inline label, is shaped and is load-bearing: its
+mutant was caught.
+
+### Before the report (working agreement 10)
+
+* **The affected set** (`uv run scripts/affected_tests.py`) is **235 test files**. The load average
+  was 16 to 29 from other sessions. t17's 210 files stopped at 69% of a 115 s limit at load 16, so I did
+  not start it. The whole set is left to the pull request's `ci` check.
+* **Within the limit,** each under `perl -e 'alarm 115'` on the interpreter, with `-n auto -m "not slow
+  and not live"`:
+
+  | Run | Result |
+  |---|---|
+  | `arguments/landscape`, `integrations/landscape`, `tests/config`, and the landscape scripts' tests (assign, dry run by section, read texts, classify) | 1,093 passed in 11.6 s |
+  | The application's landscape, assignment, plan-text, analytic-text and classification tests, `domain`, `tests/architecture`, `tests/specs` | 1,708 passed in 26.4 s |
+  | The other 61 test files at the top of `packages/debate_core/tests/application` | 1,925 passed in 33.8 s |
+  | `debate_cli`'s landscape command, `test_app.py`, the two pinned integration lists (`test_installation.py`, `commands/test_doctor.py`), `tests/smoke/test_landscape_smoke.py` | 142 passed in 33.3 s |
+
+  A first run of all of `application` with `domain` and the always-run list stopped at the limit at 81%
+  (exit 142, load 17), with no failure by then. No worker was left running. Its parts are the second and
+  third rows. The application's `caselist/` and `tub/` subdirectories, which the affected set reaches
+  through imports, were not run.
+* **The cheap checks:**
+  * `ruff format --check .`: 1438 files already formatted;
+  * `ruff check .`: all checks passed;
+  * `pyright` (the project's configuration): 0 errors, in 83 s;
+  * `lint-imports`: 18 kept, 0 broken;
+  * `check_thin_handlers.py`: 65 handlers within 25 statements;
+  * `docs_index.py --check-descriptions`: OK;
+  * `check_command_blocks.py --base origin/dev`: OK;
+  * `check_links.py`: OK;
+  * `pre-commit run check-merge-conflict --all-files`: passed;
+  * `validate_specs.py`: OK.
+* **No shared test ground changed:** no `pyproject.toml`, `uv.lock`, conftest or pytest plugin. So no
+  whole-selection hand-off.
+* **One slip, corrected.** Commit `5a617a7` went in with 3 pyright errors, because its check chain piped
+  pyright to `tail`. The next commit (`74eccf6`) fixed them, and every later check ran bare.
 
 ## The counts (hspolicy26, through 2026-10-20, taxonomy 1.3.0)
 
@@ -312,37 +477,168 @@ Their teams' other open rounds were not counted.
 
 ## Files changed
 
-* This report. Nothing else: no code, config or spec has changed.
+All relative to `origin/dev` at `d0cc9c3`, which the branch was synced onto with `scripts/task sync`
+before the build.
+
+* **`debate_core.arguments.landscape`:** `plan_text.py` (the reader), `kritikal_aff.py` (the sentence),
+  `aff_assignment.py` (the methods, the refusal, the control, `TransitionPlanInputs`), `render.py` (the
+  labels and rows).
+* **`debate_core.application`:** `plan_texts.py`, `ports/plan_text_store.py`, `aff_assignment.py`,
+  `landscape_run.py`, `landscape_report.py`.
+* **`debate_core.domain`:** `landscape_report.py` (`TransitionPlans` and the report's field).
+* **Tests:**
+  * in `packages/debate_core/tests`: `arguments/landscape/test_transition_plan_text.py` and
+    `application/test_landscape_transition_plans.py` (new);
+  * `arguments/landscape/test_aff_assignment.py` and `test_kritikal_aff.py`;
+  * `application/test_plan_texts.py`, `test_aff_assignment.py` and `test_landscape_run.py`;
+  * `integrations/landscape/test_plan_text_store.py` (the cache's field pin);
+  * `tests/scripts/test_assign_landscape_affs.py` and `test_landscape_dry_run_by_section.py`.
+* **`tests/fixtures/landscape/transition_plan_affs/`** (new, by hand).
+* **`scripts/assign_landscape_affs.py`, `scripts/landscape_dry_run_by_section.py`.**
+* **`docs/guides/landscape-taxonomy.md`.**
+* **The spec:** the PM's rulings as a comment above `acceptanceCriteria`. The Goal's phase stays
+  `InProgress` (ac3).
+* This report.
 
 ## Deviations from the spec
 
-None so far.
+1. **Files outside `constraints.packages`,** each needed by a ruling or by ac3, as for t17:
+   * `debate_core.domain`: the report's `TransitionPlans` model, beside t17's `KritikalAffs`;
+   * `scripts/assign_landscape_affs.py` and `scripts/landscape_dry_run_by_section.py`, with their tests
+     in `tests/scripts`. The operator's re-read and dry run must print the new counts for ac3, and an
+     exact-output test of each pins every line.
+
+   I did not edit the spec's list; the PM amends it, as for t17. `debate_core.integrations` is not
+   touched: only its test of the cache's fields, which is under `packages/debate_core/tests`.
 
 ## Decisions and assumptions
 
-1. **The 256 are re-counted under 1.3.0:** 254 files. The other 2 are now files of K-aff rounds, as
-   t17 recorded.
-2. **"Where the plan sits" uses t09's own shape:** `should` with a federal actor before it, never the
-   fifty states. That is what a widened reader would keep. The other-actor row shows nothing is lost
-   by it.
-3. **A label is a paragraph of at most 6 words** before the plan text, as t09's `_LONGEST_LABEL_WORDS`.
-   An inline label is at most 5 words before a colon.
-4. **The simulation reads t09's carry rule as it is.** A carry needs a team whose identified affs
-   narrow to one, and it never goes into a round whose own plan text exists and names none. A team
-   that already holds a K aff and a policy aff disagrees, and carries nothing.
+1. **The readings are kept apart from t09's.** They go in their own cache field and their own verdict
+   per source (`PlanTextRun.transition`), never into t09's paragraphs. So no t09 verdict changes, and
+   `PLAN_TEXT`, `TEAM_CARRY` and t09's carry guard read exactly what they read before. That is how
+   `TEAM_CARRY`'s 254 stay (ruling 2). They are read in every file, and used only where the rule says.
+2. **What the reader takes, as the counts read it:**
+   * a label is a paragraph of at most 6 words that t01's normalizer reduces to `thus the plan`, `thus
+     plan` or `thus`. So `Thus, the plan:` and `1AC Thus the plan` count, as in the counts;
+   * the inline form is `Thus the plan:` (a comma allowed after `Thus`), colon only;
+   * the plan text must have t09's shape and is never card text (evidence or cite);
+   * a t09 inline label under a transition label is t09's to read.
+3. **The control counts a round when t09's own rule calls the two affs different.** That is,
+   `narrowest` of the round's aff and the plan text's ids keeps more than the round's aff: a sibling
+   mechanism counts, a parent or child does not, and the resolutional aff gives way. The counts' 13
+   `TEAM_CARRY` rounds were "another top-level aff". Two mechanisms of single payer also disagree under
+   t09's rule, so the real control can be larger than 13 + 2. A conflicting plan text under `Thus` in
+   such a round counts too.
+4. **The carry follows t09's rule and guard exactly.** A team carries only if:
+   * it has a `TRANSITION_PLAN_TEXT` round;
+   * its assigned and placed affs, every method's, narrow to one, so a team that is also a K aff
+     carries nothing;
+   * its rounds neither disagree under t09 nor conflict under the new reading.
+
+   It carries only into open rounds whose every file is `NONE` under both readers. The counts'
+   simulation did not apply the disagreement part, so the real carry can come in below its 23.
+5. **The K-aff carry's refusal comes after its advantage guard.** A round reading an advantage still
+   counts under t17's guard, so t17's 17 are not recounted as transition refusals. It refuses a plan
+   text that names an aff or conflicts. One that names nothing refuses nothing. t17's row "Of those, the
+   kritikal affirmative not carried in: the round's own file reads an advantage" still counts only
+   rounds that are unidentified. Its rounds now mostly fall to `TRANSITION_PLAN_TEXT`, so expect that
+   row near 0 (the counts' simulation identified all 17).
+6. **The widened method sentence is read where t17 reads its sentences:** any paragraph but card text,
+   headings included. The counts read it outside headings, so the dry run may find one more.
+7. **Two equivalent checks were removed** after their mutant survived (Mutants above).
+8. **The rule versions:** `plan-text-4` (with the label list in the vocabulary's digest, so an edit to
+   it re-reads every file) and `kritikal-aff-2`. Removing the equivalent checks changes no reading, so
+   it bumped nothing.
+9. **From the counts, unchanged:** the 256 are 254 under 1.3.0, and the other-actor row shows t09's
+   federal-actor shape loses nothing.
 
 ## Operator follow-ups
 
-None yet. After the build, ac3 needs one operator block. It re-reads the plan-text cache under a new
-rule version (about 205 to 305 s, as t17's refills), then runs the dry run for the method table.
+**ac3: the cache re-read, then the dry run.** Local only: it writes under
+`~/.debate-research/dev/landscape/` alone, publishes nothing and writes to no bucket. It prints counts
+only. The taxonomy is unchanged (1.3.0), so the classification and analytic-text caches are still
+current, and only the plan texts are read again.
+
+**If `v1-e32-t22` (taxonomy 1.4.0) merges into `dev` before you run this,** tell the session first. It
+syncs the branch and gives you this block with the classification step added.
+
+From the task worktree:
+
+```bash
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t24-unlabelled-plan-affs
+```
+
+**1. The re-read** (expected runtime 205 to 305 s, as t17's of 2026-10-25). It refuses to start if a
+`DEBATE_*` variable is set or a `caselist pull` is running:
+
+```bash
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; else uv run python scripts/assign_landscape_affs.py plan-texts --caselist hspolicy26 --snapshot 2026-10-20; fi
+```
+
+**Success looks like:**
+* `Plan texts: 1770 sources, 0 cached, 1770 parsed, 0 refused by the parser, 0 unread; cache written.`
+  The rule version changed, so nothing is cached;
+* t09's verdicts unchanged from t17's: `NAMES: 950`, `CONFLICTING: 7`, `UNNAMED: 2`, `NONE: 811`
+  documents;
+* `Plan texts under Thus: NAMES N, ...` with **N above zero** (the counts expect a few hundred);
+* a `K-aff markers:` line, 28 documents or a few more for the widened method sentence;
+* a `Runtime` line.
+
+A `STOP:` line means nothing ran. Paste every line back.
+
+**2. The dry run** (expected runtime about 75 s on the warm caches). It is read-only and takes no
+bucket lock. The session can run it once step 1 is done, or paste:
+
+```bash
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; else uv run python scripts/landscape_dry_run_by_section.py --caselist hspolicy26 --snapshot 2026-10-20; fi
+```
+
+**Success looks like:**
+* `Dry run of hspolicy26 through 2026-10-20, taxonomy 1.3.0: nothing written; 7 files planned.`;
+* `Affirmative rounds by method: ...`. `PLACED_CARD 57`, `PLAN_TEXT 1172` and `TEAM_CARRY 254` are as
+  before. `TRANSITION_PLAN_TEXT` is above zero (the counts' simulation: about 327) and
+  `TRANSITION_PLAN_CARRY` up to about 23. `not identified N of 2192` has N well below 669 (the
+  simulation: about 319);
+* the `Kritikal affirmatives (kritikal-aff): ...` line. `KRITIKAL_AFF_CARRY` is expected to drop from 9,
+  about 7 of them refused;
+* the `Plans under Thus: the K-aff carry refused in R rounds; C rounds identified another way ...; by
+  method: ...` line;
+* the scan lines, as before.
+
+Paste every line back. A `Refused:` line means the run did not start, and says why.
+
+**The "before" for ac3** is already on record: t17's dry run of 2026-10-25 and this session's
+read-only pass of 2026-10-26, both at 669 of 2,192 ([the base](#the-base)). A dry run of today's `dev`
+code would need the old cache key, which step 1 replaces.
+
+**The publish** waits for the cloud cutover. The republish carries t17, t23 and this task together,
+after the cutover.
 
 ## Follow-up work
 
-None yet.
+* **The 70 open rounds that read an advantage** (26 teams, the counts' simulation) stay unidentified.
+  35 hold a plan text under `Thus` that names no aff, and 34 hold no plan text these labels mark. A
+  plan text that names nothing might take an alias the coach adds. That is the coach's sheet
+  (v1-e32-t09's), not a rule.
+* **`Therefore`,** if the PM wants it later, is one word in `TRANSITION_PLAN_LABELS`. It would add about
+  12 rounds and block about 18 carries.
+* **The CLI's JSON** does not carry the transition rows yet, as t17's group did not. The run's report
+  carries them (`LandscapeReport.transition_plans`).
 
 ## Questions for the PM
 
-Paste-ready:
+None open.
+
+### The questions of 2026-10-26 on the counts, answered
+
+The PM ruled the same day:
+1. the rule as proposed;
+2. the method names;
+3. option (b) for t17's K-aff carry only, with the marker and `TEAM_CARRY` rounds kept in a control
+   row;
+4. the method sentence widened.
+
+Kept as asked:
 
 ```text
 v1-e32-t24 counts (session, 2026-10-26). Read-only, local store only, nothing

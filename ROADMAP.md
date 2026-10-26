@@ -62,8 +62,8 @@ v2.3's extension work.
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 50 | 45 | 242 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 108 | 83 | 498 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 46 | 29 | 262 |
-| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 15 | 5 | 113 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 46 | 30 | 262 |
+| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 15 | 6 | 113 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 22 | 13 | 154 |
@@ -335,7 +335,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [A local text classifier for the cards headings cannot place, compared before anything is wired](plan_specs/v1/e32-argument-landscape/t21-local-classifier-comparison.yaml) `v1-e32-t21-local-classifier-comparison` | InProgress | 1 | 5.0 |
 | [A coach-edited scenario vocabulary per DA and advantage](plan_specs/v1/e32-argument-landscape/t22-scenario-vocabulary.yaml) `v1-e32-t22-scenario-vocabulary` | Pending | 2 | 3.0 |
 | [Team links on a school's page, as on a position's](plan_specs/v1/e32-argument-landscape/t23-school-page-team-links.yaml) `v1-e32-t23-school-page-team-links` | InProgress | 1 | 1.0 |
-| [Policy affs whose plan text has no label, identified by the plan or the advantages](plan_specs/v1/e32-argument-landscape/t24-unlabelled-plan-affs.yaml) `v1-e32-t24-unlabelled-plan-affs` | Pending | 2 | 4.0 |
+| [Policy affs whose plan text has no label, identified by the plan or the advantages](plan_specs/v1/e32-argument-landscape/t24-unlabelled-plan-affs.yaml) `v1-e32-t24-unlabelled-plan-affs` | Succeeded | 2 | 4.0 |
 | [What each impact runs through, named in words a debater uses](plan_specs/v1/e32-argument-landscape/t25-readable-impact-chains.yaml) `v1-e32-t25-readable-impact-chains` | Pending | 1 | 3.0 |
 | [The review queue ordered by the local proxy model, which places nothing](plan_specs/v1/e32-argument-landscape/t26-review-queue-proxy-ordering.yaml) `v1-e32-t26-review-queue-proxy-ordering` | Pending | 1 | 3.0 |
 
@@ -367,7 +367,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [Access-status and paywall detection](plan_specs/v1/e04-article-retrieval/t03-access-status.yaml) `v1-e04-t03-access-status` | Succeeded | 2 | 6.0 |
 | [Readable-text extraction (HTML + PDF)](plan_specs/v1/e04-article-retrieval/t04-content-extraction.yaml) `v1-e04-t04-content-extraction` | Succeeded | 2 | 8.5 |
 | [ArticleService orchestration](plan_specs/v1/e04-article-retrieval/t05-article-service.yaml) `v1-e04-t05-article-service` | Succeeded | 3 | 8.5 |
-| [`debate-research fetch` command and recorded fixtures](plan_specs/v1/e04-article-retrieval/t06-fetch-command.yaml) `v1-e04-t06-fetch-command` | Pending | 2 | 7.5 |
+| [`debate-research fetch` command and recorded fixtures](plan_specs/v1/e04-article-retrieval/t06-fetch-command.yaml) `v1-e04-t06-fetch-command` | Succeeded | 2 | 7.5 |
 | [How extraction and access classification behave on real pages, measured in place](plan_specs/v1/e04-article-retrieval/t07-real-page-measurement.yaml) `v1-e04-t07-real-page-measurement` | Pending | 1 | 2.0 |
 | [An Article found by its DOI and by a URL a snapshot was fetched from](plan_specs/v1/e04-article-retrieval/t08-article-lookup-by-identifier-and-fetched-url.yaml) `v1-e04-t08-article-lookup-by-identifier-and-fetched-url` | Pending | 1 | 3.0 |
 

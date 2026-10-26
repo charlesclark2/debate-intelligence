@@ -422,14 +422,14 @@ name = "debate-cli"
 version = "1.1.0"
 source = { editable = "packages/debate_cli" }
 dependencies = [
-    { name = "debate-core", extra = ["aws", "docx", "http", "opencaselist", "tub"] },
+    { name = "debate-core", extra = ["aws", "docx", "extraction", "http", "opencaselist", "tub"] },
     { name = "rich" },
     { name = "typer" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "debate-core", extras = ["aws", "docx", "http", "opencaselist", "tub"], editable = "packages/debate_core" },
+    { name = "debate-core", extras = ["aws", "docx", "extraction", "http", "opencaselist", "tub"], editable = "packages/debate_core" },
     { name = "rich", specifier = ">=13.9" },
     { name = "typer", specifier = ">=0.15" },
 ]

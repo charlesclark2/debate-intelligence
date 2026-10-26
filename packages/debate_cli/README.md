@@ -359,3 +359,37 @@ uv run pytest packages/debate_cli/tests
 `tests/test_output.py` covers the output contract in isolation; `tests/test_app.py` runs the real
 command line through Typer's `CliRunner`, including commands that stand in for the ones later
 tasks add, so the skeleton's promises are checked rather than described.
+
+## `debate-research fetch`
+
+`debate-research fetch <URL>` (`v1-e04-t06-fetch-command`) retrieves an article or open-access PDF
+into a hashed snapshot in this environment's data directory, or says exactly why it cannot. The work
+is `ArticleService`'s (`debate_core.application.article_service`), asked through `ArticleFetch`
+(`debate_core.application.article_fetch`): the polite fetcher reads robots.txt and waits between
+requests to one host, the access classifier decides the status, and a snapshot is stored only for an
+ACCESSIBLE page. Paywalls are never bypassed.
+
+```console
+$ uv run debate-research fetch https://www.example.org/news/2026/10/some-story
+$ uv run debate-research fetch https://www.example.org/news/2026/10/some-story --refresh
+$ uv run debate-research --json fetch https://www.example.org/report.pdf | jq '.data.snapshot // .error.details.reason'
+$ uv run debate-research fetch --paste my-copy.txt --source-url https://www.example.org/paywalled-story
+```
+
+A person sees the canonical URL, title, identifiers, access status and reason, provenance, and the
+snapshot's id, both SHA-256 hashes, paragraph count, extractor and normalizer versions; a refusal is
+a panel with the status, reason, status code, marker and rules version. `--json` prints one envelope,
+published as `packages/debate_core/schemas/fetch_result.v1.json`. Neither ever holds page text.
+
+`--refresh` asks the publisher again even when a snapshot younger than `articles.refetch_after_hours`
+is stored. `--paste FILE` (or `-` for stdin) with `--source-url` stores text the user lawfully has,
+such as a subscriber's copy, as USER_SUPPLIED, and fetches nothing. It is stored only after the user
+attests lawful access, at a prompt in a terminal or with `--i-have-lawful-access` where no prompt can
+be shown (`--json`, text on stdin, no terminal).
+
+| Exit | Means |
+|---|---|
+| `0` | ACCESSIBLE and stored (or answered by a recent stored snapshot), or pasted text stored as USER_SUPPLIED. |
+| `1` | Refused, nothing stored: not a source URL, pasted text not attested, or pasted text rejected (blank, too short, too large). |
+| `2` | A usage error, for example `--paste` without `--source-url`, or a URL and `--paste` together. |
+| `3` | PAYWALLED, BLOCKED, ROBOTS_DISALLOWED, NOT_FOUND, UNSUPPORTED_TYPE or ERROR (`SOURCE_NOT_ACCESSIBLE`), or the fetcher could not run. No snapshot is stored. |

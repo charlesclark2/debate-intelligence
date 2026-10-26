@@ -255,6 +255,31 @@ class TestWhatIsStillDriftInBucketMode:
         assert entry.missing_local == (digest_of_body(LOST),)
         assert digest_of_body(LOST) not in entry.held_only_in_bucket
 
+    async def test_a_source_recorded_at_the_manifests_digest_with_another_size_is_drift(
+        self,
+        local: LocalEvidence,
+        bucket: S3EvidenceObjectStore,
+        imported_data_dir: Path,
+        s3_client: S3Client,
+        evidence_bucket: str,
+    ) -> None:
+        """The recorded digest is metadata: bytes of another size under it are other bytes."""
+        await publish_everything(local, bucket)
+        key = expected_source_key(LOST)
+        restored_without_raw_sources(imported_data_dir)
+        s3_client.put_object(
+            Bucket=evidence_bucket,
+            Key=key,
+            Body=b"short",
+            Metadata={SHA256_METADATA_NAME: digest_of_body(LOST)},
+        )
+
+        entry = await compared(local, bucket, bucket_mode=True)
+
+        assert not entry.in_sync
+        assert entry.checksum_mismatches == (key,)
+        assert digest_of_body(LOST) not in entry.held_only_in_bucket
+
     async def test_a_manifest_the_bucket_lacks_is_drift(
         self,
         local: LocalEvidence,

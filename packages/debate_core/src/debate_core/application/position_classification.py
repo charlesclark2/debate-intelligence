@@ -56,7 +56,7 @@ from debate_core.application.ports.classification_store import (
 )
 from debate_core.application.ports.taxonomy_repository import TaxonomyRepository
 from debate_core.arguments.landscape.matcher import MatchItem, PositionMatcher, read_items
-from debate_core.arguments.landscape.model_stage import ModelCandidate, places_nothing
+from debate_core.arguments.landscape.model_stage import ModelCandidate, places_nothing, sent_headings
 from debate_core.arguments.landscape.review_queue import (
     DEFAULT_MINIMUM_REVIEW_TEAMS,
     DEFAULT_REVIEW_THRESHOLD,
@@ -335,7 +335,7 @@ class PositionClassificationService:
                 fingerprint=one.item.fingerprint,
                 source_sha256=one.source.sha256,
                 first_element_index=one.card.first_element_index or 0,
-                headings=one.item.headings,
+                headings=sent_headings(one.item.headings, codes),
                 tag=card_tag(one.card.tag, own, names, codes),
                 short_cite=scrubbed_cite(one.card.short_cite, own, names, codes),
                 own_names=own,

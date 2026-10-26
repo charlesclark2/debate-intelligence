@@ -7,7 +7,9 @@ above the threshold, a card the coach ruled names no position, a section, or a d
 ## What a card sends (:class:`ModelItem`)
 
 The headings over it as the matcher reads them (normalized, with the disclosing teams' own names and the
-caselist's schools taken out, and each heading's answer flag), and three pieces of free text, each read
+caselist's schools taken out, and each heading's answer flag), less any word of a team code of the
+caselist (:func:`sent_headings`; a heading keeps another team's code standing alone, a prompt does not),
+and three pieces of free text, each read
 as lowercase words by :func:`~debate_core.arguments.landscape.tag_scrub.card_tag`: the same names, every
 school of the caselist and every word of every team code taken out.
 
@@ -49,7 +51,7 @@ its `repr`.
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Sequence
+from collections.abc import Collection, Iterable, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Final
@@ -89,6 +91,7 @@ __all__ = [
     "prompt_variables",
     "refusal",
     "refusal_reason",
+    "sent_headings",
 ]
 
 EXCERPT_WORDS: Final = 120
@@ -160,6 +163,20 @@ class ModelItem:
     """The first :data:`EXCERPT_WORDS` words of the evidence, without names; None when the card has none."""
     evidence: str = field(default="", repr=False)
     """The card's whole evidence text, as stored: only to check a rationale against; never sent."""
+
+
+def sent_headings(
+    headings: Sequence[NormalizedHeading], codes: Collection[str]
+) -> tuple[NormalizedHeading, ...]:
+    """`headings` as a model is shown them: without any word of `codes`, and a heading left empty dropped."""
+    sent: list[NormalizedHeading] = []
+    for heading in headings:
+        text = " ".join(word for word in heading.text.split() if word not in codes)
+        if text:
+            sent.append(
+                heading if text == heading.text else NormalizedHeading(text=text, answer=heading.answer)
+            )
+    return tuple(sent)
 
 
 def bounded_words(text: str | None, limit: int) -> str | None:

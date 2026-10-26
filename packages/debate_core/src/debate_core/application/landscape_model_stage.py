@@ -98,8 +98,12 @@ CLASSIFICATION_TASK_CLASS: Final = TaskClass.HIGH_VOLUME
 CLASSIFICATION_POLICY: Final = ValidationPolicy(fail_closed=False)
 """Placing a card under a position writes no evidence, so it is not an evidence-integrity action."""
 
-DEFAULT_MAX_MODEL_ITEMS: Final = 500
-"""Cards (fingerprints) one run may ask a model about. Proposed to the PM from the hspolicy26 count."""
+DEFAULT_MAX_MODEL_ITEMS: Final = 2000
+"""Cards (one per fingerprint) one run may ask a model about, proposed to the PM from hspolicy26's count.
+
+On 2026-10-20's store the first 2,000, in :func:`~debate_core.arguments.landscape.model_stage.model_order`,
+stand for 14,413 of the 58,299 cards stage one left unplaced or below the threshold, in 100 calls.
+"""
 
 POLICY_QUESTION: Final = 4
 """The data-use policy's open question a live run waits on: the provider's no-retention terms."""

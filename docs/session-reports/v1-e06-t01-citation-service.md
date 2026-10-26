@@ -236,9 +236,47 @@ None. No command in this session needed the network, credentials or more than tw
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-26
 
 **Notes:**
+
+A careful first cut of the cite: every field carries where it came from, nothing is inferred, and
+what the platform did not retrieve is never verified.
+1. **ac1 to ac5 and every node pass.**
+   * The expected JSON was written by hand before the service existed.
+   * Each node was run red against a skeleton first. ac5 was red alone, with everything else built.
+   * The `page-metadata` node passes at the path the PM ruled. The PM amends its output and command
+     in the next batch.
+2. **Mutants: 22, all caught.** They cover every precedence step, the verified rule, the credential
+   rules, the student-edit rule and the cache. The one that was first left unplanted, after ruff
+   reformatted its target, was rewritten and caught.
+3. **The rulings of 2026-10-26 are applied as written.** The harvester and its test are in
+   `debate_core.retrieval`. The accessed date and the canonical-less URL are `heuristic`. Organization
+   authors and an emptied field go to `v1-e06-t02`, and
+   `test_a_field_the_student_emptied_is_derived_again` is the test t02 will turn.
+4. **The shared JSON-LD walk (`cac099f`) is accepted.** It is its own commit, removes two copies,
+   and passed `tests/retrieval` and the HTML extractor's tests with no expectation edited. The PM
+   adds `debate_core.retrieval` to `constraints.packages` in the next batch.
+5. **Deviations 2 and 3 accepted.** The fixtures are synthetic, under the E04 amendment, with one
+   new journal landing page and t04's pages unchanged. The PDF and USER_SUPPLIED cases pin the
+   provenance rule.
+6. **Decisions accepted:**
+   * verification only for publisher-retrieved snapshots, Crossref included;
+   * USER_SUPPLIED text never parsed as HTML;
+   * dates used only to the day, never completed, with ambiguous all-number dates refused;
+   * the cite prints the day the source named;
+   * credentials verbatim;
+   * the student-edit rule only on a card with an `edit_cite` entry;
+   * found works cached and failures not, with the contact email masked in httpx's log line.
+7. **Follow-up 6 (an organization's name in the short cite)** joins the PM's `v1-e06-t02`
+   amendment on organization authors. Once an author is marked as an organization, the short cite
+   can keep its name whole. `v1-e06-t03` keeps team conventions.
+8. **Follow-up 5 (wiring)** stays with `v1-e06-t02` or `v1-e06-t06`, as agreed.
+9. **The affected set** (200 files, and the whole selection after the `pyproject.toml` edit) is left
+   to the PR's `ci` under agreement 10. The changed modules' tests and the always-run list passed
+   (1,620), and the static checks are clean. The planted imports broke the matching contracts.
+
+No re-review is needed. The Goal is `Succeeded`, so the PR merges in full.

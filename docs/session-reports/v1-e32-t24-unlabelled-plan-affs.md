@@ -95,6 +95,7 @@
 | ac1: counts before building, read-only: where the 256 files' plan texts sit, and which affs their advantages point to, sent to the PM with a proposed rule | PASS | [The counts](#the-counts-hspolicy26-through-2026-10-20-taxonomy-130), sent 2026-10-26 with the proposed rule. The PM ruled the same day ([below](#the-pms-rulings-applied)). Nothing was built before the ruling |
 | ac2: after the ruling, on synthetic fixtures, the rule identifies an unlabelled plan's aff, refuses a round whose own plan text names another, and the method table counts the new method's rounds; tests shown failing first | PASS | `test_the_method_table_matches_the_hand_written_golden_file` against [`method_table.md`](../../tests/fixtures/landscape/transition_plan_affs/method_table.md), hand-written from the fixture's [README table](../../tests/fixtures/landscape/transition_plan_affs/README.md). The fixture's readings go through the real `build_aff_assignments`. It identifies three rounds by their own plan text and one by carry. It refuses EE (an unnamed t09 plan text of its own), HH and CC (t09's plan text, and t09's carry, naming another aff) and DD (two affs). The table counts `TRANSITION_PLAN_TEXT` 3 and `TRANSITION_PLAN_CARRY` 1. Red first: [below](#checks-shown-failing-for-their-reason) |
 | ac3: the operator's dry run on hspolicy26 before and after: rounds with no identified aff, by method | PASS | Before: 669 of 2,192, by the method table in [the base](#the-base) (t17's dry run of 2026-10-25, reproduced by this session's read-only pass of 2026-10-26). After: the operator's re-read (226.7 s), then `landscape_dry_run_by_section.py --caselist hspolicy26 --snapshot 2026-10-20` (73.1 s) → **313 of 2,192**, by method [below](#the-real-store-after-the-re-read-2026-10-26) |
+| unlabelled-plan-affs node: `uv run pytest packages/debate_core/tests/arguments/landscape` | PASS | `.venv/bin/python -m pytest packages/debate_core/tests/arguments/landscape` under `perl -e 'alarm 115'` → 916 passed in 9.99 s |
 
 ## The real store after the re-read (2026-10-26)
 
@@ -152,7 +153,6 @@ was set and no `caselist pull` was running.
   neoliberalism, disability, Buddhism and ontology 1 each.
 * **The scan:** 9 hits, 0 not yet accepted, the same as t17's: 1 in report.md's plank table, 8 in
   `top_cards.csv`. None is in the method table. Its new rows hold counts and method names only.
-| unlabelled-plan-affs node: `uv run pytest packages/debate_core/tests/arguments/landscape` | PASS | `.venv/bin/python -m pytest packages/debate_core/tests/arguments/landscape` under `perl -e 'alarm 115'` → 916 passed in 9.99 s |
 
 ## The PM's rulings, applied
 
@@ -784,9 +784,45 @@ is the base rate (871 of 935 are single payer). By mechanism it is wrong in
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-26
 
 **Notes:**
+
+The largest single gain in the report so far, made the careful way: counted first, built to the
+rulings, kept apart from t09's readings, and measured on the real store.
+1. **ac1 to ac3 and the node's criterion pass.**
+   * The method table's golden is hand-written from a fixture that runs the real assignment.
+   * Every suite was red for its reason. The two setup failures are honestly left out of the count.
+   * The one fix to the code after a test failed (the carry's refusal count) is on record.
+2. **Mutants: 24.** The survivor and its twin were removed as equivalent, with the load-bearing check
+   beside them mutated and caught. That is agreement 8 applied exactly.
+3. **The real store:**
+   * unidentified rounds fall from **669 to 313 of 2,192**;
+   * `TRANSITION_PLAN_TEXT` takes 334 rounds and `TRANSITION_PLAN_CARRY` 23;
+   * `PLAN_TEXT`, `TEAM_CARRY` and `PLACED_CARD` are unchanged;
+   * the K-aff carry was refused in 7 rounds, as ruled;
+   * t17's 17 advantage refusals are all identified now;
+   * the widened sentence adds 3 marker rounds;
+   * the scan is unchanged.
+
+   Every move from the counts' simulation is explained to the round.
+4. **The control of 30 against the counts' 15 is accepted** (Decision 3). It uses t09's own
+   `narrowest` rule, so a sibling mechanism of single payer counts as different. Every one of the 30
+   keeps its aff. It's a record, not a finding.
+5. **Deviation 1 accepted.** The PM adds `debate_core.domain`, `scripts` and `tests/scripts` to
+   `constraints.packages` in the next batch, as for t17.
+6. **Decisions 1 to 9 accepted,** above all the readings kept in their own cache field and verdict, so
+   no t09 verdict could change.
+7. **One edit before the PR:** the node criterion's row sits after the real-store section, outside the
+   acceptance criteria table. Move it into the table.
+8. **The affected set** (235 files at load 16 to 29) is left to the PR's `ci` under agreement 10. The
+   landscape, application and CLI groups, the pinned lists and the static checks passed. The
+   `caselist/` and `tub/` subdirectories weren't run, so `ci` decides those. The pyright slip in
+   `5a617a7`, fixed in the next commit, is disclosed.
+9. **Merge order:** this merges before `v1-e32-t22`, which then syncs onto it. The republish comes
+   after both.
+
+No re-review is needed. The Goal is `Succeeded`, so the PR merges in full.

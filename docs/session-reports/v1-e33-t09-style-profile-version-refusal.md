@@ -260,9 +260,45 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-26
 
 **Notes:**
+
+A small guard done properly: counted first, one refusal for every version that differs, and the
+store's own rows as the authority.
+1. **ac1 and the node's criterion pass.**
+   * The refusal names both profiles and the re-parse once.
+   * It runs before any occurrence is read (`read_occurrences` is never called) and writes nothing.
+   * The CLI case runs through the container and the real `LocalParsedStore`.
+   * Red first: 3 service failures and 1 CLI failure. The two passes are a must-not-refuse case and
+     plumbing, both explained.
+2. **The count is a useful record:** one generation per caselist and one profile everywhere on this
+   machine, equal to the build's, so nothing local is refused by this change.
+3. **Mutants: 18.** The badly built P4 was replaced by P4b and caught. O4 is caught by the shared
+   parser-ordering test, and the reason is given.
+4. **Deviation 1 accepted.** The port's two implementations had to grow with it. The PM adds
+   `debate_core.integrations` and `debate_core.testing` to `constraints.packages` in the next batch.
+5. **Decisions 1 to 6 accepted:**
+   * the occurrence rows read raw as the authority, so a newer build's records refuse rather than
+     crash;
+   * every version named even when the parser differs;
+   * an empty table not refused;
+   * a mixed table refused;
+   * two reads kept apart;
+   * the plain re-parse hint.
+6. **`files publish`:** correctly left alone. Its re-check re-parses from blobs and never resolves an
+   occurrence.
+7. **Follow-ups:**
+   * **1 (the sidecar's profile in `files check` and `files publish`)** is filed by the PM as an E33
+     task (p3): a WARN beside the parser one.
+   * **2 (a newer store, profile or parser, should say "install the newer build" rather than
+     "re-parse")** joins `v1-e01-t33-newer-build-messages` by the PM's amendment, since that task
+     covers exactly newer-build wording.
+8. **The affected set** (318 files) is left to the PR's `ci` under agreement 10. The caselist,
+   file-service, parsed-store and CLI groups, the always-run list and the static checks passed
+   (2,365 tests).
+
+No re-review is needed. The Goal is `Succeeded`, so the PR merges in full.

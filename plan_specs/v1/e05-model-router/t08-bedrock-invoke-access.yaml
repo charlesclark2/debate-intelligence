@@ -72,7 +72,7 @@ spec:
         non-default temperature is refused, and that each model id and inference profile in the
         routing files resolves; v1-e05-t02's Stubber tests pin each answer.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

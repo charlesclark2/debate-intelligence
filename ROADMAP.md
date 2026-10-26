@@ -62,7 +62,7 @@ v2.3's extension work.
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 50 | 45 | 242 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 108 | 83 | 498 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 46 | 28 | 262 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 46 | 29 | 262 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 15 | 5 | 113 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
@@ -303,7 +303,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [Structured output validation and repair](plan_specs/v1/e05-model-router/t05-structured-output-validation.yaml) `v1-e05-t05-structured-output-validation` | Succeeded | 2 | 7.0 |
 | [CardSelection / MarkupSpan contract and prompts](plan_specs/v1/e05-model-router/t06-card-selection-contract.yaml) `v1-e05-t06-card-selection-contract` | Succeeded | 3 | 12.0 |
 | [Token/cost telemetry and budgets](plan_specs/v1/e05-model-router/t07-usage-telemetry.yaml) `v1-e05-t07-usage-telemetry` | Pending | 1 | 8.0 |
-| [A profile that may call Bedrock, and the model access its first call needs](plan_specs/v1/e05-model-router/t08-bedrock-invoke-access.yaml) `v1-e05-t08-bedrock-invoke-access` | Pending | 1 | 4.0 |
+| [A profile that may call Bedrock, and the model access its first call needs](plan_specs/v1/e05-model-router/t08-bedrock-invoke-access.yaml) `v1-e05-t08-bedrock-invoke-access` | InProgress | 1 | 4.0 |
 | [Replay tolerates a new optional parameter, a refused model call is not retryable, and doctor can check the routing file](plan_specs/v1/e05-model-router/t09-replay-and-model-exit-codes.yaml) `v1-e05-t09-replay-and-model-exit-codes` | Pending | 2 | 3.0 |
 | [Record mode keeps an invalid answer, so a repaired call can be recorded live](plan_specs/v1/e05-model-router/t10-record-mode-keeps-invalid-answers.yaml) `v1-e05-t10-record-mode-keeps-invalid-answers` | Pending | 2 | 2.0 |
 | [A prompt may set its own effort, so a classifier need not think at the route's default](plan_specs/v1/e05-model-router/t11-per-prompt-effort.yaml) `v1-e05-t11-per-prompt-effort` | Pending | 1 | 2.0 |
@@ -318,7 +318,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [Trends and per-school views](plan_specs/v1/e32-argument-landscape/t04-trend-and-school-views.yaml) `v1-e32-t04-trend-and-school-views` | Succeeded | 1 | 9.0 |
 | [`debate-research landscape` command](plan_specs/v1/e32-argument-landscape/t05-landscape-cli.yaml) `v1-e32-t05-landscape-cli` | Succeeded | 2 | 10.0 |
 | [LD de-extinction position taxonomy](plan_specs/v1/e32-argument-landscape/t06-ld-de-extinction-taxonomy.yaml) `v1-e32-t06-ld-de-extinction-taxonomy` | Pending | 1 | 3.0 |
-| [Model classification of what headings cannot place](plan_specs/v1/e32-argument-landscape/t07-model-classification-stage.yaml) `v1-e32-t07-model-classification-stage` | Pending | 3 | 8.0 |
+| [Model classification of what headings cannot place](plan_specs/v1/e32-argument-landscape/t07-model-classification-stage.yaml) `v1-e32-t07-model-classification-stage` | InProgress | 3 | 8.0 |
 | [A released position id is never deleted or reused](plan_specs/v1/e32-argument-landscape/t08-released-position-ids.yaml) `v1-e32-t08-released-position-ids` | Succeeded | 1 | 3.0 |
 | [Each Policy affirmative round's plan, counted first, so the landscape names what affs read](plan_specs/v1/e32-argument-landscape/t09-policy-plan-texts.yaml) `v1-e32-t09-policy-plan-texts` | Succeeded | 1 | 5.0 |
 | [Impact cards per DA and advantage in the landscape report](plan_specs/v1/e32-argument-landscape/t10-impact-cards-per-position.yaml) `v1-e32-t10-impact-cards-per-position` | Succeeded | 1 | 4.0 |
@@ -328,7 +328,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [Each DA's and advantage's scenarios and link chain, and what each impact card runs through](plan_specs/v1/e32-argument-landscape/t14-scenarios-and-link-chains.yaml) `v1-e32-t14-scenarios-and-link-chains` | Succeeded | 1 | 5.0 |
 | [The advantages each affirmative's teams read](plan_specs/v1/e32-argument-landscape/t15-advantages-per-aff.yaml) `v1-e32-t15-advantages-per-aff` | Succeeded | 1 | 3.0 |
 | [An advantage counterplan's planks, and the advantage each one solves](plan_specs/v1/e32-argument-landscape/t16-advantage-cp-planks.yaml) `v1-e32-t16-advantage-cp-planks` | Succeeded | 1 | 4.0 |
-| [Kritikal affirmatives identified, not left among the rounds with no identified aff](plan_specs/v1/e32-argument-landscape/t17-kritikal-affirmatives.yaml) `v1-e32-t17-kritikal-affirmatives` | Pending | 2 | 4.0 |
+| [Kritikal affirmatives identified, not left among the rounds with no identified aff](plan_specs/v1/e32-argument-landscape/t17-kritikal-affirmatives.yaml) `v1-e32-t17-kritikal-affirmatives` | Succeeded | 2 | 4.0 |
 | [The school view by position: every team that reads each DA, CP and K, with its caselist page](plan_specs/v1/e32-argument-landscape/t18-school-view-by-position.yaml) `v1-e32-t18-school-view-by-position` | Succeeded | 1 | 2.0 |
 | [A dry run's scan refusal says nothing was written and gives the publish command](plan_specs/v1/e32-argument-landscape/t19-dry-run-scan-refusal-wording.yaml) `v1-e32-t19-dry-run-scan-refusal-wording` | Pending | 1 | 1.0 |
 | [report.md in two halves: every affirmative section together, then every negative one](plan_specs/v1/e32-argument-landscape/t20-report-sides-together.yaml) `v1-e32-t20-report-sides-together` | Succeeded | 1 | 2.0 |

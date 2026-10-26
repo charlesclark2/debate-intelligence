@@ -16,6 +16,10 @@ on 2026-10-24 to read the raw sources again in this task, through the
 4. returns each source's verdict
    (:func:`~debate_core.arguments.landscape.plan_text.document_plan_text`) with counts.
 
+Beside t09's plan texts it reads and caches the plan texts under a transition label (`v1-e32-t24`,
+:func:`~debate_core.arguments.landscape.plan_text.read_transition_plan_texts`) and returns their verdict
+per source apart from t09's (:attr:`PlanTextRun.transition`), which they never change.
+
 A source the parser refused is `UNREAD` and cached as unreadable. One whose bytes could not be read,
 or whose worker failed, is `UNREAD` and not cached, so the next run tries it again. The parser is given
 a placeholder path, never the disclosure's, so no school or team code reaches it.
@@ -55,6 +59,7 @@ from debate_core.arguments.landscape.plan_text import (
     paragraphs_of,
     read_back_plan_texts,
     read_plan_texts,
+    read_transition_plan_texts,
     sheet_plan_texts,
 )
 from debate_core.domain.caselist import SourceDocument
@@ -98,6 +103,9 @@ class PlanTextRun:
     counts: PlanTextCounts
     kritikal: dict[str, KritikalReading] = field(default_factory=dict[str, KritikalReading], repr=False)
     """Each readable source's K-aff markers and heading families, by digest (`v1-e32-t17`)."""
+    transition: dict[str, DocumentPlanText] = field(default_factory=dict[str, DocumentPlanText], repr=False)
+    """Each readable source's verdict over its plan texts under a transition label, by digest
+    (`v1-e32-t24`)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,7 +168,10 @@ class PlanTextService:
                 paragraphs, in_cards = paragraphs_of(result)
                 found = read_plan_texts(paragraphs, in_cards, vocabulary)
                 markers = read_kritikal_markers(paragraphs, vocabulary.kritikal)
-                written[sha] = _entry(sha, parser_version, vocabulary.digest, found, markers)
+                under_transition = read_transition_plan_texts(paragraphs, in_cards, vocabulary)
+                written[sha] = _entry(
+                    sha, parser_version, vocabulary.digest, found, markers, under_transition
+                )
             elif isinstance(result, ParseFailure):
                 written[sha] = CachedPlanText(
                     source_sha256=sha,
@@ -177,6 +188,7 @@ class PlanTextService:
         verdicts: dict[str, DocumentPlanText] = {}
         readings: dict[str, tuple[PlanTextParagraph, ...]] = {}
         kritikal: dict[str, KritikalReading] = {}
+        transition: dict[str, DocumentPlanText] = {}
         for sha in sorted(wanted):
             entry = held.get(sha)
             if entry is None or not entry.readable:
@@ -187,6 +199,9 @@ class PlanTextService:
             kritikal[sha] = KritikalReading(
                 markers=tuple(_marker(one) for one in entry.kritikal_markers),
                 heading_families=entry.heading_families,
+            )
+            transition[sha] = document_plan_text(
+                tuple(_paragraph(one) for one in entry.transition_paragraphs), vocabulary
             )
         refused = sum(1 for sha in wanted if (entry := held.get(sha)) is not None and not entry.readable)
         return PlanTextRun(
@@ -204,6 +219,7 @@ class PlanTextService:
                 cache_written=changed,
             ),
             kritikal=kritikal,
+            transition=transition,
         )
 
     async def words(
@@ -303,29 +319,32 @@ def _entry(
     vocabulary_digest: str,
     found: Sequence[PlanTextParagraph],
     kritikal: KritikalReading,
+    transition: Sequence[PlanTextParagraph],
 ) -> CachedPlanText:
     return CachedPlanText(
         source_sha256=sha,
         parser_version=parser_version,
         vocabulary_digest=vocabulary_digest,
         readable=True,
-        paragraphs=tuple(
-            CachedPlanTextParagraph(
-                label_element_index=one.label_element_index,
-                element_index=one.element_index,
-                unit=one.unit,
-                kept=one.kept,
-                shaped=one.shaped,
-                digest=one.digest,
-                named=one.named,
-            )
-            for one in found
-        ),
+        paragraphs=tuple(_cached(one) for one in found),
         kritikal_markers=tuple(
             CachedKritikalMarker(kind=one.kind, form=one.form, element_index=one.element_index, unit=one.unit)
             for one in kritikal.markers
         ),
         heading_families=kritikal.heading_families,
+        transition_paragraphs=tuple(_cached(one) for one in transition),
+    )
+
+
+def _cached(one: PlanTextParagraph) -> CachedPlanTextParagraph:
+    return CachedPlanTextParagraph(
+        label_element_index=one.label_element_index,
+        element_index=one.element_index,
+        unit=one.unit,
+        kept=one.kept,
+        shaped=one.shaped,
+        digest=one.digest,
+        named=one.named,
     )
 
 

@@ -78,6 +78,11 @@ class CachedPlanText(DomainModel):
     heading_families: tuple[PositionId, ...] = Field(
         default=(), description="The K families the source's headings name, by id (`v1-e32-t17`)."
     )
+    transition_paragraphs: tuple[CachedPlanTextParagraph, ...] = Field(
+        default=(),
+        description="Its plan texts under a transition label (`Thus the plan`, `Thus`), kept apart from "
+        "t09's so no verdict of t09's changes (`v1-e32-t24`).",
+    )
 
     @property
     def key(self) -> PlanTextKey:

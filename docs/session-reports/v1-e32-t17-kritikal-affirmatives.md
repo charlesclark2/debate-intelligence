@@ -958,3 +958,26 @@ counts step and the build.
 
 The Goal is `Succeeded`, and the PR merges in full after the coach's edit is committed. No re-review is
 needed.
+
+## PM review, second
+
+**Verdict:** ACCEPTED
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:** PM (Claude), 2026-10-25
+
+**Notes:**
+
+Item 10 of the first review is done.
+* **The coach's edit** went in on its own commit (`bb2e248`), after `tests/config` passed: 20 families
+  became 19 (colonialism merged into settler colonialism), with 54 phrases and no school, team code
+  or tournament word.
+* **The plan-text step ran again** (304.7 s, the cache re-keyed, the verdicts and markers unchanged),
+  then the dry run (79.2 s, nothing written).
+* **Only the families line moved:** settler colonialism now counts 2 files and 2 teams. Rounds,
+  methods, refusals, the control, the planks and the scan are unchanged.
+
+Before the PR, change the header's session status to plain `COMPLETE`: the coach's edit is no longer
+to come. The PM batch of 2026-10-25 (q) already amended `constraints.packages`, so if the merge from
+`dev` touches the spec, keep both sides. The PR merges in full. The republish follows the cutover's
+step 9.

@@ -194,6 +194,7 @@ source_modules = [
     "debate_core.integrations.file_streaming",
     "debate_core.integrations.opencaselist",
     "debate_core.integrations.discovery",
+    "debate_core.integrations.crossref_doi",
     "debate_core.integrations.http_fetcher",
     "debate_core.integrations.html_extractor",
     "debate_core.integrations.pdf_extractor",
@@ -207,8 +208,9 @@ type = "forbidden"
 # httpx is the `http` extra (PM ruling 2026-10-21, v1-e04-t02 packaging). Like boto3, it may not
 # reach the domain, the application layer, the shared test fakes or an adapter that has no business
 # on the network, even indirectly. The adapters allowed it are the ones left off this list:
-# debate_core.integrations.opencaselist (v1-e34-t01), debate_core.integrations.discovery (E07) and
-# debate_core.integrations.http_fetcher (v1-e04-t02). `debate_core.retrieval` is on it (PM ruling,
+# debate_core.integrations.opencaselist (v1-e34-t01), debate_core.integrations.discovery (E07),
+# debate_core.integrations.http_fetcher (v1-e04-t02) and debate_core.integrations.crossref_doi
+# (v1-e06-t01). `debate_core.retrieval` is on it (PM ruling,
 # v1-e04-t01, 2026-10-19): retrieval holds the types, errors and rules, and the fetching adapter
 # lives in debate_core.integrations.
 source_modules = [
@@ -259,6 +261,7 @@ source_modules = [
     "debate_core.integrations.secrets_manager",
     "debate_core.integrations.sns",
     "debate_core.integrations.discovery",
+    "debate_core.integrations.crossref_doi",
     "debate_core.integrations.http_fetcher",
     "debate_core.integrations.html_extractor",
     "debate_core.integrations.pdf_extractor",
@@ -329,6 +332,7 @@ source_modules = [
     # PM ruling 2026-10-22 (v1-e07-t05: feedparser falls back to a loose parser on a hostile feed).
     # The feed providers parse XML with defusedxml only, so lxml stays out of discovery too.
     "debate_core.integrations.discovery",
+    "debate_core.integrations.crossref_doi",
     "debate_workers",
 ]
 forbidden_modules = ["lxml", "docx"]
@@ -386,6 +390,7 @@ source_modules = [
     "debate_core.integrations.sns",
     "debate_core.integrations.opencaselist",
     "debate_core.integrations.discovery",
+    "debate_core.integrations.crossref_doi",
     "debate_core.integrations.http_fetcher",
     "debate_api",
     "debate_workers",
@@ -429,6 +434,7 @@ source_modules = [
     "debate_core.integrations.sns",
     "debate_core.integrations.opencaselist",
     "debate_core.integrations.http_fetcher",
+    "debate_core.integrations.crossref_doi",
     "debate_core.integrations.html_extractor",
     "debate_core.integrations.pdf_extractor",
     "debate_api",

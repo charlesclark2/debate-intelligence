@@ -300,6 +300,25 @@ class ImpactCard(TopCard):
         ),
     )
 
+    @model_validator(mode="after")
+    def _check_named_by(self) -> Self:
+        if self.named_by is not None and self.runs_through is None:
+            raise ValueError(f"its {self.named_by.value} names the row, but the row has none")
+        return self
+
+    @property
+    def runs_through(self) -> str | None:
+        """The words :attr:`named_by` names the row with; None when the row is left out."""
+        if self.named_by is None:
+            return None
+        text = {
+            LeadInSource.SCENARIO: self.scenario,
+            LeadInSource.INTERNAL_LINK: self.internal_link_tag,
+            LeadInSource.TAG: self.tag,
+            LeadInSource.CARD_ABOVE: self.card_above_tag,
+        }[self.named_by]
+        return text if text is not None and text.strip() else None
+
 
 class ChainCard(TopCard):
     """A DA's or an advantage's most-read card for one chain role (`v1-e32-t14`), rank 1 always.
@@ -337,7 +356,11 @@ class ChainCoverage(DomainModel):
     rows_with_scenario: int = Field(ge=0)
     rows_with_internal_link: int = Field(ge=0)
     rows_with_card_above: int = Field(
-        ge=0, description="Rows with no labelled internal link that show the card above instead."
+        ge=0,
+        description=(
+            "Rows with no labelled internal link whose card above is there and holds no caselist word. It "
+            "names the row only when no scenario or tag does (`v1-e32-t25`)."
+        ),
     )
     withheld_names: int = Field(
         ge=0,
@@ -376,6 +399,12 @@ class ChainCoverage(DomainModel):
             self.impact_rows
         ):
             raise ValueError("rows with a scenario or a lead-in are among the impact rows")
+        if tuple(one.source for one in self.named_rows) != LEAD_IN_ORDER:
+            raise ValueError("named rows are counted once per source, in naming order")
+        if sum(one.rows for one in self.named_rows) + self.rows_left_out != self.impact_rows:
+            raise ValueError("every impact row is named by one source or left out")
+        if self.named_rows[0].rows != self.rows_with_scenario:
+            raise ValueError("the rows a scenario names are the rows with a scenario")
         return self
 
 

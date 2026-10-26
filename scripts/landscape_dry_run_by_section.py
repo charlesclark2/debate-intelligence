@@ -15,6 +15,8 @@ dry run without `--publish`, and prints only counts:
   lists of `v1-e32-t22`), never a name; and per kind the words two or more teams use as a scenario under
   a position with a list that its list does not hold, and how many of them hold a caselist word, so the
   coach knows when to look at the lists again (the PM's ruling of 2026-10-26), never the words;
+* per DA and advantage kind, the impact ranks each source names under "What each impact runs through",
+  those left out and the tags withheld (`v1-e32-t25`, the PM's brief of 2026-10-26), never a name;
 * the CPs' planks: how many, under how many CPs, in how many groups by the advantage they solve, how many
   withheld for naming a school, and where every plank found went;
 * the scan's hits by file, report.md's section (its nearest heading, and each CP's plank table apart) and
@@ -38,11 +40,18 @@ from pathlib import Path
 from debate_core.application.errors import DomainError
 from debate_core.application.landscape_run import LandscapeRunRequest, LandscapeRunResult
 from debate_core.application.landscape_scan import hits_by_section
+from debate_core.domain.landscape_report import LeadInSource
 from debate_core.domain.landscape_texts import AnalyticTextKind
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG_DIR = REPO_ROOT / "config" / "landscape"
 PLANK_TABLE: str = ": plank table"
+NAMED_BY: dict[LeadInSource, str] = {
+    LeadInSource.SCENARIO: "a scenario",
+    LeadInSource.INTERNAL_LINK: "an internal link",
+    LeadInSource.TAG: "a tag",
+    LeadInSource.CARD_ABOVE: "the card above",
+}
 
 
 def report_lines(result: LandscapeRunResult) -> list[str]:
@@ -104,6 +113,12 @@ def report_lines(result: LandscapeRunResult) -> list[str]:
     lines += [
         f"Scenario words no list holds, {one.kind.value}: {one.unlisted_words} that two or more teams use "
         f"under a position with a list, {one.unlisted_words_withheld} of them holding a caselist word."
+        for one in result.report.chain_coverage
+    ]
+    lines += [
+        f"Impact ranks named, {one.kind.value}: "
+        + ", ".join(f"{named.rows} by {NAMED_BY[named.source]}" for named in one.named_rows)
+        + f"; {one.rows_left_out} left out; {one.withheld_tags} tags withheld."
         for one in result.report.chain_coverage
     ]
     texts = result.report.texts

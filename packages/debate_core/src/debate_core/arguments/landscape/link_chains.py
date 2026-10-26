@@ -61,6 +61,20 @@ stays a scenario heading, since the team wrote `Scenario 1`, and names nothing. 
 shows its scenario's name for any of its forms and nothing for other words; merged forms are one name,
 whose teams are every form's. A position with no list shows the words.
 
+## What names an impact row (:func:`rank_name`, `v1-e32-t25`)
+
+An impact row under "What each impact runs through" is named by the first of these it has, in
+:data:`~debate_core.domain.landscape_report.LEAD_IN_ORDER`, and report.md marks which:
+
+1. its scenario, the name above, shown by the report's rules;
+2. its labelled internal link's tag;
+3. the impact card's own tag;
+4. the tag of the card above it in its block, when that card is no impact card.
+
+A text holding a word of a caselist school, team code or tournament (:func:`is_withheld`) is passed
+over and counted, and the next names the row. A row none of them names is left out and counted, never
+shown empty. A tag is quoted whole, as parsed, as every tag in the report is.
+
 Pure and deterministic: no model, no I/O.
 """
 
@@ -289,8 +303,21 @@ class RankName(NamedTuple):
 
 
 def rank_name(texts: Mapping[LeadInSource, str | None], words: frozenset[str]) -> RankName:
-    """The first of :data:`LEAD_IN_ORDER` with a text in `texts` that is not withheld (`v1-e32-t25`)."""
-    return RankName(source=None, withheld=0)
+    """The first of :data:`LEAD_IN_ORDER` with a text in `texts` that is not withheld (`v1-e32-t25`).
+
+    A source with no text, or only whitespace, is not there. One whose text holds a caselist word
+    (:func:`is_withheld`) is passed over and counted, and the next names the row instead.
+    """
+    withheld = 0
+    for source in LEAD_IN_ORDER:
+        text = texts.get(source)
+        if text is None or not text.strip():
+            continue
+        if is_withheld(text, words):
+            withheld += 1
+            continue
+        return RankName(source=source, withheld=withheld)
+    return RankName(source=None, withheld=withheld)
 
 
 def caselist_words(disclosures: Iterable[Disclosure]) -> frozenset[str]:

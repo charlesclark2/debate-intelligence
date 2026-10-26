@@ -236,6 +236,7 @@ class World:
             writer=DocxEvidenceFileWriter(snapshots=self.files.snapshots, parser=PARSER),
             quality=self.quality(),
             parser_version=PARSER.parser_version,
+            profile_version=PARSER.profile_version,
             files_dir=self.files_dir,
             clock=lambda: BUILT_AT,
         )

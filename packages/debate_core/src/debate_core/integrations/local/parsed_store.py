@@ -45,7 +45,10 @@ from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Final
 
-from debate_core.application.caselist.occurrence_table_guard import fingerprint_stamps_of_file
+from debate_core.application.caselist.occurrence_table_guard import (
+    fingerprint_stamps_of_file,
+    profile_stamps_of_file,
+)
 from debate_core.application.ports.parsed_store import (
     FAILURES_NAME,
     INDEX_NAME,
@@ -154,6 +157,13 @@ class LocalParsedStore:
             if not is_regular_file(path):
                 return None
             return fingerprint_stamps_of_file(path)
+
+    async def read_occurrence_profiles(self, caselist: str, version: str) -> frozenset[str] | None:
+        path = self._root / caselist / version / OCCURRENCES_NAME
+        with refused_as_access_denied("read", _ROLE):
+            if not is_regular_file(path):
+                return None
+            return profile_stamps_of_file(path)
 
     # -- writing ------------------------------------------------------------------------------
 

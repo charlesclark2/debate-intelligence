@@ -13,7 +13,8 @@ What is tested, in the order a build asks:
   (ac1); a build writes the `.docx`, its sidecar and a PASS report, and counts what it placed (ac1);
 * a draft is refused unless allowed, and then says DRAFT (ac2);
 * a store of another parser or fingerprint version is refused once, before any card is resolved, with
-  both versions and the re-parse named (ac8);
+  both versions and the re-parse named (ac8); so is one whose newest generation was written under
+  another style profile, in the same refusal, which names every version that differs (`v1-e33-t09`);
 * an output directory inside a git working tree is refused before anything is resolved (ac10);
 * a card resolved to an unattributed occurrence is named before any source is read (ac7);
 * a missing source fails its card with `SOURCE_MISSING` and `store get`, and no file is built (ac4);
@@ -52,11 +53,12 @@ from debate_core.application.ports.evidence_file_writer import (
     FileBuildRefusal,
     FileBuildRequest,
 )
-from debate_core.application.ports.parsed_store import OccurrenceRecord
+from debate_core.application.ports.parsed_store import OccurrenceRecord, version_directory_name
 from debate_core.domain.caselist import Side
 from debate_core.domain.file_provenance import provenance_sidecar_name
 from debate_core.evidence.file_checks.report import CheckStatus, QualityCheck
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
+from debate_core.evidence.style_profile_loader import load_style_profile
 from debate_core.integrations.docx_file_writer.writer import DocxEvidenceFileWriter
 from debate_core.integrations.docx_parser.parser import DebateDocxParser
 from debate_core.testing.docx_builder import build_docx, paragraph_xml, run_xml
@@ -76,6 +78,13 @@ BUILT_AT: Final = datetime(2026, 10, 24, 12, 0, tzinfo=UTC)
 CASELIST: Final = "hspolicy26"
 OLD_PARSER: Final = "2026.10.18-docx-4"
 OLD_FINGERPRINTS: Final = "card-fingerprint-v3"
+OTHER_PROFILE: Final = "2026.11.02-verbatim-2"
+#: The same parser version reading through a style profile of another version: what a profile change
+#: under one parser version parses a caselist's next generation with.
+OTHER_PROFILE_PARSER: Final = DebateDocxParser(
+    load_style_profile().model_copy(update={"profile_version": OTHER_PROFILE})
+)
+SECOND_GENERATION: Final = version_directory_name(PARSER.parser_version, 2)
 
 RECORDED: Final = (
     Path(__file__).resolve().parents[1]
@@ -220,6 +229,7 @@ class World:
             writer=writer,
             quality=quality,  # pyright: ignore[reportArgumentType]
             parser_version=PARSER.parser_version,
+            profile_version=PARSER.profile_version,
             files_dir=self.root / "files",
             clock=lambda: BUILT_AT,
         )
@@ -475,6 +485,85 @@ def test_the_version_refusal_comes_before_the_git_working_tree_refusal(world: Wo
     result = world.build(world.recipe([{"fingerprint": first.fingerprint}]), out_dir=checkout / "built")
     assert result.refusal is not None
     assert result.refusal.code is BuildRefusalCode.STORE_PARSED_BY_ANOTHER_VERSION
+
+
+def test_a_store_written_under_another_style_profile_is_refused_once_before_resolving(world: World) -> None:
+    """The newest generation of this build's own parser version, parsed through another style profile."""
+    first, second = world.add(SOURCE_ONE)
+    reparsed = asyncio.run(FileBuilderWorld(parser=OTHER_PROFILE_PARSER).add_source(SOURCE_ONE))
+    world.publish(version=SECOND_GENERATION, rows=[card.occurrence for card in reparsed])
+    result = world.build(
+        world.recipe([{"fingerprint": first.fingerprint}, {"fingerprint": second.fingerprint}])
+    )
+
+    assert result.status is BuildStatus.REFUSED
+    assert result.refusal is not None
+    assert result.refusal.code is BuildRefusalCode.STORE_PARSED_BY_ANOTHER_VERSION
+    message = result.refusal.message
+    assert OTHER_PROFILE in message and PARSER.profile_version in message
+    assert "style profile" in message
+    assert "fingerprint" not in message and "parser " not in message
+    assert (
+        result.refusal.hint is not None
+        and result.refusal.hint.count(f"debate-research caselist parse --caselist {CASELIST}") == 1
+    )
+    assert result.recipe_errors == () and result.card_problems == () and result.unattributed == ()
+    assert world.store.occurrence_reads == 0
+    assert world.events == []
+    assert written(world.root) == []
+
+
+def test_every_version_that_differs_is_named_with_both_values_in_one_refusal(world: World) -> None:
+    first, _ = world.add(SOURCE_ONE)
+    world.store = SpyStore()
+    world.publish(
+        version=OLD_PARSER,
+        rows=[
+            row.model_copy(update={"fingerprint_version": OLD_FINGERPRINTS, "profile_version": OTHER_PROFILE})
+            for row in world.rows
+        ],
+    )
+    result = world.build(world.recipe([{"fingerprint": first.fingerprint}]))
+
+    assert result.refusal is not None
+    assert result.refusal.code is BuildRefusalCode.STORE_PARSED_BY_ANOTHER_VERSION
+    for version in (
+        OLD_PARSER,
+        PARSER.parser_version,
+        OLD_FINGERPRINTS,
+        FINGERPRINT_VERSION,
+        OTHER_PROFILE,
+        PARSER.profile_version,
+    ):
+        assert version in result.refusal.message, version
+    assert result.refusal.hint is not None and result.refusal.hint.count("--caselist hspolicy26") == 1
+    assert world.store.occurrence_reads == 0
+
+
+def test_a_table_holding_rows_of_this_profile_and_another_is_refused(world: World) -> None:
+    first, second = world.add(SOURCE_ONE)
+    world.publish(
+        rows=[first.occurrence, second.occurrence.model_copy(update={"profile_version": OTHER_PROFILE})]
+    )
+    result = world.build(world.recipe([{"fingerprint": first.fingerprint}]))
+
+    assert result.refusal is not None
+    assert result.refusal.code is BuildRefusalCode.STORE_PARSED_BY_ANOTHER_VERSION
+    assert OTHER_PROFILE in result.refusal.message
+    assert world.store.occurrence_reads == 0
+
+
+def test_an_occurrence_table_with_no_rows_names_no_profile_and_is_not_refused_for_one(world: World) -> None:
+    """A caselist with nothing parsed yet says nothing about a profile; its pin fails to resolve instead."""
+    first, _ = world.add(SOURCE_ONE)
+    asyncio.run(
+        world.store.write_aggregates("hsld26", PARSER.parser_version, index=(), failures=(), occurrences=())
+    )
+    pin = {"caselist": "hsld26", "source_sha256": "1a" * 32, "element_index": 0}
+    result = world.build(
+        world.recipe([{"fingerprint": first.fingerprint}, {"fingerprint": "b1" * 32, "pin": pin}])
+    )
+    assert result.refusal is not None and result.refusal.code is BuildRefusalCode.RECIPE_UNRESOLVED
 
 
 # ------------------------------------------------------------------------------------------------

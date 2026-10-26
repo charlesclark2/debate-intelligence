@@ -271,6 +271,7 @@ class FileBuildService:
         writer: EvidenceFileWriter,
         quality: FileQualityService,
         parser_version: str,
+        profile_version: str,
         files_dir: Path,
         clock: Callable[[], datetime],
     ) -> None:
@@ -279,6 +280,7 @@ class FileBuildService:
         self._writer = writer
         self._quality = quality
         self._parser_version = parser_version
+        self._profile_version = profile_version
         self._files_dir = files_dir
         self._clock = clock
         self._resolver = RecipeResolver(

@@ -28,6 +28,7 @@ from debate_core.application.caselist.occurrence_table_guard import (
     is_newer_fingerprint_version,
     newer_stamp,
     occurrence_table_of,
+    profile_stamps_of_file,
     refuse_newer_table,
 )
 from debate_core.evidence.fingerprints import EXACT_FINGERPRINT_VERSIONS, FINGERPRINT_VERSION
@@ -139,6 +140,21 @@ def test_stamps_are_read_from_each_rows_json_and_not_through_this_builds_model()
 def test_a_line_with_no_readable_stamp_says_nothing_and_is_passed_over() -> None:
     lines = ["not json\n", "[1, 2]\n", '{"fingerprint_version": 8}\n', '{"fingerprint_version": ""}\n', "\n"]
     assert fingerprint_stamps([*lines, json.dumps({"fingerprint_version": OLDER})]) == {OLDER}
+
+
+def test_a_tables_profile_stamps_are_read_from_each_rows_json_as_its_fingerprint_stamps_are(
+    tmp_path: Path,
+) -> None:
+    """`files build`'s style profile refusal (`v1-e33-t09`) reads the profile the same way."""
+    table = tmp_path / "occurrences.jsonl"
+    rows = [
+        {"profile_version": "synthetic-verbatim-2", "fingerprint_version": BUILD, "a_field_from_later": 1},
+        {"profile_version": "synthetic-verbatim-1", "fingerprint_version": NEWER},
+        {"profile_version": "", "fingerprint_version": BUILD},
+        {"fingerprint_version": BUILD},
+    ]
+    table.write_text("".join(json.dumps(row) + "\n" for row in rows) + "not json\n", encoding="utf-8")
+    assert profile_stamps_of_file(table) == {"synthetic-verbatim-1", "synthetic-verbatim-2"}
 
 
 @pytest.mark.parametrize(

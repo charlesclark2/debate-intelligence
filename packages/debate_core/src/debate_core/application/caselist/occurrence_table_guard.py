@@ -64,6 +64,8 @@ __all__ = [
     "is_newer_fingerprint_version",
     "newer_stamp",
     "occurrence_table_of",
+    "profile_stamps",
+    "profile_stamps_of_file",
     "refuse_newer_table",
 ]
 
@@ -141,22 +143,41 @@ def fingerprint_stamps(lines: Iterable[str]) -> frozenset[str]:
     build's model does not accept, and its table must still name its version. A line with no
     readable stamp says nothing about one and is passed over.
     """
-    stamps: set[str] = set()
-    for line in lines:
-        try:
-            row = json.loads(line)
-        except ValueError:
-            continue
-        stamp = cast("dict[str, object]", row).get("fingerprint_version") if isinstance(row, dict) else None
-        if isinstance(stamp, str) and stamp:
-            stamps.add(stamp)
-    return frozenset(stamps)
+    return _stamps(lines, "fingerprint_version")
 
 
 def fingerprint_stamps_of_file(path: Path) -> frozenset[str]:
     """:func:`fingerprint_stamps` of the occurrence table at `path`, read a line at a time."""
     with path.open(encoding="utf-8") as stream:
         return fingerprint_stamps(stream)
+
+
+def profile_stamps(lines: Iterable[str]) -> frozenset[str]:
+    """The `profile_version` of every row of an occurrence table's lines (`v1-e33-t09`).
+
+    The style profile the row's element indices were read under, read as :func:`fingerprint_stamps`
+    reads its own stamp: from each line's JSON, passing over a line with none.
+    """
+    return _stamps(lines, "profile_version")
+
+
+def profile_stamps_of_file(path: Path) -> frozenset[str]:
+    """:func:`profile_stamps` of the occurrence table at `path`, read a line at a time."""
+    with path.open(encoding="utf-8") as stream:
+        return profile_stamps(stream)
+
+
+def _stamps(lines: Iterable[str], name: str) -> frozenset[str]:
+    stamps: set[str] = set()
+    for line in lines:
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        stamp = cast("dict[str, object]", row).get(name) if isinstance(row, dict) else None
+        if isinstance(stamp, str) and stamp:
+            stamps.add(stamp)
+    return frozenset(stamps)
 
 
 def occurrence_table_of(key: str) -> tuple[str, str] | None:

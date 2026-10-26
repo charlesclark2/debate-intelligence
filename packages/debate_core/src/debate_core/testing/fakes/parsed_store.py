@@ -100,6 +100,10 @@ class InMemoryParsedStore:
         held = self.aggregates.get((caselist, version))
         return frozenset(row.fingerprint_version for row in held[2]) if held is not None else None
 
+    async def read_occurrence_profiles(self, caselist: str, version: str) -> frozenset[str] | None:
+        held = self.aggregates.get((caselist, version))
+        return frozenset(row.profile_version for row in held[2]) if held is not None else None
+
 
 def build_fake_parsed_store() -> ParsedStore:
     """Build the in-memory :class:`ParsedStore` (v1-e31-t06), typed as the port, for pyright's check."""

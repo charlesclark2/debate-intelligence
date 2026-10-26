@@ -1,0 +1,34 @@
+{
+  "cassette_version": 1,
+  "kind": "404",
+  "url": "https://www.prairiedispatch.example/news/2026/10/county-fair-moved",
+  "made_from": "v1-e04-t03's 404 page (The Prairie Dispatch is invented), which carries the site's metering script: a missing page is not a paywall",
+  "interactions": [
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://www.prairiedispatch.example/robots.txt"
+      },
+      "response": {
+        "status_code": 200,
+        "headers": {
+          "content-type": "text/plain; charset=utf-8"
+        },
+        "body_text": "User-agent: *\nAllow: /\n"
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://www.prairiedispatch.example/news/2026/10/county-fair-moved"
+      },
+      "response": {
+        "status_code": 404,
+        "headers": {
+          "content-type": "text/html; charset=utf-8"
+        },
+        "body_file": "access/not-found.html"
+      }
+    }
+  ]
+}

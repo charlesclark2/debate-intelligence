@@ -1,0 +1,34 @@
+{
+  "cassette_version": 1,
+  "kind": "paywalled",
+  "url": "https://www.harborreview.example/politics/2026/10/inside-the-tariff-talks",
+  "made_from": "v1-e04-t03's hard-paywall teaser (The Harbor Review is invented): one paragraph, isAccessibleForFree \"False\" and a subscribe box. No article body exists to leak",
+  "interactions": [
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://www.harborreview.example/robots.txt"
+      },
+      "response": {
+        "status_code": 200,
+        "headers": {
+          "content-type": "text/plain; charset=utf-8"
+        },
+        "body_text": "User-agent: *\nAllow: /\n"
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://www.harborreview.example/politics/2026/10/inside-the-tariff-talks"
+      },
+      "response": {
+        "status_code": 200,
+        "headers": {
+          "content-type": "text/html; charset=utf-8"
+        },
+        "body_file": "access/hard-paywall.html"
+      }
+    }
+  ]
+}

@@ -472,3 +472,116 @@ def test_position_kinds_and_sides_cover_the_spec() -> None:
     }
     assert {side.value for side in PositionSide} == {"aff", "neg", "both"}
     assert Position.model_config.get("extra") == "forbid"
+
+
+# ------------------------------------------------------------------------------------------------
+# A DA's or advantage's scenario list (`v1-e32-t22`)
+# ------------------------------------------------------------------------------------------------
+
+
+def test_a_da_and_an_advantage_with_scenario_lists_load() -> None:
+    loaded = load(
+        taxonomy(
+            position(
+                "sample-midterms-da",
+                scenarios=[{"name": "Golden dome", "forms": ["dome", "golden dome"]}],
+                not_scenarios=["too early"],
+            ),
+            position(
+                "sample-costs-advantage",
+                kind="advantage",
+                side="aff",
+                scenarios=[{"name": "debt", "forms": ["debt"]}],
+            ),
+            position("sample-spending-da"),
+        )
+    )
+    midterms = loaded.position("sample-midterms-da")
+    assert [(one.name, one.forms) for one in midterms.scenarios] == [("Golden dome", ("dome", "golden dome"))]
+    assert midterms.not_scenarios == ("too early",)
+    assert midterms.has_scenario_list
+    assert loaded.position("sample-costs-advantage").has_scenario_list
+    assert not loaded.position("sample-spending-da").has_scenario_list
+
+
+def test_a_position_with_only_forms_that_name_no_scenario_has_a_list() -> None:
+    loaded = load(taxonomy(position("sample-midterms-da", not_scenarios=["too early"])))
+    assert loaded.position("sample-midterms-da").has_scenario_list
+
+
+@pytest.mark.parametrize(("kind", "side"), [("aff", "aff"), ("cp", "neg"), ("k", "neg"), ("t", "neg")])
+@pytest.mark.parametrize(
+    "fields",
+    [{"scenarios": [{"name": "dome", "forms": ["dome"]}]}, {"not_scenarios": ["too early"]}],
+    ids=["scenarios", "not_scenarios"],
+)
+def test_only_a_da_or_an_advantage_lists_scenarios(kind: str, side: str, fields: dict[str, Any]) -> None:
+    assert "DAs and advantages" in refusal(
+        taxonomy(position("sample-position", kind=kind, side=side, **fields))
+    )
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"scenarios": [{"name": "dome", "forms": ["dome"]}, {"name": "golden dome", "forms": ["dome"]}]},
+        {"scenarios": [{"name": "dome", "forms": ["dome", "dome"]}]},
+        {"scenarios": [{"name": "dome", "forms": ["dome"]}], "not_scenarios": ["dome"]},
+        {"not_scenarios": ["dome", "dome"]},
+    ],
+    ids=["two scenarios", "one scenario twice", "a scenario and not a scenario", "not a scenario twice"],
+)
+def test_a_form_listed_twice_on_one_position_is_refused(fields: dict[str, Any]) -> None:
+    assert "'dome'" in refusal(taxonomy(position("sample-midterms-da", **fields)))
+
+
+def test_a_scenario_name_used_twice_on_one_position_is_refused_whatever_its_case() -> None:
+    message = refusal(
+        taxonomy(
+            position(
+                "sample-midterms-da",
+                scenarios=[
+                    {"name": "Golden dome", "forms": ["dome"]},
+                    {"name": "golden dome", "forms": ["golden dome"]},
+                ],
+            )
+        )
+    )
+    assert "golden dome" in message.casefold()
+
+
+def test_the_same_form_on_two_positions_is_allowed() -> None:
+    # A form is read under its own position only: `econ` is one DA's scenario and another's too.
+    load(
+        taxonomy(
+            position("sample-midterms-da", scenarios=[{"name": "econ", "forms": ["econ"]}]),
+            position("sample-spending-da", not_scenarios=["econ"]),
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    "scenario",
+    [
+        {"name": "dome", "forms": []},
+        {"name": "", "forms": ["dome"]},
+        {"name": "dome"},
+        {"name": "dome", "forms": ["Golden Dome"]},
+        {"name": "dome", "forms": ["golden  dome"]},
+        {"name": "dome", "forms": ["dome"], "teams": 15},
+    ],
+    ids=[
+        "no forms",
+        "no name",
+        "forms missing",
+        "a capital in a form",
+        "two spaces in a form",
+        "an unknown key",
+    ],
+)
+def test_a_scenario_without_a_name_or_a_form_in_normalized_words_is_refused(scenario: dict[str, Any]) -> None:
+    refusal(taxonomy(position("sample-midterms-da", scenarios=[scenario])))
+
+
+def test_a_form_that_names_no_scenario_is_written_in_normalized_words() -> None:
+    refusal(taxonomy(position("sample-midterms-da", not_scenarios=["Too early"])))

@@ -75,7 +75,9 @@ side never does. Per DA and advantage:
 
 * **A scenario name** shows when two or more teams' counted cards under the position carry it, and is
   withheld, and counted, when it holds a word of a caselist school, team code or tournament. A row's
-  scenario is the shown name the most teams of its labelled copies carry, ties by name.
+  scenario is the shown name the most teams of its labelled copies carry, ties by name. Where the
+  coach has listed the position's scenarios (`v1-e32-t22`), a card's name is the coach's for its words
+  and none for words the list does not hold, so a name's teams are those of every form under it.
 * **A row's internal link** is, per labelled copy, the nearest card above it in its file under the same
   position heading that is counted for the position and labelled an internal link; the row shows the
   tag the most teams' copies have, ties by tag. With none, and only then, the row carries the tag of
@@ -135,11 +137,13 @@ from debate_core.arguments.landscape.headings import NormalizedHeading
 from debate_core.arguments.landscape.impacts import is_impact_card
 from debate_core.arguments.landscape.kritikal_aff import KritikalAffInputs
 from debate_core.arguments.landscape.link_chains import (
+    CardScenario,
     SubHeading,
     card_roles,
     card_scenario,
     caselist_words,
     is_withheld,
+    scenario_name,
 )
 from debate_core.arguments.landscape.matcher import PositionMatcher
 from debate_core.arguments.landscape.render import (
@@ -932,7 +936,7 @@ class _LinkChains:
         self._no_position = frozenset(
             one.heading for one in inputs.overrides.overrides if one.position_id is None
         )
-        self._words = caselist_words(inputs.disclosures)
+        self._words_of_caselist = caselist_words(inputs.disclosures)
         files: defaultdict[str, list[LandscapeCard]] = defaultdict(list)
         for card in inputs.cards:
             files[card.source_sha256].append(card)
@@ -947,6 +951,7 @@ class _LinkChains:
         self._placing: dict[tuple[str, int], int | None] = {}
         self._shown: dict[str, dict[str, set[tuple[str, str]]]] = {}
         self._withheld: dict[str, int] = {}
+        self._unlisted: dict[str, tuple[int, int]] = {}
 
     # Per card -----------------------------------------------------------------------------------
 
@@ -976,6 +981,17 @@ class _LinkChains:
     def _roles(self, card: LandscapeCard, kind: PositionKind) -> frozenset[ChainRole]:
         return card_roles(self._sub_headings(card), card.headings, card.tag, kind)
 
+    def _words(self, card: LandscapeCard, position: Position) -> CardScenario:
+        """The card's scenario under `position`, named by `v1-e32-t14`'s words, its dropped forms skipped."""
+        return card_scenario(
+            self._sub_headings(card), position.kind, self._no_position, position.not_scenarios
+        )
+
+    def _scenario(self, card: LandscapeCard, position: Position) -> CardScenario:
+        """The card's scenario under `position`, its name the coach's when the position has a list."""
+        found = self._words(card, position)
+        return found._replace(name=scenario_name(position, found.name))
+
     def _teams(self, rounds: Iterable[str]) -> set[tuple[str, str]]:
         return {team for one in rounds if (team := self._range.rounds[one].team) is not None}
 
@@ -984,17 +1000,26 @@ class _LinkChains:
     def _names(self, position_id: str) -> dict[str, set[tuple[str, str]]]:
         """The scenario names a position shows, with their teams: two or more teams, none withheld."""
         if position_id not in self._shown:
-            kind = self._taxonomy.position(position_id).kind
+            position = self._taxonomy.position(position_id)
             teams: defaultdict[str, set[tuple[str, str]]] = defaultdict(set)
+            unlisted: defaultdict[str, set[tuple[str, str]]] = defaultdict(set)
             for key, rounds in self._reads.get(position_id, {}).items():
                 card = self._cards.get(key)
                 if card is None:
                     continue
-                name = card_scenario(self._sub_headings(card), kind, self._no_position).name
+                words = self._words(card, position).name
+                name = scenario_name(position, words)
                 if name is not None:
                     teams[name] |= self._teams(rounds)
+                elif words is not None:
+                    unlisted[words] |= self._teams(rounds)
+            used_unlisted = [words for words, found in unlisted.items() if len(found) >= 2]
+            self._unlisted[position_id] = (
+                len(used_unlisted),
+                sum(is_withheld(words, self._words_of_caselist) for words in used_unlisted),
+            )
             used = {name: found for name, found in teams.items() if len(found) >= 2}
-            withheld = {name for name in used if is_withheld(name, self._words)}
+            withheld = {name for name in used if is_withheld(name, self._words_of_caselist)}
             self._withheld[position_id] = len(withheld)
             self._shown[position_id] = {name: found for name, found in used.items() if name not in withheld}
         return self._shown[position_id]
@@ -1022,7 +1047,8 @@ class _LinkChains:
 
     def with_lead_in(self, row: ImpactCard) -> ImpactCard:
         """The row with its scenario and its labelled internal link, or else the card above it."""
-        kind = self._taxonomy.position(row.position_id).kind
+        position = self._taxonomy.position(row.position_id)
+        kind = position.kind
         names = self._names(row.position_id)
         scenario: defaultdict[str, set[tuple[str, str]]] = defaultdict(set)
         link: defaultdict[str, set[tuple[str, str]]] = defaultdict(set)
@@ -1032,7 +1058,7 @@ class _LinkChains:
             if card is None or card.cluster_id != row.fingerprint:
                 continue
             teams = self._teams(rounds)
-            name = card_scenario(self._sub_headings(card), kind, self._no_position).name
+            name = self._scenario(card, position).name
             if name is not None and name in names:
                 scenario[name] |= teams
             tag = self._internal_link_tag(card, row.position_id, kind)
@@ -1093,16 +1119,15 @@ class _LinkChains:
         documents: set[str] = set()
         structured: set[str] = set()
         for position_id, reads in self._reads.items():
-            if self._taxonomy.position(position_id).kind is not kind:
+            position = self._taxonomy.position(position_id)
+            if position.kind is not kind:
                 continue
             for key in reads:
                 documents.add(key[0])
                 card = self._cards.get(key)
                 if card is None or key[0] in structured:
                     continue
-                if card_scenario(self._sub_headings(card), kind, self._no_position).heading or self._roles(
-                    card, kind
-                ):
+                if self._scenario(card, position).heading or self._roles(card, kind):
                     structured.add(key[0])
         rows = [row for row in impact_cards if row.position_id in listed]
         for position_id in listed:
@@ -1122,6 +1147,8 @@ class _LinkChains:
                 RoleGap(role=role, positions=sum((one, role) not in filled for one in listed))
                 for role in CHAIN_ROLES[kind]
             ),
+            unlisted_words=sum(self._unlisted[position_id][0] for position_id in listed),
+            unlisted_words_withheld=sum(self._unlisted[position_id][1] for position_id in listed),
         )
 
 

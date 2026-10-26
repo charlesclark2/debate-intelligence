@@ -51,6 +51,16 @@ role label, no answer, no heading the coach ruled names no position, and none of
 The innermost heading of each kind wins. Whether a name is shown (two or more teams of the position
 use it) and whether it is withheld (:func:`is_withheld`) is the report's.
 
+## The coach's scenario list (:func:`scenario_name`, `v1-e32-t22`)
+
+A DA or advantage may list its scenarios in the taxonomy, each a name and its forms, and the forms
+that name no scenario. A form is matched as the words above are, whole: it is what this module reads
+from a heading. A form ruled no scenario is skipped as :data:`NOT_A_SCENARIO` is, so a named heading
+of one is no scenario heading and a heading further in may still name the card; a numbered heading
+stays a scenario heading, since the team wrote `Scenario 1`, and names nothing. A position with a list
+shows its scenario's name for any of its forms and nothing for other words; merged forms are one name,
+whose teams are every form's. A position with no list shows the words.
+
 Pure and deterministic: no model, no I/O.
 """
 
@@ -62,7 +72,7 @@ from typing import Final, NamedTuple
 
 from debate_core.arguments.landscape.impacts import is_impact_card, is_impact_heading, tag_opening
 from debate_core.domain.caselist import Disclosure
-from debate_core.domain.landscape import PositionKind
+from debate_core.domain.landscape import Position, PositionKind
 from debate_core.domain.landscape_report import CHAIN_ROLES, ChainRole
 
 __all__ = [
@@ -77,6 +87,7 @@ __all__ = [
     "card_scenario",
     "heading_roles",
     "is_withheld",
+    "scenario_name",
     "tag_role",
 ]
 
@@ -210,10 +221,18 @@ def card_roles(
 
 
 def card_scenario(
-    sub_headings: Sequence[SubHeading], kind: PositionKind, no_position: Iterable[str] = ()
+    sub_headings: Sequence[SubHeading],
+    kind: PositionKind,
+    no_position: Iterable[str] = (),
+    not_scenarios: Iterable[str] = (),
 ) -> CardScenario:
-    """Whether the card sits under a scenario heading, and its scenario name, from its sub-headings."""
+    """Whether the card sits under a scenario heading, and its scenario name, from its sub-headings.
+
+    `not_scenarios` are the forms the coach ruled name no scenario for the card's position: a named
+    heading of one is no scenario heading, and words of one name nothing (`v1-e32-t22`).
+    """
     decided = frozenset(no_position)
+    dropped = frozenset(not_scenarios)
     heading = False
     numbered: str | None = None
     named: str | None = None
@@ -227,7 +246,7 @@ def card_scenario(
         if labels:
             if labels <= {ChainRole.IMPACT, ChainRole.INTERNAL_LINK}:
                 words = " ".join(word for word in sub.text.split() if word not in _LABEL_WORDS)
-                if words and not NOT_A_SCENARIO.search(words):
+                if words and words not in dropped and not NOT_A_SCENARIO.search(words):
                     beside = words
             continue
         if sub.text in decided:
@@ -235,11 +254,27 @@ def card_scenario(
         found = _NUMBERED.match(sub.text)
         if found is not None:
             heading = True
-            numbered = sub.text[found.end() :].strip() or None
-        elif not NOT_A_SCENARIO.search(sub.text):
+            words = sub.text[found.end() :].strip()
+            numbered = words if words and words not in dropped else None
+        elif sub.text not in dropped and not NOT_A_SCENARIO.search(sub.text):
             heading = True
             named = sub.text
     return CardScenario(heading=heading, name=numbered or named or beside)
+
+
+def scenario_name(position: Position, words: str | None) -> str | None:
+    """The name `position` shows for :func:`card_scenario`'s words (`v1-e32-t22`).
+
+    A position without a scenario list shows the words, `v1-e32-t14`'s rule. One with a list shows the
+    coach's name of the scenario whose forms hold the words, and nothing for words its list does not
+    hold, so every name it shows is the coach's.
+    """
+    if words is None or not position.has_scenario_list:
+        return words
+    for scenario in position.scenarios:
+        if words in scenario.forms:
+            return scenario.name
+    return None
 
 
 def caselist_words(disclosures: Iterable[Disclosure]) -> frozenset[str]:
@@ -253,8 +288,12 @@ def caselist_words(disclosures: Iterable[Disclosure]) -> frozenset[str]:
 
 
 def is_withheld(name: str, words: frozenset[str]) -> bool:
-    """`name` holds a word of a caselist school, team code or tournament, so the report never shows it."""
-    return any(word in words for word in name.split())
+    """`name` holds a word of a caselist school, team code or tournament, so the report never shows it.
+
+    A name is read as the caselist's words are, by its letters and digits without case, so the coach's
+    `Golden dome` is read as `golden dome` is.
+    """
+    return any(word in words for word in _plain_words(name))
 
 
 def _plain_words(text: str) -> list[str]:

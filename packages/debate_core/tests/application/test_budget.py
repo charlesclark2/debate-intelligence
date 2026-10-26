@@ -648,7 +648,7 @@ def bedrock_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, **models: 
 def factory_router(
     settings: Settings, delegate: ModelRouter, mode: str, tmp_path: Path, pricing: Path | None
 ) -> ModelRouter:
-    def real_router(routing: RoutingPolicy, *, aws_profile: str | None) -> ModelRouter:
+    def real_router(policy: RoutingPolicy, *, aws_profile: str | None) -> ModelRouter:  # noqa: ARG001
         return delegate
 
     return build_model_router(

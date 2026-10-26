@@ -20,6 +20,7 @@ from __future__ import annotations
 import gc
 import hashlib
 import json
+import logging
 import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
@@ -280,3 +281,33 @@ def test_pasted_text_is_bounded_by_http_max_response_bytes(
     assert exit_code == 1
     assert document["error"]["code"] == "USER_TEXT_REJECTED"
     assert "over the 2048-byte limit" in document["error"]["message"]
+
+
+# --------------------------------------------------------------------------------------------
+# No page text in any log record
+# --------------------------------------------------------------------------------------------
+
+STANDARD_RECORD_FIELDS = set(vars(logging.LogRecord("n", logging.INFO, "p", 1, "m", None, None)))
+
+
+def test_no_log_record_holds_a_sentence_of_the_page_whatever_the_level(
+    replay: ReplayTransport, data_dir: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The message and every `extra` field of every record, at DEBUG, against t04's own paragraphs."""
+    expected = json.loads(
+        (Path(__file__).parents[1] / "fixtures" / "extraction" / "news-article.expected.json").read_text(
+            "utf-8"
+        )
+    )
+    sentences = [paragraph[:60] for paragraph in expected["paragraphs"]]
+    caplog.set_level(logging.DEBUG)
+
+    fetch(load_cassette("news-article").url)
+    fetch(load_cassette("paywalled").url)
+
+    assert caplog.records, "nothing was logged, so nothing was checked"
+    for record in caplog.records:
+        extras = {name: value for name, value in vars(record).items() if name not in STANDARD_RECORD_FIELDS}
+        logged = record.getMessage() + " " + " ".join(str(value) for value in extras.values())
+        for sentence in [*sentences, "Negotiators from two invented trading partners"]:
+            assert sentence not in logged, (record.name, sentence)

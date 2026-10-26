@@ -618,12 +618,16 @@ documents beside each as a comment:
 * **Merge** forms that are one scenario under one name. The report then counts the teams of every form
   together, so two forms one team each can show as a scenario two teams read:
   `- {name: Golden dome, forms: [dome, golden dome]}`.
-* **Rename** by changing `name`. Sentence case, as a label is: `Golden dome`, not `Golden Dome`.
+* **Rename** by changing `name`, in the words a debater uses. Unlike a label, a name may carry capitals
+  after its first word, for a proper noun: `War with China`. A name shaped like a team code (`QX dome`,
+  `RiOs`) or holding a school word is still refused.
 * **Drop** heading words that are no scenario (an answer filed without a marker, such as `too early`) by
   moving the form from `scenarios` to `not_scenarios`: `not_scenarios: [too early]`. A heading of those
   words then counts as no scenario heading at all, and names nothing.
 * **Words not on the list show no scenario** for a position that has one. A new name teams start using
-  after the seed shows nothing until you add it.
+  after the seed shows nothing until you add it. The operator's dry run counts, per kind, the words two
+  or more teams use under a position with a list that its list does not hold: when that count is above
+  zero, it is time to look at the lists again. The words themselves are never printed.
 * **Never write** a school, a team code or a tournament's word, in a name or a form: the report withholds
   a name holding one anyway, and counts it. Never change or remove an `id`. A form is listed once per
   position, and a name once.

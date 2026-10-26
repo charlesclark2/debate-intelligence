@@ -95,8 +95,12 @@ def _forms(position: Position) -> tuple[str, ...]:
     return (*(form for scenario in position.scenarios for form in scenario.forms), *position.not_scenarios)
 
 
-def _label_findings(owner: str, label: str) -> list[str]:
-    """A label or a scenario name holding a team code's shape, or a capital after its first word."""
+def _label_findings(owner: str, label: str, *, sentence_case: bool = True) -> list[str]:
+    """A label or a scenario name holding a team code's shape, or a label a capital after its first word.
+
+    A scenario name may carry capitals after its first word, for a proper noun (`War with China`; the
+    PM's ruling of 2026-10-26 on `v1-e32-t22`); a team code's shape and a school word are still refused.
+    """
     findings: list[str] = []
     words = [word.strip("()[],.;:/") for word in label.split()]
     for index, word in enumerate(words):
@@ -104,7 +108,7 @@ def _label_findings(owner: str, label: str) -> list[str]:
             len(word) == 2 and word.isupper() and word not in SHORT_LABEL_ACRONYMS
         ):
             findings.append(f"{owner} holds {word!r}, shaped like a team code")
-        elif index > 0 and _TITLE_WORD.match(word):
+        elif sentence_case and index > 0 and _TITLE_WORD.match(word):
             findings.append(f"{owner} holds {word!r}, shaped like a name; labels are sentence case")
     return findings
 
@@ -121,7 +125,9 @@ def personal_data_findings(taxonomy: Taxonomy) -> list[str]:
             findings += _heading_findings(position.id, alias)
         findings += _label_findings(f"{position.id}: its label", position.label)
         for scenario in position.scenarios:
-            findings += _label_findings(f"{position.id}: its scenario {scenario.name!r}", scenario.name)
+            findings += _label_findings(
+                f"{position.id}: its scenario {scenario.name!r}", scenario.name, sentence_case=False
+            )
             findings += _heading_findings(
                 f"{position.id}: its scenario {scenario.name!r}", scenario.name.casefold()
             )

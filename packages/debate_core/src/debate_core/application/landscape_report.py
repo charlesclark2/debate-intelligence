@@ -936,7 +936,7 @@ class _LinkChains:
         self._no_position = frozenset(
             one.heading for one in inputs.overrides.overrides if one.position_id is None
         )
-        self._words = caselist_words(inputs.disclosures)
+        self._words_of_caselist = caselist_words(inputs.disclosures)
         files: defaultdict[str, list[LandscapeCard]] = defaultdict(list)
         for card in inputs.cards:
             files[card.source_sha256].append(card)
@@ -951,6 +951,7 @@ class _LinkChains:
         self._placing: dict[tuple[str, int], int | None] = {}
         self._shown: dict[str, dict[str, set[tuple[str, str]]]] = {}
         self._withheld: dict[str, int] = {}
+        self._unlisted: dict[str, tuple[int, int]] = {}
 
     # Per card -----------------------------------------------------------------------------------
 
@@ -980,11 +981,15 @@ class _LinkChains:
     def _roles(self, card: LandscapeCard, kind: PositionKind) -> frozenset[ChainRole]:
         return card_roles(self._sub_headings(card), card.headings, card.tag, kind)
 
-    def _scenario(self, card: LandscapeCard, position: Position) -> CardScenario:
-        """The card's scenario under `position`, its name the coach's when the position has a list."""
-        found = card_scenario(
+    def _words(self, card: LandscapeCard, position: Position) -> CardScenario:
+        """The card's scenario under `position`, named by `v1-e32-t14`'s words, its dropped forms skipped."""
+        return card_scenario(
             self._sub_headings(card), position.kind, self._no_position, position.not_scenarios
         )
+
+    def _scenario(self, card: LandscapeCard, position: Position) -> CardScenario:
+        """The card's scenario under `position`, its name the coach's when the position has a list."""
+        found = self._words(card, position)
         return found._replace(name=scenario_name(position, found.name))
 
     def _teams(self, rounds: Iterable[str]) -> set[tuple[str, str]]:
@@ -997,15 +1002,24 @@ class _LinkChains:
         if position_id not in self._shown:
             position = self._taxonomy.position(position_id)
             teams: defaultdict[str, set[tuple[str, str]]] = defaultdict(set)
+            unlisted: defaultdict[str, set[tuple[str, str]]] = defaultdict(set)
             for key, rounds in self._reads.get(position_id, {}).items():
                 card = self._cards.get(key)
                 if card is None:
                     continue
-                name = self._scenario(card, position).name
+                words = self._words(card, position).name
+                name = scenario_name(position, words)
                 if name is not None:
                     teams[name] |= self._teams(rounds)
+                elif words is not None:
+                    unlisted[words] |= self._teams(rounds)
+            used_unlisted = [words for words, found in unlisted.items() if len(found) >= 2]
+            self._unlisted[position_id] = (
+                len(used_unlisted),
+                sum(is_withheld(words, self._words_of_caselist) for words in used_unlisted),
+            )
             used = {name: found for name, found in teams.items() if len(found) >= 2}
-            withheld = {name for name in used if is_withheld(name, self._words)}
+            withheld = {name for name in used if is_withheld(name, self._words_of_caselist)}
             self._withheld[position_id] = len(withheld)
             self._shown[position_id] = {name: found for name, found in used.items() if name not in withheld}
         return self._shown[position_id]
@@ -1133,8 +1147,8 @@ class _LinkChains:
                 RoleGap(role=role, positions=sum((one, role) not in filled for one in listed))
                 for role in CHAIN_ROLES[kind]
             ),
-            unlisted_words=0,
-            unlisted_words_withheld=0,
+            unlisted_words=sum(self._unlisted[position_id][0] for position_id in listed),
+            unlisted_words_withheld=sum(self._unlisted[position_id][1] for position_id in listed),
         )
 
 

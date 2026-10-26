@@ -12,7 +12,9 @@ dry run without `--publish`, and prints only counts:
   identifies whose files hold a marker) and the K families in the K-aff files' headings, by id;
 * per DA and advantage kind, the impact rows, those with a scenario and the scenario names withheld, and
   the documents with no scenario heading and no role label (`v1-e32-t14`, under the coach's scenario
-  lists of `v1-e32-t22`), never a name;
+  lists of `v1-e32-t22`), never a name; and per kind the words two or more teams use as a scenario under
+  a position with a list that its list does not hold, and how many of them hold a caselist word, so the
+  coach knows when to look at the lists again (the PM's ruling of 2026-10-26), never the words;
 * the CPs' planks: how many, under how many CPs, in how many groups by the advantage they solve, how many
   withheld for naming a school, and where every plank found went;
 * the scan's hits by file, report.md's section (its nearest heading, and each CP's plank table apart) and
@@ -97,6 +99,11 @@ def report_lines(result: LandscapeRunResult) -> list[str]:
         f"{one.rows_with_scenario} with a scenario, {one.withheld_names} names withheld; "
         f"{one.unstructured_documents} of {one.documents} documents with no scenario heading and no role "
         "label."
+        for one in result.report.chain_coverage
+    ]
+    lines += [
+        f"Scenario words no list holds, {one.kind.value}: {one.unlisted_words} that two or more teams use "
+        f"under a position with a list, {one.unlisted_words_withheld} of them holding a caselist word."
         for one in result.report.chain_coverage
     ]
     texts = result.report.texts

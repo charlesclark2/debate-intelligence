@@ -1,0 +1,14 @@
+# A routing file for this module's tests only: one Claude route on a us. geographic profile, and no
+# embeddings or rerank route. The grant it gives is that profile and the model behind it in the
+# three regions a us. profile routes to, and no statement for scoring models at all.
+
+version: 1
+
+routes:
+  high_volume:
+    provider: bedrock
+    model_id: anthropic.claude-haiku-5-5
+    inference_profile: us.anthropic.claude-haiku-5-5
+    region: us-east-1
+    max_tokens: 2048
+    timeout_seconds: 60

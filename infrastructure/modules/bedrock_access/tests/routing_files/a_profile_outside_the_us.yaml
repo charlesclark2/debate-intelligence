@@ -1,0 +1,14 @@
+# A routing file for this module's tests only: a Claude route on an eu. geographic profile. The
+# module writes the regions behind us. profiles alone, so it refuses this file rather than grant
+# the model in regions nobody checked.
+
+version: 1
+
+routes:
+  high_volume:
+    provider: bedrock
+    model_id: anthropic.claude-haiku-5-5
+    inference_profile: eu.anthropic.claude-haiku-5-5
+    region: eu-west-1
+    max_tokens: 2048
+    timeout_seconds: 60

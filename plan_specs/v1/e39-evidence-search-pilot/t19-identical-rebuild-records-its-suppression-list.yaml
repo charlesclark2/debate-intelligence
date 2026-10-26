@@ -1,0 +1,83 @@
+# TASK v1-e39-t19-identical-rebuild-records-its-suppression-list - A rebuilt index identical to the published one records the suppression list it was checked against
+# Epic: E39 — Team Evidence Search (Student Pilot) | Release: v1.7 (Team evidence search pilot) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e39-t19-identical-rebuild-records-its-suppression-list
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+  annotations:
+    debate/title: "A rebuilt index identical to the published one records the suppression list it was checked against"
+spec:
+  # Filed by the PM, 2026-10-26, from the cutover's comparison (v1-e40-t06, ac1) and the PM's reading of it (2026-10-26).
+  description: >-
+    In the cutover's comparison the published index's manifest recorded the suppression list at
+    5 entries, though the bucket's list had held 6 since removal RM-2026-90 on 2026-10-23. The
+    cloud run rebuilt the index under all 6 and got the same index id, because the sixth entry
+    suppressed nothing. As v1-e39-t09's stage rules, it did not publish, since `current.json`
+    already named that id. So the published manifest describes an older list, and a removal
+    audit or a comparison reads that as a difference. When a rebuild's index id equals the
+    published one but its manifest's sources differ (the suppression digest, or an occurrence
+    digest), publish the record of what it was checked against, under the run's lock. Either the
+    manifest is updated in place, or a small record sits beside it; the session proposes which.
+    Index objects whose sha256 matches are never uploaded again, and the pointer's rules are
+    unchanged. The comparison script and the evidence-search runbook read the new record.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, packages/debate_core/tests, ops, tests/scripts, docs/runbooks]
+    forbidden:
+      - Re-uploading an index object whose sha256 matches
+      - Changing how an index id is computed
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e39-t09-weekly-index-refresh
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Against moto, an identical rebuild under a longer suppression list updates the
+        published record of the list it was checked against, without changing the index id
+        or uploading an unchanged object; a rebuild under the same list writes nothing;
+        tests shown failing first.
+    - id: ac2
+      description: >-
+        The comparison script reads the new record, by test on synthetic manifests.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e39-t19-identical-rebuild-records-its-suppression-list-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+spec:
+  description: >-
+    Record the suppression list an identical rebuild was checked against.
+  goalRef:
+    name: v1-e39-t19-identical-rebuild-records-its-suppression-list
+  graph:
+    nodes:
+      - id: identical-rebuild-record
+        kind: Task
+        name: Identical rebuild record
+        description: >-
+          Record the suppression list an identical rebuild was checked against.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Index refresh tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, index_refresh]
+status:
+  phase: Pending

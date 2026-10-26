@@ -1,0 +1,93 @@
+# TASK v1-e32-t27-branches-and-mechanisms-counted-first - Branches and mechanisms in the DA sections, counted first
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t27-branches-and-mechanisms-counted-first
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "Branches and mechanisms in the DA sections, counted first"
+spec:
+  # Filed by the PM, 2026-10-26, from the coach's read of v1-e32-t22's seed and the PM's ruling (2026-10-26).
+  description: >-
+    Scenario lists (v1-e32-t22) name one flat scenario per impact card. Two needs the coach
+    raised are not scenarios. Branches: the Midterms DA has two outcomes, Dems win and
+    Republicans win, each with its own impacts. A card under `dems win > dome impact` shows the
+    branch or, with the branch dropped, the impact, but never both. The mechanism: for the
+    Economy DA the coach wants what causes the decline, from the DA's thesis (plan, link,
+    internal link, impact), not `decline` or `econ`. Some Economy DAs may be different DAs by
+    link (taxes, stocks, debt). Count first, read-only, on hspolicy26 through 2026-10-20, as
+    counts and ids only: (a) per DA, the documents that nest an impact or named heading under
+    another named heading below the position, and the outer headings two or more teams use; (b)
+    for the Economy DA, the documents that label a link or internal link, grouped by the link
+    card's tag words, to see whether the mechanism can be read from labels or needs the model
+    stage (v1-e32-t07). Send the counts to the PM with three options: a two-level scenario
+    (branch, then impact) in the taxonomy; the mechanism as a named link per DA, beside
+    v1-e32-t25's names; or splitting DAs by link. Build only the option the PM rules.
+  priority: 2
+  constraints:
+    packages: [debate_core.arguments, debate_core.application, debate_core.domain, packages/debate_core/tests, tests/fixtures/landscape, config/landscape, scripts, tests/scripts, tests/config, docs/guides]
+    forbidden:
+      - A school or team code beside quoted text (policy 1.13)
+      - Heading words, team codes or schools printed in the counts
+      - A model call in this task
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e32-t22-scenario-vocabulary
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e32-t25-readable-impact-chains
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Counts before building, read-only: (a) and (b) above, sent to the PM with the three
+        options.
+    - id: ac2
+      description: >-
+        After the ruling, on synthetic fixtures, the chosen option matches hand-written
+        golden files; tests shown failing first.
+    - id: ac3
+      description: >-
+        The operator's dry run on hspolicy26 shows the Midterms DA's branches or the Economy
+        DA's mechanism as ruled, with counts before and after (operator).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t27-branches-and-mechanisms-counted-first-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    Count how teams nest branches and label links, then build what the PM rules.
+  goalRef:
+    name: v1-e32-t27-branches-and-mechanisms-counted-first
+  graph:
+    nodes:
+      - id: branches-and-mechanisms
+        kind: Task
+        name: Branches and mechanisms
+        description: >-
+          Count how teams nest branches and label links, then build what the PM rules.
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Landscape tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/landscape]
+status:
+  phase: Pending

@@ -282,5 +282,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e33-t09-style-profile-version-refusal
+    - id: t10
+      kind: Task
+      name: 'files check and files publish warn when a built file''s style profile is not the running one'
+      description: >-
+        files check and files publish warn when a built file's style profile is not the
+        running one.
+      inputs:
+        specRef: plan_specs/v1/e33-file-builder/t10-sidecar-style-profile-warning.yaml
+        goalRef: v1-e33-t10-sidecar-style-profile-warning
+      dependsOn:
+      - t09
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e33-t10-sidecar-style-profile-warning reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e33-t10-sidecar-style-profile-warning
 status:
   phase: Pending

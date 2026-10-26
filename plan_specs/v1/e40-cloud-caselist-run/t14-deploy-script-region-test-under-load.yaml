@@ -1,0 +1,71 @@
+# TASK v1-e40-t14-deploy-script-region-test-under-load - The deploy script's region test, which failed once under load, made deterministic
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t14-deploy-script-region-test-under-load
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "The deploy script's region test, which failed once under load, made deterministic"
+spec:
+  # Filed by the PM, 2026-10-26, from v1-e32-t22's report, accepted by the PM (2026-10-26).
+  description: >-
+    `tests/scripts/test_caselist_run_deploy.py::test_every_aws_call_is_made_as_the_deployer_profile_in_us_east_1`
+    failed once at load average 11.8 under `-n 6` in v1-e32-t22's session, then passed alone and
+    in a full re-run of `tests/scripts`. The failing line asserts that every recorded `aws` call
+    starts `--region us-east-1`. Find the cause before changing anything, for example a
+    recording shared between workers, an `AWS_REGION` or `AWS_DEFAULT_REGION` leaking from
+    another test, or a call that only sometimes runs. Reproduce it under load if possible. Fix
+    the cause in the test or the script, never with a retry or a looser assertion.
+  priority: 3
+  constraints:
+    packages: [tests/scripts, ops, scripts]
+    forbidden:
+      - A rerun or retry marker
+      - Weakening the assertion
+      - Network or AWS access in any test
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The cause is named with its evidence, and the fix holds it. The test passes 50 times
+        under `-n 6` with the machine loaded, and the report gives the command and result.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t14-deploy-script-region-test-under-load-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    Find why the region test failed under load, then fix the cause.
+  goalRef:
+    name: v1-e40-t14-deploy-script-region-test-under-load
+  graph:
+    nodes:
+      - id: deploy-region-test
+        kind: Task
+        name: Deploy region test
+        description: >-
+          Find why the region test failed under load, then fix the cause.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Deploy script tests pass
+            command: uv
+            args: [run, pytest, tests/scripts/test_caselist_run_deploy.py]
+status:
+  phase: Pending

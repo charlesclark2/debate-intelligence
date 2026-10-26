@@ -445,3 +445,63 @@ The cutover in dev, steps "Before you start" to 6, on the evening of 2026-10-25 
   20261026T035957Z (`caselist pull`) holds the bucket's run lock`.
 * **Still to come:** the run's outcome, record and log line; step 7's comparison (ac1); steps 8 and
   9 before 2026-10-28 06:00 Chicago.
+
+## PM record, 2026-10-26
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+The cutover in dev, from the hand run's outcome to step 9 (UTC times).
+
+* **The hand run `20261026T040426Z`** (the lock's holder id was `20261026T035957Z`, taken when the
+  restore began) stopped `EssentialContainerExited` with exit code `0`, in about 14 minutes.
+  * The restore took about 4.5 minutes: 15,341 parsed objects (9.1 GB), the state files and the
+    search index.
+  * The week's work: hspf26's first complete archive (5,021 files stored, 190 withdrawn, 24
+    superseded) and one OpenEv camp file, with nothing deferred by the download cap.
+  * Parse: nothing new to parse; the camp file is an unsupported type.
+  * The index was rebuilt, identical to the published `4a9f6fa7c02391c2`, and not republished.
+  * The disk peaked at 15% of the task's volume, the run-state bundle saved (9 MB), and the
+    summary line was one whole log event (about 90 KB).
+* **The record checks (step 5):** `caselist runs --remote --last 3` listed the run at the top in the
+  Mac's columns, with no skipped or unreadable record. The details read `"bundle": "saved, …"`,
+  `"took_over": null`, `"parsed_objects": 15341` and `"lock_lost": false`. The lock read `"state":
+  "free"` and `"home_environment": "dev"`.
+* **The run's outcome reads `incomplete`,** from the report stage's `CASELIST_DRIFT` on `openev
+  2026-ld (something missing)`, with nothing failed or pending.
+  * The PM's drift check, `caselist status --caselist openev` against step 7's restored copy, read
+    `0/3` local files, 3 published, 0 missing, manifest `yes`, 0 mismatches. The bucket is in sync.
+    What is missing is the working copy's raw sources: a restore brings none, and the two older
+    camp files are unsupported types no parse fetched.
+  * So it is a false drift in bucket mode, and it recurs whenever a run touches a snapshot whose raw
+    sources it does not all hold. Filed as `v1-e40-t13-bucket-mode-report-counts-held-sources`
+    (p1).
+* **Step 7, ac1: accepted with one explained difference.** `compare_cloud_run.py` ran on the Mac
+  under the dev lock and restored 51 manifests and 15,342 parsed objects in 499.1 s, downloading and
+  publishing nothing. The record is
+  [`docs/data/caselist-cloud-run-comparison.md`](../data/caselist-cloud-run-comparison.md).
+  * Every parse record agreed across hsld26, hspf26, hspolicy26 and openev: sources, parsed,
+    unsupported, cards, occurrence rows, and the source and occurrence records themselves.
+  * The index agreed: the same id, 50,434 documents, 331,460 occurrences, the per-store counts, and
+    0 suppressed occurrences on both sides.
+  * **The one difference:** the cloud's index manifest records a 5-entry suppression list, the Mac's
+    rebuild a 6-entry one. The bucket's list has two versions, 2026-10-01 and 2026-10-23 00:36
+    (removal RM-2026-90, the sixth entry), and holds 6 entries now. The published index was built
+    by the Mac's run of 2026-10-22, before that removal. The cloud run rebuilt it under all 6, got
+    the same id (the sixth entry suppresses nothing in the corpus), and rightly did not republish,
+    so the published manifest's suppression line is stale metadata, not a missing suppression.
+    Filed as `v1-e39-t19-identical-rebuild-records-its-suppression-list` (p3).
+  * The scratch copy was removed afterwards.
+* **Step 8:** `caselist_run_schedule_enabled = true` in `owner.auto.tfvars`. The plan was `0 to add,
+  1 to change, 0 to destroy`, the single resource `module.caselist_run.aws_scheduler_schedule.run[0]`,
+  read by the PM: `PLAN OK … the run's schedule DISABLED -> ENABLED, nothing else`. The apply was `0
+  added, 1 changed, 0 destroyed`, and the output reads `"ENABLED"`.
+* **Step 9:** the late-run alarm read `OK False` (it had counted the hand run and left `ALARM`).
+  The plan was `0 to add, 1 to change, 0 to destroy`, the single resource
+  `module.caselist_run.aws_cloudwatch_metric_alarm.late_run`, with `~ actions_enabled = false ->
+  true`, read by the PM. The apply was `0 added, 1 changed, 0 destroyed`, and the output reads
+  `true`.
+* **The parse stage's stop on SIGTERM** (the 2026-10-24 amendment) could not be read: no SIGTERM
+  reached this run, which parsed one source. It is read from the first run that is stopped.
+* **The Goal is `Succeeded`.** ac1 is above; ac2 was recorded on 2026-10-25. The cloud runs the week
+  in dev from Wednesday 2026-10-28, the login at 03:00 and the run at 06:00 Chicago. Prod follows at
+  the pilot's promotion, when the run's home moves (ADR-0020 (7), `v1-e40-t11`).

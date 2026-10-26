@@ -422,5 +422,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e39-t18-backfiles-in-the-pilot-index
+    - id: t19
+      kind: Task
+      name: 'A rebuilt index identical to the published one records the suppression list it was checked against'
+      description: >-
+        A rebuilt index identical to the published one records the suppression list it was
+        checked against.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t19-identical-rebuild-records-its-suppression-list.yaml
+        goalRef: v1-e39-t19-identical-rebuild-records-its-suppression-list
+      dependsOn:
+      - t09
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t19-identical-rebuild-records-its-suppression-list reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t19-identical-rebuild-records-its-suppression-list
 status:
   phase: Pending

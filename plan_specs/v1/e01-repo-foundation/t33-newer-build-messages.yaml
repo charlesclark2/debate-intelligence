@@ -24,6 +24,13 @@ spec:
     settings pattern this build reserves (for example `providers.*_api_key`), the hint says a
     newer build may define it, and that running from another folder or upgrading fixes it. The
     typo protection stays: an unknown name is still refused.
+    (PM amendment 2026-10-26, from v1-e33-t09's follow-up 2.) `files build`'s refusal of a store
+    read by another parser version says "re-parse with this build" even when the store's parser
+    is newer, and that re-parse writes a directory that sorts below the newer one, so the build
+    refuses again. When the store's parser version is newer than the build's, the hint says to
+    install the newer build instead. Style profile versions have no order, so when only the
+    profile differs the hint names both and says which way to go depends on which build is
+    newer, never asserting one.
   priority: 3
   constraints:
     packages: [debate_core.application, debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests]
@@ -41,6 +48,12 @@ spec:
       description: >-
         An unknown setting is still refused, and one in a reserved pattern gets the
         newer-build hint, by tests shown failing first.
+    - id: ac3
+      description: >-
+        Added by the PM, 2026-10-26. A store read by a newer parser version is refused with
+        a hint to install the newer build, an older one keeps the re-parse hint, and a store
+        under another style profile gets a hint naming both without asserting which is
+        newer; tests shown failing first.
 status:
   phase: Pending
 ---

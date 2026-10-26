@@ -274,5 +274,24 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e04-t08-article-lookup-by-identifier-and-fetched-url
+    - id: t09
+      kind: Task
+      name: 'fetch --paste can report the access status of the user''s own copy'
+      description: >-
+        fetch --paste can report the access status of the user's own copy.
+      inputs:
+        specRef: plan_specs/v1/e04-article-retrieval/t09-reported-status-for-pasted-text.yaml
+        goalRef: v1-e04-t09-reported-status-for-pasted-text
+      dependsOn:
+      - t06
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e04-t09-reported-status-for-pasted-text reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e04-t09-reported-status-for-pasted-text
 status:
   phase: Pending

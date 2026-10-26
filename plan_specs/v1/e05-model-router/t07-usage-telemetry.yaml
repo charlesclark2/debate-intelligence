@@ -31,7 +31,9 @@ spec:
     test.
   priority: 2
   constraints:
-    packages: [debate_core.integrations, debate_core.application, debate_cli]
+    # PM context 2026-10-26: config/model_pricing.yaml, the settings and tests, and the
+    # bedrock-access runbook's line on usage.
+    packages: [debate_core.integrations, debate_core.application, debate_cli, config, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
     forbidden:
       - Logging prompt bodies or source text in telemetry records
       - Hard-coded per-token prices in Python code

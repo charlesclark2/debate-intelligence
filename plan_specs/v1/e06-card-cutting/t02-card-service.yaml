@@ -25,9 +25,22 @@ spec:
     unverified citation fields) still produces a persisted card with verification_status UNVERIFIED and
     reasons, never a silently "finished" card. Boundaries: fetching is ArticleService (E04); rendering and
     export are t04/t05; the CLI is t06. The use case lives in debate_core.application with injected ports.
+    (PM amendment 2026-10-26, from v1-e06-t01's questions 2 and 3 and its note on
+    re-resolution.) Three cite rules are decided here, each by test shown failing first. A
+    `retrieval` citation source names the platform's own retrieval record, and is verified for a
+    PUBLISHER_RETRIEVED snapshot only: the accessed date, and the retrieved URL when a page
+    declares no canonical one, take it instead of `heuristic`, which changes the source enum,
+    the schema export and v1-e06-t01's ac1 list. So an open-access PDF or a page without a
+    canonical link can reach VERIFIED. When a page names no person, the issuing organization may
+    stand as the author, marked as an organization author (the PM leans yes, as debate
+    convention), and the short cite keeps an organization's name whole rather than taking its
+    last word. A cite field a student cleared is recorded as a student edit, and re-resolution
+    never refills it, turning v1-e06-t01's `test_a_field_the_student_emptied_is_derived_again`.
   priority: 1
   constraints:
-    packages: [debate_core.application, debate_core.evidence]
+    # PM amendment 2026-10-26: the citation source enum, the harvester, and the schema export, for
+    # the three cite rules below.
+    packages: [debate_core.application, debate_core.evidence, debate_core.domain, debate_core.retrieval, packages/debate_core/tests, packages/debate_core/schemas]
     forbidden:
       - Evidence text on a card that did not come from span extraction over the stored snapshot
       - Marking a card VERIFIED when any verifier check or required citation field fails
@@ -60,6 +73,13 @@ spec:
       description: >-
         The persisted card carries GeneratedArtifactMetadata (model_id, prompt ids/versions, temperature,
         snapshot_id) and a format_profile name, and re-running verification on it reproduces the same status.
+    - id: ac5
+      description: >-
+        Added by the PM, 2026-10-26. The accessed date and a canonical-less URL of a
+        publisher-retrieved snapshot carry a verified `retrieval` source, and of any other
+        provenance an unverified one; an organization author stands in when the page names
+        no person, marked so, with its name whole in the short cite; a cleared cite field
+        stays cleared on re-resolution; tests shown failing first.
 status:
   phase: Pending
 ---

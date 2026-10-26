@@ -40,6 +40,7 @@ from debate_core.application.file_publish_service import (
     PublishRequest,
     PublishResult,
     PublishStatus,
+    published_recipe,
 )
 from debate_core.application.file_quality_service import FileQualityService
 from debate_core.application.file_recipes import RecipeResolver, load_recipe
@@ -49,6 +50,7 @@ from debate_core.application.ports.suppression import ReasonCode, SuppressionAct
 from debate_core.domain.built_file_metadata import BuiltFileMetadata
 from debate_core.domain.caselist import Side
 from debate_core.domain.file_provenance import FileProvenanceManifest
+from debate_core.domain.file_recipe import FileRecipe
 from debate_core.evidence.file_checks.report import QualityCheck
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
 from debate_core.integrations.docx_file_writer.writer import DocxEvidenceFileWriter
@@ -749,3 +751,76 @@ def test_the_published_recipe_is_the_same_bytes_whenever_the_file_is_published(w
 def test_find_by_source_over_an_empty_files_prefix_finds_nothing(world: World) -> None:
     lookup = asyncio.run(world.service().find_by_source("1" * 64))
     assert (lookup.found, lookup.unreadable) == ((), ())
+
+
+def test_pins_inside_hats_lose_their_school_team_tournament_and_round_too() -> None:
+    """A recipe with hats: every pin in every hat's blocks is stripped (PM amendment 2026-10-19)."""
+    pin = {
+        "caselist": CASELIST,
+        "source_sha256": "a" * 64,
+        "element_index": 3,
+        "side": "NEG",
+        "school": "Maple Grove",
+        "team_code": "QX",
+        "tournament": "Riverbend Invitational",
+        "round": "Round 4",
+    }
+    recipe = FileRecipe.model_validate(
+        {
+            "schema_version": 1,
+            "title": "Hatted file",
+            "topic": TOPIC,
+            "format": "POLICY",
+            "caselist": CASELIST,
+            "position": "synthetic-position",
+            "side": "NEG",
+            "fingerprint_version": FINGERPRINT_VERSION,
+            "structure": [
+                {
+                    "pocket": "Pocket",
+                    "hats": [
+                        {
+                            "hat": "First hat",
+                            "blocks": [{"block": "A", "items": [{"fingerprint": "b" * 64, "pin": pin}]}],
+                        },
+                        {
+                            "hat": "Second hat",
+                            "blocks": [{"block": "B", "items": [{"fingerprint": "c" * 64, "pin": pin}]}],
+                        },
+                    ],
+                }
+            ],
+        }
+    )
+
+    published = yaml.safe_load(published_recipe(recipe))
+
+    pins = [item["pin"] for hat in published["structure"][0]["hats"] for item in hat["blocks"][0]["items"]]
+    assert pins == [{"caselist": CASELIST, "source_sha256": "a" * 64, "element_index": 3, "side": "NEG"}] * 2
+    assert load_recipe(published_recipe(recipe).decode("utf-8")).ok
+
+
+def test_a_file_whose_name_makes_no_key_is_refused(world: World) -> None:
+    docx = world.built({"fingerprint": world.add(SOURCE_ONE)}, name="Synthetic_File")
+
+    outcome = only(world.publish(docx))
+
+    assert outcome.refusal.code is FileRefusalCode.SLUG_INVALID
+    assert world.object_keys() == []
+
+
+def test_a_quality_report_that_is_not_one_is_missing_and_a_missing_sidecar_fails_the_check(
+    world: World,
+) -> None:
+    docx = world.built({"fingerprint": world.add(SOURCE_ONE)})
+    report = docx.with_name("synthetic-file.docx.quality.json")
+    kept = report.read_bytes()
+    report.write_text("{}", encoding="utf-8")
+    assert only(world.publish(docx)).refusal.code is FileRefusalCode.QUALITY_REPORT_MISSING
+
+    report.write_bytes(kept)
+    docx.with_name("synthetic-file.docx.provenance.json").unlink()
+    outcome = only(world.publish(docx))
+    assert outcome.refusal.code is FileRefusalCode.QUALITY_FAILED
+    assert QualityCheck.SIDECAR in outcome.refusal.failing_checks
+    assert world.object_keys() == []

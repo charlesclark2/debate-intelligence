@@ -62,6 +62,7 @@ __all__ = [
     "Position",
     "PositionKind",
     "PositionSide",
+    "Scenario",
     "Taxonomy",
     "Topic",
     "TopicMap",
@@ -141,6 +142,15 @@ class PositionSide(StrEnum):
     BOTH = "both"
 
 
+class Scenario(DomainModel):
+    """One scenario of a DA or advantage, as the coach names it (`v1-e32-t22`)."""
+
+    name: NonEmptyText = Field(description="What the report calls it: the words a debater uses.")
+    forms: tuple[Alias, ...] = Field(
+        description="The heading words it is filed under, each as `v1-e32-t14` reads a scenario's words."
+    )
+
+
 class Position(DomainModel):
     """One argument a report counts: a plan, a DA, a K, an LD value, a PF contention."""
 
@@ -166,6 +176,17 @@ class Position(DomainModel):
     merged_into: PositionId | None = Field(
         default=None, description="The position a retired one was renamed or merged into."
     )
+    scenarios: tuple[Scenario, ...] = Field(
+        default=(), description="DAs and advantages only: the coach's scenarios, each with its forms."
+    )
+    not_scenarios: tuple[Alias, ...] = Field(
+        default=(), description="DAs and advantages only: heading words the coach ruled name no scenario."
+    )
+
+    @property
+    def has_scenario_list(self) -> bool:
+        """The coach has listed this position's scenarios, so its names are the list's."""
+        return False
 
     @model_validator(mode="after")
     def _check_own_fields(self) -> Self:

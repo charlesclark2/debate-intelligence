@@ -42,7 +42,7 @@ from debate_core.arguments.landscape.analytic_texts import CounterplanActors
 from debate_core.arguments.landscape.headings import normalize_heading
 from debate_core.arguments.landscape.kritikal_aff import KritikalAffConfig, KritikalFamily
 from debate_core.arguments.landscape.plan_text import ResolutionalPlanWords
-from debate_core.domain.landscape import Taxonomy
+from debate_core.domain.landscape import Position, Taxonomy
 from debate_core.domain.landscape_classification import OverrideRules
 from debate_core.integrations.landscape.released_ids import RELEASED_FILE
 from debate_core.integrations.landscape.yaml_taxonomy_repository import (
@@ -90,26 +90,65 @@ def _heading_findings(owner: str, heading: str) -> list[str]:
     ]
 
 
+def _forms(position: Position) -> tuple[str, ...]:
+    """Every heading form a position's scenario list holds (`v1-e32-t22`)."""
+    return (*(form for scenario in position.scenarios for form in scenario.forms), *position.not_scenarios)
+
+
+def _label_findings(owner: str, label: str) -> list[str]:
+    """A label or a scenario name holding a team code's shape, or a capital after its first word."""
+    findings: list[str] = []
+    words = [word.strip("()[],.;:/") for word in label.split()]
+    for index, word in enumerate(words):
+        if _CAMEL_INITIALS.match(word) or (
+            len(word) == 2 and word.isupper() and word not in SHORT_LABEL_ACRONYMS
+        ):
+            findings.append(f"{owner} holds {word!r}, shaped like a team code")
+        elif index > 0 and _TITLE_WORD.match(word):
+            findings.append(f"{owner} holds {word!r}, shaped like a name; labels are sentence case")
+    return findings
+
+
 def personal_data_findings(taxonomy: Taxonomy) -> list[str]:
     """Everything in `taxonomy` shaped like a team code, a school or a person's name."""
     findings: list[str] = []
     for position in taxonomy.positions:
-        for alias in (*position.aliases, *(keyword.casefold() for keyword in position.tag_keywords)):
+        for alias in (
+            *position.aliases,
+            *(keyword.casefold() for keyword in position.tag_keywords),
+            *_forms(position),
+        ):
             findings += _heading_findings(position.id, alias)
-        words = [word.strip("()[],.;:/") for word in position.label.split()]
-        for index, word in enumerate(words):
-            if _CAMEL_INITIALS.match(word) or (
-                len(word) == 2 and word.isupper() and word not in SHORT_LABEL_ACRONYMS
-            ):
-                findings.append(f"{position.id}: its label holds {word!r}, shaped like a team code")
-            elif index > 0 and _TITLE_WORD.match(word):
-                findings.append(
-                    f"{position.id}: its label holds {word!r}, shaped like a name; labels are sentence case"
-                )
-        text = " ".join((position.label, position.description, *position.aliases, *position.tag_keywords))
+        findings += _label_findings(f"{position.id}: its label", position.label)
+        for scenario in position.scenarios:
+            findings += _label_findings(f"{position.id}: its scenario {scenario.name!r}", scenario.name)
+            findings += _heading_findings(
+                f"{position.id}: its scenario {scenario.name!r}", scenario.name.casefold()
+            )
+        text = " ".join(
+            (
+                position.label,
+                position.description,
+                *position.aliases,
+                *position.tag_keywords,
+                *(scenario.name for scenario in position.scenarios),
+                *_forms(position),
+            )
+        )
         for word in re.findall(r"[a-z]+", text.casefold()):
             if word in SCHOOL_WORDS:
                 findings.append(f"{position.id}: {word!r} names a school")
+    return findings
+
+
+def unreachable_form_findings(taxonomy: Taxonomy) -> list[str]:
+    """Every scenario form no heading normalizes to, so `v1-e32-t14`'s words can never be it."""
+    findings: list[str] = []
+    for position in taxonomy.positions:
+        for form in _forms(position):
+            normalized = normalize_heading(form)
+            if (normalized.text, normalized.answer) != (form, False):
+                findings.append(f"{position.id}: the form {form!r} normalizes to {normalized.text!r}")
     return findings
 
 
@@ -197,6 +236,11 @@ def test_every_alias_is_a_heading_the_normalizer_can_produce(path: Path) -> None
 
 
 @pytest.mark.parametrize("path", TAXONOMY_FILES, ids=lambda path: path.stem)
+def test_every_scenario_form_is_heading_words_the_normalizer_can_produce(path: Path) -> None:
+    assert unreachable_form_findings(load_taxonomy_file(path)) == []
+
+
+@pytest.mark.parametrize("path", TAXONOMY_FILES, ids=lambda path: path.stem)
 def test_no_taxonomy_names_a_team_a_school_or_a_person(path: Path) -> None:
     assert personal_data_findings(load_taxonomy_file(path)) == []
 
@@ -275,6 +319,35 @@ def one_position(**fields: Any) -> Taxonomy:
         ("a name in a label", {"label": "Spending DA Avery Quinlan"}, "name"),
         ("a school in an alias", {"aliases": ["sample high spending da"]}, "school"),
         ("a school in a description", {"description": "Read by the academy down the road."}, "school"),
+        (
+            "camel initials in a scenario name",
+            {"scenarios": [{"name": "Dome (RiOs)", "forms": ["dome"]}]},
+            "team code",
+        ),
+        (
+            "two capitals in a scenario name",
+            {"scenarios": [{"name": "QX dome", "forms": ["dome"]}]},
+            "team code",
+        ),
+        (
+            "a team code in a lowercase name",
+            {"scenarios": [{"name": "qx dome", "forms": ["dome"]}]},
+            "team code",
+        ),
+        (
+            "a name in a scenario name",
+            {"scenarios": [{"name": "Dome Avery Quinlan", "forms": ["dome"]}]},
+            "name",
+        ),
+        (
+            "a school in a scenario name",
+            {"scenarios": [{"name": "the academy crash", "forms": ["crash"]}]},
+            "school",
+        ),
+        ("a team code in a form", {"scenarios": [{"name": "dome", "forms": ["dome qx"]}]}, "team code"),
+        ("a school in a form", {"scenarios": [{"name": "dome", "forms": ["sample high dome"]}]}, "school"),
+        ("a team code in a dropped form", {"not_scenarios": ["qx too early"]}, "team code"),
+        ("a school in a dropped form", {"not_scenarios": ["prep too early"]}, "school"),
     ],
     ids=lambda value: value if isinstance(value, str) and " " in value else "",
 )
@@ -290,6 +363,33 @@ def test_the_personal_data_check_passes_debate_vocabulary() -> None:
         aliases=["t no single payer", "adv cp", "theory at 50 state fiat bad", "irs da"],
     )
     assert personal_data_findings(taxonomy) == []
+
+
+def test_the_personal_data_check_passes_scenario_vocabulary() -> None:
+    taxonomy = one_position(
+        scenarios=[
+            {"name": "Golden dome", "forms": ["dome", "golden dome"]},
+            {"name": "AI arms race", "forms": ["ai arms race"]},
+            {"name": "dem win crushes trumpism", "forms": ["dem win crushes trumpism"]},
+        ],
+        not_scenarios=["too early", "other issues"],
+    )
+    assert personal_data_findings(taxonomy) == []
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [{"scenarios": [{"name": "dome", "forms": ["1nc dome"]}]}, {"not_scenarios": ["a2 dome"]}],
+    ids=["a speech name the normalizer takes off", "an answer marker"],
+)
+def test_the_form_check_refuses_a_form_no_heading_reduces_to(fields: dict[str, Any]) -> None:
+    assert unreachable_form_findings(one_position(**fields)), fields
+
+
+def test_the_form_check_passes_a_form_a_heading_reduces_to() -> None:
+    assert (
+        unreachable_form_findings(one_position(scenarios=[{"name": "dome", "forms": ["golden dome"]}])) == []
+    )
 
 
 @pytest.mark.parametrize(

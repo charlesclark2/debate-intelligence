@@ -362,6 +362,14 @@ def test_a_retirement_a_merge_and_a_new_id_pass_with_the_version_bumped(
         pytest.param(
             None, [{**GENERIC_POSITIONS[0], "aliases": ["condo bad", "condo"]}], id="generic-alias-added"
         ),
+        pytest.param(
+            edited("spending-da", scenarios=[{"name": "Debt spiral", "forms": ["debt spiral"]}]),
+            None,
+            id="scenario-list-added",
+        ),
+        pytest.param(
+            edited("spending-da", not_scenarios=["too early"]), None, id="form-dropped-as-no-scenario"
+        ),
     ],
 )
 def test_any_edit_at_a_released_version_is_refused_and_passes_with_a_bump(

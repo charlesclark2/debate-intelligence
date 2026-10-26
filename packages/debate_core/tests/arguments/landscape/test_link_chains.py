@@ -1,4 +1,5 @@
-"""The chain-role and scenario rules (`v1-e32-t14`), as the PM ruled them on 2026-10-25.
+"""The chain-role and scenario rules (`v1-e32-t14`), as the PM ruled them on 2026-10-25, and the coach's
+scenario lists (`v1-e32-t22`).
 
 Every case is a heading or tag as the normalizer and `tag_words` write them, with the answer the
 ruling gives, written by hand.
@@ -18,9 +19,10 @@ from debate_core.arguments.landscape.link_chains import (
     caselist_words,
     heading_roles,
     is_withheld,
+    scenario_name,
     tag_role,
 )
-from debate_core.domain.landscape import PositionKind
+from debate_core.domain.landscape import Position, PositionKind
 from debate_core.domain.landscape_report import ChainRole
 from debate_core.testing.landscape_report import read_synthetic_caselist
 
@@ -310,3 +312,95 @@ def test_a_short_word_of_a_school_or_tournament_is_not_a_caselist_word() -> None
     assert "oak" not in words and "elm" not in words and "big" not in words
     assert {"fictional", "open"} <= words
     assert disclosure.team_code.casefold() in words
+
+
+# ------------------------------------------------------------------------------------------------
+# The coach's scenario list (`v1-e32-t22`)
+# ------------------------------------------------------------------------------------------------
+
+DROPPED = ("too early", "economic collapse")
+
+
+def _position(**fields: object) -> Position:
+    return Position.model_validate(
+        {"id": "sample-midterms-da", "label": "Midterms DA", "kind": "da", "side": "neg", **fields}
+    )
+
+
+LISTED = _position(
+    scenarios=[
+        {"name": "Golden dome", "forms": ["dome", "golden dome"]},
+        {"name": "iran", "forms": ["iran"]},
+    ],
+    not_scenarios=list(DROPPED),
+)
+
+
+@pytest.mark.parametrize(
+    ("sub_headings", "scenario"),
+    [
+        (_sub("too early"), CardScenario(False, None)),
+        (_sub("too early", "dome impact"), CardScenario(False, "dome")),
+        (_sub("dome", "too early"), CardScenario(True, "dome")),
+        (_sub("economic collapse impact"), CardScenario(False, None)),
+        (_sub("too early internal"), CardScenario(False, None)),
+        (_sub("scenario 1 economic collapse"), CardScenario(True, None)),
+        (_sub("scenario 1 economic collapse", "dome impact"), CardScenario(True, "dome")),
+        (_sub("too early dome"), CardScenario(True, "too early dome")),
+    ],
+    ids=[
+        "a named heading",
+        "a named heading then an impact label beside a form",
+        "an inner named heading under a named one",
+        "beside an impact label",
+        "beside an internal-link label",
+        "a numbered heading stays one, with no name",
+        "a numbered heading then an impact label beside a form",
+        "a form inside longer words is not the form",
+    ],
+)
+def test_a_form_the_coach_ruled_names_no_scenario_is_no_scenario_heading_and_names_nothing(
+    sub_headings: tuple[SubHeading, ...], scenario: CardScenario
+) -> None:
+    assert card_scenario(sub_headings, DA, not_scenarios=DROPPED) == scenario
+
+
+def test_without_forms_ruled_out_a_card_keeps_t14s_scenario() -> None:
+    assert card_scenario(_sub("too early"), DA) == CardScenario(True, "too early")
+    assert card_scenario(_sub("scenario 1 economic collapse"), DA) == CardScenario(True, "economic collapse")
+
+
+@pytest.mark.parametrize(
+    ("words", "name"),
+    [
+        ("dome", "Golden dome"),
+        ("golden dome", "Golden dome"),
+        ("iran", "iran"),
+        ("polycrisis", None),
+        (None, None),
+    ],
+    ids=["one form", "the merged form", "a name as its form", "words the list does not hold", "no words"],
+)
+def test_a_listed_position_shows_the_coachs_name_for_a_form_and_nothing_else(
+    words: str | None, name: str | None
+) -> None:
+    assert scenario_name(LISTED, words) == name
+
+
+def test_a_position_without_a_list_shows_t14s_words() -> None:
+    plain = _position()
+    assert scenario_name(plain, "polycrisis") == "polycrisis"
+    assert scenario_name(plain, None) is None
+
+
+def test_a_position_listing_only_forms_that_name_no_scenario_shows_no_name() -> None:
+    assert scenario_name(_position(not_scenarios=["too early"]), "polycrisis") is None
+
+
+def test_a_coachs_name_holding_a_caselist_word_is_withheld_whatever_its_case_or_punctuation() -> None:
+    words = caselist_words(read_synthetic_caselist(FIXTURE).disclosures)
+    assert is_withheld("Cedarvale crash", words)
+    assert is_withheld("Crash (Cedarvale)", words)
+    assert is_withheld("QQ-style surge", words)
+    assert not is_withheld("Golden dome", words)
+    assert not is_withheld("Rising costs", words)

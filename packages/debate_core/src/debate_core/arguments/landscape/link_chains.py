@@ -62,7 +62,7 @@ from typing import Final, NamedTuple
 
 from debate_core.arguments.landscape.impacts import is_impact_card, is_impact_heading, tag_opening
 from debate_core.domain.caselist import Disclosure
-from debate_core.domain.landscape import PositionKind
+from debate_core.domain.landscape import Position, PositionKind
 from debate_core.domain.landscape_report import CHAIN_ROLES, ChainRole
 
 __all__ = [
@@ -77,6 +77,7 @@ __all__ = [
     "card_scenario",
     "heading_roles",
     "is_withheld",
+    "scenario_name",
     "tag_role",
 ]
 
@@ -210,7 +211,10 @@ def card_roles(
 
 
 def card_scenario(
-    sub_headings: Sequence[SubHeading], kind: PositionKind, no_position: Iterable[str] = ()
+    sub_headings: Sequence[SubHeading],
+    kind: PositionKind,
+    no_position: Iterable[str] = (),
+    not_scenarios: Iterable[str] = (),
 ) -> CardScenario:
     """Whether the card sits under a scenario heading, and its scenario name, from its sub-headings."""
     decided = frozenset(no_position)
@@ -240,6 +244,11 @@ def card_scenario(
             heading = True
             named = sub.text
     return CardScenario(heading=heading, name=numbered or named or beside)
+
+
+def scenario_name(position: Position, words: str | None) -> str | None:
+    """The name `position` shows for `v1-e32-t14`'s scenario words."""
+    return words
 
 
 def caselist_words(disclosures: Iterable[Disclosure]) -> frozenset[str]:

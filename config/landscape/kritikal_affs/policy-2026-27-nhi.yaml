@@ -27,13 +27,10 @@ families:
     phrases: [afropessimism, afro pessimism, afropess, afro pess]
   - id: antiblackness
     label: Antiblackness
-    phrases: [antiblackness, anti blackness]
+    phrases: [antiblackness, anti blackness, wilderson]
   - id: settler-colonialism
     label: Settler colonialism
-    phrases: [settler colonialism, settler colonial, set col, setcol]
-  - id: colonialism
-    label: Colonialism
-    phrases: [colonialism, coloniality, decolonial, decoloniality, decolonization]
+    phrases: [settler colonialism, settler colonial, set col, setcol, colonialism, coloniality, decolonial, decoloniality, decolonization]
   - id: biopolitics
     label: Biopolitics
     phrases: [biopolitics, biopower, necropolitics]
@@ -45,10 +42,10 @@ families:
     phrases: [debility]
   - id: psychoanalysis
     label: Psychoanalysis
-    phrases: [psychoanalysis, lacan, lacanian, death drive]
+    phrases: [psychoanalysis, lacan, lacanian, death drive, zizek]
   - id: queer
     label: Queer theory
-    phrases: [queer, queerness]
+    phrases: [queer, queerness, heteronormativity]
   - id: feminism
     label: Feminism
     phrases: [feminism, feminist, patriarchy]

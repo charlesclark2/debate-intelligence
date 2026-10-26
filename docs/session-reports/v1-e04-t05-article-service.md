@@ -262,9 +262,50 @@ agreement 10; that is not a hand-off.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-25
 
 **Notes:**
+
+The service that turns E04's parts into one honest answer: a snapshot only for a readable page, a
+reason for everything else, and the coach's own text kept distinguishable from the publisher's.
+1. **All six criteria and every node criterion pass.**
+   * Each 2026-10-19 rule was shown failing first, once together and once alone against the final
+     tests, so each one's failing tests are on record.
+   * ac2's twelve failure cases each check the status, the reason, `rules_version`, no snapshot and
+     an empty blob store.
+2. **Mutants: 23, all caught.** The UNSUPPORTED_TYPE case was added when only the guard caught it.
+   The NOT_FOUND and ROBOTS_DISALLOWED snapshot mutants are honestly called equivalent, since no
+   text exists for either status.
+3. **Deviations accepted:**
+   * `fetch_target_url` and `RelCanonicalRule.SITE_ROOT_REFUSED` in `debate_core.retrieval` are t01's
+     design ("a new rule is a new member") and pure URL logic.
+   * The fakes now answer as the real adapters do.
+
+   The PM adds `debate_core.retrieval` and `debate_core.testing` to `constraints.packages` in the
+   next batch.
+4. **Decisions accepted:**
+   * an Article for every outcome;
+   * both URLs kept, with the identity key apart from the URL that answered;
+   * a re-fetch age of 168 hours;
+   * "last readable retrieval" as `updated_at` while ACCESSIBLE;
+   * "unchanged" judged against the newest publisher snapshot under the same normalizer only;
+   * the site root as path `/` with no query;
+   * the fetch target as given;
+   * the extractor's name in `extractor_version`;
+   * user text attested exactly `True`, a reported status never overwriting a measured one, and the
+     same quality bar;
+   * one log event per outcome, without the fetched URL;
+   * identifiers from URLs only.
+5. **Follow-ups:**
+   * `v1-e04-t06` gains the wiring notes and a setting for the HTML extractor's `max_bytes`, by the
+     PM's amendment.
+   * The short-link freshness gap and dedupe by DOI become one E04 task (an Article lookup by
+     identifier and by fetched URL, a port change).
+6. **The affected set** (361 files, through the root conftest's import of settings) is left to the
+   PR's `ci` under agreement 10. Retrieval, the whole application suite (3,824 tests), the
+   always-run list and the static checks passed.
+
+No re-review is needed. The Goal is `Succeeded`, so the PR merges in full.

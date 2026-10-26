@@ -261,8 +261,21 @@ def _deposit_candidates(work: DoiWork | None) -> CitationCandidates:
 
 
 def keep_student_edits(stored: Citation, derived: Citation) -> tuple[Citation, tuple[str, ...]]:
-    """`derived`, keeping each of `stored`'s fields a student changed away from the source (ac5)."""
-    return derived, ()
+    """`derived`, keeping each of `stored`'s fields a student changed away from the source (ac5).
+
+    For each field: when `stored` has no value, or the same value as `derived`, the derived field is
+    taken, verified exactly when the derivation is. A stored value marked verified is the service's
+    own from an earlier resolution (a student's changed field never arrives verified), so the
+    derivation replaces it. Any other stored value is the student's: it is kept as stored, with
+    `verified` false, and its name is returned. Returns the cite and those names, in cite order.
+    """
+    kept: dict[str, CitationField[Any]] = {}
+    for name in CITATION_FIELD_NAMES:
+        mine: CitationField[Any] = getattr(stored, name)
+        theirs: CitationField[Any] = getattr(derived, name)
+        if mine.is_present and not mine.verified and mine.value != theirs.value:
+            kept[name] = mine
+    return derived.evolve(**kept), tuple(kept)
 
 
 # --------------------------------------------------------------------------------------------

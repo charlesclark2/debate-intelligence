@@ -13,8 +13,9 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import replace
 from datetime import UTC, datetime
-from typing import Any, Final
+from typing import Any, Final, cast
 
 import httpx
 import pytest
@@ -74,7 +75,7 @@ def triples(citation: Citation) -> dict[str, tuple[object, str, bool]]:
         if isinstance(value, datetime):
             value = value.astimezone(UTC).isoformat().replace("+00:00", "Z")
         elif isinstance(value, tuple):
-            value = list(value)  # pyright: ignore[reportUnknownArgumentType]
+            value = list(cast(tuple[object, ...], value))
         found[name] = (value, field.source.value, field.verified)
     return found
 
@@ -333,9 +334,8 @@ def test_a_higher_source_wins_wherever_it_is_listed(
     higher: CitationFieldSource, lower: CitationFieldSource
 ) -> None:
     for name in ("title", "publication", "author_credentials"):
-        candidates = CitationCandidates(
-            **{name: (Harvested("lower", lower, "lower"), Harvested("higher", higher, "higher"))}
-        )
+        listed = (Harvested("lower", lower, "lower"), Harvested("higher", higher, "higher"))
+        candidates = replace(CitationCandidates(), **{name: listed})
 
         chosen: CitationField[str] = getattr(resolve(candidates, None), name)
 

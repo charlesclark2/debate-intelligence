@@ -1181,6 +1181,12 @@ class ArticleSettings(SettingsGroup):
         le=1_000_000,
         description="When trafilatura extracts fewer characters than this, the readability fallback runs.",
     )
+    html_max_bytes: int = Field(
+        default=10 * 1024 * 1024,
+        ge=1024,
+        le=512 * 1024 * 1024,
+        description="An HTML document larger than this is refused before it is parsed (v1-e04-t06).",
+    )
     pdf_max_bytes: int = Field(
         default=50 * 1024 * 1024,
         ge=1024,

@@ -46,6 +46,7 @@ regenerates it on `dev` ([`v1-e01-t16`](../plan_specs/v1/e01-repo-foundation/t16
 | [process/task-workflow.md](process/task-workflow.md) | `scripts/task`: start → session → PM review → PR → finish |
 | [process/working-agreements.md](process/working-agreements.md) | Project rules: light CI, operator hand-off for long commands, doc locations, naming |
 | [runbooks/aws-account-baseline.md](runbooks/aws-account-baseline.md) | Building and verifying the AWS account baseline: identity, audit, budgets |
+| [runbooks/bedrock-access.md](runbooks/bedrock-access.md) | Calling the routed Bedrock models: the BedrockInvoker permission set's plan and apply, its SSO profile, the account's one-time model access, the data-use checks and the first real call |
 | [runbooks/caselist-backfiles.md](runbooks/caselist-backfiles.md) | Importing earlier seasons' complete archives as backfiles (`caselist backfile-import`): when imports may run, the dry run and the import, the order, what each refusal means, and the rebuild a removal adds |
 | [runbooks/caselist-backfill.md](runbooks/caselist-backfill.md) | The one-off caselist and camp-file backfill: what `pull` fetches, what is imported by hand, and the day-by-day download plan |
 | [runbooks/caselist-cloud-credentials.md](runbooks/caselist-cloud-credentials.md) | The weekly cloud run's credentials: applying the key, the two secrets, the roles and the writer, writing the Tabroom password, the scheduled login, and logging in by hand |

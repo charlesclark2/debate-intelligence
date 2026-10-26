@@ -1222,6 +1222,9 @@ class ServiceContainer:
             inbox=self.caselist_inbox(),
             # The landscape school views a removal left on this machine (v1-e32-t13).
             local_reports=FsEvidenceVersionStore(storage.data_dir),
+            # A restored working copy holds no raw sources: what the bucket holds at the manifest's
+            # digest is present, for the report stage, retention and `caselist status` alike (v1-e40-t13).
+            bucket_mode=self._in_bucket_mode,
             versions=S3EvidenceVersionStore(
                 bucket=str(storage.s3.bucket),
                 profile=storage.s3.aws_profile,

@@ -879,7 +879,9 @@ def status_summary(report: CaselistStatusReport, settings: Settings) -> dict[str
     `held_row_requests` do the same for its rows at a path a removal holds (`v1-e30-t21`), which an
     older build imported. `held_skipped_rows` and `held_skipped_row_requests` count the skipped
     members' rows at such a path, a symbolic link named as the removed file, which have no digest to
-    name and which every build before `v1-e30-t22` wrote. `held_in_inbox` is one object per caselist
+    name and which every build before `v1-e30-t22` wrote. `held_only_in_bucket`, in bucket mode and
+    only when above zero, counts the raw sources this machine lacks that the bucket holds at the
+    manifest's digest, which count as present (`v1-e40-t13`). `held_in_inbox` is one object per caselist
     compared: the uploads at a held path in the download inbox's archives, by count,
     `sha256_prefixes` and `requests`. `refused_at_import` is the same, for the uploads an import
     refused at a held path that the same removal run again has not yet listed, from the held-digest
@@ -1122,6 +1124,8 @@ def _status_entry(entry: SnapshotStatus) -> dict[str, JsonValue]:
         "held_row_requests": sorted({row.request_id for row in entry.held_rows}),
         "held_skipped_rows": len(entry.held_skipped_rows),
         "held_skipped_row_requests": sorted(set(entry.held_skipped_rows)),
+        # Only in bucket mode, and only when there are some, so local mode's output is unchanged (v1-e40-t13).
+        **({"held_only_in_bucket": len(entry.held_only_in_bucket)} if entry.held_only_in_bucket else {}),
     }
 
 
@@ -1282,9 +1286,25 @@ def _status_table(report: CaselistStatusReport, settings: Settings) -> TableSpec
                 *_suppressed_object_lines(report),
                 *_held_lines(report),
                 *_residue_lines(report),
+                *_held_only_in_bucket_lines(report),
             ]
         ),
     )
+
+
+def _held_only_in_bucket_lines(report: CaselistStatusReport) -> list[str]:
+    """Under the status table, in bucket mode: the raw sources only the bucket holds, by count and
+    snapshot (`v1-e40-t13`). Counted present, so not drift, and not among the local files either."""
+    held = [entry for entry in report.snapshots if entry.held_only_in_bucket]
+    if not held:
+        return []
+    named = ", ".join(
+        f"{len(entry.held_only_in_bucket)} in {entry.caselist} {entry.snapshot}" for entry in held
+    )
+    return [
+        f"Raw sources held only in the bucket: {named}. Bucket mode counts each as present, at the "
+        "manifest's digest."
+    ]
 
 
 def _publish_failure(report: PublishReport, payload: dict[str, JsonValue]) -> CommandFailure:

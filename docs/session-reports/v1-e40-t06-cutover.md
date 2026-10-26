@@ -399,3 +399,49 @@ Added by the PM. Nothing above is changed, and this section is not a review.
     the checkout, and the installed shape was checked by hand from the repository root.
   * The cutover's prerequisite, a green validate-dev on a pre-release containing this task, is met
     by the first pre-release after that batch merges.
+
+## PM record, 2026-10-25 (second)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+The cutover in dev, steps "Before you start" to 6, on the evening of 2026-10-25 (UTC times).
+
+* **Before you start.**
+  * validate-dev was green on `v1.1.0-dev.153` (23:24, with the PM's smoke fix), and twice on
+    `v1.1.0-dev.155` (`76b53e7`).
+  * The `caselist-credentials-dev` worktree was at `11dd2a5` with the cutover merged.
+  * The schedule was `DISABLED`, the late-run alarm's email off and the subscription confirmed.
+  * Nothing was under `reports/sync/`, and `head-object` on the lock answered 404. The runbook's
+    `KeyCount` query printed `None` on an empty prefix, so the PM batch of 2026-10-25 (q) replaces it.
+* **Step 1, by PM ruling: the Mac's last run was 2026-10-22's.**
+  * Its record read `20261022T052044Z completed pending_publish: 0`, with no pending-work file.
+  * So the steps from step 2 on ran that evening, and the cloud's first scheduled run is Wednesday
+    2026-10-28, before the coach travels from 2026-11-01.
+  * The runbook now says the check decides, not the date.
+* **Step 2:** the agent was booted out and unloaded, and its plist kept.
+* **Step 3:**
+  * `TAG=v1.1.0-dev.155`, with `2` from the profile check. A first try printed `STOP` because zsh read
+    `"$TAG:c…"` as a modifier; with `${TAG}` it passed, and the runbook is corrected.
+  * `install_channel.sh` installed `1.1.0.dev155`, with no integration failing.
+  * One `debate-research` was on `PATH`: `v1.1.0-dev.155 bucket ['hsld26', 'hspolicy26', 'hspf26']`,
+    matching the plist.
+  * The plist was rewritten without its `--caselist` arguments, as the runbook says, and nothing
+    was loaded.
+  * The seed's plan read `applied false`, `seeded_already false` and `manifests 50`. The seed then
+    read `applied true`, `manifests 50`, and checked back the bundle and the five state files.
+* **Step 4:**
+  * The dry run gave seven `ok:` lines.
+  * The push gave `sha256:3438e18f792fd11f1f95431323fb1cd5c11a2756fb121b49508c0e0c743d5721`, with
+    task definition revision 5 registered.
+  * `owner.auto.tfvars` changed by its digest line only.
+  * The plan was `2 to add, 4 to change, 2 to destroy`, read in full by the PM: the two task
+    definitions' images, the schedules' targets and the scheduler policies. `PLAN OK`.
+  * The apply was `2 added, 4 changed, 2 destroyed`, the schedule still `DISABLED`, and the
+    `login-task-changed` email arrived.
+* **Step 5:** the lock was `free`, and the run was started by hand as task `580a6a73…` at about 03:59.
+  It recorded itself as run `20261026T035957Z`.
+* **Step 6, ac2: done.** At 04:03:12 the cloud run was `RUNNING` with 26 minutes of lease. A `caselist
+  pull` on the Mac answered `"status": "error"`, `"code": "RUN_LOCK_HELD"`, `cloud run
+  20261026T035957Z (`caselist pull`) holds the bucket's run lock`.
+* **Still to come:** the run's outcome, record and log line; step 7's comparison (ac1); steps 8 and
+  9 before 2026-10-28 06:00 Chicago.

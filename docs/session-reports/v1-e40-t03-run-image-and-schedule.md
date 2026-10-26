@@ -873,3 +873,14 @@ Added by the PM. Nothing above is changed, and this section is not a review.
     script's own message and checked with `ecr describe-images` before any apply. It was pushed
     again with the tag set explicitly.
 * **Still open, so the Goal stays `InProgress`:** ac2's hand run, which is `v1-e40-t06`'s cutover.
+
+## PM record, 2026-10-25 (second)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+* **The run image `v1.1.0-dev.155`**,
+  `sha256:3438e18f792fd11f1f95431323fb1cd5c11a2756fb121b49508c0e0c743d5721`, was applied in the
+  cutover's step 4: `2 added, 4 changed, 2 destroyed`, `PLAN OK`. The run's and the login's task
+  definitions now run it, and the schedule is still `DISABLED`.
+* **ac2's hand run** (the cutover's step 5) started at about 03:59 UTC on 2026-10-26 as run
+  `20261026T035957Z`. Its outcome is recorded with `v1-e40-t06`'s.

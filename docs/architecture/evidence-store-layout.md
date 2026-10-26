@@ -80,7 +80,7 @@ public season-and-division archive rather than a person or a school.
 |---|---|---|---|
 | `raw/` | The bytes exactly as they were downloaded: disclosed caselist files and OpenEv camp files | `caselist publish` (E30 `t05`), scheduled sync (E34) | Kept. Removed only on request |
 | `parsed/` | Extracted cards, paragraphs and offsets derived from a raw file by one parser version | The parse pipeline (E31 `t06`) | Kept; regenerable by re-parsing |
-| `files/` | Built team files — the DOCX and its provenance sidecar (E33) | The file builder (E33) | Kept |
+| `files/` | Published team files: under `files/<topic>/<side>/<position>/<slug>/<recipe hash 12>/`, the DOCX, its provenance sidecar, its PASS quality report, the recipe without any pin's attribution, and `metadata.json` (E33, v1-e33-t05) | `files publish` (E33) | Kept |
 | `manifests/` | One JSONL row per source: sha256, size, content type, caselist, snapshot, provenance | The importers and `caselist publish` (E30 `t03`–`t05`) | Kept. The record of what the store holds |
 | `reports/` | Run logs and derived reports: argument-landscape output, sync run summaries, the student search pilot's index (`reports/tub/search/`) | Landscape analysis (E32), sync runs (E34), `tub index publish` (`v1-e39-t02`), V2 tub index (`reports/tub/`) | Kept; regenerable. Superseded index versions pruned by `v1-e39-t07`. A landscape bundle's school views (`schools.csv`, `schools.md`) are deleted with their sources by `caselist remove` and by the annual purge (`v1-e32-t13`) |
 | `uploads/` | Files a coach or a user put in themselves, after they have passed scanning | V2 debate tub (`v2-e35-t03`), V3 user uploads (`v3-e20-t02`) | Kept |
@@ -99,8 +99,11 @@ version is deleted by a removal request
 raw/caselist/hsld26/sha256/ab/cd/abcd1234…def0          a disclosed file, by digest
 raw/openev/2026/sha256/1f/9e/1f9e5678…c4a1              an OpenEv camp file
 parsed/hsld26/v3/sha256/ab/cd/abcd1234…def0.jsonl       its cards, from parser version v3
-files/hsld26/2026-09-15/aff-warming-core.docx           a built team file
-files/hsld26/2026-09-15/aff-warming-core.provenance.json  what it cites
+files/nhi/aff/politics-da/aff-politics-core/1a2b3c4d5e6f/aff-politics-core.docx
+                                                        a published team file (v1-e33-t05)
+files/nhi/aff/politics-da/aff-politics-core/1a2b3c4d5e6f/aff-politics-core.provenance.json
+                                                        what it cites; also its .quality.json,
+                                                        recipe.yaml and metadata.json, last
 manifests/hsld26/2026-09-15.jsonl                       one snapshot's sources
 manifests/openev/2026-ndi.jsonl                         one camp's files
 manifests/_suppression/suppression-list.jsonl           sha256 values that must never be re-imported

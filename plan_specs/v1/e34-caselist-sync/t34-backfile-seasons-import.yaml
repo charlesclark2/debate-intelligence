@@ -44,7 +44,8 @@ spec:
     (v1-e40-t09), because the operator's machine lacks the space.
   priority: 2
   constraints:
-    packages: [debate_core.application, debate_core.integrations, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, config/profiles, docs/runbooks, docs/data]
+    # PM amendment 2026-10-25, from the PM's review (Deviation 2): the new command's smoke check.
+    packages: [debate_core.application, debate_core.integrations, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, config/profiles, docs/runbooks, docs/data, tests/smoke]
     forbidden:
       - A download above the rate limit, or through anything but the documented API
       - A season before 2021-22

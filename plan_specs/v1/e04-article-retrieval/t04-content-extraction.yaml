@@ -28,7 +28,9 @@ spec:
     (E03-t01), hashing or persistence here.
   priority: 1
   constraints:
-    packages: [debate_core.retrieval, debate_core.integrations]
+    # PM amendment 2026-10-25, from the PM's review (Deviations): the providers port and the shared
+    # fake the extraction models moved out of, the fixtures, the import contracts and the lock.
+    packages: [debate_core.retrieval, debate_core.integrations, debate_core.application, debate_core.testing, tests/fixtures/extraction, tests/architecture, pyproject.toml, uv.lock]
     forbidden:
       - Modifying words during extraction (no spelling fixes, summarization or LLM cleanup)
       - OCR or extraction from DRM-protected or paywalled documents

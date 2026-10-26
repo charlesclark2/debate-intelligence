@@ -1,0 +1,74 @@
+# TASK v1-e04-t08-article-lookup-by-identifier-and-fetched-url - An Article found by its DOI and by a URL a snapshot was fetched from
+# Epic: E04 Article Retrieval & Extraction | Release: v1.3 (URL → verified card) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e04-t08-article-lookup-by-identifier-and-fetched-url
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e04-article-retrieval
+  annotations:
+    debate/title: "An Article found by its DOI and by a URL a snapshot was fetched from"
+spec:
+  # Filed by the PM, 2026-10-25, from v1-e04-t05's follow-ups, accepted by the PM (2026-10-25).
+  description: >-
+    ArticleService finds an Article before a fetch only under the input's canonical form. A
+    short link whose rel=canonical is another path is fetched on every call, and the same work
+    under two URLs with one DOI becomes two Articles (architecture section 9). Add lookups to
+    the Article repository port and its adapters, by identifier (DOI first) and by a snapshot's
+    fetched URL, and use them in `retrieve` before fetching and after rel=canonical, merging
+    nothing a user supplied. A port change, so every adapter and fake gains it.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, debate_core.testing, packages/debate_core/tests]
+    forbidden:
+      - An identifier read from page text
+      - Merging a USER_SUPPLIED snapshot into another Article
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e04-t05-article-service
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A short link whose rel=canonical is another path is not fetched again within the
+        re-fetch age, and two URLs carrying one DOI give one Article, against every adapter
+        and fake; tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e04-t08-article-lookup-by-identifier-and-fetched-url-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e04-article-retrieval
+spec:
+  description: >-
+    Look Articles up by DOI and by fetched URL before fetching.
+  goalRef:
+    name: v1-e04-t08-article-lookup-by-identifier-and-fetched-url
+  graph:
+    nodes:
+      - id: article-lookups
+        kind: Task
+        name: Article lookups
+        description: >-
+          Look Articles up by DOI and by fetched URL before fetching.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Article service tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_article_service.py]
+status:
+  phase: Pending

@@ -236,5 +236,43 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e04-t06-fetch-command
+    - id: t07
+      kind: Task
+      name: 'How extraction and access classification behave on real pages, measured in place'
+      description: >-
+        How extraction and access classification behave on real pages, measured in place.
+      inputs:
+        specRef: plan_specs/v1/e04-article-retrieval/t07-real-page-measurement.yaml
+        goalRef: v1-e04-t07-real-page-measurement
+      dependsOn:
+      - t06
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e04-t07-real-page-measurement reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e04-t07-real-page-measurement
+    - id: t08
+      kind: Task
+      name: 'An Article found by its DOI and by a URL a snapshot was fetched from'
+      description: >-
+        An Article found by its DOI and by a URL a snapshot was fetched from.
+      inputs:
+        specRef: plan_specs/v1/e04-article-retrieval/t08-article-lookup-by-identifier-and-fetched-url.yaml
+        goalRef: v1-e04-t08-article-lookup-by-identifier-and-fetched-url
+      dependsOn:
+      - t05
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e04-t08-article-lookup-by-identifier-and-fetched-url reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e04-t08-article-lookup-by-identifier-and-fetched-url
 status:
   phase: Pending

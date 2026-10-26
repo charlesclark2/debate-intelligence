@@ -43,10 +43,44 @@ advantage's 1 are words their lists do not hold, so they are no longer names tho
 show. Only the Stagnation advantage's 1, which has no list, is still counted. The count goes from DA 2
 / advantage 2 to DA 0 / advantage 1 (question 3).
 
-**What the PM should look at first:**
-* [Question 1](#questions-for-the-pm), which I built one way and recommend: does a listed position
-  also show heading words its list does not hold?
-* The two Deviations: files outside `constraints.packages`.
+**The PM's rulings of 2026-10-26** ([below](#the-pms-rulings-2026-10-26)) are applied:
+* a listed position shows only the coach's names, as built;
+* the dry run now counts, per kind, the words two or more teams use under a listed position that its
+  list does not hold, never printing them;
+* a scenario name may carry capitals after its first word;
+* the two Deviations stand, and the PM adds the packages in the next batch.
+
+The new tests were run red first (6 failed, `981b0de`), and 7 more mutants were all caught.
+
+## The PM's rulings (2026-10-26)
+
+On [the questions](#questions-for-the-pm), as the PM wrote them:
+
+1. **(a), as built.** A listed position shows only the coach's names, and a drop-only list shows
+   nothing. **Add the follow-up count now, in this task:** one counts-only line per kind in
+   `landscape_dry_run_by_section.py`, with the words two or more teams use as a scenario that no listed
+   position's list holds (counted, never printed). Test it red first.
+2. **Packages: yes.** The PM adds `debate_core.domain`, `scripts` and `tests/scripts` with a ruling
+   comment in the next batch. Recorded under Deviations.
+3. **FYIs accepted, with one change:** a scenario name may carry capitals after its first word (proper
+   nouns such as `War with China`), and is still refused when it has a team-code shape or a school
+   word. Update the `tests/config` check, its refusing cases and the guide.
+
+**What changed for them:**
+* **The count** (`981b0de` red, `e7f5103` green). `ChainCoverage` gains `unlisted_words` and
+  `unlisted_words_withheld`. Per listed position, these are t14's words, with its dropped forms
+  skipped, that the list does not hold and two or more teams use, and how many of them hold a caselist
+  word. Positions without a list count nothing.
+  * The dry run prints, per kind, `Scenario words no list holds, <kind>: N that two or more teams use
+    under a position with a list, M of them holding a caselist word.`
+  * report.md and the CSVs are unchanged.
+* **Capitals.** The scenario-name check in `tests/config` drops sentence case and keeps the team-code
+  shapes and school words; labels keep sentence case.
+  * The refusing case "a name in a scenario name" is gone.
+  * New refusing case: "a school in a capitalized scenario name" (`Crash at Sample Academy`, refused
+    for `academy` alone).
+  * New passing names: `War with China`, `Golden Dome arms race`.
+  * The guide says both changes.
 
 ## The coach's edit (step 3)
 
@@ -64,8 +98,8 @@ more length.
 * **Merge** forms that are one scenario under one name, in one entry. For example
   `- {name: Golden dome, forms: [dome, golden dome]}`, deleting the other entry. Their teams are then
   counted together.
-* **Rename** a scenario by changing its `name`, in sentence case as labels are (`Golden dome`, not
-  `Golden Dome`).
+* **Rename** a scenario by changing its `name`, in the words a debater uses. Capitals after the first
+  word are allowed for proper nouns (`War with China`, by the PM's ruling of 2026-10-26).
 * **Mark a non-scenario to drop:** move its form from `scenarios` to that position's `not_scenarios`
   list, for example `not_scenarios: [too early]`. On hspolicy26, t14's counts suggested `too early`,
   `trump steals` and `other issues` under the Midterms DA, and most of the advantages' names (`clog`,
@@ -87,7 +121,7 @@ runs the affected tests, and gives the operator the refill and dry-run blocks dr
 
 | Node | Status | Notes |
 |---|---|---|
-| scenario-vocabulary | Built; ac2 open | In order:<br>1. hand-written fixture and goldens (`1c5b830`);<br>2. tests, red against a skeleton (`2f66fcd`);<br>3. the rule, the domain model and the service (`cb66760`);<br>4. 20 mutants;<br>5. the seed at 1.4.0, the dry run's scenario lines and the guide (`0dffac7`).<br>Next: the coach's edit, then the operator's refill and dry run |
+| scenario-vocabulary | Built; ac2 open | In order:<br>1. hand-written fixture and goldens (`1c5b830`);<br>2. tests, red against a skeleton (`2f66fcd`);<br>3. the rule, the domain model and the service (`cb66760`);<br>4. 20 mutants;<br>5. the seed at 1.4.0, the dry run's scenario lines and the guide (`0dffac7`);<br>6. the PM's rulings: the unlisted-words count and capitals in names, red (`981b0de`), then green (`e7f5103`), then 7 mutants.<br>Next: the coach's edit, then the operator's refill and dry run |
 
 ## Acceptance criteria
 
@@ -166,9 +200,49 @@ rule and 8 service failures. The counts are 12 and 9.)
 | Config check: scenario names not checked like labels | 2 | `test_the_personal_data_check_refuses[camel initials …]`, `[a name in a scenario name]` |
 | Config check: every form counts as reachable | 2 | `test_the_form_check_refuses_a_form_no_heading_reduces_to` |
 
+### After the PM's rulings
+
+**Red against a skeleton** (`981b0de`). The skeleton has `ChainCoverage`'s two fields, filled with 0,
+the dry run with no line for them, and the config check unchanged. The run covered `tests/config`, the
+vocabulary suite and the dry-run script's test: **6 failed, 91 passed**.
+
+| Failing | Why |
+|---|---|
+| `test_words_two_teams_use_that_a_list_does_not_hold_are_counted_per_kind`, `test_a_drop_only_list_counts_the_words_it_does_not_hold` | the count was 0 (expected advantage 1, DA 1 with 1 holding a caselist word; and DA 1) |
+| the dry run's two tests | no `Scenario words no list holds` line |
+| `test_the_personal_data_check_passes_scenario_vocabulary` | `War with China` refused for sentence case |
+| `test_the_personal_data_check_refuses[a school in a capitalized scenario name]` | refused for sentence case as well as for its school word |
+
+`test_listed_and_dropped_words_are_not_unlisted` and `test_a_position_without_a_list_has_no_unlisted_words`
+passed on the skeleton. They are must-not-count cases, and the mutants below show they bite. One red was
+first for the wrong reason: a passing case reused a name already in its list, in another case, and the
+domain refused it on load. I renamed that case and ran it again before the commit.
+
+**7 mutants, all caught**, with the same runner (fresh process, fresh `HYPOTHESIS_STORAGE_DIRECTORY`,
+bytes restored and checked, `git status` clean). The dry-run script's test was added to its files: 493
+tests.
+
+| Mutant | Failed | Caught by |
+|---|---|---|
+| Unlisted: one team's words count | 2 | `test_words_two_teams_use_…`, the dry run's count test |
+| Unlisted: a position without a list counts its words | 4 | `test_a_position_without_a_list_has_no_unlisted_words`, `test_listed_and_dropped_…`, the drop-only case, the dry run's zeros |
+| Unlisted: the count reads words with the drops kept | 2 | `test_listed_and_dropped_words_are_not_unlisted`, the drop-only case |
+| Unlisted: the caselist-word share is not counted | 2 | `test_words_two_teams_use_…`, the dry run's count test |
+| Dry run: the line prints the total as the caselist-word share | 1 | the dry run's count test |
+| Config: scenario names held to sentence case again | 2 | the passing-vocabulary test, the capitalized school case |
+| Config: labels freed from sentence case | 1 | `test_the_personal_data_check_refuses[a name in a label]` |
+
 ## Before the report (working agreement 10)
 
-These ran on `0dffac7`, the last code commit; this report changes no code.
+The first round ran on `0dffac7`. After the rulings, on `e7f5103`:
+* `uv run scripts/affected_tests.py` chose the same 253 of 515 files from 22 changed files, still over
+  two minutes, so the pull request's `ci` runs them.
+* The changed directories and the always-run list (the same 21 paths as below): **4,284 passed in
+  76.38s**, load average 11.8, nothing failed.
+* ruff format and check, lint-imports (18 kept) and the handler check are clean. Pyright on
+  `packages/debate_core` and the script: 0 errors.
+
+The first round:
 
 * **The affected set is over two minutes.** `uv run scripts/affected_tests.py` chose 253 of 515 files
   (49.1%) from 21 changed files, in 9.0 s.
@@ -212,12 +286,15 @@ These ran on `0dffac7`, the last code commit; this report changes no code.
   * `is_withheld` reads a name's words as the caselist's are read: letters and digits, without case;
   * the docstring's section.
 * **`debate_core.application.landscape_report`:** `_LinkChains._scenario` reads every card's scenario
-  through both, for the names, the rows and the documents count; the docstring line.
+  through both, for the names, the rows and the documents count; `_words` reads t14's words with the
+  drops skipped, and `_names` counts the words a list does not hold; the docstring line.
+* **`debate_core.domain.landscape_report`:** `ChainCoverage.unlisted_words` and
+  `.unlisted_words_withheld` (the PM's ruling 1).
 * **`debate_core.arguments.landscape.render`:** the How-to-read bullet.
 * **`config/landscape/`:** the taxonomy at 1.4.0 with the seed and its version note; `topics.yaml` at
   1.4.0.
-* **`scripts/landscape_dry_run_by_section.py`:** one counts-only line per kind for the scenario
-  section. See Deviation 2.
+* **`scripts/landscape_dry_run_by_section.py`:** two counts-only lines per kind: the scenario section,
+  and the words no list holds. See Deviation 2.
 * **Tests:**
   * `arguments/landscape/test_scenario_vocabulary.py` (new): the goldens and nine one-list cases;
   * `test_link_chains.py`: dropped forms, `scenario_name`, withholding a coach's name;
@@ -240,19 +317,20 @@ These ran on `0dffac7`, the last code commit; this report changes no code.
      there.
    * I added the fields and their invariants there, and nothing else. The rule stays in
      `debate_core.arguments`.
-   * [Question 2](#questions-for-the-pm) asks the PM to add the package to the spec. I have not edited
-     the spec's constraints.
+   * **Ruled 2026-10-26: yes.** The PM adds `debate_core.domain` to the spec's packages, with a ruling
+     comment, in the next batch. I have not edited the spec's constraints.
 2. **`scripts/landscape_dry_run_by_section.py` and its test (`tests/scripts`) are outside
    `constraints.packages`.**
    * The PM's context asks for "the dry run printing the scenario section". Today's script prints the
      scan's hits by section, but no scenario count.
    * I added one line per kind: impact rows, rows with a scenario, names withheld, and documents with no
      scenario heading and no role label. Counts only, from the report's existing chain coverage.
-   * Same question.
+   * The PM's ruling 1 added the unlisted-words line to the same script.
+   * **Ruled 2026-10-26: yes.** The PM adds `scripts` and `tests/scripts` in the same batch.
 
 ## Decisions and assumptions
 
-1. **A list governs its position** (built; [question 1](#questions-for-the-pm)).
+1. **A list governs its position** (built; ruled (a) on 2026-10-26).
    * The spec says "a name in the list replaces t14's words for that position; positions without a
      list keep t14's rule". I read that as: for a position with a list, the names shown are the list's,
      and words it does not hold show nothing.
@@ -272,10 +350,14 @@ These ran on `0dffac7`, the last code commit; this report changes no code.
    * a numbered heading (`Scenario 1: …`) stays a scenario heading, because the team marked it one,
      and names nothing.
 5. **Forms are matched whole**, as t14's words are produced. `too early dome` is not `too early`.
-6. **Scenario names get the label check** in `tests/config`: no team-code shapes and no school words,
-   like aliases; sentence case, like labels. So `War with China` is refused and `war with china` passes.
-   This is the PM's label ruling of 2026-10-24 applied as written; question 3 asks whether names should
-   be freer.
+6. **Scenario names get the label check** in `tests/config`, without sentence case: no team-code shapes
+   and no school words, like aliases and labels. `War with China` passes. This was sentence case as
+   first built; the PM's ruling of 2026-10-26 changed it.
+10. **The unlisted-words count, per position.** The ruling says "no listed position's list holds". I
+    count a listed position's words against its own list, summed per kind. A word under the Midterms DA
+    is counted when the Midterms list lacks it, even if another DA's list holds it. Dropped forms are
+    held by the list. Words holding a caselist word are counted, and also given apart, because the
+    coach can never list them.
 7. **The seed is t14's table, copied, not re-measured.** The PM asked for "t14's table": hspolicy26
    through 2026-10-20, as t14's session report records it. The 4 names t14 withheld are not in the
    seed. Stagnation advantage's only name was withheld, so it has no list.
@@ -348,6 +430,12 @@ if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset i
        [summary](#summary)).
      * The coach's merges and drops move the rows with a scenario. Drops can also move the documents
        with no scenario heading: t14 had 676 of 1,164 for advantages and 251 of 662 for DAs;
+   * a `Scenario words no list holds, advantage: …` line and one for `da`.
+     * On the unedited seed they count exactly the words t14 withheld under a listed position: DA 2
+       (Midterms) and advantage 1 (Disease), each holding a caselist word.
+     * A merge or rename moves nothing. A dropped form is held by the list, so dropping does not add
+       one, though a heading further in may then name a card and surface other words.
+     * Later, new words teams use raise them;
    * the scan lines, with **no hit** in report.md's `Advantages: impact cards` or `Disadvantages: impact
      cards` sections: those hold the scenario names.
 
@@ -358,10 +446,6 @@ if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset i
 
 ## Follow-up work
 
-* **Names the list does not hold** (if the PM keeps decision 1). A heading that teams start using
-  after the seed shows nothing until the coach adds it. A count of the words two or more teams use that
-  no listed position's list holds, in the dry run, would tell the coach when to look again. That is the
-  PM's to file. It is not built.
 * **v1-e32-t25** names each impact rank by the coach's scenario name first. It reads
   `ImpactCard.scenario`, which now holds the coach's name where a list exists.
 * **The deploy-script test that failed once under load:**
@@ -371,6 +455,8 @@ if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset i
   It belongs to the caselist deploy script's owner. I did not investigate it further.
 
 ## Questions for the PM
+
+Answered on 2026-10-26 ([the rulings](#the-pms-rulings-2026-10-26)). Kept as sent:
 
 ```text
 v1-e32-t22 questions (session, 2026-10-26): built and checked, stopped for the coach

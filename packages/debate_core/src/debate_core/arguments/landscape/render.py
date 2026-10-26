@@ -477,8 +477,10 @@ def _header_section(report: LandscapeReport, trends: LandscapeTrends | None = No
         "many of its documents carry no labelled impact. They are also in `impact_cards.csv`.",
         "* **What each impact runs through**, under its impact cards: a row's **scenario** is heading words "
         "two or more teams use under the position (a `Scenario 1` heading's name, a named heading, or the "
-        "words beside an impact or internal-link label, such as `Dome impact`), and its **internal link** is "
-        "the nearest card above it under the same position heading that a heading or its tag labels an "
+        "words beside an impact or internal-link label, such as `Dome impact`). Where the coach has listed a "
+        "position's scenarios, a row shows only the coach's names, each with the teams of every heading "
+        "listed under it. Its **internal link** is the nearest card above it under the same position heading "
+        "that a heading or its tag labels an "
         "internal link. Neither is guessed. With no labelled internal link, the card directly above the "
         "impact card in its block is shown as the card above it in the file when it is not an impact card "
         "itself: where it sits, not what it does. A scenario name holding a word of a caselist school, team "

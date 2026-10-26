@@ -27,6 +27,15 @@ checks the form and `tests/config/test_landscape_taxonomies.py` checks that ever
 is one the normalizer can produce. Two positions of one topic never claim the same alias, retired
 ones included, because a heading must lead to one position.
 
+## A DA's or advantage's scenarios
+
+A DA or an advantage may carry the coach's scenario list (`v1-e32-t22`): :class:`Scenario` entries,
+each a name and the heading words it is filed under (`forms`, written as an alias is), and
+`not_scenarios`, forms the coach ruled name no scenario. A form is listed once per position, and a
+name once, whatever its case. A position with either list shows the coach's names and no other words;
+one with neither keeps `v1-e32-t14`'s rule. The rule itself is
+:mod:`debate_core.arguments.landscape.link_chains`'s.
+
 ## The topic map
 
 `config/landscape/topics.yaml` is a :class:`TopicMap`: each topic with its event, the resolution's
@@ -142,12 +151,17 @@ class PositionSide(StrEnum):
     BOTH = "both"
 
 
+_SCENARIO_KINDS: Final = frozenset({PositionKind.DA, PositionKind.ADVANTAGE})
+"""The kinds whose impacts a report says the scenario of (`v1-e32-t14`), so the kinds that list one."""
+
+
 class Scenario(DomainModel):
     """One scenario of a DA or advantage, as the coach names it (`v1-e32-t22`)."""
 
     name: NonEmptyText = Field(description="What the report calls it: the words a debater uses.")
     forms: tuple[Alias, ...] = Field(
-        description="The heading words it is filed under, each as `v1-e32-t14` reads a scenario's words."
+        min_length=1,
+        description="The heading words it is filed under, each as `v1-e32-t14` reads a scenario's words.",
     )
 
 
@@ -186,7 +200,7 @@ class Position(DomainModel):
     @property
     def has_scenario_list(self) -> bool:
         """The coach has listed this position's scenarios, so its names are the list's."""
-        return False
+        return bool(self.scenarios or self.not_scenarios)
 
     @model_validator(mode="after")
     def _check_own_fields(self) -> Self:
@@ -198,7 +212,27 @@ class Position(DomainModel):
         twice = sorted(alias for alias, count in Counter(self.aliases).items() if count > 1)
         if twice:
             raise ValueError(f"{self.id} lists the alias {twice[0]!r} twice")
+        self._check_scenario_list()
         return self
+
+    def _check_scenario_list(self) -> None:
+        if not self.has_scenario_list:
+            return
+        if self.kind not in _SCENARIO_KINDS:
+            raise ValueError(f"{self.id} is a {self.kind.value}; only DAs and advantages list scenarios")
+        forms = [*(form for one in self.scenarios for form in one.forms), *self.not_scenarios]
+        twice = sorted(form for form, count in Counter(forms).items() if count > 1)
+        if twice:
+            raise ValueError(
+                f"{self.id} lists the scenario form {twice[0]!r} twice; a form names one scenario"
+            )
+        names = sorted(
+            name
+            for name, count in Counter(one.name.casefold() for one in self.scenarios).items()
+            if count > 1
+        )
+        if names:
+            raise ValueError(f"{self.id} names two scenarios {names[0]!r}; merge their forms under one")
 
 
 class Taxonomy(DomainModel):

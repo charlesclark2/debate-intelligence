@@ -1,4 +1,4 @@
-"""`debate-research landscape report`: one caselist's argument landscape, written here and published.
+"""`debate-research landscape report` and `landscape evaluate`: the landscape, and its model stage measured.
 
 ::
 
@@ -74,12 +74,28 @@ nothing), a live run the data-use policy does not yet allow, or a report that ca
   the data-use policy records its open question 4 as answered (the E32 gate). A run that holds cards
   back over the limit exits `1` after caching what it asked, so the next run asks about the rest.
   `--json`'s `classification.model` counts what was asked, held back, refused and spent in tokens.
+
+## `landscape evaluate`
+
+::
+
+    debate-research landscape evaluate --caselist hspolicy26 --sample <coach CSV> --sample-rows <rows file>
+
+Measures the model stage against cards a coach labelled (`v1-e32-t07` ac4): `v1-e32-t21`'s coach
+sample, the filled CSV and the rows file written beside it. Every labelled card the store holds is asked
+about, and the command prints, for the caselist's format, how many of the cards a report would count
+name the coach's position (the bar is 85%), and what the scan of the prompt inputs and of the prompt's
+cassettes on this machine found: counts, never a name. `--model-mode replay` (the default) answers from
+those cassettes; `record`, once, after the data-use policy records its open question 4 as answered,
+makes the calls and writes them. It caches, writes and publishes no report. Exit `0` when the format
+meets the bar and both scans are clean, `1` otherwise.
 """
 
 from __future__ import annotations
 
 import asyncio
 from datetime import date
+from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Final, NoReturn
 
@@ -92,6 +108,7 @@ from debate_cli.context import CliContext, cli_context, command_name
 from debate_cli.exit_codes import ExitCode
 from debate_cli.output import CliOutput, CommandFailure, JsonValue, OutputMode
 from debate_core.application.errors import error_code_of
+from debate_core.application.landscape_model_evaluation import TARGET_ACCURACY, FormatEvaluation
 from debate_core.application.landscape_model_stage import (
     DEFAULT_MAX_MODEL_ITEMS,
     POLICY_QUESTION,
@@ -107,9 +124,20 @@ from debate_core.application.landscape_run import (
 )
 from debate_core.application.landscape_staleness import FailedSyncRun
 from debate_core.application.settings import Environment, Settings, find_repository_root
+from debate_core.arguments.landscape.model_stage import NameScan
 from debate_core.domain.landscape_trends import LandscapeTrends, TrendLabel
 
-__all__ = ["CIRCUIT_WIDE", "REPORT_HELP", "SCAN_NOTICE", "SCHOOL_VIEW", "report", "run_summary"]
+__all__ = [
+    "CIRCUIT_WIDE",
+    "REPORT_HELP",
+    "SCAN_NOTICE",
+    "SCHOOL_VIEW",
+    "EvaluationMode",
+    "evaluate",
+    "evaluation_summary",
+    "report",
+    "run_summary",
+]
 
 LANDSCAPE_CONFIG: Final = Path("config") / "landscape"
 POLICY_FILE: Final = Path("docs") / "policies" / "caselist-data-use.md"
@@ -235,6 +263,133 @@ def report(
 
 
 report.__doc__ = REPORT_HELP
+
+
+class EvaluationMode(StrEnum):
+    """`--model-mode` for an evaluation: replay the cassettes, or record them once."""
+
+    REPLAY = "replay"
+    RECORD = "record"
+
+
+def evaluate(
+    ctx: typer.Context,
+    caselist: Annotated[str, typer.Option("--caselist", help="Caselist slug, e.g. hspolicy26.")],
+    sample: Annotated[
+        Path, typer.Option("--sample", exists=True, dir_okay=False, help="The coach's filled sample CSV.")
+    ],
+    sample_rows: Annotated[
+        Path,
+        typer.Option("--sample-rows", exists=True, dir_okay=False, help="The rows file written beside it."),
+    ],
+    model_mode: Annotated[
+        EvaluationMode,
+        typer.Option("--model-mode", help="replay: from this machine's cassettes. record: call and record."),
+    ] = EvaluationMode.REPLAY,
+    snapshot: Annotated[
+        str | None, typer.Option("--snapshot", help="The weekly snapshot, YYYY-MM-DD. Default: the newest.")
+    ] = None,
+    config_dir: Annotated[
+        Path | None,
+        typer.Option("--config-dir", file_okay=False, help="The directory holding topics.yaml."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Write one machine-readable JSON object to stdout.")
+    ] = False,
+) -> None:
+    """Measure the landscape's model stage against cards a coach labelled."""
+    cli = cli_context(ctx)
+    if json_output and not cli.output.is_json:
+        cli.output = CliOutput(OutputMode.JSON, verbose=cli.output.verbose)
+    refusal = _policy_refusal() if model_mode is EvaluationMode.RECORD else None
+    if refusal is not None:
+        _end(cli, ctx, refusal)
+    service = cli.services.landscape_evaluation(
+        config_dir=_config_dir(config_dir), record=model_mode is EvaluationMode.RECORD
+    )
+    with sample.open(encoding="utf-8", newline="") as labels, sample_rows.open(encoding="utf-8") as rows:
+        result = asyncio.run(
+            service.evaluate(caselist, labels, rows, snapshot=_snapshot_date(snapshot) if snapshot else None)
+        )
+    payload = evaluation_summary(result)
+    passed = result.meets_target and result.sent.clean and result.cassettes.clean
+    if passed or not cli.output.is_json:
+        cli.output.success(command_name(ctx), payload, display=_evaluation_display(result))
+    if not passed:
+        _end(cli, ctx, _evaluation_failure(result, payload))
+
+
+def evaluation_summary(result: FormatEvaluation) -> dict[str, JsonValue]:
+    """`landscape evaluate`'s `data`: counts, the accuracy against the bar, and the two scans' counts."""
+    return {
+        "caselist": result.caselist,
+        "event": result.event,
+        "topic_id": result.topic_id,
+        "taxonomy_version": result.taxonomy_version,
+        "prompt_version": result.prompt_version,
+        "snapshot": _iso(result.snapshot),
+        "labelled": result.labelled,
+        "found": result.found,
+        "asked": result.asked,
+        "calls": result.calls,
+        "counted": result.counted,
+        "correct": result.correct,
+        "accuracy": result.accuracy,
+        "target": TARGET_ACCURACY,
+        "meets_target": result.meets_target,
+        "placed_below_threshold": result.placed_below_threshold,
+        "placed_labelled_none": result.placed_labelled_none,
+        "refused": dict(result.refused),
+        "input_tokens": result.input_tokens,
+        "output_tokens": result.output_tokens,
+        "interrupted": result.interrupted,
+        "scan": {
+            name: {
+                "texts": scan.texts,
+                "schools": scan.schools,
+                "team_codes": scan.team_codes,
+                "other_names": scan.other_names,
+                "clean": scan.clean,
+            }
+            for name, scan in (("prompt_inputs", result.sent), ("cassettes", result.cassettes))
+        },
+    }
+
+
+def _evaluation_display(result: FormatEvaluation) -> str:
+    accuracy = "n/a" if result.accuracy is None else f"{result.accuracy:.1%}"
+    return "\n".join(
+        [
+            f"{result.caselist} ({result.event}) on {result.topic_id} {result.taxonomy_version}, "
+            f"landscape.classify_position {result.prompt_version}.",
+            f"Labelled {result.labelled}, found {result.found}; asked about {result.asked} in "
+            f"{result.calls} call(s).",
+            f"Counted {result.counted}, correct {result.correct}: {accuracy} (bar {TARGET_ACCURACY:.0%}); "
+            f"{result.placed_below_threshold} placed below the threshold, {result.placed_labelled_none} "
+            "labelled none.",
+            f"Scan of the prompt inputs: {_scan_line(result.sent)}. Of the cassettes: "
+            f"{_scan_line(result.cassettes)}.",
+        ]
+    )
+
+
+def _scan_line(scan: NameScan) -> str:
+    return (
+        f"{scan.texts} text(s), {scan.schools} naming a school, {scan.team_codes} a team code, "
+        f"{scan.other_names} a tournament"
+    )
+
+
+def _evaluation_failure(result: FormatEvaluation, payload: dict[str, JsonValue]) -> CommandFailure:
+    if not (result.sent.clean and result.cassettes.clean):
+        message = "the scan found a school, team code or tournament in the prompt inputs or the cassettes"
+    else:
+        message = (
+            f"the model stage's accuracy is under the bar of {TARGET_ACCURACY:.0%}, or nothing was counted"
+        )
+    return CommandFailure(
+        code="EVALUATION_BELOW_BAR", message=message, exit_code=ExitCode.DOMAIN_FAILURE, details=payload
+    )
 
 
 def _end(cli: CliContext, ctx: typer.Context, failure: CommandFailure) -> NoReturn:

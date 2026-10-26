@@ -192,7 +192,12 @@ from debate_core.application.file_build_service import FileBuildService
 from debate_core.application.file_publish_service import FilePublishService
 from debate_core.application.file_quality_service import FileQualityService
 from debate_core.application.file_suggest_service import FileSuggestService
-from debate_core.application.landscape_model_stage import ModelClassificationStage, ParsedStoreCardTexts
+from debate_core.application.landscape_model_evaluation import LandscapeModelEvaluationService
+from debate_core.application.landscape_model_stage import (
+    CLASSIFY_POSITION_PROMPT_ID,
+    ModelClassificationStage,
+    ParsedStoreCardTexts,
+)
 from debate_core.application.landscape_run import LandscapeModelMode, LandscapeRunService
 from debate_core.application.landscape_scan import ScanAcceptanceLog
 from debate_core.application.plan_texts import PlanTextService
@@ -345,6 +350,13 @@ def validating_routing(settings_loader: Callable[[], Settings]) -> Callable[[], 
         return settings
 
     return load
+
+
+def _texts_under(directory: Path) -> list[str]:
+    """Every JSON file's text under `directory`, in name order: the cassettes a scan reads."""
+    if not directory.is_dir():
+        return []
+    return [path.read_text(encoding="utf-8") for path in sorted(directory.glob("*.json"))]
 
 
 class SettingsNotConfigured(RuntimeError):
@@ -619,6 +631,25 @@ class ServiceContainer:
             ),
             stale_after_days=settings.caselist.stale_after_days,
             backfile_caselists=settings.caselist.backfile_caselists,
+        )
+
+    def landscape_evaluation(self, *, config_dir: Path, record: bool) -> LandscapeModelEvaluationService:
+        """The model stage measured against a coach's labels (`v1-e32-t07` ac4), over this machine's stores.
+
+        It replays, or with `record` records, the same cassettes a landscape run replays, under the data
+        directory, and scans every cassette of the prompt there after it has run.
+        """
+        mode = ModelMode.RECORD if record else ModelMode.REPLAY
+        data_dir = self.settings.storage.data_dir
+        cassettes = data_dir / LANDSCAPE_DIRECTORY / MODEL_CASSETTES_DIRECTORY
+        return LandscapeModelEvaluationService(
+            taxonomies=YamlTaxonomyRepository.load(config_dir),
+            parsed_store=LocalParsedStore(data_dir),
+            local=self._local_evidence(),
+            suppression=self.local_suppression_list(),
+            objects=FsEvidenceObjectStore(data_dir),
+            stage=lambda max_items: self.landscape_model_stage(mode, max_items, cassette_dir=cassettes),
+            cassette_texts=lambda: _texts_under(cassettes / CLASSIFY_POSITION_PROMPT_ID),
         )
 
     def landscape_model_stage(

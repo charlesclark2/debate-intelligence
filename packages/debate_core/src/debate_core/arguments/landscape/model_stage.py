@@ -51,7 +51,7 @@ its `repr`.
 from __future__ import annotations
 
 import json
-from collections.abc import Collection, Iterable, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Final
@@ -79,6 +79,7 @@ __all__ = [
     "BatchProblem",
     "ModelCandidate",
     "ModelItem",
+    "NameScan",
     "Refusal",
     "answer_problems",
     "batches",
@@ -87,6 +88,7 @@ __all__ = [
     "item_label",
     "judge",
     "model_order",
+    "name_scan",
     "places_nothing",
     "prompt_variables",
     "refusal",
@@ -367,3 +369,41 @@ def refusal_reason(result: ClassificationResult) -> Refusal | None:
     if not places_nothing(result):
         return None
     return next((reason for reason, text in _REFUSED_RATIONALE.items() if text == result.rationale), None)
+
+
+@dataclass(frozen=True, slots=True)
+class NameScan:
+    """How many texts named a school, a team code or another name of the caselist: counts, never the names."""
+
+    texts: int
+    schools: int = 0
+    team_codes: int = 0
+    other_names: int = 0
+
+    @property
+    def clean(self) -> bool:
+        return not (self.schools or self.team_codes or self.other_names)
+
+
+def name_scan(
+    texts: Iterable[str], caselist_names: Mapping[str, Sequence[str]], other_names: Iterable[str] = ()
+) -> NameScan:
+    """Count the `texts` holding, as whole lowercase words, a school of the caselist, a word of a team
+    code, or one of `other_names` (the disclosing teams' tournaments). A text is read as
+    :func:`~debate_core.arguments.landscape.matcher.tag_words` reads a tag, so JSON and punctuation do
+    not hide a name.
+
+    A debater's name cannot be scanned for: no list of them exists (the caselist's paths name schools
+    and codes). The scan says so by having no count for it.
+    """
+    schools = [words for words in map(tag_words, caselist_names) if words]
+    codes = {word for codes in caselist_names.values() for code in codes for word in tag_words(code).split()}
+    others = [words for words in map(tag_words, other_names) if words]
+    counted = school_hits = code_hits = other_hits = 0
+    for text in texts:
+        counted += 1
+        padded = f" {tag_words(text)} "
+        school_hits += any(f" {school} " in padded for school in schools)
+        code_hits += any(f" {code} " in padded for code in codes)
+        other_hits += any(f" {name} " in padded for name in others)
+    return NameScan(texts=counted, schools=school_hits, team_codes=code_hits, other_names=other_hits)

@@ -37,7 +37,7 @@ from __future__ import annotations
 
 import dataclasses
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Final
 
@@ -83,6 +83,7 @@ __all__ = [
     "ClassificationCounts",
     "ClassificationRun",
     "PositionClassificationService",
+    "model_candidate",
 ]
 
 UNPLACED: Final = "UNPLACED"
@@ -330,16 +331,7 @@ class PositionClassificationService:
                 continue
             if key in cached:
                 refused.add(key)
-            own = tuple(name for team in one.source.teams for name in team.names if name.strip())
-            candidates[key] = ModelCandidate(
-                fingerprint=one.item.fingerprint,
-                source_sha256=one.source.sha256,
-                first_element_index=one.card.first_element_index or 0,
-                headings=sent_headings(one.item.headings, codes),
-                tag=card_tag(one.card.tag, own, names, codes),
-                short_cite=scrubbed_cite(one.card.short_cite, own, names, codes),
-                own_names=own,
-            )
+            candidates[key] = model_candidate(one.source, one.item, one.card, names, codes)
         outcome = await stage.run(
             [dataclasses.replace(candidate, cards=shared[key]) for key, candidate in candidates.items()],
             taxonomy=taxonomy,
@@ -356,6 +348,27 @@ class PositionClassificationService:
         return _ModelPlacements(
             stage.prompt_version, found, outcome=outcome, candidates=len(candidates), hits=hits
         )
+
+
+def model_candidate(
+    source: SeedSource, item: MatchItem, card: SeedCard, names: CaselistNames, codes: Collection[str]
+) -> ModelCandidate:
+    """`card` of `source`, read by stage one as `item`, as the model stage is asked about it.
+
+    Its headings lose team-code words, and its tag and short cite are read as words without the
+    disclosing teams' names, the caselist's schools or any team code. The excerpt is cut later, from the
+    evidence the stage reads for the cards it keeps.
+    """
+    own = tuple(name for team in source.teams for name in team.names if name.strip())
+    return ModelCandidate(
+        fingerprint=item.fingerprint,
+        source_sha256=source.sha256,
+        first_element_index=card.first_element_index or 0,
+        headings=sent_headings(item.headings, codes),
+        tag=card_tag(card.tag, own, names, codes),
+        short_cite=scrubbed_cite(card.short_cite, own, names, codes),
+        own_names=own,
+    )
 
 
 @dataclass(frozen=True, slots=True)

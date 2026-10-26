@@ -176,6 +176,8 @@ class ModelStageOutcome:
     """Tokens of the calls whose answers were used, as the router reported them."""
     interrupted: str | None = None
     """The class of the router error that stopped the stage; None when it ran to the end."""
+    sent_inputs: tuple[str, ...] = field(default=(), repr=False)
+    """Each batch's `items` variable as sent: what a scan of the prompt inputs reads. Never logged."""
 
 
 class ModelClassificationStage:
@@ -245,11 +247,12 @@ class ModelClassificationStage:
         refused: Counter[str] = Counter()
         calls = input_tokens = output_tokens = 0
         interrupted: str | None = None
+        sent_inputs: list[str] = []
         for batch in batches(items, self._batch_size):
+            variables = prompt_variables(taxonomy, batch)
+            sent_inputs.append(str(variables["items"]))
             prompt = ModelPrompt(
-                prompt_id=CLASSIFY_POSITION_PROMPT_ID,
-                prompt_version=self.prompt_version,
-                variables=prompt_variables(taxonomy, batch),
+                prompt_id=CLASSIFY_POSITION_PROMPT_ID, prompt_version=self.prompt_version, variables=variables
             )
             size = len(batch)
             try:
@@ -307,6 +310,7 @@ class ModelClassificationStage:
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             interrupted=interrupted,
+            sent_inputs=tuple(sent_inputs),
         )
 
 

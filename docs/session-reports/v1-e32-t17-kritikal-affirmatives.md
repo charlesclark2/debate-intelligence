@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e32-argument-landscape/t17-kritikal-affirmatives.yaml`](../../plan_specs/v1/e32-argument-landscape/t17-kritikal-affirmatives.yaml) |
 | Epic / release | `v1-e32-argument-landscape` / `v1.2` |
 | Branch | `task/v1-e32-t17-kritikal-affirmatives` |
-| Session status | COMPLETE: built and tested after the PM's rulings of 2026-10-25. The operator refilled the caches, and the dry run on the real store is recorded. The coach's edit to the K families comes back before the pull request <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 

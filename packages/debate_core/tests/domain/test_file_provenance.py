@@ -15,6 +15,7 @@ from debate_core.domain.file_provenance import (
     formatting_sha256,
     text_sha256,
 )
+from debate_core.domain.file_recipe import RecipeStatus
 from debate_core.domain.style_profile import RunEmphasis, StyleMatchSource
 
 DIGEST = "a" * 64
@@ -226,3 +227,13 @@ def test_a_sidecar_written_before_camp_cards_still_validates() -> None:
         None,
         None,
     )
+
+
+def test_a_sidecar_written_before_the_recipe_status_validates_with_none_and_records_one_given() -> None:
+    """`recipe_status` is an addition (`v1-e33-t05`): an older sidecar has no key, and reads as None."""
+    older = FileProvenanceManifest.model_validate(manifest([entry()]))
+    assert older.recipe_status is None
+    draft = FileProvenanceManifest.model_validate({**manifest([entry()]), "recipe_status": "draft"})
+    assert draft.recipe_status is RecipeStatus.DRAFT
+    with pytest.raises(ValidationError):
+        FileProvenanceManifest.model_validate({**manifest([entry()]), "recipe_status": "approved"})

@@ -170,9 +170,53 @@ All of this is in [`docs/runbooks/bedrock-access.md`](../runbooks/bedrock-access
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-25
 
 **Notes:**
+
+A grant that cannot drift from the routing files, and a client that can no longer be steered by
+whatever `AWS_PROFILE` the shell holds.
+1. **ac1 to ac3 and the node's criterion pass.**
+   * The module's tests were red against a `bedrock:*` on `*` skeleton.
+   * All 20 Terraform mutants were caught as clean assertion failures, with the geography validation
+     caught by `Missing expected failure`.
+   * All 10 Python mutants were caught.
+   * The client test that showed today's behaviour (`KEY-OF-THE-SHELL`) is the right red.
+   * `terraform_checks.sh` passed with the lock files unchanged.
+2. **ac4 and ac5 are the operator's,** after the cloud cutover's step 9. The runbook's own check reads
+   that. The PR merges `--partial`.
+3. **Rulings on the three questions:**
+   1. **(a): a missing model profile is reported and fails nothing,** while no weekly-run command
+      calls a model. It flips when a model stage joins the weekly run, as the follow-up says.
+   2. **(a): one probe run over both routing files,** 23 requests, each model asked its seven
+      questions once. ac5's questions are separate requests, so this is the reading that answers
+      them.
+   3. **(a): both sets grant what both files name.** It's one account, dev's calls still go through
+      dev's routing file and its $2 daily budget, and the Opus probe needn't wait for prod.
+4. **Deviations accepted:**
+   * a module of its own, `bedrock_access`, so the plan touches nothing else by construction;
+   * the probe asking each model once.
+
+   The PM adds `debate_cli`, `packages/debate_cli/tests` and `tests/smoke` to `constraints.packages`
+   in the next batch. ac2's doctor row can only be met there.
+5. **Accepted as made:**
+   * the grant read from the routing files with `yamldecode`, and the `us.` regions the one written
+     list, with other geographies refused;
+   * the setting in the bundled profiles only;
+   * no profile meaning the chain without `AWS_PROFILE`;
+   * `RealRouterFactory` as a Protocol, so no composition root can forget the profile;
+   * account ids masked in the probe's table, and tokens counted;
+   * an eight-hour session;
+   * only AWS's documentation account id in the tests.
+6. **Open question 4:** the operator sends the PM the AWS page's date read and the logging check's
+   output (Step 6). The PM records both in the data-use policy's next version, with rule 3's wording
+   from `v1-e32-t07`'s review.
+7. **The affected set** (361 files, through the root conftest) is left to the PR's `ci` under
+   agreement 10. The changed areas, the doctor and installation tests, the smoke check, the always-run
+   list and the static checks passed (1,635 tests).
+
+No re-review is needed. The PM records the plan, the apply and the first call when the operator runs
+them.

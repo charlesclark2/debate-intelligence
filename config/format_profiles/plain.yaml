@@ -17,3 +17,10 @@ evidence_base_half_points: 22
 # The one difference from team-default: no highlighting (the spec's definition of plain).
 highlight_color: null
 condensed_half_points: 16
+# Not measured: a card-rendering choice (v1-e06-t04, pre-approved by the PM on 2026-10-27).
+# ADR-0018 makes the ellipsis a rendering decision; it is spaced so a cut never joins two words,
+# and holds no square bracket, which only an interpolation's rendering adds.
+omission_marker: " … "
+# Not measured: a card-rendering choice (v1-e06-t04, pre-approved by the PM on 2026-10-27).
+# Red text in the base style profile's Normal paragraph style.
+unverified_banner_color: FF0000

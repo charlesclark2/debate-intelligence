@@ -42,6 +42,8 @@ VALID: dict[str, Any] = {
     "evidence_base_half_points": 22,
     "highlight_color": "cyan",
     "condensed_half_points": 16,
+    "omission_marker": " … ",
+    "unverified_banner_color": "FF0000",
 }
 
 
@@ -235,6 +237,14 @@ def test_every_disagreement_is_reported_at_once() -> None:
         ({"cite_block": {"short_cite_bold": True, "full_cite_half_points": 0}}, "full_cite_half_points"),
         ({"cite_block": {"short_cite_bold": True}}, "full_cite_half_points"),
         ({"name": ""}, "name"),
+        ({"omission_marker": "[…]"}, "omission_marker"),
+        ({"omission_marker": "… ]"}, "omission_marker"),
+        ({"omission_marker": "["}, "omission_marker"),
+        ({"omission_marker": "   "}, "omission_marker"),
+        ({"omission_marker": ""}, "omission_marker"),
+        ({"unverified_banner_color": "red"}, "unverified_banner_color"),
+        ({"unverified_banner_color": "ff0000"}, "unverified_banner_color"),
+        ({"unverified_banner_color": "FF00001"}, "unverified_banner_color"),
     ],
 )
 def test_impossible_values_are_refused(changes: dict[str, Any], message: str) -> None:
@@ -319,6 +329,8 @@ def test_plain_has_no_highlighting() -> None:
 _VALUE_LINE = re.compile(r"^(?P<indent>\s*)(?P<key>[a-z_]+):\s*(?P<value>[^\s#][^#]*?)\s*$")
 _CITED = re.compile(r'^\s*# team-format-survey\.md: "(?P<line>[^"]+)"\s*$')
 _NOT_MEASURED = ("name", "description", "base_style_profile")
+#: Card-rendering choices the renderer needs and the survey does not measure (v1-e06-t04).
+_RENDERING_CHOICES = ("omission_marker", "unverified_banner_color")
 
 
 def _cited_values(text: str) -> list[tuple[str, str, str | None]]:
@@ -327,7 +339,11 @@ def _cited_values(text: str) -> list[tuple[str, str, str | None]]:
     found: list[tuple[str, str, str | None]] = []
     for index, line in enumerate(lines):
         match = _VALUE_LINE.match(line)
-        if match is None or match["key"] in _NOT_MEASURED or match["value"].startswith(">"):
+        if (
+            match is None
+            or match["key"] in (*_NOT_MEASURED, *_RENDERING_CHOICES)
+            or match["value"].startswith(">")
+        ):
             continue
         previous = next((lines[i] for i in range(index - 1, -1, -1) if lines[i].strip()), "")
         cited = _CITED.match(previous)
@@ -365,3 +381,22 @@ def test_the_citation_check_notices_a_value_its_line_does_not_name() -> None:
 
     assert (key, value) == ("evidence_base_half_points", "24")
     assert cited is not None and f"{value} half-points" not in cited
+
+
+def test_an_omission_marker_with_text_but_no_bracket_is_accepted() -> None:
+    assert resolve(omission_marker="...").profile.omission_marker == "..."
+    assert resolve(omission_marker=" … ").profile.omission_marker == " … "
+
+
+@pytest.mark.parametrize("name", ["team-default", "flow", "plain"])
+def test_each_committed_profile_says_its_rendering_choices_are_not_measured(name: str) -> None:
+    lines = (COMMITTED_PROFILES / f"{name}.yaml").read_text(encoding="utf-8").splitlines()
+    profile = load_format_profile(name, COMMITTED_PROFILES).profile
+
+    for key in _RENDERING_CHOICES:
+        [index] = [i for i, line in enumerate(lines) if line.startswith(f"{key}:")]
+        comment = next(
+            line for line in reversed(lines[:index]) if not line.startswith("# ") or "Not measured" in line
+        )
+        assert comment.startswith("# Not measured: a card-rendering choice (v1-e06-t04"), f"{name}: {key}"
+    assert (profile.omission_marker, profile.unverified_banner_color) == (" … ", "FF0000")

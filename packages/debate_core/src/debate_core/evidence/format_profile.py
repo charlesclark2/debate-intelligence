@@ -11,7 +11,11 @@ when it cuts a card, the ones the style profile leaves open:
 * the evidence base size: the size of the underlined text that is read;
 * the highlight colour, or none;
 * the condensed-text size: the size of the text that is not underlined, or none to leave it at
-  the base size.
+  the base size;
+* two card-rendering choices the renderer (`v1-e06-t04`) needs and nothing else defined: the
+  omission marker written where a card cut text (ADR-0018 makes the ellipsis a rendering decision;
+  it may hold no square bracket, which only an interpolation's rendering adds), and the colour of
+  the banner over a card that is not VERIFIED. Neither is measured from the team's files.
 
 `team-default`, `flow` and `plain` are the profiles that ship, in `config/format_profiles/`; each
 value in `team-default` cites the line of `docs/data/team-format-survey.md` it comes from.
@@ -112,6 +116,17 @@ class FormatProfile(DomainModel):
     condensed_half_points: int | None = Field(
         gt=0,
         description="The `w:sz` of evidence that is not underlined, or None to leave it at the base size.",
+    )
+    omission_marker: str = Field(
+        pattern=r"^[^\[\]]*[^\[\]\s][^\[\]]*$",
+        description=(
+            "The text written at each of a card's omitted ranges (ADR-0018). Never part of evidence_text, "
+            "and never a square bracket: brackets are an interpolation's alone."
+        ),
+    )
+    unverified_banner_color: str = Field(
+        pattern=r"^[0-9A-F]{6}$",
+        description="The `w:color` of the banner over a card that is not VERIFIED, six hex digits.",
     )
 
     @model_validator(mode="before")

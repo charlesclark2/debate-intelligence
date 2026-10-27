@@ -6,6 +6,12 @@ of a list of cards: each card exactly as the domain serializes it, with its mode
 snapshot the cards were cut from, read through the article repository. The bytes are what
 `debate-research verify` reads (`v1-e03-t06`) and what the DOCX renderer embeds (`v1-e06-t04`).
 
+:meth:`ExportService.export_docx` is the DOCX side (`v1-e06-t04`): the same manifest, with each card's
+cite formatted by `format_cite` and each failure `CardService` reported as a code, handed to the
+renderer, which reaches this service as the
+:class:`~debate_core.application.ports.card_document.CardDocumentRenderer` port because it writes with
+python-docx and this layer may not import a document library.
+
 ## The same cards give the same bytes
 
 Keys are sorted and the document is indented (:func:`~debate_core.evidence.manifest.serialize_manifest`),
@@ -35,12 +41,17 @@ adds nothing to it.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
+from debate_core.application.card_types import CardFailure
+from debate_core.application.citation_service import format_cite
 from debate_core.application.errors import DomainError
+from debate_core.application.ports.card_document import CardDocumentRenderer
 from debate_core.application.ports.persistence import ArticleRepository
 from debate_core.application.ports.providers import Clock
 from debate_core.domain import Card
+from debate_core.evidence.card_rendering import CardToRender, CiteText, DocumentHeadings, RenderRefused
+from debate_core.evidence.format_profile import ResolvedFormatProfile
 from debate_core.evidence.manifest import (
     MANIFEST_VERSION,
     CardManifest,
@@ -58,9 +69,12 @@ class ExportRefused(DomainError):
 class ExportService:
     """Writes cards as a card manifest, referencing the snapshots they were cut from."""
 
-    def __init__(self, *, articles: ArticleRepository, clock: Clock) -> None:
+    def __init__(
+        self, *, articles: ArticleRepository, clock: Clock, render_docx: CardDocumentRenderer | None = None
+    ) -> None:
         self._articles = articles
         self._clock = clock
+        self._render_docx = render_docx
 
     async def manifest(self, cards: Sequence[Card]) -> CardManifest:
         """The current-version manifest of ``cards``, in their order, with their snapshots' references."""
@@ -90,3 +104,48 @@ class ExportService:
     async def export_json(self, cards: Sequence[Card]) -> bytes:
         """``cards`` as the manifest's JSON: keys sorted, indented, UTF-8, the same bytes every time."""
         return serialize_manifest(await self.manifest(cards))
+
+    async def export_docx(
+        self,
+        cards: Sequence[Card],
+        *,
+        profile: ResolvedFormatProfile,
+        failures: Mapping[str, Sequence[CardFailure]] | None = None,
+        headings: DocumentHeadings | None = None,
+    ) -> bytes:
+        """``cards`` as a .docx in ``profile``, with their manifest embedded (`v1-e06-t04`).
+
+        Each cite is :func:`~debate_core.application.citation_service.format_cite`'s. ``failures`` are
+        `CardService`'s reasons by card id; each card that is not VERIFIED needs at least one, and its
+        banner names each failure's code and the verifier's code beside it, once each.
+        """
+        if self._render_docx is None:
+            raise ExportRefused("this export service was built with no DOCX renderer")
+        failures = failures or {}
+        strays = sorted(set(failures) - {card.card_id for card in cards})
+        if strays:
+            raise ExportRefused(f"failures were given for cards that are not exported: {', '.join(strays)}")
+        manifest = await self.manifest(cards)
+        try:
+            items = [
+                CardToRender(card, _cite_text(card), _reason_codes(failures.get(card.card_id, ())))
+                for card in cards
+            ]
+            return self._render_docx(manifest, items, profile, headings=headings)
+        except RenderRefused as refused:
+            raise ExportRefused(str(refused)) from refused
+
+
+def _cite_text(card: Card) -> CiteText:
+    formatted = format_cite(card.citation, provenance_mode=card.provenance_mode)
+    return CiteText(short_cite=formatted.short_cite, full_cite=formatted.full_cite)
+
+
+def _reason_codes(failures: Sequence[CardFailure]) -> tuple[str, ...]:
+    """Each failure's code, then the verifier's code it carries, in order and once each."""
+    codes: list[str] = []
+    for failure in failures:
+        codes.append(failure.reason.value)
+        if failure.verifier_code is not None:
+            codes.append(failure.verifier_code.value)
+    return tuple(dict.fromkeys(codes))

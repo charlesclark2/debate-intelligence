@@ -2,11 +2,12 @@
 
 validate-dev only runs after a merge into dev, so no task pull request exercises it; a step that
 pulls the wrong image, or a red result that reaches no one, shows up days later or not at all. These
-tests hold those parts: the slow job pulls the Lambda image the deploy script names before the tier
-runs, and the conclude job opens or updates an issue on a failure and closes it on a success.
+tests hold those parts: before the tier runs, the slow job pulls the Lambda image the deploy script
+names and installs LibreOffice for the rendered-DOCX open check (v1-e06-t04); and the conclude job
+opens or updates an issue on a failure and closes it on a success.
 
 Where a step's shell is the point, the test runs that step's own `run:` text with bash, in a
-throwaway directory, against stub `docker` and `gh` commands that log their arguments. Nothing here
+throwaway directory, against stub `docker`, `apt-get` and `gh` commands that log their arguments. Nothing here
 reaches GitHub, a registry or the network.
 """
 
@@ -131,6 +132,57 @@ def test_a_failed_pull_fails_the_step(checkout: Path, tmp_path: Path) -> None:
     assert log.read_text(encoding="utf-8").splitlines() == [
         f"docker pull --platform linux/arm64 {declared_image()}"
     ]
+
+
+# --------------------------------------------------------------------------------------------
+# slow: LibreOffice is on the runner before the tier runs (v1-e06-t04)
+# --------------------------------------------------------------------------------------------
+
+
+def test_the_slow_job_installs_libreoffice_before_the_tier_runs() -> None:
+    """The rendered-DOCX open check skips without soffice, and a skip fails the tier."""
+    slow = jobs()["slow"]
+    install_at, install = step_named(slow, "Install LibreOffice")
+    tier_at, _ = step_named(slow, "Run pytest")
+
+    assert install_at < tier_at
+    assert "continue-on-error" not in install
+
+
+def libreoffice_stubs(tmp_path: Path, apt_get: str) -> tuple[Path, Path]:
+    stubs, log = tmp_path / "bin", tmp_path / "calls.log"
+    stubs.mkdir()
+    write_stub(stubs, "sudo", 'exec "$@"\n')
+    write_stub(stubs, "apt-get", apt_get)
+    write_stub(stubs, "soffice", "")
+    return stubs, log
+
+
+def test_the_install_step_installs_libreoffice_writer_and_shows_its_version(tmp_path: Path) -> None:
+    stubs, log = libreoffice_stubs(tmp_path, "")
+    _, install = step_named(jobs()["slow"], "Install LibreOffice")
+
+    result = run_step(install["run"], tmp_path, stubs, log, {})
+
+    assert result.returncode == 0, result.stderr
+    assert log.read_text(encoding="utf-8").splitlines() == [
+        "sudo apt-get update",
+        "apt-get update",
+        "sudo apt-get install --yes --no-install-recommends libreoffice-writer",
+        "apt-get install --yes --no-install-recommends libreoffice-writer",
+        "soffice --version",
+    ]
+
+
+def test_a_failed_libreoffice_install_fails_the_step(tmp_path: Path) -> None:
+    """Never a skip: an install that fails stops the job before the open check could skip for it."""
+    stubs, log = libreoffice_stubs(tmp_path, 'if [ "$1" = install ]; then exit 1; fi\n')
+    _, install = step_named(jobs()["slow"], "Install LibreOffice")
+
+    result = run_step(install["run"], tmp_path, stubs, log, {})
+
+    assert result.returncode != 0
+    assert "soffice --version" not in log.read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize("job", ["resolve", "smoke", "slow", "image"])

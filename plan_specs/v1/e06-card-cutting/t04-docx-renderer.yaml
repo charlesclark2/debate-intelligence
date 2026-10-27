@@ -81,7 +81,7 @@ spec:
         renders each of Card.interpolations at its anchor with Interpolation.rendered, the only code that
         adds brackets. Neither is ever written into evidence_text or read back as evidence by t07.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

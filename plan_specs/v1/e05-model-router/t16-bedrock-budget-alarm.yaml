@@ -1,4 +1,4 @@
-# TASK v1-e05-t16-bedrock-budget-alarm - An AWS budget alarm on the account's model spend at 80% and 100% of $50
+# TASK v1-e05-t16-bedrock-budget-alarm - An AWS budget alarm on the account's model spend, $100 a month with a first notice at $50
 # Epic: E05 Model Router & Structured LLM Contracts | Release: v1.2 (Argument landscape & file building) | Major: V1
 ---
 apiVersion: planspec.io/v1alpha1
@@ -12,7 +12,7 @@ metadata:
     debate/release: v1.2
     debate/epic: v1-e05-model-router
   annotations:
-    debate/title: "An AWS budget alarm on the account's model spend at 80% and 100% of $50"
+    debate/title: "An AWS budget alarm on the account's model spend, $100 a month with a first notice at $50"
 spec:
   # Filed by the PM, 2026-10-27, from the coach's ceiling of 2026-10-27 ($50 a month, preferably).
   description: >-
@@ -20,10 +20,14 @@ spec:
     from Cost Explorer, read by the operator: which services and usage types a Bedrock call to a
     Claude, Titan or Cohere model is billed under (Amazon Bedrock, or AWS Marketplace for a
     model sold there), so the budget's filter catches every model charge and nothing else. Then
-    a Terraform module: one AWS Budgets cost budget of $50 a month on those charges, with
-    notifications at 80% and 100% of actual spend and at 100% of forecast, to the coach's
+    a Terraform module: one AWS Budgets cost budget a month on those charges, with
+    notifications as the amendment below sets them, to the coach's
     address through the run's alert topic or a subscription of its own. The PM reads the plan
     before the apply. No permission set or account assignment changes.
+    (PM amendment 2026-10-27, the coach's word on v1-e05-t15.) The ceiling is $100 a month
+    across dev and prod, $50 in each profile, on the condition that model work is never
+    duplicated between them. The budget is $100, with notifications at $50 (the coach's first
+    preference), $80 and $100 of actual spend, and at $100 of forecast.
   priority: 2
   constraints:
     packages: [infrastructure, docs/runbooks, docs/data]
@@ -42,8 +46,9 @@ spec:
         operator, recorded as names only, before the filter is written.
     - id: ac2
       description: >-
-        Terraform tests show one budget of 50 USD a month, the filter, the three
-        notifications and no grant, shown failing first.
+        Terraform tests show one budget of 100 USD a month, the filter, its notifications (actual
+        spend at $50, $80 and $100, forecast at $100) and no grant, shown failing first. (PM
+        amendment 2026-10-27.)
     - id: ac3
       description: >-
         The PM reads the plan, the operator applies it, and the budget reads its first

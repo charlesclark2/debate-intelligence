@@ -24,6 +24,10 @@ spec:
     parse checked against dev's counts, a publish to prod with a sign-in before each caselist,
     prod's search index and function together, and the copy deleted after (data-use policy
     1.18). Starts after v1-e31-t31's dev re-parse is recorded.
+    (PM amendment 2026-10-27, from v1-e40-t10's review.) The hand prod publish
+    (caselist-cutover.md, "Until the promotion") sends raw sources and manifests only. Add the
+    new week's parsed store to it, from the same restored copy, so prod's parsed store and
+    search index keep up with dev's weeks between re-parses.
   priority: 2
   constraints:
     packages: [docs/runbooks, docs/data, ops, tests/scripts]

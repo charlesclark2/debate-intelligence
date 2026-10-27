@@ -946,5 +946,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e01-t41-pr-smoke-reads-the-bundled-profiles
+    - id: t42
+      kind: Task
+      name: 'Coverage measured in the test parts and combined, so the push run is never held by one unsplit job'
+      description: >-
+        Coverage measured in the test parts and combined, so the push run is never held by
+        one unsplit job.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t42-coverage-measured-in-the-parts.yaml
+        goalRef: v1-e01-t42-coverage-measured-in-the-parts
+      dependsOn:
+      - t38
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t42-coverage-measured-in-the-parts reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t42-coverage-measured-in-the-parts
 status:
   phase: Pending

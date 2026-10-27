@@ -33,6 +33,13 @@ spec:
     synthetic fixtures and replay cassettes only, and the live first run (ac5) waits. The policy
     cites v1-e32-t02 for model-use rule 3 and E32 gate item 3; this task owns both now and
     corrects those two citations as a no-loosening correction.
+    (PM amendment 2026-10-27, the coach's word: $100 a month across dev and prod, and no model
+    work duplicated between them.) A card is classified once, in dev. The cache's MODEL entries
+    are what a prod report reads, wherever prod's data directory is: today prod is published
+    from dev's data directory, so it reads the same cache; when prod has its own, dev's MODEL
+    entries are carried to it rather than recomputed, and prod's model stage sends only items
+    dev's entries lack at the same prompt version and model. Name the carrying in the report;
+    the first prod model run is v1-e05-t17's.
   priority: 2
   constraints:
     packages: [debate_core.application, debate_core.arguments, debate_core.integrations, prompts/landscape, tests/fixtures/landscape, packages/debate_cli, docs/policies, docs/data]

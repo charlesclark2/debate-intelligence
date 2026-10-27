@@ -246,12 +246,20 @@ jobs:
   # fail_under), and measuring it took a third of the suite's time on every pull request. It is one
   # unsplit run, so the report covers everything at once, and it is the collection the parts above
   # are compared with. It is not one of `ci`'s needs, because `ci` is what a pull request waits for
-  # and this never runs on one; a failure here still fails the push's run.
+  # and this never runs on one.
+  #
+  # It does not fail the push's run (PM batch 2026-10-27v). From 2026-10-26 the unsplit run passed its
+  # 20-minute limit on every push to dev, each push's run concluded `failure` though every part of
+  # `test` passed, and the dev pre-release, which waits for a successful push run, made no build for
+  # about thirty merges. The parts above are what decides whether the push run is green; this job
+  # reports coverage when it finishes, and its own result is still shown. Measuring coverage in the
+  # parts and combining it is v1-e01-t42.
   coverage:
     if: github.event_name == 'push'
     runs-on: ubuntu-24.04
+    continue-on-error: true
     # Longer than the other jobs: this is the one run that still grows with the suite.
-    timeout-minutes: 20
+    timeout-minutes: 40
     steps:
       - *checkout
       - *setup-uv

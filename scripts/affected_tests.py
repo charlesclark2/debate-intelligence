@@ -319,8 +319,8 @@ def changed_tables(root: Path, before: str, after: str | None) -> frozenset[str]
         return None
     tables: set[str] = set()
     for key in old.keys() | new.keys():
-        if key == "tool" and isinstance(old.get(key, {}), dict) and isinstance(new.get(key, {}), dict):
-            old_tools, new_tools = old.get(key, {}), new.get(key, {})
+        old_tools, new_tools = old.get(key, {}), new.get(key, {})
+        if key == "tool" and isinstance(old_tools, dict) and isinstance(new_tools, dict):
             tables |= {
                 f"tool.{tool}"
                 for tool in old_tools.keys() | new_tools.keys()

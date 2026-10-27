@@ -16,6 +16,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -877,8 +878,9 @@ def test_adding_the_import_linter_table_on_a_branch_selects_the_architecture_tes
         pytest.param(lambda text: text + "\n[tool.importlinter\n", id="a file that does not parse"),
     ],
 )
-def test_any_other_root_pyproject_change_is_the_whole_selection(workspace: Workspace, edit: object) -> None:
-    assert callable(edit)
+def test_any_other_root_pyproject_change_is_the_whole_selection(
+    workspace: Workspace, edit: Callable[[str], str]
+) -> None:
     result = describe(workspace, {"pyproject.toml": LINTED}, {"pyproject.toml": edit(LINTED)})
     assert result.status == 0
     assert result.stdout == (

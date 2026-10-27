@@ -900,6 +900,270 @@ def test_a_packages_pyproject_is_the_whole_selection_whichever_table_changed(wor
 
 
 # --------------------------------------------------------------------------------------------
+# The container and the app (v1-e01-t39): an import inside a factory is that factory's, a
+# command's `cli.services.X` reaches factory X, and a test that runs the app reaches the commands
+# its literal arguments name. Each case commits CLI_WORLD over BASE's app.py, then describes one
+# more commit.
+# --------------------------------------------------------------------------------------------
+
+CLI = "packages/debate_cli/src/debate_cli"
+CLI_TESTS = "packages/debate_cli/tests"
+RUNS = {
+    "verify": f"{CLI_TESTS}/test_verify_command.py",
+    "remove": f"{CLI_TESTS}/test_remove_command.py",
+    "files": f"{CLI_TESTS}/test_files_command.py",
+    "caselist help": f"{CLI_TESTS}/test_caselist_help.py",
+    "help and verify": f"{CLI_TESTS}/test_help_and_verify.py",
+    "unreadable": f"{CLI_TESTS}/test_runs_what_it_reads.py",
+    "remove, by a helper": f"{CLI_TESTS}/test_caselist_by_a_helper.py",
+    "verify, beside prose": f"{CLI_TESTS}/test_prose_names_nothing.py",
+    "remove, installed": "tests/smoke/test_remove_smoke.py",
+    "verify, installed": "tests/smoke/test_verify_smoke.py",
+    # BASE's: `debate-research --version` names no command, so it cannot be told which one it runs.
+    "version": "tests/runs_the_cli/test_installed_cli.py",
+}
+BUILDS_THE_PARSER = f"{CLI_TESTS}/test_container_parser.py"
+WALKS_THE_CONTAINER = f"{CLI_TESTS}/test_every_factory.py"
+# Calls the function that reads the container's source; the app imports the module for another one.
+READS_THE_WIRING = f"{CLI_TESTS}/test_wiring_check.py"
+ALL_RUNS = set(RUNS.values())
+CANNOT_TELL = {RUNS["unreadable"], RUNS["version"], RUNS["help and verify"]}
+
+CLI_WORLD = {
+    f"{CORE}/store_adapter.py": "class StoreAdapter:\n    pass\n",
+    f"{CORE}/parser_adapter.py": "class Parser:\n    pass\n",
+    f"{CORE}/verify_rules.py": "RULES = 1\n",
+    f"{CORE}/container_limits.py": "LIMIT = 1\n",
+    f"{CLI}/container.py": (
+        "from debate_core.container_limits import LIMIT\n"
+        "from debate_core.verify_rules import RULES\n\n"
+        "MOST = LIMIT\n\n\n"
+        "class ServiceContainer:\n"
+        "    def verified(self):\n"
+        "        return RULES\n\n"
+        "    def bucket(self):\n"
+        "        from debate_core.store_adapter import StoreAdapter\n\n"
+        "        return StoreAdapter()\n\n"
+        "    def removal(self):\n"
+        "        return self.bucket()\n\n"
+        "    def parser(self):\n"
+        "        from debate_core.parser_adapter import Parser\n\n"
+        "        return Parser()\n"
+    ),
+    f"{CLI}/context.py": (
+        "from debate_cli.container import ServiceContainer\n\n\n"
+        "class CliContext:\n    services: ServiceContainer\n"
+    ),
+    f"{CLI}/commands/__init__.py": "",
+    f"{CLI}/commands/verify.py": (
+        "from debate_cli.context import CliContext\n\n\n"
+        "def verify(cli: CliContext):\n    return cli.services.verified()\n"
+    ),
+    # Two spellings: `cli.services.X`, and `services = cli.services` then `services.X`.
+    f"{CLI}/commands/caselist_remove.py": (
+        "from debate_cli.context import CliContext\n\n\n"
+        "def remove(cli: CliContext):\n    return cli.services.removal()\n\n\n"
+        "def unsuppress(cli: CliContext):\n    services = cli.services\n    return services.removal()\n"
+    ),
+    # A third: the container handed to a helper, which asks it for the factory.
+    f"{CLI}/commands/files.py": (
+        "from debate_cli.context import CliContext\n\n\n"
+        "def build(cli: CliContext):\n    return parse_with(cli.services)\n\n\n"
+        "def parse_with(services):\n    return services.parser()\n"
+    ),
+    f"{CLI}/command_registry.py": (
+        "import typer\n\n"
+        "from debate_cli.commands import caselist_remove, files, verify\n\n\n"
+        "def register_commands(app: typer.Typer) -> None:\n"
+        '    app.command("verify")(verify.verify)\n\n'
+        '    disclosed_evidence = command_group("caselist", "Caselist evidence.")\n'
+        '    disclosed_evidence.command("remove")(caselist_remove.remove)\n'
+        '    disclosed_evidence.command("unsuppress")(caselist_remove.unsuppress)\n'
+        "    app.add_typer(disclosed_evidence)\n\n"
+        '    evidence_files = command_group("files", "Evidence files.")\n'
+        '    evidence_files.command("build")(files.build)\n'
+        "    app.add_typer(evidence_files)\n\n\n"
+        "def command_group(name: str, help_text: str) -> typer.Typer:\n"
+        "    return typer.Typer(name=name, help=help_text)\n"
+    ),
+    f"{CLI}/app.py": (
+        "from debate_cli.command_registry import register_commands\n"
+        "from debate_cli.context import CliContext\n"
+        "from debate_cli.wiring_check import describe_failure\n\n\n"
+        "def main(*arguments):\n    pass\n"
+    ),
+    f"{CLI}/wiring_check.py": (
+        'CONTAINER_MODULE = "debate_cli.container"\n\n\n'
+        "def wired():\n    return CONTAINER_MODULE\n\n\n"
+        "def describe_failure(error):\n    return str(error)\n"
+    ),
+    READS_THE_WIRING: (
+        "from debate_cli.wiring_check import wired\n\n\ndef test_wired():\n    assert wired()\n"
+    ),
+    # A helper that puts the group first, and the test that finishes the command.
+    RUNS["remove, by a helper"]: (
+        "from debate_cli.app import main\n\n\n"
+        'def caselist(*arguments):\n    return main("caselist", *arguments)\n\n\n'
+        'def test_remove():\n    caselist("remove", "--team", "T")\n'
+    ),
+    # Prose that mentions a command is not an argument.
+    RUNS["verify, beside prose"]: (
+        "from debate_cli.app import main\n\n\n"
+        'def test_verify():\n    assert main("verify") is None, "run caselist remove before you verify"\n'
+    ),
+    RUNS["verify"]: (
+        "from typer.testing import CliRunner\n\nfrom debate_cli.app import main\n\n\n"
+        'def test_verify():\n    CliRunner().invoke(main, ["verify", "--json"])\n'
+    ),
+    RUNS["remove"]: (
+        "from debate_cli.app import main\n\n"
+        'REMOVE = ("caselist", "remove", "--team", "T")\n\n\n'
+        "def test_remove():\n    main(*REMOVE)\n"
+    ),
+    RUNS["files"]: 'from debate_cli.app import main\n\n\ndef test_build():\n    main("files", "build")\n',
+    # The group alone shows its help, which lists every command in it.
+    RUNS["caselist help"]: 'from debate_cli.app import main\n\n\ndef test_help():\n    main("caselist")\n',
+    # The root's help lists every command, whatever else the file runs.
+    RUNS["help and verify"]: (
+        "from debate_cli.app import main\n\n\n"
+        'def test_help():\n    main("--help")\n\n\ndef test_verify():\n    main("verify")\n'
+    ),
+    # Its arguments come from a file, so no literal says which command it runs.
+    RUNS["unreadable"]: (
+        "import json\nfrom pathlib import Path\n\nfrom debate_cli.app import main\n\n\n"
+        "def test_each_listed_command(tmp_path):\n"
+        "    for arguments in json.loads(Path(tmp_path).read_text()):\n"
+        "        main(*arguments)\n"
+    ),
+    # A helper that runs the installed CLI with whatever it is given: the tests that use it name the command.
+    "tests/smoke/installed.py": (
+        "import subprocess\n\n\ndef run(*arguments):\n"
+        '    return subprocess.run(["debate-research", *arguments])\n'
+    ),
+    RUNS["remove, installed"]: (
+        "from tests.smoke.installed import run\n\n\n"
+        'def test_remove():\n    run("caselist", "remove", "--execute")\n'
+    ),
+    RUNS["verify, installed"]: (
+        'from tests.smoke.installed import run\n\n\ndef test_verify():\n    run("verify")\n'
+    ),
+    BUILDS_THE_PARSER: (
+        "from debate_cli.container import ServiceContainer\n\n\n"
+        "def test_parser():\n    assert ServiceContainer().parser()\n"
+    ),
+    WALKS_THE_CONTAINER: (
+        "from debate_cli.container import ServiceContainer\n\n\n"
+        "def test_every_factory():\n"
+        "    for name in vars(ServiceContainer):\n"
+        "        getattr(ServiceContainer(), name)\n"
+    ),
+}
+
+
+def described_in_the_cli_world(workspace: Workspace, change: dict[str, str], *args: str) -> Result:
+    workspace.commit(CLI_WORLD, "setup")
+    workspace.commit(change, "described")
+    return workspace.run("--diff", "HEAD", *args)
+
+
+def changed_in_the_world(path: str) -> dict[str, str]:
+    return {path: CLI_WORLD[path] + "\n# changed\n"}
+
+
+@pytest.mark.parametrize(
+    ("module", "expected"),
+    [
+        # Imported inside `bucket`, which `removal` calls; `caselist remove` and `unsuppress` ask for
+        # `removal`. The group's help lists them, and the tests that cannot be told apart run anything.
+        pytest.param(
+            "store_adapter",
+            {
+                RUNS["remove"],
+                RUNS["remove, installed"],
+                RUNS["remove, by a helper"],
+                RUNS["caselist help"],
+                WALKS_THE_CONTAINER,
+                READS_THE_WIRING,
+            }
+            | CANNOT_TELL,
+            id="an import inside a factory another factory calls",
+        ),
+        # Imported inside `parser`, which `files build` asks for through a helper it hands the container.
+        pytest.param(
+            "parser_adapter",
+            {RUNS["files"], BUILDS_THE_PARSER, WALKS_THE_CONTAINER, READS_THE_WIRING} | CANNOT_TELL,
+            id="an import inside a factory a helper asks for",
+        ),
+        # Imported at the top, but only `verified` uses it.
+        pytest.param(
+            "verify_rules",
+            {RUNS["verify"], RUNS["verify, installed"], RUNS["verify, beside prose"], WALKS_THE_CONTAINER}
+            | {READS_THE_WIRING}
+            | CANNOT_TELL,
+            id="a top-level import one factory uses",
+        ),
+        # Imported at the top and used by module code: importing the container runs it. The wiring
+        # check reads the container's import statements, which did not change, so it is not reached.
+        pytest.param(
+            "container_limits",
+            ALL_RUNS | {BUILDS_THE_PARSER, WALKS_THE_CONTAINER},
+            id="a top-level import module code uses",
+        ),
+    ],
+)
+def test_an_integration_reaches_the_tests_of_the_commands_whose_factories_import_it(
+    workspace: Workspace, module: str, expected: set[str]
+) -> None:
+    result = described_in_the_cli_world(workspace, changed_in_the_world(f"{CORE}/{module}.py"))
+    assert_selected(result, expected | ALWAYS | READS_SOURCE)
+
+
+def test_a_command_module_reaches_the_tests_that_name_its_commands(workspace: Workspace) -> None:
+    result = described_in_the_cli_world(workspace, changed_in_the_world(f"{CLI}/commands/caselist_remove.py"))
+    assert_selected(
+        result,
+        {RUNS["remove"], RUNS["remove, installed"], RUNS["remove, by a helper"], RUNS["caselist help"]}
+        | CANNOT_TELL
+        | ALWAYS
+        | READS_SOURCE,
+    )
+
+
+@pytest.mark.parametrize("module", ["app.py", "command_registry.py", "context.py"])
+def test_the_app_itself_reaches_every_test_that_runs_it(workspace: Workspace, module: str) -> None:
+    result = described_in_the_cli_world(workspace, changed_in_the_world(f"{CLI}/{module}"))
+    assert_selected(result, ALL_RUNS | ALWAYS | READS_SOURCE)
+
+
+def test_a_registry_the_script_cannot_read_reaches_every_command(workspace: Workspace) -> None:
+    looped = CLI_WORLD[f"{CLI}/command_registry.py"].replace(
+        '    app.command("verify")(verify.verify)\n',
+        '    for name, command in (("verify", verify.verify),):\n        app.command(name)(command)\n',
+    )
+    workspace.commit({**CLI_WORLD, f"{CLI}/command_registry.py": looped}, "setup")
+    workspace.commit(changed_in_the_world(f"{CORE}/store_adapter.py"), "described")
+    assert_selected(
+        workspace.run("--diff", "HEAD"),
+        ALL_RUNS | {WALKS_THE_CONTAINER, READS_THE_WIRING} | ALWAYS | READS_SOURCE,
+    )
+
+
+def test_explain_names_the_factory_and_the_command_a_test_is_reached_through(workspace: Workspace) -> None:
+    result = described_in_the_cli_world(
+        workspace, changed_in_the_world(f"{CORE}/store_adapter.py"), "--explain"
+    )
+    reasons = dict(line.split("  <- ", 1) for line in result.stdout.splitlines())
+    assert reasons[RUNS["remove, installed"]] == (
+        "imports tests/smoke/installed.py, which runs debate_cli.app "
+        f"({CLI}/app.py) for `caselist remove` and `caselist unsuppress`, "
+        f"which registers debate_cli.commands.caselist_remove ({CLI}/commands/caselist_remove.py), "
+        f"which asks for debate_cli.container's removal ({CLI}/container.py), "
+        f"which calls debate_cli.container's bucket ({CLI}/container.py), "
+        f"which imports debate_core.store_adapter ({CORE}/store_adapter.py), which changed"
+    )
+
+
+# --------------------------------------------------------------------------------------------
 # --run
 # --------------------------------------------------------------------------------------------
 

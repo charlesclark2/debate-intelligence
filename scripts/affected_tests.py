@@ -47,6 +47,36 @@ working tree's uncommitted and untracked files, and selects every test file one 
   built from it (an operand of `/`, an argument of `Path` or `joinpath`, an item a `for` walks)
   and only from four letters up. `"flow"` as a label and `"s3"` as boto3's service name name
   nothing.
+* **The container and the app, by factory and by command** (v1-e01-t39). Every command module
+  imports `debate_cli/container.py` through `debate_cli/context.py`, and `debate_cli/app.py`
+  imports every command module through `command_registry.py`, so read as files they make any
+  change reach every test that runs a command. They are read finer:
+  * Each method of `ServiceContainer`, and each function and class beside it, is a part. An import
+    inside one is that part's, and one at the top is the parts' whose code uses the name it binds.
+    An import that module code uses (a constant, a base class, a decorator), or that nothing uses,
+    is the whole module's, as a change to the file itself is. A part reaches the parts that call
+    it (`self.X`).
+  * A file that can hold a container (a `debate_cli` module, or a file that imports one) reaches
+    each part it names, as an attribute or a quoted word: `cli.services.X`, `services.X` after
+    `services = cli.services`, a helper handed the container that calls `services.X`, or a test's
+    `container.X()`. One that reads the class by reflection (`getattr` with a name it computes,
+    `vars`, `dir`, `inspect`) or names the container module in a string reaches every part. In a
+    package module, only the functions that do so are counted: the post-install check's
+    `wired_integrations` reads the container's imports, so a file that calls it, or runs the
+    module, reaches every part, and `app.py`, which imports the module for its error message,
+    does not.
+  * `command_registry.py`'s `register_commands` says which commands each module is (`caselist
+    remove`, `caselist unsuppress`). A command module reaches the app for those commands, and the
+    app for a command reaches each file that runs the app, through an import, a fixture, a
+    console script or a helper, if the literal arguments of that file, or of the helpers and
+    conftests between it and the app, name the command. Arguments are read as runs of literal
+    words a call, a list, a tuple or a constant holds, so `("caselist", "remove", "--team", t)`
+    names `caselist remove`, a helper's `("caselist", *arguments)` with its caller's
+    `("remove", ...)` does too, and prose, a dictionary key or a word in another command does
+    not. A group alone names all its commands (its help lists them). A test whose runs hold no
+    command's first word, or that passes `--help`, cannot be told apart and reaches every command,
+    as before. A registry it cannot read, or a container with no `ServiceContainer` class, is read
+    as a file, as before.
 * **Source readers.** A test that walks a directory and parses the Python it finds there
   (`ast.parse` with a glob, `rglob`, `iterdir` or `walk`) reads source as data, so any changed
   Python file selects it.
@@ -56,8 +86,9 @@ working tree's uncommitted and untracked files, and selects every test file one 
   `scripts/terraform_checks.sh`, and `site/` and `web/` by their own pnpm checks; the script says
   so, and selects only the tests that name what changed.
 * **Always run:** `tests/architecture/`, `tests/specs/` and the CLI's composition-root and
-  command-registration tests (`test_app.py`, `test_help_rendering.py`), which wiring reaches as
-  much as imports do.
+  command-registration tests (`test_app.py`, `test_help_rendering.py`, and
+  `test_container_factories.py`, which builds every factory), which wiring reaches as much as
+  imports do.
 
 A change to **shared test ground** (any `pyproject.toml`, `uv.lock`, the root `conftest.py`,
 `tests/pytest_plugins/`, `.github/workflows/ci.yml`) affects the whole selection. The script prints
@@ -127,7 +158,24 @@ ALWAYS_RUN = (
     "tests/specs/",
     "packages/debate_cli/tests/test_app.py",
     "packages/debate_cli/tests/test_help_rendering.py",
+    # Builds every factory, so that an integration that fails to import still fails (v1-e01-t39).
+    "packages/debate_cli/tests/test_container_factories.py",
 )
+# The composition root and the app, read by factory and by command (v1-e01-t39).
+CLI_SOURCE = "packages/debate_cli/src/debate_cli"
+CONTAINER = f"{CLI_SOURCE}/container.py"
+CONTAINER_CLASS = "ServiceContainer"
+CONTAINER_MODULE = "debate_cli.container"
+CONTEXT = f"{CLI_SOURCE}/context.py"
+APP = f"{CLI_SOURCE}/app.py"
+COMMAND_REGISTRY = f"{CLI_SOURCE}/command_registry.py"
+REGISTERING_FUNCTION = "register_commands"
+# A part of a file is named `<file>::<part>`: a container method, or the app for one command module.
+PART = "::"
+# What passes the root's own help: it lists every command.
+HELP_FLAGS = frozenset({"--help", "-h"})
+# Calls that read the container by a name they compute, or as a whole.
+REFLECTION_CALLS = frozenset({"vars", "dir", "getmembers", "getsource", "attrgetter", "methodcaller"})
 # The tests that read every tracked Markdown file, or check docs/ as a whole.
 DOCS_CHECK_TESTS = (
     "tests/docs/",
@@ -457,6 +505,12 @@ CONFTEST = "is beneath"
 RUNS = "runs"
 NAMES = "names"
 READS_SOURCE = "reads the Python source of"
+# v1-e01-t39: between the container's parts, the files that ask for them, and the app's commands.
+CALLS = "calls"
+USES = "uses"
+ASKS = "asks for"
+READS_EVERY_PART = "reads the container whole, by reflection or as source, so it has"
+REGISTERS = "registers"
 ROOT_CONFTEST = "conftest.py"
 # The edges a conftest read fixture by fixture is reached by when its fixtures' own edges carry them.
 FIXTURE_EDGES = frozenset({IMPORTS, RUNS})
@@ -471,6 +525,11 @@ class Graph:
     # Conftests below the root read fixture by fixture: reaching one through a file it imports or
     # runs does not reach every test beneath it (v1-e01-t32).
     narrowed_conftests: set[str] = field(default_factory=set)
+    # The app for each command module (`app.py::<module>`) -> the commands it registers, as words,
+    # and each group's words -> the words beneath it, `()` holding the top-level ones (v1-e01-t39).
+    app_commands: dict[str, tuple[tuple[str, ...], ...]] = field(default_factory=dict)
+    command_children: dict[tuple[str, ...], set[str]] = field(default_factory=dict)
+    labels: dict[str, str] = field(default_factory=dict)  # a part -> how --explain shows it
 
     def add(self, dependent: str, how: str, target: str) -> None:
         if dependent != target:
@@ -481,18 +540,35 @@ def build_graph(tree: Tree, layout: Layout) -> Graph:
     graph = Graph(layout)
     resolver = Resolver(layout)
     package_edges = grimp_edges(tree, layout, graph) or {}
+    container = read_container(tree, resolver) if CONTAINER in tree.texts else None
+    registered = read_registry(tree, layout) if COMMAND_REGISTRY in tree.texts else None
+    if CONTAINER in tree.texts and container is None:
+        graph.notes.append(f"{CONTAINER} has no {CONTAINER_CLASS} class to read; it was read as one file.")
+    if COMMAND_REGISTRY in tree.texts and registered is None:
+        graph.notes.append(
+            f"{COMMAND_REGISTRY} could not be read command by command; every command reaches the app."
+        )
+
+    def imported_as_parts(path: str, target: str) -> bool:
+        """An import the container's parts, or the app's commands, account for instead (v1-e01-t39)."""
+        return (path == CONTAINER and container is not None) or (
+            path == COMMAND_REGISTRY and registered is not None and target in registered
+        )
+
     for path, module in layout.path_modules.items():
         parent = module.rpartition(".")[0]
         if parent in layout.module_paths:
             graph.add(path, IMPORTS, layout.module_paths[parent])
         for imported in package_edges.get(module, ()):
-            if imported in layout.module_paths:
-                graph.add(path, IMPORTS, layout.module_paths[imported])
+            target = layout.module_paths.get(imported)
+            if target is not None and not imported_as_parts(path, target):
+                graph.add(path, IMPORTS, target)
     for path in tree.texts:
         if not path.endswith(".py") or layout.path_modules.get(path) in package_edges:
             continue
         for target in resolver.imports_of(path):
-            graph.add(path, IMPORTS, target)
+            if not imported_as_parts(path, target):
+                graph.add(path, IMPORTS, target)
     for path in tree.texts:
         if layout.is_package_file(path):
             continue  # package code names the CLI in its messages; it does not start it
@@ -509,6 +585,10 @@ def build_graph(tree: Tree, layout: Layout) -> Graph:
     for conftest in conftests:
         if conftest != ROOT_CONFTEST and conftest in tree.texts:
             add_conftest_fixtures(tree, layout, resolver, graph, conftest, conftests)
+    if container is not None:
+        add_container_parts(tree, layout, graph, container)
+    if registered is not None:
+        add_app_commands(layout, graph, registered)
     return graph
 
 
@@ -727,6 +807,457 @@ def fixture_of(definition: ast.stmt) -> tuple[str, bool] | None:
         never_autouse = autouse is None or (isinstance(autouse, ast.Constant) and autouse.value is False)
         return fixture_name, not never_autouse
     return None
+
+
+# --------------------------------------------------------------------------------------------
+# The container by factory and the app by command (v1-e01-t39)
+# --------------------------------------------------------------------------------------------
+
+
+def part_of(path: str, part: str) -> str:
+    return f"{path}{PART}{part}"
+
+
+@dataclass
+class ContainerReading:
+    """`container.py` part by part: the container class's methods, and the functions and classes beside it.
+
+    `module_files` is what module code needs, the code that runs when the module is imported: a
+    top-level assignment, a base class, a decorator, a dunder method. An import nothing uses is
+    counted there too, since one that fails fails the import. `module_parts` are the parts module
+    code uses.
+    """
+
+    part_files: dict[str, set[str]]  # part -> the files the imports it uses bring
+    part_calls: dict[str, set[str]]  # part -> the parts its code names
+    module_files: set[str]
+    module_parts: set[str]
+
+
+def names_in(*nodes: ast.AST | None) -> set[str]:
+    """Every name and attribute a piece of code mentions."""
+    found: set[str] = set()
+    for node in nodes:
+        for child in ast.walk(node) if node is not None else ():
+            if isinstance(child, ast.Name):
+                found.add(child.id)
+            elif isinstance(child, ast.Attribute):
+                found.add(child.attr)
+    return found
+
+
+def evaluated_with_the_definition(definition: ast.stmt) -> list[ast.AST]:
+    """What a `def` or `class` statement evaluates when it runs: decorators, defaults, bases."""
+    if isinstance(definition, ast.ClassDef):
+        return [*definition.decorator_list, *definition.bases, *definition.keywords]
+    if isinstance(definition, ast.FunctionDef | ast.AsyncFunctionDef):
+        defaults = [*definition.args.defaults, *(d for d in definition.args.kw_defaults if d is not None)]
+        return [*definition.decorator_list, *defaults]
+    return [definition]
+
+
+def read_container(tree: Tree, resolver: Resolver) -> ContainerReading | None:
+    """`container.py` read part by part; None when it has no single container class to read."""
+    syntax = tree.syntax(CONTAINER)
+    if syntax is None:
+        return None
+    classes = [
+        node for node in syntax.body if isinstance(node, ast.ClassDef) and node.name == CONTAINER_CLASS
+    ]
+    if len(classes) != 1:
+        return None
+    container_class = classes[0]
+    bound: dict[str, set[str]] = {}  # a name a top-level import binds -> the files it brings
+    module_code: list[ast.AST] = []
+    parts: dict[str, list[ast.stmt]] = {}
+
+    def bind(statement: ast.Import | ast.ImportFrom) -> None:
+        for alias in statement.names:
+            if isinstance(statement, ast.Import):
+                files = resolver.resolve(CONTAINER, 0, alias.name, ())
+                bound.setdefault(alias.asname or alias.name.split(".")[0], set()).update(files)
+            else:
+                files = resolver.resolve(CONTAINER, statement.level, statement.module or "", (alias.name,))
+                bound.setdefault(alias.asname or alias.name, set()).update(files)
+
+    for statement in syntax.body:
+        if isinstance(statement, ast.Import | ast.ImportFrom):
+            bind(statement)
+        elif statement is container_class:
+            module_code.extend(evaluated_with_the_definition(container_class))
+            for member in container_class.body:
+                is_method = isinstance(member, ast.FunctionDef | ast.AsyncFunctionDef)
+                if is_method and not (member.name.startswith("__") and member.name.endswith("__")):
+                    parts.setdefault(member.name, []).append(member)
+                    module_code.extend(evaluated_with_the_definition(member))
+                else:
+                    module_code.append(member)  # a class attribute, or a dunder every user runs
+        elif isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+            parts.setdefault(statement.name, []).append(statement)
+            module_code.extend(evaluated_with_the_definition(statement))
+        else:
+            # Module code: an assignment, an `if TYPE_CHECKING:` block. Imports in it are bound
+            # like any other top-level import, and read by what uses the names.
+            for child in ast.walk(statement):
+                if isinstance(child, ast.Import | ast.ImportFrom):
+                    bind(child)
+            module_code.append(statement)
+
+    reading = ContainerReading({}, {}, set(), set())
+    used_by_parts: set[str] = set()
+    for part, definitions in parts.items():
+        files: set[str] = set()
+        names = names_in(*definitions)
+        for definition in definitions:
+            for child in ast.walk(definition):
+                if isinstance(child, ast.Import):
+                    for alias in child.names:
+                        files |= resolver.resolve(CONTAINER, 0, alias.name, ())
+                elif isinstance(child, ast.ImportFrom):
+                    names_imported = tuple(alias.name for alias in child.names)
+                    files |= resolver.resolve(CONTAINER, child.level, child.module or "", names_imported)
+        for name in names & bound.keys():
+            files |= bound[name]
+        used_by_parts |= names
+        reading.part_files[part] = files
+        reading.part_calls[part] = (names & parts.keys()) - {part}
+    module_names = names_in(*module_code)
+    for name, files in bound.items():
+        if name in module_names or name not in used_by_parts:
+            reading.module_files |= files
+    reading.module_parts = module_names & parts.keys()
+    return reading
+
+
+def reads_the_container_whole(syntax: ast.AST) -> bool:
+    """Whether a file reads the container class by reflection, or the container module as source.
+
+    Reflection is a call such as `vars(...)`, `inspect.getmembers(...)` or a `getattr` with a name
+    it computes, on something named for the container (`ServiceContainer`, `container`,
+    `services`). Source is the container's module name, or path, in a string: what the post-install
+    check reads its imports from.
+    """
+    holders = {CONTAINER_CLASS, "container", "services"}
+    for node in ast.walk(syntax):
+        if (
+            isinstance(node, ast.Constant)
+            and isinstance(node.value, str)
+            and (node.value == CONTAINER_MODULE or node.value.endswith("debate_cli/container.py"))
+        ):
+            return True
+        if not isinstance(node, ast.Call) or not node.args:
+            continue
+        function = node.func
+        name = function.attr if isinstance(function, ast.Attribute) else getattr(function, "id", "")
+        computed = name in ("getattr", "hasattr") and not (
+            len(node.args) > 1 and isinstance(node.args[1], ast.Constant)
+        )
+        if (name in REFLECTION_CALLS or computed) and names_in(node.args[0]) & holders:
+            return True
+    return False
+
+
+def container_readers(syntax: ast.Module) -> set[str] | None:
+    """A module's top-level names that read the container whole, and what uses them; None if module code does.
+
+    `debate_cli/installation.py` reads the container's imports in `wired_integrations`, and
+    `check_installation` and `main` call it, but `app.py` imports the module for
+    `incomplete_installation_failure` alone. A file that uses a reading name has every part; one
+    that imports the module for something else does not. An `if __name__ == "__main__":` block is
+    left out: it runs only when the module is run, and a file that runs it has every part.
+    """
+    defined: dict[str, list[ast.stmt]] = {}
+    module_code: list[ast.stmt] = []
+    for statement in syntax.body:
+        if isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+            defined.setdefault(statement.name, []).append(statement)
+        elif isinstance(statement, ast.Assign | ast.AnnAssign):
+            targets = statement.targets if isinstance(statement, ast.Assign) else [statement.target]
+            for target in targets:
+                for node in ast.walk(target):
+                    if isinstance(node, ast.Name):
+                        defined.setdefault(node.id, []).append(statement)
+        elif not isinstance(statement, ast.Import | ast.ImportFrom) and not runs_only_as_a_program(statement):
+            module_code.append(statement)
+    readers = {
+        name for name, statements in defined.items() if any(map(reads_the_container_whole, statements))
+    }
+    while True:
+        more = {name for name, statements in defined.items() if names_in(*statements) & readers} - readers
+        if not more:
+            break
+        readers |= more
+    if any(
+        reads_the_container_whole(statement) or names_in(statement) & readers for statement in module_code
+    ):
+        return None
+    return readers
+
+
+def runs_only_as_a_program(statement: ast.stmt) -> bool:
+    """`if __name__ == "__main__":`."""
+    test = statement.test if isinstance(statement, ast.If) else None
+    return (
+        isinstance(test, ast.Compare)
+        and isinstance(test.left, ast.Name)
+        and test.left.id == "__name__"
+        and any(isinstance(item, ast.Constant) and item.value == "__main__" for item in test.comparators)
+    )
+
+
+def add_container_parts(tree: Tree, layout: Layout, graph: Graph, reading: ContainerReading) -> None:
+    """The container's parts as nodes, and each file that can hold a container reaching the parts it names.
+
+    A file can hold one if it is a `debate_cli` module, which can be handed `cli.services`, or it
+    imports one. It reaches a part it names as an attribute (`cli.services.removal()`), a name or
+    a quoted word; one that reads the container whole reaches every part. A file that does not
+    parse reaches every part too.
+    """
+    for part, files in sorted(reading.part_files.items()):
+        node = part_of(CONTAINER, part)
+        graph.labels[node] = f"{CONTAINER_MODULE}'s {part} ({CONTAINER})"
+        for file in sorted(files):
+            graph.add(node, IMPORTS, file)
+        for called in sorted(reading.part_calls[part]):
+            graph.add(node, CALLS, part_of(CONTAINER, called))
+    for file in sorted(reading.module_files):
+        graph.add(CONTAINER, IMPORTS, file)
+    for part in sorted(reading.module_parts):
+        graph.add(CONTAINER, USES, part_of(CONTAINER, part))
+    cli_files = {path for path in layout.path_modules if path.startswith(f"{CLI_SOURCE}/")}
+    holders = set(cli_files)
+    for target in cli_files:
+        holders |= {dependent for dependent, how in graph.dependents.get(target, ()) if how == IMPORTS}
+    # The container's own parts import CLI modules too (`package_version`); they are what is held.
+    holders = {holder for holder in holders if holder != CONTAINER and PART not in holder}
+    every_part = sorted(reading.part_files)
+    for holder in sorted(holders):
+        syntax = tree.syntax(holder) if holder.endswith(".py") else None
+        readers = container_readers(syntax) if syntax is not None else None
+        if readers is None or (readers and holder not in layout.path_modules):
+            for part in every_part:
+                graph.add(holder, READS_EVERY_PART, part_of(CONTAINER, part))
+            continue
+        assert syntax is not None
+        named = names_in(syntax) & reading.part_files.keys()
+        named |= {
+            node.value
+            for node in ast.walk(syntax)
+            if isinstance(node, ast.Constant)
+            and isinstance(node.value, str)
+            and node.value in reading.part_files
+        }
+        for part in sorted(named):
+            graph.add(holder, ASKS, part_of(CONTAINER, part))
+        if not readers:
+            continue
+        # A module whose functions read the container whole: the files that call them, or run it, do.
+        for dependent, how in list(graph.dependents.get(holder, ())):
+            if PART in dependent:
+                continue
+            used = tree.syntax(dependent) if dependent.endswith(".py") else None
+            if how == RUNS or (how == IMPORTS and (used is None or names_in(used) & readers)):
+                for part in every_part:
+                    graph.add(dependent, READS_EVERY_PART, part_of(CONTAINER, part))
+
+
+def read_registry(tree: Tree, layout: Layout) -> dict[str, list[tuple[str, ...]]] | None:
+    """Each command module `register_commands` registers -> its commands, as their words; None if unreadable.
+
+    It reads the function's statements one by one: a group made with a call whose first argument is
+    its name, `<group>.command("<name>")(<module>.<function>)`, and `<parent>.add_typer(<group>)`.
+    Any other statement, or a group never added, means it cannot tell, and the registry is read as
+    a file: every command reaches the app whole.
+    """
+    syntax = tree.syntax(COMMAND_REGISTRY)
+    if syntax is None:
+        return None
+    functions = [
+        node
+        for node in syntax.body
+        if isinstance(node, ast.FunctionDef) and node.name == REGISTERING_FUNCTION
+    ]
+    if len(functions) != 1 or not functions[0].args.args:
+        return None
+    root = functions[0].args.args[0].arg
+    modules: dict[str, str] = {}  # the name a module is imported as -> its file
+    for node in syntax.body:
+        if isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            for alias in node.names:
+                module = layout.module_paths.get(f"{node.module}.{alias.name}")
+                if module is not None:
+                    modules[alias.asname or alias.name] = module
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.asname and alias.name in layout.module_paths:
+                    modules[alias.asname] = layout.module_paths[alias.name]
+    groups: dict[str, str] = {}  # variable -> the group's word
+    parents: dict[str, str] = {}  # group variable -> the variable it is added to
+    commands: list[tuple[str, str, str]] = []  # (group variable, word, module file)
+    for statement in functions[0].body:
+        if isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Constant):
+            continue  # the docstring
+        value = statement.value if isinstance(statement, ast.Expr | ast.Assign) else None
+        if (
+            isinstance(statement, ast.Assign)
+            and len(statement.targets) == 1
+            and isinstance(statement.targets[0], ast.Name)
+            and isinstance(value, ast.Call)
+            and value.args
+            and isinstance(value.args[0], ast.Constant)
+            and isinstance(value.args[0].value, str)
+        ):
+            groups[statement.targets[0].id] = value.args[0].value
+            continue
+        if not isinstance(statement, ast.Expr) or not isinstance(value, ast.Call):
+            return None
+        function = value.func
+        if (  # <group>.command("<word>")(<module>.<function>)
+            isinstance(function, ast.Call)
+            and isinstance(function.func, ast.Attribute)
+            and function.func.attr == "command"
+            and isinstance(function.func.value, ast.Name)
+            and len(function.args) == 1
+            and isinstance(function.args[0], ast.Constant)
+            and isinstance(function.args[0].value, str)
+            and len(value.args) == 1
+            and isinstance(value.args[0], ast.Attribute)
+            and isinstance(value.args[0].value, ast.Name)
+            and value.args[0].value.id in modules
+        ):
+            commands.append((function.func.value.id, function.args[0].value, modules[value.args[0].value.id]))
+        elif (  # <parent>.add_typer(<group>)
+            isinstance(function, ast.Attribute)
+            and function.attr == "add_typer"
+            and isinstance(function.value, ast.Name)
+            and len(value.args) == 1
+            and isinstance(value.args[0], ast.Name)
+            and value.args[0].id in groups
+        ):
+            parents[value.args[0].id] = function.value.id
+        else:
+            return None
+
+    def words_of(variable: str, depth: int = 0) -> tuple[str, ...] | None:
+        if variable == root:
+            return ()
+        if variable not in groups or variable not in parents or depth > len(groups):
+            return None
+        above = words_of(parents[variable], depth + 1)
+        return None if above is None else (*above, groups[variable])
+
+    registered: dict[str, list[tuple[str, ...]]] = {}
+    for variable, word, module in commands:
+        above = words_of(variable)
+        if above is None:
+            return None
+        registered.setdefault(module, []).append((*above, word))
+    return registered
+
+
+def add_app_commands(layout: Layout, graph: Graph, registered: dict[str, list[tuple[str, ...]]]) -> None:
+    """The app for each command module as a node, reached from that module and judged by who names it."""
+    for module, commands in sorted(registered.items()):
+        node = part_of(APP, layout.path_modules[module])
+        graph.app_commands[node] = tuple(commands)
+        shown = listed([f"`{' '.join(command)}`" for command in commands])
+        graph.labels[node] = f"{layout.show(APP)} for {shown}"
+        graph.add(node, REGISTERS, module)
+        for command in commands:
+            for depth, word in enumerate(command):
+                graph.command_children.setdefault(command[:depth], set()).add(word)
+
+
+def listed(items: list[str]) -> str:
+    """`a`, `a and b`, `a, b and c`."""
+    return items[0] if len(items) == 1 else f"{', '.join(items[:-1])} and {items[-1]}"
+
+
+@dataclass(frozen=True)
+class Run:
+    """Consecutive literal words a file passes or keeps together: an argument vector, or part of one.
+
+    `open_end` is whether something that is not a literal follows them (`*arguments`, a name), so
+    that a helper's `("tub", "users", *arguments)` can be finished by its caller's `("add", ...)`.
+    """
+
+    words: tuple[str, ...]
+    open_end: bool
+
+    def holds(self, sequence: tuple[str, ...]) -> bool:
+        width = len(sequence)
+        return any(
+            self.words[start : start + width] == sequence for start in range(len(self.words) - width + 1)
+        )
+
+
+def argument_runs(tree: Tree, path: str, starters: frozenset[str]) -> frozenset[Run]:
+    """The runs of literal words in a file: what its calls, lists, tuples and assigned constants hold.
+
+    A string with whitespace is a command line when it starts with one of `starters` (the console
+    script, a command's first word, an option); otherwise it is prose, and ends the run like any
+    other value. A file that is not Python, or does not parse, gives each line's words.
+    """
+    syntax = tree.syntax(path) if path.endswith(".py") else None
+    if syntax is None:
+        lines = tree.texts.get(path, "").splitlines()
+        return frozenset(Run(tuple(line.split()), True) for line in lines if line.split())
+    sequences: list[list[ast.expr]] = []
+    for node in ast.walk(syntax):
+        if isinstance(node, ast.Call):
+            sequences.append(list(node.args))
+        elif isinstance(node, ast.List | ast.Tuple | ast.Set):
+            sequences.append(list(node.elts))
+        elif isinstance(node, ast.Assign | ast.AnnAssign) and isinstance(node.value, ast.Constant):
+            sequences.append([node.value])
+    runs: set[Run] = set()
+    for elements in sequences:
+        words: list[str] = []
+        for element in elements:
+            pieces = None
+            if isinstance(element, ast.Constant) and isinstance(element.value, str):
+                pieces = element.value.split() or [element.value]
+                if len(pieces) > 1 and not (pieces[0] in starters or pieces[0].startswith("-")):
+                    pieces = None
+            if pieces is None:
+                if words:
+                    runs.add(Run(tuple(words), True))
+                words = []
+            else:
+                words.extend(pieces)
+        if words:
+            runs.add(Run(tuple(words), False))
+    return frozenset(runs)
+
+
+def names_command(runs: frozenset[Run], command: tuple[str, ...]) -> bool:
+    """Whether runs of literal words name `command`.
+
+    * All its words in one run: `("caselist", "remove", "--team", "T")`.
+    * Its first words ending a run something else follows, and the rest in any run: a helper's
+      `("tub", "users", *arguments)` and its caller's `("add", "--email", email)`.
+    * Its group alone, ending a run: `("caselist",)` shows the group's help, which lists every
+      command in it.
+    """
+    if any(run.holds(command) for run in runs):
+        return True
+    for depth in range(1, len(command)):
+        group = command[:depth]
+        ends = [run for run in runs if run.words[-depth:] == group]
+        if any(not run.open_end for run in ends):
+            return True
+        if any(run.open_end for run in ends) and any(run.holds(command[depth:]) for run in runs):
+            return True
+    return False
+
+
+def names_any_command(runs: frozenset[Run], top: set[str]) -> bool:
+    """Whether a run holds any top-level command's word: otherwise nothing tells which command it runs."""
+    return any(top.intersection(run.words) for run in runs)
+
+
+def passes_help(runs: frozenset[Run]) -> bool:
+    return any(HELP_FLAGS.intersection(run.words) for run in runs)
 
 
 def grimp_edges(tree: Tree, layout: Layout, graph: Graph) -> dict[str, set[str]] | None:
@@ -1424,6 +1955,11 @@ class Walk:
         self.data_files: set[str] = set()
         self.fallback_tests: dict[str, str] = {}
         self.notes: list[str] = []
+        self.runs: dict[str, frozenset[Run]] = {}
+        self.runners: dict[str, list[tuple[str, str]]] = {}
+        self.conftests = sorted(
+            path for path in layout.tree.paths if PurePosixPath(path).name == "conftest.py"
+        )
 
     def reach(self, path: str, how: str, via: str | None) -> None:
         if path not in self.why:
@@ -1467,6 +2003,9 @@ class Walk:
                         "selected for that, and an import failure there would fail every test."
                     )
                     continue
+                if path in self.graph.app_commands:
+                    self.reach_runners(path)
+                    continue
                 through_fixtures = self.reached_by_fixtures(path)
                 for dependent, how in self.graph.dependents.get(path, ()):
                     if not (through_fixtures and how == CONFTEST):
@@ -1503,6 +2042,83 @@ class Walk:
                 self.fallback_tests.update(dict.fromkeys(tests, reason))
         return None
 
+    def reach_runners(self, node: str) -> None:
+        """From the app for one command module, to each file that runs the app and names a command of it.
+
+        A file runs the app through an import, a fixture, a console script or `-m`. It is reached
+        when its runs of literal words (:func:`argument_runs`), with those of the conftests above it
+        and the helpers between it and the app, name one of the module's commands
+        (:func:`names_command`), or pass `--help`. A helper that names none is followed to the
+        files that import or name it, carrying its runs. A test whose runs hold no command's first
+        word cannot be told apart, and is reached, as is a conftest, which its fixtures then narrow
+        as they always do.
+        """
+        commands = self.graph.app_commands[node]
+        top = self.graph.command_children.get((), set())
+        pending = [(runner, how, self.runs_in(runner)) for runner, how in self.graph.dependents.get(APP, ())]
+        seen: set[tuple[str, frozenset[Run]]] = set()
+        while pending:
+            runner, how, runs = pending.pop()
+            is_test = runner in self.layout.test_files
+            if is_test:
+                runs = runs.union(*(self.runs_in(conftest) for conftest in self.conftests_above(runner)))
+            if (runner, runs) in seen:
+                continue
+            seen.add((runner, runs))
+            named = passes_help(runs) or any(names_command(runs, command) for command in commands)
+            if runner in self.graph.narrowed_conftests:
+                # By its import, so that its fixtures go on narrowing it: their edges carry its tests.
+                self.reach(runner, IMPORTS, node)
+                continue
+            if named or PurePosixPath(runner).name == "conftest.py":
+                self.reach(runner, how, node)
+                continue
+            further = [] if is_test else self.runners_of(runner)
+            if not further:
+                if not names_any_command(runs, top):
+                    self.reach(
+                        runner, how, node
+                    )  # nothing it passes names a command: it cannot be told apart
+                continue
+            for next_runner, next_how in further:
+                chain = f"{next_how} {self.show(runner)}, which {how}"
+                pending.append((next_runner, chain, runs | self.runs_in(next_runner)))
+
+    def runs_in(self, path: str) -> frozenset[Run]:
+        if path not in self.runs:
+            starters = frozenset(
+                self.graph.command_children.get((), set()) | self.layout.console_scripts.keys()
+            )
+            self.runs[path] = argument_runs(self.layout.tree, path, starters)
+        return self.runs[path]
+
+    def conftests_above(self, test: str) -> list[str]:
+        return [
+            conftest
+            for conftest in self.conftests
+            if conftest == ROOT_CONFTEST or test.startswith(str(PurePosixPath(conftest).parent) + "/")
+        ]
+
+    def runners_of(self, helper: str) -> list[tuple[str, str]]:
+        """The files that import a helper that runs the app, and those that run it by its name."""
+        if helper not in self.runners:
+            found = list(self.graph.dependents.get(helper, ()))
+            if runs_by_path(helper, self.layout):
+                keys = keys_for(helper, self.layout, deleted=False)
+                mentions = self.corpus.find(keys.file_names, keys.path_parts)
+                mentioners = set(keys.neighbours) | self.corpus.denoters(helper, keys)
+                for key in (*keys.file_names, *keys.path_parts):
+                    mentioners |= mentions.get(key, set())
+                mentioners.discard(helper)
+                found += [
+                    (mentioner, NAMES) for mentioner in sorted(mentioners) if self.can_read(mentioner, helper)
+                ]
+            self.runners[helper] = found
+        return self.runners[helper]
+
+    def show(self, path: str) -> str:
+        return self.graph.labels.get(path) or self.layout.show(path)
+
     def can_read(self, reader: str, path: str) -> bool:
         """A package module reads only its own package's files: one installed from a wheel has no others.
 
@@ -1522,7 +2138,7 @@ class Walk:
         while current is not None and current not in seen:
             seen.add(current)
             how, via = self.why[current]
-            steps.append(how if via is None else f"{how} {self.layout.show(via)}")
+            steps.append(how if via is None else f"{how} {self.show(via)}")
             current = via
         return ", which ".join(steps)
 

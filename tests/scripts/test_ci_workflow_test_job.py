@@ -230,7 +230,9 @@ def test_a_part_measures_no_coverage_on_any_event_but_a_push() -> None:
     # a push alone.
     pytest_steps = [step for step in test["steps"] if " pytest " in step.get("run", "")]
     assert sorted(step.get("if") for step in pytest_steps) == sorted([ON_A_PUSH, ON_ANY_OTHER_EVENT])
-    about_coverage = [step for step in test["steps"] if re.search(r"cov|artifact", json.dumps(step), re.I)]
+    about_coverage = [
+        step for step in test["steps"] if re.search(r"--cov|COVERAGE_|-artifact@", json.dumps(step))
+    ]
     assert about_coverage, "no step of the test job measures or keeps coverage"
     assert {step.get("if") for step in about_coverage} == {ON_A_PUSH}
 
@@ -405,7 +407,9 @@ def test_a_pull_request_part_keeps_no_coverage_and_the_push_parts_combine_into_t
     for completed in (on_a_pull_request, *on_a_push, unsplit):
         assert completed.returncode == 0, completed.stdout[-2000:] + completed.stderr[-2000:]
         assert " passed" in completed.stdout
-    assert "coverage" not in on_a_pull_request.stdout
+    # pytest-cov's report heading; the word alone is also in the checkout's path, which pytest prints.
+    assert "coverage: platform" not in on_a_pull_request.stdout
+    assert "coverage: platform" in unsplit.stdout
     assert "TOTAL" not in on_a_pull_request.stdout
     assert list(pull_request_temp.iterdir()) == []
     for part, completed in enumerate(on_a_push, start=1):
@@ -457,16 +461,16 @@ def test_the_combining_step_reports_when_every_part_of_the_matrix_is_there(tmp_p
     ("names", "named_in_the_error"),
     [
         # One part's data missing: the case each of the step's two checks refuses.
-        (of(8, 1, 2, 3, 4, 6, 7, 8), "5"),
+        (of(8, 1, 2, 3, 4, 6, 7, 8), "missing: 5;"),
         # The last part missing, and one of a matrix of another size in its place: the count is right,
         # so only the check of every part number refuses it.
-        ([*of(8, 1, 2, 3, 4, 5, 6, 7), *of(9, 3)], "8"),
+        ([*of(8, 1, 2, 3, 4, 5, 6, 7), *of(9, 3)], "missing: 8;"),
         # Every part there, and one more of a matrix of another size: only the count refuses it.
-        ([*of(8, *range(1, 9)), *of(9, 3)], "9"),
+        ([*of(8, *range(1, 9)), *of(9, 3)], "missing: none; found: coverage-part-1-of-8"),
         # Nothing downloaded at all.
-        ([], "no part"),
+        ([], "no part's coverage data"),
         # A name that says no matrix total.
-        (["coverage-part-3"], "coverage-part-3"),
+        (["coverage-part-3"], "coverage-part-3 does not say"),
     ],
     ids=["one-part-missing", "last-part-missing", "a-part-too-many", "none", "no-total-in-the-name"],
 )

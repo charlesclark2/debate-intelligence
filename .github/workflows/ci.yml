@@ -35,8 +35,14 @@
 #     The push run on dev is the whole selection, and the dev pre-release waits for it, so a test the
 #     selection missed fails before any release; a red push run on dev is fixed by the next pull
 #     request before anything else merges (working agreement 10).
-#   * It measures no coverage. The `coverage` job does, over the whole selection, on pushes to dev and
-#     main only.
+#   * It measures no coverage on a pull request or a dispatch. On a push to dev or main each part
+#     measures coverage of its own share and keeps the data as an artifact, and the `coverage` job
+#     combines every part's data into one report over the whole selection (v1-e01-t42). Until then
+#     the `coverage` job was one unsplit run of the whole selection, which passed 20 minutes and
+#     held the dev pre-release; now the push run waits for the parts and a short combining job.
+#     Coverage makes a part about half as long again (1.52 times, measured on the operator's Mac),
+#     so a push part takes longer than the same part on a pull request: the 2-minute figure below
+#     is for pull requests, and a push part is held by the job's 10-minute limit.
 #   * When it drifts: every part ends with its 25 slowest tests (`--durations=25`). If `ci` on
 #     ordinary pull requests passes 3 minutes, or one part's pytest step passes 2, append the next
 #     number to the `test` job's `matrix.part`. That is the whole change. If one part is steadily
@@ -239,34 +245,88 @@ jobs:
         # change. The durations are how anyone sees which tests are slow on a runner, where the
         # order is not the one a laptop gives. pytest reads `@FILE` as more arguments, one per line;
         # an empty file adds none, and pytest runs every path in `testpaths`.
+        if: github.event_name != 'push'
         run: uv run --frozen pytest -n auto -m "not slow and not live" --part "${{ matrix.part }}/${{ strategy.job-total }}" --durations=25 "@$RUNNER_TEMP/test-selection.txt"
+      - name: pytest --cov (one part of the selection, measuring coverage, on a push)
+        # The step above with coverage added (v1-e01-t42): [tool.coverage] in pyproject.toml says what
+        # is measured, and the part writes no report of its own (`--cov-report=` is none). Its data
+        # goes to a file named for this part out of the matrix total, which the `coverage` job
+        # combines with every other part's into the one report.
+        if: github.event_name == 'push'
+        env:
+          COVERAGE_FILE: ${{ runner.temp }}/coverage-part-${{ matrix.part }}-of-${{ strategy.job-total }}
+        run: uv run --frozen pytest -n auto -m "not slow and not live" --part "${{ matrix.part }}/${{ strategy.job-total }}" --durations=25 --cov --cov-report= "@$RUNNER_TEMP/test-selection.txt"
+      - name: Keep this part's coverage data for the coverage job
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v6
+        with:
+          name: coverage-data-part-${{ matrix.part }}-of-${{ strategy.job-total }}
+          path: ${{ runner.temp }}/coverage-part-${{ matrix.part }}-of-${{ strategy.job-total }}
+          if-no-files-found: error
+          # Read once, by the `coverage` job of the same run.
+          retention-days: 1
 
   # Branch coverage of the whole default selection, with the report every run printed until
   # v1-e01-t27, on pushes to dev and main only: nothing is gated on coverage (pyproject.toml sets no
-  # fail_under), and measuring it took a third of the suite's time on every pull request. It is one
-  # unsplit run, so the report covers everything at once, and it is the collection the parts above
-  # are compared with. It is not one of `ci`'s needs, because `ci` is what a pull request waits for
-  # and this never runs on one.
+  # fail_under), and measuring it took a third of the suite's time on every pull request. Each part
+  # of `test` measures its own share on a push and keeps the data as an artifact; this job combines
+  # every part's data and prints the report once, over the whole selection (v1-e01-t42). It runs no
+  # tests, so it is short and does not grow with the suite.
   #
-  # It does not fail the push's run (PM batch 2026-10-27v). From 2026-10-26 the unsplit run passed its
-  # 20-minute limit on every push to dev, each push's run concluded `failure` though every part of
-  # `test` passed, and the dev pre-release, which waits for a successful push run, made no build for
-  # about thirty merges. The parts above are what decides whether the push run is green; this job
-  # reports coverage when it finishes, and its own result is still shown. Measuring coverage in the
-  # parts and combining it is v1-e01-t42.
+  # Until v1-e01-t42 this job was one unsplit run of the whole selection. From 2026-10-26 it passed
+  # its 20-minute limit on every push to dev, each push's run concluded `failure` though every part
+  # of `test` passed, and the dev pre-release, which waits for a successful push run, made no build
+  # for about thirty merges; PM batch 2026-10-27v let it fail without failing the run. Now its result
+  # is the run's again: a part's data that is missing fails it, rather than leaving that part's tests
+  # out of the total.
+  #
+  # It is not one of `ci`'s needs, because `ci` is what a pull request waits for and this never runs
+  # on one.
   coverage:
+    needs: test
     if: github.event_name == 'push'
     runs-on: ubuntu-24.04
-    continue-on-error: true
-    # Longer than the other jobs: this is the one run that still grows with the suite.
-    timeout-minutes: 40
+    timeout-minutes: 10
     steps:
       - *checkout
       - *setup-uv
       - *install-python
+      # The report finds the measured packages through the workspace, as the parts did.
       - *uv-sync
-      - name: pytest --cov (the whole default selection, unsplit)
-        run: uv run --frozen pytest -n auto --cov --cov-report=term-missing -m "not slow and not live"
+      - name: Download every part's coverage data
+        uses: actions/download-artifact@v7
+        with:
+          pattern: coverage-data-part-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/coverage-data
+      - name: coverage combine and report (every part of the matrix, or nothing)
+        # Each part's file is coverage-part-K-of-N, N being the matrix's size. The step combines only
+        # when the files are exactly parts 1 to N of the same N, and otherwise names what is missing
+        # and fails. The report is the one `--cov-report=term-missing` printed for the unsplit run.
+        run: |
+          shopt -s nullglob
+          files=("$RUNNER_TEMP"/coverage-data/coverage-part-*)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "::error title=Coverage::no part's coverage data was downloaded"
+            exit 1
+          fi
+          parts=${files[0]##*-of-}
+          case "$parts" in
+            '' | *[!0-9]*)
+              echo "::error title=Coverage::${files[0]##*/} does not say which part of how many it is"
+              exit 1
+              ;;
+          esac
+          missing=""
+          for ((part = 1; part <= parts; part++)); do
+            [ -f "$RUNNER_TEMP/coverage-data/coverage-part-$part-of-$parts" ] || missing="$missing $part"
+          done
+          if [ -n "$missing" ] || [ "${#files[@]}" -ne "$parts" ]; then
+            echo "::error title=Coverage::expected parts 1 to $parts of $parts; missing:${missing:- none}; found: ${files[*]##*/}"
+            exit 1
+          fi
+          uv run --frozen coverage combine --data-file="$RUNNER_TEMP/coverage-combined" "${files[@]}"
+          uv run --frozen coverage report --data-file="$RUNNER_TEMP/coverage-combined" --show-missing
 
   # The contracts live in pyproject.toml's [tool.importlinter]; v1-e02-t06-import-boundary-guard
   # owns the full set.

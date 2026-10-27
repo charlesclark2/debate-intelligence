@@ -26,6 +26,7 @@ regenerates it on `dev` ([`v1-e01-t16`](../plan_specs/v1/e01-repo-foundation/t16
 | [data/caselist-sync-runs.md](data/caselist-sync-runs.md) | Counts from each weekly `caselist pull`, recorded by the operator; aggregates only |
 | [data/debate-file-style-survey.md](data/debate-file-style-survey.md) | Which Word styles real team, caselist and camp `.docx` files use, and the share of files per template family |
 | [data/evidence-search-pilot.md](data/evidence-search-pilot.md) | The student search pilot's evidence: early sessions, the promotion checklist, the beta and the go or no-go |
+| [data/file-publish-log.md](data/file-publish-log.md) | Every operator publish of built files to the evidence buckets: keys, counts and statuses, no team codes (v1-e33-t05) |
 | [data/landscape/first-run-policy.md](data/landscape/first-run-policy.md) | Counts from the first Policy argument landscape reports on hspolicy26 (`v1-e32-t05`): classification coverage, review queue and scan; aggregates only |
 | [data/parsed-card-store.md](data/parsed-card-store.md) | Layout and record shapes of the parsed card store that caselist parse writes |
 | [data/parser-eval-2026-10.md](data/parser-eval-2026-10.md) | Parser evaluation baseline on 2026.10.18-docx-5: per-unit scores for the labelled tiers |
@@ -48,7 +49,7 @@ regenerates it on `dev` ([`v1-e01-t16`](../plan_specs/v1/e01-repo-foundation/t16
 | [process/task-workflow.md](process/task-workflow.md) | `scripts/task`: start → session → PM review → PR → finish |
 | [process/working-agreements.md](process/working-agreements.md) | Project rules: light CI, operator hand-off for long commands, doc locations, naming |
 | [runbooks/aws-account-baseline.md](runbooks/aws-account-baseline.md) | Building and verifying the AWS account baseline: identity, audit, budgets |
-| [runbooks/bedrock-access.md](runbooks/bedrock-access.md) | Calling the routed Bedrock models: the BedrockInvoker permission set's plan and apply, its SSO profile, the account's one-time model access, the data-use checks and the first real call |
+| [runbooks/bedrock-access.md](runbooks/bedrock-access.md) | Calling the routed Bedrock models: the BedrockInvoker permission set's plan and apply, its SSO profile, the account's one-time model access, the data-use checks, the first real call and zero-retention mode |
 | [runbooks/caselist-backfiles.md](runbooks/caselist-backfiles.md) | Importing earlier seasons' complete archives as backfiles (`caselist backfile-import`): when imports may run, the dry run and the import, the order, what each refusal means, and the rebuild a removal adds |
 | [runbooks/caselist-backfill.md](runbooks/caselist-backfill.md) | The one-off caselist and camp-file backfill: what `pull` fetches, what is imported by hand, and the day-by-day download plan |
 | [runbooks/caselist-cloud-credentials.md](runbooks/caselist-cloud-credentials.md) | The weekly cloud run's credentials: applying the key, the two secrets, the roles and the writer, writing the Tabroom password, the scheduled login, and logging in by hand |

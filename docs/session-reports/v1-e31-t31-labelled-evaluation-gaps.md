@@ -922,3 +922,13 @@ wrong premise before anyone ran it.
 
 After the session's two edits (the C-step order and the C7 key check), the PR merges `--partial`.
 No re-review is needed unless the key check finds a write beyond the version directory.
+
+### The merge order narrowed, recorded by the PM 2026-10-27
+
+The coach's word: the weekly run, its login and its alerts are in the cloud, and images may be deployed
+while he travels. Note 11's "no dev run image is applied until the operator is back" is withdrawn.
+What stays is the ordering it protected: **no run image carrying `docx-7` is applied until C7 has
+published all four caselists' `docx-7` directories**, wherever and whenever C7 is run (or until
+`v1-e40-t08` lets the run parse what a bump owes). Thursday 2026-10-29's image is built from a tag cut
+before this PR merges, and its Terraform runs from a worktree at that tag's commit, so this PR may merge
+once that tag's validate-dev run is green.

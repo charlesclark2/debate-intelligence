@@ -464,8 +464,9 @@ DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/dev" uv run deb
       `<data_dir>/suppression/held-digests.jsonl` on this machine and
       `manifests/_suppression/held-digests.jsonl` in each bucket. Each is one upload the import
       refused: its sha256, the held path's digest and the request holding the path, and nothing
-      else. The import writes this machine's copy, as it refuses the upload; the removal writes the
-      bucket's. It is append-only and merged like the list, and a file of its own for the reason
+      else. The import writes this machine's copy, as it refuses the upload. The bucket's is
+      written by the removal, by the pull's search index stage, and in bucket mode by each save of
+      the run-state bundle under the run's lock (`v1-e40-t12`). It is append-only and merged like the list, and a file of its own for the reason
       the path entries are.
 - [ ] Find every built file whose provenance sidecar cites a removed sha256 (E33). Withdraw it from
       use immediately and rebuild it without those cards before anyone reads it in a round.
@@ -970,6 +971,12 @@ At the next import (or immediately, if you have the next archive on hand):
       writes the list. The import does write its sha256 and the request, and nothing else, to
       `held-digests.jsonl` beside the path entries on this machine (`v1-e30-t23`), so running the
       removal again lists it however long after, once the archive is gone too.
+      In bucket mode a cloud task's copy goes when the task stops, so its run gives
+      `manifests/_suppression/held-digests.jsonl` the lines at each save of the run-state bundle,
+      under its lock (`v1-e40-t12`). The removal run again and `caselist status` read that object
+      from any machine, under *REFUSED AT IMPORT AT A HELD PATH*. *HELD UPLOADS IN THE DOWNLOAD
+      INBOX* reads this machine's inbox only, and a cloud task's inbox is never there. A task killed
+      before its first save leaves the week to the next run, which meets the upload again.
 - [ ] **Where the upload is now** (`v1-e30-t21`). A weekly archive whose every member was removed or
       held leaves the inbox when `caselist pull` finishes importing it, and the import stage's
       reason says *N archive(s) taken out of the inbox, which held only files removed or held at a

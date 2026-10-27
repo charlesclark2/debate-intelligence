@@ -42,7 +42,10 @@ What an import refused at a held path (`v1-e30-t23`) is a fourth record beside t
 `held-digests.jsonl` (:class:`~debate_core.application.ports.suppression.HeldDigestEntry` says
 why), found as the path holds are. Its writer is the one exception to the rule below: the import
 appends it, to this machine's copy alone (:func:`record_held_digests`), and the removal, which holds
-every copy, gives the bucket's copy what it lacks.
+every copy, gives the bucket's copy what it lacks. `held-digests.jsonl` is also appended by a
+bucket-mode run under its lock (`v1-e40-t12`): each save of the run-state bundle gives the bucket's
+copy what the working copy holds first
+(:meth:`~debate_core.application.caselist.run_state.RunState.save_held_digests`).
 
 ## Which copies a command holds
 
@@ -118,7 +121,8 @@ REMOVAL_LOG_KEY: Final = validate_object_key(f"{SUPPRESSION_PREFIX}removal-log.j
 PATH_HOLDS_KEY: Final = validate_object_key(f"{SUPPRESSION_PREFIX}{PATH_HOLDS_FILENAME}")
 """The bucket's copy of the path-hold record: beside the list, under the takedown's one prefix."""
 HELD_DIGESTS_KEY: Final = validate_object_key(f"{SUPPRESSION_PREFIX}{HELD_DIGESTS_FILENAME}")
-"""The bucket's copy of the held-digest record (`v1-e30-t23`), which only a removal writes."""
+"""The bucket's copy of the held-digest record (`v1-e30-t23`): a removal writes it, and a bucket-mode
+run appends to it under its lock at each save of the run-state bundle (`v1-e40-t12`)."""
 
 _PATH_HOLDS_CALLED: Final = "path-hold list"
 _HELD_DIGESTS_CALLED: Final = "held-digest record"
@@ -127,7 +131,11 @@ _WITHDRAWALS_CALLED: Final = "withdrawal record"
 
 
 def is_suppression_key(key: str) -> bool:
-    """Whether `key` is under `manifests/_suppression/`, which only remove and unsuppress may write."""
+    """Whether `key` is under `manifests/_suppression/`, which only remove and unsuppress may write.
+
+    One exception: `held-digests.jsonl` is also appended by a bucket-mode run under its lock
+    (`v1-e40-t12`). `store sync` skips the whole prefix either way.
+    """
     return key.startswith(SUPPRESSION_PREFIX)
 
 
@@ -307,7 +315,8 @@ class RecordedSuppressionList:
         """Append to every copy's held-digest record, by the rule :meth:`append_path_holds` follows.
 
         With nothing new, each copy is still given what another holds and it lacks: that is how a
-        removal writes the bucket's copy of what an import recorded on this machine.
+        removal, and a bucket-mode save of the run-state bundle (`v1-e40-t12`), write the bucket's
+        copy of what an import recorded on this machine.
         """
         if self._held_digest_lines is None:
             if entries:
@@ -436,9 +445,11 @@ class LocalFallbackSuppressionList:
     async def append_held_digests(self, entries: Sequence[HeldDigestEntry]) -> None:
         """Append to this machine's copy alone, whatever the session (`v1-e30-t23`).
 
-        The pull's importers append here, with the everyday credential, which may not write under
-        the bucket's `manifests/_suppression/`. The removal run again gives the bucket's copy what
-        this one holds. Unlike every other append, this is never the union's.
+        The pull's importers append here, and a backfile import's runs unlocked, where no bucket
+        write may happen. Unlike every other append, this is never the union's.
+        `held-digests.jsonl` is also appended by a bucket-mode run under its lock (`v1-e40-t12`):
+        each save of the run-state bundle gives the bucket's copy what this one holds. The pull's
+        search index stage and the removal run again do the same.
         """
         await record_held_digests(self._local, entries)
 

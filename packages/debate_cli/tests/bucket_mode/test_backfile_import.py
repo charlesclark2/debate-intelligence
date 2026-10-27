@@ -30,6 +30,7 @@ from __future__ import annotations
 import gzip
 import io
 import json
+import shutil
 import tarfile
 import zipfile
 from collections.abc import Iterator
@@ -561,3 +562,41 @@ def test_a_path_a_removal_holds_holds_a_later_complete_archive_of_the_backfile(
     assert imported["data"]["import"]["held_by_request"] == {"RM-2026-06": 1}
     later_key = f"manifests/{BACKFILE}/{LATER_ARCHIVE_DATE.isoformat()}.jsonl"
     assert digest_of("cardmirror") not in {row.get("sha256") for row in member_rows(world, later_key)}
+
+
+def test_an_upload_a_backfile_import_refused_at_a_held_path_is_found_from_another_data_directory(
+    backfiles: tuple[World, Site], tmp_path: Path
+) -> None:
+    """The task's working copy goes with it; the held-digest record reaches the bucket (`v1-e40-t12`).
+
+    The import is the unlocked step, so the record is given to the bucket at the locked step's save
+    of the bundle. A backfile import never runs the search index stage, whose reconcile was the only
+    other way the record reached the bucket, so before `v1-e40-t12` it stayed in the task's copy."""
+    world, site = backfiles
+    assert execute(world)["exit_code"] == ExitCode.OK
+    macs_copy = tmp_path / "the-macs-copy"
+    world.use(macs_copy)
+    remove = ("caselist", "remove", "--source", digest_of("direct"), "--reason", "REQUESTED_BY_TEAM")
+    remove = (*remove, "--request", "RM-2026-06")
+    assert world.run(*remove, "--execute")["exit_code"] == ExitCode.OK
+    later = {R1: BODIES["verbatim"], R2: BODIES["wiki"], R6: BODIES["cardmirror"]}
+    site.offer(BACKFILE, (ARCHIVE_DATE, zipped(MEMBERS)), (LATER_ARCHIVE_DATE, zipped(later)))
+    world.clock.advance(timedelta(days=2))
+    cloud = world.use(tmp_path / "cloud-task-later")
+    imported = execute(world)
+    assert imported["exit_code"] == ExitCode.OK, json.dumps(imported.get("error"))[:800]
+    held = (cloud / "suppression" / "held-digests.jsonl").read_text(encoding="utf-8")
+    assert digest_of("cardmirror") in held, "the premise: the task's import refused it, and recorded it"
+    shutil.rmtree(cloud)
+    world.use(macs_copy)
+
+    status = world.run("caselist", "status", "--caselist", BACKFILE)
+    planned = world.run(*remove)
+
+    report = status["data"] if status["data"] is not None else status["error"]["details"]
+    refused = {one["caselist"]: one for one in report["refused_at_import"]}[BACKFILE]
+    assert refused["uploads"] == 1, refused
+    assert refused["requests"] == ["RM-2026-06"]
+    assert planned["exit_code"] == ExitCode.OK, planned
+    sources = {one["sha256"]: one for one in planned["data"]["sources"]}
+    assert sources[digest_of("cardmirror")]["inclusion"] == "held_at_import", sorted(sources)

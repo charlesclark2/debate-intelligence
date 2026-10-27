@@ -49,7 +49,7 @@ spec:
         `caselist status` from another data directory in bucket mode; tests shown failing
         first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

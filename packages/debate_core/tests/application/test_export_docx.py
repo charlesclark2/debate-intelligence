@@ -128,7 +128,8 @@ def test_export_docx_names_each_failure_and_verifier_code_in_the_banner(world: D
     data = run(world.export.export_docx([card], profile=TEAM_DEFAULT, failures=failures))
 
     assert paragraph_texts(data)[1] == (
-        "UNVERIFIED — not a finished card: CITATION_UNVERIFIED, EVIDENCE_UNVERIFIED, TEXT_MISMATCH, SPAN_MISMATCH"
+        "UNVERIFIED — not a finished card: "
+        "CITATION_UNVERIFIED, EVIDENCE_UNVERIFIED, TEXT_MISMATCH, SPAN_MISMATCH"
     )
 
 

@@ -1,0 +1,19 @@
+# The edits v1-e32-t25's golden files make to the synthetic caselist (../synthetic_caselist/), so that
+# each source a rank can be named by, and a rank named by none, is reached. README.md works out the
+# expected report by hand.
+#
+# cards: a card by its file (the digest's first two characters, repeated) and first paragraph, and its
+# new tag. Every other field is the fixture's.
+cards:
+  - {file: a1, element_index: 6, tag: "2. Extinction from a Cedarvale collapse"}
+  - {file: a3, element_index: 15, tag: null}
+# scenario_lists: by position id, as a topic's taxonomy file writes them (v1-e32-t22). Every other
+# position keeps no list.
+scenario_lists:
+  costs-advantage:
+    not_scenarios: [economic collapse]
+  spending-da:
+    scenarios:
+      - name: Market crash
+        forms: [cedarvale crash]
+    not_scenarios: [recession]

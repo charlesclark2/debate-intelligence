@@ -45,7 +45,7 @@ from debate_core.arguments.landscape.render import (
     render_top_cards_csv,
 )
 from debate_core.domain.landscape import PositionSide
-from debate_core.domain.landscape_report import LandscapeReport, TopCard
+from debate_core.domain.landscape_report import LandscapeReport, LeadInSource, TopCard
 from debate_core.testing.landscape_report import (
     SYNTHETIC_REPORT_DATE,
     SYNTHETIC_THIRD_SNAPSHOT,
@@ -215,12 +215,31 @@ def test_each_kind_says_how_many_of_its_documents_carry_no_labelled_impact() -> 
     assert "# no_labelled_impact_advantage=3/6\n# no_labelled_impact_da=2/6\n" in files["impact_cards.csv"]
 
 
+def _named_by(report: LandscapeReport, **sources: LeadInSource) -> LandscapeReport:
+    """`report` with the rows keyed `<position id>__<rank>` named by these sources, set by hand."""
+    rows = tuple(
+        row.model_copy(update={"named_by": sources[key]})
+        if (key := f"{row.position_id.replace('-', '_')}__{row.rank}") in sources
+        else row
+        for row in report.impact_cards
+    )
+    return report.model_copy(update={"impact_cards": rows})
+
+
 def test_the_card_above_an_impact_is_never_called_its_internal_link() -> None:
-    """`v1-e32-t14`, the PM's ruling: a fact about the file, in report.md only, counted apart."""
+    """`v1-e32-t14`, the PM's ruling: a fact about the file, in report.md only. `v1-e32-t25` marks it."""
     files = _bundle().files
     above = "Single payer cuts administrative costs"
-    assert f"* Rank 1: no labelled internal link. Card above it in the file: {above}\n" in files["report.md"]
-    assert f"Internal link: {above}" not in files["report.md"]
+    shown = render_markdown(
+        _named_by(
+            _bundle().report,
+            costs_advantage__1=LeadInSource.CARD_ABOVE,
+            spending_da__3=LeadInSource.INTERNAL_LINK,
+        )
+    )
+    assert f"* Rank 1: {above} (card above)\n" in shown
+    assert f"{above} (internal link)" not in shown
+    assert "* Rank 3: Deficits spike interest rates (internal link)\n" in shown
     rows = list(
         csv.DictReader(line for line in files["impact_cards.csv"].splitlines() if not line.startswith("#"))
     )
@@ -229,7 +248,16 @@ def test_the_card_above_an_impact_is_never_called_its_internal_link() -> None:
     assert above not in files["impact_cards.csv"]
     labelled = next(row for row in rows if row["position_id"] == "spending-da" and row["rank"] == "3")
     assert labelled["internal_link_tag"] == "Deficits spike interest rates"
-    assert "* Rank 3: Internal link: Deficits spike interest rates\n" in files["report.md"]
+
+
+def test_each_named_row_is_marked_with_its_source_and_escaped_as_a_cell() -> None:
+    """`v1-e32-t25`: the name, escaped as every quoted tag is, then its source in brackets."""
+    report = _bundle().report
+    first = report.impact_cards[0].model_copy(
+        update={"tag": "Costs | fall *fast*\nunder_plan", "named_by": LeadInSource.TAG}
+    )
+    shown = render_markdown(report.model_copy(update={"impact_cards": (first, *report.impact_cards[1:])}))
+    assert "* Rank 1: Costs \\| fall \\*fast\\* under\\_plan (tag)\n" in shown
 
 
 def test_a_tag_in_an_impact_row_is_escaped_in_markdown_and_exact_in_the_csv() -> None:

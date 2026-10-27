@@ -121,6 +121,11 @@ position use it. Through 2026-09-15:
   documents: 2 of 6 (`b3` and `b6`). Rows with a scenario: advantage 1 of 3, DA 1 of 4. With a labelled
   internal link: advantage 0, DA 1; the card above shown instead: advantage 1, DA 0. Names withheld:
   advantage 0, DA 1.
+* **What names each rank (`v1-e32-t25`).** The first of its scenario, its labelled internal link, its
+  own tag and the card above it. Every impact card here has a tag, so the Costs advantage's rank 1 and
+  the Spending DA's rank 3 are named by their scenarios and every other rank by its tag; the card above
+  rank 1 and rank 3's internal link stay on the row but name nothing. `../readable_impact_chains/`
+  edits two tags and adds two scenario lists to reach the other sources and a left-out rank.
 * **The rest of the report.** The 11 new cards are in files that already read their positions, so no
   round, team, trend or school-view row changes. Coverage is 45 of 56 cards; `top_cards.csv` gains the
   new clusters (Costs advantage 35, 37 and 38, Spending DA 39 to 41, Midterms DA 43 and 44); `a6`'s

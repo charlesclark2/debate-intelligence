@@ -91,6 +91,7 @@ from debate_core.domain.landscape_report import (
     ImpactCard,
     ImpactCoverage,
     LandscapeReport,
+    LeadInSource,
     PositionStats,
     TopCard,
 )
@@ -154,7 +155,8 @@ TOP_CARD_COLUMNS: Final = (
 
 IMPACT_CARD_COLUMNS: Final = (*TOP_CARD_COLUMNS, "scenario", "internal_link_tag")
 """impact_cards.csv's columns: a top card's, of the cluster's labelled copies (`v1-e32-t10`), then its
-scenario and its labelled internal link's tag (`v1-e32-t14`). The card above it is report.md's only."""
+scenario and its labelled internal link's tag (`v1-e32-t14`), empty when that holds a word of a caselist
+school, team code or tournament (`v1-e32-t25`). The card above it is report.md's only."""
 
 TREND_COLUMNS: Final = (
     "position_id",
@@ -475,16 +477,17 @@ def _header_section(report: LandscapeReport, trends: LandscapeTrends | None = No
         "tag opens with an impact word such as `extinction`, `existential` or `the impact`. Only the "
         "labelled copies of a card count. An impact nobody labelled is not found, so each kind says how "
         "many of its documents carry no labelled impact. They are also in `impact_cards.csv`.",
-        "* **What each impact runs through**, under its impact cards: a row's **scenario** is heading words "
-        "two or more teams use under the position (a `Scenario 1` heading's name, a named heading, or the "
-        "words beside an impact or internal-link label, such as `Dome impact`). Where the coach has listed a "
-        "position's scenarios, a row shows only the coach's names, each with the teams of every heading "
-        "listed under it. Its **internal link** is the nearest card above it under the same position heading "
-        "that a heading or its tag labels an "
-        "internal link. Neither is guessed. With no labelled internal link, the card directly above the "
-        "impact card in its block is shown as the card above it in the file when it is not an impact card "
-        "itself: where it sits, not what it does. A scenario name holding a word of a caselist school, team "
-        "code or tournament is withheld.",
+        "* **What each impact runs through**, under its impact cards, names each rank by the first of these "
+        "it has, marked with where the name came from: its **scenario**, heading words two or more teams "
+        "use under the position (a `Scenario 1` heading's name, a named heading, or the words beside an "
+        "impact or internal-link label, such as `Dome impact`), and where the coach has listed a position's "
+        "scenarios only the coach's names, each with the teams of every heading listed under it; its "
+        "**internal link**, the nearest card above it under the same position heading that a heading or its "
+        "tag labels an internal link; the impact card's own **tag**; and the **card above** it, the card "
+        "directly above it in its block when that is not an impact card itself: where it sits, not what it "
+        "does. None is guessed. A rank with none of these is left out, and the position says how many "
+        "were. A scenario name or a tag holding a word of a caselist school, team code or tournament is "
+        "withheld, and the next one names the rank.",
         "* **The link chain** of each advantage and DA is its most-read card for each role a team labelled, "
         "by a heading under the position or the tag's first words: uniqueness (`U`, `UQ`), link, internal "
         "link (`IL`) and impact, and for an advantage harms, inherency and solvency. An `AT:` heading, a "
@@ -556,7 +559,7 @@ def _impact_block(
                 for card in cards
             ]
             lines += ["", "What each impact runs through:", ""]
-            lines += [_lead_in(card) for card in cards]
+            lines += _lead_ins(cards)
             lines.append("")
         if chains is not None:
             lines += _chain_table(report, kind, stats.position_id)
@@ -692,8 +695,7 @@ _ROLE_LABELS: Final = {
 def _chain_coverage_lines(kind: PositionKind, chains: ChainCoverage) -> list[str]:
     """What a kind's scenarios, lead-ins and link chains could not see (`v1-e32-t14` ac3)."""
     rows = chains.impact_rows
-    without = rows - chains.rows_with_internal_link
-    shows = "shows" if chains.rows_with_card_above == 1 else "show"
+    named = "; ".join(f"by {_NAMED_BY[one.source]}: {one.rows:,}" for one in chains.named_rows)
     gaps = ", ".join(
         f"{_ROLE_LABELS[gap.role].lower()} {gap.positions:,} of {chains.positions:,}"
         for gap in chains.roles_without_card
@@ -703,23 +705,39 @@ def _chain_coverage_lines(kind: PositionKind, chains: ChainCoverage) -> list[str
         f"{_of(chains.unstructured_documents, chains.documents)}.",
         "",
         f"* Impact rows: {rows:,}; with a scenario two or more teams name: {chains.rows_with_scenario:,}.",
-        f"* With a labelled internal link: {chains.rows_with_internal_link:,} of {rows:,} rows; with none: "
-        f"{without:,}, of which {chains.rows_with_card_above:,} {shows} the card above it in the file.",
+        f"* Ranks named {named}; left out: {chains.rows_left_out:,}.",
         "* Scenario names withheld for holding a word of a caselist school, team code or tournament: "
         f"{chains.withheld_names:,}.",
+        "* Tags withheld for holding a word of a caselist school, team code or tournament: "
+        f"{chains.withheld_tags:,}.",
         f"* Positions with no labelled card, by role: {gaps}.",
         "",
     ]
 
 
-def _lead_in(card: ImpactCard) -> str:
-    """What one impact row runs through: its labelled internal link, or else the card above it."""
-    if card.internal_link_tag is not None:
-        return f"* Rank {card.rank}: Internal link: {_cell(card.internal_link_tag)}"
-    line = f"* Rank {card.rank}: no labelled internal link."
-    if card.card_above_tag is not None:
-        line += f" Card above it in the file: {_cell(card.card_above_tag)}"
-    return line
+_NAMED_BY: Final = {
+    LeadInSource.SCENARIO: "a scenario",
+    LeadInSource.INTERNAL_LINK: "an internal link",
+    LeadInSource.TAG: "the impact card's tag",
+    LeadInSource.CARD_ABOVE: "the card above it",
+}
+"""How a kind's count of the rows each source names reads (`v1-e32-t25`)."""
+
+
+def _lead_ins(cards: Sequence[ImpactCard]) -> list[str]:
+    """Each impact row's name, marked with its source, then how many nothing names (`v1-e32-t25`)."""
+    lines = [
+        f"* Rank {card.rank}: {_cell(card.runs_through)} ({card.named_by.value})"
+        for card in cards
+        if card.named_by is not None and card.runs_through is not None
+    ]
+    left_out = sum(card.named_by is None for card in cards)
+    if left_out:
+        lines.append(
+            "* Ranks left out, with no scenario, internal link, tag or card above to name them: "
+            f"{left_out:,}."
+        )
+    return lines
 
 
 def _chain_table(report: LandscapeReport, kind: PositionKind, position_id: str) -> list[str]:

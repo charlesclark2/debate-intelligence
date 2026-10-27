@@ -83,10 +83,16 @@ side never does. Per DA and advantage:
   tag the most teams' copies have, ties by tag. With none, and only then, the row carries the tag of
   the card directly above a copy in its block when that card is not an impact card: the card above it
   in the file, for report.md, never called an internal link.
+* **What names a row** (`v1-e32-t25`) is the first of its scenario, its internal link, its own tag and
+  the card above it (:func:`~debate_core.arguments.landscape.link_chains.rank_name`). An internal link or
+  card above holding a word of a caselist school, team code or tournament is not kept on the row, so
+  impact_cards.csv never quotes one. Such a text the row reaches, its own tag included, is counted and
+  the next source names the row; a row nothing names is left out and counted.
 * **Its link chain** is its most-read cluster per role, ranked as impact cards are, by the teams of the
   copies labelled with the role; the impact role is the impact section's first row.
 * **Per kind**, the documents with no scenario heading and no role label, the rows with a scenario, an
-  internal link or the card above, the names withheld, and the positions with no card for each role.
+  internal link or the card above, the rows each source names and those left out, the names and tags
+  withheld, and the positions with no card for each role.
 
 ## What never leaves this module
 
@@ -143,6 +149,7 @@ from debate_core.arguments.landscape.link_chains import (
     card_scenario,
     caselist_words,
     is_withheld,
+    rank_name,
     scenario_name,
 )
 from debate_core.arguments.landscape.matcher import PositionMatcher
@@ -178,6 +185,7 @@ from debate_core.domain.landscape_report import (
     DEFAULT_IMPACT_CARDS,
     DEFAULT_TOP_CARDS,
     IMPACT_KINDS,
+    LEAD_IN_ORDER,
     PLACED_CARD_METHOD,
     AffAssignment,
     AffIdentification,
@@ -188,6 +196,8 @@ from debate_core.domain.landscape_report import (
     ImpactCoverage,
     LandscapeCard,
     LandscapeReport,
+    LeadInSource,
+    NamedRows,
     PositionStats,
     ReportHeader,
     RoleGap,
@@ -952,6 +962,7 @@ class _LinkChains:
         self._shown: dict[str, dict[str, set[tuple[str, str]]]] = {}
         self._withheld: dict[str, int] = {}
         self._unlisted: dict[str, tuple[int, int]] = {}
+        self._withheld_tags: Counter[str] = Counter()
 
     # Per card -----------------------------------------------------------------------------------
 
@@ -1046,7 +1057,11 @@ class _LinkChains:
     # Per impact row -----------------------------------------------------------------------------
 
     def with_lead_in(self, row: ImpactCard) -> ImpactCard:
-        """The row with its scenario and its labelled internal link, or else the card above it."""
+        """The row with its scenario, its labelled internal link or else the card above it, and what names it.
+
+        An internal link or card above holding a caselist word is never kept on the row, and is counted
+        only when the row reaches it (`v1-e32-t25`).
+        """
         position = self._taxonomy.position(row.position_id)
         kind = position.kind
         names = self._names(row.position_id)
@@ -1067,12 +1082,27 @@ class _LinkChains:
             tag = self._card_above_tag(card)
             if tag is not None:
                 above[tag] |= teams
-        internal_link = _most_teams(link)
+        words = self._words_of_caselist
+        shown = _most_teams(scenario)
+        labelled_link = _most_teams(link)
+        card_above = _most_teams(above)
+        named = rank_name(
+            {
+                LeadInSource.SCENARIO: shown,
+                LeadInSource.INTERNAL_LINK: labelled_link,
+                LeadInSource.TAG: row.tag,
+                LeadInSource.CARD_ABOVE: card_above,
+            },
+            words,
+        )
+        self._withheld_tags[row.position_id] += named.withheld
+        internal_link = _not_withheld(labelled_link, words)
         return row.model_copy(
             update={
-                "scenario": _most_teams(scenario),
+                "scenario": shown,
                 "internal_link_tag": internal_link,
-                "card_above_tag": None if internal_link is not None else _most_teams(above),
+                "card_above_tag": None if internal_link is not None else _not_withheld(card_above, words),
+                "named_by": named.source,
             }
         )
 
@@ -1149,6 +1179,12 @@ class _LinkChains:
             ),
             unlisted_words=sum(self._unlisted[position_id][0] for position_id in listed),
             unlisted_words_withheld=sum(self._unlisted[position_id][1] for position_id in listed),
+            named_rows=tuple(
+                NamedRows(source=source, rows=sum(row.named_by is source for row in rows))
+                for source in LEAD_IN_ORDER
+            ),
+            rows_left_out=sum(row.named_by is None for row in rows),
+            withheld_tags=sum(self._withheld_tags[position_id] for position_id in listed),
         )
 
 
@@ -1157,6 +1193,11 @@ def _most_teams(found: Mapping[str, set[tuple[str, str]]]) -> str | None:
     if not found:
         return None
     return min(found, key=lambda one: (-len(found[one]), one))
+
+
+def _not_withheld(text: str | None, words: frozenset[str]) -> str | None:
+    """`text`, unless it holds a word of a caselist school, team code or tournament."""
+    return None if text is None or is_withheld(text, words) else text
 
 
 def _is_impact(card: LandscapeCard | None) -> bool:

@@ -20,7 +20,8 @@ module is the report as values; `LandscapeReportService` builds it and the rende
   impact (`v1-e32-t10`), and per kind an :class:`ImpactCoverage`: how many of its documents carry no
   labelled impact;
 * under each impact row its scenario and internal link, and per DA and advantage one
-  :class:`ChainCard` per chain role, with a :class:`ChainCoverage` per kind (`v1-e32-t14`);
+  :class:`ChainCard` per chain role, with a :class:`ChainCoverage` per kind (`v1-e32-t14`); and what
+  names each impact row, a :class:`LeadInSource`, counted per kind (`v1-e32-t25`);
 * an :class:`UnclassifiedSummary`: what the report could not count, by cards and by rounds;
 * how affirmative rounds were identified, one :class:`AffIdentification` per method;
 * :class:`AdvantagesByAff` (`v1-e32-t15`): under each aff `v1-e32-t09` assigned rounds to, and each
@@ -67,6 +68,7 @@ __all__ = [
     "DEFAULT_IMPACT_CARDS",
     "DEFAULT_TOP_CARDS",
     "IMPACT_KINDS",
+    "LEAD_IN_ORDER",
     "PLACED_CARD_METHOD",
     "ROUND_ID_PATTERN",
     "AdvantagesByAff",
@@ -85,6 +87,8 @@ __all__ = [
     "KritikalFamilyCount",
     "LandscapeCard",
     "LandscapeReport",
+    "LeadInSource",
+    "NamedRows",
     "PositionStats",
     "ReportHeader",
     "RoleGap",
@@ -141,6 +145,27 @@ CHAIN_ROLES: Final = {
     ),
 }
 """The roles each kind's link chain shows, in report order: the coach's list (`v1-e32-t14`)."""
+
+
+class LeadInSource(StrEnum):
+    """What names an impact row under report.md's "What each impact runs through" (`v1-e32-t25`).
+
+    The value is the mark report.md prints after the name, so the coach can judge it.
+    """
+
+    SCENARIO = "scenario"
+    INTERNAL_LINK = "internal link"
+    TAG = "tag"
+    CARD_ABOVE = "card above"
+
+
+LEAD_IN_ORDER: Final = (
+    LeadInSource.SCENARIO,
+    LeadInSource.INTERNAL_LINK,
+    LeadInSource.TAG,
+    LeadInSource.CARD_ABOVE,
+)
+"""The order in which an impact row's sources name it, the first it has naming it (`v1-e32-t25`)."""
 
 RoundId = Annotated[str, StringConstraints(pattern=ROUND_ID_PATTERN)]
 AffMethod = Annotated[str, StringConstraints(pattern=AFF_METHOD_PATTERN)]
@@ -266,6 +291,33 @@ class ImpactCard(TopCard):
             "only."
         ),
     )
+    named_by: LeadInSource | None = Field(
+        default=None,
+        description=(
+            "What names the row under 'What each impact runs through' (`v1-e32-t25`): the first of its "
+            "scenario, internal link, own tag and card above that is there and holds no caselist word. "
+            "None when none is: the row is left out there, and counted."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _check_named_by(self) -> Self:
+        if self.named_by is not None and self.runs_through is None:
+            raise ValueError(f"its {self.named_by.value} names the row, but the row has none")
+        return self
+
+    @property
+    def runs_through(self) -> str | None:
+        """The words :attr:`named_by` names the row with; None when the row is left out."""
+        if self.named_by is None:
+            return None
+        text = {
+            LeadInSource.SCENARIO: self.scenario,
+            LeadInSource.INTERNAL_LINK: self.internal_link_tag,
+            LeadInSource.TAG: self.tag,
+            LeadInSource.CARD_ABOVE: self.card_above_tag,
+        }[self.named_by]
+        return text if text is not None and text.strip() else None
 
 
 class ChainCard(TopCard):
@@ -284,6 +336,13 @@ class RoleGap(DomainModel):
     positions: int = Field(ge=0)
 
 
+class NamedRows(DomainModel):
+    """How many impact rows of a kind one source names (`v1-e32-t25`)."""
+
+    source: LeadInSource
+    rows: int = Field(ge=0)
+
+
 class ChainCoverage(DomainModel):
     """What one kind's scenarios and link chains could not see (`v1-e32-t14` ac3)."""
 
@@ -297,7 +356,11 @@ class ChainCoverage(DomainModel):
     rows_with_scenario: int = Field(ge=0)
     rows_with_internal_link: int = Field(ge=0)
     rows_with_card_above: int = Field(
-        ge=0, description="Rows with no labelled internal link that show the card above instead."
+        ge=0,
+        description=(
+            "Rows with no labelled internal link whose card above is there and holds no caselist word. It "
+            "names the row only when no scenario or tag does (`v1-e32-t25`)."
+        ),
     )
     withheld_names: int = Field(
         ge=0,
@@ -314,6 +377,17 @@ class ChainCoverage(DomainModel):
     unlisted_words_withheld: int = Field(
         ge=0, description="Of those, the words holding a word of a caselist school, team code or tournament."
     )
+    named_rows: tuple[NamedRows, ...] = Field(
+        description="The impact rows each source names (`v1-e32-t25`), one per source in naming order."
+    )
+    rows_left_out: int = Field(ge=0, description="Impact rows no source names, left out and counted.")
+    withheld_tags: int = Field(
+        ge=0,
+        description=(
+            "Internal-link, impact and card-above tags that would have named a row, withheld for holding a "
+            "word of a caselist school, team code or tournament; the next source named the row instead."
+        ),
+    )
 
     @model_validator(mode="after")
     def _check_counts(self) -> Self:
@@ -325,6 +399,12 @@ class ChainCoverage(DomainModel):
             self.impact_rows
         ):
             raise ValueError("rows with a scenario or a lead-in are among the impact rows")
+        if tuple(one.source for one in self.named_rows) != LEAD_IN_ORDER:
+            raise ValueError("named rows are counted once per source, in naming order")
+        if sum(one.rows for one in self.named_rows) + self.rows_left_out != self.impact_rows:
+            raise ValueError("every impact row is named by one source or left out")
+        if self.named_rows[0].rows != self.rows_with_scenario:
+            raise ValueError("the rows a scenario names are the rows with a scenario")
         return self
 
 

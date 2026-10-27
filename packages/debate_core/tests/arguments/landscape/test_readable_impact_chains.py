@@ -1,4 +1,4 @@
-"""What each impact runs through, named in words a debater uses (`v1-e32-t25`).
+"""What each impact runs through, named in words a debater uses (`v1-e32-t25`), with `v1-e32-t27`'s link.
 
 Each impact row is named by the first of its scenario, its labelled internal link, its own tag and the
 card above it, marked with that source; a withheld text falls through to the next, and a row with none
@@ -44,6 +44,7 @@ RUNS_THROUGH = "What each impact runs through:"
 
 SCENARIO = LeadInSource.SCENARIO
 INTERNAL_LINK = LeadInSource.INTERNAL_LINK
+LINK = LeadInSource.LINK
 TAG = LeadInSource.TAG
 CARD_ABOVE = LeadInSource.CARD_ABOVE
 
@@ -80,7 +81,7 @@ def _named(report: LandscapeReport, position_id: str) -> list[LeadInSource | Non
 
 
 def _counts(report: LandscapeReport) -> dict[str, tuple[int, ...]]:
-    """Per kind: rows named by scenario, internal link, tag and card above; left out; tags withheld."""
+    """Per kind: rows named by scenario, internal link, link, tag and card above; left out; tags withheld."""
     return {
         one.kind.value: (*(named.rows for named in one.named_rows), one.rows_left_out, one.withheld_tags)
         for one in report.chain_coverage
@@ -139,12 +140,13 @@ def test_impact_cards_csv_matches_the_hand_written_golden() -> None:
     assert _bundle_files()["impact_cards.csv"] == (READABLE / "impact_cards.csv").read_text(encoding="utf-8")
 
 
-def test_the_unchanged_caselist_names_every_row_by_its_scenario_or_its_tag() -> None:
+def test_the_unchanged_caselist_names_every_row_by_its_scenario_its_link_or_its_tag() -> None:
+    # `v1-e32-t27`: the Spending DA's rank 1, its scenario withheld, is named by b1's link above it.
     report = _report(read_synthetic_caselist(FIXTURE))
     assert _named(report, "costs-advantage") == [SCENARIO, TAG, TAG]
-    assert _named(report, "spending-da") == [TAG, TAG, SCENARIO]
+    assert _named(report, "spending-da") == [LINK, TAG, SCENARIO]
     assert _named(report, "hospital-closures-da") == [TAG]
-    assert _counts(report) == {"advantage": (1, 0, 2, 0, 0, 0), "da": (1, 0, 3, 0, 0, 0)}
+    assert _counts(report) == {"advantage": (1, 0, 0, 2, 0, 0, 0), "da": (1, 0, 1, 2, 0, 0, 0)}
 
 
 # ------------------------------------------------------------------------------------------------
@@ -158,7 +160,7 @@ def test_each_row_takes_the_first_source_it_has() -> None:
     assert _named(report, "costs-advantage") == [CARD_ABOVE, TAG, None]
     # Spending: rank 1 the coach's `Market crash`; rank 3's internal link ahead of its own tag.
     assert _named(report, "spending-da") == [SCENARIO, TAG, INTERNAL_LINK]
-    assert _counts(report) == {"advantage": (0, 0, 1, 1, 1, 1), "da": (1, 1, 2, 0, 0, 0)}
+    assert _counts(report) == {"advantage": (0, 0, 0, 1, 1, 1, 1), "da": (1, 1, 0, 2, 0, 0, 0)}
 
 
 def test_a_scenario_names_a_row_ahead_of_its_internal_link() -> None:
@@ -184,7 +186,7 @@ def test_an_empty_row_is_left_out_and_counted_never_shown() -> None:
 def test_a_blank_tag_is_no_tag() -> None:
     report = _report(_with_edits(_edits(), {("a3", 15): "   "}))
     assert _named(report, "costs-advantage") == [CARD_ABOVE, TAG, None]
-    assert _counts(report)["advantage"] == (0, 0, 1, 1, 1, 1)
+    assert _counts(report)["advantage"] == (0, 0, 0, 1, 1, 1, 1)
 
 
 # ------------------------------------------------------------------------------------------------
@@ -208,7 +210,7 @@ def test_a_withheld_card_above_leaves_the_row_out_and_both_are_counted() -> None
     report = _report(_with_edits(_edits(), {("a1", 3): "Single payer cuts Driftwood costs"}))
     assert _named(report, "costs-advantage") == [None, TAG, None]
     assert report.impact_cards[0].card_above_tag is None
-    assert _counts(report)["advantage"] == (0, 0, 1, 0, 2, 2)
+    assert _counts(report)["advantage"] == (0, 0, 0, 1, 0, 2, 2)
 
 
 def test_a_withheld_internal_link_falls_through_to_the_tag_and_leaves_the_csv() -> None:
@@ -216,7 +218,7 @@ def test_a_withheld_internal_link_falls_through_to_the_tag_and_leaves_the_csv() 
     inputs = _with_edits(_edits(), {("b5", 9): "Deficits spike Birchmoor rates"})
     report = _report(inputs)
     assert _named(report, "spending-da") == [SCENARIO, TAG, TAG]
-    assert _counts(report)["da"] == (1, 0, 3, 0, 0, 1)
+    assert _counts(report)["da"] == (1, 0, 0, 3, 0, 0, 1)
     rank_3 = next(one for one in report.impact_cards if one.position_id == "spending-da" and one.rank == 3)
     assert rank_3.internal_link_tag is None
     files = LandscapeReportService().bundle(inputs, synthetic_staleness()).files
@@ -225,15 +227,16 @@ def test_a_withheld_internal_link_falls_through_to_the_tag_and_leaves_the_csv() 
 
 
 def test_a_withheld_text_a_row_never_reaches_is_not_counted_but_never_quoted() -> None:
-    # Unchanged lists: Spending rank 3 is named by `recession`, and Costs rank 1 by `economic collapse`.
+    # Unchanged lists: Spending rank 3 is named by `recession`, and Costs rank 1 by `economic collapse`;
+    # Spending rank 1 by b1's link (`v1-e32-t27`).
     inputs = _with_edits(
         {},
         {("b5", 9): "Deficits spike Birchmoor rates", ("a1", 6): "2. Extinction from a Cedarvale collapse"},
     )
     report = _report(inputs)
-    assert _named(report, "spending-da") == [TAG, TAG, SCENARIO]
+    assert _named(report, "spending-da") == [LINK, TAG, SCENARIO]
     assert _named(report, "costs-advantage") == [SCENARIO, TAG, TAG]
-    assert _counts(report) == {"advantage": (1, 0, 2, 0, 0, 0), "da": (1, 0, 3, 0, 0, 0)}
+    assert _counts(report) == {"advantage": (1, 0, 0, 2, 0, 0, 0), "da": (1, 0, 1, 2, 0, 0, 0)}
     rows = list(
         csv.DictReader(
             line
@@ -273,7 +276,7 @@ def test_a_tag_holding_a_team_code_is_withheld_for_the_next_source() -> None:
     # `XX` is a team code of the caselist; the Hospital closures DA's only row has no card above it.
     report = _report(_with_edits(_edits(), {("b4", 6): "Rural hospitals close in XX counties"}))
     assert _named(report, "hospital-closures-da") == [None]
-    assert _counts(report)["da"] == (1, 1, 1, 0, 1, 1)
+    assert _counts(report)["da"] == (1, 1, 0, 1, 0, 1, 1)
 
 
 # ------------------------------------------------------------------------------------------------
@@ -283,24 +286,28 @@ def test_a_tag_holding_a_team_code_is_withheld_for_the_next_source() -> None:
 WORDS = frozenset({"cedarvale", "xx"})
 
 
-def test_the_order_is_scenario_internal_link_tag_card_above() -> None:
-    assert LEAD_IN_ORDER == (SCENARIO, INTERNAL_LINK, TAG, CARD_ABOVE)
-    every = {SCENARIO: "dome", INTERNAL_LINK: "il", TAG: "tag", CARD_ABOVE: "above"}
+def test_the_order_is_scenario_internal_link_link_tag_card_above() -> None:
+    assert LEAD_IN_ORDER == (SCENARIO, INTERNAL_LINK, LINK, TAG, CARD_ABOVE)
+    every = {SCENARIO: "dome", INTERNAL_LINK: "il", LINK: "link", TAG: "tag", CARD_ABOVE: "above"}
     assert rank_name(every, WORDS) == (SCENARIO, 0)
     assert rank_name({**every, SCENARIO: None}, WORDS) == (INTERNAL_LINK, 0)
+    assert rank_name({**every, SCENARIO: None, INTERNAL_LINK: None}, WORDS) == (LINK, 0)
     assert rank_name({TAG: "tag", CARD_ABOVE: "above"}, WORDS) == (TAG, 0)
     assert rank_name({CARD_ABOVE: "above"}, WORDS) == (CARD_ABOVE, 0)
 
 
 def test_with_nothing_there_nothing_names_the_row() -> None:
     assert rank_name({}, WORDS) == (None, 0)
-    assert rank_name({SCENARIO: None, INTERNAL_LINK: "", TAG: " \t", CARD_ABOVE: None}, WORDS) == (None, 0)
+    assert rank_name(
+        {SCENARIO: None, INTERNAL_LINK: "", LINK: "  ", TAG: " \t", CARD_ABOVE: None}, WORDS
+    ) == (None, 0)
 
 
 def test_withheld_texts_are_passed_over_and_counted() -> None:
-    texts = {INTERNAL_LINK: "Cedarvale spike", TAG: "Crash in XX", CARD_ABOVE: "Rates rise"}
-    assert rank_name(texts, WORDS) == (CARD_ABOVE, 2)
-    assert rank_name({**texts, CARD_ABOVE: "cedarvale"}, WORDS) == (None, 3)
+    texts = {INTERNAL_LINK: "Cedarvale spike", LINK: "XX link", TAG: "Crash in XX", CARD_ABOVE: "Rates rise"}
+    assert rank_name(texts, WORDS) == (CARD_ABOVE, 3)
+    assert rank_name({**texts, CARD_ABOVE: "cedarvale"}, WORDS) == (None, 4)
+    assert rank_name({**texts, LINK: "Spending link"}, WORDS) == (LINK, 1)
     assert rank_name({TAG: "Cedarvales crash"}, WORDS) == (TAG, 0)
 
 
@@ -331,6 +338,7 @@ def _row(**changes: object) -> ImpactCard:
     [
         (SCENARIO, "scenario"),
         (INTERNAL_LINK, "internal_link_tag"),
+        (LINK, "link_tag"),
         (TAG, "tag"),
         (CARD_ABOVE, "card_above_tag"),
     ],
@@ -360,7 +368,7 @@ def _coverage(**changes: object) -> ChainCoverage:
             "unlisted_words_withheld": 0,
             "named_rows": tuple(
                 NamedRows(source=source, rows=rows)
-                for source, rows in zip(LEAD_IN_ORDER, (1, 1, 2, 0), strict=True)
+                for source, rows in zip(LEAD_IN_ORDER, (1, 1, 0, 2, 0), strict=True)
             ),
             "rows_left_out": 0,
             "withheld_tags": 0,
@@ -382,12 +390,14 @@ def test_coverage_counts_each_source_once_in_naming_order() -> None:
         NamedRows(source=SCENARIO, rows=1),
         NamedRows(source=TAG, rows=2),
         NamedRows(source=INTERNAL_LINK, rows=1),
+        NamedRows(source=LINK, rows=0),
         NamedRows(source=CARD_ABOVE, rows=0),
     )
     with pytest.raises(ValidationError, match="naming order"):
         _coverage(named_rows=swapped)
+    without_link = tuple(one for one in _coverage().named_rows if one.source is not LINK)
     with pytest.raises(ValidationError, match="naming order"):
-        _coverage(named_rows=swapped[:3])
+        _coverage(named_rows=without_link)
 
 
 def test_coverage_rows_named_by_a_scenario_are_the_rows_with_one() -> None:

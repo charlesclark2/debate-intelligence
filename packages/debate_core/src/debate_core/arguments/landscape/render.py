@@ -718,6 +718,7 @@ def _chain_coverage_lines(kind: PositionKind, chains: ChainCoverage) -> list[str
 _NAMED_BY: Final = {
     LeadInSource.SCENARIO: "a scenario",
     LeadInSource.INTERNAL_LINK: "an internal link",
+    LeadInSource.LINK: "a link",
     LeadInSource.TAG: "the impact card's tag",
     LeadInSource.CARD_ABOVE: "the card above it",
 }

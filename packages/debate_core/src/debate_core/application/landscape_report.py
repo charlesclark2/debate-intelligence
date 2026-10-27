@@ -1090,6 +1090,7 @@ class _LinkChains:
             {
                 LeadInSource.SCENARIO: shown,
                 LeadInSource.INTERNAL_LINK: labelled_link,
+                LeadInSource.LINK: None,
                 LeadInSource.TAG: row.tag,
                 LeadInSource.CARD_ABOVE: card_above,
             },

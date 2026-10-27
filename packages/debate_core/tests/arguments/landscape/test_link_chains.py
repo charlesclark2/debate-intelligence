@@ -152,6 +152,51 @@ def test_a_tag_opening_labels_uniqueness_link_or_internal_link_and_never_by_u(
 
 
 # ------------------------------------------------------------------------------------------------
+# A label that names an answer is no link (`v1-e32-t27`, the PM's ruling of 2026-10-26)
+# ------------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "heading",
+    ["link non unique", "links non unique", "link nonunique", "link not unique", "non unique link", "no links"],
+)
+def test_a_heading_naming_a_link_answer_labels_no_link(heading: str) -> None:
+    assert heading_roles(heading, DA) == NOTHING
+    assert heading_roles(heading, ADVANTAGE) == NOTHING
+
+
+@pytest.mark.parametrize(
+    "tag",
+    [
+        # hspolicy26 held one link tag opening `the link turns`, which t14's reader took for a link.
+        "The link turns: deficits follow new spending",
+        "The link turn - reform is popular",
+        "Links are non-unique: spending is high now",
+        "Link non-unique - spending is high now",
+        "Link is not unique: spending rose last year",
+        "Links nonunique: spending is high",
+        "No links: the plan is popular",
+        "2. The link turns - the plan is popular",
+    ],
+)
+def test_a_tag_naming_a_link_answer_labels_no_link(tag: str) -> None:
+    assert tag_role(tag) is None
+
+
+@pytest.mark.parametrize(
+    ("heading", "tag"),
+    [
+        ("link overview", "Link: the plan turns the economy down"),
+        ("link spending turns", "The link: reform turns voters away"),
+        ("links", "Links - unique spending cuts follow"),
+    ],
+)
+def test_a_link_whose_later_words_turn_or_say_unique_is_still_a_link(heading: str, tag: str) -> None:
+    assert heading_roles(heading, DA) == {L}
+    assert tag_role(tag) is L
+
+
+# ------------------------------------------------------------------------------------------------
 # A card's roles
 # ------------------------------------------------------------------------------------------------
 

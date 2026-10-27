@@ -187,9 +187,35 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-27
 
 **Notes:**
+
+The cause is found exactly, and the fix is the smallest one that closes the gap: the harness alone,
+using an override `load_settings` already documents.
+1. **ac1 passes.** The tier was counted under both harnesses with no check edited and compared test by
+   test. Exactly 2 checks changed, both pass to fail, each with its cause (v1-e40-t06's `bucket`
+   run state, and v1-e05-t08's Bedrock profile). #571's two new checks were re-checked after the sync.
+2. **ac2 passes.** The 2026-10-27 pin, reverted as a mutant, fails 3 checks under the new harness and
+   passed under the old one, which was the gap. All 156 smoke checks pass, run in quarters.
+3. **Mutants: 5, the PM's two among them, all caught.** Mutants 3 and 4 show validate-dev's path is
+   untouched: an installed build gets no profile directory, and the variable reaches only the
+   checkout's build.
+4. **Decisions accepted:**
+   * `DEBATE_PROFILE_DIR`, not a stamped stand-in, since stamping would change the channel and write
+     into the source tree;
+   * the guard reads its expected value from the committed profile;
+   * the time measured both ways (no measurable cost per process, about 0.6 s for the new check).
+5. **One risk, managed by timing.** The guard check's installed-build branch (the `_bundled_config`
+   source label) first runs in validate-dev. The label's shape is pinned by an existing settings
+   test, so it should pass. But validate-dev must be green for Thursday 2026-10-29's image. So
+   **this PR merges after Thursday's image apply**, and its first validate-dev run is the check. If
+   that run fails on the guard's label alone, the fix is a follow-up, not a revert.
+6. **The affected set** (65 files, 26 of them smoke) is left to the PR's `ci` under agreement 10.
+   The whole smoke tier, the always-run list and the docs checks passed, as did the static checks.
+
+No re-review is needed. The Goal is `Succeeded`, and the PR merges in full, after Thursday's image
+apply.

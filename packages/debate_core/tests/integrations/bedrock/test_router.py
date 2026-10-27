@@ -58,6 +58,8 @@ from debate_core.integrations.bedrock.router import (
     client_config,
 )
 from debate_core.integrations.models import ModelRoute, RoutingPolicy
+from debate_core.integrations.models.model_mode import ModelMode
+from debate_core.integrations.models.record_replay import RecordReplayModelRouter
 from debate_core.testing.contracts import (
     EmbeddingAnswer,
     ModelRouterContract,
@@ -601,6 +603,50 @@ async def test_structured_output_cut_off_or_withheld_is_invalid_even_with_a_tool
         await choose(stubbed.router())
 
     assert [problem.type for problem in raised.value.problems] == ["unfinished_answer"]
+
+
+REFUSED_AS_RECEIVED = {
+    "no tool call": ([{"text": "Paragraph four, I think."}], "end_turn", None),
+    "not the schema": (
+        [tool_use(TOOL, {"paragraph_id": "the fourth", "start_offset": 10, "end_offset": 90})],
+        "tool_use",
+        {"paragraph_id": "the fourth", "start_offset": 10, "end_offset": 90},
+    ),
+    "cut off": ([tool_use(TOOL, ANSWER)], "max_tokens", dict(ANSWER)),
+    "called twice": (
+        [tool_use(TOOL, ANSWER, "tooluse-1"), tool_use(TOOL, {"paragraph_id": 5}, "tooluse-2")],
+        "tool_use",
+        [dict(ANSWER), {"paragraph_id": 5}],
+    ),
+}
+
+
+@pytest.mark.parametrize(
+    ("content", "stop_reason", "received"), list(REFUSED_AS_RECEIVED.values()), ids=list(REFUSED_AS_RECEIVED)
+)
+async def test_structured_output_refused_is_recorded_as_received_and_replays_as_the_same_error(
+    content: list[dict[str, Any]], stop_reason: str, received: Any, stubbed: StubbedBedrock, tmp_path: Path
+) -> None:
+    """Record mode writes the answer the adapter refused; replay raises its error again (v1-e05-t10)."""
+    stubbed.add_converse(content, stop_reason=stop_reason, input_tokens=640, output_tokens=25)
+    recording = RecordReplayModelRouter(
+        stubbed.router(), mode=ModelMode.RECORD, cassette_dir=tmp_path, environ={}
+    )
+
+    with pytest.raises(InvalidModelOutput) as live:
+        await choose(recording)
+
+    (cassette,) = tmp_path.rglob("*.json")
+    assert json.loads(cassette.read_text(encoding="utf-8"))["response"]["output"] == received
+    replaying = RecordReplayModelRouter(None, mode=ModelMode.REPLAY, cassette_dir=tmp_path)
+    with pytest.raises(InvalidModelOutput) as replayed:
+        await choose(replaying)
+    for error in (live.value, replayed.value):
+        assert error.usage is not None
+        assert (error.usage.input_tokens, error.usage.output_tokens) == (640, 25)
+    assert str(replayed.value) == str(live.value)
+    assert replayed.value.problems == live.value.problems
+    assert (replayed.value.model_id, replayed.value.usage) == (live.value.model_id, live.value.usage)
 
 
 @pytest.mark.parametrize("stop_reason", ["tool_use", "end_turn"])

@@ -221,6 +221,7 @@ The offline routers (v1-e05-t03-fake-replay-models) are why no test or eval ever
 | `fixture_key.py` | `fixture_key`: SHA-256 of the prompt id, version, canonical JSON of the variables and the schema's dotted path |
 | `fake_router.py` | `FakeModelRouter`, answering from `tests/fixtures/model_outputs/<prompt_id>/<key>.json`, with hashed embeddings and lexical-overlap rerank |
 | `record_replay.py` | `RecordReplayModelRouter`: record a real router's calls to `tests/fixtures/model_cassettes/`, replay them, or pass through |
+| `received_answer.py` | How a real router hands record mode the answer it refused, so an invalid answer is recorded and replays as the same error (v1-e05-t10) |
 | `model_mode.py` | `resolve_model_mode` (`--model-mode`, else `DEBATE_MODEL_MODE`, else replay) and `add_model_mode_option` for argparse |
 | `redaction.py` | What a cassette is scrubbed of before it is written |
 | `factory.py` | `build_model_router`: `models.provider = "fake"` is the fake; a real provider is wrapped in the mode's router |

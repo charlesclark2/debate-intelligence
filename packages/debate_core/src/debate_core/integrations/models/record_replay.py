@@ -8,9 +8,10 @@ v1-e05-t02-bedrock-adapter) and does one of three things, chosen by the run's
   :class:`~debate_core.integrations.models.errors.MissingFixtureError` naming the prompt and the key.
   The real router is not even held in this mode, so nothing can fall back to it.
 * **record**: make the real call, then write the request and the response to a cassette, scrubbed
-  by :func:`~debate_core.integrations.models.redaction.redact`. A developer opts in with
-  `DEBATE_MODEL_MODE=record` or `--model-mode record`, with credentials; it is refused when
-  `CI=true`, so CI never records.
+  by :func:`~debate_core.integrations.models.redaction.redact`. An answer the real router refused
+  as :class:`~debate_core.application.errors.InvalidModelOutput` is written too (below). A
+  developer opts in with `DEBATE_MODEL_MODE=record` or `--model-mode record`, with credentials; it
+  is refused when `CI=true`, so CI never records.
 * **live**: make the real call and write nothing.
 
 ## Cassettes
@@ -33,6 +34,23 @@ inference profile, because no model was reached. The recorded model id is kept: 
 model's answer is being replayed. Its output is validated strictly, as every router's is
 (:func:`~debate_core.application.structured_output.validate_model_output`); a hand-written cassette
 with `"output": null` replays an answer that never called the schema's tool (v1-e05-t05, ac5).
+
+## A refused answer (v1-e05-t10)
+
+When the real router raises `InvalidModelOutput`, record mode writes the answer the router handed
+it (:mod:`~debate_core.integrations.models.received_answer`) under the call's key, as any recording
+is, and raises the error on. Its response holds what the model said and why it was refused::
+
+    {"model_id": "...", "output": {...} or null, "problems": [{"loc": [...], "msg": "...", "type": "..."}],
+     "prompt_id": "...", "prompt_version": "...", "usage": {...} or null}
+
+`output` is the tool's input, or `null` when the model never called the tool. `problems` and
+`usage` are the error's. A cassette with `problems` replays as that same error, its problems,
+model id and usage included, so the structured-output guard sends the same repair request and finds
+the repair's own cassette. Replay logs nothing and costs nothing: the usage recorder sits inside it.
+
+Nothing is written for a provider error, a budget refusal, a call that never reached the provider,
+or an invalid answer the router did not hand over, since record mode has no answer to write for it.
 """
 
 from __future__ import annotations
@@ -42,8 +60,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final
 
-from pydantic import BaseModel, JsonValue, ValidationError
+from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
 
+from debate_core.application.errors import InvalidModelOutput, OutputProblem
+from debate_core.application.model_errors import describe_problems
 from debate_core.application.ports.model_router import ModelRouter
 from debate_core.application.settings import ConfigurationError
 from debate_core.application.structured_output import validate_model_output
@@ -76,6 +96,7 @@ from debate_core.integrations.models.model_mode import (
     ModelMode,
     running_in_ci,
 )
+from debate_core.integrations.models.received_answer import receiving_answer
 from debate_core.integrations.models.redaction import redact
 
 __all__ = [
@@ -95,6 +116,9 @@ CASSETTE_FORMAT: Final = 1
 
 _EMBED_DIRECTORY: Final = "_embed"
 _RERANK_DIRECTORY: Final = "_rerank"
+_PROBLEMS: Final = "problems"
+"""The response key that makes a cassette a refused answer's: why the real router refused it."""
+_RECORDED_PROBLEMS: Final = TypeAdapter(tuple[OutputProblem, ...])
 _HINT: Final = (
     f"Record it with {MODEL_MODE_VARIABLE}=record and credentials, outside CI "
     "(tests/fixtures/model_cassettes/README.md); replay never calls a real model."
@@ -265,9 +289,16 @@ class RecordReplayModelRouter:
         request = ModelRequest.build(task_class, prompt, schema, params)
         if self._delegate is None:
             return self._replay_structured(request, schema)
-        response = await self._delegate.generate_structured(task_class, prompt, schema, params)
-        if self.mode is ModelMode.RECORD:
-            self.cassettes.write_structured(request, response.model_dump(mode="json"))
+        if self.mode is not ModelMode.RECORD:
+            return await self._delegate.generate_structured(task_class, prompt, schema, params)
+        with receiving_answer() as received:
+            try:
+                response = await self._delegate.generate_structured(task_class, prompt, schema, params)
+            except InvalidModelOutput as invalid:
+                if received.received:
+                    self.cassettes.write_structured(request, _refused_response(invalid, received.answer))
+                raise
+        self.cassettes.write_structured(request, response.model_dump(mode="json"))
         return response
 
     async def embed(self, texts: Sequence[str]) -> EmbeddingResponse:
@@ -297,6 +328,8 @@ class RecordReplayModelRouter:
     ) -> ModelResponse[OutputT]:
         recorded = self.cassettes.read_structured(request)
         response = recorded.response
+        if _PROBLEMS in response:
+            raise _replayed_refusal(recorded, request.prompt)
         route = _replayed_route(recorded, response.get("route"))
         usage = _validated(recorded, ModelUsage, response.get("usage"))
         prompt = request.prompt
@@ -351,6 +384,48 @@ def refuse_recording_in_ci(environ: Mapping[str, str] | None = None) -> None:
             field="model_mode",
             source=f"env:{CI_VARIABLE}",
         )
+
+
+def _refused_response(invalid: InvalidModelOutput, answer: JsonValue | None) -> dict[str, JsonValue]:
+    """The cassette response of an answer the real router refused: what it said, and why it was refused."""
+    return {
+        "model_id": invalid.model_id,
+        "output": answer,
+        _PROBLEMS: [
+            {"loc": list(problem.loc), "type": problem.type, "msg": problem.msg}
+            for problem in invalid.problems
+        ],
+        "prompt_id": invalid.prompt_id,
+        "prompt_version": invalid.prompt_version,
+        "usage": invalid.usage.model_dump(mode="json") if invalid.usage is not None else None,
+    }
+
+
+def _replayed_refusal(recorded: RecordedCall, prompt: ModelPrompt) -> InvalidModelOutput:
+    """The `InvalidModelOutput` the real router raised for the answer `recorded` holds, raised again.
+
+    Its problems are the recorded ones, not the recorded output validated again: a router refuses
+    some answers before validating them (a cut-off turn), and words some problems its own way (an
+    answer with no tool call), and the repair request quotes the problems, so a replay that worded
+    them differently would ask for a repair nobody recorded.
+    """
+    response = recorded.response
+    try:
+        problems = _RECORDED_PROBLEMS.validate_python(response.get(_PROBLEMS))
+    except ValidationError as error:
+        raise FixtureFileError(recorded.path, f"its recorded problems are not valid: {error}") from error
+    model_id = response.get("model_id")
+    if model_id is not None and not isinstance(model_id, str):
+        raise FixtureFileError(recorded.path, "its recorded model id is not text or null")
+    usage = response.get("usage")
+    return InvalidModelOutput(
+        prompt.prompt_id,
+        prompt.prompt_version,
+        describe_problems(problems),
+        model_id=model_id,
+        problems=problems,
+        usage=_validated(recorded, ModelUsage, usage) if usage is not None else None,
+    )
 
 
 def _replayed_route(recorded: RecordedCall, route: object) -> ResolvedRoute:

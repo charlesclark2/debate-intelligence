@@ -19,7 +19,7 @@ context variable, so calls running at the same time each hear only their own ans
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -44,7 +44,7 @@ _LISTENER: Final[ContextVar[ReceivedAnswer | None]] = ContextVar("received_answe
 
 
 @contextmanager
-def receiving_answer() -> Iterator[ReceivedAnswer]:
+def receiving_answer() -> Generator[ReceivedAnswer, None, None]:
     """Listen for the answer a router hands over inside this block, and stop listening after it."""
     received = ReceivedAnswer()
     token = _LISTENER.set(received)

@@ -35,6 +35,15 @@ working tree's uncommitted and untracked files, and selects every test file one 
   changed script or test helper outside the packages is also found by its file name, which is how
   a test that starts it with subprocess (`write_junk_beside_a_held_link_files.py`,
   `scripts/*.py`) is selected.
+* **Paths, not words** (v1-e01-t32). A Python string that is a path names only what it denotes. A
+  `Path(__file__)` join (`Path(__file__).parent / "fixtures" / "landscape"`) denotes the path it
+  builds, so another package's folder of the same name is not named. A string with a slash
+  denotes the existing paths it is the end of (`"card/select.md"` is `prompts/card/select.md`),
+  or, when it starts with a slash, only one from the repository root or the file's own folder: a
+  route (`"/account/email/verify"`) or an f-string's tail (`f"{CORE}/retrieval/identifiers.py"`)
+  denotes nothing. A string with a wildcard denotes the folder before it; one with whitespace is
+  prose or a command, and its words are searched. A bare word shorter than four letters names no
+  folder or script (`"s3"`).
 * **Source readers.** A test that walks a directory and parses the Python it finds there
   (`ast.parse` with a glob, `rglob`, `iterdir` or `walk`) reads source as data, so any changed
   Python file selects it.
@@ -50,7 +59,10 @@ working tree's uncommitted and untracked files, and selects every test file one 
 A change to **shared test ground** (any `pyproject.toml`, `uv.lock`, the root `conftest.py`,
 `tests/pytest_plugins/`, `.github/workflows/ci.yml`) affects the whole selection. The script prints
 one line saying so, and that CI runs it, and exits 0; `--run` then runs nothing, because a session
-never runs the whole selection (working agreement 10).
+never runs the whole selection (working agreement 10). The one exception is a root `pyproject.toml`
+change that touches only `[tool.importlinter]`, read by `tests/architecture/` alone, which selects
+those (v1-e01-t32). It is read as TOML: a change to `[tool.pytest]`, the dependencies or any other
+table, or only to comments, is still the whole selection.
 
 It is conservative on purpose: a missed test is the failure that matters, and an extra one costs
 seconds. When it cannot tell, it selects more and says why (`--explain`). It keeps no state between
@@ -82,6 +94,7 @@ import ast
 import bisect
 import contextlib
 import importlib
+import posixpath
 import re
 import subprocess
 import sys
@@ -99,6 +112,11 @@ CI_MARKERS = "not slow and not live"
 # Shared test ground: a change to any of these can reach every test.
 SHARED_TEST_GROUND_FILES = frozenset({"conftest.py", "uv.lock", ".github/workflows/ci.yml"})
 SHARED_TEST_GROUND_DIRECTORIES = ("tests/pytest_plugins/",)
+# The root pyproject.toml's tables that only some tests read: a change to these alone selects those
+# tests, not the whole selection (v1-e01-t32). `[tool.pytest]`, the dependencies and every other
+# table stay shared test ground.
+ROOT_PYPROJECT = "pyproject.toml"
+TABLES_READ_ONLY_BY = {"tool.importlinter": ("tests/architecture/",)}
 
 # What imports cannot see: tests that read the whole repository, and the CLI's wiring.
 ALWAYS_RUN = (
@@ -128,6 +146,11 @@ GENERIC_FILE_NAMES = frozenset({"__init__.py", "__main__.py", "conftest.py", "py
 LOADED_BY_FOLDER = frozenset({"sitecustomize.py", "usercustomize.py"})
 # A folder named like this (`v1`, `ab`) matches literals that have nothing to do with it.
 VAGUE_FOLDER = re.compile(r"v\d+|.{1,2}")
+# A quoted word shorter than this names a folder or a script only beside a slash: `"s3"` in
+# `boto3.client("s3")` is not `tests/smoke/stand_ins/s3.py` (v1-e01-t32).
+SHORTEST_QUOTED_WORD = 4
+# A path segment holding one of these is a pattern or a placeholder, not a name: the path ends there.
+WILDCARD = re.compile(r"[*?\[{<%]")
 LARGEST_SEARCHED_FILE = 2_000_000
 
 SOURCE_READER = re.compile(r"\bast\.parse\(")
@@ -244,6 +267,9 @@ def decode(data: bytes) -> str | None:
 class Change:
     path: str
     deleted: bool
+    # For the root pyproject.toml: the tables that differ, `tool.<name>` for a tool's own (v1-e01-t32).
+    # None when either version is missing or does not parse; empty when only comments or layout moved.
+    tables: frozenset[str] | None = None
 
 
 def changed_files(root: Path, base: str, head: str | None, diff: str | None) -> list[Change]:
@@ -252,7 +278,7 @@ def changed_files(root: Path, base: str, head: str | None, diff: str | None) -> 
         if len(parents) < 2:
             raise SystemExit(f"affected_tests: {diff} has no parent to compare with")
         listing = git(root, "diff", "--name-status", "--no-renames", "-z", parents[1], parents[0])
-        return parse_name_status(listing)
+        return with_tables(root, parse_name_status(listing), parents[1], parents[0])
     tip = head or "HEAD"
     merge_base = git(root, "merge-base", base, tip).decode().strip()
     changes = {
@@ -268,7 +294,58 @@ def changed_files(root: Path, base: str, head: str | None, diff: str | None) -> 
         for path in untracked.split("\0"):
             if path:
                 changes[path] = Change(path, deleted=False)
-    return sorted(changes.values(), key=lambda change: change.path)
+    ordered = sorted(changes.values(), key=lambda change: change.path)
+    return with_tables(root, ordered, merge_base, head)
+
+
+def with_tables(root: Path, changes: list[Change], before: str, after: str | None) -> list[Change]:
+    """`changes`, with the tables a root pyproject.toml change touched (`after` None: the working tree)."""
+    return [
+        Change(change.path, change.deleted, changed_tables(root, before, after))
+        if change.path == ROOT_PYPROJECT and not change.deleted
+        else change
+        for change in changes
+    ]
+
+
+def changed_tables(root: Path, before: str, after: str | None) -> frozenset[str] | None:
+    """The top-level tables of the root pyproject.toml that differ, and each `tool.<name>` on its own."""
+    old = pyproject_at(root, before)
+    new = pyproject_at(root, after)
+    if old is None or new is None:
+        return None
+    tables: set[str] = set()
+    for key in old.keys() | new.keys():
+        if key == "tool" and isinstance(old.get(key, {}), dict) and isinstance(new.get(key, {}), dict):
+            old_tools, new_tools = old.get(key, {}), new.get(key, {})
+            tables |= {
+                f"tool.{tool}"
+                for tool in old_tools.keys() | new_tools.keys()
+                if old_tools.get(tool) != new_tools.get(tool)
+            }
+        elif old.get(key) != new.get(key):
+            tables.add(key)
+    return frozenset(tables)
+
+
+def pyproject_at(root: Path, revision: str | None) -> dict[str, object] | None:
+    """The root pyproject.toml at a commit, or in the working tree; None if missing or unreadable."""
+    if revision is None:
+        file = root / ROOT_PYPROJECT
+        if not file.is_file():
+            return None
+        data = file.read_text(encoding="utf-8")
+    else:
+        shown = subprocess.run(
+            ["git", "show", f"{revision}:{ROOT_PYPROJECT}"], cwd=root, capture_output=True, check=False
+        )
+        if shown.returncode != 0:
+            return None
+        data = shown.stdout.decode("utf-8", errors="replace")
+    try:
+        return tomllib.loads(data)
+    except tomllib.TOMLDecodeError:
+        return None
 
 
 def parse_name_status(listing: bytes) -> list[Change]:
@@ -699,9 +776,13 @@ def imported_names(tree: ast.AST) -> Iterator[tuple[int, str, tuple[str, ...]]]:
 
 
 class Corpus:
-    """Every searched file's text in one string, so a set of names is found in one pass."""
+    """Every searched file's text in one string, so a set of names is found in one pass.
 
-    def __init__(self, texts: dict[str, str]) -> None:
+    `denoting` maps an existing file or folder to the files whose path literals denote it
+    (:class:`PathIndex`); those literals are left out of `texts`, so their words are not searched.
+    """
+
+    def __init__(self, texts: dict[str, str], denoting: dict[str, set[str]] | None = None) -> None:
         self.paths = sorted(texts)
         self.starts: list[int] = []
         pieces: list[str] = []
@@ -711,35 +792,277 @@ class Corpus:
             pieces.append(texts[path])
             offset += len(texts[path]) + 1
         self.text = "\0".join(pieces)
+        self.denoting = denoting or {}
 
     def find(self, file_names: Iterable[str], path_parts: Iterable[str]) -> dict[str, set[str]]:
-        """For each name, the files holding it: a file name anywhere, a path part between quotes or /."""
+        """For each name, the files holding it: a file name anywhere, a path part between quotes or /.
+
+        A path part shorter than :data:`SHORTEST_QUOTED_WORD` counts only beside a slash: `"s3"` in
+        `boto3.client("s3")` is not the stand-in `tests/smoke/stand_ins/s3.py` (v1-e01-t32).
+        """
         names = sorted(set(file_names), key=len, reverse=True)
         parts = sorted(set(path_parts), key=len, reverse=True)
+        long_parts = [part for part in parts if len(part) >= SHORTEST_QUOTED_WORD]
+        short_parts = [part for part in parts if len(part) < SHORTEST_QUOTED_WORD]
         alternatives: list[str] = []
         if names:
             alternatives.append(r"(?<![\w-])(?P<name>" + "|".join(map(re.escape, names)) + r")(?![\w-])")
-        if parts:
+        if long_parts:
             alternatives.append(
-                r"(?<=[\"'/\\`])(?P<part>" + "|".join(map(re.escape, parts)) + r")(?=[\"'/\\`])"
+                r"(?<=[\"'/\\`])(?P<part>" + "|".join(map(re.escape, long_parts)) + r")(?=[\"'/\\`])"
+            )
+        if short_parts:
+            short = "|".join(map(re.escape, short_parts))
+            alternatives.append(
+                rf"(?:(?<=/)(?P<short>{short})(?=[\"'/\\`])|(?<=[\"'/\\`])(?P<short_before>{short})(?=/))"
             )
         found: dict[str, set[str]] = {}
         if not alternatives:
             return found
         for match in re.finditer("|".join(alternatives), self.text):
-            key = match.group("name") if names and match.group("name") else match.group("part")
+            key = next(value for value in match.groupdict().values() if value)
             path = self.paths[bisect.bisect_right(self.starts, match.start()) - 1]
             found.setdefault(key, set()).add(path)
         return found
 
+    def denoters(self, path: str, keys: Keys) -> set[str]:
+        """The files whose path literals denote `path`, or a folder it is read through."""
+        found = set(self.denoting.get(path, ()))
+        for folder in keys.folders:
+            found |= self.denoting.get(folder, set())
+        return found
+
+
+# --------------------------------------------------------------------------------------------
+# Path literals: a quoted string names a file only if it denotes one that exists (v1-e01-t32)
+# --------------------------------------------------------------------------------------------
+
+
+class PathIndex:
+    """The existing files and folders, to tell a path literal from a route, a bucket key or a word.
+
+    `known` is the tree's files and the changed files, so a test that names a file the change
+    deleted still names it.
+    """
+
+    def __init__(self, known: Iterable[str]) -> None:
+        self.files = set(known)
+        self.folders: set[str] = set()
+        for path in self.files:
+            for parent in PurePosixPath(path).parents:
+                if str(parent) != ".":
+                    self.folders.add(str(parent))
+        self.by_tail: dict[str, set[str]] = {}
+        for path in self.files | self.folders:
+            parts = path.split("/")
+            for start in range(len(parts)):
+                self.by_tail.setdefault("/".join(parts[start:]), set()).add(path)
+
+    def exists(self, path: str) -> bool:
+        return path in self.files or path in self.folders
+
+    def denoted(self, text: str, reader: str) -> set[str] | None:
+        """The existing paths a string with a slash in `reader` denotes; None when it cannot tell.
+
+        * One that starts with a slash is a route, a bucket key or the tail of an f-string
+          (`f"{CORE}/retrieval/identifiers.py"`). It denotes a file only from the repository root
+          or from the reader's own folder: `"/account/email/verify"` is not `tests/fixtures/verify/`.
+        * Any other denotes every existing path it is the end of, which includes the root, the
+          reader's folder and the folders above it, and a base the reader joins it to:
+          `PROMPTS / "card/select.md"` is `prompts/card/select.md`.
+        * Text after `=` or a `scheme:` is tried too (`--config=tests/x.yaml`). A segment with a
+          wildcard or a placeholder ends the path; when the first one does, it cannot tell.
+
+        It cannot tell, either, for text with whitespace in it: that is prose or a command, and its
+        words are searched as before.
+        """
+        if "/" not in text or any(character.isspace() for character in text):
+            return None
+        candidates = [text]
+        if "=" in text:
+            candidates.append(text.rsplit("=", 1)[1])
+        scheme, colon, rest = text.partition(":")
+        if colon and "/" not in scheme and not rest.startswith("//"):
+            candidates.append(rest)
+        found: set[str] = set()
+        for candidate in candidates:
+            denoted = self.denoted_by(candidate, reader)
+            if denoted is None:
+                return None
+            found |= denoted
+        return found
+
+    def denoted_by(self, text: str, reader: str) -> set[str] | None:
+        segments: list[str] = []
+        for segment in text.split("/"):
+            if WILDCARD.search(segment):
+                if not segments:
+                    return None
+                break
+            if segment not in ("", "."):
+                segments.append(segment)
+        while segments and segments[0] == "..":
+            segments.pop(0)
+        if not segments or ".." in segments:
+            return None
+        relative = "/".join(segments)
+        if not text.startswith("/"):
+            return set(self.by_tail.get(relative, ()))
+        folder = PurePosixPath(reader).parent
+        beside = relative if str(folder) == "." else f"{folder}/{relative}"
+        return {candidate for candidate in (relative, beside) if self.exists(candidate)}
+
+
+def static_paths(syntax: ast.Module, reader: str) -> dict[int, str]:
+    """The repository path each `Path(__file__)`-rooted join in a file builds, by its string's node id.
+
+    `Path(__file__).resolve().parents[1] / "fixtures" / "cards"` in `tests/x/test_y.py` builds
+    `tests/fixtures` at its first string and `tests/fixtures/cards` at its second. A base may be a
+    name the file assigns once (`REPO_ROOT = Path(__file__).resolve().parents[2]`), `Path("x")`
+    from the repository root, or `.joinpath(...)`. A join it cannot follow builds nothing here, and
+    its strings are read as words.
+    """
+    assigned: dict[str, list[ast.expr]] = {}
+    for node in ast.walk(syntax):
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            assigned.setdefault(node.targets[0].id, []).append(node.value)
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.value:
+            assigned.setdefault(node.target.id, []).append(node.value)
+    bindings = {name: values[0] for name, values in assigned.items() if len(values) == 1}
+
+    def joined(base: str | None, piece: str) -> str | None:
+        if base is None or piece.startswith("/"):
+            return None
+        normal = posixpath.normpath(posixpath.join(base, piece))
+        return None if normal == ".." or normal.startswith("../") else normal
+
+    def evaluate(node: ast.expr, depth: int = 0) -> str | None:
+        if depth > 20:
+            return None
+        if isinstance(node, ast.Name):
+            return evaluate(bindings[node.id], depth + 1) if node.id in bindings else None
+        if isinstance(node, ast.Attribute) and node.attr == "parent":
+            inner = evaluate(node.value, depth + 1)
+            return None if inner in (None, ".") else posixpath.dirname(inner) or "."
+        if (
+            isinstance(node, ast.Subscript)
+            and isinstance(node.value, ast.Attribute)
+            and node.value.attr == "parents"
+            and isinstance(node.slice, ast.Constant)
+            and isinstance(node.slice.value, int)
+        ):
+            inner = evaluate(node.value.value, depth + 1)
+            if inner is None:
+                return None
+            parents = [str(parent) for parent in PurePosixPath(inner).parents]
+            return parents[node.slice.value] if 0 <= node.slice.value < len(parents) else None
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+            right = node.right
+            if isinstance(right, ast.Constant) and isinstance(right.value, str):
+                return joined(evaluate(node.left, depth + 1), right.value)
+            return None
+        if isinstance(node, ast.Call):
+            function = node.func
+            name = function.attr if isinstance(function, ast.Attribute) else getattr(function, "id", "")
+            if name == "Path" and len(node.args) == 1 and not node.keywords:
+                argument = node.args[0]
+                if isinstance(argument, ast.Name) and argument.id == "__file__":
+                    return reader
+                if isinstance(argument, ast.Name) and isinstance(bindings.get(argument.id), ast.Constant):
+                    argument = bindings[argument.id]
+                if isinstance(argument, ast.Constant) and isinstance(argument.value, str):
+                    return joined(".", argument.value)
+                return None
+            if isinstance(function, ast.Attribute) and name in ("resolve", "absolute") and not node.args:
+                return evaluate(function.value, depth + 1)
+            if isinstance(function, ast.Attribute) and name == "joinpath" and node.args:
+                path = evaluate(function.value, depth + 1)
+                for argument in node.args:
+                    if not (isinstance(argument, ast.Constant) and isinstance(argument.value, str)):
+                        return None
+                    path = joined(path, argument.value)
+                return path
+        return None
+
+    built: dict[int, str] = {}
+    for node in ast.walk(syntax):
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+            right = node.right
+            if isinstance(right, ast.Constant) and isinstance(right.value, str):
+                path = evaluate(node)
+                if path is not None:
+                    built[id(right)] = path
+        elif (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "joinpath"
+            and node.args
+        ):
+            path = evaluate(node)
+            last = node.args[-1]
+            if path is not None and isinstance(last, ast.Constant):
+                built[id(last)] = path
+    return built
+
+
+def naming_text(tree: Tree, path: str, index: PathIndex) -> tuple[str, set[str]]:
+    """A file's literals as searched for names (`"a", "b"`), and the existing paths it denotes.
+
+    A string a `Path(__file__)` join builds into an existing path denotes that path; a string with
+    a slash denotes what :meth:`PathIndex.denoted` says. Either way it is left out of the words, so
+    `"verify"` in a route or `"landscape"` in another package's fixture folder names nothing. Any
+    other string is a word, as before. A file that is not Python, or does not parse, is all words.
+    """
+    syntax = tree.syntax(path) if path.endswith(".py") else None
+    if syntax is None:
+        return tree.literals(path), set()
+    built = static_paths(syntax, path)
+    prose = {
+        id(node.value)
+        for node in ast.walk(syntax)
+        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant)
+    }
+    words: list[ast.Constant] = []
+    denoted: set[str] = set()
+    for node in ast.walk(syntax):
+        if not (isinstance(node, ast.Constant) and isinstance(node.value, str)) or id(node) in prose:
+            continue
+        joined = built.get(id(node))
+        if joined is not None and index.exists(joined):
+            denoted.add(joined)
+            continue
+        from_slash = index.denoted(node.value, path)
+        if from_slash is None:
+            words.append(node)
+        else:
+            denoted |= from_slash
+    words.sort(key=lambda node: (node.lineno, node.col_offset))
+    return ", ".join(f'"{node.value}"' for node in words), denoted
+
+
+def naming_corpus(tree: Tree, changes: list[Change]) -> Corpus:
+    index = PathIndex(tree.paths | {change.path for change in changes})
+    texts: dict[str, str] = {}
+    denoting: dict[str, set[str]] = {}
+    for path in tree.texts:
+        texts[path], denoted = naming_text(tree, path, index)
+        for target in denoted:
+            denoting.setdefault(target, set()).add(path)
+    return Corpus(texts, denoting)
+
 
 @dataclass(frozen=True)
 class Keys:
-    """How a file is named by the files that read or run it."""
+    """How a file is named by the files that read or run it.
+
+    `folders` are the folders a reader may name to read it, the same walk as `path_parts` but as
+    whole paths, for a path literal that denotes one of them.
+    """
 
     file_names: frozenset[str]
     path_parts: frozenset[str]
     neighbours: frozenset[str]
+    folders: frozenset[str] = frozenset()
 
 
 def keys_for(path: str, layout: Layout, deleted: bool) -> Keys:
@@ -760,12 +1083,16 @@ def keys_for(path: str, layout: Layout, deleted: bool) -> Keys:
         path_parts.add(pure.stem)
         return Keys(frozenset(file_names), frozenset(path_parts), frozenset())
     folder = pure.parent
+    folders: set[str] = set()
     while str(folder) != "." and not ends_folder_walk(folder, layout):
         if not VAGUE_FOLDER.fullmatch(folder.name):
             path_parts.add(folder.name)
+        folders.add(str(folder))
         neighbours |= layout.python_files_in.get(str(folder), set())
         folder = folder.parent
-    return Keys(frozenset(file_names), frozenset(path_parts), frozenset(neighbours - {path}))
+    return Keys(
+        frozenset(file_names), frozenset(path_parts), frozenset(neighbours - {path}), frozenset(folders)
+    )
 
 
 def ends_folder_walk(folder: PurePosixPath, layout: Layout) -> bool:
@@ -813,6 +1140,19 @@ def shared_test_ground(path: str) -> bool:
     )
 
 
+def tests_reading_tables(change: Change) -> tuple[str, ...] | None:
+    """The test folders a root pyproject.toml change reaches, when it only touched tables they alone read.
+
+    None for any other change, and for one that touched another table, only comments, or that
+    cannot be read: those are the whole selection.
+    """
+    if change.path != ROOT_PYPROJECT or not change.tables:
+        return None
+    if not change.tables <= TABLES_READ_ONLY_BY.keys():
+        return None
+    return tuple(folder for table in sorted(change.tables) for folder in TABLES_READ_ONLY_BY[table])
+
+
 def files_under(layout: Layout, prefixes: Iterable[str]) -> set[str]:
     prefixes = tuple(prefixes)
     return {
@@ -825,14 +1165,29 @@ def files_under(layout: Layout, prefixes: Iterable[str]) -> set[str]:
 def select(tree: Tree, changes: list[Change]) -> Selection:
     layout = Layout.of(tree)
     selection = Selection(total=len(layout.test_files))
+    read_by: dict[str, tuple[str, ...]] = {}
     for change in changes:
-        if shared_test_ground(change.path):
+        folders = tests_reading_tables(change)
+        if folders is not None:
+            read_by[change.path] = folders
+        elif shared_test_ground(change.path):
+            if change.path == ROOT_PYPROJECT and change.tables:
+                selection.notes.append(f"{change.path} changes {', '.join(sorted(change.tables))}.")
             selection.whole = f"{change.path} is shared test ground"
             return selection
     graph = build_graph(tree, layout)
     selection.notes.extend(graph.notes)
-    walk = Walk(layout, graph, Corpus({path: tree.literals(path) for path in tree.texts}))
+    walk = Walk(layout, graph, naming_corpus(tree, changes))
     for change in changes:
+        if change.path in read_by:
+            tables = ", ".join(sorted(change.tables or ()))
+            selection.add(
+                dict.fromkeys(
+                    files_under(layout, read_by[change.path]),
+                    f"reads [{tables}] of {change.path}, the only table that changed",
+                )
+            )
+            continue
         walk.start(change)
         selection.add(files_by_category(change.path, layout, selection.notes))
     selection.whole = walk.run()
@@ -945,7 +1300,7 @@ class Walk:
         parts = {part for keys in batch.values() for part in keys.path_parts}
         mentions = self.corpus.find(names, parts)
         for path, keys in batch.items():
-            mentioners = set(keys.neighbours)
+            mentioners = set(keys.neighbours) | self.corpus.denoters(path, keys)
             for key in (*keys.file_names, *keys.path_parts):
                 mentioners |= mentions.get(key, set())
             mentioners.discard(path)

@@ -596,6 +596,191 @@ def test_a_spec_change_selects_the_spec_tests(workspace: Workspace) -> None:
 
 
 # --------------------------------------------------------------------------------------------
+# Quoted words and paths (v1-e01-t32). Each case commits files of its own on top of BASE, then
+# describes one more commit with --diff HEAD, so BASE and the counts above stay as they are.
+# --------------------------------------------------------------------------------------------
+
+
+def describe(workspace: Workspace, setup: dict[str, str], change: dict[str, str]) -> Result:
+    workspace.commit(setup, "setup")
+    workspace.commit(change, "described")
+    return workspace.run("--diff", "HEAD")
+
+
+STAND_INS = {
+    "tests/stand_ins/s3.py": "S3 = 1\n",
+    "tests/stand_ins/abcd.py": "ABCD = 1\n",
+    "tests/clients/test_client_words.py": 'CLIENTS = ["s3", "abcd"]\n',
+    "tests/clients/test_imports_the_stand_in.py": "from tests.stand_ins import s3\n",
+}
+
+
+def test_a_quoted_word_shorter_than_four_letters_names_no_script(workspace: Workspace) -> None:
+    result = describe(workspace, STAND_INS, {"tests/stand_ins/s3.py": "S3 = 2\n"})
+    # `"s3"` is boto3's service name, not the stand-in; the test that imports the stand-in still reaches it.
+    assert_selected(result, {"tests/clients/test_imports_the_stand_in.py"} | ALWAYS | READS_SOURCE)
+
+
+def test_a_quoted_word_of_four_letters_still_names_its_script(workspace: Workspace) -> None:
+    result = describe(workspace, STAND_INS, {"tests/stand_ins/abcd.py": "ABCD = 2\n"})
+    assert_selected(result, {"tests/clients/test_client_words.py"} | ALWAYS | READS_SOURCE)
+
+
+VERIFY_FIXTURES = {
+    "tests/fixtures/verify/case.json": "{}\n",
+    # A route ending in the folder's name: not a path from the root or from the test's folder.
+    "tests/api/test_routes.py": 'ROUTE = "/account/email/verify"\n',
+    # A path from the repository root.
+    "tests/api/test_reads_from_the_root.py": 'CASES = "tests/fixtures/verify"\n',
+    # A path from the test file's own folder, tests/.
+    "tests/test_reads_beside_itself.py": 'CASES = "fixtures/verify"\n',
+    # The same folder joined to the test file's folder, and an f-string's tail read from the root.
+    "tests/api/test_joins_its_path.py": (
+        'from pathlib import Path\n\nCASES = Path(__file__).parents[1] / "fixtures" / "verify"\n'
+    ),
+    "tests/api/test_formats_its_path.py": 'ROOT = "."\nCASES = f"{ROOT}/tests/fixtures/verify"\n',
+    # A pattern denotes the folder before its wildcard.
+    "tests/api/test_globs_the_folder.py": 'PATTERN = "tests/fixtures/verify/*.json"\n',
+    # A bare word cannot tell, so it still names the folder: the command `verify` reading its cases.
+    "tests/cli/test_verify_command.py": 'ARGUMENTS = ["verify", "--json"]\n',
+}
+
+
+def test_a_route_names_no_fixture_folder_but_a_path_to_it_does(workspace: Workspace) -> None:
+    result = describe(workspace, VERIFY_FIXTURES, {"tests/fixtures/verify/case.json": '{"changed": 1}\n'})
+    assert_selected(
+        result,
+        {
+            "tests/api/test_reads_from_the_root.py",
+            "tests/test_reads_beside_itself.py",
+            "tests/api/test_joins_its_path.py",
+            "tests/api/test_formats_its_path.py",
+            "tests/api/test_globs_the_folder.py",
+            "tests/cli/test_verify_command.py",
+        }
+        | ALWAYS,
+    )
+
+
+def test_a_folder_joined_to_the_files_own_folder_is_not_another_folder_of_that_name(
+    workspace: Workspace,
+) -> None:
+    setup = {
+        "tests/fixtures/landscape/report.txt": "shared\n",
+        "packages/debate_cli/tests/fixtures/landscape/bundle.txt": "the CLI's own\n",
+        "packages/debate_cli/tests/test_own_landscape.py": (
+            'from pathlib import Path\n\nOWN = Path(__file__).resolve().parent / "fixtures" / "landscape"\n'
+        ),
+        "tests/test_shared_landscape.py": (
+            'from pathlib import Path\n\nSHARED = Path(__file__).parent / "fixtures" / "landscape"\n'
+        ),
+    }
+    result = describe(workspace, setup, {"tests/fixtures/landscape/report.txt": "changed\n"})
+    assert_selected(result, {"tests/test_shared_landscape.py"} | ALWAYS)
+
+
+def test_a_module_named_only_in_an_f_strings_tail_is_data_not_a_read(workspace: Workspace) -> None:
+    """The planted-break check names the modules it breaks in a clone; that does not select it."""
+    setup = {
+        "tests/scripts/test_plants_a_break.py": (
+            f'CORE = "{CORE}"\nBREAKS = [f"{{CORE}}/nobody_imports.py", f"{{CORE}}/domain.py"]\n'
+        ),
+        "tests/scripts/test_reads_a_module_by_its_path.py": f'SOURCE = "{CORE}/nobody_imports.py"\n',
+    }
+    result = describe(workspace, setup, changed(f"{CORE}/nobody_imports.py"))
+    assert_selected(result, {"tests/scripts/test_reads_a_module_by_its_path.py"} | ALWAYS | READS_SOURCE)
+
+
+def test_a_path_to_a_deleted_fixture_still_names_it(workspace: Workspace) -> None:
+    workspace.delete("tests/fixtures/cards/a.json")
+    assert_selected(
+        workspace.run("--diff", "HEAD"),
+        {
+            "tests/fixture_users/test_names_file.py",
+            "tests/fixture_users/test_names_folder.py",
+            "tests/fixture_users/test_uses_builder.py",
+        }
+        | ALWAYS,
+    )
+
+
+# --------------------------------------------------------------------------------------------
+# The root pyproject.toml, table by table (v1-e01-t32)
+# --------------------------------------------------------------------------------------------
+
+LINTED = (
+    BASE["pyproject.toml"] + "addopts = \"-m 'not slow'\"\n\n"
+    '[project]\nname = "workspace"\ndependencies = ["typer>=0.12"]\n\n'
+    "[tool.importlinter]\n"
+    'root_packages = ["debate_core", "debate_cli"]\n\n'
+    "[[tool.importlinter.contracts]]\n"
+    'name = "The domain imports no adapter"\n'
+    'type = "forbidden"\n'
+    'source_modules = ["debate_core.domain"]\n'
+    'forbidden_modules = ["debate_core.integrations"]\n'
+)
+READS_THE_PYPROJECT = {"tests/test_reads_the_pyproject.py": 'PYPROJECT = "pyproject.toml"\n'}
+
+
+def test_an_import_linter_only_root_pyproject_change_selects_the_architecture_tests(
+    workspace: Workspace,
+) -> None:
+    contract = LINTED.replace('"debate_core.integrations"]', '"debate_core.integrations", "debate_cli"]')
+    result = describe(
+        workspace, {"pyproject.toml": LINTED, **READS_THE_PYPROJECT}, {"pyproject.toml": contract}
+    )
+    # tests/architecture is in the always-run list too; the test that names pyproject.toml is not chosen.
+    assert_selected(result, ALWAYS)
+    assert (
+        "tests/architecture/test_layers.py  <- reads [tool.importlinter] of pyproject.toml, the only "
+        "table that changed"
+    ) in workspace.run("--diff", "HEAD", "--explain").stdout.splitlines()
+
+
+def test_adding_the_import_linter_table_on_a_branch_selects_the_architecture_tests(
+    workspace: Workspace,
+) -> None:
+    workspace.commit(
+        {"pyproject.toml": BASE["pyproject.toml"] + LINTED[LINTED.index("[tool.importlinter]") :]}
+    )
+    assert_selected(workspace.run(), ALWAYS)
+
+
+@pytest.mark.parametrize(
+    "edit",
+    [
+        pytest.param(lambda text: text.replace("not slow", "not slow and not live"), id="the pytest table"),
+        pytest.param(
+            lambda text: text.replace("not slow", "not live").replace('"debate_cli"]', '"debate_api"]'),
+            id="the pytest and import-linter tables",
+        ),
+        pytest.param(lambda text: text.replace("typer>=0.12", "typer>=0.13"), id="a dependency"),
+        pytest.param(lambda text: text + "\n[tool.uv]\npackage = false\n", id="another tool's table"),
+        pytest.param(lambda text: text + "\n# only a comment\n", id="only a comment"),
+        pytest.param(lambda text: text + "\n[tool.importlinter\n", id="a file that does not parse"),
+    ],
+)
+def test_any_other_root_pyproject_change_is_the_whole_selection(workspace: Workspace, edit: object) -> None:
+    assert callable(edit)
+    result = describe(workspace, {"pyproject.toml": LINTED}, {"pyproject.toml": edit(LINTED)})
+    assert result.status == 0
+    assert result.stdout == (
+        "The whole selection is affected: pyproject.toml is shared test ground. CI runs it on the pull "
+        "request; a session does not (working agreement 10).\n"
+    )
+
+
+def test_a_packages_pyproject_is_the_whole_selection_whichever_table_changed(workspace: Workspace) -> None:
+    package = "packages/debate_cli/pyproject.toml"
+    linted = BASE[package] + '\n[tool.importlinter]\nroot_packages = ["debate_cli"]\n'
+    result = describe(
+        workspace, {package: linted}, {package: linted.replace('["debate_cli"]', '["debate_core"]')}
+    )
+    assert result.whole
+    assert f"{package} is shared test ground" in result.stdout
+
+
+# --------------------------------------------------------------------------------------------
 # --run
 # --------------------------------------------------------------------------------------------
 

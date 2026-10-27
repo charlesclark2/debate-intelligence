@@ -57,8 +57,11 @@ A student may change a cite field through
 holds a cite edit, keeps what the student wrote (:func:`keep_student_edits`): a field whose value
 equals the derived one takes the derived field, verified exactly when the derivation is; a field
 that differs keeps the student's value, unverified, and is named in
-:attr:`CitationResolution.student_fields`. A card no student has cite-edited takes the derived cite
-whole. Saving the card, and re-verifying it, is the caller's step.
+:attr:`CitationResolution.student_fields`. A field the student cleared is recorded on the cite
+(`cleared_by_student`, by the edit policy) and stays empty, named there too, and is never filled
+again by re-resolution (`v1-e06-t02`): a required one leaves the card UNVERIFIED, with the
+verifier's ``CITATION_UNVERIFIED`` naming it. A card no student has cite-edited takes the derived
+cite whole. Saving the card, and re-verifying it, is the caller's step.
 
 ## Formatting (ac4)
 
@@ -274,20 +277,24 @@ def _deposit_candidates(work: DoiWork | None) -> CitationCandidates:
 def keep_student_edits(stored: Citation, derived: Citation) -> tuple[Citation, tuple[str, ...]]:
     """`derived`, keeping each of `stored`'s fields a student changed away from the source (ac5).
 
-    For each field: when `stored` has no value, or the same value as `derived`, the derived field is
-    taken, verified exactly when the derivation is. A stored value marked verified is the service's
-    own from an earlier resolution (a student's changed field never arrives verified), so the
-    derivation replaces it. Any other stored value is the student's: it is kept as stored, with
-    `verified` false, and its name is returned. Returns the cite and those names, in cite order.
+    For each field: a field the student cleared (`stored.cleared_by_student`, `v1-e06-t02`) stays
+    empty, whatever the source says. Otherwise, when `stored` has no value, or the same value as
+    `derived`, the derived field is taken, verified exactly when the derivation is. A stored value
+    marked verified is the service's own from an earlier resolution (a student's changed field never
+    arrives verified), so the derivation replaces it. Any other stored value is the student's: it is
+    kept as stored, with `verified` false. The names of the cleared and kept fields are returned with
+    the cite, in cite order.
     """
     kept: dict[str, CitationField[Any]] = {}
     for name in CITATION_FIELD_NAMES:
         mine: CitationField[Any] = getattr(stored, name)
         theirs: CitationField[Any] = getattr(derived, name)
-        if mine.is_present and not mine.verified and mine.value != theirs.value:
+        if name in stored.cleared_by_student or (
+            mine.is_present and not mine.verified and mine.value != theirs.value
+        ):
             kept[name] = mine
     marked = {"authors_are_organizations": stored.authors_are_organizations} if "authors" in kept else {}
-    return derived.evolve(**kept, **marked), tuple(kept)
+    return derived.evolve(**kept, **marked, cleared_by_student=stored.cleared_by_student), tuple(kept)
 
 
 # --------------------------------------------------------------------------------------------

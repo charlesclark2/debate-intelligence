@@ -77,12 +77,14 @@ from debate_core.domain import (
     Card,
     CardOmission,
     CardSpan,
+    Citation,
     Interpolation,
     SourceSnapshot,
     SpanPurpose,
     SpanStyle,
     VerificationStatus,
 )
+from debate_core.domain.citation import CITATION_FIELD_NAMES
 from debate_core.evidence._runtime_checks import is_instance
 from debate_core.evidence.card_mapping import place_evidence_on_card, snapshot_ranges_of
 from debate_core.evidence.edits import (
@@ -208,7 +210,9 @@ def apply_tag_or_cite_edit(card: Card, edit: TagOrCiteEdit) -> EditedCard:
     Needs no snapshot and never re-cuts the quotation, so it applies to a card with no evidence yet and
     to one whose stored quotation no longer matches its snapshot (re-verification reports that). A cite
     field the student changed may not arrive marked verified
-    (:attr:`~debate_core.evidence.edits.EditProblem.CITATION_CLAIMS_VERIFICATION`).
+    (:attr:`~debate_core.evidence.edits.EditProblem.CITATION_CLAIMS_VERIFICATION`). A cite field the
+    edit empties is recorded as cleared by the student (:func:`_with_cleared_fields`), so re-resolving
+    the cite never fills it again (`v1-e06-t02`).
     """
     kind = kind_of(edit)
     match edit:
@@ -216,7 +220,7 @@ def apply_tag_or_cite_edit(card: Card, edit: TagOrCiteEdit) -> EditedCard:
             edited = _evolved(kind, EditProblem.INVALID_TAG, card, tag=edit.tag)
         case EditCite():
             _check_cite_claims_nothing(card, edit)
-            edited = card.evolve(citation=edit.citation)
+            edited = card.evolve(citation=_with_cleared_fields(card.citation, edit.citation))
     return EditedCard(edited.evolve(verification_status=VerificationStatus.UNVERIFIED), kind)
 
 
@@ -373,13 +377,30 @@ def _check_cite_claims_nothing(card: Card, edit: EditCite) -> None:
     """A cite field the student changed may not arrive marked verified."""
     before = card.citation.model_dump()
     after = edit.citation.model_dump()
-    claimed = [name for name, field in after.items() if field != before[name] and field["verified"]]
+    claimed = [
+        name for name in CITATION_FIELD_NAMES if after[name] != before[name] and after[name]["verified"]
+    ]
     if claimed:
         raise InvalidEvidenceEdit(
             edit.kind,
             EditProblem.CITATION_CLAIMS_VERIFICATION,
             f"changed cite fields {claimed} are marked verified; only the citation service verifies one",
         )
+
+
+def _with_cleared_fields(before: Citation, after: Citation) -> Citation:
+    """`after`, naming as cleared each field it leaves empty that held a value or was already cleared.
+
+    What the edit itself says it cleared is not read: a field is cleared by being emptied, and stays
+    cleared until the student fills it.
+    """
+    cleared = tuple(
+        name
+        for name in CITATION_FIELD_NAMES
+        if not getattr(after, name).is_present
+        and (getattr(before, name).is_present or name in before.cleared_by_student)
+    )
+    return after.evolve(cleared_by_student=cleared)
 
 
 def _negation_flag(edited: Card, removed: _Ranges, snapshot_text: SnapshotText) -> NegationFlag | None:

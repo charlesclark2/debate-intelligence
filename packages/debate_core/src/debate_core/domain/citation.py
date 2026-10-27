@@ -120,10 +120,19 @@ class Citation(DomainModel):
     cleared_by_student: tuple[str, ...] = Field(
         default=(),
         description=(
-            "Cite fields a student cleared through a cite edit, in cite order. Each is empty, and stays "
-            "empty when the cite is resolved again, until the student fills it."
+            "Cite fields a student's last cite edit left empty, in cite order. Re-resolving the cite keeps "
+            "each as the student left it; the edit policy rewrites the list on every cite edit."
         ),
     )
+
+    @model_validator(mode="after")
+    def _check_cleared_fields(self) -> Self:
+        unknown = [name for name in self.cleared_by_student if name not in CITATION_FIELD_NAMES]
+        if unknown:
+            raise ValueError(f"not cite fields: {', '.join(unknown)}")
+        if list(self.cleared_by_student) != [n for n in CITATION_FIELD_NAMES if n in self.cleared_by_student]:
+            raise ValueError("cleared fields are listed once each, in cite order")
+        return self
 
     @model_validator(mode="after")
     def _check_organization_authors(self) -> Self:

@@ -960,9 +960,22 @@ def test_keep_student_edits_keeps_a_cleared_field_cleared_whatever_the_source_sa
     assert student_fields == ("title",)
 
 
-def test_a_cite_cannot_record_a_cleared_field_that_holds_a_value_or_is_no_field() -> None:
-    with pytest.raises(ValueError, match="cleared"):
-        Citation(title=field("Kept", BYLINE), cleared_by_student=("title",))
+async def test_what_an_edit_says_it_cleared_is_not_read(world: CitationWorld) -> None:
+    card = await card_with_derived_cite(world)
+
+    claims_title_cleared = EditCite(card.citation.evolve(cleared_by_student=("title",)))
+
+    card = (
+        await world.edits.edit(
+            card.card_id, claims_title_cleared, expected_revision=card.revision, actor_id=STUDENT
+        )
+    ).card
+
+    assert card.citation.cleared_by_student == ()
+    assert (await world.service.re_resolve(card)).citation.title == card.citation.title
+
+
+def test_a_cite_cannot_record_a_cleared_field_that_is_no_field_or_out_of_order() -> None:
     with pytest.raises(ValueError, match="cite field"):
         Citation(cleared_by_student=("weather",))
     with pytest.raises(ValueError, match="cite order"):

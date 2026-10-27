@@ -111,6 +111,15 @@
           "description": "True when `authors` names the issuing organizations rather than people: the source named no person, and a typed source named the organization.",
           "title": "Authors Are Organizations",
           "type": "boolean"
+        },
+        "cleared_by_student": {
+          "default": [],
+          "description": "Cite fields a student's last cite edit left empty, in cite order. Re-resolving the cite keeps each as the student left it; the edit policy rewrites the list on every cite edit.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Cleared By Student",
+          "type": "array"
         }
       },
       "title": "Citation",

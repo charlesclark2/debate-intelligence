@@ -133,6 +133,15 @@ PLANTED_BREAKS = [
         '<meta property="og:title" content="Scientists say mammoth revival is years away">',
         '<meta property="og:title" content="Scientists say a planted revival is years away">',
     ),
+    # v1-e01-t39: an integration the container imports inside one factory. Only `caselist retire`'s
+    # test reads what it changed, through `cli.services.version_retention`, so the break is caught
+    # only if the selection follows the command to the factory and the test to the command.
+    PlantedBreak(
+        "debate_core: a lazily imported integration names the wrong place, read through one command's factory",
+        f"{CORE}/integrations/local/version_directories.py",
+        '        return "this machine"\n',
+        '        return "this planted machine"\n',
+    ),
     PlantedBreak(
         "pyproject.toml: an import-linter contract is renamed, and nothing else changes",
         "pyproject.toml",

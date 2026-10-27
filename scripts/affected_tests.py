@@ -1,7 +1,8 @@
 """Print the test files a branch's changes can affect, and optionally run them (v1-e01-t28).
 
 Working agreement 10 has a session run the affected set once before its report, and CI run the
-whole default selection on the pull request. This script prints that affected set. It reads the
+same selection on a pull request into dev (scripts/ci_test_selection.py, v1-e01-t38) and the whole
+default selection on dev's push run. This script prints that affected set. It reads the
 files the branch changed against its merge base with `--base` (origin/dev by default), plus the
 working tree's uncommitted and untracked files, and selects every test file one of them can reach:
 

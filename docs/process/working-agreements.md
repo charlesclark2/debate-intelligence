@@ -18,8 +18,10 @@ The goal is a short wait between opening a PR and being able to merge it into `d
   `pytest --part K/N` on its own runner. A part is not a list of directories:
   `tests/pytest_plugins/run_in_parts.py` deals each test file's tests round the N parts, so every
   selected test is in exactly one part and the parts stay level with nothing to maintain. The
-  parts together are the whole default selection; `tests/scripts/test_ci_workflow_test_job.py`
-  collects all of them and proves it on every run. No test is moved off the PR path to make room.
+  parts together are the selection: on a pull request into `dev` the tests its changes reach, and
+  otherwise the whole default selection ([agreement 10](#10-a-session-tests-what-it-changed-a-pull-request-what-it-reaches-and-dev-and-main-everything)).
+  `tests/scripts/test_ci_workflow_test_job.py` collects all of them and proves it, for both, on
+  every run. No test is moved off the PR path to make room.
 * **When it drifts**, read the `test` parts of a few recent pull requests. Each ends with its 25
   slowest tests.
   * `ci` over 3 minutes on ordinary pull requests, or one part's pytest step over 2: append the
@@ -29,7 +31,7 @@ The goal is a short wait between opening a PR and being able to merge it into `d
     name them. Make them cheaper; never mark them `slow` to get them out of the way.
 * **The same option splits a long local run** for the operator: `uv run pytest --part 1/2` and
   then `--part 2/2` are the whole default selection between them, for any N. A session does not use
-  it to run the whole selection in pieces; what a session runs is [agreement 10](#10-a-session-tests-what-it-changed-and-ci-tests-everything).
+  it to run the whole selection in pieces; what a session runs is [agreement 10](#10-a-session-tests-what-it-changed-a-pull-request-what-it-reaches-and-dev-and-main-everything).
 * **Coverage is not measured on a PR, or by a plain `uv run pytest`.** It took a third of the
   suite's time and nothing is gated on it. `ci.yml`'s `coverage` job measures it over the whole
   selection on every push to `dev` and `main`. Locally, ask for it:
@@ -202,16 +204,33 @@ be always passes.
   pull request adds or changes it. A `#` inside quotes, a heredoc body or a word such as a URL's
   `#anchor` is not a comment and passes.
 
-## 10. A session tests what it changed, and CI tests everything
+## 10. A session tests what it changed, a pull request what it reaches, and dev and main everything
 
 The whole default selection takes about six minutes on the operator's Mac and grows with almost every
 task. Sessions were running it in eighths several times each (at red, at green, after formatting,
-after mutation runs, after a sync), and that had become most of a session's wall-clock time. CI runs
-the whole selection on every pull request, in parallel parts, in about three minutes. That is the
-gate, and it runs once per push rather than once per idea. (Added by the PM, 2026-10-19.)
+after mutation runs, after a sync), and that had become most of a session's wall-clock time. CI ran
+the whole selection on every pull request, in parallel parts, in about three minutes, once per push
+rather than once per idea. (Added by the PM, 2026-10-19.) By 2026-10-26 that run neared the
+5-minute budget of [agreement 1](#1-ci-stays-light), so a pull request into `dev` now runs only the
+tests its changes reach, and the whole selection runs once per merge instead (`v1-e01-t38`).
 
+* **A pull request into `dev` runs the affected set.** ci.yml's `test` job reads
+  `scripts/affected_tests.py`'s selection against the pull request's base commit, always-run list
+  included, and deals it round the parts. When the pull request changes shared test ground (ci.yml
+  among it), or its selection fails, comes back empty or has no base commit to compare with, the job
+  runs the whole selection instead: it fails toward more tests, never fewer. The job summary says
+  how many test files it ran and, for the whole selection, why.
+* **Dev's push run and every promotion run everything.** A push to `dev` or `main`, a pull request
+  into `main` and a dispatched run each run the whole default selection, and the `coverage` job
+  measures it on every push. The dev pre-release waits for dev's push run, so a test the affected set
+  missed fails there, before any release.
+* **A red push run on `dev` is fixed by the next pull request, before anything else merges.** A red
+  push run means a test the affected set did not reach is failing on `dev`. Nothing else merges
+  into `dev` until a pull request fixes it. That pull request's session runs the failing tests by
+  name as well as its affected set, because the fix's own selection may not reach them.
 * **A session never runs the whole default selection**, in one command or in parts. Not at red, not
-  before the report, not after a sync. The pull request's `ci` check is the whole-suite run.
+  before the report, not after a sync. The whole-suite run is CI's: the pull request's `ci` check
+  when the selection is the whole one, and dev's push run after every merge.
 * **While working, run the tests for what you are changing:** the new or changed test files, the
   test directory of the module under change, and the plan node's own acceptance command. A red run
   is the new tests alone, shown failing.
@@ -226,7 +245,7 @@ gate, and it runs once per push rather than once per idea. (Added by the PM, 202
     nothing: that run is CI's, or the operator's under the exception below;
   * **when the affected set would take longer than about two minutes,** the session does not hand it
     to the operator: it says so in the report and leaves it to the pull request's `ci` check, which
-    runs the whole selection anyway. It still runs, within the two minutes, the test directories of
+    runs the same affected set, or the whole selection. It still runs, within the two minutes, the test directories of
     what it changed and the always-run list (the PM's ruling of 2026-10-19, written in 2026-10-20);
   * `ruff format --check`, `ruff check`, `pyright packages/<changed packages>`, `lint-imports`,
     `scripts/validate_specs.py`, and the docs checks when docs changed. These take seconds.

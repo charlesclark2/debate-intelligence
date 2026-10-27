@@ -163,6 +163,8 @@ def test_the_copy_holds_the_runs_state_and_the_data_directory_and_the_bucket_are
     assert data["parsed_objects"] > 0
     assert data["index_id"] == world.published_index()["index_id"]
     assert data["caselists"] == [CASELIST]
+    assert data["sources"] is None
+    assert not (copy / "blobs").exists(), "without --with-sources, no raw source is fetched"
 
     assert files(copy / "objects" / "manifests") == files(live / "objects" / "manifests")
     assert rows(copy / "debate.sqlite3") == live_rows

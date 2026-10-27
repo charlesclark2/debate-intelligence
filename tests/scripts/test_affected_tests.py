@@ -643,6 +643,8 @@ VERIFY_FIXTURES = {
     "tests/api/test_globs_the_folder.py": 'PATTERN = "tests/fixtures/verify/*.json"\n',
     # A bare word cannot tell, so it still names the folder: the command `verify` reading its cases.
     "tests/cli/test_verify_command.py": 'ARGUMENTS = ["verify", "--json"]\n',
+    # A command line is not one path: its words are searched, and the file's name is among them.
+    "tests/api/test_runs_a_command.py": 'COMMAND = "jq . tests/fixtures/verify/case.json"\n',
 }
 
 
@@ -657,6 +659,7 @@ def test_a_route_names_no_fixture_folder_but_a_path_to_it_does(workspace: Worksp
             "tests/api/test_formats_its_path.py",
             "tests/api/test_globs_the_folder.py",
             "tests/cli/test_verify_command.py",
+            "tests/api/test_runs_a_command.py",
         }
         | ALWAYS,
     )
@@ -736,7 +739,7 @@ FIXTURE_WORLD = {
         "@pytest.fixture\n"
         "def heavy(light):\n"
         "    from debate_core.world_lazy import LAZY\n\n"
-        "    return HEAVY + LAZY + light\n\n\n"
+        "    return HEAVY + LAZY\n\n\n"
         "def pytest_collection_modifyitems(items):\n"
         "    mark(items)\n"
     ),
@@ -753,7 +756,8 @@ FIXTURE_WORLD = {
 @pytest.mark.parametrize(
     ("module", "users"),
     [
-        # `heavy` requests `light`, and the deeper conftest's `composed` requests `heavy`.
+        # `heavy` requests `light` (by its parameter alone), and the deeper conftest's `composed`
+        # requests `heavy`.
         pytest.param("world_light", {"light", "heavy", "composed"}, id="a fixture and what requests it"),
         pytest.param("world_heavy", {"heavy", "composed"}, id="one fixture"),
         # Imported inside the fixture's own function: it counts for that fixture, as a top-level one does.

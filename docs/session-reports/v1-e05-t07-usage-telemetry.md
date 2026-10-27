@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e05-model-router/t07-usage-telemetry.yaml`](../../plan_specs/v1/e05-model-router/t07-usage-telemetry.yaml) |
 | Epic / release | `v1-e05-model-router` / `v1.2` |
 | Branch | `task/v1-e05-t07-usage-telemetry` |
-| Session status | COMPLETE, phase left InProgress until the PM rules on two questions (below) |
+| Session status | COMPLETE: phase Succeeded after the PM's rulings of 2026-10-26 (Deviations 1 and 2) |
 
 ## Summary
 
@@ -177,7 +177,7 @@ are the results shown.
 
 ## Deviations from the spec
 
-1. **Settings names: needs the PM's ruling.**
+1. **Settings names: ruled option A, as built (PM, 2026-10-26).**
    * The brief says "Limits come from settings: models.budget.per_run_usd and per_day_usd. Code has
      no default limit."
    * `models.budget_usd_daily` already existed: "Ceiling on model spend per day … Enforced by the E05
@@ -188,10 +188,14 @@ are the results shown.
        `None` (no limit), so code holds no default;
      * the profile values are unchanged and now take effect;
      * the per-run limit is a new `models.budget_usd_per_run: float | None = None`.
-   * The names are read in one place, `factory.budget_limits()`, so option B is a rename.
+   * The names are read in one place, `factory.budget_limits()`.
+   * **PM ruling (2026-10-26):** option A, as built: `models.budget_usd_daily` and
+     `models.budget_usd_per_run`. No code change followed.
 2. **ac1's wording.** It is FAIL as written and PASS as amended; see the criteria table. Suggested
    amendment: "Every call made through the real router yields a UsageRecord (…) appended to a local
    JSONL usage log; the response keeps its ModelUsage."
+   * **PM ruling (2026-10-26):** ac1 is amended as suggested, in the PM's next batch. ac1 is
+     therefore PASS as amended, and the Goal is set to Succeeded.
 3. **Outside `constraints.packages`**, each as the brief or the repo's rules require:
    * `config/model_pricing.yaml` and the settings change, which the brief pre-approved;
    * `docs/runbooks/bedrock-access.md`, which the brief asked for;
@@ -307,9 +311,53 @@ No other hand-off. The affected set (81% of the suite) is left to the PR's `ci` 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-26
 
 **Notes:**
+
+Telemetry and budgets built where the brief put them, failing closed. The rulings below close the
+two open questions, so the Goal can be `Succeeded`.
+1. **Ruling on the settings names: option A, as built.**
+   * The per-day limit stays `models.budget_usd_daily`. Its field default becomes `None`, so code
+     holds no limit, and the profiles keep dev at $2, prod at $20 and test at $0.
+   * The per-run limit is `models.budget_usd_per_run`.
+   * The brief's `models.budget.*` names were the PM's error: an existing, tested setting already
+     named the guard.
+2. **Ruling on ac1: amended as the session suggests.** "Every call made through the real router
+   yields a UsageRecord (run_id, prompt_id, model_id, input/output tokens, latency_ms,
+   estimated_cost_usd) appended to a local JSONL usage log; the response keeps its ModelUsage."
+   The PM amends the spec in the next batch, and ac1 passes as amended. Widening a domain type and
+   every cassette for this would buy nothing.
+3. **ac2 to ac4 and every node criterion pass.**
+   * Red first: 58 failed against a skeleton. The 18 passes are must-not-refuse cases and paths
+     written in final form, each named.
+   * The exact-keys test and the never-logged-text test hold the record to telemetry only.
+   * Both attempts of a repaired call are in the log and the budget (the 2026-10-24 amendment).
+4. **Mutants: 21.** All are caught, the PM's three among them. Mutant 19 (the factory never builds
+   the guard) survived first, and the two factory tests added for it in `07769eb` catch it.
+5. **Deviations 3 to 5 accepted:**
+   * the files outside `constraints.packages`, which the PM adds in the next batch;
+   * the Opus entry, since prod routes `deep_audit` to it;
+   * rerank priced per 1,000 search units.
+6. **FYI 1 is accepted as the intended behaviour.** Until the prices are committed, every record or
+   live call in dev and prod is refused by name. The `first_call` probe calls the adapter directly,
+   so `v1-e05-t08`'s operator steps are unaffected. `v1-e32-t07`'s live run waits for the PM's price
+   batch, which follows the operator's read of the AWS page.
+7. **Decisions accepted:**
+   * one run per `build_model_router`;
+   * the local day for both the file and the limit;
+   * latency measured around the delegate;
+   * the ceiling's stated gaps;
+   * in-flight holds within a process;
+   * an unreadable ledger line refusing the call;
+   * `--max-cost` replacing the per-run limit for one command, with the daily limit still applying.
+8. **Follow-ups:** an installed build lacking `model_pricing.yaml` is filed by the PM with the
+   build-stamping work. Cache tokens, adopting `--max-cost`, `config show` attribution and
+   cross-process holds stay as listed.
+9. **The affected set** (428 files, since `settings.py` changed) is left to the PR's `ci` under
+   agreement 10. The changed directories and the always-run list passed, as did the static checks.
+
+No re-review is needed. Set the Goal to `Succeeded`, and the PR merges in full.

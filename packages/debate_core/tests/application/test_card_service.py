@@ -193,6 +193,23 @@ def test_a_result_whose_verdict_is_about_another_card_is_refused() -> None:
         )
 
 
+async def test_a_card_cannot_record_a_model_call_that_was_shown_another_snapshot(world: CardWorld) -> None:
+    source = await world.add_page("news-article")
+    card = (await world.card_service.cut_card(news_request(source.snapshot.snapshot_id))).card
+    elsewhere = card.generated_by[0].evolve(snapshot_ids=(SNAPSHOT,))
+
+    with pytest.raises(ValueError, match="exactly the card's snapshot"):
+        card.evolve(generated_by=(elsewhere,))
+    with pytest.raises(ValueError, match="exactly the card's snapshot"):
+        Card(
+            owner_id=STUDENT,
+            article_id=ARTICLE,
+            tag="A tag",
+            provenance_mode=card.provenance_mode,
+            generated_by=card.generated_by,
+        )
+
+
 async def test_a_result_whose_metadata_is_not_its_cards_is_refused(world: CardWorld) -> None:
     source = await world.add_page("news-article")
     cut = await world.card_service.cut_card(news_request(source.snapshot.snapshot_id))

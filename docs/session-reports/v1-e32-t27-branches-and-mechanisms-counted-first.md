@@ -10,36 +10,261 @@
 
 ## Summary
 
-**Stopped at the checkpoint, as briefed: the counts are taken, nothing is built.** The Goal stays
-`InProgress`. ac1 passes. ac2 and ac3 wait for the PM's ruling on
-[the relay prompt](#questions-for-the-pm).
+**Built as ruled (2a), and checked. ac1 and ac2 pass. ac3 is the operator's dry run, drafted
+[below](#operator-follow-ups). The Goal stays `InProgress` until it is run.**
 
-**What the counts say** (hspolicy26 through 2026-10-20, taxonomy 1.4.0, read-only, 52 s):
+**What is built.** Under each DA's and advantage's impact cards, "What each impact runs through" names
+every rank by the first of these it has:
+1. its scenario;
+2. its internal link;
+3. **its link, marked `(link)`**;
+4. its own tag;
+5. the card above it.
 
-* **Branches are not in the headings.**
-  * No DA has a named or impact heading nested under another named heading below the position: 0
-    documents on all 20 DAs.
-  * Read in file order instead, Midterms has only 9 of 418 documents, from 6 teams, with an impact card
-    after a named block. No outer heading is used by two teams, so the coach's list of branch headings
-    is empty.
-  * `dems win` never sits over an impact card, either nested or in file order.
-  * The branch is in the tags. 242 Midterms documents (96 teams) have tags saying the Democrats win,
-    against 14 documents (9 teams) for the Republicans. The three impact ranks' copies sit almost
-    entirely in the Democrats' documents.
-* **The mechanism: half the Economy DA is labelled, and its link-tag words rarely repeat.**
-  * 46 of 89 Economy DA documents (22 of 44 teams) label a link or an internal link. 43 label neither.
-  * Grouped by tag words, those cards make 220 groups, and 188 of them belong to one team. 29 groups
-    used by two or more teams pass the screen ([the list](#word-list-2-the-economy-das-link-tag-word-groups)).
-  * The shared groups describe one mechanism: paying for the plan, through spending and tax hikes, hits
-    investment, jobs and GDP. Several of them are answers rather than links.
-* **Splitting the Economy DA by link has little to go on.** Only 13 of the 46 labelled documents, and 6
-  of the 44 teams, use the words of just one family (taxes, stocks, debt or rates). The seven most-shared
-  groups use none.
+The link is read as t25 reads the internal link. It is the nearest card above the impact copy that is:
+* under the same position heading;
+* counted for the position;
+* labelled a link by t14's reader.
 
-**Recommendation:** a narrow version of option 2. A team's labelled link names an impact rank ahead of
-its tag, with no taxonomy change. On hspolicy26 that renames 12 of 44 DA rows, one of them the Economy
-DA's rank 2. I recommend against a two-level scenario (it would change nothing) and against splitting by
-link ([the options](#the-three-options-measured)).
+A withheld link falls through to the next source and is counted. A label naming an answer is no link.
+There is no taxonomy change, no bump and no model call. The dry run's "Impact ranks named" line gains
+"by a link".
+
+**t14's reader took one answer for a link on hspolicy26.** It was a link tag opening `the link turns`,
+in 1 document: t14 refused a `link turn(s)` opening but not one with a leading `the`. The reader now
+also refuses:
+* that opening;
+* a link heading naming a non-unique or `no links`;
+* a link tag calling its link non-unique.
+
+On hspolicy26 only that one tag changes, and the 12 renamed rows stay 12.
+
+**On hspolicy26, measured after the build** (read-only, wired by hand, 55.9 s):
+* **DA rows** are named 9 by a scenario, 4 by an internal link, **12 by a link**, 18 by a tag and 0 by
+  the card above. 1 is left out (2 before), and 2 tags are withheld.
+* **The Economy DA's rank 2** is `(link)`. Ranks 1 and 3 keep their tag.
+* **No advantage row changes.**
+
+Every count is the one the relay prompt predicted.
+
+**How it was checked:**
+* The goldens were written by hand and committed before any code (`f428e6f`), and matched on the first
+  green run.
+* The tests ran red against a skeleton that names nothing by a link: 42 failed (`ccd0ba0`).
+* 19 mutants, the PM's three among them, all caught. Two survived the first pass, and the tests they
+  showed missing were added (`646428b`).
+
+## The PM's rulings (2026-10-26)
+
+* **2a alone.** A rank is named by the labelled link above its impact copy, read as t25 reads an
+  internal link, and marked `(link)`. No branch build, and no 2b or 3.
+* **The branch question is answered by the counts.** On hspolicy26 the Midterms DA is run almost entirely
+  as "Dems win" in the tags, and no team nests impacts under a branch heading. If "Republicans win"
+  grows, t22's unlisted-words line and these counts are where it shows.
+* **The order is confirmed:** scenario, internal link, link, tag, card above. The internal link stays
+  ahead, as the step nearest the impact.
+* **t14's label reader reads "link".** A label naming an answer (no link, link turn, non-unique and the
+  like) is not a link. If the reader treats any as one, count them, exclude them, and test it
+  ([below](#answer-labels-on-hspolicy26)).
+* **A withheld link falls through** to the next source and is counted, as in t25.
+* **The build:**
+  * goldens hand-written before code, with a variant reaching `(link)` and a withheld link;
+  * red first;
+  * mutants under working agreement 8, the PM's three among them;
+  * no taxonomy change and no bump;
+  * "by a link" in the dry run;
+  * the dry-run block for ac3;
+  * the How-to-read bullet and the guide.
+
+## For the coach
+
+* **The Midterms DA runs as "Dems win."** Across 418 hspolicy26 documents (through 2026-10-20), the tags
+  of 242 documents (96 teams) say the Democrats win, against 14 (9 teams) for the Republicans. No team
+  nests its impacts under a branch heading. If "Republicans win" grows, it will show in the dry run's
+  "Scenario words no list holds" line and in a recount of these numbers.
+* **The Economy DA's shared link is the plan's financing.** Its most-shared link cards say that paying
+  for the plan, through spending and tax hikes, hurts investment, jobs and GDP. That overlaps the Taxes
+  DA (7 teams). Whether the two stay separate positions is your call. The 29 link-tag groups two or
+  more teams use are [listed below](#word-list-2-the-economy-das-link-tag-word-groups).
+
+## The build (ac2)
+
+### The goldens, by hand, before any code (`f428e6f`)
+
+* **`golden/report.md`.**
+  * The How-to-read bullet names the link.
+  * Both per-kind lines gain "by a link": advantage 0, DA 1.
+  * The Spending DA's rank 1 becomes `Spending triggers a debt spiral (link)`. Its scenario is withheld,
+    no internal link sits above it, and `b1`'s cluster 14 above it is under `link`.
+* **`scenario_vocabulary/impact_sections.md`** (t22's) shows the same rank 1 and the per-kind lines.
+* **`readable_impact_chains/impact_sections.md`** (t25's):
+  * the per-kind lines, with 0 by a link (its Spending rank 1 is named by `Market crash` first);
+  * the left-out line's wording.
+* **`link_lead_ins/`, the new variant.** Three tag edits and `recession` dropped:
+  * `b1`'s link to rank 1 holds `Birchmoor`, so it is **withheld, counted**, and rank 1 falls to its tag;
+  * `b5`'s internal link to rank 3 holds `Birchmoor`, so it is **withheld, counted**;
+  * `b5`'s paragraph 3 now opens `Link:`, so it **names rank 3 `(link)`** behind the withheld internal
+    link.
+
+  Its README works out every line. Its impact sections, its CSV and the rest of report.md (unchanged)
+  are each a test.
+* **`synthetic_caselist/README.md`**: a bullet on the link.
+
+### The tests
+
+* **`test_link_lead_ins.py` (new), 24 tests:**
+  * the three goldens;
+  * the unchanged caselist;
+  * the order: the internal link ahead of the link (the PM's), the scenario ahead of the link, the link
+    ahead of the tag;
+  * the nearest link;
+  * a link in another section of the file, or on a card that answers the position, naming nothing;
+  * no advantage link;
+  * five answer labels naming no rank;
+  * withholding: fall-through and count, never shown, both link and tag withheld, a withheld link never
+    reached.
+* **`test_link_chains.py`:**
+  * six link headings naming an answer, refused;
+  * eight answer tags, refused, among them hspolicy26's `the link turns`;
+  * three must-not cases, where later words say `turns` or `unique`.
+* **t25's `test_readable_impact_chains.py`:** the order, the counts with a link column, the domain's
+  checks with five sources.
+* **The dry run's test:** five distinct counts per kind, and the synthetic caselist's line.
+
+### Red against a skeleton (`ccd0ba0`)
+
+The skeleton has the shape and names nothing by a link:
+* `LeadInSource.LINK` in the order;
+* `ImpactCard.link_tag` and its place in `runs_through`;
+* the report's "by a link" label.
+
+The service passes no link. t14's reader is unchanged, and so are the bullet, the left-out wording and
+the dry run's label.
+
+The run covered the landscape tests, the report service's tests and the dry run's test: **42 failed,
+1,085 passed**.
+
+| Failing, grouped by reason | Count |
+|---|---|
+| Goldens: base report.md (`test_render`), t22's two, t25's two, the variant's two | 7 |
+| Order and service: the unchanged caselist (t25's and the new test), the edits' rank 3, internal link and scenario ahead of the link, link ahead of the tag, the nearest link, t25's case with no lists | 8 |
+| Withholding: fall-through and count, both withheld, never reached (the count differs: the skeleton never reaches the withheld link) | 3 |
+| Answer labels in the report: five tags (the same reason: rank 1's withheld link not counted) | 5 |
+| t14's reader: six headings and seven tags naming an answer, still read as a link | 13 |
+| The dry run: its six tests call `report_lines`, which has no "by a link" label (`KeyError: LeadInSource.LINK`) | 6 |
+
+**Already passing on the skeleton, and why:**
+* must-not cases: a link in another section; no advantage link; `test_a_withheld_link_is_never_shown`,
+  since the skeleton shows no link at all;
+* the reader's tag `No links: …`, already none because it never opens `link`;
+* the reader's must-not cases.
+
+The mutants below show they bite.
+
+**Two expectations of t25's I had not updated before the red run:**
+* the left-out line's wording in `test_an_empty_row_is_left_out_and_counted_never_shown`, which passed
+  at red since the skeleton kept the wording;
+* the dry run's synthetic lines in `test_the_dry_run_prints_the_planks_…`, which failed at red with the
+  `KeyError`.
+
+Both were corrected by hand to the new text after the first green run, and are in `672ada4`.
+
+### The build (`672ada4`, `a87cd88`)
+
+* **`link_chains`:**
+  * `NOT_A_LINK` gains `no links`, `non unique`, `nonunique` and `not unique`;
+  * a tag is no link when, past a leading `the`, it opens with one of those answers, or when the words
+    after `link(s)` call it non-unique;
+  * the docstrings.
+* **`landscape_report`:**
+  * one walk for the internal link and the link (`_labelled_above`: same section, counted cards,
+    nearest);
+  * the link goes to `rank_name`, and is kept on the row unless withheld.
+* **`domain.landscape_report`:** `LeadInSource.LINK`, `LEAD_IN_ORDER`, `ImpactCard.link_tag` (report.md
+  only, so impact_cards.csv is unchanged).
+* **`render`:** the bullet, the left-out wording, "by a link".
+* **The dry-run script:** "by a link".
+* **The guide.**
+
+**`a87cd88`.** The first build also refused `turn(s)` and `defense` after `link(s)`. t14's own
+openings (`link turn(s)`, `link defense`) already refuse those once a leading `the` is dropped, so the
+entries could not be told from their absence. Working agreement 8 says to remove such a check, so it
+was removed.
+
+### Mutants
+
+19 mutants:
+* each applied alone (one rule, in one or two edits);
+* the tests run in a fresh process with `PYTHONDONTWRITEBYTECODE=1` and a new, empty
+  `HYPOTHESIS_STORAGE_DIRECTORY` per run (no Hypothesis is used);
+* the files restored and checked by SHA-256, and `git status` clean after each batch;
+* the test files: `test_link_lead_ins.py`, `test_readable_impact_chains.py`, `test_render.py`,
+  `test_scenario_vocabulary.py`, `test_link_chains.py`, `application/test_landscape_report.py` and the
+  dry run's test: 392 tests, 394 after `646428b`.
+
+| Mutant | Failed | Caught by |
+|---|---|---|
+| **The link is chosen ahead of the internal link (the PM's)** | 6 | `test_an_internal_link_names_a_rank_ahead_of_its_link`, the variant's golden, the edits' rank 3, the order |
+| **An answer label is read as a link: the tag's check is gone (the PM's)** | 14 | the reader's answer tags, the five answer labels in the report |
+| **A withheld link is shown: not passed over, and kept on the row (the PM's)** | 14 | `test_a_withheld_link_is_never_shown`, fall-through and count, both withheld, never reached, the variant's golden |
+| The tag is chosen ahead of the link | 22 | the base golden, the unchanged caselist, the dry run's synthetic lines |
+| The link is chosen ahead of the scenario | 24 | `test_a_scenario_names_a_rank_ahead_of_its_link`, t14's withheld-name case |
+| The card above is chosen ahead of the link | 6 | t25's order and goldens |
+| No link is read (the skeleton) | 20 | the goldens, the order and withholding cases |
+| The link is read as the internal link's role | 15 | the link ahead of the tag, the scenario ahead of the link, both withheld |
+| The walk for a link crosses into another section | 1 | `test_a_link_under_another_heading_of_the_position_names_nothing`. **Survived the first pass**; this test was added in `646428b` |
+| A link no team's counted card holds names a rank | 1 | `test_a_link_on_a_card_that_answers_the_position_names_nothing`. **Survived the first pass**; added in `646428b` |
+| The farthest link above is read, not the nearest | 5 | `test_the_link_is_the_nearest_…`, the variant's golden |
+| A withheld link is passed over but not counted | 12 | the withheld counts in the order, answer and withholding cases |
+| A withheld link is kept on the row | 1 | `test_a_withheld_link_falls_through_to_the_tag_and_is_counted` |
+| A tag's leading `the` hides an answer | 4 | the reader's `The link turn(s)` tags, the report's `The link turns` |
+| A tag calling its link non-unique is a link | 5 | the reader's non-unique tags, the report's `Links are non-unique` |
+| A link heading naming a non-unique or `no links` is a link (t14's list as it was) | 6 | the reader's six headings |
+| A link-named row shows its internal link's words | 150 | the domain refuses the row (`names the row, but the row has none`) in every report |
+| The kind line counts link rows as internal-link rows | 4 | the four goldens |
+| The dry run labels the link count as the tag's | 2 | the dry run's two line tests |
+
+## The real store after the build (ac3's prediction)
+
+**What ran.** `counts/count_after_build.py` in the session's scratchpad, wired as the counts were.
+* It took 55.9 s and 49.6 s, under the 115 s alarm, and no process outlived it.
+* `debate.sqlite3`'s SHA-256 was unchanged, and nothing was written.
+* It printed counts and position ids only.
+
+| | Advantage | DA |
+|---|---|---|
+| Impact rows | 43 | 44 |
+| Named by a scenario / internal link / **link** / tag / card above | 0 / 0 / **0** / 39 / 2 | 9 / 4 / **12** / 18 / 0 |
+| Left out | 2 | **1** |
+| Tags withheld (links included) | 4 | 2 |
+| Before (t25's operator dry run): scenario / internal link / tag / card above; left out; withheld | 0 / 0 / 39 / 2; 2; 4 | 9 / 4 / 29 / 0; 2; 2 |
+| Scenario lines: rows with a scenario, names withheld, documents with no scenario heading or role label | 0, 1, 676 of 1,164 | 9, 0, 253 of 662 |
+
+* **The 12 DA rows:**
+  * by DA: HHS 3, Medical devices 2, Stocks 2, and Court clog, Economy, Permitting reform, Rates and
+    Taxes 1 each;
+  * 11 were named by their tag, and 1 was left out.
+* **The Economy DA:** rank 1 `(tag)`, rank 2 `(link)`, rank 3 `(tag)`.
+* **DA tags withheld stay at 2.** The row the link rescued from "left out" no longer reaches its withheld
+  own tag (−1). The row whose link is withheld now counts it (+1).
+* **Advantages:** no advantage impact copy has a labelled link above it, so nothing changes.
+* The scenario lines are t22's and t25's.
+
+### Answer labels on hspolicy26
+
+The PM's rule, "if the reader treats any as one, count them". I first counted with probe phrases, the
+session's words: non-unique, no links, takeout, turns, defense, overview and others.
+* **Over the 1,787 counted DA cards labelled a link, in 268 documents:**
+  * no accepted link heading holds a non-unique, no-links, takeout or turn phrase;
+  * 12 link headings in 5 documents hold `overview` or `o v`. They are the team's own link overview, not
+    an answer, and stay links;
+  * 10 link tags hold `turns` in their first six words. Only one is a link-turn label: a tag opening
+    `the link turns …`, which t14 read as a link because only `link turn(s)` openings were refused. In
+    the other nine, `turns` comes two or three words in and not after the link word; four of them read
+    `turns case` or `turns the case`. The rule reads only the label at the opening, and I did not read
+    those tags further.
+* **After the build, against t14's old rule** (`count_after_build.py`): the widened reader refuses
+  exactly **1 DA link tag in 1 document**, and no heading. No advantage card changes.
 
 ## The counts before building (ac1)
 
@@ -328,7 +553,7 @@ The family column is the session's family words, as above.
 
 ## Questions for the PM
 
-A paste-ready relay prompt:
+Answered on 2026-10-26 ([the rulings](#the-pms-rulings-2026-10-26)). Kept as sent, a paste-ready relay prompt:
 
 ```text
 v1-e32-t27 (branches and mechanisms, counted first): the counts are taken; nothing is built. Stopped at
@@ -392,40 +617,73 @@ Q3. Two notes for the coach, no build here: hspolicy26's Midterms DA is run almo
 
 | Node | Status | Notes |
 |---|---|---|
-| branches-and-mechanisms | In progress | Counts taken and sent (ac1). The build waits for the PM's ruling. The node's test command passes on the unchanged branch (baseline). |
+| branches-and-mechanisms | Done, but for the operator's ac3 | In order:<br>1. the counts and the relay prompt (`8dd6b9e`);<br>2. the PM's ruling, 2a;<br>3. the hand-written goldens (`f428e6f`);<br>4. the tests, red against a skeleton (`ccd0ba0`);<br>5. the build (`672ada4`), and its simplification (`a87cd88`);<br>6. 19 mutants, and the two tests the survivors showed missing (`646428b`);<br>7. the recount on hspolicy26 and the guide's figure (`ebd0678`). |
 
 ## Acceptance criteria
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| ac1: counts before building, read-only, (a) and (b), sent to the PM with the three options | PASS | `perl -e 'alarm 115; exec @ARGV' .venv/bin/python <scratchpad>/counts/count_branches_and_mechanisms.py config/landscape <scratchpad>/counts/word_lists_final.json` → exit 0 in 51.2 s; no process left; `debate.sqlite3` SHA-256 unchanged. [The counts](#the-counts-before-building-ac1) and [the relay prompt](#questions-for-the-pm) |
-| ac2: after the ruling, on synthetic fixtures, the chosen option matches hand-written goldens; tests shown failing first | NOT RUN | Waits for the ruling. Nothing is built before it, as the brief says |
-| ac3: the operator's dry run on hspolicy26 shows the ruling, with counts before and after (operator) | NOT RUN | Waits for the build. The counts before are in this report: for 2a, 12 of 44 DA rows renamed, Economy rank 2 |
-| branches-and-mechanisms: `uv run pytest packages/debate_core/tests/arguments/landscape` | NOT RUN (baseline green) | Baseline only, before any change: `.venv/bin/python -m pytest -q -p no:randomly packages/debate_core/tests/arguments/landscape` → **977 passed in 28.94s**. The node is done only after the build |
+| ac1: counts before building, read-only, (a) and (b), sent to the PM with the three options | PASS | `perl -e 'alarm 115; exec @ARGV' .venv/bin/python <scratchpad>/counts/count_branches_and_mechanisms.py config/landscape <scratchpad>/counts/word_lists_final.json` → exit 0 in 51.2 s; no process left; `debate.sqlite3` SHA-256 unchanged. [The counts](#the-counts-before-building-ac1), [the relay prompt](#questions-for-the-pm) and [the rulings](#the-pms-rulings-2026-10-26) |
+| ac2: after the ruling, on synthetic fixtures, the chosen option matches hand-written golden files; tests shown failing first | PASS | **Goldens** (`f428e6f`, before any code): `test_link_lead_ins.py::test_the_impact_sections_match_the_hand_written_golden`, `::test_impact_cards_csv_matches_the_hand_written_golden`, `::test_the_rest_of_report_md_is_the_unchanged_caselists`, `test_render.py::test_rendering_the_fixture_matches_the_golden_file[report.md]`, and t22's and t25's impact-section goldens, all passing. **Red:** 42 failed against the skeleton (`ccd0ba0`, [above](#red-against-a-skeleton-ccd0ba0)). **Mutants:** 19 of 19 caught, the PM's three among them |
+| ac3: the operator's dry run on hspolicy26 shows the Economy DA's mechanism as ruled, with counts before and after (operator) | NOT RUN | The operator's. The block is [below](#operator-follow-ups). It expects DA `9 by a scenario, 4 by an internal link, 12 by a link, 18 by a tag, 0 by the card above; 1 left out; 2 tags withheld` and the advantage line unchanged, from the session's recount after the build. The Economy DA's rank 2 `(link)` is from the recount, since the dry run counts per kind (t25's ruling 3) |
+| branches-and-mechanisms: `uv run pytest packages/debate_core/tests/arguments/landscape` | PASS | `.venv/bin/python -m pytest -q -p no:randomly packages/debate_core/tests/arguments/landscape` on `ebd0678` → **1017 passed in 7.75s** (977 at the checkpoint; 40 new) |
 
 ## Before the report (working agreement 10)
 
-Only this report changed, so the checks are the cheap ones:
-* **`uv run --frozen python scripts/affected_tests.py --run`.** It chose 26 test files, the always-run
-  list. Result: **1 failed, 1,360 passed in 121.54s**, at load average 7.2.
-  * The run took 2 min 11 s in all, past the two-minute line. I ran it without an alarm, expecting it to
-    be shorter. That was my mistake.
-  * The failure was
-    `tests/scripts/test_caselist_run_deploy.py::test_every_aws_call_is_made_as_the_deployer_profile_in_us_east_1`.
-    This is the deploy-script test t22 recorded failing under load, which the PM filed as an E40 task.
-    Alone it passed: `1 passed in 6.86s`. This branch changes no code.
-* `uv run --frozen python scripts/check_command_blocks.py --base origin/dev` → no `#` comments in 504
-  blocks, this report included.
-* `scripts/docs_index.py --check-descriptions` → all 54 documents have a description.
+On `ebd0678`:
+* **The affected set is over two minutes.** `uv run --frozen python scripts/affected_tests.py` chose 234
+  of 530 files (44.2%) from 20 changed files, in 7.0 s. t25's set was 232 files and ran past two minutes,
+  so these are left to the pull request's `ci`, which runs the whole selection.
+* **Within the two minutes, the changed directories and the always-run list.** One run of
+  `.venv/bin/python -m pytest -q -n 6 -m "not slow and not live" -p no:randomly` under a 115 s alarm:
+  * the paths: `packages/debate_core/tests/arguments/landscape`, `packages/debate_core/tests/domain`,
+    `packages/debate_core/tests/integrations/landscape`, the nine
+    `packages/debate_core/tests/application/test_landscape*.py`,
+    `packages/debate_cli/tests/test_landscape_command.py`, `tests/smoke/test_landscape_smoke.py`,
+    `tests/architecture`, `tests/specs`, `tests/scripts/test_landscape_dry_run_by_section.py`;
+  * the result: **2,789 passed in 17.62s**, at load average 6.4.
+* **Then `tests/config` and all of `tests/scripts`:** **1,567 passed in 71.48s**, at load average 7.5.
+  No process outlived either run.
+* `uv run --frozen ruff format --check .` → 1,478 files already formatted. `uv run --frozen ruff check .`
+  → all checks passed.
+* `uv run --frozen pyright`, bare as CI runs it → 0 errors, 0 warnings.
+* `uv run --frozen lint-imports` → 18 kept, 0 broken. `scripts/check_thin_handlers.py` → 66 handlers
+  within 25 statements.
 * `uv run scripts/validate_specs.py` → OK, 475 files.
-* No ruff, pyright or lint-imports run, since no Python file changed.
+* `scripts/check_command_blocks.py --base origin/dev` → no `#` comments in 504 blocks, this report
+  included. `scripts/docs_index.py --check-descriptions` → all 54 documents have a description.
+* No `pyproject.toml`, `uv.lock`, conftest or pytest-plugin change, so no whole-selection hand-off.
+* **At the checkpoint**, the affected run took 2 min 11 s: it ran without an alarm, past the two-minute
+  line. That was my mistake. Its one failure was t22's load-dependent deploy-script test, which passed
+  alone in 6.86 s.
 
 ## Files changed
 
-* `docs/session-reports/v1-e32-t27-branches-and-mechanisms-counted-first.md`: this report.
+* **`debate_core.arguments.landscape.link_chains`:** the answer labels t14's reader now refuses
+  (`NOT_A_LINK`, `_LINK_ANSWERS`, `_answers_a_link`), and the docstrings.
+* **`debate_core.application.landscape_report`:**
+  * `_labelled_above`, one walk for the internal link and the link;
+  * the link in `with_lead_in`;
+  * the docstrings.
+* **`debate_core.domain.landscape_report`:** `LeadInSource.LINK`, `LEAD_IN_ORDER`, `ImpactCard.link_tag`
+  and `runs_through`.
+* **`debate_core.arguments.landscape.render`:** the How-to-read bullet, the left-out wording, "by a link".
+* **`scripts/landscape_dry_run_by_section.py`:** "by a link".
+* **Tests:**
+  * `arguments/landscape/test_link_lead_ins.py` (new);
+  * `test_link_chains.py`: the answer labels;
+  * `test_readable_impact_chains.py`: five sources;
+  * `tests/scripts/test_landscape_dry_run_by_section.py`: the link count.
+* **`tests/fixtures/landscape/`:**
+  * `link_lead_ins/`: README, `edits.yaml`, `impact_sections.md`, `impact_cards.csv`;
+  * `golden/report.md`;
+  * t22's and t25's `impact_sections.md`;
+  * `synthetic_caselist/README.md`.
+* **`docs/guides/landscape-taxonomy.md`:** the link's place in the order, the answer labels, the example,
+  and its reach on hspolicy26.
+* This report.
 
-No code, config, fixture or spec changed. The count scripts are in the session's scratchpad
-(`counts/`), as t25's were.
+All inside `constraints.packages`. No taxonomy, config or spec change.
 
 ## Deviations from the spec
 
@@ -440,8 +698,14 @@ No code, config, fixture or spec changed. The count scripts are in the session's
    next batch.
 3. **The counts were run by the session.** They are read-only, over files the operator already has, and
    took 51 s. Working agreement 2 and the brief allow that.
+4. **ac3's wording.** ac3 asks the dry run to show "the Economy DA's mechanism as ruled". As t25's
+   ruling 3 set, the dry run prints one counts-only line per kind. The Economy DA's rank 2 `(link)` is
+   in the session's read-only recount after the build ([above](#the-real-store-after-the-build-ac3s-prediction)),
+   as t25's per-position view was. No per-position line was added.
 
 ## Decisions and assumptions
+
+**For the counts:**
 
 1. **A named heading ignores the coach's drops.** Otherwise `dems win`, which the coach dropped, could
    never be an outer heading, and the PM asked how many dropped headings are outer ones. Everything
@@ -470,17 +734,97 @@ No code, config, fixture or spec changed. The count scripts are in the session's
 6. **"Documents" are counted per DA.** A document holding several DAs is counted under each, so the
    rows of the tables are not summed into a DA total.
 
+**For the build:**
+
+7. **The link is kept on the row when it does not name it,** as t25 keeps an internal link. Nothing
+   prints it then. A withheld link is never kept. `ImpactCard.link_tag` is report.md's only, so
+   impact_cards.csv's columns are unchanged: the ruling names report.md and the dry run.
+8. **One walk for both.** The internal link and the link are read by one function. Each is the nearest
+   card above a labelled copy that is in the same position section, counted for the position, and
+   labelled the role. With several copies, each a different link, the link with the most teams names the
+   row, ties by tag, as t25 does.
+9. **Where the answer labels are refused.** The PM's rule is applied in t14's reader itself, not only
+   where a link names a rank. A link answer is then no link anywhere: in the chain table's Link row and
+   in the role-label counts too.
+   * On hspolicy26 that changes one DA tag in one document.
+   * The scenario lines, the 12 renamed rows and every per-kind count are as predicted.
+10. **What counts as an answer label:**
+    * headings holding `no links`, `non unique`, `nonunique` or `not unique`, beside t14's `link
+      turn(s)`, `no link`, `link defense`, `lt` and `l t`;
+    * tags opening with one of those past a leading `the`, or whose words after `link(s)` call it
+      non-unique (`is not unique`, `are non-unique`, …).
+
+    `link overview` stays a link: the team's own overview of its link.
+11. **Withheld links are counted in the kind's "Tags withheld" line,** since a link is a tag. The line's
+    wording is t25's.
+12. **The variant uses a drop-only list** (`recession`, t22's rule), to reach the internal link without
+    its scenario. One effect, worked out in its README: `cedarvale crash` becomes words no list holds
+    rather than a withheld name, so the DA's names withheld go from 1 to 0 in that variant.
+
 ## Operator follow-ups
 
-None yet. After the ruling, the build's ac3 needs the operator's dry run, and the refill too if the
-ruling bumps the taxonomy. The blocks will come with the build.
+1. **ac3: the dry run on hspolicy26.**
+   * It is the landscape service as a dry run, without `--publish`: read-only, no bucket lock, nothing
+     written.
+   * Expected runtime: about 75 s on the caches t22's refill left warm (t25's run: 70.7 s).
+   * It prints counts and ids only, never a name, tag, text, team or school.
+   * It refuses to start if a `DEBATE_*` variable is set or a `caselist pull` is running.
+
+   From the task worktree:
+
+```bash
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t27-branches-and-mechanisms-counted-first
+```
+
+```bash
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; else uv run python scripts/landscape_dry_run_by_section.py --caselist hspolicy26 --snapshot 2026-10-20; fi
+```
+
+   **Success looks like:**
+   * `Dry run of hspolicy26 through 2026-10-20, taxonomy 1.4.0: nothing written; 7 files planned.`
+   * The scenario lines, as in t22's and t25's runs:
+     * `Scenarios, advantage (… positions): 43 impact rows, 0 with a scenario, 1 names withheld; 676 of
+       1164 documents …`;
+     * `Scenarios, da (… positions): 44 impact rows, 9 with a scenario, 0 names withheld; 253 of 662
+       documents …`.
+   * **The counts after**, from the session's recount after the build:
+     * `Impact ranks named, advantage: 0 by a scenario, 0 by an internal link, 0 by a link, 39 by a tag,
+       2 by the card above; 2 left out; 4 tags withheld.` (no advantage row changed);
+     * `Impact ranks named, da: 9 by a scenario, 4 by an internal link, 12 by a link, 18 by a tag, 0 by
+       the card above; 1 left out; 2 tags withheld.`
+   * **The counts before** are t25's run (2026-10-26): advantage `0 / 0 / 39 / 2`, 2 left out, 4
+     withheld; DA `9 / 4 / 29 / 0`, 2 left out, 2 withheld. 12 DA rows are renamed by a link: 11 from
+     their tag, 1 from left out. The Economy DA's rank 2 is among them.
+   * The scan lines: t25's 9 hits, all accepted earlier (1 in a plank table, 8 in `top_cards.csv`), and
+     **no hit** in report.md's `Advantages: impact cards` or `Disadvantages: impact cards` sections. The
+     12 `(link)` lines quote link tags, each of which passed the report's word-level withholding.
+
+   Paste every line back. A `Refused:` line means the run did not start, and says why.
+   * If the lines match, the session records them here, marks ac3 PASS and sets the Goal to
+     `Succeeded`.
+   * A number that differs is a finding, not a failure: paste it and the session explains it.
+
+2. **No publish.** The landscape republish carrying t17, t23, t24, t22 and t25 goes ahead separately, as
+   briefed.
+
+3. **The pull request, after the PM's review.** Sync once more, then open the PR, from the task worktree:
+
+```bash
+scripts/task sync v1-e32-t27-branches-and-mechanisms-counted-first
+```
+
+```bash
+scripts/task pr v1-e32-t27-branches-and-mechanisms-counted-first
+```
 
 ## Follow-up work
 
-* **Branches from tags (t07 or a new E32 task),** if the coach wants them. hspolicy26 writes the
-  Midterms DA's branch in its uniqueness tags, not its headings.
-* **Economy DA and Taxes DA,** a coach's question: the Economy DA's shared link is the plan's
-  financing, through spending and tax hikes.
+* **Branches from tags (t07 or a new E32 task),** if the coach wants them. hspolicy26 writes the Midterms
+  DA's branch in its uniqueness tags, not its headings. As ruled, the counts answer the question for now.
+* **The Economy DA and the Taxes DA:** the coach's question, [above](#for-the-coach).
+* **The chain table's Link row** now also refuses answer labels (Decision 9). On hspolicy26 one tag
+  changes. If the refused card was its DA's most-read link card, that DA's Link row shows the next one.
+  The dry run does not print the chain table, so it shows at the republish.
 
 ## PM review
 

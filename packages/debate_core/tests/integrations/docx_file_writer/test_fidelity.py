@@ -499,7 +499,7 @@ def runs_of_the_paragraph(docx: bytes, text: str) -> list[tuple[str, bytes]]:
             "".join(t.text or "" for t in run.iter(f"{WORDML}t")),
             b""
             if run.find(f"{WORDML}rPr") is None
-            else etree.tostring(run.find(f"{WORDML}rPr"), method="c14n"),
+            else etree.tostring(run.find(f"{WORDML}rPr"), method="c14n", exclusive=True),
         )
         for run in found[0].iter(f"{WORDML}r")
     ]

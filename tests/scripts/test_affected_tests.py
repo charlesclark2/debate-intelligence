@@ -646,6 +646,10 @@ VERIFY_FIXTURES = {
     "tests/api/test_globs_the_folder.py": 'PATTERN = "tests/fixtures/verify/*.json"\n',
     # A word a path is built from, on a base the script cannot follow: it cannot tell, so it names it.
     "tests/api/test_joins_an_unknown_base.py": 'def cases(root):\n    return root / "verify"\n',
+    # The folders a loop walks, to join each one later.
+    "tests/api/test_walks_its_folders.py": (
+        'def folders(root):\n    return [root / name for name in ("verify", "other")]\n'
+    ),
     # A command's argument is not a path: it names no folder.
     "tests/cli/test_verify_command.py": 'ARGUMENTS = ["verify", "--json"]\n',
     # A command line is not one path: its words are searched, and the file's name is among them.
@@ -664,6 +668,7 @@ def test_a_route_names_no_fixture_folder_but_a_path_to_it_does(workspace: Worksp
             "tests/api/test_formats_its_path.py",
             "tests/api/test_globs_the_folder.py",
             "tests/api/test_joins_an_unknown_base.py",
+            "tests/api/test_walks_its_folders.py",
             "tests/api/test_runs_a_command.py",
         }
         | ALWAYS,

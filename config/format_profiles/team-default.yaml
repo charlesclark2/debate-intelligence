@@ -1,0 +1,28 @@
+# The team's own card format: how a cut card is sized and coloured when nobody asks for anything
+# else. The name is Card.format_profile's default (debate_core.domain.card.DEFAULT_FORMAT_PROFILE).
+#
+# Loaded by debate_core.evidence.format_profile. Owned by v1-e06-t03-format-profiles. A format
+# profile never defines a style: the pocket, hat, block and tag headings, the cite style, underline,
+# emphasis and the highlight vocabulary all come from the base style profile named below.
+#
+# Every value cites the summary line of docs/data/team-format-survey.md it comes from: the value
+# most of the team's 314 files favour, measured in place without reading their text.
+---
+name: team-default
+description: >-
+  The team's card format, measured from its 2024-25 to 2026-27 files: the tag, pocket, hat and
+  block headings and the cite style from the verbatim style profile, a bold short cite with the
+  full cite at body size, read text at 11 pt highlighted cyan, and the text that is not read
+  condensed to 8 pt.
+base_style_profile: verbatim
+cite_block:
+  # team-format-survey.md: "- Cite paragraphs led by a short cite in the cite style: 3725 of 4901"
+  short_cite_bold: true
+  # team-format-survey.md: "- Full cite size: 22 half-points (11 pt), most common in 192 of 247 files with cites"
+  full_cite_half_points: 22
+# team-format-survey.md: "- Underlined evidence size: 22 half-points (11 pt), most common in 229 of 246 files with underlining"
+evidence_base_half_points: 22
+# team-format-survey.md: "- Evidence highlight colour: `cyan`, most common in 142 of 240 files with highlighting"
+highlight_color: cyan
+# team-format-survey.md: "- Not-underlined evidence size: 16 half-points (8 pt), most common in 199 of 249 files with text that is not underlined"
+condensed_half_points: 16

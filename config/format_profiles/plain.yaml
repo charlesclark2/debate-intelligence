@@ -1,0 +1,19 @@
+# team-default without highlighting: the card as the team formats it, with nothing marked for
+# reading. For a copy that is printed, or read by someone who should choose for themselves.
+#
+# Loaded by debate_core.evidence.format_profile. Owned by v1-e06-t03-format-profiles. Only
+# highlight_color differs from team-default; the other values are team-default's, whose comments
+# cite docs/data/team-format-survey.md.
+---
+name: plain
+description: >-
+  The team's card format with no highlighting: tag and cite from the verbatim style profile, a
+  bold short cite, read text underlined at 11 pt, unread text at 8 pt, and no highlight colour.
+base_style_profile: verbatim
+cite_block:
+  short_cite_bold: true
+  full_cite_half_points: 22
+evidence_base_half_points: 22
+# The one difference from team-default: no highlighting (the spec's definition of plain).
+highlight_color: null
+condensed_half_points: 16

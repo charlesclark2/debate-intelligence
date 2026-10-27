@@ -1,0 +1,23 @@
+# The reading copy (`debate-research cut --format flow`, architecture section 11): what is read
+# keeps team-default's size and colour, and everything that is not read is shrunk one step
+# further, so the tag, the short cite and the highlighted words are what take the page.
+#
+# A proposal for the coach's sign-off, not a measured convention: the spec names `flow` without
+# defining it. Loaded by debate_core.evidence.format_profile. Owned by
+# v1-e06-t03-format-profiles. The two values that differ from team-default cite the survey rows
+# they are taken from; the rest are team-default's.
+---
+name: flow
+description: >-
+  A reading copy of the team's card format: tag and cite from the verbatim style profile, a bold
+  short cite, read text at 11 pt highlighted cyan, and everything that is not read smaller than in
+  team-default (the full cite at 8 pt, unread text at 7 pt).
+base_style_profile: verbatim
+cite_block:
+  short_cite_bold: true
+  # team-format-survey.md, full cite sizes: "| 16 half-points (8 pt) | 1101 | 3 |"
+  full_cite_half_points: 16
+evidence_base_half_points: 22
+highlight_color: cyan
+# team-format-survey.md, not-underlined sizes: "| 14 half-points (7 pt) | 19224 | 15 |"
+condensed_half_points: 14

@@ -107,6 +107,7 @@ from debate_core.domain.style_profile import (
     StyleProfile,
 )
 from debate_core.evidence.style_classifier import (
+    MAXIMUM_CITE_LINE_CHARACTERS,
     MAXIMUM_HEADING_CHARACTERS,
     NAME_AND_YEAR_AT_THE_HEAD_CHARACTERS,
     RunDescription,
@@ -234,6 +235,24 @@ _BRACKETED_CITE_CONFIDENCE: Final = 0.6
 #: A tag read from its bold and its place above a cite is a guess of the same weight as the
 #: classifier's own bold line at reading size (`heuristic-direct-formatted-heading-tag`).
 _BOLD_TAG_CONFIDENCE: Final = 0.5
+
+#: A cite line read from its place, under a cite or a tag, is a guess of the same weight as a cite line.
+_CITE_BY_ITS_PLACE_CONFIDENCE: Final = 0.6
+
+#: A link, as a cite line holds one: what tells a later line of a cite, or a cite under a tag, from
+#: a line of analysis (`v1-e31-t31`).
+_LINK: Final = re.compile(r"https?://|www\.", re.IGNORECASE)
+
+#: A year as a cite line writes it: four digits from 1900, or an apostrophe and two digits.
+_YEAR: Final = re.compile(r"\b(?:19|20)\d{2}\b|['’‘]\d{2}\b")
+
+#: The assembly's rules for cite lines read by their place (`v1-e31-t31`), by the shape each takes.
+_CITE_LINE_BELOW_A_CITE: Final = "assembly-cite-line-below-a-cite"
+_CITE_LINE_BELOW_A_TAG: Final = "assembly-cite-line-below-a-tag"
+_CITE_IN_THE_TAG_STYLE: Final = "assembly-cite-in-the-tag-style-below-a-tag"
+
+#: The assembly's demotion of a tag that has nothing under it.
+_DEMOTED_TAG_RULE: Final = "assembly-tag-without-cite-or-evidence"
 
 #: The units after which a cite may stand: a tag, a line under it, or a line of the cite itself.
 _UNITS_A_CITE_STANDS_AFTER: Final = (StructuralUnit.TAG, StructuralUnit.UNDERTAG, StructuralUnit.CITE)
@@ -789,6 +808,13 @@ class DebateDocxParser:
                 for position, section in enumerate(classified)
             ]
             assembled = self._assemble(self._demote_tags_with_no_card(classified), provenance)
+        cites = self._cite_lines_by_their_place(assembled)
+        if cites:
+            classified = [
+                _read_as_a_cite_by_its_place(section, cites[position]) if position in cites else section
+                for position, section in enumerate(classified)
+            ]
+            assembled = self._assemble(self._demote_tags_with_no_card(classified), provenance)
 
         warnings = list(package.warnings)
         if package.forbidden_characters_replaced:
@@ -892,10 +918,8 @@ class DebateDocxParser:
                 continue
             if self._is_a_guess_a_body_may_take(assembled.decided[position]):
                 continue
-            above = position - 1
-            while above >= 0 and _says_nothing(assembled.sections[above]):
-                above -= 1
-            if above >= 0 and self._is_a_bold_tag(assembled.decided[above], package):
+            above = _line_above(assembled.sections, position)
+            if above is not None and self._is_a_bold_tag(assembled.decided[above], package):
                 tags.add(above)
         return frozenset(tags)
 
@@ -945,6 +969,68 @@ class DebateDocxParser:
             run.character_style_id, run.character_style_name, run.character_style_based_on
         )
         return match is not None and match.emphasis in (RunEmphasis.UNDERLINE, RunEmphasis.EMPHASIS)
+
+    def _cite_lines_by_their_place(self, assembled: _Assembled) -> dict[int, str]:
+        """The lines that are cites by where they stand, by position, each with its rule (`v1-e31-t31`).
+
+        The labelled evaluation's missed cites sit mostly in three places, and the PM ruled a rule
+        for each (2026-10-27). Every one asks for a body directly below: a line that says something
+        and was read as body, blank lines and page furniture stepped over.
+
+        * **A later line of a cite** (`assembly-cite-line-below-a-cite`): read as nothing, directly
+          under a line read as a cite, and holding a link or a year. 23 labelled cites; without the
+          link-or-year guard it also took 3 body lines and an undertag.
+        * **A line under a tag** (`assembly-cite-line-below-a-tag`): read as nothing, directly under
+          a tag, or a tag demoted only because nothing under it was read, and holding a link or a
+          year. 19 labelled cites, and no other line.
+        * **A cite set in the tag style** (`assembly-cite-in-the-tag-style-below-a-tag`): read as a
+          tag directly under a tag, or a demoted one, with a name and a year at its head. 4 labelled
+          cites; the tag above, which the second tag left with nothing under it, gets its reading
+          back when the build assembles again.
+
+        No line longer than the profile's cite bound (1,000 characters) is taken. The longest
+        labelled cite each rule takes is 765, 488 and 540 characters, and past the bound the earlier
+        cite rules leave a paragraph as it was on purpose (`v1-e31-t12`): a card run together with
+        its cite, if anything.
+
+        The shapes are read from one assembly, as they were measured (`tests/evals/parser/
+        missed_units.py`); a line a rule takes does not make a second line a rule's.
+        """
+        sections = assembled.sections
+        cites: dict[int, str] = {}
+        for position, section in enumerate(sections):
+            above, below = _line_above(sections, position), _line_below(sections, position)
+            if above is None or below is None or sections[below].unit is not StructuralUnit.EVIDENCE:
+                continue
+            upper = sections[above]
+            text = section.text.strip()
+            if len(text) > self._profile.cite.maximum_cite_characters or self._left_by_the_long_cite_rule(
+                text
+            ):
+                continue
+            if _is_read_as_nothing(section) and (_LINK.search(text) or _YEAR.search(text)):
+                if upper.unit is StructuralUnit.CITE:
+                    cites[position] = _CITE_LINE_BELOW_A_CITE
+                elif _is_a_tag(upper):
+                    cites[position] = _CITE_LINE_BELOW_A_TAG
+            elif section.unit is StructuralUnit.TAG and _is_a_tag(upper):
+                source = first_name_and_year(text, self._profile)
+                if source is not None and source.start() <= NAME_AND_YEAR_AT_THE_HEAD_CHARACTERS:
+                    cites[position] = _CITE_IN_THE_TAG_STYLE
+        return cites
+
+    def _left_by_the_long_cite_rule(self, text: str) -> bool:
+        """Whether a line is one the classifier's long-cite rule judged and left as it was.
+
+        Longer than a cite line and opening with a short cite, a line is a cite only when it opens in
+        bold or holds the rest in one bracket (`v1-e31-t12`); otherwise it may be evidence that names
+        its source first, and t12 left it as it was on purpose. A rule reading cites by their place
+        does not overturn that.
+        """
+        return (
+            len(text) > MAXIMUM_CITE_LINE_CHARACTERS
+            and re.match(self._profile.cite.short_cite_pattern, for_matching(text)) is not None
+        )
 
     def _advance(
         self,
@@ -1156,6 +1242,46 @@ def _read_as_a_bold_tag(section: _ReadSection) -> _ReadSection:
         ),
         in_text_box=section.in_text_box,
     )
+
+
+def _read_as_a_cite_by_its_place(section: _ReadSection, rule: str) -> _ReadSection:
+    """The same paragraph as a line of its card's cite, with the rule and the reading it overrode."""
+    return _ReadSection(
+        read=section.read,
+        match=ParagraphStyleMatch(
+            unit=StructuralUnit.CITE,
+            rule_id=f"{rule}:{section.match.rule_id}",
+            match_source=StyleMatchSource.HEURISTIC,
+            confidence=_CITE_BY_ITS_PLACE_CONFIDENCE,
+        ),
+        in_text_box=section.in_text_box,
+    )
+
+
+def _is_read_as_nothing(section: FileSection) -> bool:
+    """Read as `OTHER`, and not a blank line or page furniture."""
+    return section.unit is StructuralUnit.OTHER and not _says_nothing(section)
+
+
+def _is_a_tag(section: FileSection) -> bool:
+    """A tag, or a tag the assembly demoted only because nothing under it was read as a cite or body."""
+    return section.unit is StructuralUnit.TAG or section.match.rule_id.startswith(_DEMOTED_TAG_RULE)
+
+
+def _line_above(sections: Sequence[FileSection], position: int) -> int | None:
+    """The nearest paragraph above that says something, or None."""
+    above = position - 1
+    while above >= 0 and _says_nothing(sections[above]):
+        above -= 1
+    return above if above >= 0 else None
+
+
+def _line_below(sections: Sequence[FileSection], position: int) -> int | None:
+    """The nearest paragraph below that says something, or None."""
+    below = position + 1
+    while below < len(sections) and _says_nothing(sections[below]):
+        below += 1
+    return below if below < len(sections) else None
 
 
 def _says_nothing(section: FileSection) -> bool:

@@ -32,6 +32,14 @@ spec:
     break, because the file names `identifiers.py` by path, which is why its inner runs say `8
     deselected`. It is harmless today; handle it with the quoted-word and path edges, so a test
     file that names a path only as data does not select itself.
+    (PM amendment 2026-10-26, pre-approved in the PM's context.) Also: a quoted string names a
+    file only when it resolves to an existing path from the repository root or the test file's
+    directory (`"/account/email/verify"` named `tests/fixtures/verify/`; `"flow"` and `"LD"`
+    widened v1-e06-t03's selection); the two package-level conftests
+    (`packages/debate_core/tests/application/caselist/` and `packages/debate_api/tests/`)
+    narrowed to what their fixtures use; and `debate_cli/app.py`'s reach counted over
+    v1-e01-t38's 20 merges, then narrowed only if behaviour-identical, each narrowed edge held
+    by a planted break.
   priority: 3
   constraints:
     packages: [debate_cli, debate_core.testing, packages, tests, scripts]

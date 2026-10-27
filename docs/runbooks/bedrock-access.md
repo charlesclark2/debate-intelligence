@@ -225,22 +225,55 @@ of them. Its one action is `bedrock:InvokeModel`.
 
 **The Anthropic use-case form.** Anthropic's models need it submitted once per account before the
 first call. As `debate-admin`, in the console at us-east-1: Amazon Bedrock, then **Model catalog**,
-then any Anthropic Claude model. If the page offers **Submit use case details**, fill it in for the
-team's research tool and submit it; if it does not, the account has already submitted it. Record
-the date you submitted it, or that it was already done, in the session report or for the PM.
+then any Anthropic Claude model, then **Open in playground**. If a use-case form appears, fill it in
+for the team's research tool and submit it; if none appears, the account has already submitted it.
+It can take about 15 minutes to reach every model. Record the date for the PM. (Dev's form was
+submitted on 2026-10-27.)
 
-**What the account says about each model**, read-only. Each line is one model and four fields.
+**Marketplace subscriptions are made by a first call.** Since October 2025 Bedrock has no model-access
+page and shows no offer to accept: a model sold through AWS Marketplace (Anthropic, Cohere) is
+subscribed by the first call from a principal with Marketplace permissions. The invoker set has none,
+so that first call is made once as `debate-admin`, with a few dozen tokens. `end_turn` (or
+`application/json` for the reranker) means the call was answered and the subscription now exists.
+Replace the profile ids with the routing files' if they differ.
 
 **Operator command** (expected runtime ~1 min)
 Where: your Mac, anywhere
 ```bash
-for model in anthropic.claude-haiku-5-5 anthropic.claude-sonnet-5-5 anthropic.claude-opus-5-5 amazon.titan-embed-text-v2:0 cohere.rerank-v3-5:0; do printf '%s ' "$model"; aws bedrock get-foundation-model-availability --profile debate-admin --region us-east-1 --model-id "$model" --query '[agreementAvailability.status, authorizationStatus, entitlementAvailability, regionAvailability]' --output text; done
+aws sso login --sso-session debate
+for m in us.anthropic.claude-haiku-5-5 us.anthropic.claude-sonnet-5-5 us.anthropic.claude-opus-5-5; do echo "== $m"; aws bedrock-runtime converse --profile debate-admin --region us-east-1 --model-id "$m" --messages '[{"role":"user","content":[{"text":"Reply with the word OK."}]}]' --inference-config '{"maxTokens":512}' --query 'stopReason' --output text; done
+echo "== cohere.rerank-v3-5:0"
+aws bedrock-runtime invoke-model --profile debate-admin --region us-east-1 --model-id cohere.rerank-v3-5:0 --cli-binary-format raw-in-base64-out --body '{"query":"debate","documents":["policy debate","a recipe"],"top_n":1,"api_version":2}' /tmp/rerank-first-call.json --query 'contentType' --output text
 ```
-Success looks like each model followed by `AVAILABLE AUTHORIZED AVAILABLE AVAILABLE`. A model with
-`NOT_AVAILABLE` agreement or entitlement needs its Marketplace offer accepted: open it in the console's
-model catalog as `debate-admin` and accept the offer it shows. `Invalid choice` or an unknown-operation
-error means this AWS CLI is older than the command: update the AWS CLI, or skip this block and go by
-step 7's answers, which name a missing subscription in the refusal.
+
+**When a Claude call is refused:**
+
+* "Model use case details have not been submitted": the form has not reached that model yet. Wait
+  15 minutes and run it again.
+* "is not available for this account … contact AWS Sales": read the account's applied quotas. A
+  model whose cross-region tokens-per-minute quota is `0.0` while AWS's default is not is held at zero
+  for the account. That is lifted by a support case (Support Center, Service limit increase, Amazon
+  Bedrock), not by a quota request, which refuses any value at or below the default. Dev's 5.5 quotas
+  were held at zero on 2026-10-27, and dev routes to Haiku 4.5 and Sonnet 4.6 until they are restored
+  (`v1-e05-t13`).
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, anywhere
+```bash
+aws service-quotas list-service-quotas --profile debate-admin --region us-east-1 --service-code bedrock --query "Quotas[?contains(QuotaName, 'Cross-region model inference tokens per minute for Anthropic Claude')].[QuotaName, Value]" --output text
+```
+
+**What the account says about each model**, read-only, after the first calls. Each line is one
+model and four fields.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, anywhere
+```bash
+for model in anthropic.claude-haiku-5-5 anthropic.claude-sonnet-5-5 anthropic.claude-opus-5-5 amazon.titan-embed-text-v2:0 cohere.rerank-v3-5:0; do echo "== $model"; aws bedrock get-foundation-model-availability --profile debate-admin --region us-east-1 --model-id "$model" --query '[agreementAvailability.status, authorizationStatus, entitlementAvailability, regionAvailability]' --output text; done
+```
+Each model is followed by `AVAILABLE AUTHORIZED AVAILABLE AVAILABLE` once its first call has been
+answered. `NOT_AVAILABLE` agreement before then is expected. `Invalid choice` or an
+unknown-operation error means this AWS CLI is older than the command: update it, or skip this block.
 
 ## Step 6 — The data-use checks (the policy's open question 4)
 

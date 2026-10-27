@@ -34,9 +34,11 @@ spec:
     Boundaries: no rendering here (t04); golden cards are E09 t01.
   priority: 2
   constraints:
-    packages: [debate_core.domain, debate_core.evidence, config/format_profiles, tests/fixtures/team_samples]
+    # PM amendment 2026-10-26 (the review's Deviations 1 to 3): the analysis in place, the survey,
+    # and the synthetic tree.
+    packages: [debate_core.domain, debate_core.evidence, config/format_profiles, tests/fixtures/team_samples, scripts, tests/scripts, docs/data, tests/fixtures/debate_files/team_format, tests/fixtures]
     forbidden:
-      - Reading from ~/Documents/debate at test or run time (fixtures are committed, scrubbed copies)
+      - Reading from ~/Documents/debate at test or run time (tests use synthetic files; the analysis runs in place on the operator's machine)
       - Committing sample files containing student names, emails or docProps author metadata
       - Hard-coding fonts, sizes or colours in renderer code instead of profile config
       - Redefining heading, cite or underline/emphasis/highlight styles already in the shared style profile
@@ -50,8 +52,9 @@ spec:
   acceptanceCriteria:
     - id: ac1
       description: >-
-        tests/fixtures/team_samples/ holds 6-10 scrubbed .docx copies covering Policy, LD and PF across the
-        2024-25, 2025-26 and 2026-27 seasons, with a MANIFEST.md listing season, event and scrub date only.
+        tests/fixtures/team_samples/MANIFEST.md lists the team files the profiles were measured on, held
+        on the operator's machine: season, event and a 16-hex-digit keyed digest per file, nothing else.
+        (PM amendment 2026-10-26: no team file is copied into the repository in any form.)
     - id: ac2
       description: >-
         scripts/analyze_team_formatting.py produces a report of style names, heading levels, run-level
@@ -93,7 +96,7 @@ spec:
           Copy representative files from ~/Documents/debate/{2024-2025,2025-2026,2026-2027} into
           tests/fixtures/team_samples/, strip docProps metadata and debater identifiers with a scrub script,
           and write MANIFEST.md.
-        outputs: [tests/fixtures/team_samples/, scripts/scrub_docx_samples.py]
+        outputs: [tests/fixtures/team_samples/MANIFEST.md]
         estimatedEffort: 2h
         acceptanceCriteria:
           - type: artifact_exists
@@ -116,7 +119,7 @@ spec:
           - type: command_succeeds
             name: Analysis runs over the samples
             command: uv
-            args: [run, scripts/analyze_team_formatting.py, tests/fixtures/team_samples]
+            args: [run, scripts/analyze_team_formatting.py, tests/fixtures/debate_files/team_format, --exclude-dir, Opencaselist]
       - id: profile-model
         kind: Task
         name: FormatProfile model and loader

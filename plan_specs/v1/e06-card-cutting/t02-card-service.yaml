@@ -40,7 +40,9 @@ spec:
   constraints:
     # PM amendment 2026-10-26: the citation source enum, the harvester, and the schema export, for
     # the three cite rules below.
-    packages: [debate_core.application, debate_core.evidence, debate_core.domain, debate_core.retrieval, packages/debate_core/tests, packages/debate_core/schemas]
+    # PM ruling 2026-10-26 (Deviation 1): the card world, the model answers, the cites and the
+    # verify manifests.
+    packages: [debate_core.application, debate_core.evidence, debate_core.domain, debate_core.retrieval, packages/debate_core/tests, packages/debate_core/schemas, tests/fixtures]
     forbidden:
       - Evidence text on a card that did not come from span extraction over the stored snapshot
       - Marking a card VERIFIED when any verifier check or required citation field fails
@@ -64,7 +66,8 @@ spec:
     - id: ac2
       description: >-
         A ModelOutputError, an unreproducible span or a missing author/date yields a persisted UNVERIFIED
-        card with machine-readable reasons (e.g. MODEL_OUTPUT_INVALID, SPAN_MISMATCH, CITATION_UNVERIFIED).
+        card with machine-readable reasons (e.g. MODEL_OUTPUT_INVALID, SPAN_MISMATCH, CITATION_UNVERIFIED,
+        EVIDENCE_UNVERIFIED for any other verifier code). (PM amendment 2026-10-26, from the review.)
     - id: ac3
       description: >-
         A snapshot with access_status other than ACCESSIBLE is rejected before any model call with a typed
@@ -119,7 +122,7 @@ spec:
         name: Compose the cut_card pipeline
         description: >-
           Wire selection, span extraction, markup mapping, citation and verification through injected ports
-          and save via CardRepository with revision 1.
+          and store via CardRepository.create at revision 1.
         dependsOn: [request-result-types]
         outputs: [packages/debate_core/src/debate_core/application/card_service.py]
         estimatedEffort: 4h

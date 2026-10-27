@@ -329,3 +329,17 @@ selection file is pytest's `testpaths`, which is exactly the old command.
    records both.
 
 No re-review is needed. The PR merges `--partial`, phase `InProgress`, until ac3's push run is read.
+
+## PM record, 2026-10-27
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+* **ac3 passes.**
+  * The pull request's own run (#550): each `test` part's summary read "Tests: the whole default
+    selection … because .github/workflows/ci.yml is shared test ground."
+  * The push run on `dev` for the merge commit `fb846bb` read "Tests: the whole default selection"
+    because a push to dev runs the whole selection, and the coverage job ran.
+* **The first affected run** (v1-e32-t27's pull request #552) selected 238 of 537 test files. Part 2
+  ran 1,392 tests in 3:46, against 3,404 in 4:38 for the whole selection, with the smoke and
+  bucket-mode tests the floor. The PM batch of 2026-10-27 (t) raises the parts from 5 to 8.
+* **The Goal is `Succeeded`.**

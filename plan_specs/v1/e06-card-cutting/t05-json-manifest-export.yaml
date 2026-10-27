@@ -32,7 +32,9 @@ spec:
     (t06); student data minimization means no owner email/name in the manifest, only opaque owner_id.
   priority: 1
   constraints:
-    packages: [debate_core.evidence, debate_core.application]
+    # PM ruling 2026-10-26 (question 2 and the context): the schemas, the verify command's tests and
+    # the prior-version fixture.
+    packages: [debate_core.evidence, debate_core.application, packages/debate_core/schemas, packages/debate_cli/tests, tests/fixtures]
     forbidden:
       - Breaking schema changes without bumping manifest_version and keeping a reader for the prior version
       - A second manifest model or schema beside v1-e03-t06's
@@ -58,8 +60,10 @@ spec:
         local data dir exits 0 with status VERIFIED.
     - id: ac3
       description: >-
-        Altering one character of evidence_text or one span offset in the manifest makes verify exit
-        1 with TEXT_MISMATCH or SPAN_OUT_OF_RANGE, the verifier's real reason codes.
+        Altering one character of evidence_text makes verify exit 1 with TEXT_MISMATCH. Moving the
+        quotation in the snapshot (its envelope and omissions together) exits 1 with TEXT_MISMATCH, or
+        SPAN_OUT_OF_RANGE past the snapshot's end. Altering one offset alone exits 1 with CARD_INVALID,
+        because the domain refuses the card before the verifier. (PM amendment 2026-10-26, ruling 1.)
     - id: ac4
       description: >-
         Manifests include model/prompt metadata and snapshot hashes for every card and contain no user

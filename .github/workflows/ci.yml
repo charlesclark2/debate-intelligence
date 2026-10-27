@@ -204,7 +204,7 @@ jobs:
         # To add a part, append the next number and change nothing else. Each part asks for itself
         # out of strategy.job-total, and `ci` needs this job as a whole: a matrix job is one entry
         # in `needs`, and its result is a failure if any part failed.
-        part: [1, 2, 3, 4, 5]
+        part: [1, 2, 3, 4, 5, 6, 7, 8]
     steps:
       - uses: actions/checkout@v7
         with:

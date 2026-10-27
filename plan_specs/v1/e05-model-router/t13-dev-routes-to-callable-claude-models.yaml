@@ -1,0 +1,91 @@
+# TASK v1-e05-t13-dev-routes-to-callable-claude-models - Dev routes to Claude models this account can call while the 5.5 quotas are held at zero
+# Epic: E05 Model Router & Structured LLM Contracts | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e05-t13-dev-routes-to-callable-claude-models
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e05-model-router
+  annotations:
+    debate/title: "Dev routes to Claude models this account can call while the 5.5 quotas are held at zero"
+spec:
+  # Filed by the PM, 2026-10-27, from v1-e05-t08's operator steps of 2026-10-27 and the PM's ruling.
+  description: >-
+    On 2026-10-27 the dev account's applied quotas for Claude Haiku 5.5, Sonnet 5.5 and Opus 5.5
+    were all 0 tokens per minute (AWS defaults 10M, 6M and 30M), so every call to them is
+    refused as "not available for this account". A support case is open. Claude Haiku 4.5
+    (`anthropic.claude-haiku-4-5-20251001-v1:0`, profile
+    `us.anthropic.claude-haiku-4-5-20251001-v1:0`) and Claude Sonnet 4.6
+    (`anthropic.claude-sonnet-4-6`, profile `us.anthropic.claude-sonnet-4-6`) hold non-zero
+    quotas and answered a first call as debate-admin, which created their Marketplace
+    subscriptions. Point dev's three Claude routes at them: `complex_reasoning` and
+    `high_volume` to Haiku 4.5, `deep_audit` to Sonnet 4.6, keeping each route's region,
+    max_tokens and timeout. Prod's routing is unchanged. Add both to `config/model_pricing.yaml`
+    with the operator's prices read 2026-10-27 from the AWS Bedrock pricing page (us-east-1,
+    on-demand, per million tokens): Haiku 4.5 $1.00 in and $5.00 out, Sonnet 4.6 $3.00 in and
+    $15.00 out, written per 1,000 tokens with `as_of: 2026-10-27`. The Bedrock invoker module
+    reads both routing files, so its policy grows to the new profiles and their models: update
+    the module's Terraform tests, and the runbook's plan check and its counts, for an update of
+    the one inline policy. Every test pinning a routed model id or the pricing table changes
+    with it. When the quotas are restored, a later change switches dev back; record that in the
+    routing file's comment.
+  priority: 1
+  constraints:
+    packages: [config, infrastructure/modules/bedrock_access, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke, tests/scripts, docs/runbooks]
+    forbidden:
+      - Changing prod's routing
+      - A price written from memory or in code
+      - A wildcard in the invoker policy
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e05-t07-usage-telemetry
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Dev's routing names Haiku 4.5 and Sonnet 4.6 as above, both are priced, the module's
+        Terraform tests pin the new policy exactly, and every pinned test passes; tests
+        shown failing first where a rule changed.
+    - id: ac2
+      description: >-
+        The operator's Bedrock plan updates only the inline policy, read by the PM before
+        the apply, and step 7's first call answers on both dev models (operator).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e05-t13-dev-routes-to-callable-claude-models-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e05-model-router
+spec:
+  description: >-
+    Route dev to the Claude models the account can call, and grant exactly those.
+  goalRef:
+    name: v1-e05-t13-dev-routes-to-callable-claude-models
+  graph:
+    nodes:
+      - id: dev-fallback-routes
+        kind: Task
+        name: Dev fallback routes
+        description: >-
+          Route dev to the Claude models the account can call, and grant exactly those.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Routing and pricing tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/models, -k, routing or pricing]
+status:
+  phase: Pending

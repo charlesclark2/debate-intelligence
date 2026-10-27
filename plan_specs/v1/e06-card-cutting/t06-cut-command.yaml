@@ -30,9 +30,16 @@ spec:
     calls a model.) The installed build bundles `prompts/`, and the composition root loads the
     prompt registry from it; a refused model call (`ModelAccessDenied`, `ModelRequestRejected`)
     exits with the non-retryable model error code, as v1-e05-t09 rules, never the retryable one.
+    (PM amendment 2026-10-27, from v1-e06-t02's question 1 and v1-e06-t05's follow-up 2.) A
+    provider outage, a missing or damaged snapshot or an unregistered prompt saves no card, and
+    `cut` reports it as could not run, with its own exit code and no card id. The CLI's wording
+    for exit 2 in `verify --help` and `packages/debate_cli/README.md` also names a manifest from
+    a newer build, and its hint says to install a newer build rather than pointing at the schema
+    file.
   priority: 1
   constraints:
-    packages: [debate_cli]
+    # PM amendment 2026-10-27: the command's tests and smoke check, and verify's exit-2 wording.
+    packages: [debate_cli, packages/debate_cli/tests, tests/smoke]
     forbidden:
       - Business logic (selection, verification, citation merging) in debate_cli
       - Exit code 0 when the exported card is not VERIFIED

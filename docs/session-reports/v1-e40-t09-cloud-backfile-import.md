@@ -260,9 +260,54 @@ The pull request's `ci` runs the affected set (below).
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-27
 
 **Notes:**
+
+Built to the checkpoint's rulings with the smallest footprint available: one sentence of Terraform,
+an operator script, and a plan check that passes only that one sentence.
+1. **ac1 passes.**
+   * Terraform: red 41 passed, 1 failed on the alert assertion; green 42 of 42.
+   * The run role is unchanged, and the stubbed runs refuse inside the window and without budget
+     before any download.
+   * Red skeletons for the script (13 failed) and for `BACKFILEPLAN` (15 failed). The passes on each
+     skeleton are explained, and they're the cases that don't run the logic.
+   * `scripts/terraform_checks.sh` passes offline.
+2. **Mutants: 14 of 14, the PM's four among them.** PM 1a (a third schedule) is invisible to
+   `terraform test`. The report says so and catches it with the declared-schedule scan and
+   `BACKFILEPLAN`. That's the right answer, not a gap.
+3. **The masking check is done as ruled, and nothing needed building.**
+   * `RunsRecorded` needs `caselist pull` and a run record.
+   * Run records come only from `SyncRunMonitor.watch`, which only the pull calls.
+   * A successful import is no stop event.
+4. **Deviations 1 to 5 accepted.** Deviation 5's date (the first scheduled run on 2026-10-28) is the
+   true one.
+5. **Decisions accepted:**
+   * the lock's own "held" rule;
+   * Terraform's revision passed explicitly, with its digest compared before the first import;
+   * `startedBy` `backfile-import`;
+   * the Wednesday refusal on the apply;
+   * prod accepted by the script but not in the runbook.
+   * The storage figure (about 36.5 GiB against 100 GiB) rests on an unmeasured 5 GiB image
+     allowance. The dry run's `free_bytes` is the measurement, and the PM records it.
+6. **One watch item for ac2.** The checkpoint notes that a missing key may answer 403 rather than
+   404 under the run role's document. The dry run reads an absent manifest and ledger as the first
+   import would. If it refuses with an access denial on a key that doesn't exist yet, stop: that is a
+   named grant (a listing), and it comes back to the PM before any import.
+7. **Data-use policy 1.18's sentence is accepted** as drafted, for Prohibited uses 10. The PM writes
+   it into the policy's next version, with the zero-retention decision.
+8. **Follow-ups:**
+   * 1 (the in-image token wording) goes to the next image's E40 task;
+   * 2 (`scheduler:GetSchedule`) is not filed, since Terraform's revision is enough;
+   * 3 is `v1-e40-t15`, already filed.
+9. **The affected set** (86 files) was stopped at 88% by the alarm under load, with no failure, and is
+   left to the PR's `ci` under agreement 10. The always-run list, the docs and the changed tests
+   passed (627), as did the static checks.
+
+**Merge order:** after Thursday 2026-10-29's image apply. Then the plan, `BACKFILEPLAN` and the apply,
+the PM reading the plan, then the dry run outside the window. The four imports wait for the
+operator's return. The PR merges `--partial`, with the Goal `InProgress`, until ac2 and ac3. No
+re-review is needed.

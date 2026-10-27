@@ -503,6 +503,7 @@ class StandInLiveRouter:
         request = ModelRequest.build(task_class, prompt, schema, params)
         self.requests.append(request)
         step = self._steps.pop(0)
+        await asyncio.sleep(0)  # here, and after an answer is handed over, another call may run
         if isinstance(step, Exception):
             raise step
         route = self._policy.resolve(task_class, request.params)
@@ -529,7 +530,7 @@ class StandInLiveRouter:
                 raise refuse(CUT_OFF)
             case None:
                 hand_over_answer(None)
-                await asyncio.sleep(0)  # another call may run between handing over and refusing
+                await asyncio.sleep(0)
                 raise refuse(NO_TOOL_CALL)
             case _:
                 answered = dict(step)
@@ -762,7 +763,7 @@ def test_replay_of_a_recorded_invalid_answer_raises_it_without_the_guard(tmp_pat
 
 
 def test_record_calls_made_together_each_keep_their_own_answer(tmp_path: Path) -> None:
-    """The first call hands its answer over, then waits while the second hands over its own."""
+    """Each call waits before and after handing its answer over, so the two hand-overs interleave."""
     router = recording(tmp_path, StandInLiveRouter([INVALID_PASSAGE, None]))
     other_prompt = EXAMPLE_PROMPT.model_copy(update={"variables": {"tag": "Another invented tag"}})
 

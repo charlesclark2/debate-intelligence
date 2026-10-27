@@ -61,7 +61,7 @@ spec:
         This task's own pull request shows its selection in the job summary, and the push
         run after its merge runs the whole selection, read from the run pages (operator).
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

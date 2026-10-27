@@ -109,7 +109,13 @@ TEXT_ELEMENTS: Final = tuple(f"{{{W_NS}}}{tag}" for tag in ("t", "delText", "ins
 #: The units that end a card's evidence: anything structural except the undertag, which belongs
 #: to the tag above it and sits between the tag and its cite.
 _CARD_ENDING_UNITS: Final = frozenset(
-    {StructuralUnit.POCKET, StructuralUnit.HAT, StructuralUnit.BLOCK, StructuralUnit.TAG, StructuralUnit.ANALYTIC}
+    {
+        StructuralUnit.POCKET,
+        StructuralUnit.HAT,
+        StructuralUnit.BLOCK,
+        StructuralUnit.TAG,
+        StructuralUnit.ANALYTIC,
+    }
 )
 _REPORTED_UNITS: Final = (
     StructuralUnit.POCKET,
@@ -235,7 +241,9 @@ def _parse_without_text(archive: ZipFile, part_name: str) -> etree._Element | No
     except KeyError:
         return None
     try:
-        root = etree.fromstring(data, parser=etree.XMLParser(resolve_entities=False, no_network=True, huge_tree=True))
+        root = etree.fromstring(
+            data, parser=etree.XMLParser(resolve_entities=False, no_network=True, huge_tree=True)
+        )
     except etree.XMLSyntaxError:
         return None
     etree.strip_elements(root, *TEXT_ELEMENTS, with_tail=False)
@@ -316,7 +324,9 @@ def _read_styles(root: etree._Element | None) -> tuple[dict[str, _StyleFormattin
 class _StyleTable:
     """A document's styles, with Word's inheritance resolved and cached."""
 
-    def __init__(self, styles: dict[str, _StyleFormatting], defaults: _RunProperties, profile: StyleProfile) -> None:
+    def __init__(
+        self, styles: dict[str, _StyleFormatting], defaults: _RunProperties, profile: StyleProfile
+    ) -> None:
         self._styles = styles
         self._defaults = defaults
         self._profile = profile
@@ -359,9 +369,13 @@ class _StyleTable:
     def outline_level(self, direct: int | None, style_id: str | None) -> int | None:
         if direct is not None:
             return direct
-        return next((style.outline_level for style in self.chain(style_id) if style.outline_level is not None), None)
+        return next(
+            (style.outline_level for style in self.chain(style_id) if style.outline_level is not None), None
+        )
 
-    def effective(self, direct: _RunProperties, run_style: str | None, paragraph_style: str | None) -> _RunProperties:
+    def effective(
+        self, direct: _RunProperties, run_style: str | None, paragraph_style: str | None
+    ) -> _RunProperties:
         """Direct formatting, then the run's style chain, then the paragraph's, then the defaults."""
         run_layers = (direct, *(_as_run(style) for style in self.chain(run_style)))
         layers = (*run_layers, *(_as_run(style) for style in self.chain(paragraph_style)), self._defaults)
@@ -389,13 +403,13 @@ def _own_runs(paragraph: etree._Element) -> list[etree._Element]:
     """The runs of `paragraph`, not those of a paragraph nested inside it (a text box)."""
     paragraph_tag = _w("p")
     return [
-        run
-        for run in paragraph.iter(_w("r"))
-        if next(run.iterancestors(paragraph_tag), None) is paragraph
+        run for run in paragraph.iter(_w("r")) if next(run.iterancestors(paragraph_tag), None) is paragraph
     ]
 
 
-def _measure_body(body: etree._Element, table: _StyleTable, profile: StyleProfile, formatting: FileFormatting) -> None:
+def _measure_body(
+    body: etree._Element, table: _StyleTable, profile: StyleProfile, formatting: FileFormatting
+) -> None:
     shrink_maximum = profile.shrink.maximum_half_points
     in_card = False
     for paragraph in body.iter(_w("p")):
@@ -403,7 +417,7 @@ def _measure_body(body: etree._Element, table: _StyleTable, profile: StyleProfil
         paragraph_style = _value(properties.find(_w("pStyle"))) if properties is not None else None
         direct_outline = _value(properties.find(_w("outlineLvl"))) if properties is not None else None
         unit = table.paragraph_unit(paragraph_style)
-        if unit in _REPORTED_UNITS and paragraph_style is not None:
+        if unit is not None and unit in _REPORTED_UNITS and paragraph_style is not None:
             outline = table.outline_level(
                 int(direct_outline) if direct_outline is not None and direct_outline.isdigit() else None,
                 paragraph_style,
@@ -425,9 +439,13 @@ def _measure_body(body: etree._Element, table: _StyleTable, profile: StyleProfil
             run_style = _value(run_properties.find(_w("rStyle"))) if run_properties is not None else None
             emphasis = table.run_emphasis(run_style)
             effective = table.effective(_run_properties(run_properties), run_style, paragraph_style)
-            underlined = effective.underlined if effective.underlined is not None else emphasis in _UNDERLINED_EMPHASES
+            underlined = (
+                effective.underlined if effective.underlined is not None else emphasis in _UNDERLINED_EMPHASES
+            )
             measured.append((emphasis, effective, underlined))
-        is_cite = unit is StructuralUnit.CITE or any(emphasis is RunEmphasis.CITE for emphasis, _, _ in measured)
+        is_cite = unit is StructuralUnit.CITE or any(
+            emphasis is RunEmphasis.CITE for emphasis, _, _ in measured
+        )
         if is_cite:
             formatting.cite_paragraphs += 1
             if measured[0][0] is RunEmphasis.CITE:
@@ -512,9 +530,15 @@ class TeamFormatSurvey:
     highlighted_not_underlined_runs: int = 0
     bold_evidence_runs: int = 0
     season_highlight_colors: dict[str, Counter[str]] = field(default_factory=lambda: defaultdict(Counter))
-    season_underlined_sizes: dict[str, Counter[int | None]] = field(default_factory=lambda: defaultdict(Counter))
-    season_not_underlined_sizes: dict[str, Counter[int | None]] = field(default_factory=lambda: defaultdict(Counter))
-    season_full_cite_sizes: dict[str, Counter[int | None]] = field(default_factory=lambda: defaultdict(Counter))
+    season_underlined_sizes: dict[str, Counter[int | None]] = field(
+        default_factory=lambda: defaultdict(Counter)
+    )
+    season_not_underlined_sizes: dict[str, Counter[int | None]] = field(
+        default_factory=lambda: defaultdict(Counter)
+    )
+    season_full_cite_sizes: dict[str, Counter[int | None]] = field(
+        default_factory=lambda: defaultdict(Counter)
+    )
 
     @property
     def files(self) -> int:
@@ -528,11 +552,12 @@ def most_common[T](counts: Counter[T]) -> T | None:
     return min(counts, key=lambda value: (-counts[value], value is None, value if value is not None else 0))
 
 
-def _mode_with_runs[T](modes: Counter[T], runs: Counter[T]) -> T | None:
-    """The value most files favour; ties go to more runs, then to the smaller value."""
-    if not modes:
-        return None
-    return min(modes, key=lambda value: (-modes[value], -runs[value], value is None, value if value is not None else 0))
+def _mode_with_runs[T](modes: Counter[T], runs: Counter[T]) -> T:
+    """The value most files favour; ties go to more runs, then to the smaller value. `modes` is not empty."""
+    return min(
+        modes,
+        key=lambda value: (-modes[value], -runs[value], value is None, value if value is not None else 0),
+    )
 
 
 def collect(files: Sequence[FileFormatting], skipped: Counter[str] | None = None) -> TeamFormatSurvey:
@@ -597,14 +622,19 @@ def _value_label(value: int | str | None) -> str:
     return f"`{value}`"
 
 
-def _summary_line[T: (int | None, str)](label: str, modes: Counter[T], runs: Counter[T], denominator: str) -> str:
+def _summary_line[T: (int | None, str)](
+    label: str, modes: Counter[T], runs: Counter[T], denominator: str
+) -> str:
     if not modes:
         return f"- {label}: none found"
     value = _mode_with_runs(modes, runs)
-    return f"- {label}: {_value_label(value)}, most common in {modes[value]} of {sum(modes.values())} {denominator}"
+    files = f"{modes[value]} of {sum(modes.values())} {denominator}"
+    return f"- {label}: {_value_label(value)}, most common in {files}"
 
 
-def _distribution[T: (int | None, str)](title: str, runs: Counter[T], modes: Counter[T] | None = None) -> list[str]:
+def _distribution[T: (int | None, str)](
+    title: str, runs: Counter[T], modes: Counter[T] | None = None
+) -> list[str]:
     header = f"| {title} | Runs |" + (" Files where most common |" if modes is not None else "")
     rule = "|---|---|" + ("---|" if modes is not None else "")
     lines = [header, rule]
@@ -646,10 +676,16 @@ def render_report(survey: TeamFormatSurvey, *, run_on: date, excluded_folders: S
         "Each line is the value most files favour, among the files that have one.",
         "",
         _summary_line(
-            "Evidence highlight colour", survey.highlight_color_modes, survey.highlight_colors, "files with highlighting"
+            "Evidence highlight colour",
+            survey.highlight_color_modes,
+            survey.highlight_colors,
+            "files with highlighting",
         ),
         _summary_line(
-            "Underlined evidence size", survey.underlined_size_modes, survey.underlined_sizes, "files with underlining"
+            "Underlined evidence size",
+            survey.underlined_size_modes,
+            survey.underlined_sizes,
+            "files with underlining",
         ),
         _summary_line(
             "Not-underlined evidence size",
@@ -657,13 +693,17 @@ def render_report(survey: TeamFormatSurvey, *, run_on: date, excluded_folders: S
             survey.not_underlined_sizes,
             "files with text that is not underlined",
         ),
-        _summary_line("Full cite size", survey.full_cite_size_modes, survey.full_cite_sizes, "files with cites"),
+        _summary_line(
+            "Full cite size", survey.full_cite_size_modes, survey.full_cite_sizes, "files with cites"
+        ),
         f"- Evidence paragraphs holding text at or below the shrink maximum: "
         f"{survey.condensed_evidence_paragraphs} of {survey.evidence_paragraphs}",
         f"- Cite paragraphs led by a short cite in the cite style: "
         f"{survey.cite_paragraphs_led_by_short_cite} of {survey.cite_paragraphs}",
-        f"- Short cite runs that are bold: {survey.short_cite_bold_runs} of {sum(survey.short_cite_sizes.values())}",
-        f"- Full cite runs that are bold: {survey.full_cite_bold_runs} of {sum(survey.full_cite_sizes.values())}",
+        f"- Short cite runs that are bold: {survey.short_cite_bold_runs} of "
+        f"{sum(survey.short_cite_sizes.values())}",
+        f"- Full cite runs that are bold: {survey.full_cite_bold_runs} of "
+        f"{sum(survey.full_cite_sizes.values())}",
         "",
         "## Files",
         "",
@@ -707,17 +747,21 @@ def render_report(survey: TeamFormatSurvey, *, run_on: date, excluded_folders: S
         )
         style_ids = ", ".join(
             f"`{style_id}` ({count})"
-            for (name, style_id), count in sorted(survey.unit_style_ids.items(), key=lambda item: (-item[1], item[0][1]))
+            for (name, style_id), count in sorted(
+                survey.unit_style_ids.items(), key=lambda item: (-item[1], item[0][1])
+            )
             if name == unit.value
         )
         lines.append(
-            f"| {unit.value} | {survey.unit_paragraphs[unit.value]} | {survey.unit_files[unit.value]} | {levels} | {style_ids} |"
+            f"| {unit.value} | {survey.unit_paragraphs[unit.value]} | {survey.unit_files[unit.value]} "
+            f"| {levels} | {style_ids} |"
         )
     lines += [
         "",
         "## Cite block",
         "",
-        f"{survey.cite_paragraphs} cite paragraphs, {survey.cite_paragraphs_led_by_short_cite} of them led by a run in",
+        f"{survey.cite_paragraphs} cite paragraphs, {survey.cite_paragraphs_led_by_short_cite} of them "
+        "led by a run in",
         "the cite character style (the short cite). Runs in the cite style:",
         "",
         *_distribution("Short cite size", survey.short_cite_sizes),
@@ -728,7 +772,8 @@ def render_report(survey: TeamFormatSurvey, *, run_on: date, excluded_folders: S
         "",
         "## Evidence",
         "",
-        f"{survey.evidence_paragraphs} evidence paragraphs: the paragraphs after a cite, up to the next heading.",
+        f"{survey.evidence_paragraphs} evidence paragraphs: the paragraphs after a cite, up to the next "
+        "heading.",
         "",
         "Underlined runs (the text that is read):",
         "",
@@ -794,7 +839,11 @@ class ManifestRow:
 def manifest_rows(files: Sequence[SelectedFile], key: bytes) -> list[ManifestRow]:
     """One row per file read, sorted by digest: the order says nothing about the files."""
     return sorted(
-        ManifestRow(digest=keyed_digest(selected.content, key)[:DIGEST_PREFIX_LENGTH], season=selected.season, event=selected.event)
+        ManifestRow(
+            digest=keyed_digest(selected.content, key)[:DIGEST_PREFIX_LENGTH],
+            season=selected.season,
+            event=selected.event,
+        )
         for selected in files
     )
 
@@ -847,7 +896,9 @@ def render_manifest(rows: Sequence[ManifestRow], *, run_on: date, excluded_folde
 # --------------------------------------------------------------------------------------------
 
 
-def analyze(inputs: Sequence[Path], exclude_dirs: Sequence[str], profile: StyleProfile) -> tuple[Selection, TeamFormatSurvey, list[SelectedFile]]:
+def analyze(
+    inputs: Sequence[Path], exclude_dirs: Sequence[str], profile: StyleProfile
+) -> tuple[Selection, TeamFormatSurvey, list[SelectedFile]]:
     """Select, read and fold. Returns the selection, the aggregate and the files actually read."""
     selection = select_files(inputs, exclude_dirs)
     skipped = Counter(selection.skipped)
@@ -872,7 +923,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--exclude-dir", action="append", default=[], help="A folder name to leave out.")
     parser.add_argument("--output", type=Path, help="Write the report here instead of standard output.")
     parser.add_argument("--manifest", type=Path, help="Also write the manifest of the files read here.")
-    parser.add_argument("--run-on", type=date.fromisoformat, default=date.today(), help="YYYY-MM-DD; default today.")
+    parser.add_argument(
+        "--run-on", type=date.fromisoformat, default=date.today(), help="YYYY-MM-DD; default today."
+    )
     arguments = parser.parse_args(argv)
 
     key = require_key() if arguments.manifest is not None else None
@@ -889,7 +942,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     if arguments.manifest is not None and key is not None:
         arguments.manifest.parent.mkdir(parents=True, exist_ok=True)
         arguments.manifest.write_text(
-            render_manifest(manifest_rows(read_files, key), run_on=arguments.run_on, excluded_folders=arguments.exclude_dir),
+            render_manifest(
+                manifest_rows(read_files, key),
+                run_on=arguments.run_on,
+                excluded_folders=arguments.exclude_dir,
+            ),
             encoding="utf-8",
         )
     print(

@@ -67,7 +67,11 @@ class FormatParagraph:
     paragraph_style: str | None = None
 
     def to_xml(self) -> str:
-        style = f"<w:pPr><w:pStyle w:val={quoteattr(self.paragraph_style)}/></w:pPr>" if self.paragraph_style else ""
+        style = (
+            f"<w:pPr><w:pStyle w:val={quoteattr(self.paragraph_style)}/></w:pPr>"
+            if self.paragraph_style
+            else ""
+        )
         return f"<w:p>{style}{''.join(run.to_xml() for run in self.runs)}</w:p>"
 
 
@@ -119,7 +123,9 @@ def cyan_convention(variant: str = "") -> TeamFormatFixture:
         relative_path="2024-2025/LD/cyan-convention.docx",
         paragraphs=(
             FormatParagraph((_run("Reliability Negative", variant),), paragraph_style="Heading1"),
-            FormatParagraph((_run("Demand growth strains the reserve", variant),), paragraph_style="Heading4"),
+            FormatParagraph(
+                (_run("Demand growth strains the reserve", variant),), paragraph_style="Heading4"
+            ),
             FormatParagraph(
                 (
                     _run("Okonkwo 26", variant, character_style="Style13ptBold"),
@@ -129,7 +135,9 @@ def cyan_convention(variant: str = "") -> TeamFormatFixture:
             FormatParagraph(
                 (
                     _run("Operators in the region reported that ", variant, half_points=16),
-                    _run("demand rose faster than", variant, character_style="StyleUnderline", highlight="cyan"),
+                    _run(
+                        "demand rose faster than", variant, character_style="StyleUnderline", highlight="cyan"
+                    ),
                     _run("any other load", variant, character_style="Emphasis", highlight="cyan", bold=True),
                     _run(" in the planning period.", variant, half_points=16),
                 )
@@ -180,7 +188,9 @@ def green_convention(variant: str = "") -> TeamFormatFixture:
             FormatParagraph(
                 (
                     _run("Trials across the region show ", variant, half_points=12),
-                    _run("yields fell under heat", variant, character_style="StyleUnderline", highlight="green"),
+                    _run(
+                        "yields fell under heat", variant, character_style="StyleUnderline", highlight="green"
+                    ),
                     _run(" in every variety tested.", variant, half_points=12),
                 )
             ),
@@ -211,7 +221,13 @@ def yellow_convention(variant: str = "") -> TeamFormatFixture:
             FormatParagraph(
                 (
                     _run("The record since the treaty shows ", variant, half_points=22),
-                    _run("no state tested the line", variant, underline="single", highlight="yellow", half_points=22),
+                    _run(
+                        "no state tested the line",
+                        variant,
+                        underline="single",
+                        highlight="yellow",
+                        half_points=22,
+                    ),
                 )
             ),
             FormatParagraph((_run("Escalation is unlikely", variant),), paragraph_style="Heading4"),
@@ -224,7 +240,9 @@ def yellow_convention(variant: str = "") -> TeamFormatFixture:
             FormatParagraph(
                 (
                     _run("Both sides kept ", variant, half_points=22),
-                    _run("every channel open", variant, underline="single", highlight="yellow", half_points=22),
+                    _run(
+                        "every channel open", variant, underline="single", highlight="yellow", half_points=22
+                    ),
                 )
             ),
         ),
@@ -237,7 +255,9 @@ def caselist_upload(variant: str = "") -> TeamFormatFixture:
         relative_path="2026-2027/LD Debate/Opencaselist/caselist-upload.docx",
         paragraphs=(
             FormatParagraph((_run("Another program's tag", variant),), paragraph_style="Heading4"),
-            FormatParagraph((_run("Another program's evidence", variant, highlight="magenta", underline="single"),)),
+            FormatParagraph(
+                (_run("Another program's evidence", variant, highlight="magenta", underline="single"),)
+            ),
         ),
     )
 

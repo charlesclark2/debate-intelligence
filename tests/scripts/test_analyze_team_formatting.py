@@ -111,7 +111,9 @@ def test_a_missing_input_folder_stops_the_run(tmp_path: Path) -> None:
 def test_structural_units_their_outline_levels_and_style_ids(tree: Path) -> None:
     survey = survey_of(tree)
 
-    assert survey.unit_paragraphs == Counter({"POCKET": 1, "BLOCK": 1, "TAG": 5, "UNDERTAG": 1, "ANALYTIC": 1})
+    assert survey.unit_paragraphs == Counter(
+        {"POCKET": 1, "BLOCK": 1, "TAG": 5, "UNDERTAG": 1, "ANALYTIC": 1}
+    )
     assert survey.unit_files == Counter({"POCKET": 1, "BLOCK": 1, "TAG": 3, "UNDERTAG": 1, "ANALYTIC": 1})
     assert survey.unit_outline_levels == Counter(
         {("POCKET", 0): 1, ("BLOCK", 2): 1, ("TAG", 3): 5, ("UNDERTAG", None): 1, ("ANALYTIC", 3): 1}
@@ -213,7 +215,15 @@ def test_no_words_paths_or_file_names_reach_the_report_or_the_manifest(tmp_path:
         analysis.manifest_rows(read, b"k" * 32), run_on=RUN_ON, excluded_folders=EXCLUDED
     )
 
-    for forbidden in (SENTINEL, str(tmp_path), "debate/", "convention", "Practice Speech", "Public Forum", "~$"):
+    for forbidden in (
+        SENTINEL,
+        str(tmp_path),
+        "debate/",
+        "convention",
+        "Practice Speech",
+        "Public Forum",
+        "~$",
+    ):
         assert forbidden not in written
 
 
@@ -229,8 +239,8 @@ def test_the_report_summary_names_what_most_files_do(tree: Path) -> None:
     for line in (
         "- Evidence highlight colour: `cyan`, most common in 1 of 3 files with highlighting",
         "- Underlined evidence size: 22 half-points (11 pt), most common in 3 of 3 files with underlining",
-        "- Not-underlined evidence size: 16 half-points (8 pt), most common in 1 of 3 files with text that is "
-        "not underlined",
+        "- Not-underlined evidence size: 16 half-points (8 pt), most common in 1 of 3 files with text that "
+        "is not underlined",
         "- Full cite size: 16 half-points (8 pt), most common in 1 of 3 files with cites",
         "- Evidence paragraphs holding text at or below the shrink maximum: 4 of 6",
         "- Cite paragraphs led by a short cite in the cite style: 4 of 5",
@@ -246,7 +256,8 @@ def test_the_report_summary_names_what_most_files_do(tree: Path) -> None:
         "| `cyan` | 3 | 1 |",
         "| 2024-25 | 1 | `cyan` | 22 half-points (11 pt) | 16 half-points (8 pt) | 16 half-points (8 pt) |",
         "| 2025-26 | 1 | `green` | 22 half-points (11 pt) | 12 half-points (6 pt) | 20 half-points (10 pt) |",
-        "| 2026-27 | 1 | `yellow` | 22 half-points (11 pt) | 22 half-points (11 pt) | 22 half-points (11 pt) |",
+        "| 2026-27 | 1 | `yellow` | 22 half-points (11 pt) | 22 half-points (11 pt) "
+        "| 22 half-points (11 pt) |",
     ):
         assert line in report, line
 
@@ -282,7 +293,8 @@ def test_a_style_id_nobody_published_is_counted_but_never_named(tmp_path: Path) 
 
 
 @pytest.mark.parametrize(
-    ("half_points", "label"), [(16, "16 half-points (8 pt)"), (21, "21 half-points (10.5 pt)"), (None, "not set")]
+    ("half_points", "label"),
+    [(16, "16 half-points (8 pt)"), (21, "21 half-points (10.5 pt)"), (None, "not set")],
 )
 def test_sizes_are_labelled_in_half_points_and_points(half_points: int | None, label: str) -> None:
     assert analysis.size_label(half_points) == label
@@ -305,7 +317,9 @@ def test_the_manifest_lists_season_event_and_a_keyed_digest_prefix_only(tree: Pa
     key = b"a test key that is not the operator's".ljust(32, b".")
     _, _, read = analysis.analyze([tree], EXCLUDED, load_style_profile())
 
-    manifest = analysis.render_manifest(analysis.manifest_rows(read, key), run_on=RUN_ON, excluded_folders=EXCLUDED)
+    manifest = analysis.render_manifest(
+        analysis.manifest_rows(read, key), run_on=RUN_ON, excluded_folders=EXCLUDED
+    )
 
     rows = [match.groupdict() for line in manifest.splitlines() if (match := _ROW.match(line))]
     table = [line for line in manifest.splitlines() if line.startswith("| ")]
@@ -347,8 +361,17 @@ def test_the_command_line_writes_the_report_and_the_manifest(
     report.parent.mkdir()
 
     exit_code = analysis.main(
-        [str(tree), "--exclude-dir", "Opencaselist", "--output", str(report), "--manifest", str(manifest),
-         "--run-on", "2026-10-26"]
+        [
+            str(tree),
+            "--exclude-dir",
+            "Opencaselist",
+            "--output",
+            str(report),
+            "--manifest",
+            str(manifest),
+            "--run-on",
+            "2026-10-26",
+        ]
     )
 
     assert exit_code == 0
@@ -376,7 +399,9 @@ def test_the_report_goes_to_standard_output_without_an_output_path(
     assert "| Files analysed | 3 |" in capsys.readouterr().out
 
 
-def test_nothing_to_read_is_a_failure_not_an_empty_report(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_nothing_to_read_is_a_failure_not_an_empty_report(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     (tmp_path / "2025-2026" / "LD").mkdir(parents=True)
     output = tmp_path / "survey.md"
 

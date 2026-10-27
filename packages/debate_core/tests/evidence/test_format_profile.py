@@ -99,7 +99,9 @@ def test_headings_come_from_the_base_style_profile(unit: StructuralUnit, style_i
         (RunEmphasis.EMPHASIS, "Emphasis"),
     ],
 )
-def test_cite_underline_and_emphasis_come_from_the_base_style_profile(emphasis: RunEmphasis, style_id: str) -> None:
+def test_cite_underline_and_emphasis_come_from_the_base_style_profile(
+    emphasis: RunEmphasis, style_id: str
+) -> None:
     assert resolve().character_style_id(emphasis) == style_id
 
 
@@ -108,7 +110,9 @@ def test_a_unit_the_base_has_no_style_for_is_an_error_not_a_guess() -> None:
     stripped = resolved.style_profile.model_copy(
         update={
             "paragraph_styles": tuple(
-                rule for rule in resolved.style_profile.paragraph_styles if rule.unit is not StructuralUnit.HAT
+                rule
+                for rule in resolved.style_profile.paragraph_styles
+                if rule.unit is not StructuralUnit.HAT
             )
         }
     )
@@ -133,7 +137,10 @@ def test_no_highlighting_and_no_condensing_are_choices_a_profile_can_make() -> N
 @pytest.mark.parametrize(
     ("changes", "owned_key"),
     [
-        ({"paragraph_styles": [{"unit": "TAG", "style_id": "MyTag", "style_name": "My Tag"}]}, "paragraph_styles"),
+        (
+            {"paragraph_styles": [{"unit": "TAG", "style_id": "MyTag", "style_name": "My Tag"}]},
+            "paragraph_styles",
+        ),
         ({"character_styles": []}, "character_styles"),
         ({"highlight_colors": [{"value": "magenta", "reading_color": True}]}, "highlight_colors"),
         ({"cite": {"short_cite_pattern": ".*"}}, "cite"),
@@ -143,7 +150,13 @@ def test_no_highlighting_and_no_condensing_are_choices_a_profile_can_make() -> N
         ({"tag_style": "Heading4"}, "tag_style"),
         ({"underline_style": "StyleUnderline"}, "underline_style"),
         (
-            {"cite_block": {"short_cite_bold": True, "full_cite_half_points": 16, "short_cite_style_id": "Cite"}},
+            {
+                "cite_block": {
+                    "short_cite_bold": True,
+                    "full_cite_half_points": 16,
+                    "short_cite_style_id": "Cite",
+                }
+            },
             "cite_block.short_cite_style_id",
         ),
     ],
@@ -185,7 +198,9 @@ def test_every_reading_colour_is_accepted(color: str) -> None:
 
 
 def test_condensed_text_the_base_would_not_read_as_shrunk_is_refused() -> None:
-    with pytest.raises(FormatProfileError, match="condensed_half_points 18 is text the style profile does not"):
+    with pytest.raises(
+        FormatProfileError, match="condensed_half_points 18 is text the style profile does not"
+    ):
         resolve(condensed_half_points=18)
 
 
@@ -194,7 +209,9 @@ def test_condensed_text_exactly_at_the_shrink_maximum_is_accepted() -> None:
 
 
 def test_a_base_size_the_base_would_read_as_shrunk_is_refused() -> None:
-    with pytest.raises(FormatProfileError, match="evidence_base_half_points 16 is text the style profile reads"):
+    with pytest.raises(
+        FormatProfileError, match="evidence_base_half_points 16 is text the style profile reads"
+    ):
         resolve(evidence_base_half_points=16, condensed_half_points=None)
 
 
@@ -238,7 +255,9 @@ def test_text_that_is_not_yaml_or_not_a_mapping_is_refused() -> None:
 
 
 def test_the_registry_loads_every_profile_in_a_directory_by_name(tmp_path: Path) -> None:
-    directory = write_profiles(tmp_path, alpha={"name": "alpha"}, beta={"name": "beta", "highlight_color": None})
+    directory = write_profiles(
+        tmp_path, alpha={"name": "alpha"}, beta={"name": "beta", "highlight_color": None}
+    )
 
     profiles = load_format_profiles(directory)
 
@@ -257,12 +276,16 @@ def test_a_profile_whose_name_is_not_its_file_name_is_refused(tmp_path: Path) ->
 def test_an_unknown_profile_name_lists_the_ones_there_are(tmp_path: Path) -> None:
     directory = write_profiles(tmp_path, alpha={"name": "alpha"}, beta={"name": "beta"})
 
-    with pytest.raises(FormatProfileError, match="no format profile named 'gamma'; available profiles: alpha, beta"):
+    with pytest.raises(
+        FormatProfileError, match="no format profile named 'gamma'; available profiles: alpha, beta"
+    ):
         load_format_profile("gamma", directory)
 
 
 def test_one_bad_profile_fails_the_whole_directory(tmp_path: Path) -> None:
-    directory = write_profiles(tmp_path, alpha={"name": "alpha"}, beta={"name": "beta", "base_style_profile": "nope"})
+    directory = write_profiles(
+        tmp_path, alpha={"name": "alpha"}, beta={"name": "beta", "base_style_profile": "nope"}
+    )
 
     with pytest.raises(FormatProfileError, match="beta"):
         load_format_profile("alpha", directory)
@@ -324,7 +347,7 @@ def test_every_team_default_value_cites_the_survey_line_it_comes_from() -> None:
         "condensed_half_points",
     }
     for key, value, cited in values:
-        assert cited is not None, f"{key} has no `# team-format-survey.md: \"...\"` comment above it"
+        assert cited is not None, f'{key} has no `# team-format-survey.md: "..."` comment above it'
         assert cited in survey, f"{key} cites a line the survey does not have: {cited}"
         if value.isdigit():
             assert f"{value} half-points" in cited, f"{key}: {value} is not the size its survey line names"
@@ -333,7 +356,10 @@ def test_every_team_default_value_cites_the_survey_line_it_comes_from() -> None:
 
 
 def test_the_citation_check_notices_a_value_its_line_does_not_name() -> None:
-    text = '# team-format-survey.md: "- Underlined evidence size: 22 half-points (11 pt)"\nevidence_base_half_points: 24\n'
+    text = (
+        '# team-format-survey.md: "- Underlined evidence size: 22 half-points (11 pt)"\n'
+        "evidence_base_half_points: 24\n"
+    )
 
     [(key, value, cited)] = _cited_values(text)
 

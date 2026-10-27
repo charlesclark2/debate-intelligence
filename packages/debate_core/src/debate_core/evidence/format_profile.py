@@ -33,7 +33,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, cast
 
 import yaml
 from pydantic import Field, ValidationError, model_validator
@@ -70,15 +70,15 @@ def _names_a_style(key: str) -> bool:
     return key.endswith(("_style", "_styles", "_style_id", "_style_name"))
 
 
-def _owned_keys(document: Mapping[str, Any], path: str = "") -> list[str]:
+def _owned_keys(document: Mapping[Any, Any], path: str = "") -> list[str]:
     """Every key in `document`, at any depth, that the style profile owns or that names a style."""
     owned: list[str] = []
     for key, value in document.items():
         dotted = f"{path}{key}"
-        if isinstance(key, str) and (key in _style_profile_keys() or _names_a_style(key)):
+        if key in _style_profile_keys() or _names_a_style(str(key)):
             owned.append(dotted)
         if isinstance(value, Mapping):
-            owned.extend(_owned_keys(value, f"{dotted}."))
+            owned.extend(_owned_keys(cast("Mapping[Any, Any]", value), f"{dotted}."))
     return owned
 
 
@@ -97,7 +97,9 @@ class CiteBlockLayout(DomainModel):
 class FormatProfile(DomainModel):
     """One card format profile, as `config/format_profiles/<name>.yaml` writes it."""
 
-    name: NonEmptyText = Field(description="The profile's name, e.g. `team-default`; its file is `<name>.yaml`.")
+    name: NonEmptyText = Field(
+        description="The profile's name, e.g. `team-default`; its file is `<name>.yaml`."
+    )
     description: NonEmptyText = Field(description="What the profile is for, for a reader choosing one.")
     base_style_profile: NonEmptyText = Field(
         description="The shared style profile (`v1-e31-t02`) every heading, cite and run style comes from."
@@ -115,15 +117,17 @@ class FormatProfile(DomainModel):
     @model_validator(mode="before")
     @classmethod
     def _refuse_style_definitions(cls, data: Any) -> Any:
-        if isinstance(data, Mapping):
-            owned = _owned_keys(data)
-            if owned:
-                raise ValueError(
-                    f"a format profile never defines a style: {', '.join(owned)} belongs to the base style "
-                    f"profile ({data.get('base_style_profile', 'its base style profile')}), which owns every "
-                    "heading, cite, underline, emphasis and highlight style"
-                )
-        return data
+        if not isinstance(data, Mapping):
+            return data
+        document = cast("Mapping[Any, Any]", data)
+        owned = _owned_keys(document)
+        if owned:
+            raise ValueError(
+                f"a format profile never defines a style: {', '.join(owned)} belongs to the base style "
+                f"profile ({document.get('base_style_profile', 'its base style profile')}), which owns every "
+                "heading, cite, underline, emphasis and highlight style"
+            )
+        return document
 
 
 @dataclass(frozen=True)
@@ -146,7 +150,9 @@ class ResolvedFormatProfile:
         for rule in self.style_profile.paragraph_styles:
             if rule.unit is unit:
                 return rule.style_id
-        raise FormatProfileError(f"style profile {self.style_profile.name} has no paragraph style for {unit.value}")
+        raise FormatProfileError(
+            f"style profile {self.style_profile.name} has no paragraph style for {unit.value}"
+        )
 
     def character_style_id(self, emphasis: RunEmphasis) -> str:
         """The base profile's character style for `emphasis`: `Style13ptBold` for a cite."""
@@ -190,7 +196,9 @@ def resolve_format_profile(
                 f"{style_profile.name} ({reading})"
             )
     if problems:
-        raise FormatProfileError(f"format profile {profile.name} disagrees with its style profile: " + "; ".join(problems))
+        raise FormatProfileError(
+            f"format profile {profile.name} disagrees with its style profile: " + "; ".join(problems)
+        )
     return ResolvedFormatProfile(profile=profile, style_profile=style_profile)
 
 
@@ -218,7 +226,9 @@ def load_format_profiles(
     for path in sorted(directory.glob("*.yaml")):
         profile = load_format_profile_from_text(path.read_text(encoding="utf-8"), source=path.name)
         if profile.name != path.stem:
-            raise FormatProfileError(f"format profile {path.name} is named {profile.name!r}; the file must be {profile.name}.yaml")
+            raise FormatProfileError(
+                f"format profile {path.name} is named {profile.name!r}; the file must be {profile.name}.yaml"
+            )
         profiles[profile.name] = resolve_format_profile(profile, style_profiles=style_profiles)
     return profiles
 

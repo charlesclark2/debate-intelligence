@@ -201,9 +201,41 @@ None for this task. The runbook's blocks are for the next hand prod publish and 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-27
 
 **Notes:**
+
+The restore now brings exactly the sources its manifests name, checked byte for byte, and never
+writes outside the copy. The IAM reading turned up a real edge, which is now built and tested.
+1. **ac1 passes.** Red against a refuse-nothing skeleton: 18 failed, each by assertion or by the
+   missing refusal, and the first, faulty skeleton was discarded honestly. Green: 41 CLI and smoke
+   tests and 22 core tests.
+2. **Mutants: 22 of 22, the PM's four among them, plus 2b.** The inode check that 2b prompted is
+   the right addition, since a content comparison can't see a rename over equal bytes.
+3. **The 403 finding is accepted as built.** A refused read counts as missing only when a one-key
+   listing shows nothing, and a refusal of a key that exists stays a refusal. Both are tested. It is
+   the same edge `v1-e40-t09`'s dry run watches for under the run role.
+4. **Deviations 1 to 3 accepted.**
+   * Suppressed sources and held-only digests are never fetched, present or not. That is the removal's
+     intent, and the publisher holds them back anyway.
+   * `--snapshot` without `--caselist` selects that week across every caselist.
+   * The room check after the restore is covered by the runbook's `df` block.
+5. **Decisions accepted:**
+   * the 1 GiB margin;
+   * a missing source not stopping the count, and any other failure stopping new fetches;
+   * every path checked to be inside the copy;
+   * the runbook publishing raw sources and manifests only, with `caselist status` left out of the
+     success check for the reason given.
+6. **Prod's parsed store** is not published from the copy in this step, so prod's parsed store and
+   index stay at their last hand publish until `v1-e40-t16`. The PM amends `v1-e40-t16` to cover a
+   new week's parsed publish to prod as well as the re-parse. That matters only at the pilot's
+   promotion, since the students are on dev.
+7. **The affected set** (191 files, widened by `container.py`) is left to the PR's `ci` under
+   agreement 10. Three of its four parts passed within the line (551, 129 and 1,155), and the static
+   checks are clean.
+
+No re-review is needed. The Goal is `Succeeded`, and the PR merges in full. It carries no Terraform
+and changes nothing the weekly run calls, so it may merge before Thursday's image.

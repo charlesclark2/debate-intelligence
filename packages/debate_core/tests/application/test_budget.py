@@ -692,16 +692,22 @@ async def test_build_model_router_holds_a_real_router_to_the_settings_run_budget
     assert raised.value.ceiling_usd == pytest.approx(0.010263)
 
 
-async def test_the_test_profile_s_zero_daily_budget_refuses_a_live_call_to_an_unpriced_model(
+async def test_the_test_profile_s_zero_daily_budget_refuses_a_live_call_at_the_committed_prices(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The committed pricing file prices nothing yet, and the test profile's daily limit is $0."""
+    """The committed pricing file, and the test profile's daily limit of $0.
+
+    The example routing file sends high_volume to Haiku with 2048 max_tokens: a ceiling of 23 bytes at
+    $0.0001/1K ($0.0000023) plus 2048 tokens at $0.0005/1K ($0.001024), $0.0010263, over $0.
+    """
     settings = bedrock_settings(tmp_path, monkeypatch)
     delegate = MeteredRouter([(VALID, 1, 1)])
 
     assert settings.models.budget_usd_daily == 0.0
-    with pytest.raises(UnpricedModelError, match="anthropic.claude-haiku-5-5"):
+    with pytest.raises(BudgetExceededError) as raised:
         await factory_router(settings, delegate, "live", tmp_path, None).generate_structured(
             TaskClass.HIGH_VOLUME, WARMING, ContractPassage
         )
     assert delegate.calls == []
+    assert (raised.value.limit_name, raised.value.model_id) == ("per-day", "anthropic.claude-haiku-5-5")
+    assert raised.value.ceiling_usd == pytest.approx(0.0010263)

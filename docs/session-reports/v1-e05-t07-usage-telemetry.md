@@ -214,8 +214,23 @@ are the results shown.
   have limits from the moment this merges, and every model is unpriced until the PM's price batch.
   So **every record or live model call in dev and prod is refused** with `UnpricedModelError`
   naming the model until the prices are committed. Replay and the fake router are unaffected.
-  `test_the_test_profile_s_zero_daily_budget_refuses_a_live_call_to_an_unpriced_model` pins this.
   I built no bypass.
+  * **Prices committed (PM addition, 2026-10-26).** The operator read the AWS Bedrock pricing page
+    (us-east-1, on-demand) on 2026-10-26, and `config/model_pricing.yaml` now holds the PM's
+    values, each with `as_of: 2026-10-26` and `source: https://aws.amazon.com/bedrock/pricing/`.
+    So the gap above closes with this branch. Calls in dev and prod are now held to their daily
+    limits at those prices, rather than refused as unpriced.
+  * The tests that pinned "every price unset" now pin "every price set and well-formed":
+    * `test_pricing_every_committed_price_is_set_and_well_formed` checks the PM's table, written
+      by hand;
+    * `test_pricing_the_committed_prices_price_each_kind_of_call` checks one hand-worked cost per
+      kind of call;
+    * `test_the_test_profile_s_zero_daily_budget_refuses_a_live_call_at_the_committed_prices` is
+      now a per-day `BudgetExceededError` with a $0.0010263 ceiling.
+  * Both pins fail when one price is changed (Haiku output 0.0005 → 0.005: 2 failed), and the
+    file was restored byte for byte.
+  * Commands run: `test_usage.py`, `test_factory.py`, `test_budget.py`,
+    `test_prompt_registry_wiring.py` and `test_aws_extra.py` → 99 passed; ruff and pyright clean.
 * **What a record holds**: `run_id, prompt_id, prompt_version, model_id, attempt, input_tokens,
   output_tokens, latency_ms, estimated_cost_usd, recorded_at`, and nothing else.
   * A repair is recorded as what was sent: `model.repair`, attempt 2. `max_repairs` is exactly 1,
@@ -236,7 +251,10 @@ are the results shown.
     adapter adds and the wrapper never sees. It also assumes `max_tokens` bounds every output token
     billed.
   * Embedding: the texts' bytes, a full bound.
-  * Rerank: its search units, **leaving out** Cohere's splitting of long documents.
+  * Rerank: its search units, **leaving out** Cohere's splitting of long documents. Cohere also
+    splits a document over 512 tokens into several, each counted as a document, so a rerank of long
+    documents can bill more search units than ceil(documents / 100). The ceiling leaves that out,
+    because a document's token count is not known before the call (PM note, 2026-10-26).
   * A route with no `max_tokens` cannot be bounded and is refused when a limit is set. No current
     route lacks one.
   * Because the input side is incomplete, a run's last call can overshoot a limit by what was left

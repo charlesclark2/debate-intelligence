@@ -281,6 +281,19 @@ def record(**fields: Any) -> UsageRecord:
 # ---------------------------------------------------------------------------------------------
 
 
+BEDROCK_PRICING_PAGE = "https://aws.amazon.com/bedrock/pricing/"
+
+COMMITTED_PRICES = {
+    # Read by the operator off the AWS Bedrock pricing page (us-east-1, on-demand) on 2026-10-26.
+    "anthropic.claude-haiku-5-5": {"input_usd_per_1k_tokens": 0.0001, "output_usd_per_1k_tokens": 0.0005},
+    "anthropic.claude-sonnet-5-5": {"input_usd_per_1k_tokens": 0.002, "output_usd_per_1k_tokens": 0.01},
+    "anthropic.claude-opus-5-5": {"input_usd_per_1k_tokens": 0.004, "output_usd_per_1k_tokens": 0.02},
+    "amazon.titan-embed-text-v2:0": {"input_usd_per_1k_tokens": 0.00002},
+    "cohere.rerank-v3-5:0": {"usd_per_1k_search_units": 2.0},
+}
+"""The prices the PM committed, written out by hand from the PM's table; every other price is unset."""
+
+
 def test_pricing_file_has_an_entry_for_every_model_the_routing_files_route() -> None:
     routed = {
         route["model_id"]
@@ -297,6 +310,37 @@ def test_pricing_file_has_an_entry_for_every_model_the_routing_files_route() -> 
         "cohere.rerank-v3-5:0",
     }
     assert {model_id for model_id in routed if committed.price_for(model_id) is None} == set()
+
+
+def test_pricing_every_committed_price_is_set_and_well_formed() -> None:
+    """Each routed model has the prices its calls need, the day they were read and where."""
+    committed = ModelPricing.load(COMMITTED_PRICING)
+
+    for model_id, prices in COMMITTED_PRICES.items():
+        entry = committed.price_for(model_id)
+        assert entry is not None, model_id
+        unset = {
+            "input_usd_per_1k_tokens": None,
+            "output_usd_per_1k_tokens": None,
+            "usd_per_1k_search_units": None,
+        }
+        assert entry.model_dump() == unset | prices | {
+            "as_of": date(2026, 10, 26),
+            "source": BEDROCK_PRICING_PAGE,
+        }
+
+
+def test_pricing_the_committed_prices_price_each_kind_of_call() -> None:
+    committed = ModelPricing.load(COMMITTED_PRICING)
+
+    # Haiku: 2000 in at $0.0001/1K = $0.0002, 400 out at $0.0005/1K = $0.0002.
+    assert committed.structured_cost("anthropic.claude-haiku-5-5", 2000, 400) == pytest.approx(0.0004)
+    # Opus: 2000 in at $0.004/1K = $0.008, 400 out at $0.02/1K = $0.008.
+    assert committed.structured_cost("anthropic.claude-opus-5-5", 2000, 400) == pytest.approx(0.016)
+    # Titan: 1500 tokens at $0.00002/1K = $0.00003.
+    assert committed.embedding_cost("amazon.titan-embed-text-v2:0", 1500) == pytest.approx(0.00003)
+    # Cohere: 250 documents are 3 search units at $2.00/1K = $0.006.
+    assert committed.rerank_cost("cohere.rerank-v3-5:0", 250) == pytest.approx(0.006)
 
 
 def test_pricing_cost_of_a_structured_call_is_its_tokens_at_the_per_1k_prices(pricing: ModelPricing) -> None:

@@ -28,7 +28,9 @@ spec:
   priority: 2
   constraints:
     # PM context 2026-10-26: the dry run's counts-only line per kind and its test.
-    packages: [debate_core.arguments, debate_core.application, packages/debate_core/tests, tests/fixtures/landscape, docs/guides, scripts, tests/scripts]
+    # PM ruling 2026-10-26, from the review (Deviation 1): the report values in
+    # debate_core.domain.landscape_report.
+    packages: [debate_core.arguments, debate_core.application, packages/debate_core/tests, tests/fixtures/landscape, docs/guides, scripts, tests/scripts, debate_core.domain]
     forbidden:
       - A school or team code beside a quoted tag (policy 1.13)
       - Network or AWS access in any test

@@ -740,6 +740,32 @@ permission set.
 Keep at most four pushes between applies: the repository keeps the five newest images, and a task
 definition pins one by digest.
 
+**Replacing the digest line.** Step 6's append block stops on a line that is already there, so a new
+image's line replaces the old one with this block, after the push has written
+`/tmp/caselist-run-deploy.txt`. It changes that one line and nothing else, and stops when the file
+holds no digest line or more than one. Then step 6's plan, read by the PM before the apply.
+
+**Operator command** (expected runtime under a second)
+Where: `$WT`, in the shell that ran the push
+```bash
+cd "$WT"
+NEW="$(grep -oE 'caselist_image_digest = "sha256:[0-9a-f]{64}"' /tmp/caselist-run-deploy.txt | tail -1)"
+if [ -z "$NEW" ]; then echo "STOP: no digest line in /tmp/caselist-run-deploy.txt; run the push first"; else python3 -I - infrastructure/envs/dev/owner.auto.tfvars "$NEW" <<'DIGEST'
+import re, sys
+path, new = sys.argv[1], sys.argv[2]
+text = open(path).read()
+found = [line for line in text.splitlines() if re.match(r"^caselist_image_digest\s*=", line)]
+if len(found) != 1:
+    sys.exit("STOP: expected one caselist_image_digest line, found " + str(len(found)))
+open(path, "w").write(re.sub(r"(?m)^caselist_image_digest\s*=.*$", new, text))
+print("replaced: " + found[0] + "  ->  " + new)
+DIGEST
+fi
+grep -cE '^caselist_image_digest += "sha256:[0-9a-f]{64}"$' infrastructure/envs/dev/owner.auto.tfvars
+```
+Success looks like `replaced: caselist_image_digest = "sha256:<old>"  ->  caselist_image_digest =
+"sha256:<new>"`, then `1`. (Added by the PM, 2026-10-26, from `v1-e40-t13`'s review.)
+
 ## The deadline, and stopping a run
 
 The run's command is `timeout --signal=TERM --kill-after=120s 6h debate-research --json caselist

@@ -1,0 +1,72 @@
+# TASK v1-e05-t12-installed-build-carries-model-pricing - An installed build carries config/model_pricing.yaml beside the routing files
+# Epic: E05 Model Router & Structured LLM Contracts | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e05-t12-installed-build-carries-model-pricing
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e05-model-router
+  annotations:
+    debate/title: "An installed build carries config/model_pricing.yaml beside the routing files"
+spec:
+  # Filed by the PM, 2026-10-26, from v1-e05-t07's follow-up, accepted by the PM (2026-10-26).
+  description: >-
+    `scripts/stamp_build.py` bundles the profiles and the routing files, but not
+    `config/model_pricing.yaml` (v1-e05-t07), so an installed build's real model calls would be
+    unpriced and refused under a budget limit. No installed build makes one today, because the
+    model stage needs `prompts/` from a checkout, but the first one that does would fail closed.
+    Bundle the pricing file as the routing files are, resolve it the same way in an installed
+    build, and update the bundle's pins and the smoke check.
+  priority: 3
+  constraints:
+    packages: [scripts, tests/scripts, debate_core.application, debate_core.integrations, packages/debate_core/tests, tests/smoke]
+    forbidden:
+      - A price written in code
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e05-t07-usage-telemetry
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A stamped build holds the pricing file, and an installed build's router prices a
+        call from it, by tests shown failing first; the smoke check covers it.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e05-t12-installed-build-carries-model-pricing-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e05-model-router
+spec:
+  description: >-
+    Bundle the pricing file with the routing files in a stamped build.
+  goalRef:
+    name: v1-e05-t12-installed-build-carries-model-pricing
+  graph:
+    nodes:
+      - id: bundled-pricing
+        kind: Task
+        name: Bundled pricing file
+        description: >-
+          Bundle the pricing file with the routing files in a stamped build.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Stamp build tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, -k, stamp]
+status:
+  phase: Pending

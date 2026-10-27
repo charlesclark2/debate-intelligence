@@ -220,3 +220,46 @@ whatever `AWS_PROFILE` the shell holds.
 
 No re-review is needed. The PM records the plan, the apply and the first call when the operator runs
 them.
+
+## PM record, 2026-10-27
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+The runbook's steps in dev, on 2026-10-27, from the `caselist-credentials-dev` worktree at
+`origin/dev` `8051c77`.
+
+* **Before you start.** Signed in as `AWSReservedSSO_DebateBreakGlassAdmin`. The cutover's step 9
+  output read `true`. `bedrock_invoker_user_names` was added to `owner.auto.tfvars` (count `1`).
+* **Steps 1 and 2.** The plan read `Plan: 3 to add, 0 to change, 0 to destroy.`, with nothing replaced
+  or destroyed and every change under `module.bedrock_access`. The check printed `PLAN OK: 3 to
+  create, nothing else; bedrock:InvokeModel on 14 resources, 9 Claude models through the 3 profiles`.
+  The PM read both before the apply.
+* **Step 3.** `Apply complete! Resources: 3 added, 0 changed, 0 destroyed.`, then
+  `"DebateDevBedrockInvoker"` and `"debate-dev-bedrock"`.
+* **Step 4.** The profile signed in as `AWSReservedSSO_DebateDevBedrockInvoker`. `doctor
+  --evidence-profiles` read `debate-dev-bedrock (models.aws_profile): defined, and signed in as
+  DebateDevBedrockInvoker`.
+* **Step 5.** The Anthropic use-case form was submitted on 2026-10-27, and
+  `get-use-case-for-model-access` reads it as recorded.
+  * Bedrock no longer shows an offer to accept: a first call as `debate-admin` makes the Marketplace
+    subscription. The runbook's step 5 is rewritten in the PM batch of 2026-10-27 (t).
+  * Cohere Rerank 3.5 answered its first call (`application/json`). Titan read `AVAILABLE` throughout.
+  * **Claude Haiku, Sonnet and Opus 5.5 were refused** as "not available for this account". Their
+    applied cross-region tokens-per-minute quotas are all `0.0`, against AWS defaults of 10M, 6M and
+    30M. A quota request refuses any value at or below the default, so a support case was opened on
+    2026-10-27 to restore them.
+  * **Claude Haiku 4.5 and Sonnet 4.6** hold non-zero quotas (5M and 6M) and answered their first
+    calls (`end_turn`), Haiku 4.5 after the form reached it. Dev routes to them until the 5.5 quotas
+    are restored (`v1-e05-t13`).
+* **Step 6, the policy's open question 4.**
+  * The operator read Data protection on 2026-10-27, and the PM read its Data retention and Abuse
+    detection subpages the same day:
+    * model providers receive no prompts or completions;
+    * retention is set per region and defaults to each model's policy, with AWS possibly retaining
+      content for abuse prevention;
+    * a zero-retention mode exists;
+    * the pages do not say whether prompts are used for training.
+  * Invocation logging read `None None None` in us-east-1, us-east-2 and us-west-2. The policy's
+    next version records this, with the coach's decision on zero-retention mode.
+* **Still open, so the Goal stays `InProgress`:** ac5's first call (step 7), after `v1-e05-t13`
+  re-plans the invoker policy for the dev models.

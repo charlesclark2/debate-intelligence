@@ -63,7 +63,9 @@ spec:
     - id: ac3
       description: >-
         The operator's dry run on hspolicy26 shows the Midterms DA's branches or the Economy
-        DA's mechanism as ruled, with counts before and after (operator).
+        DA's mechanism as ruled, with counts before and after (operator). The dry run counts per
+        kind (v1-e32-t25's ruling 3); the per-position view is the session's read-only recount.
+        (PM amendment 2026-10-27.)
 status:
   phase: Succeeded
 ---

@@ -61,7 +61,8 @@ spec:
         This task's own pull request shows its selection in the job summary, and the push
         run after its merge runs the whole selection, read from the run pages (operator).
 status:
-  phase: InProgress
+  # PM record 2026-10-27: ac3 read off the pull request's run and the push run after its merge.
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

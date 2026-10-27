@@ -24,6 +24,10 @@ spec:
     `InvalidModelOutput` and the guard's repair finds its own recorded cassette. A recorded
     invalid answer holds what the model said, as every cassette does, and stays under the
     cassette rules. Built before the first live recording of a structured prompt.
+    (PM amendment 2026-10-27, from the review's Deviation 1.) The recorded refusal also holds
+    the problems the router refused the answer for, and replay raises those rather than
+    validating the output again, so a refusal for a stop reason replays as one and a repair
+    request keeps its key.
   priority: 3
   constraints:
     packages: [debate_core.integrations, packages/debate_core/tests, tests/fixtures]

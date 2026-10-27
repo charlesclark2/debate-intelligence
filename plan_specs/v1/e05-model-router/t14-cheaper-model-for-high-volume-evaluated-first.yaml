@@ -1,0 +1,87 @@
+# TASK v1-e05-t14-cheaper-model-for-high-volume-evaluated-first - A cheaper model for the high-volume route, chosen by the coach-labelled evaluation
+# Epic: E05 Model Router & Structured LLM Contracts | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e05-t14-cheaper-model-for-high-volume-evaluated-first
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e05-model-router
+  annotations:
+    debate/title: "A cheaper model for the high-volume route, chosen by the coach-labelled evaluation"
+spec:
+  # Filed by the PM, 2026-10-27, from the operator's question of 2026-10-27 (why only Haiku and Sonnet).
+  description: >-
+    Every route names a Claude model, and the prompts, the structured-output probes
+    (v1-e05-t08's first call) and the model stage's evaluation were built against Claude.
+    Bedrock serves cheaper families (Mistral, Llama, Gemma, Nova and others) that may classify a
+    card's position well enough for `high_volume`, which carries most calls. Count first,
+    read-only: which serverless Bedrock models in us-east-1 support Converse with a forced tool
+    choice and the strict tool schema the structured-output guard sends, their prices read by
+    the operator off the pricing page, and their applied quotas. Then, for up to three
+    candidates the PM approves, grant them through a dev-only evaluation routing file the
+    invoker module also reads, and run `debate-research landscape evaluate` in record mode
+    against the coach's labels (v1-e32-t21's sample) for each, beside the current `high_volume`
+    model. Report per candidate: the share of counted cards naming the coach's position, the
+    repair rate, refusals, and the cost per card from the usage log. The coach chooses; a
+    routing change follows only by the coach's word, in its own change.
+  priority: 2
+  constraints:
+    packages: [config, infrastructure/modules/bedrock_access, infrastructure/envs, scripts, tests/scripts, packages/debate_core/tests, docs/data, docs/runbooks]
+    forbidden:
+      - Changing a route before the coach chooses
+      - A price written from memory
+      - A real model call in a test
+      - Prompt text changed to suit a candidate in this task
+  context:
+    - kind: TaskRef
+      name: v1-e05-t13-dev-routes-to-callable-claude-models
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Counts first: the candidates that support forced tool choice and strict schemas,
+        with prices and quotas, sent to the PM.
+    - id: ac2
+      description: >-
+        For the approved candidates, the evaluation's scores, repair rate, refusals and cost
+        per card beside the current model, recorded in docs/data as counts only (operator).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e05-t14-cheaper-model-for-high-volume-evaluated-first-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e05-model-router
+spec:
+  description: >-
+    Find which cheaper models can do the structured calls, then measure them on the coach's
+    labels.
+  goalRef:
+    name: v1-e05-t14-cheaper-model-for-high-volume-evaluated-first
+  graph:
+    nodes:
+      - id: cheaper-model-evaluation
+        kind: Task
+        name: Cheaper model evaluation
+        description: >-
+          Find which cheaper models can do the structured calls, then measure them on the
+          coach's labels.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Routing tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/models, -k, routing]
+status:
+  phase: Pending

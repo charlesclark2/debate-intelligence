@@ -23,8 +23,8 @@ Rules:
 * Tests never hit the live network or real models: recorded fixtures and the fake/replay
   ModelRouter only.
 * Never run the whole test suite, in one command or in parts: run the tests for what you change
-  while working, and the affected set once before the report. CI runs everything on the PR
-  (working agreement 10).
+  while working, and the affected set once before the report. CI runs the affected set on a pull
+  request into dev and everything on dev's push run (working agreement 10).
 * Finish by setting the task Goal to `Succeeded`, running `uv run scripts/validate_specs.py`, and
   completing `docs/session-reports/<task-name>.md` (leave its PM review section alone).
   Don't regenerate `ROADMAP.md` or the table in `docs/README.md` in a task: a workflow refreshes

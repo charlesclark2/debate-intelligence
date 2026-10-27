@@ -31,7 +31,9 @@ spec:
     the style profile (v1-e31-t02) rather than separate style code.
   priority: 1
   constraints:
-    packages: [debate_core.evidence, debate_core.application]
+    # PM context 2026-10-27: the banner and omission marker in the profiles if absent, and
+    # validate-dev's LibreOffice step.
+    packages: [debate_core.evidence, debate_core.application, config/format_profiles, debate_core.domain, .github/workflows, packages/debate_core/tests]
     forbidden:
       - Emitting evidence text other than Card.evidence_text (no re-extraction or model text)
       - Rendering an UNVERIFIED card without the banner

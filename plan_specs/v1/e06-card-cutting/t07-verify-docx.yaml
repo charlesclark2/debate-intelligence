@@ -26,6 +26,10 @@ spec:
     flagged MANUAL_EDIT with the differing range. Documents with no manifest (e.g. hand-cut team files)
     report NO_MANIFEST instead of pretending to verify. Boundaries: does not re-fetch sources, does not
     modify the DOCX, and does not verify arbitrary Verbatim files (that is V3 file intelligence).
+    (PM amendment 2026-10-26, from v1-e06-t05's question 4.) Verify also checks each manifest
+    snapshot reference against the stored snapshot record (sha256, extractor version,
+    retrieved_at, canonical URL), with a reason code of its own, for JSON manifests and embedded
+    ones alike.
   priority: 2
   constraints:
     packages: [debate_core.evidence, debate_core.application, debate_cli]
@@ -56,6 +60,10 @@ spec:
       description: >-
         A DOCX with no embedded manifest exits with a distinct code and NO_MANIFEST status; a manifest
         whose snapshot is missing locally reports SNAPSHOT_UNAVAILABLE.
+    - id: ac5
+      description: >-
+        Added by the PM, 2026-10-26. A tampered snapshot reference fails verify with its own
+        reason code, and an untampered one passes, by tests shown failing first.
 status:
   phase: Pending
 ---

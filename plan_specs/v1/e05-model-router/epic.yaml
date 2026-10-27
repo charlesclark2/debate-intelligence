@@ -320,5 +320,42 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e05-t12-installed-build-carries-model-pricing
+    - id: t13
+      kind: Task
+      name: 'Dev routes to Claude models this account can call while the 5.5 quotas are held at zero'
+      description: >-
+        Dev routes to Claude models this account can call while the 5.5 quotas are held at
+        zero.
+      inputs:
+        specRef: plan_specs/v1/e05-model-router/t13-dev-routes-to-callable-claude-models.yaml
+        goalRef: v1-e05-t13-dev-routes-to-callable-claude-models
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e05-t13-dev-routes-to-callable-claude-models reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e05-t13-dev-routes-to-callable-claude-models
+    - id: t14
+      kind: Task
+      name: 'A cheaper model for the high-volume route, chosen by the coach-labelled evaluation'
+      description: >-
+        A cheaper model for the high-volume route, chosen by the coach-labelled evaluation.
+      inputs:
+        specRef: plan_specs/v1/e05-model-router/t14-cheaper-model-for-high-volume-evaluated-first.yaml
+        goalRef: v1-e05-t14-cheaper-model-for-high-volume-evaluated-first
+      dependsOn:
+      - t13
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e05-t14-cheaper-model-for-high-volume-evaluated-first reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e05-t14-cheaper-model-for-high-volume-evaluated-first
 status:
   phase: Pending

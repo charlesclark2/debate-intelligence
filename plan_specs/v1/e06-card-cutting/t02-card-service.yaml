@@ -81,7 +81,7 @@ spec:
         no person, marked so, with its name whole in the short cite; a cleared cite field
         stays cleared on re-resolution; tests shown failing first.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

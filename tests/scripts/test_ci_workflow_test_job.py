@@ -14,7 +14,7 @@ The wait for `ci` on a pull request is the budget in working agreement 1. Two th
   selection. The parts are compared with the unsplit collection of both. The step that writes the
   file is run here too, with a stand-in for the script, to show that a script that cannot run
   leaves the whole selection rather than part of one. Which files the script chooses for which
-  event is `tests/scripts/test_ci_test_selection.py`.
+  event is `tests/scripts/test_ci_workflow_test_selection.py`.
 
 The commands are read out of ci.yml, not restated, so these tests follow the workflow.
 """

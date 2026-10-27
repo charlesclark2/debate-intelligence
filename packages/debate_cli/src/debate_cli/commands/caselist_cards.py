@@ -39,8 +39,8 @@ from typing import Annotated
 
 import typer
 
-from debate_cli.commands.caselist import _snapshot_date  # pyright: ignore[reportPrivateUsage]
 from debate_cli.context import cli_context, command_name
+from debate_cli.options.snapshot_date import parse_snapshot_date
 from debate_cli.output import CliOutput, JsonValue, OutputMode, TableSpec
 from debate_core.application.caselist_card_stats import CaselistCardReport, ClusterSummary, read_parsed_cards
 
@@ -76,7 +76,7 @@ def cards(
     cli = cli_context(ctx)
     if json_output and not cli.output.is_json:
         cli.output = CliOutput(OutputMode.JSON, verbose=cli.output.verbose)
-    as_of = _snapshot_date(snapshot) if snapshot is not None else None
+    as_of = parse_snapshot_date(snapshot) if snapshot is not None else None
     service = cli.services.caselist_card_stats()
     report = asyncio.run(
         service.report(

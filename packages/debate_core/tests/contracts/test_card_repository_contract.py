@@ -16,7 +16,8 @@ from __future__ import annotations
 import pytest
 
 from debate_core.integrations.local import SqliteCardRepository, SqliteDatabase
-from debate_core.testing.contracts import CardRepositoryContract, CardRepositoryFactory
+from debate_core.testing.contracts.harness import CardRepositoryFactory
+from debate_core.testing.contracts.repositories import CardRepositoryContract
 from debate_core.testing.fakes.persistence import InMemoryCardRepository
 
 

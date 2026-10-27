@@ -126,7 +126,7 @@ from typing import Annotated, Any, cast
 import typer
 
 from debate_cli.bucket_lock import cancelled_on_sigterm
-from debate_cli.commands.caselist import event_for_caselist
+from debate_cli.caselist_events import event_for_caselist
 from debate_cli.context import cli_context, command_name
 from debate_cli.exit_codes import ExitCode, exit_code_for_failure_codes
 from debate_cli.output import CommandFailure, JsonValue, TableSpec

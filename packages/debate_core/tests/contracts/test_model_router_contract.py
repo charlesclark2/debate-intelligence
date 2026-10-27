@@ -38,7 +38,7 @@ from debate_core.domain.model_contracts import (
     TaskClass,
 )
 from debate_core.integrations.models import ModelRoute, RoutingPolicy
-from debate_core.testing.contracts import (
+from debate_core.testing.contracts.model_router import (
     EmbeddingAnswer,
     ModelRouterContract,
     ModelRouterFactory,

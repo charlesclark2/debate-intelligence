@@ -272,7 +272,7 @@ always to keep both sides**, and picking one silently deletes another task's wor
 | `uv.lock` | Two tasks added dependencies | Never hand-merge. `git checkout --ours uv.lock && uv lock && git add uv.lock` - take dev's copy and regenerate against the merged `pyproject.toml`, which must be resolved first |
 | `pyproject.toml`, `packages/*/pyproject.toml` | Two tasks added a dependency or an extra | Keep both entries with their comments, alphabetically. A wrong resolution here breaks `uv lock` with a TOML parse error |
 | `**/__init__.py` | Two tasks exported something | Keep every import and every `__all__` entry from both sides, alphabetically. Ruff and pyright catch a missing import; a missing `__all__` entry passes both |
-| `commands/__init__.py`, `container.py`, `test_app.py`, `tests/smoke/README.md` | Two tasks registered a command, a service or a smoke check | Keep both registrations. The three lists must agree: a service in `container.py` is a service in `test_app.py` |
+| `command_registry.py`, `container.py`, `test_app.py`, `tests/smoke/README.md` | Two tasks registered a command, a service or a smoke check | Keep both registrations. The three lists must agree: a service in `container.py` is a service in `test_app.py` |
 
 Two rules learned the hard way:
 

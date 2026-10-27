@@ -18,7 +18,12 @@ fixture error. Nothing else counts: no test ran, every test passed, a usage erro
 error. `test_a_break_no_selected_test_reaches_is_not_counted_as_caught` holds that with a real
 break nothing reaches, so the check still fails when nothing catches a break.
 
-Each break prints its selection's size; run with `-s` to see them. The run takes about a minute,
+v1-e01-t32 narrowed five edges (command registration, the contract suites' re-exports, a conftest
+read fixture by fixture, a path that names only what it denotes, an import-linter-only root
+`pyproject.toml`) and added a break for each: a narrowed edge is done only when a break in the code
+a test uses still selects that test, and it fails.
+
+Each break prints its selection's size; run with `-s` to see them. The run takes about two minutes,
 so it is marked `slow` and is not on the pull-request path: validate-dev's slow tier runs it on
 every dev pre-release, and it runs on request with `uv run pytest -m slow -s -k planted tests/scripts`.
 The tests of :func:`how_caught` itself are fast and run on every pull request.
@@ -93,6 +98,39 @@ PLANTED_BREAKS = [
         '"""Asynchronous job handlers: a thin surface over debate_core."""\n',
         '"""Asynchronous job handlers: a thin surface over debate_core."""\n'
         'raise ImportError("planted break")\n',
+    ),
+    # v1-e01-t32: one for each edge that round narrowed. A test that uses the broken code must still
+    # be selected, and fail.
+    PlantedBreak(
+        "debate_cli: a caselist slug implies the wrong event, outside the commands package",
+        "packages/debate_cli/src/debate_cli/caselist_events.py",
+        '    "hsld": Event.LD,\n',
+        '    "hsld": Event.POLICY,\n',
+    ),
+    PlantedBreak(
+        "debate_core.testing: the contract harness counts every page twice, with no package re-export",
+        f"{CORE}/testing/contracts/harness.py",
+        "        pages += 1\n",
+        "        pages += 2\n",
+    ),
+    PlantedBreak(
+        "debate_core: a local version listing drops its last version, used by a caselist conftest fixture",
+        f"{CORE}/integrations/local/fs_version_store.py",
+        "        return tuple(sorted(found))\n",
+        "        return tuple(sorted(found))[:-1]\n",
+    ),
+    PlantedBreak(
+        # The harvest test reads it as "extraction/news-article.html", a path from no folder of its own.
+        "tests/fixtures: a fixture page's title changes, read by the end of its path",
+        "tests/fixtures/extraction/news-article.html",
+        '<meta property="og:title" content="Scientists say mammoth revival is years away">',
+        '<meta property="og:title" content="Scientists say a planted revival is years away">',
+    ),
+    PlantedBreak(
+        "pyproject.toml: an import-linter contract is renamed, and nothing else changes",
+        "pyproject.toml",
+        'name = "The keychain library stays inside debate_core.integrations.opencaselist"\n',
+        'name = "The keychain library stays inside debate_core.integrations.opencaselist, planted"\n',
     ),
 ]
 

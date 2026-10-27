@@ -60,7 +60,7 @@ from debate_core.integrations.bedrock.router import (
 from debate_core.integrations.models import ModelRoute, RoutingPolicy
 from debate_core.integrations.models.model_mode import ModelMode
 from debate_core.integrations.models.record_replay import RecordReplayModelRouter
-from debate_core.testing.contracts import (
+from debate_core.testing.contracts.model_router import (
     EmbeddingAnswer,
     ModelRouterContract,
     ModelRouterFactory,

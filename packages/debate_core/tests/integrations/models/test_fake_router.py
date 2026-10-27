@@ -30,7 +30,8 @@ from debate_core.integrations.models.fake_router import (
     lexical_overlap_scores,
 )
 from debate_core.integrations.models.fixture_key import fixture_key
-from debate_core.testing.contracts import (
+from debate_core.testing.contracts.model_router import (
+    ContractPassage,
     EmbeddingAnswer,
     ModelRouterContract,
     ModelRouterFactory,
@@ -38,7 +39,6 @@ from debate_core.testing.contracts import (
     RerankAnswer,
     StructuredAnswer,
 )
-from debate_core.testing.contracts.model_router import ContractPassage
 from debate_core.testing.fakes.clock_and_ids import FixedClock
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[5]

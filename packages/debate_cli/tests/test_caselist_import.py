@@ -31,7 +31,7 @@ from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
-from debate_cli.commands.caselist import EVENTS_BY_SLUG_PREFIX, event_for_caselist
+from debate_cli.caselist_events import EVENTS_BY_SLUG_PREFIX, event_for_caselist
 from debate_cli.exit_codes import ExitCode
 from debate_core.application.caselist.manifest import MANIFEST_SCHEMA_VERSION, manifest_key
 from debate_core.domain.caselist import Event

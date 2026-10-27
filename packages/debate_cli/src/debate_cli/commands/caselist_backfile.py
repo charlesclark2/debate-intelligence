@@ -41,10 +41,10 @@ from typing import Annotated, NoReturn
 import typer
 
 from debate_cli.bucket_lock import terminated_on_sigterm
-from debate_cli.commands.caselist import event_for_caselist
-from debate_cli.commands.store import CONFIRM_PROD_FLAG
+from debate_cli.caselist_events import event_for_caselist
 from debate_cli.context import CliContext, cli_context, command_name
 from debate_cli.exit_codes import ExitCode
+from debate_cli.options.bucket_environment import CONFIRM_PROD_FLAG
 from debate_cli.output import CommandFailure, JsonValue, TableSpec
 from debate_core.application.caselist.backfile_import import (
     BackfileImportRefused,

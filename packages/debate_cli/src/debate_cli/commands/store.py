@@ -63,6 +63,7 @@ import typer
 from debate_cli.bucket_lock import run_holding_the_bucket_lock
 from debate_cli.context import CliContext, cli_context, command_name
 from debate_cli.exit_codes import ExitCode, exit_code_for_failure_codes
+from debate_cli.options.bucket_environment import CONFIRM_PROD_FLAG, SYNCABLE_ENVIRONMENTS
 from debate_cli.output import CommandFailure, JsonValue, TableSpec
 from debate_core.application.evidence_sync import (
     SkipKind,
@@ -75,12 +76,6 @@ from debate_core.application.evidence_sync import (
 from debate_core.application.settings import Environment, Settings
 
 __all__ = ["get", "ls", "sync"]
-
-#: The environments that name a real bucket. `test` is deliberately not one of them.
-SYNCABLE_ENVIRONMENTS = (Environment.DEV, Environment.PROD)
-
-#: Confirmation a push to production needs, spelled the way the rest of the CLI spells one.
-CONFIRM_PROD_FLAG = "--confirm-prod"
 
 
 def sync(

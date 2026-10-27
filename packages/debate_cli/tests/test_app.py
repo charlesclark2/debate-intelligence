@@ -24,7 +24,7 @@ from typer.testing import CliRunner, Result
 
 from debate_cli import UNKNOWN_VERSION, __version__, package_version
 from debate_cli.app import create_app, main
-from debate_cli.commands import command_group
+from debate_cli.command_registry import command_group
 from debate_cli.container import ServiceContainer, Settings, SettingsNotConfigured
 from debate_cli.context import cli_context, command_name
 from debate_cli.exit_codes import ExitCode

@@ -29,7 +29,7 @@ from typer.core import TyperGroup
 
 from debate_cli import DISTRIBUTION_NAME
 from debate_cli.build_info import current_build_info, settings_loader
-from debate_cli.commands import register_commands
+from debate_cli.command_registry import register_commands
 from debate_cli.container import ServiceContainer, validating_routing
 from debate_cli.context import CliContext, command_name
 from debate_cli.exit_codes import ExitCode

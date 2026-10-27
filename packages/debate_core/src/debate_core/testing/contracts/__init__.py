@@ -12,7 +12,7 @@ A sixth, :class:`~debate_core.testing.contracts.model_router.ModelRouterContract
 
 Five persistence contract classes, one per port::
 
-    from debate_core.testing.contracts import CardRepositoryContract
+    from debate_core.testing.contracts.repositories import CardRepositoryContract
 
     class TestSqliteCardRepository(CardRepositoryContract):
         @pytest.fixture
@@ -23,64 +23,14 @@ That is the whole opt-in: subclass, override one fixture. `README.md` in this di
 full walkthrough, including what the factory must guarantee and which behaviour the contracts
 deliberately leave to the adapter.
 
+**This file holds only this docstring** (v1-e01-t32). It re-exported every suite, so a test of one
+adapter imported all six, and a change to the model-router contract selected the repository tests.
+Import each name from the module that defines it: `repositories`, `snapshot_store`,
+`evidence_object_store`, `model_router` or `harness`
+(`tests/architecture/test_fakes_reach_only_their_port.py`).
+
 **This package imports pytest**, so it is importable in a test environment and not in a running
 CLI or API. That is why `debate_core.testing` does not re-export it: `from debate_core.testing
 import build_fake_ports` keeps working in production code paths, and only a test ever reaches
 `debate_core.testing.contracts`.
 """
-
-from debate_core.testing.contracts.evidence_object_store import (
-    EvidenceObjectStoreContract,
-    EvidenceObjectStoreFactory,
-)
-from debate_core.testing.contracts.harness import (
-    ASYNC_BACKEND,
-    AdapterContract,
-    ArticleRepositoryFactory,
-    BlobCopyCounter,
-    BlobCorruptor,
-    CardRepositoryFactory,
-    SearchRepositoryFactory,
-    SnapshotStoreFactory,
-    walk_all_pages,
-)
-from debate_core.testing.contracts.model_router import (
-    EmbeddingAnswer,
-    ModelRouterContract,
-    ModelRouterFactory,
-    PlannedAnswer,
-    RerankAnswer,
-    RouteExpectation,
-    StructuredAnswer,
-)
-from debate_core.testing.contracts.repositories import (
-    ArticleRepositoryContract,
-    CardRepositoryContract,
-    SearchRepositoryContract,
-)
-from debate_core.testing.contracts.snapshot_store import SnapshotStoreContract
-
-__all__ = [
-    "StructuredAnswer",
-    "RouteExpectation",
-    "RerankAnswer",
-    "PlannedAnswer",
-    "ModelRouterFactory",
-    "ModelRouterContract",
-    "EmbeddingAnswer",
-    "ASYNC_BACKEND",
-    "AdapterContract",
-    "ArticleRepositoryContract",
-    "ArticleRepositoryFactory",
-    "BlobCopyCounter",
-    "BlobCorruptor",
-    "CardRepositoryContract",
-    "CardRepositoryFactory",
-    "EvidenceObjectStoreContract",
-    "EvidenceObjectStoreFactory",
-    "SearchRepositoryContract",
-    "SearchRepositoryFactory",
-    "SnapshotStoreContract",
-    "SnapshotStoreFactory",
-    "walk_all_pages",
-]

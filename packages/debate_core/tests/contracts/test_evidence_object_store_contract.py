@@ -24,7 +24,10 @@ import pytest
 from debate_core.application.ports.evidence_store import EvidenceObjectStore
 from debate_core.integrations.local import FsEvidenceObjectStore
 from debate_core.integrations.s3 import S3EvidenceObjectStore
-from debate_core.testing.contracts import EvidenceObjectStoreContract, EvidenceObjectStoreFactory
+from debate_core.testing.contracts.evidence_object_store import (
+    EvidenceObjectStoreContract,
+    EvidenceObjectStoreFactory,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
     from mypy_boto3_s3.client import S3Client

@@ -40,10 +40,10 @@ from typing import Annotated, NoReturn
 import typer
 
 from debate_cli.bucket_lock import run_holding_the_bucket_lock
-from debate_cli.commands.caselist import _snapshot_date  # pyright: ignore[reportPrivateUsage]
-from debate_cli.commands.landscape import _config_dir  # pyright: ignore[reportPrivateUsage]
 from debate_cli.context import CliContext, cli_context, command_name
 from debate_cli.exit_codes import ExitCode
+from debate_cli.options.landscape_config import landscape_config_dir
+from debate_cli.options.snapshot_date import parse_snapshot_date
 from debate_cli.output import CliOutput, CommandFailure, OutputMode
 from debate_cli.presenters.files_presenter import (
     Rendered,
@@ -188,7 +188,7 @@ def suggest(
     request = SuggestRequest(
         caselist=caselist, position=position, side=side, snapshot=_day(snapshot), top=top, out=out
     )
-    service = cli.services.file_suggest(config_dir=_config_dir(config_dir))
+    service = cli.services.file_suggest(config_dir=landscape_config_dir(config_dir))
     try:
         result = asyncio.run(service.suggest(request))
     except (SuggestRefused, LandscapeRequestRefused) as refused:
@@ -304,7 +304,7 @@ def _not_this_environment(settings: Settings, env: Environment, *, confirmed: bo
 
 
 def _day(snapshot: str | None) -> date | None:
-    return _snapshot_date(snapshot) if snapshot is not None else None
+    return parse_snapshot_date(snapshot) if snapshot is not None else None
 
 
 def _hint_of(refused: Exception) -> str | None:

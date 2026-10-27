@@ -1617,8 +1617,7 @@ class ServiceContainer:
         """Build the weekly pull: the source, both importers, the publisher and the status check.
 
         `event_for_caselist` is the command's, not this container's: which event a caselist slug
-        debates is a table `debate_cli.commands.caselist` keeps, and a composition root that
-        imported a command module to reach it would have the dependency the wrong way round.
+        debates is a table `debate_cli.caselist_events` keeps for the commands, which pass it in here.
 
         The publisher and the status check are `None` when this environment names no bucket, which
         is what `test` is and what a half-configured installation is. The run then records its

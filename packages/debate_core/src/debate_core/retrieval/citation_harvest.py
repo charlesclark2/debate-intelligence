@@ -7,7 +7,7 @@ nothing. Which candidate becomes the cite, and whether it counts as verified, is
 :class:`~debate_core.application.citation_service.CitationService`'s decision, by a fixed precedence.
 Nothing here is guessed by a model, and nothing is fetched.
 
-Candidates come in source order, JSON-LD, meta tags, OpenGraph, byline, heuristic, and within one
+Candidates come in source order, JSON-LD, meta tags, OpenGraph, byline, retrieval, heuristic, and within one
 source in the order of the lists below. The same value from the same source is listed once.
 
 ## The sources
@@ -39,8 +39,10 @@ source in the order of the lists below. The same value from the same source is l
   `bio`, `about-author`, `about-the-author`, `contributor-bio` or `author-description`, whose
   paragraphs are kept verbatim when they name one of the page's authors in full.
 * **Heuristic** (`heuristic`), never verified: the `<title>` element, which usually carries the
-  site's name too; a date in the URL's path (`/2026/03/14/` or `2026-03-14`, a whole date only); and
-  the retrieved URL itself, canonicalized, as the URL of last resort.
+  site's name too, and a date in the URL's path (`/2026/03/14/` or `2026-03-14`, a whole date only).
+* **Retrieval** (`retrieval`): the retrieved URL itself, canonicalized, as the URL of last resort. It
+  is the platform's own record of where it retrieved the text, not a guess, so it is not a heuristic
+  (`v1-e06-t02`); the citation service verifies it when the platform retrieved the text.
 
 Credentials are read from the bio and from JSON-LD's `jobTitle` and `affiliation` of each author
 (as "Name, job title, affiliation"; authors joined with "; "), and from nothing else: not a job
@@ -90,6 +92,7 @@ _META_TAG: Final = CitationFieldSource.META_TAG
 _OPENGRAPH: Final = CitationFieldSource.OPENGRAPH
 _BYLINE: Final = CitationFieldSource.BYLINE
 _HEURISTIC: Final = CitationFieldSource.HEURISTIC
+_RETRIEVAL: Final = CitationFieldSource.RETRIEVAL
 
 
 @dataclass(frozen=True, slots=True)
@@ -210,7 +213,7 @@ def _with_url_heuristics(
         title=_once((*found.title, *title_element)),
         published_at=_once((*found.published_at, *(stated for stated in path_dates if stated is not None))),
         canonical_url=_once(
-            (*found.canonical_url, Harvested(_canonical(retrieved_url), _HEURISTIC, retrieved_url))
+            (*found.canonical_url, Harvested(_canonical(retrieved_url), _RETRIEVAL, retrieved_url))
         ),
         dois=tuple(dict.fromkeys((*found.dois, *detect_identifiers(retrieved_url).dois))),
     )

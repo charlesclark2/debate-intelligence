@@ -54,6 +54,7 @@ PAGES: Final = {
     "news-article": "news-article",
     "think-tank-report": "think-tank-report",
     "government-press-release": "gov-press-release",
+    "open-access-pdf": "journal-article",
 }
 """Citation case → t04's extraction case, whose hand-written paragraphs are the snapshot's text."""
 

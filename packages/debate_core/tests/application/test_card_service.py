@@ -746,3 +746,52 @@ def test_each_verifier_code_becomes_one_unverified_card_failure(code: ReasonCode
     )
     if code is ReasonCode.CITATION_UNVERIFIED:
         assert failure.fields == card.citation.unverified_fields
+
+
+# =============================================================================================
+# ac5: the cite rules decided here, as they reach a card
+# =============================================================================================
+
+PDF_SELECTION: Final[dict[str, JsonValue]] = {
+    "passages": [{"first_paragraph": 5, "last_paragraph": 5, "start_offset": 82, "end_offset": 216}],
+    "tag": {
+        "text": "Revival programs weaken the urgency of protecting living species",
+        "argument_role": "link",
+        "need_alignment": "direct",
+        "confidence": 0.7,
+    },
+    "rationale": "Paragraph 5 names the moral hazard a revival creates for living populations.",
+    "confidence": 0.7,
+}
+PDF_MARKUP: Final[dict[str, JsonValue]] = {
+    "spans": [
+        {"paragraph": 5, "start_offset": 133, "end_offset": 215, "style": "underline", "purpose": "warrant"},
+        {"paragraph": 5, "start_offset": 162, "end_offset": 215, "style": "highlight", "purpose": "impact"},
+    ],
+    "rationale": "The underline is the hazard; the highlight is its consequence.",
+}
+
+
+async def test_an_open_access_pdf_is_cut_into_a_verified_card_with_its_retrieved_url_verified() -> None:
+    world = scripted_world(PDF_SELECTION, PDF_MARKUP)
+    source = await world.add_page("open-access-pdf")
+
+    result = await world.card_service.cut_card(
+        CutRequest(
+            snapshot_id=source.snapshot.snapshot_id, need="revival creates a moral hazard", owner_id=STUDENT
+        )
+    )
+
+    assert (result.is_verified, result.reasons) == (True, ())
+    assert result.card.evidence_text == (
+        "We ask whether the promise creates a moral hazard: if extinction can be undone, the urgency of "
+        "protecting living populations may fade."
+    )
+    url = result.card.citation.canonical_url
+    assert (url.value, url.source.value, url.verified) == (
+        "https://journal.synthetic-conservation.example/doi/pdf/10.5555/jscs.2026.0012",
+        "retrieval",
+        True,
+    )
+    accessed = result.card.citation.accessed_at
+    assert (accessed.source.value, accessed.verified) == ("retrieval", True)

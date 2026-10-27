@@ -23,8 +23,8 @@ proposal §8, §19): each field is a value some source states, or it is missing.
 ## Which value wins, and what verifies it
 
 Per field, the candidate from the highest source in :data:`SOURCE_PRECEDENCE` wins: Crossref, then
-JSON-LD, meta tags, OpenGraph, byline, heuristic; within one source, the first found. A field with
-no candidate is `missing`.
+JSON-LD, meta tags, OpenGraph, byline, the platform's retrieval record, heuristic; within one source,
+the first found. A field with no candidate is `missing`.
 
 A value is **verified** when its source is an explicit statement (anything but `heuristic`) and the
 platform retrieved the source itself (`PUBLISHER_RETRIEVED`). A heuristic is never verified, and
@@ -36,10 +36,11 @@ formatted cite, so it stays visible.
 `affiliation`, or Crossref's affiliations (ac3). Otherwise the field is missing and the cite carries
 no qualification.
 
-**The accessed date** is the snapshot's `retrieved_at`. No source in the
-:class:`~debate_core.domain.enums.CitationFieldSource` list names the platform's own retrieval
-record, so it is recorded as `heuristic` and unverified, with the timestamp as `raw`; it is not a
-required field, so it never holds a card back (session report, Decisions).
+**The platform's retrieval record** (`retrieval`, `v1-e06-t02`) is the accessed date, the snapshot's
+`retrieved_at` with the timestamp as `raw`, and the URL of last resort: the retrieved URL,
+canonicalized, when the page declares no canonical URL of its own. Like any explicit source it is
+verified exactly when the platform retrieved the text, so an open-access PDF, or a page with no
+canonical link, can verify; under any other provenance it is a record of what the user said.
 
 ## A student's edits (ac5)
 
@@ -109,6 +110,7 @@ SOURCE_PRECEDENCE: Final = (
     CitationFieldSource.META_TAG,
     CitationFieldSource.OPENGRAPH,
     CitationFieldSource.BYLINE,
+    CitationFieldSource.RETRIEVAL,
     CitationFieldSource.HEURISTIC,
 )
 """Which source's value a field takes when several state one, highest first."""
@@ -116,6 +118,7 @@ SOURCE_PRECEDENCE: Final = (
 _RANK: Final = {source: rank for rank, source in enumerate(SOURCE_PRECEDENCE)}
 _CROSSREF: Final = CitationFieldSource.CROSSREF
 _HEURISTIC: Final = CitationFieldSource.HEURISTIC
+_RETRIEVAL: Final = CitationFieldSource.RETRIEVAL
 
 
 class CrossrefOutcome(StrEnum):
@@ -203,8 +206,8 @@ def resolve_citation(
             "canonical_url": _chosen(candidates.canonical_url, verifies),
             "accessed_at": {
                 "value": accessed_at,
-                "source": _HEURISTIC,
-                "verified": False,
+                "source": _RETRIEVAL,
+                "verified": verifies,
                 "raw": accessed_at.isoformat(),
             },
         }

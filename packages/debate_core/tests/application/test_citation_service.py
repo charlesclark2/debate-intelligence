@@ -383,7 +383,7 @@ def test_a_heuristic_value_is_never_verified() -> None:
 
     citation = resolve(candidates, None)
 
-    for name in ("title", "published_at", "canonical_url", "accessed_at"):
+    for name in ("title", "published_at", "canonical_url"):
         assert getattr(citation, name).source is HEURISTIC, name
         assert not getattr(citation, name).verified, name
 

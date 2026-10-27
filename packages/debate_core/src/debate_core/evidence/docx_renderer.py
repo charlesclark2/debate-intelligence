@@ -57,6 +57,9 @@ from xml.sax.saxutils import quoteattr
 import docx
 from docx.document import Document
 from docx.enum.text import WD_COLOR_INDEX
+from docx.opc.constants import CONTENT_TYPE, RELATIONSHIP_TYPE
+from docx.opc.packuri import PackURI
+from docx.opc.part import Part
 from docx.shared import Pt, RGBColor
 from docx.styles.style import CharacterStyle, ParagraphStyle
 from docx.text.paragraph import Paragraph
@@ -77,8 +80,15 @@ from debate_core.evidence.card_rendering import (
     banner_text,
     cite_marks,
 )
+from debate_core.evidence.docx_manifest_part import (
+    MANIFEST_PART_NAME,
+    MANIFEST_PROPERTIES_PART_NAME,
+    EmbeddedManifestError,
+    manifest_part_xml,
+    manifest_properties_xml,
+)
 from debate_core.evidence.format_profile import ResolvedFormatProfile
-from debate_core.evidence.manifest import CardManifest
+from debate_core.evidence.manifest import CardManifest, serialize_manifest
 from debate_core.evidence.run_segmentation import (
     EvidenceRun,
     InterpolationMark,
@@ -170,10 +180,18 @@ def render_cards_docx(
             "the cards to render must be the manifest's cards, in its order: the manifest describes the "
             "document it is embedded in"
         )
+    for item in cards:
+        _check_card_writable(item)
+    manifest_bytes = serialize_manifest(manifest)
+    try:
+        manifest_part = manifest_part_xml(manifest_bytes)
+    except EmbeddedManifestError as error:
+        raise RenderRefused(str(error)) from error
     writer = _CardDocumentWriter(profile)
     writer.write_headings(headings or DocumentHeadings())
     for item in cards:
         writer.write_card(item)
+    writer.embed_manifest(manifest_part, manifest_properties_xml(manifest_bytes))
     return writer.save(manifest.generated_at)
 
 
@@ -240,11 +258,6 @@ class _CardDocumentWriter:
     def write_card(self, item: CardToRender) -> None:
         card = item.card
         layout = self._profile.profile
-        _check_writable(card.tag, f"tag of card {card.card_id}")
-        _check_writable(item.cite.full_cite, f"cite of card {card.card_id}")
-        _check_writable(card.evidence_text, f"evidence of card {card.card_id}")
-        for interpolation in card.interpolations:
-            _check_writable(interpolation.text, f"an interpolation of card {card.card_id}")
 
         self._paragraph(StructuralUnit.TAG).add_run(card.tag)
 
@@ -297,6 +310,19 @@ class _CardDocumentWriter:
 
     # -- the package --------------------------------------------------------------------------
 
+    def embed_manifest(self, part_xml: bytes, properties_xml: bytes) -> None:
+        """Add the manifest as a custom XML part related from the document, with its properties part."""
+        package = self._document.part.package
+        item = Part(PackURI(MANIFEST_PART_NAME), CONTENT_TYPE.XML, part_xml, package)
+        properties = Part(
+            PackURI(MANIFEST_PROPERTIES_PART_NAME),
+            CONTENT_TYPE.OFC_CUSTOM_XML_PROPERTIES,
+            properties_xml,
+            package,
+        )
+        item.relate_to(properties, RELATIONSHIP_TYPE.CUSTOM_XML_PROPS)
+        self._document.part.relate_to(item, RELATIONSHIP_TYPE.CUSTOM_XML)
+
     def save(self, generated_at: datetime) -> bytes:
         moment = generated_at.astimezone(UTC)
         properties = self._document.core_properties
@@ -312,6 +338,15 @@ class _CardDocumentWriter:
 
 def _size(run: Run, half_points: int) -> None:
     run.font.size = Pt(half_points / 2)
+
+
+def _check_card_writable(item: CardToRender) -> None:
+    card = item.card
+    _check_writable(card.tag, f"tag of card {card.card_id}")
+    _check_writable(item.cite.full_cite, f"cite of card {card.card_id}")
+    _check_writable(card.evidence_text, f"evidence of card {card.card_id}")
+    for interpolation in card.interpolations:
+        _check_writable(interpolation.text, f"an interpolation of card {card.card_id}")
 
 
 def _check_writable(text: str, what: str) -> None:

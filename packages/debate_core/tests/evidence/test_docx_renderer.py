@@ -971,3 +971,11 @@ def test_a_manifest_element_with_more_than_text_in_it_is_refused(tmp_path: Path)
 
     with pytest.raises(EmbeddedManifestError, match="holds only the manifest's text"):
         read_embedded_manifest_bytes(path)
+
+
+def test_a_manifest_an_xml_part_cannot_carry_is_refused_before_anything_is_written() -> None:
+    title = FULLY_VERIFIED_CITATION.title.evolve(value="Methane￿ release")
+    card = verified(hand_card(citation=FULLY_VERIFIED_CITATION.evolve(title=title)))
+
+    with pytest.raises(RenderRefused, match=re.escape("the manifest holds U+FFFF")):
+        render(CardToRender(card, HAND_CITE))

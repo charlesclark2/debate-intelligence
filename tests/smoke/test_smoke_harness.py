@@ -60,6 +60,8 @@ def test_an_installed_build_is_described_by_the_variables_validate_dev_sets(tmp_
     )
 
     assert (build.installed, build.commit, build.tag, build.channel) == (True, SHA, "v0.1.0-dev.9", "dev")
+    # It carries its own profiles, so validate-dev's run names none (v1-e01-t41).
+    assert build.profile_directory is None
 
 
 @pytest.mark.parametrize("inside", ["binary", "interpreter"])

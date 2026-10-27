@@ -25,19 +25,14 @@ def test_the_bundled_dev_profile_names_the_weekly_caselists_and_keeps_the_runs_s
 ) -> None:
     """ADR-0020 (5): `caselist pull` with no `--caselist`, in the cloud and on the Mac, reads these.
 
-    A published build reads the profile its wheel carries. This checkout's own console script, run from
-    a scratch directory, reads no profile at all, so there the two settings are their defaults, which
-    `test_settings_environments.py` holds apart from the committed profile.
+    A published build reads the profile its wheel carries, and this checkout's own console script the
+    committed file that wheel's copy is made from (`v1-e01-t41`), so both must report it.
     """
     shown: Any = installed_cli.run("--json", "config", "show").envelope()["data"]
 
-    if installed_cli.build.installed:
-        assert shown["settings"]["caselist.sync_caselists"] == ["hsld26", "hspolicy26", "hspf26"]
-        assert shown["settings"]["caselist.run_state"] == "bucket"
-        assert shown["sources"]["caselist.run_state"].startswith("profile:")
-    else:
-        assert shown["sources"]["caselist.run_state"] == "default"
-        assert shown["settings"]["caselist.run_state"] == "local"
+    assert shown["settings"]["caselist.sync_caselists"] == ["hsld26", "hspolicy26", "hspf26"]
+    assert shown["settings"]["caselist.run_state"] == "bucket"
+    assert shown["sources"]["caselist.run_state"].startswith("profile:")
 
 
 #: Bucket mode and a bucket, named here so that a source checkout's run meets the same guards as a

@@ -4,8 +4,10 @@ Both reach OpenCaselist, so where the data-use policy's E34 gate is not turned o
 off) each refuses before a request is built: the gate covers a backfile as it covers the weekly run.
 The test turns the gate off itself: the bundled dev profile turns it on (`v1-e40-t06`), and the
 installed build runs with `DEBATE_ENV=dev` (PM batch 2026-10-27u, after validate-dev's smoke tier
-read the dev profile's gate as on). The import's own rules, its lock and its publish are checked in
-process against moto and a stand-in site (`packages/debate_cli/tests/bucket_mode/test_backfile_import.py`).
+read the dev profile's gate as on). This checkout's script reads the same profile (`v1-e01-t41`), so
+without that pin the check fails in the pull request's tier too. The import's own rules, its lock
+and its publish are checked in process against moto and a stand-in site
+(`packages/debate_cli/tests/bucket_mode/test_backfile_import.py`).
 """
 
 from __future__ import annotations

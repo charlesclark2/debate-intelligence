@@ -57,7 +57,8 @@
           "source": "meta_tag",
           "verified": false,
           "raw": null
-        }
+        },
+        "authors_are_organizations": false
       },
       "evidence_text": "Wells across the invented Marrow basin ran dry in 2031.",
       "evidence_start_offset": 0,
@@ -135,7 +136,8 @@
           "source": "meta_tag",
           "verified": false,
           "raw": null
-        }
+        },
+        "authors_are_organizations": false
       },
       "evidence_text": "Wells basin ran dry in 2031.",
       "evidence_start_offset": 0,
@@ -225,7 +227,8 @@
           "source": "meta_tag",
           "verified": false,
           "raw": null
-        }
+        },
+        "authors_are_organizations": false
       },
       "evidence_text": "Nobody in the basin has planned for it.",
       "evidence_start_offset": 57,
@@ -303,7 +306,8 @@
           "source": "meta_tag",
           "verified": false,
           "raw": null
-        }
+        },
+        "authors_are_organizations": false
       },
       "evidence_text": "Wells across the invented Marrow basin ran dry in 2031, not 2035.",
       "evidence_start_offset": 0,
@@ -381,7 +385,8 @@
           "source": "meta_tag",
           "verified": false,
           "raw": null
-        }
+        },
+        "authors_are_organizations": false
       },
       "evidence_text": "Reservoirs in the invented Fenn valley held water through 2040.",
       "evidence_start_offset": 0,

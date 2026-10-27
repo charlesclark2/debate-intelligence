@@ -184,6 +184,12 @@
     "accessed_at": {
       "$ref": "#/$defs/CitationField_Annotated_datetime__AfterValidator__",
       "description": "When the platform retrieved the source."
+    },
+    "authors_are_organizations": {
+      "default": false,
+      "description": "True when `authors` names the issuing organizations rather than people: the source named no person, and a typed source named the organization.",
+      "title": "Authors Are Organizations",
+      "type": "boolean"
     }
   },
   "title": "Citation",

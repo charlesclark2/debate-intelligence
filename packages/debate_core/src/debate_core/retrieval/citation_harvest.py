@@ -14,7 +14,8 @@ source in the order of the lists below. The same value from the same source is l
 
 * **JSON-LD** (`json_ld`): the page's article node, the first node typed as an article, report or
   blog post, else the first `WebPage` node. Title from `headline`, then `name`; authors from `author`
-  (people or organizations, by `name`, or plain strings); publication from `isPartOf`, then
+  (people and untyped entries by `name`, or plain strings), and organization authors from an `author`
+  typed `Organization` or one of its subtypes (:data:`ORGANIZATION_TYPES`); publication from `isPartOf`, then
   `publisher`; date from `datePublished`; URL from `url`, then `mainEntityOfPage`; DOIs from
   `identifier` and `sameAs`. The nodes come from :func:`~debate_core.retrieval.json_ld.json_ld_nodes`,
   the walk the access classifier and the HTML extractor share.
@@ -44,8 +45,12 @@ source in the order of the lists below. The same value from the same source is l
   is the platform's own record of where it retrieved the text, not a guess, so it is not a heuristic
   (`v1-e06-t02`); the citation service verifies it when the platform retrieved the text.
 
-Credentials are read from the bio and from JSON-LD's `jobTitle` and `affiliation` of each author
-(as "Name, job title, affiliation"; authors joined with "; "), and from nothing else: not a job
+**Organization authors** are kept apart from people (`v1-e06-t02`): the citation service lets one
+stand as the author only when no source names a person. They come only from a JSON-LD `author` typed
+as an organization; a site name, `og:site_name`, a publisher or a publication is never an author.
+
+Credentials are read from the bio and from JSON-LD's `jobTitle` and `affiliation` of each person
+author (as "Name, job title, affiliation"; authors joined with "; "), and from nothing else: not a job
 title after a byline, not a `description`, not `citation_author_institution` (ac3). Crossref's
 affiliations are the third source; they reach the service through its DOI lookup, not this module.
 
@@ -79,6 +84,7 @@ from debate_core.retrieval.identifiers import detect_identifiers
 from debate_core.retrieval.json_ld import json_ld_nodes, json_ld_types
 
 __all__ = [
+    "ORGANIZATION_TYPES",
     "CitationCandidates",
     "Harvested",
     "StatedDate",
@@ -259,6 +265,7 @@ def harvest_page(raw: bytes, *, content_type: str | None, retrieved_url: str) ->
     byline = page.byline()
     found = CitationCandidates(
         authors=_once((*json_ld.authors, *meta.authors, *byline.authors)),
+        organization_authors=json_ld.organization_authors,
         title=_once((*json_ld.title, *meta.title, *opengraph.title)),
         publication=_once((*json_ld.publication, *meta.publication, *opengraph.publication)),
         published_at=_once((*json_ld.published_at, *meta.published_at, *byline.published_at)),
@@ -412,6 +419,7 @@ class _TreeBuilder(HTMLParser):
 @dataclass(frozen=True, slots=True)
 class _FromOneSource:
     authors: tuple[Harvested[tuple[str, ...]], ...] = ()
+    organization_authors: tuple[Harvested[tuple[str, ...]], ...] = ()
     author_credentials: tuple[Harvested[str], ...] = ()
     title: tuple[Harvested[str], ...] = ()
     publication: tuple[Harvested[str], ...] = ()
@@ -427,6 +435,16 @@ _ARTICLE_TYPES: Final = frozenset(
     }
 )  # fmt: skip
 _WEB_PAGE: Final = "WebPage"
+ORGANIZATION_TYPES: Final = frozenset(
+    {
+        "Organization", "Airline", "Consortium", "Cooperative", "Corporation", "EducationalOrganization",
+        "CollegeOrUniversity", "FundingScheme", "GovernmentOrganization", "LibrarySystem", "LocalBusiness",
+        "MedicalOrganization", "NGO", "NewsMediaOrganization", "OnlineBusiness", "PerformingGroup",
+        "PoliticalParty", "Project", "FundingAgency", "ResearchProject", "ResearchOrganization",
+        "SearchRescueOrganization", "SportsOrganization", "WorkersUnion",
+    }
+)  # fmt: skip
+"""schema.org's `Organization` and the subtypes of it a cite's issuing body is typed with."""
 
 _META_TITLE: Final = ("citation_title", "dc.title", "dcterms.title")
 _META_AUTHORS_ONE_PER_TAG: Final = (
@@ -512,10 +530,15 @@ class _Page:
         )
         if node is None:
             return _FromOneSource()
-        authors = _json_ld_names(node.get("author"))
+        stated = _listed(node.get("author"))
+        authors = _json_ld_names([item for item in stated if not _is_organization(item)])
+        organizations = _json_ld_names([item for item in stated if _is_organization(item)])
         return _FromOneSource(
             title=_texts(_JSON_LD, node.get("headline"), node.get("name")),
             authors=(Harvested(authors, _JSON_LD, ", ".join(authors)),) if authors else (),
+            organization_authors=(
+                (Harvested(organizations, _JSON_LD, ", ".join(organizations)),) if organizations else ()
+            ),
             author_credentials=_json_ld_credentials(node.get("author")),
             publication=_texts(_JSON_LD, *_json_ld_first_names(node.get("isPartOf"), node.get("publisher"))),
             published_at=_dates(_JSON_LD, node.get("datePublished")),
@@ -695,10 +718,21 @@ def _json_ld_first_names(*values: object) -> Iterator[str]:
             yield names[0]
 
 
+def _is_organization(author: object) -> bool:
+    """Whether a JSON-LD `author` entry is typed as an organization (and not also as a person)."""
+    mapping = _mapping(author)
+    if mapping is None:
+        return False
+    types = json_ld_types(mapping)
+    return bool(types & ORGANIZATION_TYPES) and "Person" not in types
+
+
 def _json_ld_credentials(authors: object) -> tuple[Harvested[str], ...]:
-    """'Name, job title, affiliation' for each JSON-LD author that states either, joined by '; '."""
+    """'Name, job title, affiliation' for each JSON-LD person author that states either, joined by '; '."""
     stated: list[str] = []
     for item in _listed(authors):
+        if _is_organization(item):
+            continue
         author = _mapping(item)
         name = (
             _as_name(author.get("name", ""))

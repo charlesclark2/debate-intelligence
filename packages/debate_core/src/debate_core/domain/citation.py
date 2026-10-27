@@ -117,6 +117,12 @@ class Citation(DomainModel):
         ),
     )
 
+    @model_validator(mode="after")
+    def _check_organization_authors(self) -> Self:
+        if self.authors_are_organizations and not self.authors.is_present:
+            raise ValueError("a cite with no authors cannot mark them as organizations")
+        return self
+
     @property
     def unverified_fields(self) -> tuple[str, ...]:
         """Names of the required cite fields that are not verified, in cite order.

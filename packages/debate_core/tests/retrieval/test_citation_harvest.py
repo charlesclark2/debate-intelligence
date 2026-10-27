@@ -474,7 +474,8 @@ def test_people_and_organizations_named_together_are_kept_apart() -> None:
 
 def test_a_site_name_or_a_publisher_is_never_an_author() -> None:
     head = '<meta property="og:site_name" content="Synthetic Policy Office">' + json_ld(
-        '"@type": "Report", "publisher": {"@type": "GovernmentOrganization", "name": "Synthetic Policy Office"}'
+        '"@type": "Report",'
+        ' "publisher": {"@type": "GovernmentOrganization", "name": "Synthetic Policy Office"}'
     )
 
     found = harvested(head=head)

@@ -33,8 +33,15 @@ nothing shows the text is that work. The provenance mode travels on the resoluti
 formatted cite, so it stays visible.
 
 **Credentials** are only ever an explicit author bio on the page, JSON-LD's `jobTitle` and
-`affiliation`, or Crossref's affiliations (ac3). Otherwise the field is missing and the cite carries
-no qualification.
+`affiliation`, or Crossref's affiliations (ac3), each of a person author. Otherwise the field is
+missing and the cite carries no qualification.
+
+**An organization as the author** (`v1-e06-t02`). When no source names a person, an organization a
+typed source names as the author stands in: a JSON-LD `author` typed `Organization` or a subtype, or
+a Crossref contributor deposited with a whole name and no family name. The cite marks it
+(`authors_are_organizations`), and its short cite keeps the name whole. Beside a named person an
+organization is not an author, and nothing else ever makes one: not a site name, `og:site_name`, a
+publisher or the publication. With no typed organization, `authors` stays missing.
 
 **The platform's retrieval record** (`retrieval`, `v1-e06-t02`) is the accessed date, the snapshot's
 `retrieved_at` with the timestamp as `raw`, and the URL of last resort: the retrieved URL,
@@ -56,7 +63,8 @@ whole. Saving the card, and re-verifying it, is the caller's step.
 ## Formatting (ac4)
 
 :func:`format_cite` writes the short cite, "Lastname YY" (first author's last name, "et al." for
-more; with no author the publication, then the title; "ND" with no date), and the full cite line:
+more, an organization's name whole; with no author the publication, then the title; "ND" with no
+date), and the full cite line:
 authors with their credentials in parentheses, the title in quotes, the publication, the date as
 the source states its day, the URL, the accessed date, and where the text came from when the
 platform did not retrieve it. Team conventions are format profiles' business (`v1-e06-t03`). The
@@ -194,9 +202,12 @@ def resolve_citation(
     """
     deposit = _deposit_candidates(work)
     verifies = provenance_mode is ProvenanceMode.PUBLISHER_RETRIEVED
+    people = (*deposit.authors, *candidates.authors)
+    organizations = (*deposit.organization_authors, *candidates.organization_authors)
     return Citation.model_validate(
         {
-            "authors": _chosen((*deposit.authors, *candidates.authors), verifies),
+            "authors": _chosen(people or organizations, verifies),
+            "authors_are_organizations": not people and bool(organizations),
             "author_credentials": _chosen(
                 (*deposit.author_credentials, *candidates.author_credentials), verifies
             ),
@@ -231,15 +242,22 @@ def _deposit_candidates(work: DoiWork | None) -> CitationCandidates:
     """What a Crossref work states, as candidates from `crossref`."""
     if work is None:
         return CitationCandidates()
-    names = tuple(name for author in work.authors if (name := author.display_name) is not None)
+    people = tuple(author for author in work.authors if author.family is not None)
+    names = tuple(name for author in people if (name := author.display_name) is not None)
+    organizations = tuple(
+        author.name for author in work.authors if author.family is None and author.name is not None
+    )
     credentials = "; ".join(
         ", ".join((name, *author.affiliations))
-        for author in work.authors
+        for author in people
         if (name := author.display_name) is not None and author.affiliations
     )
     day = next((stated.whole_date for stated in work.dates if stated.whole_date is not None), None)
     return CitationCandidates(
         authors=(Harvested(names, _CROSSREF, ", ".join(names)),) if names else (),
+        organization_authors=(
+            (Harvested(organizations, _CROSSREF, ", ".join(organizations)),) if organizations else ()
+        ),
         author_credentials=(Harvested(credentials, _CROSSREF, credentials),) if credentials else (),
         title=(Harvested(work.title, _CROSSREF, work.title),) if work.title else (),
         publication=(Harvested(work.container_title, _CROSSREF, work.container_title),)
@@ -268,7 +286,8 @@ def keep_student_edits(stored: Citation, derived: Citation) -> tuple[Citation, t
         theirs: CitationField[Any] = getattr(derived, name)
         if mine.is_present and not mine.verified and mine.value != theirs.value:
             kept[name] = mine
-    return derived.evolve(**kept), tuple(kept)
+    marked = {"authors_are_organizations": stored.authors_are_organizations} if "authors" in kept else {}
+    return derived.evolve(**kept, **marked), tuple(kept)
 
 
 # --------------------------------------------------------------------------------------------
@@ -410,7 +429,8 @@ def format_cite(citation: Citation, *, provenance_mode: ProvenanceMode) -> Forma
 def _short_name(citation: Citation) -> str:
     names = citation.authors.value
     if names:
-        return _last_name(names[0]) + (" et al." if len(names) > 1 else "")
+        first = names[0] if citation.authors_are_organizations else _last_name(names[0])
+        return first + (" et al." if len(names) > 1 else "")
     return citation.publication.value or citation.title.value or NO_AUTHOR
 
 

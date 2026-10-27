@@ -57,7 +57,8 @@
           "source": "meta_tag",
           "verified": false,
           "raw": null
-        }
+        },
+        "authors_are_organizations": false
       },
       "evidence_text": "Wells across the invented Marrow basin ran dry in 2031.",
       "evidence_start_offset": 0,
@@ -135,7 +136,8 @@
           "source": "meta_tag",
           "verified": false,
           "raw": null
-        }
+        },
+        "authors_are_organizations": false
       },
       "evidence_text": "Wells basin ran dry in 2031.",
       "evidence_start_offset": 0,
@@ -225,7 +227,8 @@
           "source": "meta_tag",
           "verified": false,
           "raw": null
-        }
+        },
+        "authors_are_organizations": false
       },
       "evidence_text": "Nobody in the basin has planned for it.",
       "evidence_start_offset": 57,

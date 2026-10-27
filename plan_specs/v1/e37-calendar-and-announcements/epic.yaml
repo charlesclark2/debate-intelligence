@@ -263,5 +263,24 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e37-t08-smoke-results-band
+    - id: t09
+      kind: Task
+      name: 'Website changes reach the public site in a day, without waiting for a release'
+      description: >-
+        Website changes reach the public site in a day, without waiting for a release.
+      inputs:
+        specRef: plan_specs/v1/e37-calendar-and-announcements/t09-site-changes-publish-without-a-release.yaml
+        goalRef: v1-e37-t09-site-changes-publish-without-a-release
+      dependsOn:
+      - t02
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e37-t09-site-changes-publish-without-a-release reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e37-t09-site-changes-publish-without-a-release
 status:
   phase: Pending

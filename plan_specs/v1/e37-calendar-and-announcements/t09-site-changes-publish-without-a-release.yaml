@@ -1,0 +1,94 @@
+# TASK v1-e37-t09-site-changes-publish-without-a-release - Website changes reach the public site in a day, without waiting for a release
+# Epic: E37 — Calendar & Announcements (Coach-Editable) | Release: v1.6 (Public team website) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e37-t09-site-changes-publish-without-a-release
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e37-calendar-and-announcements
+  annotations:
+    debate/title: "Website changes reach the public site in a day, without waiting for a release"
+spec:
+  # Filed by the PM, 2026-10-27, from the coach's request of 2026-10-27 (a tournament a week: the schedule and results change weekly).
+  description: >-
+    The public site serves `main`, and `main` moves only at a promotion of all of `dev`
+    (ADR-0013), or by a hotfix. The team now attends about one tournament a week, so the
+    schedule and the results change weekly, and the season-results page (v1-e37-t06) has been on
+    `dev` for days without reaching parents. Give the website its own lane, so a change under
+    `site/` reaches the public site in a day and never waits for the next CLI release. Count
+    first, read-only: what `protect-main` requires of a pull request into `main` today
+    (validate-dev's status among it), what the hotfix path asks, how `back-merge` brings `main`
+    back into `dev`, how long each step takes, and which checks a `site/`-only change needs.
+    Then propose to the PM, before building, one lane, for example: a `site/<what>` branch from
+    `main`, a pull request into `main` that may change nothing outside `site/` (refused
+    otherwise), checked by the site's build, tests, content-policy guard and export checks, then
+    the operator's `scripts/site_deploy.sh` for dev and prod, and the existing back-merge into
+    `dev` the same day. The policy's pre-publication checklist still applies to every student
+    name, and the consent guard still runs. The first use of the lane brings `dev`'s `site/` to
+    `main` once (the results page among it), with Charlie's word. Deploy-on-merge stays with
+    v2-e10-t03's keyless deploy roles; this task needs no AWS credential in CI.
+  priority: 1
+  constraints:
+    packages: [.github/workflows, .github/rulesets, scripts, tests/scripts, site, docs/runbooks, docs/guides, docs/process, docs/adr]
+    forbidden:
+      - A change outside site/ reaching main through the lane
+      - Any AWS credential in a workflow
+      - Skipping the consent guard or the pre-publication checklist
+      - A branch ruleset change applied without the PM reading it first
+  context:
+    - kind: TaskRef
+      name: v1-e37-t02-events-calendar
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Counts first: what main's protection and the hotfix path require today, and a
+        proposed lane, sent to the PM before building.
+    - id: ac2
+      description: >-
+        The lane as ruled: a pull request into main changing anything outside site/ is
+        refused by a check, shown failing first; a site-only one passes the site's checks;
+        the back-merge carries it to dev; documented in the coach's editing guide with every
+        command.
+    - id: ac3
+      description: >-
+        The first use: dev's site/ reaches main and prod through the lane, after Charlie's
+        word, with the results page live (operator).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e37-t09-site-changes-publish-without-a-release-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e37-calendar-and-announcements
+spec:
+  description: >-
+    Count what main requires, propose a site-only lane, then build and use it once.
+  goalRef:
+    name: v1-e37-t09-site-changes-publish-without-a-release
+  graph:
+    nodes:
+      - id: site-lane
+        kind: Task
+        name: Site lane
+        description: >-
+          Count what main requires, propose a site-only lane, then build and use it once.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Workflow tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, -k, workflow]
+status:
+  phase: Pending

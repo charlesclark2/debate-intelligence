@@ -24,7 +24,9 @@ spec:
     as its own section, and every count it carried is under Impact. Taxonomy ids are unchanged.
   priority: 3
   constraints:
-    packages: [debate_core.arguments, packages/debate_core/tests, config/landscape, tests/fixtures/landscape, scripts, tests/scripts]
+    # PM ruling 2026-10-27, Question 2 of the checkpoint: impact cards are picked in the report
+    # service and the roles live in the domain model; the guide's line on chain roles.
+    packages: [debate_core.arguments, packages/debate_core/tests, config/landscape, tests/fixtures/landscape, scripts, tests/scripts, debate_core.application, debate_core.domain, docs/guides]
     forbidden:
       - A taxonomy id renamed or reused
       - Card text, a school or team code in any fixture

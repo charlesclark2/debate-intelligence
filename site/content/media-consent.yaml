@@ -38,6 +38,20 @@ students:
     consentReference: MC-2026-001
     season: '2026-27'
     dateChecked: 2026-10-01
+  # The two students named in the Ronald Reagan results: forms confirmed on file by Charlie on
+  # 2026-10-27, references assigned by him the same day.
+  - publishedName: Daksh Chauhan
+    publishedForm: full-name-and-class-year
+    graduationYear: 2030
+    consentReference: MC-2026-002
+    season: '2026-27'
+    dateChecked: 2026-10-27
+  - publishedName: Marianna Troicki
+    publishedForm: full-name-and-class-year
+    graduationYear: 2030
+    consentReference: MC-2026-003
+    season: '2026-27'
+    dateChecked: 2026-10-27
 # Example of the shape, for when the first entry is added:
 #   - publishedName: Jordan Rivera
 #     publishedForm: full-name-and-class-year

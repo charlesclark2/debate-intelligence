@@ -75,7 +75,8 @@ const ORDINALS = [
 ] as const
 
 /**
- * Every placing the site publishes: a place, a speaker award, or how far the debater advanced.
+ * Every placing the site publishes: a place, a speaker award, how far the debater advanced, or a
+ * state qualifying leg earned at the tournament (policy version 1.2).
  * Each one is a single placing at a single tournament. The list is closed on purpose: a free
  * text field would accept "went 5-1" as readily as "quarterfinalist".
  */
@@ -90,6 +91,9 @@ export const PLACINGS: readonly string[] = [
   'octofinalist',
   'double-octofinalist',
   'triple-octofinalist',
+  // Policy version 1.2, Results and awards 3: a leg toward the State tournament, earned at one
+  // tournament. Never numbered or counted, so there is no "first" or "second" leg here.
+  'state qualifying leg',
 ]
 
 /** What a loss looks like written down (Results and awards 4). */

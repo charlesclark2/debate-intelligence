@@ -263,7 +263,7 @@ One entry per placing. The comment at the top of the file lists every field. In 
 | `end` | With `tournament`: its last day, only for a tournament of more than one day | `2026-11-14` |
 | `event` | `policy`, `lincoln-douglas` or `public-forum` | `lincoln-douglas` |
 | `division` | `varsity`, `junior-varsity` or `novice` | `varsity` |
-| `placing` | One of the placings the site publishes, written in lower case: `first place` to `tenth place`, `top speaker`, `second speaker` to `tenth speaker`, `champion`, `finalist`, `semifinalist`, `quarterfinalist`, `octofinalist`, `double-octofinalist`, `triple-octofinalist` | `quarterfinalist` |
+| `placing` | One of the placings the site publishes, written in lower case: `first place` to `tenth place`, `top speaker`, `second speaker` to `tenth speaker`, `champion`, `finalist`, `semifinalist`, `quarterfinalist`, `octofinalist`, `double-octofinalist`, `triple-octofinalist`, or `state qualifying leg` for a leg toward the State tournament earned there (never "first" or "second": a leg is not numbered or counted, policy version 1.2) | `quarterfinalist` |
 | `students` | Optional. Who placed, exactly as `site/content/media-consent.yaml` writes their name. Leave it out for the team-level form | `[Jordan Rivera]` |
 
 **Update `revised`** at the top of the file to the day you make any change. The page shows it as

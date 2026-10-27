@@ -3,8 +3,8 @@
 
 | | |
 |---|---|
-| Policy version | 1.1 |
-| Status | **Approved**, version 1.1, 2026-09-30. See [Approval](#approval). |
+| Policy version | 1.2 |
+| Status | **Approved**, version 1.2, 2026-10-27. See [Approval](#approval). |
 | Owner | Charlie Clark (product owner and head coach) |
 | Written by | v1-e36-t01-publishing-policy implementation session, 2026-09-20 |
 | Applies to | Everything published on the public Whitefish Bay debate team website at `wfbdebate.org`, in the dev preview and in prod, and every source the site is built from |
@@ -319,6 +319,10 @@ name a child. Both facts are respected here.
    total, no speaker-point average, no bid count, no leaderboard, no "most improved" table, and no
    ranking of team members against one another. A single tournament placing is a result; an
    accumulated record is a profile, and this site does not profile minors.
+   **A state qualifying leg is a result** (version 1.2). Earning a leg toward the Wisconsin State
+   Debate Tournament at a tournament is published like a placing at that tournament: "State
+   qualifying leg". It is never numbered or counted ("first leg", "two of two legs"), and the
+   record that earned it is never given.
 4. **Nothing about losing, by name.** A result naming a student is published only where the
    student placed or advanced. The site does not publish elimination-round losses by name, records
    with losses in them, or a list of who did not break.
@@ -696,7 +700,7 @@ policy without the answer; **open** means the answer is still needed before the 
 
 ## Approval
 
-**Version 1.1 of this policy is approved.** The core pages (`v1-e36-t04`), the first prod deploy
+**Version 1.2 of this policy is approved.** The core pages (`v1-e36-t04`), the first prod deploy
 (`v1-e36-t05`), announcements and the calendar (E37) and the donation page (E38) may proceed, each
 still subject to the [Pre-publication checklist](#pre-publication-checklist). **`v1-e36-t04` may
 include student photographs**, now that the district has confirmed its form covers website
@@ -708,10 +712,11 @@ nothing this policy governs may be published under it.
 
 | Field | Value |
 |---|---|
-| Policy version | 1.1 |
+| Policy version | 1.2 |
 | Approved by | **Charlie Clark** |
 | Role | Product owner and head coach |
-| Approval date | **2026-09-30** for version 1.1; **2026-09-20** for version 1.0 |
+| Approval date | **2026-10-27** for version 1.2; **2026-09-30** for version 1.1; **2026-09-20** for version 1.0 |
+| Changes in version 1.2 | **One rule loosened, with Charlie's approval.** [Results and awards](#results-and-awards) 3: a state qualifying leg earned at a tournament is published as a result of that tournament ("State qualifying leg"), never numbered or counted, and never with the record that earned it. Charlie, 2026-10-27: qualifying legs are a big achievement for students and should be celebrated. Recorded by the PM in the PM batch of 2026-10-27 (w) |
 | Changes in version 1.1 | **A correction, no rule changed.** The address for removal requests (and every coach address on the site) is `charles.clark@wfbschools.com`, Charlie's district address; version 1.0 printed `charles.clark@wfbschools.org`, which is not his address. Approved by Charlie in the `v1-e37-t05-parent-email-signup` session on 2026-09-30 |
 | Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.0, carried into 1.1 unchanged apart from the address, including the district approval recorded from Randee Drew on 2026-09-18 and the [Pre-publication checklist](#pre-publication-checklist) |
 | Open questions resolved at approval | **3** — the district's media-consent form covers website publication and renews annually at the start of each season (Randee Drew, 2026-09-20), which is why consent expires and the start-of-season check exists. **4** — no district pre-launch review is wanted, so `v1-e36-t05` is not gated on one |

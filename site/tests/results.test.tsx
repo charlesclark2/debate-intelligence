@@ -383,6 +383,14 @@ describe('the shape of an entry', () => {
     expect(PLACINGS).toContain('top speaker')
     expect(PLACINGS).toContain('quarterfinalist')
   })
+
+  it('publishes a state qualifying leg, never a numbered or counted one (policy 1.2)', () => {
+    expect(placingProblem('state qualifying leg')).toBeNull()
+    expect(placingProblem('State Qualifying Leg')).toBeNull()
+    for (const counted of ['first state qualifying leg', 'second state qualifying leg', '2 state qualifying legs', 'state qualifying legs']) {
+      expect(placingProblem(counted), counted).not.toBeNull()
+    }
+  })
 })
 
 /* acceptance criterion 1: the page and the home page, rendered with fixture content. */
@@ -561,32 +569,51 @@ describe('the results page holds no copy of its own', () => {
 })
 
 /**
- * The results the site actually ships, written out by hand from the coach's facts: Fort
- * Atkinson, Saturday, October 17, 2026, Varsity Lincoln-Douglas, first place and top speaker.
- * Checked for shape and never for who: the name is in site/content/ and nowhere else.
+ * The results the site actually ships, written out by hand from the coach's facts:
+ * - Fort Atkinson, Saturday, October 17, 2026, Varsity Lincoln-Douglas, first place and top speaker;
+ * - Ronald Reagan High School, Saturday, October 24, 2026, Novice Lincoln-Douglas, third speaker and
+ *   a state qualifying leg (policy version 1.2), each a different student.
+ * Checked for shape and never for who: the names are in site/content/ and nowhere else.
  */
 describe('the results this site ships', () => {
   const shipped = loadResults()
+  const fullNameAndYear = /^\p{L}[\p{L}.'’ -]* \p{L}[\p{L}.'’ -]* \(20\d\d\)$/u
 
   it('is the current season', () => {
     expect(shipped.season).toBe(loadSchedule().season)
     expect(shipped.season).toBe(loadMediaConsent().season)
   })
 
-  it('is the coach’s first result: two placings at Fort Atkinson, in individual form', () => {
+  it('is the coach’s results so far: Ronald Reagan, then Fort Atkinson, newest first', () => {
     expect(shipped.groups.map((group) => [group.tournament.name, group.tournament.start, group.tournament.scheduleId])).toEqual([
+      ['Ronald Reagan High School', '2026-10-24', 'ronald-reagan-2026'],
       ['Fort Atkinson', '2026-10-17', null],
     ])
-    const results = shipped.groups[0]!.results
+  })
+
+  it('has Fort Atkinson’s two placings, one student, in individual form', () => {
+    const results = shipped.groups[1]!.results
     expect(results.map((result) => [result.placing, result.division, result.event])).toEqual([
       ['first place', 'varsity', 'lincoln-douglas'],
       ['top speaker', 'varsity', 'lincoln-douglas'],
     ])
     for (const result of results) {
       expect(result.named).toBe(true)
-      // "Full Name (graduation year)", by shape: one student, a name of two or more words.
-      expect(result.who).toMatch(/^\p{L}[\p{L}.'’ -]* \p{L}[\p{L}.'’ -]* \(20\d\d\)$/u)
+      expect(result.who).toMatch(fullNameAndYear)
     }
     expect(new Set(results.map((result) => result.who)).size).toBe(1)
+  })
+
+  it('has Ronald Reagan’s speaker award and state qualifying leg, two students, in individual form', () => {
+    const results = shipped.groups[0]!.results
+    expect(results.map((result) => [result.placing, result.division, result.event]).sort()).toEqual([
+      ['state qualifying leg', 'novice', 'lincoln-douglas'],
+      ['third speaker', 'novice', 'lincoln-douglas'],
+    ])
+    for (const result of results) {
+      expect(result.named).toBe(true)
+      expect(result.who).toMatch(fullNameAndYear)
+    }
+    expect(new Set(results.map((result) => result.who)).size).toBe(2)
   })
 })

@@ -37,7 +37,9 @@ spec:
     these.
   priority: 2
   constraints:
-    packages: [debate_core.evidence, debate_core.integrations.docx_parser, packages/debate_core/tests, scripts, tests/scripts, tests/evals, docs/data]
+    # PM amendment 2026-10-27, Deviation 6: the version line in the structural fixtures and the
+    # writer's sidecars, and the writer's tests.
+    packages: [debate_core.evidence, debate_core.integrations.docx_parser, packages/debate_core/tests, scripts, tests/scripts, tests/evals, docs/data, debate_core.integrations.docx_file_writer, tests/fixtures]
     forbidden:
       - Any rule change before the PM rules on the tallies
       - Card text, a school, team code, file name or person's name in any fixture, log, report or commit (synthetic values only)
@@ -63,9 +65,12 @@ spec:
         the report.
     - id: ac4
       description: >-
-        `parser_version` is bumped once, and the operator's re-parse (dev, the second run,
-        prod with a sign-in before each caselist, the cluster rebuild) is written out in
-        full.
+        `parser_version` is bumped once, and the operator's dev re-parse is written out in full
+        for bucket mode: a copy restored under the lock, the full parse and publish of every
+        caselist's new version directory before the run's new image is applied, the image, the
+        second run, the cluster comparison and the search function with its index. (PM amendment
+        2026-10-27, rulings Q5 and Deviation 4: prod's re-parse is v1-e40-t16, after
+        v1-e40-t10.)
 status:
   phase: Pending
 ---

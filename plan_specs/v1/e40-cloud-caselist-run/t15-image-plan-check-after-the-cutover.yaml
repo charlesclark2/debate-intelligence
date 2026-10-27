@@ -1,0 +1,73 @@
+# TASK v1-e40-t15-image-plan-check-after-the-cutover - A plan check for a new run image after the cutover, with the schedule left enabled
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t15-image-plan-check-after-the-cutover
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "A plan check for a new run image after the cutover, with the schedule left enabled"
+spec:
+  # Filed by the PM, 2026-10-27, from v1-e31-t31's Deviation 5 and the PM's batch of 2026-10-27 (u).
+  description: >-
+    The cutover runbook's image-plan check expects the run's schedule `DISABLED`, which held
+    only for the first image apply; since the cutover every image apply leaves it `ENABLED`, so
+    the check stops on each. The PM's batch of 2026-10-27 (u) gave `caselist-cloud-run.md`, "A
+    new image, later", a plan block the PM reads by eye. Write the check: `PLAN OK` only for 2
+    to add, 4 to change, 2 to destroy, the login and run task definitions replaced, the two
+    schedules and their roles' policies repointed, no schedule state change and nothing outside
+    the module, tested on synthetic plans as v1-e40-t06's checks are.
+  priority: 3
+  constraints:
+    packages: [ops, tests/scripts, docs/runbooks]
+    forbidden:
+      - A plan with a permission set or account assignment passing
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e40-t06-cutover
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `PLAN OK` for the expected shape and `PLAN STOP` for each wrong one, on synthetic
+        plans, shown failing first; the runbook's block uses it.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t15-image-plan-check-after-the-cutover-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    Check a post-cutover image plan's shape exactly.
+  goalRef:
+    name: v1-e40-t15-image-plan-check-after-the-cutover
+  graph:
+    nodes:
+      - id: image-plan-check
+        kind: Task
+        name: Image plan check
+        description: >-
+          Check a post-cutover image plan's shape exactly.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Ops tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, -k, caselist_run]
+status:
+  phase: Pending

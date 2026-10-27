@@ -63,8 +63,10 @@ spec:
       description: >-
         FormatProfile (Pydantic) names its base style profile (v1-e31-t02) for tag/pocket/hat/block
         headings, cite and underline/emphasis/highlight styles, and defines only cite block layout (short
-        cite bold, full cite size), evidence base size, highlight colour and condensed-text size; team-default,
-        flow and plain profiles validate and resolve against the shared style profile.
+        cite bold, full cite size), evidence base size, highlight colour, condensed-text size, the
+        omission marker and the unverified banner's colour; team-default, flow and plain profiles
+        validate and resolve against the shared style profile. (PM amendment 2026-10-27:
+        `omission_marker` and `unverified_banner_color`, added by v1-e06-t04 as pre-approved.)
     - id: ac4
       description: >-
         Charlie reviews the analysis report against the generated profile values and signs off that

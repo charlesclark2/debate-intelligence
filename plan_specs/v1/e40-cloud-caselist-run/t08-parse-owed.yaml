@@ -26,7 +26,13 @@ spec:
     parse owed parses those snapshots first, even when it imports nothing, and `caselist runs`
     and `caselist status` say a parse is owed. A removal that reaches a snapshot clears its
     entry.
-  priority: 3
+    (PM amendment 2026-10-27, from v1-e31-t31's code check.) A parser version the store has no
+    directory of owes a full parse of every caselist the run follows, openev included, whether
+    or not the run imports into it that week. The run parses what is owed before its index
+    stage, so the first run on a new image builds an index of the new version instead of
+    failing. Today a bump needs the operator's full parse from a restored copy (v1-e31-t31's
+    runbook steps).
+  priority: 2
   constraints:
     packages: [debate_core.application, debate_core.integrations, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, docs/runbooks]
     forbidden:

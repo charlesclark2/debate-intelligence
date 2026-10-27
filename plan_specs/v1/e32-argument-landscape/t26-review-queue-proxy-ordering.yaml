@@ -24,6 +24,11 @@ spec:
     reviewer accepts or overrides. The model is trained and kept under the data directory as
     t21's are, and refused when a removal has reached its table. Nothing is placed by it, and
     the report's counts are unchanged.
+    (PM note 2026-10-27, from v1-e32-t21's coach sample.) The coach's labels put the proxy at 13
+    of 24 right at or above its threshold, 4 of 17 just below and 0 of 6 far below, and 17 of 47
+    overall: its confidence orders well but its guess is often wrong. So the suggestion is shown
+    only at or above the threshold, worded as a suggestion, and the ordering is what this task
+    is for.
   priority: 3
   constraints:
     packages: [debate_core.arguments, debate_core.application, packages/debate_core/tests, scripts, tests/scripts, debate_cli, packages/debate_cli/tests, docs/guides]

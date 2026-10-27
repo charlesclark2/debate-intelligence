@@ -62,18 +62,22 @@ spec:
         steps, and the plan, apply and check commands.
     - id: ac4
       description: >-
-        Operator-run: the dev and prod plans are read by the PM before apply; after the dev
-        apply, t02's probe runs with the new profile and its tables are recorded in t02's
-        report.
+        Operator-run: the dev plan is read by the PM before apply; after the dev apply, t02's
+        probe runs with the new profile and its tables are recorded in t02's report. (PM
+        amendment 2026-10-27: prod's plan and apply move to v1-e05-t17, with the switch back to
+        the 5.5 models, since prod routes only to them and the account's 5.5 quotas are held at
+        zero.)
     # PM ruling 2026-10-22: v1-e05-t02's ac7, moved here.
     - id: ac5
       description: >-
         Operator-run with the new profile, the first real call on each Claude route, recorded in this
         report: which toolChoice types and structured-output options the model accepts, whether a
         non-default temperature is refused, and that each model id and inference profile in the
-        routing files resolves; v1-e05-t02's Stubber tests pin each answer.
+        routing files resolves; v1-e05-t02's Stubber tests pin each answer. (PM amendment
+        2026-10-27: dev's routes as v1-e05-t13 set them. The 5.5 models' answers, refused today as
+        "not available for this account", are v1-e05-t17's.)
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

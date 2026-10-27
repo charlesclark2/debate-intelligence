@@ -743,7 +743,7 @@ definition pins one by digest.
 **Replacing the digest line.** Step 6's append block stops on a line that is already there, so a new
 image's line replaces the old one with this block, after the push has written
 `/tmp/caselist-run-deploy.txt`. It changes that one line and nothing else, and stops when the file
-holds no digest line or more than one. Then step 6's plan, read by the PM before the apply.
+holds no digest line or more than one. Then the plan below, read by the PM before the apply.
 
 **Operator command** (expected runtime under a second)
 Where: `$WT`, in the shell that ran the push
@@ -765,6 +765,45 @@ grep -cE '^caselist_image_digest += "sha256:[0-9a-f]{64}"$' infrastructure/envs/
 ```
 Success looks like `replaced: caselist_image_digest = "sha256:<old>"  ->  caselist_image_digest =
 "sha256:<new>"`, then `1`. (Added by the PM, 2026-10-26, from `v1-e40-t13`'s review.)
+
+**The plan, after the cutover.** Step 6's plan and the cutover runbook's image-plan check were
+written for the first image apply, while the run's schedule was still `DISABLED`; since the cutover
+(2026-10-26) the schedule is `ENABLED` and stays so, so their "stays `DISABLED`" reading no longer
+holds (`v1-e31-t31`'s review). Use this plan instead, until a check of its own is written. It prints
+only resource addresses and counts.
+
+**Operator command** (expected runtime ~2 min)
+Where: `$WT`, in the shell that replaced the digest line
+```bash
+cd "$WT"
+if env | grep -qE '^(TF_VAR_|TF_WORKSPACE=|TF_DATA_DIR=|TF_CLI_ARGS)'; then echo "STOP: a Terraform override is set in this shell"; else AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev init -input=false >/dev/null && AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev plan -input=false -no-color -out=caselist-new-image.tfplan | tee /tmp/caselist-new-image-plan.txt | tail -3; fi
+grep -E '^Plan:|must be replaced|will be destroyed' /tmp/caselist-new-image-plan.txt
+grep -E '^  # ' /tmp/caselist-new-image-plan.txt | grep -v 'module.caselist_run' | head
+grep -cE 'aws_ssoadmin|aws_identitystore' /tmp/caselist-new-image-plan.txt
+grep -E '^ +[~+-] state ' /tmp/caselist-new-image-plan.txt
+```
+
+**What to read, and what stops you.** Send the PM every line the block printed; apply only after the
+PM's word.
+
+* `Plan: 2 to add, 4 to change, 2 to destroy.`, with exactly two `must be replaced` lines, the login
+  and run task definitions, and the same two as `will be destroyed`.
+* Nothing from the third command: every change is inside `module.caselist_run`.
+* `0` from the fourth: no permission set, account assignment or Identity Center change.
+* Nothing from the fifth: no schedule's `state` changes, so the run's stays `ENABLED`.
+
+Any other count or line stops the apply until the PM has read it.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`, after the PM's word, on any day but Wednesday
+```bash
+cd "$WT"
+if [ "$(date +%A)" = "Wednesday" ]; then echo "STOP: it is Wednesday, the run's day; apply on another day"; else AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev apply -input=false caselist-new-image.tfplan; fi
+AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output caselist_run_schedule_state
+```
+Success looks like `Apply complete! Resources: 2 added, 4 changed, 2 destroyed.`, then `"ENABLED"`.
+One `-login-task-changed` email is expected. (Added by the PM, 2026-10-27, from `v1-e31-t31`'s
+review; the PM reads every plan before its apply.)
 
 ## The deadline, and stopping a run
 

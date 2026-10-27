@@ -1,0 +1,73 @@
+# TASK v1-e01-t40-planted-break-nearest-ordering - The planted-break check runs the tests nearest a break by what reads it, not by path
+# Epic: E01 Repository & Delivery Foundation | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t40-planted-break-nearest-ordering
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: "The planted-break check runs the tests nearest a break by what reads it, not by path"
+spec:
+  # Filed by the PM, 2026-10-27, from v1-e01-t32's follow-up work (the planted-break harness).
+  description: >-
+    The planted-break check runs a break's ten nearest selected tests, sorted by path within a
+    chain length. For a data file many tests name at one hop, the ten are the alphabetically
+    first: seven slow `bucket_mode/` files can run while the test that reads the file never
+    does, which is why t32's first fixture break hung. Prefer tests that read the changed path
+    by a path over those that name it by a word, then the fastest by the last recorded
+    durations, so each break runs the tests most likely to catch it, quickly. Every current
+    break is still caught, and the exit-code break finishes under two minutes.
+  priority: 3
+  constraints:
+    packages: [tests/scripts, scripts]
+    forbidden:
+      - A planted break dropped or weakened
+  context:
+    - kind: TaskRef
+      name: v1-e01-t32-test-selection-reach-round-three
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Every planted break is still caught, the unreached one still is not, and each
+        finishes under two minutes, by the harness's own run (operator if the whole set
+        passes two minutes).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t40-planted-break-nearest-ordering-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Order a break's nearest tests by what reads the change and by duration.
+  goalRef:
+    name: v1-e01-t40-planted-break-nearest-ordering
+  graph:
+    nodes:
+      - id: nearest-ordering
+        kind: Task
+        name: Nearest-test ordering
+        description: >-
+          Order a break's nearest tests by what reads the change and by duration.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Selection tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, -k, affected]
+status:
+  phase: Pending

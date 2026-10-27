@@ -1,0 +1,78 @@
+# TASK v1-e01-t41-pr-smoke-reads-the-bundled-profiles - The pull request's smoke tier reads the bundled profiles, as the installed build does
+# Epic: E01 Repository & Delivery Foundation | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t41-pr-smoke-reads-the-bundled-profiles
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: "The pull request's smoke tier reads the bundled profiles, as the installed build does"
+spec:
+  # Filed by the PM, 2026-10-27, from validate-dev's smoke failures of 2026-10-26 and 2026-10-27, read by the PM.
+  description: >-
+    validate-dev failed three runs in a row on `test_caselist_backfile.py`: the installed build
+    reads `config/profiles/dev.toml`, where v1-e40-t06 turned the API gate on, but the pull
+    request's smoke tier runs this checkout's console script from a temporary directory, where
+    the settings fall back to their built-in values, so the premise held in `ci` and broke only
+    after merge. The PM's batch of 2026-10-27 (u) pinned the gate in that test. Make the
+    checkout's smoke build read the bundled profiles exactly as the installed build does, so a
+    profile change that breaks a smoke check fails in its own pull request. Count first: which
+    smoke checks change outcome when the profiles are read, and fix each one's premise.
+  priority: 2
+  constraints:
+    packages: [tests/smoke, packages/debate_core/tests, scripts, tests/scripts]
+    forbidden:
+      - A smoke check deleted or skipped to pass
+      - Network access in a smoke check not marked live
+  context:
+    - kind: TaskRef
+      name: v1-e01-t21-installed-smoke-stand-ins
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Counts first: the smoke checks whose outcome changes when the profiles are read, in
+        the report.
+    - id: ac2
+      description: >-
+        The checkout's smoke build reads the bundled profiles, shown by a test that reverts
+        the 2026-10-27 pin and fails; every smoke check passes.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t41-pr-smoke-reads-the-bundled-profiles-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Make the pull request's smoke build read the profiles the installed build reads.
+  goalRef:
+    name: v1-e01-t41-pr-smoke-reads-the-bundled-profiles
+  graph:
+    nodes:
+      - id: smoke-profiles
+        kind: Task
+        name: Smoke reads the profiles
+        description: >-
+          Make the pull request's smoke build read the profiles the installed build reads.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Smoke tier passes
+            command: uv
+            args: [run, pytest, tests/smoke, -m, not live]
+status:
+  phase: Pending

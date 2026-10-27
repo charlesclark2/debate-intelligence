@@ -323,3 +323,33 @@ plan check of its own for the update.
 
 No re-review is needed. The PR merges `--partial`, phase `InProgress`, until ac2's plan, apply and
 first call. The PM reads the plan before the apply.
+
+## PM record, 2026-10-27
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+ac2, from the `caselist-credentials-dev` worktree at `origin/dev` `7d66965`, on 2026-10-27:
+
+* **Follow-up 2, the profiles' regions:** both inference profiles route only to us-east-1,
+  us-east-2 and us-west-2.
+* **Step 1, the plan:** `Plan: 0 to add, 1 to change, 0 to destroy.`, the invoker set's inline
+  policy updated in place and nothing else. The PM read it before the apply.
+* **Step 2, the check:** `PLAN OK: 1 to update … 22 resources, 15 Claude models through the 5
+  profiles; 8 added, none removed`.
+* **Step 3, the apply:** `Apply complete! Resources: 0 added, 1 changed, 0 destroyed.`, then
+  `"DebateDevBedrockInvoker"` and `"debate-dev-bedrock"`.
+* **Step 7, the first call** (the runbook's `first_call` probe over both routing files):
+  * **Haiku 4.5** (`us.anthropic.claude-haiku-4-5-20251001-v1:0`) and **Sonnet 4.6**
+    (`us.anthropic.claude-sonnet-4-6`): the adapter's own call, `toolChoice any`, `toolChoice tool`,
+    `temperature 0.5`, structured output and the strict tool were all accepted. `effort low` was
+    refused on both: `ValidationException`, "This model doesn't support the effort field".
+  * **Titan** embeddings answered with 1,024 dimensions, and **Cohere Rerank 3.5** answered.
+  * **Haiku, Sonnet and Opus 5.5** were refused as "not available for this account"
+    (`AccessDeniedException`, the zero quota), so their other probes read `not tried`.
+  * `first call exit=1`, as the runbook says to expect while the 5.5 quotas are held at zero. The
+    summary line: 14 requests accepted and billed, 6,861 input and 484 output tokens; 5 refused.
+    Priced at Sonnet 4.6's rates throughout, that is under 3 cents.
+
+Both dev models answered, so ac2 passes and the Goal is `Succeeded`. The `effort` refusal touches no
+route today, since dev's routes set no effort; `v1-e05-t11` carries it. The switch back to the 5.5
+models is `v1-e05-t17`.

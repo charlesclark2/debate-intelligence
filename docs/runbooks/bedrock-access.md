@@ -1,10 +1,10 @@
-<!-- docs-index: Calling the routed Bedrock models: the BedrockInvoker permission set's plan and apply, its SSO profile, the account's one-time model access, the data-use checks and the first real call -->
+<!-- docs-index: Calling the routed Bedrock models: the BedrockInvoker permission set's plan and apply, its SSO profile, the account's one-time model access, the data-use checks, the first real call and zero-retention mode -->
 # Runbook: calling the routed Bedrock models
 
 How a model call gets a credential: the `Debate<Env>BedrockInvoker` permission set and its account
 assignment (Terraform), the SSO profile `models.aws_profile` names, the account's one-time model
-access (not Terraform), the two data-use checks the policy's open question 4 needs, and the first
-real call on each Claude route. Spec:
+access (not Terraform), the two data-use checks the policy's open question 4 needs, the first
+real call on each Claude route, and the account's zero-retention mode in the three regions. Spec:
 [`v1-e05-t08-bedrock-invoke-access`](../../plan_specs/v1/e05-model-router/t08-bedrock-invoke-access.yaml).
 Module: [`infrastructure/modules/bedrock_access`](../../infrastructure/modules/bedrock_access/README.md).
 Decisions: [ADR-0005](../adr/0005-bedrock-behind-model-router.md),
@@ -447,6 +447,63 @@ whole file either way.
   routing file does not resolve. That is a finding for the routing file's owner.
 * `the AWS profile models.aws_profile names is not defined`: step 4 was not run on this Mac.
 
+## Step 8 — Zero-retention mode, in the three regions
+
+The coach's decision of 2026-10-27: Bedrock's data retention mode is `none` (zero retention) in
+us-east-1, us-east-2 and us-west-2, the three regions a call through the inference profiles can run
+in. The mode is set per region for the whole account, prod's calls included, so it is the account's
+step, done once, as `debate-admin`. It uses the Bedrock control plane's `get-account-data-retention`
+and `put-account-data-retention` (AWS's Data retention page in the Bedrock User Guide, read by the PM
+on 2026-10-27), signed with the admin profile's own credentials, so no API key is made.
+
+**The catch, and why step 7 runs again.** Under `none`, Bedrock refuses a call to any model whose
+allowed modes do not include `none`, and AWS's page says zero-retention eligibility for Claude models
+is managed by Anthropic. The control plane cannot say which modes a model allows, so the mode is set
+and step 7 is run again: a model that needs retention answers with a `ValidationException` naming
+data retention. If any of dev's models does, the mode goes back to what it was, and the PM brings the
+choice to the coach before anything else is set.
+
+**What the account is set to now**, read-only.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, anywhere
+```bash
+aws sso login --sso-session debate
+for region in us-east-1 us-east-2 us-west-2; do printf '%s ' "$region"; aws bedrock get-account-data-retention --profile debate-admin --region "$region" --query mode --output text; done
+```
+Success looks like each region followed by its mode: `inherit` where nothing was ever set. Send the PM
+the three lines, since a refusal later puts each region back to exactly this. `Invalid choice` means
+this AWS CLI is older than the command: update it (`brew upgrade awscli`) and run the block again.
+`AccessDeniedException` means the admin role may not read the setting: stop and send the PM the line.
+
+**Set `none` in the three regions.**
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, anywhere
+```bash
+for region in us-east-1 us-east-2 us-west-2; do printf '%s ' "$region"; aws bedrock put-account-data-retention --profile debate-admin --region "$region" --mode none --query mode --output text; done
+```
+Success looks like each region followed by `none`. Then run step 7's block again, as written, and
+send the PM the whole file.
+
+**Reading step 7 under `none`.** Every row that was accepted before is accepted again, and nothing
+else matters here: dev's two adapter calls, their probes (`effort low` stays refused, as on
+2026-10-27), the embedding and the rerank. The 5.5 models' rows stay refused as "not available for
+this account" while the quota case is open; that is the quota, not the mode. A row refused with a
+`ValidationException` that names data retention is the model needing retention: put the mode back,
+below, and send the PM the file.
+
+**Only if a row names data retention: the mode put back.** Replace `inherit` with what the first block
+printed for each region, if it printed something else.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, anywhere
+```bash
+for region in us-east-1 us-east-2 us-west-2; do printf '%s ' "$region"; aws bedrock put-account-data-retention --profile debate-admin --region "$region" --mode inherit --query mode --output text; done
+```
+Success looks like each region followed by `inherit`. Run step 7 once more to see the rows accepted
+again.
+
 **What the models cost after that.** Every call a command makes in record or live mode is logged to `<data_dir>/usage/YYYY-MM-DD.jsonl`, priced from `config/model_pricing.yaml`, and refused before it is made when it could take the run or the day past `models.budget_usd_per_run` or `models.budget_usd_daily` (an unpriced model is refused whenever a limit is set); `debate-research usage --date YYYY-MM-DD` shows a day's calls, tokens and cost. The probe above calls the adapter directly and is not logged.
 
 ## Prod
@@ -455,7 +512,7 @@ After the release carrying this task is promoted to `main`, from a worktree at `
 prod root's `owner.auto.tfvars` copied from the checkout that last applied prod. Set the variables,
 then run steps 1 to 4 as written: every block reads `$WT` and `$ENVIRONMENT`. Step 1 expects the same
 `Plan: 3 to add, 0 to change, 0 to destroy.`, step 2 the same `PLAN OK`, and step 3 prints
-`"DebateProdBedrockInvoker"` and `"debate-prod-bedrock"`. Steps 5 and 6 are the account's and are not
+`"DebateProdBedrockInvoker"` and `"debate-prod-bedrock"`. Steps 5, 6 and 8 are the account's and are not
 repeated; step 7 is run again only if the PM asks for prod's own answers.
 
 ```bash

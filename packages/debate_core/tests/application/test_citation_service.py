@@ -121,6 +121,7 @@ async def test_every_cite_field_has_the_value_source_and_flag_the_fixture_expect
     assert resolution.doi == expected["doi"]
     assert resolution.crossref.value == expected["crossref"]
     assert resolution.provenance_mode.value == expected["provenance_mode"]
+    assert resolution.citation.authors_are_organizations is expected.get("authors_are_organizations", False)
 
 
 async def test_the_raw_text_each_value_was_read_from_is_kept(world: CitationWorld) -> None:
@@ -436,7 +437,9 @@ async def test_a_snapshot_of_another_article_is_refused(world: CitationWorld) ->
 # --------------------------------------------------------------------------------------------
 
 
-def test_crossref_affiliations_are_credentials_naming_each_author() -> None:
+def test_crossref_affiliations_are_credentials_naming_each_person_author() -> None:
+    """Changed by v1-e06-t02 (ac5): a deposited organization is not an author beside named people,
+    so its affiliation is no author's credential."""
     authors = (
         DoiAuthor(
             given="Rhea", family="Okonkwo-Hale", affiliations=("Dept. of Ecology", "Synthetic University")
@@ -445,13 +448,16 @@ def test_crossref_affiliations_are_credentials_naming_each_author() -> None:
         DoiAuthor(name="Synthetic Consortium", affiliations=("Example Lab",)),
     )
 
-    credentials = resolve(CitationCandidates(), work(authors=authors)).author_credentials
+    citation = resolve(CitationCandidates(), work(authors=authors))
 
+    credentials = citation.author_credentials
     assert (credentials.value, credentials.source, credentials.verified) == (
-        "Rhea Okonkwo-Hale, Dept. of Ecology, Synthetic University; Synthetic Consortium, Example Lab",
+        "Rhea Okonkwo-Hale, Dept. of Ecology, Synthetic University",
         CROSSREF,
         True,
     )
+    assert citation.authors.value == ("Rhea Okonkwo-Hale", "Tomas Lindqvist")
+    assert not citation.authors_are_organizations
 
 
 def test_crossref_credentials_are_preferred_to_a_bio() -> None:
@@ -793,3 +799,86 @@ def test_a_page_canonical_url_outranks_the_retrieval_record() -> None:
     url = resolve(candidates, None).canonical_url
 
     assert (url.value, url.source) == ("https://site.example/canonical", BYLINE)
+
+
+# --------------------------------------------------------------------------------------------
+# v1-e06-t02 ac5: an organization stands in as the author only when no person is named
+# --------------------------------------------------------------------------------------------
+
+ORGANIZATION: Final = Harvested(("Synthetic Policy Office",), JSON_LD, "Synthetic Policy Office")
+
+
+def test_an_organization_stands_in_as_the_author_when_no_person_is_named() -> None:
+    citation = resolve(CitationCandidates(organization_authors=(ORGANIZATION,)), None)
+
+    assert citation.authors == CitationField[tuple[str, ...]](
+        value=("Synthetic Policy Office",), source=JSON_LD, verified=True, raw="Synthetic Policy Office"
+    )
+    assert citation.authors_are_organizations
+
+
+@pytest.mark.parametrize("source", [META_TAG, BYLINE, JSON_LD])
+def test_an_organization_never_stands_in_beside_a_named_person(source: CitationFieldSource) -> None:
+    person = Harvested(("Ana Ruiz",), source, "Ana Ruiz")
+
+    citation = resolve(CitationCandidates(authors=(person,), organization_authors=(ORGANIZATION,)), None)
+
+    assert (citation.authors.value, citation.authors.source) == (("Ana Ruiz",), source)
+    assert not citation.authors_are_organizations
+
+
+def test_a_crossref_author_with_a_name_and_no_family_name_is_an_organization() -> None:
+    deposit = work(authors=(DoiAuthor(name="Synthetic Consortium", affiliations=("Example Lab",)),))
+
+    citation = resolve(CitationCandidates(organization_authors=(ORGANIZATION,)), deposit)
+
+    assert (citation.authors.value, citation.authors.source) == (("Synthetic Consortium",), CROSSREF)
+    assert citation.authors_are_organizations
+    assert citation.author_credentials.value is None
+
+
+def test_a_crossref_person_outranks_a_page_organization_and_a_page_person_a_crossref_organization() -> None:
+    person_deposit = work(authors=(DoiAuthor(given="Rhea", family="Okonkwo-Hale"),))
+    organization_deposit = work(authors=(DoiAuthor(name="Synthetic Consortium"),))
+    page_person = Harvested(("Ana Ruiz",), BYLINE, "Ana Ruiz")
+
+    by_deposit = resolve(CitationCandidates(organization_authors=(ORGANIZATION,)), person_deposit)
+    by_page = resolve(CitationCandidates(authors=(page_person,)), organization_deposit)
+
+    assert (by_deposit.authors.value, by_deposit.authors_are_organizations) == (("Rhea Okonkwo-Hale",), False)
+    assert (by_page.authors.value, by_page.authors_are_organizations) == (("Ana Ruiz",), False)
+
+
+def test_with_no_typed_organization_and_no_person_the_authors_stay_missing() -> None:
+    citation = resolve(
+        CitationCandidates(publication=(Harvested("Synthetic Policy Office", OPENGRAPH, "x"),)), None
+    )
+
+    assert citation.authors.source is MISSING
+    assert not citation.authors_are_organizations
+
+
+def test_the_short_cite_keeps_an_organization_name_whole() -> None:
+    citation = resolve(
+        CitationCandidates(
+            organization_authors=(
+                Harvested(
+                    ("Federal Office of Synthetic Wildlife",), JSON_LD, "Federal Office of Synthetic Wildlife"
+                ),
+            ),
+            published_at=(Harvested(utc(2026, 6, 2), JSON_LD, "2026-06-02"),),
+        ),
+        None,
+    )
+
+    assert (
+        format_cite(citation, provenance_mode=PUBLISHER).short_cite
+        == "Federal Office of Synthetic Wildlife 26"
+    )
+    person = citation.evolve(authors_are_organizations=False)
+    assert format_cite(person, provenance_mode=PUBLISHER).short_cite == "Wildlife 26"
+
+
+def test_a_cite_cannot_mark_missing_authors_as_organizations() -> None:
+    with pytest.raises(ValueError, match="organization"):
+        Citation(authors_are_organizations=True)

@@ -436,3 +436,54 @@ def test_a_bio_must_name_the_author_as_whole_words() -> None:
     body = '<div class="byline">By AP</div><div class="bio"><p>The APPLE growers are a co-op.</p></div>'
 
     assert harvested(body).author_credentials == ()
+
+
+# --------------------------------------------------------------------------------------------
+# v1-e06-t02 ac5: an organization is an author only where a source types it as one
+# --------------------------------------------------------------------------------------------
+
+
+def json_ld(node: str) -> str:
+    return f'<script type="application/ld+json">{{"@context": "https://schema.org", {node}}}</script>'
+
+
+@pytest.mark.parametrize("kind", ["Organization", "GovernmentOrganization", "NGO", "ResearchOrganization"])
+def test_a_json_ld_author_typed_as_an_organization_is_an_organization_candidate(kind: str) -> None:
+    head = json_ld(f'"@type": "Report", "author": {{"@type": "{kind}", "name": "Synthetic Policy Office"}}')
+
+    found = harvested(head=head)
+
+    assert found.authors == ()
+    assert values(found.organization_authors) == [(("Synthetic Policy Office",), JSON_LD)]
+    assert found.author_credentials == ()
+
+
+def test_people_and_organizations_named_together_are_kept_apart() -> None:
+    head = json_ld(
+        '"@type": "Article", "author": [{"@type": "Person", "name": "Ana Ruiz"},'
+        ' {"@type": "Organization", "name": "Synthetic Policy Office", "affiliation": "Example Lab"},'
+        ' {"name": "Lee Park"}, "Jo Kim"]'
+    )
+
+    found = harvested(head=head)
+
+    assert values(found.authors) == [(("Ana Ruiz", "Lee Park", "Jo Kim"), JSON_LD)]
+    assert values(found.organization_authors) == [(("Synthetic Policy Office",), JSON_LD)]
+    assert found.author_credentials == ()
+
+
+def test_a_site_name_or_a_publisher_is_never_an_author() -> None:
+    head = '<meta property="og:site_name" content="Synthetic Policy Office">' + json_ld(
+        '"@type": "Report", "publisher": {"@type": "GovernmentOrganization", "name": "Synthetic Policy Office"}'
+    )
+
+    found = harvested(head=head)
+
+    assert (found.authors, found.organization_authors) == ((), ())
+
+
+def test_the_organization_report_names_its_agency_as_an_organization_author() -> None:
+    found = harvested_fixture("citation/organization-report.html", GOVERNMENT_URL)
+
+    assert found.authors == ()
+    assert values(found.organization_authors) == [(("Federal Office of Synthetic Wildlife",), JSON_LD)]

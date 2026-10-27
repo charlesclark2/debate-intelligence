@@ -109,6 +109,9 @@ class CitationCandidates:
     """Every value a page and its URL state for each cite field, in source order."""
 
     authors: tuple[Harvested[tuple[str, ...]], ...] = ()
+    """People, and authors no source types: names the cite can take as they stand."""
+    organization_authors: tuple[Harvested[tuple[str, ...]], ...] = ()
+    """Organizations a source types as an author: the cite's author only when no person is named."""
     author_credentials: tuple[Harvested[str], ...] = ()
     title: tuple[Harvested[str], ...] = ()
     publication: tuple[Harvested[str], ...] = ()

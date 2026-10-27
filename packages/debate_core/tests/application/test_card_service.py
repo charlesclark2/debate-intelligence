@@ -795,3 +795,55 @@ async def test_an_open_access_pdf_is_cut_into_a_verified_card_with_its_retrieved
     )
     accessed = result.card.citation.accessed_at
     assert (accessed.source.value, accessed.verified) == ("retrieval", True)
+
+
+GOVERNMENT_SELECTION: Final[dict[str, JsonValue]] = {
+    "passages": [{"first_paragraph": 1, "last_paragraph": 1, "start_offset": 0, "end_offset": None}],
+    "tag": {
+        "text": "The agency is funding habitat protection now",
+        "argument_role": "uniqueness",
+        "need_alignment": "direct",
+        "confidence": 0.7,
+    },
+    "rationale": "Paragraph 1 announces the grants.",
+    "confidence": 0.7,
+}
+GOVERNMENT_MARKUP: Final[dict[str, JsonValue]] = {
+    "spans": [
+        {"paragraph": 1, "start_offset": 0, "end_offset": 20, "style": "underline", "purpose": "claim"}
+    ],
+    "rationale": "The underline is the announcement.",
+}
+
+
+async def test_a_release_its_agency_authored_is_cut_into_a_verified_card_cited_by_the_agency_whole() -> None:
+    world = scripted_world(GOVERNMENT_SELECTION, GOVERNMENT_MARKUP)
+    source = await world.add_page("organization-report")
+
+    result = await world.card_service.cut_card(
+        CutRequest(
+            snapshot_id=source.snapshot.snapshot_id, need="habitat grants are funded", owner_id=STUDENT
+        )
+    )
+
+    assert (result.is_verified, result.reasons) == (True, ())
+    citation = result.card.citation
+    assert (citation.authors.value, citation.authors_are_organizations) == (
+        ("Federal Office of Synthetic Wildlife",),
+        True,
+    )
+
+
+async def test_the_same_release_naming_no_author_is_saved_unverified_naming_authors() -> None:
+    world = scripted_world(GOVERNMENT_SELECTION, GOVERNMENT_MARKUP)
+    source = await world.add_page("government-press-release")
+
+    result = await world.card_service.cut_card(
+        CutRequest(
+            snapshot_id=source.snapshot.snapshot_id, need="habitat grants are funded", owner_id=STUDENT
+        )
+    )
+
+    assert codes(result) == [(CardFailureReason.CITATION_UNVERIFIED, ReasonCode.CITATION_UNVERIFIED)]
+    assert result.reasons[0].fields == ("authors", "title")
+    assert result.card.citation.authors.value is None

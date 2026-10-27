@@ -109,6 +109,13 @@ class Citation(DomainModel):
     accessed_at: CitationField[UtcDatetime] = Field(
         default_factory=CitationField[UtcDatetime], description="When the platform retrieved the source."
     )
+    authors_are_organizations: bool = Field(
+        default=False,
+        description=(
+            "True when `authors` names the issuing organizations rather than people: the source named no "
+            "person, and a typed source named the organization."
+        ),
+    )
 
     @property
     def unverified_fields(self) -> tuple[str, ...]:

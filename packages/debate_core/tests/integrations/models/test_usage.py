@@ -744,8 +744,12 @@ def test_record_ledger_spent_counts_this_run_and_this_day(log: UsageLog) -> None
 
     spent = log.spent("run-a", date(2026, 9, 17), SEPTEMBER)
 
-    # run-a: 0.25 + 0.125 (the unpriced call adds nothing); the day: 0.25 + 0.5 + 0.125.
-    assert (spent.run_usd, spent.day_usd) == (pytest.approx(0.375), pytest.approx(0.875))
+    # run-a: 0.25 + 0.125 (the unpriced call adds nothing); the day, and so far the month: 0.25 + 0.5 + 0.125.
+    assert (spent.run_usd, spent.day_usd, spent.month_usd) == (
+        pytest.approx(0.375),
+        pytest.approx(0.875),
+        pytest.approx(0.875),
+    )
 
 
 def test_record_ledger_reads_lines_appended_after_its_last_read(log: UsageLog) -> None:

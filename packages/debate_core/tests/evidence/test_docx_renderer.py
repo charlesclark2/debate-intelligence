@@ -27,7 +27,7 @@ import zipfile
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Final
+from typing import Any, Final
 from xml.etree import ElementTree
 
 import docx
@@ -39,6 +39,8 @@ from tests.fixtures.verification.verification_world import run
 from debate_core.application.export_service import ExportService
 from debate_core.domain import (
     Card,
+    CitationField,
+    CitationFieldSource,
     CardOmission,
     CardSpan,
     Interpolation,
@@ -59,7 +61,7 @@ from debate_core.evidence.format_profile import (
 from debate_core.evidence.manifest import MANIFEST_VERSION, CardManifest, SnapshotReference
 from debate_core.integrations.docx_file_writer.base_template import render_styles_xml
 from debate_core.integrations.docx_parser.parser import DebateDocxParser
-from debate_core.testing.builders import build_card, build_source_snapshot
+from debate_core.testing.builders import DEFAULT_CITATION, build_card, build_source_snapshot
 from debate_core.testing.fakes.clock_and_ids import FixedClock
 
 REPOSITORY: Final = Path(__file__).resolve().parents[4]
@@ -228,6 +230,16 @@ def render(
     )
 
 
+FULLY_VERIFIED_CITATION: Final = DEFAULT_CITATION.evolve(
+    accessed_at=DEFAULT_CITATION.accessed_at.evolve(source=CitationFieldSource.RETRIEVAL, verified=True)
+)
+"""The builder's cite with its accessed date verified too, so a hand-built card's cite has no mark."""
+
+
+def hand_card(**changes: Any) -> Card:
+    return build_card(**{"citation": FULLY_VERIFIED_CITATION, **changes})
+
+
 def verified(card: Card) -> Card:
     return card.evolve(verification_status=VerificationStatus.VERIFIED)
 
@@ -332,7 +344,7 @@ UNICODE_EVIDENCE: Final = "Ærø’s “café” — naïve 🐘\n\nHerd\tcounts
 
 def unicode_card() -> Card:
     assert len(UNICODE_EVIDENCE) == 45
-    return build_card(
+    return hand_card(
         evidence_text=UNICODE_EVIDENCE,
         evidence_start_offset=500,
         evidence_end_offset=560,
@@ -376,8 +388,8 @@ def test_structure_unicode_tabs_breaks_overlaps_cuts_and_interpolations_read_bac
 
 
 def test_structure_headings_are_written_once_above_the_cards_in_pocket_hat_block_order() -> None:
-    first = verified(build_card(card_id="0CARD000000000000000000001"))
-    second = verified(build_card(card_id="0CARD000000000000000000002", tag="A second tag"))
+    first = verified(hand_card(card_id="0CARD000000000000000000001"))
+    second = verified(hand_card(card_id="0CARD000000000000000000002", tag="A second tag"))
 
     paragraphs = read_paragraphs(
         render(
@@ -399,7 +411,7 @@ def test_structure_headings_are_written_once_above_the_cards_in_pocket_hat_block
 
 def test_structure_headings_left_out_are_not_written() -> None:
     paragraphs = read_paragraphs(
-        render(CardToRender(verified(build_card()), HAND_CITE), headings=DocumentHeadings(hat="Only a hat"))
+        render(CardToRender(verified(hand_card()), HAND_CITE), headings=DocumentHeadings(hat="Only a hat"))
     )
 
     assert [p.style_id for p in paragraphs] == ["Heading2", "Heading4", "Normal", "Normal"]
@@ -418,7 +430,7 @@ def test_structure_heading_styles_carry_the_style_profiles_names_and_outline_lev
     style_id: str, name: str, outline_level: str
 ) -> None:
     data = render(
-        CardToRender(verified(build_card()), HAND_CITE),
+        CardToRender(verified(hand_card()), HAND_CITE),
         headings=DocumentHeadings(pocket="Pocket", hat="Hat", block="Block"),
     )
 
@@ -430,7 +442,7 @@ def test_structure_heading_styles_carry_the_style_profiles_names_and_outline_lev
 
 
 def test_structure_the_style_table_is_the_one_the_lossless_writer_generates_from_the_style_profile() -> None:
-    data = render(CardToRender(verified(build_card()), HAND_CITE))
+    data = render(CardToRender(verified(hand_card()), HAND_CITE))
 
     with zipfile.ZipFile(io.BytesIO(data)) as package:
         rendered = package.read("word/styles.xml")
@@ -461,7 +473,7 @@ def test_structure_a_profile_without_a_bold_short_cite_writes_it_at_the_full_cit
     )
     profile = resolve_format_profile(load_format_profile_from_text(text))
 
-    cite = read_paragraphs(render(CardToRender(verified(build_card()), HAND_CITE), profile=profile))[1]
+    cite = read_paragraphs(render(CardToRender(verified(hand_card()), HAND_CITE), profile=profile))[1]
 
     assert [(r.text, r.character_style, r.half_points) for r in cite.runs] == [
         ("Rivera et al. 23", None, 18),
@@ -483,7 +495,7 @@ def test_structure_plain_writes_no_highlight_and_keeps_every_underline(
 
 
 def test_structure_a_card_with_no_evidence_has_no_evidence_paragraph() -> None:
-    card = build_card(evidence_text="", evidence_start_offset=None, evidence_end_offset=None, spans=())
+    card = hand_card(evidence_text="", evidence_start_offset=None, evidence_end_offset=None, spans=())
 
     paragraphs = read_paragraphs(render(CardToRender(card, HAND_CITE, ("MODEL_OUTPUT_INVALID",))))
 
@@ -492,8 +504,8 @@ def test_structure_a_card_with_no_evidence_has_no_evidence_paragraph() -> None:
 
 
 def test_structure_the_cards_must_be_the_manifests_cards_in_its_order() -> None:
-    first = verified(build_card(card_id="0CARD000000000000000000001"))
-    second = verified(build_card(card_id="0CARD000000000000000000002"))
+    first = verified(hand_card(card_id="0CARD000000000000000000001"))
+    second = verified(hand_card(card_id="0CARD000000000000000000002"))
     manifest = manifest_of(first, second)
 
     with pytest.raises(RenderRefused, match="the manifest's cards"):
@@ -518,7 +530,7 @@ def test_structure_evidence_a_docx_cannot_carry_as_written_is_refused_never_alte
 ) -> None:
     text = f"Before{character}after"
     card = verified(
-        build_card(
+        hand_card(
             evidence_text=text,
             evidence_start_offset=0,
             evidence_end_offset=len(text),
@@ -599,3 +611,184 @@ def test_structure_the_verbatim_parser_reads_the_card_back_under_its_headings(
     assert parsed_card.section_path == ("Neg", "De-extinction DA", "Link")
     assert parsed_card.short_cite == "Whitfield 26"
     assert parsed_card.evidence_text.replace(MARKER, "") == card.evidence_text
+
+
+# --------------------------------------------------------------------------------------------
+# Node banners-and-marks: the UNVERIFIED banner and unverified cite fields
+# --------------------------------------------------------------------------------------------
+
+RED: Final = "FF0000"
+
+
+def test_an_unverified_card_gets_a_red_banner_under_its_tag_naming_its_reasons_by_code() -> None:
+    card = hand_card()
+    reasons = ("CITATION_UNVERIFIED", "EVIDENCE_UNVERIFIED", "CARD_INCOMPLETE")
+
+    paragraphs = read_paragraphs(render(CardToRender(card, HAND_CITE, reasons)))
+
+    tag, banner, cite, evidence = paragraphs
+    assert (tag.style_id, tag.text) == ("Heading4", card.tag)
+    assert (banner.style_id, banner.text) == (
+        "Normal",
+        "UNVERIFIED — not a finished card: CITATION_UNVERIFIED, EVIDENCE_UNVERIFIED, CARD_INCOMPLETE",
+    )
+    assert {r.color for r in banner.runs} == {RED}
+    assert {(r.character_style, r.highlight) for r in banner.runs} == {(None, None)}
+    assert cite.text == HAND_CITE.full_cite
+    assert evidence_read_back(evidence, card)[0] == card.evidence_text
+
+
+def test_a_failed_card_gets_the_unverified_banner_with_its_own_status() -> None:
+    card = hand_card(verification_status=VerificationStatus.FAILED)
+
+    banner = read_paragraphs(render(CardToRender(card, HAND_CITE, ("HASH_MISMATCH",))))[1]
+
+    assert banner.text == "FAILED — not a finished card: HASH_MISMATCH"
+    assert {r.color for r in banner.runs} == {RED}
+
+
+def test_the_unverified_banner_takes_its_colour_from_the_format_profile() -> None:
+    text = (PROFILES / "team-default.yaml").read_text(encoding="utf-8")
+    profile = resolve_format_profile(
+        load_format_profile_from_text(
+            text.replace("unverified_banner_color: FF0000", "unverified_banner_color: C00000")
+        )
+    )
+
+    banner = read_paragraphs(
+        render(CardToRender(hand_card(), HAND_CITE, ("SPAN_MISMATCH",)), profile=profile)
+    )[1]
+
+    assert {r.color for r in banner.runs} == {"C00000"}
+
+
+def test_every_unverified_or_failed_card_has_a_banner_and_no_verified_card_has_one() -> None:
+    cards = [
+        CardToRender(verified(hand_card(card_id="0CARD000000000000000000001")), HAND_CITE),
+        CardToRender(hand_card(card_id="0CARD000000000000000000002"), HAND_CITE, ("SPAN_MISMATCH",)),
+        CardToRender(verified(hand_card(card_id="0CARD000000000000000000003")), HAND_CITE),
+        CardToRender(
+            hand_card(card_id="0CARD000000000000000000004", verification_status=VerificationStatus.FAILED),
+            HAND_CITE,
+            ("TEXT_MISMATCH",),
+        ),
+    ]
+
+    paragraphs = read_paragraphs(render(*cards))
+
+    banners = [p.text for p in paragraphs if any(r.color == RED for r in p.runs)]
+    assert banners == [
+        "UNVERIFIED — not a finished card: SPAN_MISMATCH",
+        "FAILED — not a finished card: TEXT_MISMATCH",
+    ]
+    verified_card, unverified_card = (
+        ["Heading4", "Normal", "Normal"],
+        ["Heading4", "Normal", "Normal", "Normal"],
+    )
+    assert [
+        p.style_id for p in paragraphs
+    ] == verified_card + unverified_card + verified_card + unverified_card
+
+
+def test_a_verified_card_renders_no_unverified_banner(news: tuple[Card, CardManifest]) -> None:
+    card, manifest = news
+
+    paragraphs = read_paragraphs(render_cards_docx(manifest, [CardToRender(card, NEWS_CITE)], TEAM_DEFAULT))
+
+    assert len(paragraphs) == 3
+    assert all(r.color is None for p in paragraphs for r in p.runs)
+    assert not any("not a finished card" in p.text for p in paragraphs)
+
+
+@pytest.mark.parametrize(
+    ("status", "reasons", "problem"),
+    [
+        (VerificationStatus.UNVERIFIED, (), "its banner must name why"),
+        (VerificationStatus.FAILED, (), "its banner must name why"),
+        (VerificationStatus.VERIFIED, ("SPAN_MISMATCH",), "is VERIFIED"),
+        (VerificationStatus.UNVERIFIED, ("the evidence says elephants are alive now",), "is a code"),
+        (VerificationStatus.UNVERIFIED, ("citation_unverified",), "is a code"),
+        (VerificationStatus.UNVERIFIED, ("SPAN_MISMATCH", ""), "is a code"),
+    ],
+)
+def test_unverified_reasons_are_codes_given_exactly_when_a_card_is_not_verified(
+    status: VerificationStatus, reasons: tuple[str, ...], problem: str
+) -> None:
+    with pytest.raises(RenderRefused, match=problem):
+        CardToRender(hand_card(verification_status=status), HAND_CITE, reasons)
+
+
+def test_the_unverified_banner_holds_no_word_of_the_snapshot_only_its_status_and_codes() -> None:
+    card = hand_card()
+
+    banner = read_paragraphs(render(CardToRender(card, HAND_CITE, ("CITATION_UNVERIFIED",))))[1]
+
+    status, _, rest = banner.text.partition(" — not a finished card: ")
+    assert (status, rest) == ("UNVERIFIED", "CITATION_UNVERIFIED")
+    evidence_words = {word.strip(".,").lower() for word in card.evidence_text.split()}
+    assert not evidence_words & {word.strip(".,:—").lower() for word in banner.text.split()} - {"not", "a"}
+
+
+def unverified_cite(**fields: CitationField[Any]) -> Card:
+    return hand_card(citation=FULLY_VERIFIED_CITATION.evolve(**fields))
+
+
+def cite_paragraph(card: Card, reasons: tuple[str, ...] = ("CITATION_UNVERIFIED",)) -> ReadParagraph:
+    paragraphs = read_paragraphs(render(CardToRender(card, HAND_CITE, reasons)))
+    [cite] = [p for p in paragraphs if p.text.startswith(HAND_CITE.short_cite)]
+    return cite
+
+
+def test_unverified_cite_fields_are_marked_after_the_cite_from_the_citations_own_flags() -> None:
+    card = unverified_cite(
+        authors=FULLY_VERIFIED_CITATION.authors.evolve(source=CitationFieldSource.HEURISTIC, verified=False),
+        published_at=CitationField[datetime](),
+        canonical_url=FULLY_VERIFIED_CITATION.canonical_url.evolve(verified=False),
+    )
+
+    cite = cite_paragraph(card)
+
+    assert cite.text == HAND_CITE.full_cite + " [author unverified] [date unverified] [URL unverified]"
+    assert [(r.text, r.character_style, r.half_points) for r in cite.runs][-1] == (
+        " [author unverified] [date unverified] [URL unverified]",
+        None,
+        22,
+    )
+
+
+def test_an_optional_cite_field_is_marked_only_when_it_is_shown_unverified() -> None:
+    missing = unverified_cite(author_credentials=CitationField[str]())
+    unverified = unverified_cite(
+        author_credentials=FULLY_VERIFIED_CITATION.author_credentials.evolve(verified=False),
+        accessed_at=FULLY_VERIFIED_CITATION.accessed_at.evolve(verified=False),
+    )
+
+    assert cite_paragraph(verified(missing), ()).text == HAND_CITE.full_cite
+    assert cite_paragraph(verified(unverified), ()).text == (
+        HAND_CITE.full_cite + " [credentials unverified] [accessed date unverified]"
+    )
+
+
+def test_a_field_the_student_cleared_is_marked_cleared_not_unverified() -> None:
+    card = unverified_cite(authors=CitationField[tuple[str, ...]]()).evolve(
+        citation=FULLY_VERIFIED_CITATION.evolve(
+            authors=CitationField[tuple[str, ...]](),
+            accessed_at=CitationField[datetime](),
+            cleared_by_student=("authors", "accessed_at"),
+        )
+    )
+
+    cite = cite_paragraph(card)
+
+    assert (
+        cite.text == HAND_CITE.full_cite + " [author cleared by student] [accessed date cleared by student]"
+    )
+    assert "unverified]" not in cite.text
+
+
+def test_a_fully_verified_cite_has_no_unverified_mark(news: tuple[Card, CardManifest]) -> None:
+    card, manifest = news
+
+    cite = read_paragraphs(render_cards_docx(manifest, [CardToRender(card, NEWS_CITE)], TEAM_DEFAULT))[1]
+
+    assert cite.text == NEWS_CITE.full_cite

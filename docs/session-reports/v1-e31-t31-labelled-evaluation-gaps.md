@@ -6,67 +6,304 @@
 | Spec | [`plan_specs/v1/e31-debate-file-parsing/t31-labelled-evaluation-gaps.yaml`](../../plan_specs/v1/e31-debate-file-parsing/t31-labelled-evaluation-gaps.yaml) |
 | Epic / release | `v1-e31-debate-file-parsing` / `v1.1` |
 | Branch | `task/v1-e31-t31-labelled-evaluation-gaps` |
-| Session status | PARTIAL: phase 1 checkpoint. The re-measure (ac1) and the tallies (ac2) are done, and the PM's ruling is asked for below. No parser rule has changed. ac3 and ac4 wait for the ruling. The Goal stays `InProgress` <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | PARTIAL: phase 2 is built. The rules, the version, the before and after on both tiers, mutation, the store diff for openev and the dev re-parse steps are done. The other three caselists' store diff, the coach sample, the coach's look at one file and the re-parse are the operator's. The Goal stays `InProgress`, as the PM ruled <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
-Phase 1 of the PM's plan of 2026-10-27, stopped at its checkpoint. No parser rule has changed.
+Phase 2, built to the PM's rulings of 2026-10-27, and stopped there. The phase 1 record, with the
+relay prompt the PM ruled on, is kept below [as it was sent](#relay-prompt-for-the-pm).
 
-- **The re-measure (ac1).** The 2026-10-20 baseline's tiers on `2026.10.20-docx-6`, without
-  `--write-baseline`: **every figure is unchanged.** The run took 2.9 s. CITE is still precision
-  0.985, recall 0.623.
-- **The tallies (ac2).** The PM asked to lead with cite recall.
-  - **31 of the 135 judged labelled cards have no cite row read at all**: the gap students see.
-  - 81 of 215 labelled cite rows are missed:
-    - 46 are a later line of a cite, read as nothing;
-    - 28 sit directly under a tag (19 of them read as nothing);
-    - 11 are read as body and 4 as a tag.
-  - The 14 missed tags: 4 are caused by a cite read as a second tag; 7 are wiki-converted bold
-    lines.
-  - **Highlight misses nothing.** All 707 wrong characters are added highlights, in one
-    coach-reviewed PF file: cyan 449, green 71, white 187.
-- **The proposals.** Four guarded cite shapes take 48 labelled cites and no other row. With all
-  four:
-  - cite precision 0.985 → 0.989, recall 0.623 → 0.847;
-  - tag F1 0.935 → 0.959;
-  - cards with no cite read 31 → 8;
-  - non-Verbatim CITE F1 0.796 → 0.956, which meets its 0.90 target.
+- **The rules (Q1 (a)).** Rules (1), (2) and (4) are built, as one assembly pass. They read as a
+  cite:
+  - a later line of a cite, or a line under a tag, read as nothing, with a link or a year, over a
+    body;
+  - a line read as a second tag under a tag, with a name and year at its head, over a body. The tag
+    above gets its reading back.
+- **White highlight (Q3 (a)).** White is no longer read as highlight; lightGray and black still are.
+- **The version.** One bump for all four rules: `2026.10.27-docx-7`.
+- **The labelled evaluation, `docx-6` → `docx-7`.**
+  - Cite precision 0.985 → 0.989, recall 0.623 → 0.837.
+  - Tag F1 0.935 → 0.959.
+  - Labelled cards with no cite read: 31 → 10.
+  - Non-Verbatim CITE F1 0.796 → 0.937 and Verbatim TAG F1 0.950 → 0.977 now meet their targets.
+  - **No precision or F1 falls, by unit or by group, on either tier**, and no span or card figure
+    falls. The pr-subset gate passes.
+- **The store, openev (in the session, 19 s).**
+  - 172 cards gain a cite and 259 cites gain a line.
+  - 6 cards lose only white highlight, and no other card changes.
+  - 142 of openev's 356 no-cite index documents gain a cite.
+  - hsld26, hspf26 and hspolicy26 each run past two minutes; they are one operator block, which
+    also writes the coach sample.
 
-  These are what-if scores from the harness's own `score_file`. The "as read" what-if reproduces the
-  published figures exactly.
-- **For the PM first:** [the relay prompt](#relay-prompt-for-the-pm). It holds the rules, the
-  white-highlight question, the coach question on the cyan and green highlights, and the re-parse
-  plan for the bucket-mode world.
+**For the PM first:**
+
+1. **The dev re-parse cannot be done as the accepted plan has it.**
+   - The code shows the cloud run parses only the caselists it imported that week, and has no
+     parse-only mode. My relay's Q5 (ii) was wrong about that.
+   - The steps below parse in full from a copy restored from the bucket, then publish.
+   - That publish from a copy is in no runbook. It needs your ruling
+     ([the code check](#the-re-parse-in-the-cloud-world-what-the-code-shows),
+     [Deviation 4](#deviations-from-the-spec)).
+2. **Two guards beyond the ruled shapes.** They keep `v1-e31-t12`'s deliberate pins
+   ([Deviation 2](#deviations-from-the-spec)). The labelled counts are unchanged by them.
+3. **The image-plan check in the cutover runbook stops on every image apply since the cutover**
+   ([Deviation 5](#deviations-from-the-spec)).
 
 ## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
-| `missed-units`: Missed units, counted then ruled | In progress: counted; waiting for the ruling | Re-measure and tallies done, relay sent. Rules, version and re-parse plan wait. `uv run pytest packages/debate_core/tests/integrations/docx_parser` → `979 passed, 2 xfailed in 10.88s` (parser unchanged) |
+| `missed-units`: Missed units, counted then ruled | Built; the re-parse is the operator's | Counted (phase 1), ruled 2026-10-27, built red then green, version bumped, measured. `uv run pytest packages/debate_core/tests/integrations/docx_parser` → `1002 passed, 2 xfailed in 2.70s` |
 
 ## Acceptance criteria
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| ac1: the baseline's tiers re-measured on the `docx-6` store, recorded beside the 2026-10-20 figures in docs/data, without writing a baseline | PASS | `perl -e 'alarm 115; exec @ARGV' .venv/bin/python scripts/run_parser_eval.py --tier both` → `pr-subset: 6 files, gate PASSED`, `full: 30 files, gate PASSED`, 2.9 s. The run had no `--write-baseline`, and `tests/evals/baselines/parser.json` is unchanged. The report rendered from the run was diffed with `docs/data/parser-eval-2026-10.md`: only the version, gate and gate-note lines differ. Recorded side by side in [`docs/data/parser-eval-gaps-2026-10.md`](../data/parser-eval-gaps-2026-10.md#re-measured-on-docx-6-2026-10-27). Run by the session, not the operator ([Deviation 1](#deviations-from-the-spec)) |
-| ac2: tallies of where missed CITE, TAG and highlight rows go, by caselist, template family and format, counts only, sent to the PM before any rule | PASS | `perl -e 'alarm 115; exec @ARGV' .venv/bin/python scripts/tally_missed_units.py --tier full` → exit 0, 3.0 s; `--tier pr-subset` the same. Tallies are in [the data document](../data/parser-eval-gaps-2026-10.md#where-the-misses-go-full-tier-docx-6), and the [relay prompt](#relay-prompt-for-the-pm) is below (2026-10-27). No file under `packages/` has changed on this branch (`git diff --stat origin/dev -- packages` prints nothing) |
-| ac3: each ruled rule a synthetic fixture shown failing first; the pr-subset gate holds; tag and cite precision do not fall; before and after figures in the report | NOT RUN | Waits for the PM's ruling. The what-if scores give the expected effects |
-| ac4: `parser_version` bumped once; the operator's re-parse written out in full | NOT RUN | Waits for the ruling. The spec's re-parse steps predate bucket mode: the plan for the cloud run is proposed in the relay, and no commands are drafted yet, as the PM asked ([Deviation 4](#deviations-from-the-spec)) |
-| Node `missed-units`: `uv run pytest packages/debate_core/tests/integrations/docx_parser` | PASS (parser unchanged) | `979 passed, 2 xfailed in 10.88s` |
-| `uv run scripts/validate_specs.py` | PASS | See [the checks](#the-checks-run-before-this-report) |
+| ac1: the baseline's tiers re-measured on the `docx-6` store, recorded beside the 2026-10-20 figures in docs/data, without writing a baseline | PASS | Phase 1: `.venv/bin/python scripts/run_parser_eval.py --tier both` under `alarm 115` → both gates passed, 2.9 s. Every figure equals 2026-10-20's, by a whole-report diff. Recorded in [`parser-eval-gaps-2026-10.md`](../data/parser-eval-gaps-2026-10.md#re-measured-on-docx-6-2026-10-27). Run by the session ([Deviation 1](#deviations-from-the-spec), kept by the PM's Q6) |
+| ac2: tallies of missed CITE, TAG and highlight rows, by caselist, template family and format, counts only, sent to the PM before any rule | PASS | Phase 1, `scripts/tally_missed_units.py`. Relay sent 2026-10-27; the PM ruled the same day. The first rule commit, `63bcfaa`, came after the ruling |
+| ac3: each ruled rule a synthetic fixture shown failing first; the pr-subset gate holds; tag and cite precision do not fall; before and after in the report | PASS | [Red then green](#red-then-green): `63bcfaa` red, **5 failed, 6 passed**, with the 5 positives failing by assertion; `8b79d51` green. White: `7eff266` red, **3 failed, 35 passed**; `c1a2025` green. The gate passed on both tiers (`run_parser_eval.py --tier both`, 2.8 s). CITE precision 0.985 → 0.989, TAG precision 0.952 → 0.976, and no unit, span or card figure falls in any group on either tier (a script compared every group of the two reports). [Before and after](#before-and-after) |
+| ac4, first half: `parser_version` is bumped once | PASS | `b893505`: `DOCX_PARSER_VERSION = "2026.10.27-docx-7"`, once for (1), (2), (4) and (H). `TestTheParserVersion` in `test_cite_lines_by_their_place.py` |
+| ac4, second half: the operator's re-parse written out in full | NOT RUN | The dev steps are written as commands in [Operator follow-ups](#operator-follow-ups), each with where it runs and what success looks like. The full parse rests on a publish from a restored copy that the PM has not yet ruled on ([Deviation 4](#deviations-from-the-spec)). Prod is a separate E40 task, after `v1-e40-t10` (the PM's Q5). Running it is the operator's, after the merge and his return |
+| Node `missed-units`: `uv run pytest packages/debate_core/tests/integrations/docx_parser` | PASS | `1002 passed, 2 xfailed in 2.70s` (the two xfails are `v1-e31-t12`'s labelled leftovers) |
+| `uv run scripts/validate_specs.py` | PASS | `OK: 480 files, 40 epics, 418 tasks, 22 releases`; phase `InProgress` |
+
+## The PM's rulings, and what was built
+
+**Q1 (a): rules (1), (2) and (4).**
+
+- They are `DebateDocxParser._cite_lines_by_their_place`, with rule ids
+  `assembly-cite-line-below-a-cite`, `assembly-cite-line-below-a-tag` and
+  `assembly-cite-in-the-tag-style-below-a-tag`, at confidence 0.6.
+- The pass reads one assembly, as the shapes were measured. When it takes a line, the build
+  assembles once more, so the tag the assembly had demoted gets its reading back.
+- A file the rules do not touch is built exactly as before.
+- Each rule has its own fixture, failing first. (1)'s and (2)'s fixtures include the line with
+  neither a link nor a year, which keeps its reading. (4)'s fixture shows the tag above read as a tag
+  again.
+- **Two guards were added beyond the ruled shapes** ([Deviation 2](#deviations-from-the-spec)):
+  - no line longer than the profile's cite bound (1,000 characters);
+  - no line longer than a cite line (400) that opens with a short cite.
+
+  On the labelled files the rules still take exactly 23, 19 and 4 cites and nothing else.
+
+**Q2 (b) and (c).**
+
+- `scripts/diff_cite_lines_by_their_place.py` re-parses each stored source and compares its cards
+  with the store's, by their last paragraph.
+- It counts cards gaining a cite by shape, caselist and family, and follows the index's no-cite
+  documents.
+- openev ran in the session, in 19 s. hspolicy26 hit the alarm at 115 s, and hsld26 (about 140 s by
+  a 400-source timing) and hspf26 (about 118 s) would too. All three go in one operator block, with
+  the coach sample.
+- `--sample-out` writes the sample only under the data directory, and refuses a path inside the
+  repository.
+
+**Q3 (a): white only.**
+
+- `COLOURS_NOT_READ_AS_HIGHLIGHT` is in `style_classifier`, and `classify_run` gives a white run no
+  `HIGHLIGHT` span.
+- Tests show:
+  - lightGray and black are still read;
+  - search's `read_aloud_text` leaves white text out;
+  - the lossless writer copies a white-highlighted paragraph as its source wrote it, `w:highlight`
+    and all, and the card reads back as its source.
+- [Every reader it reaches](#every-reader-the-white-change-reaches) is listed below.
+
+**Q4.** No rule and no label change. The block that prints the file's path is
+[Operator follow-ups](#operator-follow-ups) A.
+
+**Q5.** The version is bumped once. The dev steps are written as commands, and checked against
+the code; [what the code shows](#the-re-parse-in-the-cloud-world-what-the-code-shows) differs from
+the accepted plan in one step.
+
+**Q6.** Deviation 1 is kept.
+
+## Red then green
+
+| Commit | What | Tests |
+|---|---|---|
+| `63bcfaa` | Fixtures for the three cite rules | **5 failed, 6 passed**: the positives fail by assertion; the guards' negatives pass before and after |
+| `8b79d51` | The three rules, with the two added guards | 11 passed. Without the guards, 10 of `v1-e31-t12`'s pins in `test_cite_detection.py` fail by assertion ([Deviation 2](#deviations-from-the-spec)) |
+| `7eff266` | White-highlight tests: the parser's spans, search's read-aloud text, the writer | **3 failed, 35 passed**: the white span, the read-aloud text, and the writer test's white-span check fail by assertion; lightGray, black and the classifier's reading pass |
+| `c1a2025` | White is not read as highlight | 2,786 passed over the parser, evidence and writer directories |
+| `b893505` | `2026.10.27-docx-7` | 5,261 passed over the parser's, writer's and evidence's tests and `tests/evals` |
+| `1cc899a` | Three edge fixtures from mutation | 17 in the rules' file |
+| `6149497` | The store diff and the coach sample | 7 passed |
+
+**What the version bump changed in other files:**
+
+- the `parser_version` line of the ten structural expectations and the writer's four recorded
+  sidecars, and nothing else in them;
+- t24's version pin, restated as "this version or a later one", as t24 restated t19's;
+- the writer's two version pins.
+
+The tally tool's own tests now count with the cite-by-place pass left out, so that something is
+missed. A new test shows `docx-7` misses none of the invented file's shapes.
+
+## Before and after
+
+The real parser, `run_parser_eval.py --tier both`, against the `docx-6` re-measure. The full tables
+are in [the data document](../data/parser-eval-gaps-2026-10.md#after-the-ruling-20261027-docx-7).
+
+| Full tier, overall | `docx-6` | `docx-7` |
+|---|---|---|
+| CITE precision / recall / F1 | 0.985 / 0.623 / 0.763 | 0.989 / 0.837 / 0.907 |
+| TAG precision / recall / F1 | 0.952 / 0.919 / 0.935 | 0.976 / 0.942 / 0.959 |
+| ANALYTIC precision | 0.845 | 0.896 |
+| Highlight F1 / span F1 | 0.973 / 0.985 | 0.980 / 0.987 |
+| Card boundary exact match / card precision | 0.889 / 0.863 | 0.911 / 0.885 |
+| Labelled cards with no cite read (of 135) | 31 | 10 |
+| Verbatim CITE F1 / TAG F1 (targets 0.97) | 0.751 / 0.950 | 0.895 / 0.977 (TAG MET) |
+| Non-Verbatim CITE F1 / TAG F1 (targets 0.90) | 0.796 / 0.908 | 0.937 (MET) / 0.924 |
+
+| PR subset, overall | `docx-6` | `docx-7` |
+|---|---|---|
+| CITE precision / recall | 0.969 / 0.705 | 0.973 / 0.818 |
+| TAG precision / recall | 0.949 / 0.861 | 0.974 / 0.884 |
+| Non-Verbatim CITE F1 / TAG F1 | 0.882 / 0.850 | 1.000 / 0.900 (both MET) |
+| Verbatim highlight F1 | 0.695 | 0.756 |
+| Gate | PASSED | PASSED |
+
+These are the what-if figures for the ruled set: cite precision 0.989, recall 0.837, F1 0.907, and
+10 cards with no cite. The what-if was right.
+
+The 520 highlight characters still added are the cyan and green ones in `a888a5db95488218`, which
+wait for the coach (Q4).
+
+## The store
+
+openev, in the session: `.venv/bin/python scripts/diff_cite_lines_by_their_place.py --caselist openev --index ~/.debate-research/dev/tub-index/767b9c7c056b80cb/search-index.sqlite --workers 8`
+under `alarm 115` → exit 0, 19 s.
+
+| openev | |
+|---|---|
+| Sources read / failed / without a blob | 102 / 0 / 0 |
+| Cards that gain a cite: line under a tag / cite in the tag style | 166 / 6 |
+| Cards whose cite gains a later line | 259 |
+| Cards that lose only white highlight | 6 (85 white spans) |
+| Any other card that changed; cards vanished; new cards | **0**; 0; 0 |
+| Unchanged | 7,644 (of 8,081) |
+| The index's 356 openev no-cite documents that gain a cite | 142 |
+
+**How formatting is compared.** It is compared by the characters each emphasis covers
+(`formatting_sha256`, the writer's own fidelity reading). My first run counted 3 cards as "other"
+whose spans had only joined: when a white span between two underlines goes, the two underlines
+become one span over the same characters. I checked that by printing the spans' emphases and offsets
+only.
+
+## Mutation testing
+
+20 single-change mutants of the three rules, the guards and the white change. Each ran against the
+four test files that cover them, in 0.2 to 0.8 s a run:
+
+- `test_cite_lines_by_their_place.py`
+- `test_white_highlight.py`
+- `test_cite_detection.py`
+- `test_fidelity.py`
+
+Each run had a new, empty `HYPOTHESIS_STORAGE_DIRECTORY`; these files hold no property tests. The
+source was restored from saved bytes and checked with `filecmp` after each run, and `git status` was
+clean after.
+
+- **17 caught on the first pass, all by assertion:**
+  - no link check; no year check; no link-or-year guard;
+  - no body asked below; a cite read as any unit above;
+  - a demoted tag not a tag; a tag not a tag;
+  - no name and year asked of a tag-style line;
+  - no cite bound; no long-cite guard; the long-cite guard at 2,000;
+  - no step over blank lines above; a blank line read as nothing;
+  - no second assembly; the rules' ids swapped;
+  - white read as highlight; lightGray not read either.
+- **3 survived, and each now has a fixture** (`1cc899a`). All 3 are caught on re-run:
+  - the tag-style line's 40-character head bound;
+  - "under a tag" for a tag-style line;
+  - stepping over a blank line between a line and its body below.
+
+That is **23 runs**: 20 mutants and 3 re-runs, a little over the ~20 cap.
+
+Apart from these, two checks were each shown failing for their reason:
+
+- the tally tests (`4c1d114`, two mutants in phase 1);
+- the store diff's effects test, with shape attribution switched off.
+
+## Every reader the white change reaches
+
+A white run now carries no `HIGHLIGHT` span, so each reader of a card's formatting spans sees no
+highlight there. The run's `w:highlight` is still in the source file and in `RunDescription`.
+
+| Reader | What changes |
+|---|---|
+| `domain/search_index.py` `read_aloud_text` (`_READ_ALOUD`), and so the index's `read_aloud` column | White text is no longer read aloud. Tested |
+| `application/evidence_search.py` ranking (`read_aloud` weight 3.0) | White text no longer weighs as read aloud |
+| `domain/search_index.py` `encode_formatting_spans`, and the index's `formatting_spans` column | No white span is stored |
+| `domain/search_card_html.py` | No `card-highlight-white` class is drawn |
+| `debate_api/copy_card.py` | No white highlight style in a copied card |
+| `evidence/docx_renderer.py` (the E06 renderer) | Writes no white highlight in a rendered card |
+| `evidence/card_boundaries.py` `marked_up_share` | A white run no longer counts as marked up |
+| `domain/file_provenance.py` `formatting_sha256`, and so `evidence/file_checks/identity.py` and the writer's read-back (`writer.py:738`) | Both sides are parsed by the same parser, so they still agree. Tested: the white paragraph builds and reads back |
+| `integrations/docx_file_writer` (the lossless writer) | Unchanged: it copies the source's paragraphs. Tested: the run and its `w:highlight` arrive as written |
+| The classifier's `has_highlighted_run` (9 uses) | **Unchanged**: it reads the run's `w:highlight`, so a white run still marks a paragraph as marked up ([Decisions](#decisions-and-assumptions)) |
+
+The fingerprint is unaffected: `evidence/fingerprints.py` reads text, not highlighting.
+
+## The re-parse in the cloud world: what the code shows
+
+The PM asked me to check, not assume. A subagent gathered the runbooks' blocks, and I read each
+code claim myself:
+
+- **A parser bump means a full parse, but only of the caselists the run imported that week.**
+  - The parse stage parses `caselists_to_parse(tally.publish_targets)`, the caselists this run
+    imported (`caselist_sync.py:4187`, defined at `:5090`).
+  - For each, a parser version the store has no directory of starts an empty directory, so every
+    live source is to parse (`caselist_parse.py:384-394`, and the skip key at `:347-356`). The run
+    counts it as `full_parse` (`caselist_pull_parse.py:68`).
+  - The module says so at `caselist_sync.py:292-299`: "A caselist the run did not import into is
+    not touched".
+- **There is no parse-only cloud run.**
+  - The task runs `debate-research --json caselist pull` (`run_task.tf:84-85`).
+  - `pull` takes `--caselist`, `--dry-run`, `--publish-pending` and `--full-archive`, and none of
+    them parses without an import.
+  - `v1-e40-t08` ("parse owed", Pending) would let a run parse what it did not import.
+  - **My relay's Q5 (ii), "a run by hand with run-task overrides per caselist", does not exist.**
+- **The run restores only its own parser version's parsed store** (`run_state.py:28-34` and
+  `:347-349`; `container.py:1556`). A new-image run therefore restores no parsed store for a
+  caselist not yet parsed by `docx-7`.
+- **The index stage then fails.** It does not skip:
+  - the build raises `SearchIndexStoreNotReady` when a store has no directory of either version
+    (`search_index_build.py:552-559`);
+  - the refresh skips only on `SearchIndexStoreVersionMismatch` (`search_index_refresh.py:463-470`).
+  - So the first new-image run after a bump, before every store has a `docx-7` directory in the
+    bucket, ends with its index stage failed, and `current.json` keeps the `docx-6` index.
+- **What does work: a full parse of a restored copy.**
+  - `caselist parse` in bucket mode fetches the raw sources a copy lacks from `raw/`
+    (`container.py:840`).
+  - It takes the bucket lock around its publish only (`caselist_parse.py:168-176`).
+  - `ops/caselist_run/compare_cloud_run.py` already restores a copy and parses it in full, without
+    `--publish`.
+  - The steps below do the same and publish. No runbook has published from a restored copy, and
+    scheduled-sync's "One data directory for each bucket" warns against a second data directory
+    publishing. Here the copy is the bucket's own state, restored under the lock, but that is the
+    PM's call ([Deviation 4](#deviations-from-the-spec)).
 
 ## The checks run before this report
 
 | Command | Result |
 |---|---|
-| `uv run scripts/affected_tests.py --run` | 47 test files, `2119 passed in 265.31s`, pytest exited 0 after 269 s. **Over the two-minute line**: I expected 47 files to take well under it and did not measure first. Agreement 10 would have left it to the pull request's `ci` |
-| `.venv/bin/python -m pytest tests/evals/parser/test_missed_units.py` | `9 passed` |
-| Two mutants of `missed_units.py` (the link-or-year guard removed; the demoted tag not given back), fresh `HYPOTHESIS_STORAGE_DIRECTORY` each, `-n 0` | Both caught by assertion (2 failed and 1 failed); the file restored and `cmp` clean after each |
-| `uv run --frozen ruff format --check .` / `ruff check .` | `1527 files already formatted` / `All checks passed!` |
-| `uv run --frozen pyright scripts/tally_missed_units.py tests/evals/parser/missed_units.py tests/evals/parser/test_missed_units.py` | `0 errors, 0 warnings, 0 informations` (no package changed) |
-| `uv run --frozen lint-imports` and `uv run python scripts/check_thin_handlers.py` | `Contracts: 18 kept, 0 broken.` and `67 ... handlers within 25 statements` |
-| `uv run python scripts/docs_index.py --check-descriptions` / `scripts/check_command_blocks.py` | `All 56 indexed documents under docs/ have a description` / `OK` |
+| `uv run scripts/affected_tests.py` (measured first, as the PM asked) | **277 of 548 test files** (50.5%), from 29 changed files. That is well over two minutes, so it was not run in the session and is left to the pull request's `ci` (working agreement 10) |
+| `.venv/bin/python -m pytest` under `alarm 115`, `-n 6 -m "not slow and not live"`, over the changed test directories and the always-run list: `docx_parser`, `docx_file_writer`, `evidence`, `tests/evals`, the four `tests/scripts` files of the eval and diff scripts, `tests/architecture`, `tests/specs`, the CLI's `test_app.py` and `test_help_rendering.py`, and `application/test_search_index_build.py` | `3560 passed, 2 xfailed in 31.20s` |
+| `uv run pytest packages/debate_core/tests/integrations/docx_parser` (the node's criterion) | `1002 passed, 2 xfailed in 2.70s` |
+| `.venv/bin/python scripts/run_parser_eval.py --tier both` under `alarm 115` | both gates PASSED, 2.8 s; `tests/evals/baselines/parser.json` unchanged |
+| `uv run --frozen ruff format --check .` / `ruff check .` | `1531 files already formatted` / `All checks passed!` |
+| `.venv/bin/python -m pyright`, the whole project as CI runs it | `0 errors, 0 warnings, 0 informations` |
+| `uv run --frozen lint-imports` and `uv run --frozen python scripts/check_thin_handlers.py` | `Contracts: 18 kept, 0 broken.` and `OK: 67 ... within 25 statements` |
+| `uv run python scripts/docs_index.py --check-descriptions` / `scripts/check_command_blocks.py --base origin/dev` | `All 56 indexed documents under docs/ have a description` / `OK` |
+| `.venv/bin/python scripts/check_links.py` | `OK: 2751 relative links and anchors in 419 Markdown files` |
 | `uv run scripts/validate_specs.py` | `OK` (phase `InProgress`) |
+
+**A killed run orphaned its workers.** When the alarm stopped the hspolicy26 diff, its pool's nine
+workers outlived it. I found them by their command line (this worktree's virtualenv,
+`spawn_main`), stopped those ten PIDs, and checked that none was left. Nothing they did writes
+anywhere.
 
 ## What was counted, and how
 
@@ -164,55 +401,410 @@ Q6. ac1 says "(operator)"; the session ran it, read-only, in 2.9 s (working agre
 
 ## Files changed
 
-- `scripts/tally_missed_units.py` (new): the thin script that prints the tallies as JSON.
-- `tests/evals/parser/missed_units.py` (new): the counting module. It holds the missed rows, the
-  candidate shapes, the highlight characters and the what-if scores.
-- `tests/evals/parser/test_missed_units.py` (new): an invented file whose labels and expected
-  counts are written by hand.
-- `docs/data/parser-eval-gaps-2026-10.md` (new): the re-measure beside 2026-10-20's, the tallies,
-  the shapes and what-ifs, and the index context.
-- `docs/session-reports/v1-e31-t31-labelled-evaluation-gaps.md`: this report.
+**Parser (`debate_core.integrations.docx_parser`, `debate_core.evidence`):**
 
-No label file, baseline or parser file changed.
+- `integrations/docx_parser/parser.py`: the three cite rules, the second assembly, and the version.
+  t24's line-above loop now uses the shared `_line_above`.
+- `evidence/style_classifier.py`: `COLOURS_NOT_READ_AS_HIGHLIGHT`, read by `classify_run`.
+
+**Tests:**
+
+- new: `packages/debate_core/tests/integrations/docx_parser/test_cite_lines_by_their_place.py` and
+  `test_white_highlight.py`;
+- new: `tests/scripts/test_diff_cite_lines_by_their_place.py`;
+- changed: `.../docx_file_writer/test_fidelity.py`, the white paragraph's test and the version pin;
+- changed: `test_writer.py`, `test_tag_above_a_cite.py`, the version pins;
+- changed: `tests/evals/parser/test_missed_units.py`, which now counts with the pass left out.
+
+**Fixtures:** `tests/fixtures/debate_files/structural/*.expected.json` and
+`.../docx_file_writer/files_built_with_the_provenance_line/*.provenance.json`, the version line only.
+
+**Scripts:**
+
+- `scripts/tally_missed_units.py` (phase 1);
+- `scripts/diff_cite_lines_by_their_place.py` (new);
+- `tests/evals/parser/missed_units.py` (phase 1).
+
+**Docs:**
+
+- `docs/data/parser-eval-gaps-2026-10.md`, with the after-ruling section;
+- this report.
 
 ## Deviations from the spec
 
-1. **ac1 was run by the session, not the operator.** It is read-only over the operator's labelled
-   files and took 2.9 s (working agreement 2; the PM's instruction of 2026-10-27).
-2. **"By caselist" is by source.** The evaluation's caselist files all come from one caselist
-   (`hsld26`), so the tallies break down by source (team, caselist, camp), as well as by template
-   family and format.
-3. **Highlight is counted by character, both ways.** The spec's "a highlight span ... that the
-   parser read otherwise" is counted as labelled highlight characters the parser missed (0) and
-   highlight characters it added that the labels do not hold (707). The harness scores highlight the
-   same way.
-4. **ac4's re-parse wording predates the cutover.** Since `v1-e40-t06` the weekly run is a cloud
-   task in bucket mode. The plan is proposed in the relay (Q5) for the PM to amend the spec. No
-   commands are drafted.
+1. **ac1 was run by the session**, read-only, in 2.9 s. The PM kept this (Q6).
+2. **Two guards beyond the ruled shapes.**
+   - Built as measured, rules (1) and (2) took long paragraphs that `v1-e31-t12` pins as "left as
+     it was" on purpose:
+     - 4,001- and 1,400-character styled lines;
+     - 700-character lines that open with a name and year, have no bold opening or one-bracket
+       shape, and hold a year.
+   - 10 of t12's tests failed by assertion.
+   - So no rule takes a line longer than the profile's cite bound (1,000 characters), or a line
+     longer than 400 that opens with a short cite. The second is exactly the case t12's long-cite
+     rule judged.
+   - The longest labelled cites the rules take are 765, 488 and 540 characters. The labelled takes
+     are unchanged (23, 19, 4, and no other row), and the guards cost 1 unlabelled line.
+   - The PM may want to rule on t12's pins against rule (2) directly.
+3. **"White is not read as highlight" is read as the formatting spans.**
+   - The classifier's `has_highlighted_run`, which decides units, still sees a white run, so a
+     paragraph whose only marking is white is still marked-up body.
+   - Changing that would move unit readings that no one measured.
+   - `test_the_paragraph_is_read_as_it_was` pins the choice, so a later ruling changes one test.
+4. **The dev full parse cannot be "by hand per caselist" in the cloud.**
+   - No command parses a caselist the run did not import
+     ([the code](#the-re-parse-in-the-cloud-world-what-the-code-shows)).
+   - The steps below restore a copy under the lock, parse it in full with the installed `docx-7`
+     build in bucket mode, and publish each caselist's version directory with `caselist parse
+     --publish`. No runbook has published a parsed store from a restored copy, so **the PM's ruling
+     is needed before step C7**.
+   - The other way is to wait for `v1-e40-t08` (a run parses what is owed without an import),
+     extended to a parse every caselist owes after a bump.
+5. **The cutover runbook's image-plan check refuses every image apply since the cutover.**
+   - `IMAGEPLAN` stops when `owner.auto.tfvars` enables the run's schedule
+     (`caselist-cutover.md:357`), and it expects the schedule `DISABLED` (`:349`).
+   - "A new image, later" (`caselist-cloud-run.md:746`) points at step 6's plan, which is the
+     first apply's shape.
+   - Step C5 therefore uses whatever check Thursday 2026-10-29's `v1-e40-t13` image apply uses. I
+     have not written a check of my own.
+6. **Outside `constraints.packages`:**
+   - the structural fixtures' and the writer sidecars' version lines;
+   - the writer's test directory (version pins, and the white paragraph test the PM asked for);
+   - `tests/fixtures` and the writer tests, which are not in the list, as for t24.
+7. **23 mutation runs**, against the ~20 cap: 20 mutants and 3 re-runs.
+8. **My relay's Q5 (ii) was wrong.** It proposed "a run by hand: one-off run-task overrides per
+   caselist", and no such run exists. The PM accepted the plan on that premise. The code check is
+   above.
 
 ## Decisions and assumptions
 
-- **Candidate shapes are judged as the parser sees the file:** by what neighbouring lines were read
-  as, not by their labels. A rule can only see readings.
-- **"Above" and "below" step over blank lines, table cells and text boxes**, as `line_above`
-  (`v1-e31-t24`) and the assembly do.
-- **A year is four digits from 1900, or an apostrophe and two digits; a link is `http(s)://` or
-  `www.`.** Only their presence is counted.
-- **The index is counted by the representative's source file.** The index stores one card per
-  document; its siblings may come from files of other families.
-- **The index used is the PM note's (`767b9c7c056b80cb`),** not the newer one on the Mac, so the
-  note's totals could be checked.
+- **The version is `2026.10.27-docx-7`**, dated the day of the ruling.
+- **The cite rules read one assembly** and take what it shows, as the shapes were measured. A line
+  one rule takes does not make a second line another rule's.
+- **The confidence is 0.6**, a cite line's (`heuristic-cite-line-author-year`).
+- **The store diff compares formatting by characters covered**, as the writer's fidelity check does.
+  Spans that join where a white span was are no change.
+- **The diff reads the PM note's index (`767b9c7c056b80cb`)**, not the Mac's newest. Its 6,214 are
+  the documents the PM named.
+- **The coach sample's path:**
+  - `~/.debate-research/dev/parser-eval/cite-lines-by-their-place/coach-sample-20261027.csv`;
+  - the seed is 20261027, the ruling's date;
+  - a `.key.jsonl` beside the CSV says which file and paragraph each row is, for scoring later. It
+    is under the data directory, never the repository.
 
 ## Operator follow-ups
 
-None in phase 1. The re-parse is phase 2's, and waits for the ruling on Q5.
+**Merge order (the PM's Q5):**
+
+- The phase 2 pull request merges only after Thursday 2026-10-29's image (`v1-e40-t13`) is applied.
+- After it merges, no dev run image is applied until the operator is back. The switch is the image,
+  not the merge, and any image applied after the merge carries the full re-parse.
+- The re-parse runs Thursday to Monday, never during a Wednesday run.
+- The image also waits for the coach's sample, whatever it says (Q2 (c)). If fewer than 18 of 20 are
+  cites, rule (2) is removed before any run image carries it.
+
+### A. The path of the file the coach looks at (Q4)
+
+Any time. It prints the local path to your terminal only. Do not paste it into the session or the
+report. The coach opens the file in Word and says whether the cyan and green passages show as
+highlighted.
+
+**Operator command** (expected runtime under a second)
+Where: your Mac, any directory
+
+```bash
+python3 -I -c 'import json, os; m = json.load(open(os.path.expanduser(os.environ.get("DEBATE_PARSER_EVAL_PATHS") or "~/.debate-intelligence/parser-eval-paths.json"))); found = [p for d, p in m.items() if d.startswith("a888a5db95488218")]; print(found[0] if len(found) == 1 else "STOP: found " + str(len(found)))'
+```
+
+Success looks like one absolute path. `STOP: found 0` means the path map does not hold the file.
+
+### B. The store diff for hsld26, hspf26 and hspolicy26, and the coach sample (Q2 (b), (c))
+
+This must run **before** the re-parse. The store's newest version directory must still be
+`2026.10.20-docx-6`, so run it from this task's worktree before or after the merge, but before step
+C7.
+
+- It is read-only over the store, the blobs and the index.
+- It writes only the coach's CSV and its key, under the data directory.
+- The JSON it prints is counts only. The CSV holds lines of the files, so it is for the coach, and
+  its rows are never pasted into the session.
+
+**Operator command** (expected runtime ~8 to 10 minutes: about 140 s for hsld26, 120 s for hspf26,
+over 115 s for hspolicy26, 20 s for openev)
+Where: your Mac, in the task worktree
+
+```bash
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e31-t31-labelled-evaluation-gaps
+if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; else uv run python scripts/diff_cite_lines_by_their_place.py --index ~/.debate-research/dev/tub-index/767b9c7c056b80cb/search-index.sqlite --sample-out ~/.debate-research/dev/parser-eval/cite-lines-by-their-place/coach-sample-20261027.csv --seed 20261027 > ~/t31-store-diff.json; echo "exit $?"; fi
+jq -c '.caselists | to_entries[] | {caselist: .key} + (.value | {version, sources, sources_read, failed, without_a_blob, gaining: .cards_gaining_a_cite.all, growing: .cards_whose_cite_gains_a_line.all, white_only: .cards_losing_only_white_highlight, other: .other_cards_changed, vanish: .cards_the_store_holds_that_vanish, new: .new_cards, index: .index_no_cite_documents, index_gaining: .index_no_cite_documents_gaining_a_cite.all, seconds})' ~/t31-store-diff.json
+jq -c '.sample' ~/t31-store-diff.json
+```
+
+Success looks like:
+
+- `exit 0`, then four lines, each with `version` `2026.10.20-docx-6`, `sources_read` equal to
+  `sources`, `failed` 0, and `other` `{}`;
+- the four `index` counts sum to 6,214;
+- `.sample` says `rows_written` 20, or every file there is if fewer.
+
+Paste back the five `jq` lines. `version` `2026.10.27-docx-7` means the store was already re-parsed:
+stop. An `other` that is not `{}` is a change I did not expect: paste it as it is.
+
+**For the coach.** The CSV's columns are `sample_row, line, tag_above, body_below_first_200,
+verdict`. Write `cite`, `not cite` or `unsure` in `verdict` for each row. Then send the PM the three
+counts only. The bar is at least 18 of 20 cites.
+
+### C. The dev re-parse, after the merge and the operator's return
+
+Run in this order, Thursday to Monday. **Steps C1 to C6 are read-only or local**, apart from the
+image push and apply in C5, which the PM reads first. **C7 publishes, and waits for the PM's ruling
+on [Deviation 4](#deviations-from-the-spec).**
+
+**Time and disk:**
+
+| Step | Time |
+|---|---|
+| C3 restore | a few minutes, about 15,000 parsed objects |
+| C7 parse and publish | unmeasured: the Mac's full parse took about 30 minutes in October, plus fetching every raw source from `raw/` |
+| C9 clusters | about 20 minutes |
+
+Have at least 10 GiB free.
+
+**C1. The worktree on `dev`, with the merge** (seconds). Where: your Mac.
+
+```bash
+WT="$HOME/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/caselist-credentials-dev"
+cd "$WT" || { echo "WT does not exist: $WT"; }
+git fetch origin
+git switch --detach origin/dev
+git log --oneline -1 --grep='^v1-e31-t31-labelled-evaluation-gaps:'
+grep -c 'DOCX_PARSER_VERSION: Final = "2026.10.27-docx-7"' packages/debate_core/src/debate_core/integrations/docx_parser/parser.py
+date +%A
+df -h "$HOME" | tail -1
+```
+
+Success looks like:
+
+- one log line, then `1`;
+- a day that is not Wednesday;
+- at least 10 GiB available.
+
+No log line means the merge is not on `dev`: stop.
+
+**C2. The release that carries it** (seconds). Where: `$WT`.
+
+```bash
+cd "$WT"
+gh release list --repo charlesclark2/debate-intelligence --limit 3 --json tagName,createdAt --jq '.[] | .tagName + " " + .createdAt'
+TAG="$(gh release list --repo charlesclark2/debate-intelligence --limit 1 --json tagName --jq '.[0].tagName')"
+echo "TAG=$TAG"
+git fetch origin tag "$TAG" --no-tags
+git show "${TAG}:packages/debate_core/src/debate_core/integrations/docx_parser/parser.py" | grep -c 'DOCX_PARSER_VERSION: Final = "2026.10.27-docx-7"'
+```
+
+Success looks like `TAG=<a dev pre-release>` and `1`. `0` means the newest release predates the
+merge: wait for the next dev pre-release, whose validate-dev run (image job included) is green.
+
+**C3. The copy, restored with the build still installed** (a few minutes). Where: your Mac.
+
+The installed `docx-6` build restores the `docx-6` parsed store, which is the "before" the clusters
+are compared with in C9. It holds the bucket lock while it restores.
+
+```bash
+cd "$HOME"
+debate-research --json --version | python3 -I -c 'import json, sys; print(json.load(sys.stdin)["data"]["tag"])'
+if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif pgrep -fl 'debate-research( --json)? caselist pull'; then echo "STOP: a caselist pull is running (above)"; else DEBATE_ENV=dev debate-research caselist restore-run-state --into "$HOME/.debate-research/t31-reparse-copy" > "$HOME/t31-restore.txt" 2>&1; echo "exit $?"; tail -5 "$HOME/t31-restore.txt"; fi
+ls "$HOME/.debate-research/t31-reparse-copy/parsed/"*
+```
+
+Success looks like:
+
+- a tag older than `$TAG`, then `exit 0`;
+- `ls` showing `2026.10.20-docx-6` under each of `hsld26`, `hspf26`, `hspolicy26` and `openev`.
+
+`exit 1` means a runner holds the lock: wait for it and run again with a new, empty directory.
+
+**C4. Install the release on the Mac** (~2 min). Where: `$WT`, in the shell that set `TAG`.
+
+```bash
+cd "$WT"
+if [ -z "$TAG" ]; then echo "STOP: TAG is not set; run C2 first"; else scripts/install_channel.sh "$TAG" 2>&1 | tail -5; fi
+```
+
+Success ends with the build's `complete` line. Then run the cutover runbook's "Every build this Mac
+can run is one with the lock" block (`caselist-cutover.md`, step 3). Every `==` line must name
+`$TAG`, `bucket` and `['hsld26', 'hspolicy26', 'hspf26']`.
+
+**C5. The run's image: dry run, push, digest, plan, apply.** Where: `$WT`.
+
+The dry run (several minutes):
+
+```bash
+cd "$WT"
+if [ -z "$TAG" ]; then echo "STOP: TAG is not set"; elif env | grep -qE '^(CASELIST_RUN_DEPLOY_PROFILE|DEBATE_RELEASE_REPO)='; then echo "STOP: a deploy override is set in this shell"; else time scripts/caselist_run_deploy.sh dev "$TAG" --dry-run; fi
+```
+
+Success looks like seven `ok:` lines, then `Dry run complete. debate-dev-caselist-run:<tag> built
+and checked`.
+
+The push. This also registers a run task definition that a run by hand would use, but the schedule
+does not move until the apply.
+
+```bash
+cd "$WT"
+aws sso login --sso-session debate
+if [ -z "$TAG" ]; then echo "STOP: TAG is not set"; elif env | grep -qE '^(CASELIST_RUN_DEPLOY_PROFILE|DEBATE_RELEASE_REPO)='; then echo "STOP: a deploy override is set in this shell"; else scripts/caselist_run_deploy.sh dev "$TAG" 2>&1 | tee /tmp/caselist-run-deploy.txt | tail -8; fi
+grep -E '^pushed: |^registered: |caselist_image_digest = ' /tmp/caselist-run-deploy.txt
+```
+
+Success looks like `pushed: …@sha256:<64 hex>`, a `registered:` line, and the
+`caselist_image_digest = "sha256:…"` line.
+
+The digest line: use the replacement block of `caselist-cloud-run.md`, "A new image, later",
+unchanged. Success is its `replaced:` line, then `1`.
+
+The plan:
+
+```bash
+cd "$WT"
+if env | grep -qE '^(TF_VAR_|TF_WORKSPACE=|TF_DATA_DIR=|TF_CLI_ARGS)'; then echo "STOP: a Terraform override is set in this shell"; else AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev init -input=false >/dev/null && AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev plan -input=false -no-color -out=t31-image.tfplan | tee /tmp/t31-image-plan.txt | tail -5; fi
+grep -E '^Plan:|must be replaced|will be destroyed' /tmp/t31-image-plan.txt
+grep -c 'aws_ssoadmin' /tmp/t31-image-plan.txt
+```
+
+Expect `Plan: 2 to add, 4 to change, 2 to destroy.`, the two `must be replaced` lines of the login
+and run task definitions, and `0`. Then run the plan check Thursday 2026-10-29's `v1-e40-t13` apply
+used, against `t31-image.tfplan`. The cutover's `IMAGEPLAN` as written stops on the enabled schedule
+([Deviation 5](#deviations-from-the-spec)). **Send the PM the plan's lines and the check's output.**
+The apply waits for the PM.
+
+The apply, after the PM has read the plan:
+
+```bash
+cd "$WT"
+if env | grep -qE '^(TF_VAR_|TF_WORKSPACE=|TF_DATA_DIR=|TF_CLI_ARGS)'; then echo "STOP: a Terraform override is set in this shell"; else AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev apply -input=false t31-image.tfplan; fi
+AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output caselist_run_schedule_state
+```
+
+Success looks like `Apply complete! Resources: 2 added, 4 changed, 2 destroyed.`, then
+`"ENABLED"`. One `-login-task-changed` email is expected.
+
+**From this apply on, the next Wednesday run uses `docx-7`.** C7 must publish all four caselists
+before then. Otherwise that run parses in full only what it imports, and its index stage fails.
+
+**C6. The full parse's dry run, in the copy** (seconds; writes nothing). Where: your Mac.
+
+```bash
+cd "$HOME"
+if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; else for c in hsld26 hspolicy26 hspf26 openev; do env DEBATE_ENV=dev DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/t31-reparse-copy" debate-research --json caselist parse --caselist ${c} --dry-run | jq -c '.data | {caselist, version, sources, to_parse, skipped}'; done; fi
+```
+
+Success looks like four lines with `version` `2026.10.27-docx-7`, `to_parse` equal to `sources` and
+above zero, and `skipped` 0. `version` `2026.10.20-docx-6` means the installed build is the old one:
+stop.
+
+**C7. The full parse and publish, one caselist at a time** (unmeasured; see the table). Where: your
+Mac. **Only after the PM's ruling on Deviation 4.**
+
+First the lock and the session:
+
+```bash
+cd "$WT"
+BUCKET=$(AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output -raw evidence_bucket_name)
+aws sso login --profile debate-dev-evidence
+LOCK_STATE=$(aws s3 cp "s3://${BUCKET}/reports/sync/run-lock.json" - --profile debate-dev-evidence | python3 -I -c 'import json, sys; print(json.load(sys.stdin)["state"])')
+echo "lock ${LOCK_STATE}"
+```
+
+Success looks like `lock free`.
+
+Then the parse and publish:
+
+```bash
+cd "$HOME"
+if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif [ "$LOCK_STATE" != "free" ]; then echo "STOP: the lock is ${LOCK_STATE}, not free"; elif [ "$(date +%A)" = "Wednesday" ]; then echo "STOP: not on a Wednesday"; else for c in hsld26 hspolicy26 hspf26 openev; do env DEBATE_ENV=dev DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/t31-reparse-copy" debate-research --json caselist parse --caselist ${c} --publish > "$HOME/t31-dev-${c}.json"; echo "${c} exit $?"; done; fi
+for c in hsld26 hspolicy26 hspf26 openev; do jq -c '(.data // .error.details) | {caselist, version, sources, parsed, cards, unsupported, failed, publish: .publish.counts}' "$HOME/t31-dev-${c}.json"; done
+```
+
+Success looks like four `exit 0`, then four lines with `version` `2026.10.27-docx-7`, `parsed` above
+zero and equal to `sources` less `unsupported`, `failed` 0, and a publish count above zero. On
+`PARSED_PUBLISH_INCOMPLETE`, run that caselist's parse line again. Paste back the four `jq` lines.
+
+**C8. The second run: the next scheduled Wednesday run** (it starts at 06:00 and takes up to about
+2.5 hours). Where: your Mac, after it has finished.
+
+```bash
+cd "$HOME"
+aws sso login --profile debate-dev-evidence
+DEBATE_ENV=dev debate-research --json caselist runs --remote --last 1 | jq -c '.data.runs[0] | {parse: .details.parse, stages: [.stages[] | select(.stage == "parse" or .stage == "search_index")]}'
+```
+
+Success looks like:
+
+- `full_parses` 0, with only that week's imports parsed;
+- the `search_index` stage built and published an index.
+
+A failed `search_index` stage means a store the run read has no `docx-7` directory. Paste the line
+to the PM.
+
+**C9. The clusters against the `docx-6` tables** (about 20 minutes). Where: `$WT`. This reads the
+copy only.
+
+```bash
+cd "$WT"
+for c in hsld26 hspolicy26 hspf26 openev; do uv run python scripts/compare_card_clusters.py --data-dir "$HOME/.debate-research/t31-reparse-copy" counts --caselist ${c} --before "$HOME/.debate-research/t31-reparse-copy/parsed/${c}/2026.10.20-docx-6/occurrences.jsonl" > "$HOME/t31-clusters-${c}.json"; echo "${c} exit $?"; done
+jq -c 'to_entries[] | {caselist: .key} + (.value | {before_version, after_version, cards_only_before, cards_only_after, exact_fingerprints_changed, clusters_before, clusters_after, clusters_merged_into_another, clusters_divided, largest_before, largest_after, seconds})' "$HOME"/t31-clusters-*.json
+```
+
+Success looks like four `exit 0`, and each line `before_version` `2026.10.20-docx-6`,
+`after_version` `2026.10.27-docx-7`. A card's body does not change under these rules, only its cite
+and, for the tag-style shape, its tag and first paragraph. So expect few `exact_fingerprints_changed`.
+Paste the four lines.
+
+**C10. The search function, with the index C8 published** (minutes; the same day as C8). Where:
+`$WT`.
+
+The function's parser must match the index's, or card download is off (`evidence-search.md`,
+"Download is off"). The dry run:
+
+```bash
+cd "$WT"
+uv sync --all-packages
+scripts/tub_deploy.sh dev --dry-run
+```
+
+Then the deploy:
+
+```bash
+cd "$WT"
+scripts/tub_deploy.sh dev
+```
+
+Success looks like `{"status":"ok"}` and `Deployed <sha> to dev`. Download is back within five
+minutes.
+
+**C11. Remove the copy** (seconds). Where: your Mac. First see what goes:
+
+```bash
+du -sh "$HOME/.debate-research/t31-reparse-copy"
+ls "$HOME/.debate-research/t31-reparse-copy"
+```
+
+Then, once C9's lines are pasted:
+
+```bash
+rm -rf "$HOME/.debate-research/t31-reparse-copy"
+```
 
 ## Follow-up work
 
-- The **7 wiki-converted tag rows** (bold lines read as body, 4 of them underlined) are not proposed
-  for a rule here. If the PM wants them, they belong to a task with a store count of the shape.
-- **`v1-e40-t06`'s question 2** (raw sources for prod's hand publish) decides whether prod's
-  re-parse steps can be written.
+- **A cloud parse after a parser bump.** `v1-e40-t08`'s "parse owed", extended so a run parses every
+  caselist a new parser version owes, would replace C3, C6 and C7 with the scheduled run. The PM
+  files it (E40).
+- **The cutover runbook's `IMAGEPLAN`** needs a form for an image after the cutover, and "A new
+  image, later" should point at it (E40).
+- **Prod's re-parse:** a separate E40 task after `v1-e40-t10`, as the PM ruled.
+- **The 7 wiki-converted tag rows**, from phase 1, are still not proposed for a rule.
 
 ## PM review
 

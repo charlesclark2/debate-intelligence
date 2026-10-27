@@ -275,3 +275,86 @@ files' second cite lines (shape (1)), but the index's cards with no cite come mo
 other-heuristic and CardMirror files, where the labelled cites missed sit under a tag (shape (2)).
 How many index documents each shape would give a cite is not counted here: that needs a re-parse
 of the store.
+
+## After the ruling: `2026.10.27-docx-7`
+
+The PM ruled on 2026-10-27:
+
+- rules (1), (2) and (4) above, not (3) or (1′);
+- white highlight not read as highlight (H);
+- one version bump for all four.
+
+As built, the three cite rules also leave alone a line longer than the profile's cite bound (1,000
+characters), and a line longer than 400 characters that opens with a short cite. `v1-e31-t12`'s
+long-cite rule judged the second kind and left it as it was on purpose.
+
+Neither guard moves a labelled row. On the labelled files the rules take 23, 19 and 4 cites and
+nothing else, exactly as the what-ifs counted.
+
+### The labelled evaluation, before and after
+
+`scripts/run_parser_eval.py --tier both`, without `--write-baseline`: 2.8 s, gate passed for both
+tiers. No unit's precision or F1 falls in any group, and no span or card figure falls, on either tier.
+
+**Full tier**
+
+| Group | Metric | Target | `docx-6` | `docx-7` | Status |
+|---|---|---|---|---|---|
+| template:verbatim | TAG F1 | 0.97 | 0.950 | 0.977 | MET |
+| template:verbatim | CITE F1 | 0.97 | 0.751 | 0.895 | MISSED |
+| template:verbatim | ANALYTIC F1 | 0.85 | 0.872 | 0.901 | MET |
+| template:verbatim | span F1 | 0.99 | 0.971 | 0.974 | MISSED |
+| template:non-verbatim | TAG F1 | 0.90 | 0.908 | 0.924 | MET |
+| template:non-verbatim | CITE F1 | 0.90 | 0.796 | 0.937 | MET |
+
+The other five targets are unchanged.
+
+| Overall | `docx-6` | `docx-7` |
+|---|---|---|
+| CITE precision / recall / F1 | 0.985 / 0.623 / 0.763 | 0.989 / 0.837 / 0.907 |
+| TAG precision / recall / F1 | 0.952 / 0.919 / 0.935 | 0.976 / 0.942 / 0.959 |
+| ANALYTIC precision / recall | 0.845 / 0.741 | 0.896 / 0.741 |
+| OTHER precision | 0.483 | 0.541 |
+| Highlight precision / F1 | 0.948 / 0.973 | 0.961 / 0.980 |
+| Span F1 | 0.985 | 0.987 |
+| Card boundary exact match / card precision | 0.889 / 0.863 | 0.911 / 0.885 |
+| Cards with no cite row read, of 135 (`scripts/tally_missed_units.py`) | 31 | 10 |
+| Cite rows missed, of 215 / tag rows missed, of 173 | 81 / 14 | 35 / 10 |
+| Highlight characters added, all in `a888a5db95488218` | 707 | 520 (cyan 449, green 71) |
+
+By group:
+
+- CITE precision: Verbatim 0.979 → 0.985, non-Verbatim 1.000 → 1.000.
+- Format PF: CITE F1 0.734 → 0.860, highlight F1 0.759 → 0.811.
+
+**PR subset**
+
+| Group | Metric | Target | `docx-6` | `docx-7` | Status |
+|---|---|---|---|---|---|
+| template:verbatim | CITE F1 | 0.97 | 0.762 | 0.791 | MISSED |
+| template:verbatim | span F1 | 0.99 | 0.808 | 0.829 | MISSED |
+| template:non-verbatim | TAG F1 | 0.90 | 0.850 | 0.900 | MET |
+| template:non-verbatim | CITE F1 | 0.90 | 0.882 | 1.000 | MET |
+
+Overall on the subset:
+
+- CITE precision 0.969 → 0.973, recall 0.705 → 0.818;
+- TAG precision 0.949 → 0.974, recall 0.861 → 0.884;
+- card boundary exact match 0.921 → 0.947;
+- Verbatim highlight F1 0.695 → 0.756.
+
+### The store, before and after
+
+`scripts/diff_cite_lines_by_their_place.py` re-parses each stored `docx-6` source with `docx-7` and
+compares the cards by their last paragraph. It is read-only. In the session, openev took 19 s; the
+other three caselists each run past two minutes and are the operator's.
+
+| openev, 102 sources, 8,081 cards | |
+|---|---|
+| Cards that gain a cite: line under a tag / cite in the tag style | 166 / 6 |
+| Cards whose cite gains a later line | 259 |
+| Cards that lose only white highlight (85 white spans) | 6 |
+| Any other card that changed; cards vanished; new cards | 0; 0; 0 |
+| The index's 356 openev no-cite documents that gain a cite | 142 (line under a tag 136, cite in the tag style 6) |
+
+By family, the cards that gain a cite are cardmirror 110, verbatim 48 and other-heuristic 14.

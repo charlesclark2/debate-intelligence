@@ -65,7 +65,7 @@ spec:
         The operator's dry run on hspolicy26 shows the Midterms DA's branches or the Economy
         DA's mechanism as ruled, with counts before and after (operator).
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

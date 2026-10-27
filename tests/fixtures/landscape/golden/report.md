@@ -30,7 +30,7 @@ How to read the numbers:
 * A card under an `AT:` heading answers a position and never counts as reading it, and so does a card placed under a position in a round on the other side: a `Midterms DA` block in an affirmative file is the 2AC answering it.
 * Each position's 5 most-read cards are in `top_cards.csv`, where near-duplicate copies of a card count as one card.
 * **Impact cards**, under each advantage and DA, are up to 3 of its cards labelled as an impact, ranked by the teams reading them: a heading over the card says `impact` or `impacts` (not `no impact`, `impact defense` or `impact turn`) or `turns case`, or its tag opens with an impact word such as `extinction`, `existential` or `the impact`. Only the labelled copies of a card count. An impact nobody labelled is not found, so each kind says how many of its documents carry no labelled impact. They are also in `impact_cards.csv`.
-* **What each impact runs through**, under its impact cards, names each rank by the first of these it has, marked with where the name came from: its **scenario**, heading words two or more teams use under the position (a `Scenario 1` heading's name, a named heading, or the words beside an impact or internal-link label, such as `Dome impact`), and where the coach has listed a position's scenarios only the coach's names, each with the teams of every heading listed under it; its **internal link**, the nearest card above it under the same position heading that a heading or its tag labels an internal link; the impact card's own **tag**; and the **card above** it, the card directly above it in its block when that is not an impact card itself: where it sits, not what it does. None is guessed. A rank with none of these is left out, and the position says how many were. A scenario name or a tag holding a word of a caselist school, team code or tournament is withheld, and the next one names the rank.
+* **What each impact runs through**, under its impact cards, names each rank by the first of these it has, marked with where the name came from: its **scenario**, heading words two or more teams use under the position (a `Scenario 1` heading's name, a named heading, or the words beside an impact or internal-link label, such as `Dome impact`), and where the coach has listed a position's scenarios only the coach's names, each with the teams of every heading listed under it; its **internal link**, the nearest card above it under the same position heading that a heading or its tag labels an internal link; its **link**, the nearest such card that a heading or its tag labels a link, never an answer such as `no link`, `link turn` or `non-unique`; the impact card's own **tag**; and the **card above** it, the card directly above it in its block when that is not an impact card itself: where it sits, not what it does. None is guessed. A rank with none of these is left out, and the position says how many were. A scenario name or a tag holding a word of a caselist school, team code or tournament is withheld, and the next one names the rank.
 * **The link chain** of each advantage and DA is its most-read card for each role a team labelled, by a heading under the position or the tag's first words: uniqueness (`U`, `UQ`), link, internal link (`IL`) and impact, and for an advantage harms, inherency and solvency. An `AT:` heading, a heading naming two roles, and a card that answers the position or is read on the other side fill no role. A role no team labelled says so.
 * **Trends** compare this week's window with the previous one. A round counts in the week its file was first disclosed, whatever path it was later filed under, and a position's share is the teams that read it that week on its own side over the week's teams disclosing on that side: this week 4 on the affirmative and 4 on the negative, the previous 3 and 4. **NEW** is read for the first time on this topic; **RISING** and **FALLING** moved by at least 5 points with at least 3 teams reading it in one of the two weeks; everything else is **STEADY**. Every position's row is in `trends.csv`.
 
@@ -65,7 +65,7 @@ Advantage documents with no labelled impact: 3 of 6 (50.0%).
 Advantage documents with no scenario heading and no role label: 1 of 6 (16.7%).
 
 * Impact rows: 3; with a scenario two or more teams name: 1.
-* Ranks named by a scenario: 1; by an internal link: 0; by the impact card's tag: 2; by the card above it: 0; left out: 0.
+* Ranks named by a scenario: 1; by an internal link: 0; by a link: 0; by the impact card's tag: 2; by the card above it: 0; left out: 0.
 * Scenario names withheld for holding a word of a caselist school, team code or tournament: 0.
 * Tags withheld for holding a word of a caselist school, team code or tournament: 0.
 * Positions with no labelled card, by role: uniqueness 2 of 2, link 2 of 2, internal link 1 of 2, impact 1 of 2, harms 2 of 2, inherency 2 of 2, solvency 1 of 2.
@@ -145,7 +145,7 @@ DA documents with no labelled impact: 2 of 6 (33.3%).
 DA documents with no scenario heading and no role label: 2 of 6 (33.3%).
 
 * Impact rows: 4; with a scenario two or more teams name: 1.
-* Ranks named by a scenario: 1; by an internal link: 0; by the impact card's tag: 3; by the card above it: 0; left out: 0.
+* Ranks named by a scenario: 1; by an internal link: 0; by a link: 1; by the impact card's tag: 2; by the card above it: 0; left out: 0.
 * Scenario names withheld for holding a word of a caselist school, team code or tournament: 1.
 * Tags withheld for holding a word of a caselist school, team code or tournament: 0.
 * Positions with no labelled card, by role: uniqueness 3 of 4, link 2 of 4, internal link 3 of 4, impact 2 of 4.
@@ -160,7 +160,7 @@ DA documents with no scenario heading and no role label: 2 of 6 (33.3%).
 
 What each impact runs through:
 
-* Rank 1: Debt ceiling fights are near (tag)
+* Rank 1: Spending triggers a debt spiral (link)
 * Rank 2: Spending triggers a debt spiral (tag)
 * Rank 3: recession (scenario)
 

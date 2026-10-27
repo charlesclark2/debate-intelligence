@@ -18,16 +18,19 @@ gives is counted, never guessed.
 A sub-heading labels a role when it holds the role's words, as whole words:
 
 * **uniqueness:** `uniqueness`, `uq`, or `u` as its first word (never `u s`, which is U.S.);
-* **link:** `link`, `links`, or `l` as its first word; not `link turn(s)`, `no link`, `link defense`,
-  `lt`, `l t`, and not the `link` of `internal link`;
+* **link:** `link`, `links`, or `l` as its first word; not `link turn(s)`, `no link(s)`, `link defense`,
+  `lt`, `l t`, `non unique`, `nonunique` or `not unique`, which name answers (`v1-e32-t27`), and not the
+  `link` of `internal link`;
 * **internal link:** `internal link(s)`, `internal`, `internals`, `il`, `i l`;
 * **impact:** `v1-e32-t10`'s impact heading, reused, not rewritten;
 * **advantages only:** harms `harms`, `harm`; inherency `inherency`, `inh`; solvency `solvency`, `solv`.
 
 A tag labels uniqueness when it opens `uniqueness` or `uq`, a link when it opens `link`, `links` or
-`the link` (not `link turn(s)` or `link defense`), and an internal link when it opens `internal link`,
-`internal`, `il` or `i l`. `u` never labels in a tag: on hspolicy26, 105 of the 106 counted tags
-opening `u` open `U.S.`.
+`the link` and names no answer, and an internal link when it opens `internal link`, `internal`, `il` or
+`i l`. A link tag names an answer when, past a leading `the`, it opens with one of the heading's answers
+(`link turn`, `no link`, …), or the words after `link` or `links` call it non-unique (`non unique`, `is
+not unique`, …): `The link turns`, `Links are non-unique` (`v1-e32-t27`). `u` never labels in a tag:
+on hspolicy26, 105 of the 106 counted tags opening `u` open `U.S.`.
 
 An answer sub-heading (`AT: No Link`, the team's own frontline) fills no role, and a heading holding
 two roles' labels fills neither. A card's impact role is `v1-e32-t10`'s impact card, whatever else
@@ -68,8 +71,11 @@ An impact row under "What each impact runs through" is named by the first of the
 
 1. its scenario, the name above, shown by the report's rules;
 2. its labelled internal link's tag;
-3. the impact card's own tag;
-4. the tag of the card above it in its block, when that card is no impact card.
+3. its labelled link's tag (`v1-e32-t27`): the nearest card above it under its position heading that
+   is counted and labelled a link, read as the internal link is. The internal link comes first, as the
+   step nearest the impact;
+4. the impact card's own tag;
+5. the tag of the card above it in its block, when that card is no impact card.
 
 A text holding a word of a caselist school, team code or tournament (:func:`is_withheld`) is passed
 over and counted, and the next names the row. A row none of them names is left out and counted, never
@@ -107,8 +113,32 @@ __all__ = [
     "tag_role",
 ]
 
-NOT_A_LINK: Final = ("link turn", "link turns", "no link", "link defense", "lt", "l t")
-"""Answers and turns filed with a link word: a heading or tag holding one labels no link."""
+NOT_A_LINK: Final = (
+    "link turn",
+    "link turns",
+    "no link",
+    "no links",
+    "link defense",
+    "lt",
+    "l t",
+    "non unique",
+    "nonunique",
+    "not unique",
+)
+"""Answers and turns filed with a link word: a heading holding one, or a tag opening one, labels no link."""
+
+_LINK_ANSWERS: Final = (
+    "non unique",
+    "nonunique",
+    "not unique",
+    "is non unique",
+    "is nonunique",
+    "is not unique",
+    "are non unique",
+    "are nonunique",
+    "are not unique",
+)
+"""What the words after a tag's `link` or `links` open with when they call it non-unique (`v1-e32-t27`)."""
 
 _INTERNAL_LINK_WORDS: Final = ("internal link", "internal links", "internal", "internals", "il", "i l")
 _ADVANTAGE_WORDS: Final = {
@@ -207,11 +237,21 @@ def tag_role(tag: str | None) -> ChainRole | None:
         return ChainRole.UNIQUENESS
     if any(_opens(words, one) for one in INTERNAL_LINK_TAG_OPENINGS):
         return ChainRole.INTERNAL_LINK
-    if any(_opens(words, one) for one in LINK_TAG_OPENINGS) and not any(
-        _opens(words, one) for one in NOT_A_LINK
-    ):
+    if any(_opens(words, one) for one in LINK_TAG_OPENINGS) and not _answers_a_link(words):
         return ChainRole.LINK
     return None
+
+
+def _answers_a_link(words: str) -> bool:
+    """A tag opening with a link word names an answer: `The link turns`, `Links are non-unique`."""
+    plain = words.removeprefix("the ")
+    if any(_opens(plain, one) for one in NOT_A_LINK):
+        return True
+    for opening in ("links", "link"):
+        if _opens(plain, opening):
+            after = plain[len(opening) :].strip()
+            return any(_opens(after, one) for one in _LINK_ANSWERS)
+    return False
 
 
 def card_roles(

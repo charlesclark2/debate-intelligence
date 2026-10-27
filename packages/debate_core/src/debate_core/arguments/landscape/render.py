@@ -483,7 +483,9 @@ def _header_section(report: LandscapeReport, trends: LandscapeTrends | None = No
         "impact or internal-link label, such as `Dome impact`), and where the coach has listed a position's "
         "scenarios only the coach's names, each with the teams of every heading listed under it; its "
         "**internal link**, the nearest card above it under the same position heading that a heading or its "
-        "tag labels an internal link; the impact card's own **tag**; and the **card above** it, the card "
+        "tag labels an internal link; its **link**, the nearest such card that a heading or its tag labels a "
+        "link, never an answer such as `no link`, `link turn` or `non-unique`; the impact card's own "
+        "**tag**; and the **card above** it, the card "
         "directly above it in its block when that is not an impact card itself: where it sits, not what it "
         "does. None is guessed. A rank with none of these is left out, and the position says how many "
         "were. A scenario name or a tag holding a word of a caselist school, team code or tournament is "
@@ -718,6 +720,7 @@ def _chain_coverage_lines(kind: PositionKind, chains: ChainCoverage) -> list[str
 _NAMED_BY: Final = {
     LeadInSource.SCENARIO: "a scenario",
     LeadInSource.INTERNAL_LINK: "an internal link",
+    LeadInSource.LINK: "a link",
     LeadInSource.TAG: "the impact card's tag",
     LeadInSource.CARD_ABOVE: "the card above it",
 }
@@ -734,7 +737,7 @@ def _lead_ins(cards: Sequence[ImpactCard]) -> list[str]:
     left_out = sum(card.named_by is None for card in cards)
     if left_out:
         lines.append(
-            "* Ranks left out, with no scenario, internal link, tag or card above to name them: "
+            "* Ranks left out, with no scenario, internal link, link, tag or card above to name them: "
             f"{left_out:,}."
         )
     return lines

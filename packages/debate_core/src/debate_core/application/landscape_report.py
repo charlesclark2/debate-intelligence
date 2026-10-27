@@ -83,11 +83,13 @@ side never does. Per DA and advantage:
   tag the most teams' copies have, ties by tag. With none, and only then, the row carries the tag of
   the card directly above a copy in its block when that card is not an impact card: the card above it
   in the file, for report.md, never called an internal link.
-* **What names a row** (`v1-e32-t25`) is the first of its scenario, its internal link, its own tag and
-  the card above it (:func:`~debate_core.arguments.landscape.link_chains.rank_name`). An internal link or
-  card above holding a word of a caselist school, team code or tournament is not kept on the row, so
-  impact_cards.csv never quotes one. Such a text the row reaches, its own tag included, is counted and
-  the next source names the row; a row nothing names is left out and counted.
+* **A row's link** (`v1-e32-t27`) is found as its internal link is, the nearest card above a labelled
+  copy that is labelled a link, for report.md only.
+* **What names a row** (`v1-e32-t25`) is the first of its scenario, its internal link, its link, its own
+  tag and the card above it (:func:`~debate_core.arguments.landscape.link_chains.rank_name`). An internal
+  link, link or card above holding a word of a caselist school, team code or tournament is not kept on
+  the row, so impact_cards.csv never quotes one. Such a text the row reaches, its own tag included, is
+  counted and the next source names the row; a row nothing names is left out and counted.
 * **Its link chain** is its most-read cluster per role, ranked as impact cards are, by the teams of the
   copies labelled with the role; the impact role is the impact section's first row.
 * **Per kind**, the documents with no scenario heading and no role label, the rows with a scenario, an
@@ -1057,15 +1059,17 @@ class _LinkChains:
     # Per impact row -----------------------------------------------------------------------------
 
     def with_lead_in(self, row: ImpactCard) -> ImpactCard:
-        """The row with its scenario, its labelled internal link or else the card above it, and what names it.
+        """The row with its scenario, its labelled internal link or else the card above it, its labelled
+        link, and what names it.
 
-        An internal link or card above holding a caselist word is never kept on the row, and is counted
-        only when the row reaches it (`v1-e32-t25`).
+        An internal link, link or card above holding a caselist word is never kept on the row, and is
+        counted only when the row reaches it (`v1-e32-t25`, `v1-e32-t27`).
         """
         position = self._taxonomy.position(row.position_id)
         kind = position.kind
         names = self._names(row.position_id)
         scenario: defaultdict[str, set[tuple[str, str]]] = defaultdict(set)
+        internal: defaultdict[str, set[tuple[str, str]]] = defaultdict(set)
         link: defaultdict[str, set[tuple[str, str]]] = defaultdict(set)
         above: defaultdict[str, set[tuple[str, str]]] = defaultdict(set)
         for key, rounds in self._labelled.get(row.position_id, {}).items():
@@ -1076,7 +1080,10 @@ class _LinkChains:
             name = self._scenario(card, position).name
             if name is not None and name in names:
                 scenario[name] |= teams
-            tag = self._internal_link_tag(card, row.position_id, kind)
+            tag = self._labelled_above(card, row.position_id, kind, ChainRole.INTERNAL_LINK)
+            if tag is not None:
+                internal[tag] |= teams
+            tag = self._labelled_above(card, row.position_id, kind, ChainRole.LINK)
             if tag is not None:
                 link[tag] |= teams
             tag = self._card_above_tag(card)
@@ -1084,30 +1091,38 @@ class _LinkChains:
                 above[tag] |= teams
         words = self._words_of_caselist
         shown = _most_teams(scenario)
+        labelled_internal = _most_teams(internal)
         labelled_link = _most_teams(link)
         card_above = _most_teams(above)
         named = rank_name(
             {
                 LeadInSource.SCENARIO: shown,
-                LeadInSource.INTERNAL_LINK: labelled_link,
+                LeadInSource.INTERNAL_LINK: labelled_internal,
+                LeadInSource.LINK: labelled_link,
                 LeadInSource.TAG: row.tag,
                 LeadInSource.CARD_ABOVE: card_above,
             },
             words,
         )
         self._withheld_tags[row.position_id] += named.withheld
-        internal_link = _not_withheld(labelled_link, words)
+        internal_link = _not_withheld(labelled_internal, words)
         return row.model_copy(
             update={
                 "scenario": shown,
                 "internal_link_tag": internal_link,
+                "link_tag": _not_withheld(labelled_link, words),
                 "card_above_tag": None if internal_link is not None else _not_withheld(card_above, words),
                 "named_by": named.source,
             }
         )
 
-    def _internal_link_tag(self, card: LandscapeCard, position_id: str, kind: PositionKind) -> str | None:
-        """The tag of the nearest card above `card` under its position heading, counted and labelled IL."""
+    def _labelled_above(
+        self, card: LandscapeCard, position_id: str, kind: PositionKind, role: ChainRole
+    ) -> str | None:
+        """The tag of the nearest card above `card` under its position heading, counted and labelled `role`.
+
+        `v1-e32-t25` reads the internal link this way, and `v1-e32-t27` the link.
+        """
         section = self._section(card)
         if section is None:
             return None
@@ -1118,7 +1133,7 @@ class _LinkChains:
                 return None
             if (prior.source_sha256, prior.element_index) not in counted:
                 continue
-            if ChainRole.INTERNAL_LINK in self._roles(prior, kind):
+            if role in self._roles(prior, kind):
                 return prior.tag
         return None
 

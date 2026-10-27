@@ -68,10 +68,10 @@ def test_the_dry_run_prints_the_planks_and_the_scans_hits_by_section_and_counts_
         "list, 0 of them holding a caselist word.",
         "Scenario words no list holds, da: 0 that two or more teams use under a position with a list, 0 of "
         "them holding a caselist word.",
-        "Impact ranks named, advantage: 1 by a scenario, 0 by an internal link, 2 by a tag, 0 by the card "
-        "above; 0 left out; 0 tags withheld.",
-        "Impact ranks named, da: 1 by a scenario, 0 by an internal link, 3 by a tag, 0 by the card above; 0 "
-        "left out; 0 tags withheld.",
+        "Impact ranks named, advantage: 1 by a scenario, 0 by an internal link, 0 by a link, 2 by a tag, "
+        "0 by the card above; 0 left out; 0 tags withheld.",
+        "Impact ranks named, da: 1 by a scenario, 0 by an internal link, 1 by a link, 2 by a tag, 0 by the "
+        "card above; 0 left out; 0 tags withheld.",
         "Planks: 8 under 1 CPs, in 3 groups by what they solve, 7 rows shown, 1 withheld for naming a "
         "school.",
         "  states-cp: 8 planks, 6 teams, 3 groups, 1 withheld",
@@ -175,18 +175,19 @@ def test_the_dry_run_counts_the_scenario_words_no_list_holds_and_never_prints_th
 
 
 def test_the_dry_run_counts_the_impact_ranks_each_source_names_and_never_prints_a_name() -> None:
-    # `v1-e32-t25`, the PM's brief of 2026-10-26: one counts-only line per kind. The counts are set by
-    # hand on the report, each different, so a line printing one count in another's place fails.
+    # `v1-e32-t25`, the PM's brief of 2026-10-26: one counts-only line per kind; `v1-e32-t27` adds the
+    # link. The counts are set by hand on the report, each different, so a line printing one count in
+    # another's place fails.
     result = _result()
     advantage, da = result.report.chain_coverage
     named = (
         tuple(
             one.model_copy(update={"rows": rows})
-            for one, rows in zip(advantage.named_rows, (2, 3, 5, 7), strict=True)
+            for one, rows in zip(advantage.named_rows, (2, 3, 10, 5, 7), strict=True)
         ),
         tuple(
             one.model_copy(update={"rows": rows})
-            for one, rows in zip(da.named_rows, (11, 13, 17, 19), strict=True)
+            for one, rows in zip(da.named_rows, (11, 13, 12, 17, 19), strict=True)
         ),
     )
     result.report = result.report.model_copy(
@@ -199,10 +200,10 @@ def test_the_dry_run_counts_the_impact_ranks_each_source_names_and_never_prints_
     )
     lines = script.report_lines(result)
     assert [line for line in lines if line.startswith("Impact ranks named")] == [
-        "Impact ranks named, advantage: 2 by a scenario, 3 by an internal link, 5 by a tag, 7 by the card "
-        "above; 4 left out; 6 tags withheld.",
-        "Impact ranks named, da: 11 by a scenario, 13 by an internal link, 17 by a tag, 19 by the card "
-        "above; 8 left out; 9 tags withheld.",
+        "Impact ranks named, advantage: 2 by a scenario, 3 by an internal link, 10 by a link, 5 by a tag, 7 "
+        "by the card above; 4 left out; 6 tags withheld.",
+        "Impact ranks named, da: 11 by a scenario, 13 by an internal link, 12 by a link, 17 by a tag, 19 by "
+        "the card above; 8 left out; 9 tags withheld.",
     ]
     for words in ("economic collapse", "recession", "Debt ceiling", "Bulk purchasing", "Rural hospitals"):
         assert not any(words in line for line in lines)

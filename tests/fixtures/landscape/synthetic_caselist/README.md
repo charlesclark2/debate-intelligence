@@ -126,6 +126,11 @@ position use it. Through 2026-09-15:
   the Spending DA's rank 3 are named by their scenarios and every other rank by its tag; the card above
   rank 1 and rank 3's internal link stay on the row but name nothing. `../readable_impact_chains/`
   edits two tags and adds two scenario lists to reach the other sources and a left-out rank.
+* **A link names a rank (`v1-e32-t27`)**, after the scenario and the internal link and before the tag:
+  the nearest card above the impact copy under the same position heading labelled a link. The Spending
+  DA's rank 1 is the one rank it reaches here: its scenario `cedarvale crash` is withheld, and `b1`'s
+  cluster 14 above it is under `link`, so it reads `Spending triggers a debt spiral (link)`.
+  `../link_lead_ins/` withholds that link and reaches another behind a withheld internal link.
 * **The rest of the report.** The 11 new cards are in files that already read their positions, so no
   round, team, trend or school-view row changes. Coverage is 45 of 56 cards; `top_cards.csv` gains the
   new clusters (Costs advantage 35, 37 and 38, Spending DA 39 to 41, Midterms DA 43 and 44); `a6`'s

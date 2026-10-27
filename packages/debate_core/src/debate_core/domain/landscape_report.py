@@ -155,6 +155,7 @@ class LeadInSource(StrEnum):
 
     SCENARIO = "scenario"
     INTERNAL_LINK = "internal link"
+    LINK = "link"
     TAG = "tag"
     CARD_ABOVE = "card above"
 
@@ -162,6 +163,7 @@ class LeadInSource(StrEnum):
 LEAD_IN_ORDER: Final = (
     LeadInSource.SCENARIO,
     LeadInSource.INTERNAL_LINK,
+    LeadInSource.LINK,
     LeadInSource.TAG,
     LeadInSource.CARD_ABOVE,
 )
@@ -283,6 +285,13 @@ class ImpactCard(TopCard):
         default=None,
         description="The tag, as parsed, of the labelled internal-link card above it; None when none is.",
     )
+    link_tag: str | None = Field(
+        default=None,
+        description=(
+            "The tag, as parsed, of the labelled link card above it (`v1-e32-t27`); None when none is. "
+            "report.md only."
+        ),
+    )
     card_above_tag: str | None = Field(
         default=None,
         description=(
@@ -314,6 +323,7 @@ class ImpactCard(TopCard):
         text = {
             LeadInSource.SCENARIO: self.scenario,
             LeadInSource.INTERNAL_LINK: self.internal_link_tag,
+            LeadInSource.LINK: self.link_tag,
             LeadInSource.TAG: self.tag,
             LeadInSource.CARD_ABOVE: self.card_above_tag,
         }[self.named_by]

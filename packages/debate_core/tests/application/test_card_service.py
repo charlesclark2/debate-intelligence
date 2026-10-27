@@ -132,12 +132,12 @@ INCOMPLETE: Final = CardFailure(
 
 
 def test_a_result_whose_card_and_verdict_disagree_on_the_status_is_refused() -> None:
-    card = blank_card()
+    verified = blank_card(VerificationStatus.VERIFIED)
 
     with pytest.raises(ValueError, match="status"):
         CutResult(
-            card=card,
-            verification=verdict(blank_card(VerificationStatus.VERIFIED), VerificationStatus.VERIFIED),
+            card=verified.evolve(verification_status=VerificationStatus.UNVERIFIED),
+            verification=verdict(verified, VerificationStatus.VERIFIED),
             metadata=(),
             reasons=(),
         )

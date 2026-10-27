@@ -78,6 +78,7 @@ from debate_core.application.ports.doi_metadata import DoiMetadataSource, DoiWor
 from debate_core.application.ports.persistence import ArticleRepository
 from debate_core.application.snapshot_service import LoadedSnapshot, SnapshotService
 from debate_core.domain import Article, Card, Citation, CitationField, ProvenanceMode
+from debate_core.domain.citation import CITATION_FIELD_NAMES
 from debate_core.domain.enums import CitationFieldSource
 from debate_core.evidence.edits import EditKind
 from debate_core.retrieval.citation_harvest import (
@@ -111,17 +112,6 @@ SOURCE_PRECEDENCE: Final = (
     CitationFieldSource.HEURISTIC,
 )
 """Which source's value a field takes when several state one, highest first."""
-
-CITATION_FIELD_NAMES: Final = (
-    "authors",
-    "author_credentials",
-    "title",
-    "publication",
-    "published_at",
-    "canonical_url",
-    "accessed_at",
-)
-"""Every field of a :class:`~debate_core.domain.Citation`, in cite order."""
 
 _RANK: Final = {source: rank for rank, source in enumerate(SOURCE_PRECEDENCE)}
 _CROSSREF: Final = CitationFieldSource.CROSSREF

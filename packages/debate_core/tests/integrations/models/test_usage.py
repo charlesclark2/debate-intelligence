@@ -283,33 +283,87 @@ def record(**fields: Any) -> UsageRecord:
 
 BEDROCK_PRICING_PAGE = "https://aws.amazon.com/bedrock/pricing/"
 
+READ_2026_10_26 = date(2026, 10, 26)
+"""The day the operator read the first prices off the AWS Bedrock pricing page (v1-e05-t07)."""
+
+READ_2026_10_27 = date(2026, 10, 27)
+"""The day the operator read Haiku 4.5's and Sonnet 4.6's, for dev's fallback routes (v1-e05-t13)."""
+
 COMMITTED_PRICES = {
-    # Read by the operator off the AWS Bedrock pricing page (us-east-1, on-demand) on 2026-10-26.
-    "anthropic.claude-haiku-5-5": {"input_usd_per_1k_tokens": 0.0001, "output_usd_per_1k_tokens": 0.0005},
-    "anthropic.claude-sonnet-5-5": {"input_usd_per_1k_tokens": 0.002, "output_usd_per_1k_tokens": 0.01},
-    "anthropic.claude-opus-5-5": {"input_usd_per_1k_tokens": 0.004, "output_usd_per_1k_tokens": 0.02},
-    "amazon.titan-embed-text-v2:0": {"input_usd_per_1k_tokens": 0.00002},
-    "cohere.rerank-v3-5:0": {"usd_per_1k_search_units": 2.0},
+    # Read by the operator off the AWS Bedrock pricing page (us-east-1, on-demand), on the day beside each.
+    "anthropic.claude-haiku-5-5": {
+        "input_usd_per_1k_tokens": 0.0001,
+        "output_usd_per_1k_tokens": 0.0005,
+        "as_of": READ_2026_10_26,
+    },
+    "anthropic.claude-sonnet-5-5": {
+        "input_usd_per_1k_tokens": 0.002,
+        "output_usd_per_1k_tokens": 0.01,
+        "as_of": READ_2026_10_26,
+    },
+    "anthropic.claude-opus-5-5": {
+        "input_usd_per_1k_tokens": 0.004,
+        "output_usd_per_1k_tokens": 0.02,
+        "as_of": READ_2026_10_26,
+    },
+    # $1.00 and $5.00 per million tokens.
+    "anthropic.claude-haiku-4-5-20251001-v1:0": {
+        "input_usd_per_1k_tokens": 0.001,
+        "output_usd_per_1k_tokens": 0.005,
+        "as_of": READ_2026_10_27,
+    },
+    # $3.00 and $15.00 per million tokens.
+    "anthropic.claude-sonnet-4-6": {
+        "input_usd_per_1k_tokens": 0.003,
+        "output_usd_per_1k_tokens": 0.015,
+        "as_of": READ_2026_10_27,
+    },
+    "amazon.titan-embed-text-v2:0": {"input_usd_per_1k_tokens": 0.00002, "as_of": READ_2026_10_26},
+    "cohere.rerank-v3-5:0": {"usd_per_1k_search_units": 2.0, "as_of": READ_2026_10_26},
 }
 """The prices the PM committed, written out by hand from the PM's table; every other price is unset."""
+
+ROUTED_MODELS = {
+    "model_routing.dev.yaml": {
+        # Haiku 4.5 and Sonnet 4.6 while the account's 5.5 quotas are held at zero (v1-e05-t13).
+        "complex_reasoning": "anthropic.claude-haiku-4-5-20251001-v1:0",
+        "high_volume": "anthropic.claude-haiku-4-5-20251001-v1:0",
+        "deep_audit": "anthropic.claude-sonnet-4-6",
+        "embeddings": "amazon.titan-embed-text-v2:0",
+        "rerank": "cohere.rerank-v3-5:0",
+    },
+    "model_routing.example.yaml": {
+        "complex_reasoning": "anthropic.claude-sonnet-5-5",
+        "high_volume": "anthropic.claude-haiku-5-5",
+        "deep_audit": "anthropic.claude-opus-5-5",
+        "embeddings": "amazon.titan-embed-text-v2:0",
+        "rerank": "cohere.rerank-v3-5:0",
+    },
+    "model_routing.prod.yaml": {
+        "complex_reasoning": "anthropic.claude-sonnet-5-5",
+        "high_volume": "anthropic.claude-haiku-5-5",
+        "deep_audit": "anthropic.claude-opus-5-5",
+        "embeddings": "amazon.titan-embed-text-v2:0",
+        "rerank": "cohere.rerank-v3-5:0",
+    },
+}
+"""The model each committed routing file sends each class to, written out by hand from the files."""
 
 
 def test_pricing_file_has_an_entry_for_every_model_the_routing_files_route() -> None:
     routed = {
-        route["model_id"]
+        path.name: {
+            task_class: route["model_id"]
+            for task_class, route in yaml.safe_load(path.read_text(encoding="utf-8"))["routes"].items()
+        }
         for path in sorted((REPOSITORY_ROOT / "config").glob("model_routing.*.yaml"))
-        for route in yaml.safe_load(path.read_text(encoding="utf-8"))["routes"].values()
     }
     committed = ModelPricing.load(COMMITTED_PRICING)
 
-    assert routed == {
-        "anthropic.claude-haiku-5-5",
-        "anthropic.claude-sonnet-5-5",
-        "anthropic.claude-opus-5-5",
-        "amazon.titan-embed-text-v2:0",
-        "cohere.rerank-v3-5:0",
-    }
-    assert {model_id for model_id in routed if committed.price_for(model_id) is None} == set()
+    assert routed == ROUTED_MODELS
+    routed_models = {model_id for routes in routed.values() for model_id in routes.values()}
+    assert routed_models == set(COMMITTED_PRICES)
+    assert {model_id for model_id in routed_models if committed.price_for(model_id) is None} == set()
 
 
 def test_pricing_every_committed_price_is_set_and_well_formed() -> None:
@@ -324,10 +378,7 @@ def test_pricing_every_committed_price_is_set_and_well_formed() -> None:
             "output_usd_per_1k_tokens": None,
             "usd_per_1k_search_units": None,
         }
-        assert entry.model_dump() == unset | prices | {
-            "as_of": date(2026, 10, 26),
-            "source": BEDROCK_PRICING_PAGE,
-        }
+        assert entry.model_dump() == unset | prices | {"source": BEDROCK_PRICING_PAGE}, model_id
 
 
 def test_pricing_the_committed_prices_price_each_kind_of_call() -> None:
@@ -337,6 +388,12 @@ def test_pricing_the_committed_prices_price_each_kind_of_call() -> None:
     assert committed.structured_cost("anthropic.claude-haiku-5-5", 2000, 400) == pytest.approx(0.0004)
     # Opus: 2000 in at $0.004/1K = $0.008, 400 out at $0.02/1K = $0.008.
     assert committed.structured_cost("anthropic.claude-opus-5-5", 2000, 400) == pytest.approx(0.016)
+    # Haiku 4.5: 2000 in at $0.001/1K = $0.002, 400 out at $0.005/1K = $0.002.
+    assert committed.structured_cost("anthropic.claude-haiku-4-5-20251001-v1:0", 2000, 400) == pytest.approx(
+        0.004
+    )
+    # Sonnet 4.6: 2000 in at $0.003/1K = $0.006, 400 out at $0.015/1K = $0.006.
+    assert committed.structured_cost("anthropic.claude-sonnet-4-6", 2000, 400) == pytest.approx(0.012)
     # Titan: 1500 tokens at $0.00002/1K = $0.00003.
     assert committed.embedding_cost("amazon.titan-embed-text-v2:0", 1500) == pytest.approx(0.00003)
     # Cohere: 250 documents are 3 search units at $2.00/1K = $0.006.

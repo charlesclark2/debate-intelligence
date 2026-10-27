@@ -52,7 +52,7 @@ spec:
         The first dev cloud run after the merge that touches a snapshot whose raw sources it
         does not all hold records no drift for it, read from its record (operator).
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

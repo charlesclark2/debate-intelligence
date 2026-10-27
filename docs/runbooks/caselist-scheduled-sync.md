@@ -872,7 +872,10 @@ scheduled run does it otherwise. Until `v1-e34-t26` nothing owed such a snapshot
 was `caselist publish --caselist <slug>`. Any other kind of drift (a source, something missing,
 suppressed rows), alone or beside a manifest mismatch, is owed nothing and keeps the banner
 `caselist pull finished with a failed stage`. The report stage's reason names each snapshot with
-what differs, and the run's details carry it as `drift`.
+what differs, and the run's details carry it as `drift`. In bucket mode (the cloud run), a raw source
+the working copy lacks but the bucket holds at the manifest's digest is not "something missing": the
+report stage, retention and `caselist status` count it present, and `caselist status` adds the line
+`Raw sources held only in the bucket: N in <caselist> <snapshot>` (`v1-e40-t13`).
 
 **A manifest that drifted again.** A snapshot is owed again for a drifted manifest once. If the run
 that publishes it again sees the bucket confirm it, and the report stage then finds the manifest

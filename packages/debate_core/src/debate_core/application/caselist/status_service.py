@@ -15,10 +15,26 @@ For each snapshot, all of:
 A snapshot the bucket holds a manifest for and this machine does not is drift too: it is a snapshot
 this machine cannot vouch for.
 
+In bucket mode, the first point reads differently: see "A working copy restored without raw sources".
+
 A caselist's snapshots include its complete archives, `full/<date>` (`v1-e34-t04`), compared the
 same way: the sync's retention stage asks this whether a complete archive's publish is confirmed
 before its zip leaves the inbox, and a complete archive's manifest the bucket holds unaccounted for
 would be drift like any other.
+
+## A working copy restored without raw sources (`v1-e40-t13`)
+
+A run in bucket mode (`v1-e40-t04`) restores its working copy from the bucket's manifests and parsed
+store, without raw sources, and holds only the ones it downloads or fetches to parse. The caller
+says so (`bucket_mode`), and then a source the local manifest names that this machine lacks, and
+that the bucket holds with the manifest's digest and size, is present: not
+:attr:`SnapshotStatus.missing_local`, so not drift, and the report stage of `caselist pull`, its
+retention stage and `caselist status` agree, because all three ask this service. It is counted in
+:attr:`SnapshotStatus.held_only_in_bucket`, not in :attr:`SnapshotStatus.local_files`, so the facts
+stay visible. Presence is read from the `HeadObject` already made for
+:attr:`SnapshotStatus.published_sources`: no request is added and nothing is downloaded. A source the
+bucket lacks, or holds with other bytes or no recorded digest, is drift as before, and so are a
+manifest missing on either side and a suppressed row. Local mode is unchanged.
 
 ## Suppressed sources
 
@@ -358,6 +374,10 @@ class SnapshotStatus:
     """Whether the publisher withholds this snapshot's manifest for its rows, by its own rule
     (`v1-e30-t19`): a publish then does not clear a mismatch of it, and the removal must be
     finished first. False for a snapshot this machine holds no manifest of."""
+    held_only_in_bucket: tuple[Sha256Hex, ...] = ()
+    """In bucket mode, sources this machine does not hold that the bucket holds with the manifest's
+    digest and size (`v1-e40-t13`): present, so not in :attr:`missing_local`, and not counted in
+    :attr:`local_files` either. Always empty in local mode."""
 
     @property
     def in_sync(self) -> bool:
@@ -531,6 +551,9 @@ class CaselistStatusService:
         local_reports: The data directory, keyed as the bucket is, for the landscape school views a
             removal left on this machine (`v1-e32-t13`). Listed only with the residue check; without
             one, only the bucket's are counted.
+        bucket_mode: Whether the caller runs in bucket mode (`v1-e40-t04`), whose working copy is
+            restored without raw sources: a source the bucket holds at the manifest's digest is then
+            present (`v1-e40-t13`). See "A working copy restored without raw sources".
         concurrency: `HeadObject` calls in flight at once.
     """
 
@@ -545,6 +568,7 @@ class CaselistStatusService:
         environment: str | None = None,
         inbox: InboxHolds | None = None,
         local_reports: EvidenceVersionStore | None = None,
+        bucket_mode: bool = False,
         concurrency: int = _DEFAULT_CONCURRENCY,
     ) -> None:
         if concurrency < 1:
@@ -559,6 +583,7 @@ class CaselistStatusService:
         self._environment = environment
         self._inbox = inbox
         self._local_reports = local_reports
+        self._bucket_mode = bucket_mode
         self._semaphore_size = concurrency
 
     async def status(
@@ -836,6 +861,7 @@ class CaselistStatusService:
 
         missing_remote: list[Sha256Hex] = []
         mismatched: list[ObjectKey] = []
+        held_in_bucket: set[Sha256Hex] = set()
         published = 0
         for source, key in keyed:
             if key not in pending:
@@ -846,8 +872,14 @@ class CaselistStatusService:
                 missing_remote.append(source.sha256)
             elif info.sha256 == source.sha256 and info.size == source.size:
                 published += 1
+                held_in_bucket.add(source.sha256)
             else:
                 mismatched.append(key)
+        # Bucket mode: a source only the bucket holds, at the manifest's digest, is present (`v1-e40-t13`).
+        held_only = (
+            tuple(digest for digest in missing_local if digest in held_in_bucket) if self._bucket_mode else ()
+        )
+        missing_local = tuple(digest for digest in missing_local if digest not in held_only)
 
         manifest_present = manifest_key in pending
         if manifest_present:
@@ -865,7 +897,7 @@ class CaselistStatusService:
             local_manifest=True,
             manifest_present=manifest_present,
             sources=len(sources),
-            local_files=len(sources) - len(missing_local),
+            local_files=len(sources) - len(missing_local) - len(held_only),
             published_sources=published,
             missing_sources=tuple(sorted(missing_remote)),
             missing_local=tuple(sorted(missing_local)),
@@ -875,6 +907,7 @@ class CaselistStatusService:
             held_rows=held_rows(local, suppression),
             held_skipped_rows=held_skipped_rows(local, suppression),
             manifest_withheld=_publisher_withholds(local, local_blobs, remote, suppression),
+            held_only_in_bucket=tuple(sorted(held_only)),
         )
 
     async def _head(self, key: ObjectKey, semaphore: asyncio.Semaphore) -> ObjectInfo | None:

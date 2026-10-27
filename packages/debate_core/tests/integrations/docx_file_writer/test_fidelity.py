@@ -494,15 +494,16 @@ def runs_of_the_paragraph(docx: bytes, text: str) -> list[tuple[str, bytes]]:
         if "".join(t.text or "" for t in element.iter(f"{WORDML}t")) == text
     ]
     assert len(found) == 1, len(found)
-    return [
-        (
-            "".join(t.text or "" for t in run.iter(f"{WORDML}t")),
-            b""
-            if run.find(f"{WORDML}rPr") is None
-            else etree.tostring(run.find(f"{WORDML}rPr"), method="c14n", exclusive=True),
+    runs: list[tuple[str, bytes]] = []
+    for run in found[0].iter(f"{WORDML}r"):
+        properties = run.find(f"{WORDML}rPr")
+        runs.append(
+            (
+                "".join(t.text or "" for t in run.iter(f"{WORDML}t")),
+                b"" if properties is None else etree.tostring(properties, method="c14n", exclusive=True),
+            )
         )
-        for run in found[0].iter(f"{WORDML}r")
-    ]
+    return runs
 
 
 def test_a_white_highlighted_paragraph_is_copied_as_its_source_wrote_it(parser: DebateDocxParser) -> None:

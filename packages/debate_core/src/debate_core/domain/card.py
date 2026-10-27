@@ -40,9 +40,17 @@ else:
 An interpolation is never part of `evidence_text`. The verifier and the length invariant do not
 look at it, so a card's quotation verifies exactly as it would without one.
 
+## Which model calls shaped it (`v1-e06-t02`)
+
+A model may choose where a card's evidence is, what to mark in it and how to tag it, and the card
+keeps the provenance of each such call in `generated_by`: the model, the prompt id and version, the
+parameters sent and the snapshot the prompt was shown (architecture proposal §10, ADR-0005). Each
+record must name exactly the card's snapshot, so a card cannot claim a selection made in other text.
+A card no model shaped (a parsed or hand-built one) has none.
+
 ## Construction rules
 
-Five rules are enforced here, at construction:
+Six rules are enforced here, at construction:
 
 1. A card that holds evidence text must say where the text came from: a `snapshot_id` and the
    envelope of the quotation inside that snapshot's normalized text.
@@ -54,6 +62,7 @@ Five rules are enforced here, at construction:
 5. Interpolations need evidence to sit in: each anchor lies inside `evidence_text` or at its end,
    and anchors strictly increase, so one card has one representation and two interpolations never
    share a place.
+6. Every model call recorded in `generated_by` was shown exactly the card's snapshot.
 
 The domain deliberately does *not* check that `evidence_text` equals the snapshot's text at those
 offsets. That comparison is the evidence verifier's job (E03): a tampered or edited card has to be
@@ -81,6 +90,7 @@ from debate_core.domain.base import (
 )
 from debate_core.domain.citation import Citation
 from debate_core.domain.enums import ProvenanceMode, SpanPurpose, SpanStyle, VerificationStatus
+from debate_core.domain.provenance import SourcedArtifactMetadata
 
 __all__ = ["Card", "CardOmission", "CardSpan", "Interpolation", "InterpolatedText"]
 
@@ -255,6 +265,13 @@ class Card(DomainEntity):
     format_profile: NonEmptyText = Field(
         default=DEFAULT_FORMAT_PROFILE, description="Name of the team's formatting profile for export."
     )
+    generated_by: tuple[SourcedArtifactMetadata, ...] = Field(
+        default=(),
+        description=(
+            "The model calls that chose this card's evidence, tag and markup, in order: model, prompt id and "
+            "version, parameters, and the snapshot each was shown. Empty for a card no model shaped."
+        ),
+    )
 
     @model_validator(mode="after")
     def _check_evidence_location(self) -> Self:
@@ -365,6 +382,18 @@ class Card(DomainEntity):
                 raise ValueError(
                     f"interpolations anchored at {previous.anchor} and {interpolation.anchor} are not in "
                     "strictly increasing order; two interpolations at one place are one interpolation"
+                )
+        return self
+
+    @model_validator(mode="after")
+    def _check_generated_by(self) -> Self:
+        """A model call recorded on the card was shown the card's snapshot, and only it."""
+        for metadata in self.generated_by:
+            if metadata.snapshot_ids != (self.snapshot_id,):
+                raise ValueError(
+                    f"the {metadata.prompt_id} call recorded on this card was shown "
+                    f"{len(metadata.snapshot_ids)} snapshot(s); it must have been shown exactly the card's "
+                    f"snapshot {self.snapshot_id}"
                 )
         return self
 

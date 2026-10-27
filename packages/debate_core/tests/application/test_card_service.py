@@ -17,6 +17,7 @@ from datetime import UTC, datetime
 from typing import Final
 
 import pytest
+from tests.fixtures.card.card_world import NEWS_ARGUMENT, NEWS_NEED, CardWorld, news_request
 
 from debate_core.application.article_fetch import SOURCE_NOT_ACCESSIBLE_CODE
 from debate_core.application.card_types import (
@@ -32,9 +33,11 @@ from debate_core.domain import (
     Card,
     CardSpan,
     ProvenanceMode,
+    SpanPurpose,
     SpanStyle,
     VerificationStatus,
 )
+from debate_core.domain.model_contracts import ModelProvider, TaskClass
 from debate_core.domain.card import DEFAULT_FORMAT_PROFILE
 from debate_core.evidence.verification_types import (
     REQUIRED_CHECKS,
@@ -44,10 +47,22 @@ from debate_core.evidence.verification_types import (
     VerificationResult,
 )
 
+pytestmark = pytest.mark.anyio
+
 STUDENT: Final = "0ST0DENT000000000000000001"
 ARTICLE: Final = "0ART0000000000000000000001"
 SNAPSHOT: Final = "0SNAP000000000000000000001"
 WHEN: Final = datetime(2026, 10, 26, 15, 0, tzinfo=UTC)
+
+
+@pytest.fixture
+def anyio_backend() -> str:
+    return "asyncio"
+
+
+@pytest.fixture
+def world() -> CardWorld:
+    return CardWorld()
 
 
 # =============================================================================================
@@ -209,3 +224,182 @@ def test_the_typed_rejection_is_reported_under_the_fetch_commands_code() -> None
     assert error_code_of(refused) == SOURCE_NOT_ACCESSIBLE_CODE == "SOURCE_NOT_ACCESSIBLE"
     assert (refused.snapshot_id, refused.access_status) == (SNAPSHOT, AccessStatus.PAYWALLED)
     assert str(refused) == f"snapshot {SNAPSHOT} is PAYWALLED, not ACCESSIBLE: no card is cut from it"
+
+
+# =============================================================================================
+# The pipeline: an accessible article is cut into a VERIFIED card (ac1, ac4)
+# =============================================================================================
+
+#: The news article (t04's hand-written paragraphs): P1 0-210, P2 212-420, P3 422-712, P4 714-889,
+#: P5 891-1106. The committed answers select P2 0-108 and all of P3, which is snapshot 212-320 and
+#: 422-712 with 320-422 left out. Worked by hand from the paragraphs.
+SEGMENT_ONE: Final = (
+    "The delay follows two years of failed attempts to grow edited elephant embryos to term in surrogate "
+    "animals."
+)
+SEGMENT_TWO: Final = (
+    "Conservation biologists who have criticized the project said the timeline was never realistic. "
+    "\u201cEvery year this slips, the money raised for it is money that did not go to elephants that are "
+    "alive now,\u201d said Priya Ramaswamy, who studies elephant populations and was not involved in the work."
+)
+NEWS_TAG: Final = "Each delay in reviving the mammoth costs living elephants funding"
+
+#: The marks, by hand, in evidence_text: P2 31-86 and 31-46 stay put (P2's passage starts at 0);
+#: P3's 61-93, 119-199 and 146-199 move on by P2's 108 characters.
+NEWS_SPANS: Final = [
+    (
+        31,
+        86,
+        SpanStyle.UNDERLINE,
+        SpanPurpose.WARRANT,
+        "failed attempts to grow edited elephant embryos to term",
+    ),
+    (31, 46, SpanStyle.HIGHLIGHT, SpanPurpose.WARRANT, "failed attempts"),
+    (169, 201, SpanStyle.UNDERLINE, SpanPurpose.CLAIM, "the timeline was never realistic"),
+    (
+        227,
+        307,
+        SpanStyle.UNDERLINE,
+        SpanPurpose.IMPACT,
+        "the money raised for it is money that did not go to elephants that are alive now",
+    ),
+    (
+        254,
+        307,
+        SpanStyle.HIGHLIGHT,
+        SpanPurpose.IMPACT,
+        "money that did not go to elephants that are alive now",
+    ),
+]
+
+
+async def test_an_accessible_article_is_cut_into_a_verified_card_whose_evidence_is_the_snapshot_slice(
+    world: CardWorld,
+) -> None:
+    source = await world.add_page("news-article")
+
+    result = await world.card_service.cut_card(news_request(source.snapshot.snapshot_id))
+
+    card = result.card
+    assert (result.is_verified, card.verification_status, result.reasons) == (
+        True,
+        VerificationStatus.VERIFIED,
+        (),
+    )
+    assert card.evidence_text == SEGMENT_ONE + SEGMENT_TWO
+    text = source.normalized.text
+    assert card.evidence_text == text[212:320] + text[422:712]
+    assert (card.evidence_start_offset, card.evidence_end_offset) == (212, 712)
+    assert [(omitted.start_offset, omitted.end_offset) for omitted in card.omitted_ranges] == [(320, 422)]
+    assert card.tag == NEWS_TAG
+
+
+async def test_the_verified_card_carries_its_snapshot_spans_and_cite(world: CardWorld) -> None:
+    source = await world.add_page("news-article")
+    article = await world.articles.get(source.snapshot.article_id)
+
+    card = (await world.card_service.cut_card(news_request(source.snapshot.snapshot_id))).card
+
+    snapshot = source.snapshot
+    assert (card.snapshot_id, card.normalized_text_hash, card.normalizer_version) == (
+        snapshot.snapshot_id,
+        snapshot.normalized_text_hash,
+        snapshot.normalizer_version,
+    )
+    assert (card.article_id, card.owner_id, card.provenance_mode) == (
+        article.article_id,
+        STUDENT,
+        ProvenanceMode.PUBLISHER_RETRIEVED,
+    )
+    assert [
+        (
+            span.start_offset,
+            span.end_offset,
+            span.style,
+            span.purpose,
+            card.evidence_text[span.start_offset : span.end_offset],
+        )
+        for span in sorted(
+            card.spans, key=lambda span: (span.start_offset, span.style != SpanStyle.UNDERLINE)
+        )
+    ] == NEWS_SPANS
+    assert card.citation == (await world.service.resolve(article, source)).citation
+    assert card.citation.is_fully_verified
+    assert card.citation.authors.value == ("Dana Whitfield",)
+
+
+async def test_the_verified_card_is_saved_once_at_revision_one(world: CardWorld) -> None:
+    source = await world.add_page("news-article")
+
+    result = await world.card_service.cut_card(news_request(source.snapshot.snapshot_id))
+
+    stored = await world.cards.get(result.card.card_id)
+    assert stored == result.card
+    assert stored.revision == 1
+    assert [card.card_id for card in (await world.cards.list_by_article(stored.article_id)).items] == [
+        stored.card_id
+    ]
+
+
+async def test_the_verified_card_records_the_model_prompt_and_parameters_of_both_calls(
+    world: CardWorld,
+) -> None:
+    source = await world.add_page("news-article")
+
+    result = await world.card_service.cut_card(news_request(source.snapshot.snapshot_id))
+
+    stored = await world.cards.get(result.card.card_id)
+    assert stored.generated_by == result.metadata
+    assert [(m.prompt_id, m.prompt_version) for m in stored.generated_by] == [
+        ("card.select", "1.0.0"),
+        ("card.markup", "1.0.0"),
+    ]
+    for metadata in stored.generated_by:
+        assert metadata.model_id == "fake-fixture-model"
+        assert metadata.route.provider is ModelProvider.FAKE
+        assert metadata.route.task_class is TaskClass.COMPLEX_REASONING
+        assert metadata.temperature is None  # nothing was sent, so the route's default applied
+        assert metadata.snapshot_ids == (source.snapshot.snapshot_id,)
+        assert metadata.retrieval_ids == ()
+        assert metadata.repair_attempted is False
+    assert stored.format_profile == "team-default"
+
+
+async def test_re_verifying_a_saved_verified_card_reproduces_its_status(world: CardWorld) -> None:
+    source = await world.add_page("news-article")
+    result = await world.card_service.cut_card(news_request(source.snapshot.snapshot_id))
+
+    again = await world.verifier.verify(await world.cards.get(result.card.card_id))
+
+    assert again.status is result.verification.status is VerificationStatus.VERIFIED
+    assert again.reasons == result.verification.reasons == ()
+
+
+async def test_the_verified_card_keeps_the_format_profile_it_was_cut_for(world: CardWorld) -> None:
+    source = await world.add_page("news-article")
+    request = news_request(source.snapshot.snapshot_id)
+
+    result = await world.card_service.cut_card(
+        CutRequest(
+            snapshot_id=request.snapshot_id,
+            need=request.need,
+            owner_id=STUDENT,
+            argument=request.argument,
+            format_profile="camp-condensed",
+        )
+    )
+
+    assert result.is_verified
+    assert (await world.cards.get(result.card.card_id)).format_profile == "camp-condensed"
+
+
+async def test_the_model_is_asked_for_the_need_within_its_argument_before_a_verified_card_is_cut(
+    world: CardWorld,
+) -> None:
+    source = await world.add_page("news-article")
+
+    await world.card_service.cut_card(news_request(source.snapshot.snapshot_id))
+
+    assert [prompt.prompt_id for prompt in world.router.calls] == ["card.select", "card.markup"]
+    assert world.router.calls[0].variables["research_need"] == f"{NEWS_ARGUMENT}: {NEWS_NEED}"
+    assert str(world.router.calls[0].variables["numbered_snapshot"]).startswith("[P1] A private laboratory")

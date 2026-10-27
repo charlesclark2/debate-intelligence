@@ -21,6 +21,7 @@ live call: respx serves the answers.
 | `journal-article-landing` | journal | `journal-article-landing.html`, added here | a landing page for t04's invented journal article (`build_pdf_fixtures.py`): `citation_*` meta tags, the test-prefix DOI `10.5555/jscs.2026.0012`, a `citation_author_institution` that must not become a credential | `crossref/works-10.5555-jscs.2026.0012.json` |
 | `open-access-pdf` | journal PDF | `../extraction/journal-article.pdf`, unchanged | t04's PDF at t06's address, which carries the DOI; a PDF has no markup to read | the same answer |
 | `user-supplied` | pasted text | none: the text is in the case file | a USER_SUPPLIED snapshot of invented text, with a meta tag and a byline typed into it that must not be read | none |
+| `organization-report` | government, issued by an organization | `organization-report.html`, added by `v1-e06-t02` | t04's press release unchanged but for one JSON-LD `Report` block in its head naming the invented agency as a `GovernmentOrganization` author: the case of an organization standing in as the author | none |
 
 `crossref/works-10.5555-jscs.2026.0012.json` is a Crossref `/works/{doi}` answer for that invented
 article: the authors' full names (the page gives initials), one affiliation, and dates to the day
@@ -33,5 +34,7 @@ Each `<case>.expected.json` names its inputs (page, content type, the URL it was
 provenance mode, the article ArticleService would have stored) and the cite: every field's value,
 source and verified flag, the short and full cite lines, and which fields are unverified or missing.
 They were written from the pages and the Crossref answer (working agreement 6), before
-`CitationService` was written, and never saved from a run. Every case is retrieved at
+`CitationService` was written, and never saved from a run. `v1-e06-t02` changed them by hand for its cite
+rules: every accessed date, and the open-access PDF's and the pasted text's URLs, have the source
+`retrieval` (verified for the five publisher-retrieved cases), and `organization-report` was added. Every case is retrieved at
 `2026-10-26T15:00:00Z`, which is its accessed date.

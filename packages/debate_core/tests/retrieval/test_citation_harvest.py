@@ -38,6 +38,7 @@ META_TAG: Final = CitationFieldSource.META_TAG
 OPENGRAPH: Final = CitationFieldSource.OPENGRAPH
 BYLINE: Final = CitationFieldSource.BYLINE
 HEURISTIC: Final = CitationFieldSource.HEURISTIC
+RETRIEVAL: Final = CitationFieldSource.RETRIEVAL
 
 NEWS_URL: Final = (
     "https://www.dailymeridian.example/science/2026/09/14/mammoth-revival-years-away?utm_source=newsletter"
@@ -93,7 +94,7 @@ def test_the_news_page_states_its_cite_in_json_ld_meta_tags_opengraph_and_a_byli
         (utc(2026, 9, 14, 12, 30), META_TAG),
         (utc(2026, 9, 14), HEURISTIC),
     ]
-    assert values(found.canonical_url) == [(NEWS_CANONICAL, META_TAG), (NEWS_CANONICAL, HEURISTIC)]
+    assert values(found.canonical_url) == [(NEWS_CANONICAL, META_TAG), (NEWS_CANONICAL, RETRIEVAL)]
     assert found.dois == ()
 
 
@@ -125,7 +126,7 @@ def test_the_think_tank_report_takes_its_credentials_from_the_author_bios() -> N
     ]
     assert values(found.published_at) == [(utc(2026, 3, 3), JSON_LD)]
     assert found.published_at[0].raw == "March 3, 2026"
-    assert values(found.canonical_url) == [(THINK_TANK_URL, META_TAG), (THINK_TANK_URL, HEURISTIC)]
+    assert values(found.canonical_url) == [(THINK_TANK_URL, META_TAG), (THINK_TANK_URL, RETRIEVAL)]
 
 
 def test_the_government_release_has_no_author_and_only_its_html_title() -> None:
@@ -138,7 +139,7 @@ def test_the_government_release_has_no_author_and_only_its_html_title() -> None:
     assert found.author_credentials == ()
     assert values(found.publication) == [("Federal Office of Synthetic Wildlife", OPENGRAPH)]
     assert values(found.published_at) == [(utc(2026, 6, 2), META_TAG)]
-    assert values(found.canonical_url) == [(GOVERNMENT_URL, META_TAG), (GOVERNMENT_URL, HEURISTIC)]
+    assert values(found.canonical_url) == [(GOVERNMENT_URL, META_TAG), (GOVERNMENT_URL, RETRIEVAL)]
 
 
 def test_the_journal_landing_page_states_its_cite_in_citation_meta_tags_and_its_doi() -> None:
@@ -159,7 +160,7 @@ def test_the_journal_landing_page_states_its_cite_in_citation_meta_tags_and_its_
         ("Synthetic Conservation Press", OPENGRAPH),
     ]
     assert values(found.published_at) == [(utc(2026, 4, 20), META_TAG)]
-    assert values(found.canonical_url) == [(JOURNAL_URL, META_TAG), (JOURNAL_URL, HEURISTIC)]
+    assert values(found.canonical_url) == [(JOURNAL_URL, META_TAG), (JOURNAL_URL, RETRIEVAL)]
     assert found.dois == ("10.5555/jscs.2026.0012",)
 
 
@@ -315,7 +316,7 @@ def test_a_relative_canonical_is_resolved_and_a_non_http_one_dropped() -> None:
 
     assert values(found.canonical_url) == [
         ("https://site.example/story", OPENGRAPH),
-        ("https://site.example/story", HEURISTIC),
+        ("https://site.example/story", RETRIEVAL),
     ]
 
 
@@ -353,7 +354,7 @@ def test_a_pdf_yields_only_what_its_url_says() -> None:
     )
 
     assert found == CitationCandidates(
-        canonical_url=(Harvested(JOURNAL_PDF_URL, HEURISTIC, JOURNAL_PDF_URL),),
+        canonical_url=(Harvested(JOURNAL_PDF_URL, RETRIEVAL, JOURNAL_PDF_URL),),
         dois=("10.5555/jscs.2026.0012",),
     )
 
@@ -380,10 +381,12 @@ def test_a_date_in_the_url_path_is_a_heuristic_and_a_partial_one_is_nothing() ->
     assert harvest_url("https://site.example/news/2026/13/40/story").published_at == ()
 
 
-def test_the_heuristic_canonical_url_is_the_retrieved_url_canonicalized() -> None:
+def test_the_url_of_last_resort_is_the_retrieved_url_canonicalized_from_the_retrieval_record() -> None:
+    """Turned by v1-e06-t02 (ac5): the platform's own retrieval record, `retrieval`, not a `heuristic`."""
     found = harvest_url("https://Site.Example/story?utm_source=feed")
 
-    assert values(found.canonical_url) == [("https://site.example/story", HEURISTIC)]
+    assert values(found.canonical_url) == [("https://site.example/story", RETRIEVAL)]
+    assert found.canonical_url[0].raw == "https://Site.Example/story?utm_source=feed"
 
 
 # --------------------------------------------------------------------------------------------
@@ -433,3 +436,55 @@ def test_a_bio_must_name_the_author_as_whole_words() -> None:
     body = '<div class="byline">By AP</div><div class="bio"><p>The APPLE growers are a co-op.</p></div>'
 
     assert harvested(body).author_credentials == ()
+
+
+# --------------------------------------------------------------------------------------------
+# v1-e06-t02 ac5: an organization is an author only where a source types it as one
+# --------------------------------------------------------------------------------------------
+
+
+def json_ld(node: str) -> str:
+    return f'<script type="application/ld+json">{{"@context": "https://schema.org", {node}}}</script>'
+
+
+@pytest.mark.parametrize("kind", ["Organization", "GovernmentOrganization", "NGO", "ResearchOrganization"])
+def test_a_json_ld_author_typed_as_an_organization_is_an_organization_candidate(kind: str) -> None:
+    head = json_ld(f'"@type": "Report", "author": {{"@type": "{kind}", "name": "Synthetic Policy Office"}}')
+
+    found = harvested(head=head)
+
+    assert found.authors == ()
+    assert values(found.organization_authors) == [(("Synthetic Policy Office",), JSON_LD)]
+    assert found.author_credentials == ()
+
+
+def test_people_and_organizations_named_together_are_kept_apart() -> None:
+    head = json_ld(
+        '"@type": "Article", "author": [{"@type": "Person", "name": "Ana Ruiz"},'
+        ' {"@type": "Organization", "name": "Synthetic Policy Office", "affiliation": "Example Lab"},'
+        ' {"name": "Lee Park"}, "Jo Kim"]'
+    )
+
+    found = harvested(head=head)
+
+    assert values(found.authors) == [(("Ana Ruiz", "Lee Park", "Jo Kim"), JSON_LD)]
+    assert values(found.organization_authors) == [(("Synthetic Policy Office",), JSON_LD)]
+    assert found.author_credentials == ()
+
+
+def test_a_site_name_or_a_publisher_is_never_an_author() -> None:
+    head = '<meta property="og:site_name" content="Synthetic Policy Office">' + json_ld(
+        '"@type": "Report",'
+        ' "publisher": {"@type": "GovernmentOrganization", "name": "Synthetic Policy Office"}'
+    )
+
+    found = harvested(head=head)
+
+    assert (found.authors, found.organization_authors) == ((), ())
+
+
+def test_the_organization_report_names_its_agency_as_an_organization_author() -> None:
+    found = harvested_fixture("citation/organization-report.html", GOVERNMENT_URL)
+
+    assert found.authors == ()
+    assert values(found.organization_authors) == [(("Federal Office of Synthetic Wildlife",), JSON_LD)]

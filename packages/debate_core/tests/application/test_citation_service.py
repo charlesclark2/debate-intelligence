@@ -27,6 +27,7 @@ from tests.fixtures.citation.citation_world import (
     load_case,
 )
 
+from debate_core.application.card_service import failures_of
 from debate_core.application.citation_service import (
     CITATION_FIELD_NAMES,
     SOURCE_PRECEDENCE,
@@ -39,7 +40,8 @@ from debate_core.application.citation_service import (
 from debate_core.application.ports.doi_metadata import DoiAuthor, DoiDate, DoiWork
 from debate_core.domain import Card, Citation, CitationField, ProvenanceMode, VerificationStatus
 from debate_core.domain.enums import CitationFieldSource
-from debate_core.evidence.edits import EditCite
+from debate_core.evidence.edits import EditCite, EditKind
+from debate_core.evidence.verification_types import ReasonCode
 from debate_core.retrieval.citation_harvest import CitationCandidates, Harvested
 
 pytestmark = pytest.mark.anyio
@@ -50,6 +52,7 @@ META_TAG: Final = CitationFieldSource.META_TAG
 OPENGRAPH: Final = CitationFieldSource.OPENGRAPH
 BYLINE: Final = CitationFieldSource.BYLINE
 HEURISTIC: Final = CitationFieldSource.HEURISTIC
+RETRIEVAL: Final = CitationFieldSource.RETRIEVAL
 MISSING: Final = CitationFieldSource.MISSING
 PUBLISHER: Final = ProvenanceMode.PUBLISHER_RETRIEVED
 USER_SUPPLIED: Final = ProvenanceMode.USER_SUPPLIED
@@ -120,6 +123,7 @@ async def test_every_cite_field_has_the_value_source_and_flag_the_fixture_expect
     assert resolution.doi == expected["doi"]
     assert resolution.crossref.value == expected["crossref"]
     assert resolution.provenance_mode.value == expected["provenance_mode"]
+    assert resolution.citation.authors_are_organizations is expected.get("authors_are_organizations", False)
 
 
 async def test_the_raw_text_each_value_was_read_from_is_kept(world: CitationWorld) -> None:
@@ -172,7 +176,7 @@ PAGE_METADATA_OF_THE_JOURNAL: Final = {
         "meta_tag",
         True,
     ),
-    "accessed_at": ("2026-10-26T15:00:00Z", "heuristic", False),
+    "accessed_at": ("2026-10-26T15:00:00Z", "retrieval", True),
 }
 """The landing page's cite with no Crossref answer, written by hand from the page."""
 
@@ -321,8 +325,8 @@ def test_a_deposited_author_with_no_name_is_left_out() -> None:
 PAGE_SOURCES: Final = SOURCE_PRECEDENCE[1:]
 
 
-def test_the_precedence_is_crossref_json_ld_meta_tag_opengraph_byline_heuristic() -> None:
-    assert SOURCE_PRECEDENCE == (CROSSREF, JSON_LD, META_TAG, OPENGRAPH, BYLINE, HEURISTIC)
+def test_the_precedence_is_crossref_json_ld_meta_tag_opengraph_byline_retrieval_heuristic() -> None:
+    assert SOURCE_PRECEDENCE == (CROSSREF, JSON_LD, META_TAG, OPENGRAPH, BYLINE, RETRIEVAL, HEURISTIC)
 
 
 @pytest.mark.parametrize(
@@ -382,7 +386,7 @@ def test_a_heuristic_value_is_never_verified() -> None:
 
     citation = resolve(candidates, None)
 
-    for name in ("title", "published_at", "canonical_url", "accessed_at"):
+    for name in ("title", "published_at", "canonical_url"):
         assert getattr(citation, name).source is HEURISTIC, name
         assert not getattr(citation, name).verified, name
 
@@ -435,7 +439,9 @@ async def test_a_snapshot_of_another_article_is_refused(world: CitationWorld) ->
 # --------------------------------------------------------------------------------------------
 
 
-def test_crossref_affiliations_are_credentials_naming_each_author() -> None:
+def test_crossref_affiliations_are_credentials_naming_each_person_author() -> None:
+    """Changed by v1-e06-t02 (ac5): a deposited organization is not an author beside named people,
+    so its affiliation is no author's credential."""
     authors = (
         DoiAuthor(
             given="Rhea", family="Okonkwo-Hale", affiliations=("Dept. of Ecology", "Synthetic University")
@@ -444,13 +450,16 @@ def test_crossref_affiliations_are_credentials_naming_each_author() -> None:
         DoiAuthor(name="Synthetic Consortium", affiliations=("Example Lab",)),
     )
 
-    credentials = resolve(CitationCandidates(), work(authors=authors)).author_credentials
+    citation = resolve(CitationCandidates(), work(authors=authors))
 
+    credentials = citation.author_credentials
     assert (credentials.value, credentials.source, credentials.verified) == (
-        "Rhea Okonkwo-Hale, Dept. of Ecology, Synthetic University; Synthetic Consortium, Example Lab",
+        "Rhea Okonkwo-Hale, Dept. of Ecology, Synthetic University",
         CROSSREF,
         True,
     )
+    assert citation.authors.value == ("Rhea Okonkwo-Hale", "Tomas Lindqvist")
+    assert not citation.authors_are_organizations
 
 
 def test_crossref_credentials_are_preferred_to_a_bio() -> None:
@@ -492,7 +501,7 @@ async def test_each_fixture_cite_formats_as_the_fixture_expects(world: CitationW
 
 
 def cite_of(**fields: CitationField[Any]) -> Citation:
-    return Citation(**fields)
+    return Citation().evolve(**fields)
 
 
 @pytest.mark.parametrize(
@@ -691,14 +700,16 @@ async def test_a_card_never_cite_edited_takes_the_derived_cite_whole(world: Cita
     assert resolution.student_fields == ()
 
 
-async def test_a_field_the_student_emptied_is_derived_again(world: CitationWorld) -> None:
+async def test_a_field_the_student_cleared_stays_cleared_on_re_resolution(world: CitationWorld) -> None:
+    """Turned by v1-e06-t02 (ac5): t01's `test_a_field_the_student_emptied_is_derived_again`."""
     card = await card_with_derived_cite(world)
     card = await edited(world, card, author_credentials=CitationField[str]())
 
     resolution = await world.service.re_resolve(card)
 
-    assert resolution.citation.author_credentials.source is BYLINE
-    assert resolution.student_fields == ()
+    assert resolution.citation.author_credentials == CitationField[str]()
+    assert resolution.citation.cleared_by_student == ("author_credentials",)
+    assert resolution.student_fields == ("author_credentials",)
 
 
 async def test_a_card_with_no_snapshot_has_no_source_to_re_resolve_from(world: CitationWorld) -> None:
@@ -734,3 +745,238 @@ def test_the_expected_files_name_every_field() -> None:
     for case in CASES:
         assert set(load_case(case)["citation"]) == set(CITATION_FIELD_NAMES), case
     assert json.dumps(CITATION_FIELD_NAMES)
+
+
+# --------------------------------------------------------------------------------------------
+# v1-e06-t02 ac5: the platform's own retrieval record is a source, verified only when the
+# platform retrieved the text
+# --------------------------------------------------------------------------------------------
+
+
+async def test_the_accessed_date_of_a_publisher_retrieved_snapshot_is_a_verified_retrieval_value(
+    world: CitationWorld,
+) -> None:
+    resolution = await resolved(world, "news-article")
+
+    assert resolution.citation.accessed_at == CitationField[datetime](
+        value=RETRIEVED_AT, source=RETRIEVAL, verified=True, raw="2026-10-26T15:00:00+00:00"
+    )
+
+
+async def test_a_canonical_less_url_of_a_publisher_retrieved_snapshot_is_a_verified_retrieval_value(
+    world: CitationWorld,
+) -> None:
+    resolution = await resolved(world, "open-access-pdf")
+
+    url = resolution.citation.canonical_url
+    assert (url.value, url.source, url.verified) == (
+        "https://journal.synthetic-conservation.example/doi/pdf/10.5555/jscs.2026.0012",
+        RETRIEVAL,
+        True,
+    )
+    assert resolution.citation.is_fully_verified
+
+
+@pytest.mark.parametrize(
+    "mode", [mode for mode in ProvenanceMode if mode is not ProvenanceMode.PUBLISHER_RETRIEVED]
+)
+def test_retrieval_values_of_text_the_platform_did_not_retrieve_are_unverified(mode: ProvenanceMode) -> None:
+    candidates = CitationCandidates(
+        canonical_url=(Harvested("https://site.example/story", RETRIEVAL, "https://site.example/story"),)
+    )
+
+    citation = resolve_citation(candidates, None, provenance_mode=mode, accessed_at=RETRIEVED_AT)
+
+    for name in ("canonical_url", "accessed_at"):
+        field_: CitationField[Any] = getattr(citation, name)
+        assert (field_.source, field_.verified) == (RETRIEVAL, False), name
+
+
+def test_a_page_canonical_url_outranks_the_retrieval_record() -> None:
+    candidates = CitationCandidates(
+        canonical_url=(
+            Harvested("https://site.example/story", RETRIEVAL, "https://site.example/story?x=1"),
+            Harvested("https://site.example/canonical", BYLINE, "https://site.example/canonical"),
+        )
+    )
+
+    url = resolve(candidates, None).canonical_url
+
+    assert (url.value, url.source) == ("https://site.example/canonical", BYLINE)
+
+
+# --------------------------------------------------------------------------------------------
+# v1-e06-t02 ac5: an organization stands in as the author only when no person is named
+# --------------------------------------------------------------------------------------------
+
+ORGANIZATION: Final = Harvested(("Synthetic Policy Office",), JSON_LD, "Synthetic Policy Office")
+
+
+def test_an_organization_stands_in_as_the_author_when_no_person_is_named() -> None:
+    citation = resolve(CitationCandidates(organization_authors=(ORGANIZATION,)), None)
+
+    assert citation.authors == CitationField[tuple[str, ...]](
+        value=("Synthetic Policy Office",), source=JSON_LD, verified=True, raw="Synthetic Policy Office"
+    )
+    assert citation.authors_are_organizations
+
+
+@pytest.mark.parametrize("source", [META_TAG, BYLINE, JSON_LD])
+def test_an_organization_never_stands_in_beside_a_named_person(source: CitationFieldSource) -> None:
+    person = Harvested(("Ana Ruiz",), source, "Ana Ruiz")
+
+    citation = resolve(CitationCandidates(authors=(person,), organization_authors=(ORGANIZATION,)), None)
+
+    assert (citation.authors.value, citation.authors.source) == (("Ana Ruiz",), source)
+    assert not citation.authors_are_organizations
+
+
+def test_a_crossref_author_with_a_name_and_no_family_name_is_an_organization() -> None:
+    deposit = work(authors=(DoiAuthor(name="Synthetic Consortium", affiliations=("Example Lab",)),))
+
+    citation = resolve(CitationCandidates(organization_authors=(ORGANIZATION,)), deposit)
+
+    assert (citation.authors.value, citation.authors.source) == (("Synthetic Consortium",), CROSSREF)
+    assert citation.authors_are_organizations
+    assert citation.author_credentials.value is None
+
+
+def test_a_crossref_person_outranks_a_page_organization_and_a_page_person_a_crossref_organization() -> None:
+    person_deposit = work(authors=(DoiAuthor(given="Rhea", family="Okonkwo-Hale"),))
+    organization_deposit = work(authors=(DoiAuthor(name="Synthetic Consortium"),))
+    page_person = Harvested(("Ana Ruiz",), BYLINE, "Ana Ruiz")
+
+    by_deposit = resolve(CitationCandidates(organization_authors=(ORGANIZATION,)), person_deposit)
+    by_page = resolve(CitationCandidates(authors=(page_person,)), organization_deposit)
+
+    assert (by_deposit.authors.value, by_deposit.authors_are_organizations) == (("Rhea Okonkwo-Hale",), False)
+    assert (by_page.authors.value, by_page.authors_are_organizations) == (("Ana Ruiz",), False)
+
+
+def test_with_no_typed_organization_and_no_person_the_authors_stay_missing() -> None:
+    citation = resolve(
+        CitationCandidates(publication=(Harvested("Synthetic Policy Office", OPENGRAPH, "x"),)), None
+    )
+
+    assert citation.authors.source is MISSING
+    assert not citation.authors_are_organizations
+
+
+def test_the_short_cite_keeps_an_organization_name_whole() -> None:
+    citation = resolve(
+        CitationCandidates(
+            organization_authors=(
+                Harvested(
+                    ("Federal Office of Synthetic Wildlife",), JSON_LD, "Federal Office of Synthetic Wildlife"
+                ),
+            ),
+            published_at=(Harvested(utc(2026, 6, 2), JSON_LD, "2026-06-02"),),
+        ),
+        None,
+    )
+
+    assert (
+        format_cite(citation, provenance_mode=PUBLISHER).short_cite
+        == "Federal Office of Synthetic Wildlife 26"
+    )
+    person = citation.evolve(authors_are_organizations=False)
+    assert format_cite(person, provenance_mode=PUBLISHER).short_cite == "Wildlife 26"
+
+
+def test_a_cite_cannot_mark_missing_authors_as_organizations() -> None:
+    with pytest.raises(ValueError, match="organization"):
+        Citation(authors_are_organizations=True)
+
+
+# --------------------------------------------------------------------------------------------
+# v1-e06-t02 ac5: a cite field a student cleared is a student edit, never refilled
+# --------------------------------------------------------------------------------------------
+
+
+async def test_clearing_a_cite_field_is_recorded_on_the_cite_as_a_student_edit(world: CitationWorld) -> None:
+    card = await card_with_derived_cite(world)
+
+    card = await edited(world, card, author_credentials=CitationField[str]())
+
+    stored = await world.cards.get(card.card_id)
+    assert stored.citation.cleared_by_student == ("author_credentials",)
+    assert [entry.edit_kind for entry in await world.edit_log.entries_for(card.card_id)] == [
+        EditKind.EDIT_CITE
+    ]
+
+
+async def test_a_cleared_required_field_leaves_the_card_unverified_with_a_reason_naming_it(
+    world: CitationWorld,
+) -> None:
+    card = await card_with_derived_cite(world)
+    assert card.verification_status is VerificationStatus.VERIFIED
+    card = await edited(world, card, authors=CitationField[tuple[str, ...]]())
+
+    resolution = await world.service.re_resolve(card)
+    recorded, verdict = await world.verifier.verify_and_record(card.evolve(citation=resolution.citation))
+
+    assert resolution.citation.authors.value is None
+    assert recorded.verification_status is VerificationStatus.UNVERIFIED
+    assert [(reason.code, reason.detail) for reason in verdict.reasons] == [
+        (ReasonCode.CITATION_UNVERIFIED, "required citation fields not verified: authors")
+    ]
+    assert [failure.fields for failure in failures_of(verdict, recorded)] == [("authors",)]
+
+
+async def test_a_field_stays_cleared_through_a_later_cite_edit_of_another_field(world: CitationWorld) -> None:
+    card = await card_with_derived_cite(world)
+    card = await edited(world, card, authors=CitationField[tuple[str, ...]]())
+    card = await edited(world, card, title=field("A student's title", BYLINE))
+
+    resolution = await world.service.re_resolve(card)
+
+    assert card.citation.cleared_by_student == ("authors",)
+    assert resolution.citation.authors.value is None
+    assert resolution.student_fields == ("authors", "title")
+
+
+async def test_a_cleared_field_the_student_fills_again_is_no_longer_cleared(world: CitationWorld) -> None:
+    card = await card_with_derived_cite(world)
+    derived_title = card.citation.title
+    card = await edited(world, card, title=CitationField[str]())
+    card = await edited(world, card, title=field(derived_title.value, BYLINE))
+
+    resolution = await world.service.re_resolve(card)
+
+    assert card.citation.cleared_by_student == ()
+    assert resolution.citation.title == derived_title
+    assert resolution.student_fields == ()
+
+
+def test_keep_student_edits_keeps_a_cleared_field_cleared_whatever_the_source_says() -> None:
+    derived = Citation(title=field("Derived", JSON_LD, True), publication=field("Derived", OPENGRAPH, True))
+    stored = Citation(publication=field("Derived", OPENGRAPH, True), cleared_by_student=("title",))
+
+    kept, student_fields = keep_student_edits(stored, derived)
+
+    assert kept.title == CitationField[str]()
+    assert kept.publication == derived.publication
+    assert kept.cleared_by_student == ("title",)
+    assert student_fields == ("title",)
+
+
+async def test_what_an_edit_says_it_cleared_is_not_read(world: CitationWorld) -> None:
+    """Only emptying a field clears it: not a claim about a field the edit keeps, nor one never filled."""
+    card = await card_with_derived_cite(world, "news-article")
+    assert not card.citation.author_credentials.is_present  # the news page states none
+    claims = EditCite(card.citation.evolve(cleared_by_student=("author_credentials", "title")))
+
+    card = (
+        await world.edits.edit(card.card_id, claims, expected_revision=card.revision, actor_id=STUDENT)
+    ).card
+
+    assert card.citation.cleared_by_student == ()
+    resolution = await world.service.re_resolve(card)
+    assert (resolution.citation.title, resolution.student_fields) == (card.citation.title, ())
+
+
+def test_a_cite_cannot_record_a_cleared_field_that_is_no_field_or_out_of_order() -> None:
+    with pytest.raises(ValueError, match="cite field"):
+        Citation(cleared_by_student=("weather",))
+    with pytest.raises(ValueError, match="cite order"):
+        Citation(cleared_by_student=("title", "authors"))

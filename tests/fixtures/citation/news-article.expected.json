@@ -18,10 +18,10 @@
     "publication": {"value": "The Daily Meridian", "source": "json_ld", "verified": true},
     "published_at": {"value": "2026-09-14T12:30:00Z", "source": "json_ld", "verified": true},
     "canonical_url": {"value": "https://www.dailymeridian.example/science/2026/09/14/mammoth-revival-years-away", "source": "meta_tag", "verified": true},
-    "accessed_at": {"value": "2026-10-26T15:00:00Z", "source": "heuristic", "verified": false}
+    "accessed_at": {"value": "2026-10-26T15:00:00Z", "source": "retrieval", "verified": true}
   },
   "short_cite": "Whitfield 26",
   "full_cite": "Whitfield 26 [Dana Whitfield; \"Scientists Say Mammoth Revival Is Years Away\"; The Daily Meridian; September 14, 2026; https://www.dailymeridian.example/science/2026/09/14/mammoth-revival-years-away; accessed October 26, 2026]",
-  "unverified_fields": ["accessed_at"],
+  "unverified_fields": [],
   "missing_fields": ["author_credentials"]
 }

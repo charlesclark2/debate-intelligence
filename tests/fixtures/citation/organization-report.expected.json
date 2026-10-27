@@ -1,0 +1,28 @@
+{
+  "kind": "government, issued by an organization",
+  "page": "citation/organization-report.html",
+  "content_type": "text/html; charset=utf-8",
+  "retrieved_url": "https://www.fosw.example.gov/news/2026/06/agency-announces-grants",
+  "provenance_mode": "PUBLISHER_RETRIEVED",
+  "article": {
+    "canonical_url": "https://www.fosw.example.gov/news/2026/06/agency-announces-grants",
+    "title": "Agency Announces Grants for Habitat Protection | Federal Office of Synthetic Wildlife",
+    "doi": null
+  },
+  "doi": null,
+  "crossref": "no_doi",
+  "authors_are_organizations": true,
+  "citation": {
+    "authors": {"value": ["Federal Office of Synthetic Wildlife"], "source": "json_ld", "verified": true},
+    "author_credentials": {"value": null, "source": "missing", "verified": false},
+    "title": {"value": "Agency Announces Grants for Habitat Protection", "source": "json_ld", "verified": true},
+    "publication": {"value": "Federal Office of Synthetic Wildlife", "source": "json_ld", "verified": true},
+    "published_at": {"value": "2026-06-02T00:00:00Z", "source": "json_ld", "verified": true},
+    "canonical_url": {"value": "https://www.fosw.example.gov/news/2026/06/agency-announces-grants", "source": "meta_tag", "verified": true},
+    "accessed_at": {"value": "2026-10-26T15:00:00Z", "source": "retrieval", "verified": true}
+  },
+  "short_cite": "Federal Office of Synthetic Wildlife 26",
+  "full_cite": "Federal Office of Synthetic Wildlife 26 [Federal Office of Synthetic Wildlife; \"Agency Announces Grants for Habitat Protection\"; Federal Office of Synthetic Wildlife; June 2, 2026; https://www.fosw.example.gov/news/2026/06/agency-announces-grants; accessed October 26, 2026]",
+  "unverified_fields": [],
+  "missing_fields": ["author_credentials"]
+}

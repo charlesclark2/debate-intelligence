@@ -16,12 +16,23 @@ from pydantic import Field, model_validator
 from debate_core.domain.base import DomainModel, NonEmptyText, UtcDatetime
 from debate_core.domain.enums import CitationFieldSource
 
-__all__ = ["REQUIRED_CITATION_FIELDS", "Citation", "CitationField"]
+__all__ = ["CITATION_FIELD_NAMES", "REQUIRED_CITATION_FIELDS", "Citation", "CitationField"]
 
 #: The fields a cite must have verified before a card can be presented as finished evidence.
 #: Author credentials and the accessed date are recorded when available but never required: many
 #: legitimate sources state no author qualification.
 REQUIRED_CITATION_FIELDS = ("authors", "title", "publication", "published_at", "canonical_url")
+
+#: Every cite field of a :class:`Citation`, in cite order.
+CITATION_FIELD_NAMES = (
+    "authors",
+    "author_credentials",
+    "title",
+    "publication",
+    "published_at",
+    "canonical_url",
+    "accessed_at",
+)
 
 
 class CitationField[CitationValueT](DomainModel):
@@ -98,6 +109,36 @@ class Citation(DomainModel):
     accessed_at: CitationField[UtcDatetime] = Field(
         default_factory=CitationField[UtcDatetime], description="When the platform retrieved the source."
     )
+    authors_are_organizations: bool = Field(
+        default=False,
+        description=(
+            "True when `authors` names the issuing organizations rather than people: the source named no "
+            "person, and a typed source named the organization."
+        ),
+    )
+
+    cleared_by_student: tuple[str, ...] = Field(
+        default=(),
+        description=(
+            "Cite fields a student's last cite edit left empty, in cite order. Re-resolving the cite keeps "
+            "each as the student left it; the edit policy rewrites the list on every cite edit."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _check_cleared_fields(self) -> Self:
+        unknown = [name for name in self.cleared_by_student if name not in CITATION_FIELD_NAMES]
+        if unknown:
+            raise ValueError(f"not cite fields: {', '.join(unknown)}")
+        if list(self.cleared_by_student) != [n for n in CITATION_FIELD_NAMES if n in self.cleared_by_student]:
+            raise ValueError("cleared fields are listed once each, in cite order")
+        return self
+
+    @model_validator(mode="after")
+    def _check_organization_authors(self) -> Self:
+        if self.authors_are_organizations and not self.authors.is_present:
+            raise ValueError("a cite with no authors cannot mark them as organizations")
+        return self
 
     @property
     def unverified_fields(self) -> tuple[str, ...]:

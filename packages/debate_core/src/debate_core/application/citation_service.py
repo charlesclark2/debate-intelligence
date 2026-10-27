@@ -23,8 +23,8 @@ proposal §8, §19): each field is a value some source states, or it is missing.
 ## Which value wins, and what verifies it
 
 Per field, the candidate from the highest source in :data:`SOURCE_PRECEDENCE` wins: Crossref, then
-JSON-LD, meta tags, OpenGraph, byline, heuristic; within one source, the first found. A field with
-no candidate is `missing`.
+JSON-LD, meta tags, OpenGraph, byline, the platform's retrieval record, heuristic; within one source,
+the first found. A field with no candidate is `missing`.
 
 A value is **verified** when its source is an explicit statement (anything but `heuristic`) and the
 platform retrieved the source itself (`PUBLISHER_RETRIEVED`). A heuristic is never verified, and
@@ -33,13 +33,21 @@ nothing shows the text is that work. The provenance mode travels on the resoluti
 formatted cite, so it stays visible.
 
 **Credentials** are only ever an explicit author bio on the page, JSON-LD's `jobTitle` and
-`affiliation`, or Crossref's affiliations (ac3). Otherwise the field is missing and the cite carries
-no qualification.
+`affiliation`, or Crossref's affiliations (ac3), each of a person author. Otherwise the field is
+missing and the cite carries no qualification.
 
-**The accessed date** is the snapshot's `retrieved_at`. No source in the
-:class:`~debate_core.domain.enums.CitationFieldSource` list names the platform's own retrieval
-record, so it is recorded as `heuristic` and unverified, with the timestamp as `raw`; it is not a
-required field, so it never holds a card back (session report, Decisions).
+**An organization as the author** (`v1-e06-t02`). When no source names a person, an organization a
+typed source names as the author stands in: a JSON-LD `author` typed `Organization` or a subtype, or
+a Crossref contributor deposited with a whole name and no family name. The cite marks it
+(`authors_are_organizations`), and its short cite keeps the name whole. Beside a named person an
+organization is not an author, and nothing else ever makes one: not a site name, `og:site_name`, a
+publisher or the publication. With no typed organization, `authors` stays missing.
+
+**The platform's retrieval record** (`retrieval`, `v1-e06-t02`) is the accessed date, the snapshot's
+`retrieved_at` with the timestamp as `raw`, and the URL of last resort: the retrieved URL,
+canonicalized, when the page declares no canonical URL of its own. Like any explicit source it is
+verified exactly when the platform retrieved the text, so an open-access PDF, or a page with no
+canonical link, can verify; under any other provenance it is a record of what the user said.
 
 ## A student's edits (ac5)
 
@@ -49,13 +57,17 @@ A student may change a cite field through
 holds a cite edit, keeps what the student wrote (:func:`keep_student_edits`): a field whose value
 equals the derived one takes the derived field, verified exactly when the derivation is; a field
 that differs keeps the student's value, unverified, and is named in
-:attr:`CitationResolution.student_fields`. A card no student has cite-edited takes the derived cite
-whole. Saving the card, and re-verifying it, is the caller's step.
+:attr:`CitationResolution.student_fields`. A field the student cleared is recorded on the cite
+(`cleared_by_student`, by the edit policy) and stays empty, named there too, and is never filled
+again by re-resolution (`v1-e06-t02`): a required one leaves the card UNVERIFIED, with the
+verifier's ``CITATION_UNVERIFIED`` naming it. A card no student has cite-edited takes the derived
+cite whole. Saving the card, and re-verifying it, is the caller's step.
 
 ## Formatting (ac4)
 
 :func:`format_cite` writes the short cite, "Lastname YY" (first author's last name, "et al." for
-more; with no author the publication, then the title; "ND" with no date), and the full cite line:
+more, an organization's name whole; with no author the publication, then the title; "ND" with no
+date), and the full cite line:
 authors with their credentials in parentheses, the title in quotes, the publication, the date as
 the source states its day, the URL, the accessed date, and where the text came from when the
 platform did not retrieve it. Team conventions are format profiles' business (`v1-e06-t03`). The
@@ -78,6 +90,7 @@ from debate_core.application.ports.doi_metadata import DoiMetadataSource, DoiWor
 from debate_core.application.ports.persistence import ArticleRepository
 from debate_core.application.snapshot_service import LoadedSnapshot, SnapshotService
 from debate_core.domain import Article, Card, Citation, CitationField, ProvenanceMode
+from debate_core.domain.citation import CITATION_FIELD_NAMES
 from debate_core.domain.enums import CitationFieldSource
 from debate_core.evidence.edits import EditKind
 from debate_core.retrieval.citation_harvest import (
@@ -108,24 +121,15 @@ SOURCE_PRECEDENCE: Final = (
     CitationFieldSource.META_TAG,
     CitationFieldSource.OPENGRAPH,
     CitationFieldSource.BYLINE,
+    CitationFieldSource.RETRIEVAL,
     CitationFieldSource.HEURISTIC,
 )
 """Which source's value a field takes when several state one, highest first."""
 
-CITATION_FIELD_NAMES: Final = (
-    "authors",
-    "author_credentials",
-    "title",
-    "publication",
-    "published_at",
-    "canonical_url",
-    "accessed_at",
-)
-"""Every field of a :class:`~debate_core.domain.Citation`, in cite order."""
-
 _RANK: Final = {source: rank for rank, source in enumerate(SOURCE_PRECEDENCE)}
 _CROSSREF: Final = CitationFieldSource.CROSSREF
 _HEURISTIC: Final = CitationFieldSource.HEURISTIC
+_RETRIEVAL: Final = CitationFieldSource.RETRIEVAL
 
 
 class CrossrefOutcome(StrEnum):
@@ -201,9 +205,12 @@ def resolve_citation(
     """
     deposit = _deposit_candidates(work)
     verifies = provenance_mode is ProvenanceMode.PUBLISHER_RETRIEVED
+    people = (*deposit.authors, *candidates.authors)
+    organizations = (*deposit.organization_authors, *candidates.organization_authors)
     return Citation.model_validate(
         {
-            "authors": _chosen((*deposit.authors, *candidates.authors), verifies),
+            "authors": _chosen(people or organizations, verifies),
+            "authors_are_organizations": not people and bool(organizations),
             "author_credentials": _chosen(
                 (*deposit.author_credentials, *candidates.author_credentials), verifies
             ),
@@ -213,8 +220,8 @@ def resolve_citation(
             "canonical_url": _chosen(candidates.canonical_url, verifies),
             "accessed_at": {
                 "value": accessed_at,
-                "source": _HEURISTIC,
-                "verified": False,
+                "source": _RETRIEVAL,
+                "verified": verifies,
                 "raw": accessed_at.isoformat(),
             },
         }
@@ -238,15 +245,22 @@ def _deposit_candidates(work: DoiWork | None) -> CitationCandidates:
     """What a Crossref work states, as candidates from `crossref`."""
     if work is None:
         return CitationCandidates()
-    names = tuple(name for author in work.authors if (name := author.display_name) is not None)
+    people = tuple(author for author in work.authors if author.family is not None)
+    names = tuple(name for author in people if (name := author.display_name) is not None)
+    organizations = tuple(
+        author.name for author in work.authors if author.family is None and author.name is not None
+    )
     credentials = "; ".join(
         ", ".join((name, *author.affiliations))
-        for author in work.authors
+        for author in people
         if (name := author.display_name) is not None and author.affiliations
     )
     day = next((stated.whole_date for stated in work.dates if stated.whole_date is not None), None)
     return CitationCandidates(
         authors=(Harvested(names, _CROSSREF, ", ".join(names)),) if names else (),
+        organization_authors=(
+            (Harvested(organizations, _CROSSREF, ", ".join(organizations)),) if organizations else ()
+        ),
         author_credentials=(Harvested(credentials, _CROSSREF, credentials),) if credentials else (),
         title=(Harvested(work.title, _CROSSREF, work.title),) if work.title else (),
         publication=(Harvested(work.container_title, _CROSSREF, work.container_title),)
@@ -263,19 +277,24 @@ def _deposit_candidates(work: DoiWork | None) -> CitationCandidates:
 def keep_student_edits(stored: Citation, derived: Citation) -> tuple[Citation, tuple[str, ...]]:
     """`derived`, keeping each of `stored`'s fields a student changed away from the source (ac5).
 
-    For each field: when `stored` has no value, or the same value as `derived`, the derived field is
-    taken, verified exactly when the derivation is. A stored value marked verified is the service's
-    own from an earlier resolution (a student's changed field never arrives verified), so the
-    derivation replaces it. Any other stored value is the student's: it is kept as stored, with
-    `verified` false, and its name is returned. Returns the cite and those names, in cite order.
+    For each field: a field the student cleared (`stored.cleared_by_student`, `v1-e06-t02`) stays
+    empty, whatever the source says. Otherwise, when `stored` has no value, or the same value as
+    `derived`, the derived field is taken, verified exactly when the derivation is. A stored value
+    marked verified is the service's own from an earlier resolution (a student's changed field never
+    arrives verified), so the derivation replaces it. Any other stored value is the student's: it is
+    kept as stored, with `verified` false. The names of the cleared and kept fields are returned with
+    the cite, in cite order.
     """
     kept: dict[str, CitationField[Any]] = {}
     for name in CITATION_FIELD_NAMES:
         mine: CitationField[Any] = getattr(stored, name)
         theirs: CitationField[Any] = getattr(derived, name)
-        if mine.is_present and not mine.verified and mine.value != theirs.value:
+        if name in stored.cleared_by_student or (
+            mine.is_present and not mine.verified and mine.value != theirs.value
+        ):
             kept[name] = mine
-    return derived.evolve(**kept), tuple(kept)
+    marked = {"authors_are_organizations": stored.authors_are_organizations} if "authors" in kept else {}
+    return derived.evolve(**kept, **marked, cleared_by_student=stored.cleared_by_student), tuple(kept)
 
 
 # --------------------------------------------------------------------------------------------
@@ -417,7 +436,8 @@ def format_cite(citation: Citation, *, provenance_mode: ProvenanceMode) -> Forma
 def _short_name(citation: Citation) -> str:
     names = citation.authors.value
     if names:
-        return _last_name(names[0]) + (" et al." if len(names) > 1 else "")
+        first = names[0] if citation.authors_are_organizations else _last_name(names[0])
+        return first + (" et al." if len(names) > 1 else "")
     return citation.publication.value or citation.title.value or NO_AUTHOR
 
 

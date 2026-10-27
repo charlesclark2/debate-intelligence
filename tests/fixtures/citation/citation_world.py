@@ -47,6 +47,7 @@ CASES: Final = (
     "journal-article-landing",
     "open-access-pdf",
     "user-supplied",
+    "organization-report",
 )
 RETRIEVED_AT: Final = datetime(2026, 10, 26, 15, 0, tzinfo=UTC)
 JOURNAL_DOI: Final = "10.5555/jscs.2026.0012"

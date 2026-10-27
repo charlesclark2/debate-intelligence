@@ -172,8 +172,12 @@ locals {
   # An SNS target takes a template that is one JSON string, delivered as the email's text. Written
   # out, not jsonencode()d: jsonencode escapes `<` and `>`, and EventBridge would no longer see the
   # placeholders. No text here holds a double quote.
+  #
+  # A backfile import is a task of the run's family, started by hand with its command overridden
+  # (v1-e40-t09), so the run's email says it may be one: the last line of the task's log names the
+  # command that stopped.
   task_stopped_message = {
-    run   = "\"The ${var.environment} weekly caselist run task stopped with exit code <exit_code> (<stop_code>: <reason>). Task <task>. Read its log, debate-${var.environment}-caselist-run, and debate-research caselist runs --remote; docs/runbooks/caselist-cloud-run.md.\""
+    run   = "\"The ${var.environment} weekly caselist run task stopped with exit code <exit_code> (<stop_code>: <reason>). Task <task>. It is the weekly run, or a backfile import someone started by hand (docs/runbooks/caselist-cloud-run.md, Backfile imports): the command on the last line of its log says which. Read its log, debate-${var.environment}-caselist-run, and debate-research caselist runs --remote; docs/runbooks/caselist-cloud-run.md.\""
     login = "\"The ${var.environment} weekly caselist login task stopped with exit code <exit_code> (<stop_code>: <reason>). Task <task>. The run three hours later uses the previous token if it still works; docs/runbooks/caselist-cloud-credentials.md.\""
   }
 

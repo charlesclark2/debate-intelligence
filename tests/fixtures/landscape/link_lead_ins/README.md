@@ -10,7 +10,7 @@ through" is named by the first of these it has:
 4. the impact card's own tag;
 5. the card above it.
 
-The mark is `(link)`. A link holding a word of a caselist school, team code or tournament is withheld
+The mark is `(link)`. A link holding a word of a caselist school or team code is withheld
 and counted, and the next source names the rank. A label that names an answer (`no link`, `link turn`,
 `non-unique`) is no link (the PM's ruling of 2026-10-26).
 
@@ -73,12 +73,12 @@ card above 0; left out 0. Scenario names withheld 0. Tags withheld **2** (rank 1
 internal link). Documents with no scenario heading and no role label: still 2 of 6 (`b3`, `b6`), as
 `../readable_impact_chains/README.md` works out for the same drop.
 
-**The Spending DA's link chain.** As in `v1-e32-t14`, the table quotes each tag as parsed, and only the
-lines under "What each impact runs through" withhold.
+**The Spending DA's link chain.** Since `v1-e32-t28` the table withholds a tag as the lines under "What
+each impact runs through" do: its cell is left empty, and the row keeps its teams and cite.
 * **Link.** Cluster 14's link-labelled copies are now `b1` paragraph 0 (`YY`, `JJ`) and `b5` paragraph
   3 (`ZZ`): 3 teams. Their tags differ, one copy each, so the first in text order shows: `Link:
   deficits follow new spending`, `b5`'s cite `Ito 2026`.
-* **Internal link.** Cluster 41, `Deficits spike Birchmoor rates`, `Lee 26`, 1 team.
+* **Internal link.** Cluster 41, `Lee 26`, 1 team. Its tag holds `birchmoor`, so the cell is empty.
 * **Uniqueness and impact.** Unchanged.
 
 ### The advantages

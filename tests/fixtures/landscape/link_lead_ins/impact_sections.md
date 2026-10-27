@@ -6,8 +6,8 @@ Advantage documents with no scenario heading and no role label: 1 of 6 (16.7%).
 
 * Impact rows: 3; with a scenario two or more teams name: 1.
 * Ranks named by a scenario: 1; by an internal link: 0; by a link: 0; by the impact card's tag: 2; by the card above it: 0; left out: 0.
-* Scenario names withheld for holding a word of a caselist school, team code or tournament: 0.
-* Tags withheld for holding a word of a caselist school, team code or tournament: 0.
+* Scenario names withheld for holding a word of a caselist school or team code: 0.
+* Tags withheld for holding a word of a caselist school or team code: 0.
 * Positions with no labelled card, by role: uniqueness 2 of 2, link 2 of 2, internal link 1 of 2, impact 1 of 2, harms 2 of 2, inherency 2 of 2, solvency 1 of 2.
 
 **Costs advantage** (`costs-advantage`)
@@ -58,8 +58,8 @@ DA documents with no scenario heading and no role label: 2 of 6 (33.3%).
 
 * Impact rows: 4; with a scenario two or more teams name: 0.
 * Ranks named by a scenario: 0; by an internal link: 0; by a link: 1; by the impact card's tag: 3; by the card above it: 0; left out: 0.
-* Scenario names withheld for holding a word of a caselist school, team code or tournament: 0.
-* Tags withheld for holding a word of a caselist school, team code or tournament: 2.
+* Scenario names withheld for holding a word of a caselist school or team code: 0.
+* Tags withheld for holding a word of a caselist school or team code: 2.
 * Positions with no labelled card, by role: uniqueness 3 of 4, link 2 of 4, internal link 3 of 4, impact 2 of 4.
 
 **Spending DA** (`spending-da`)
@@ -82,7 +82,7 @@ Link chain:
 |---|---|---|---|
 | Uniqueness | 1 | Spending is at a record high now | Ito 25 |
 | Link | 3 | Link: deficits follow new spending | Ito 2026 |
-| Internal link | 1 | Deficits spike Birchmoor rates | Lee 26 |
+| Internal link | 1 |  | Lee 26 |
 | Impact | 2 | Debt ceiling fights are near | Ruiz 26 |
 
 **Midterms DA** (`election-da`): no labelled impact card.

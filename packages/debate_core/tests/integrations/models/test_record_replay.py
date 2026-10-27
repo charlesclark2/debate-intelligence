@@ -636,49 +636,56 @@ class RepairedCall:
     first_answer: LiveStep
     recorded_output: JsonValue
     """The cassette's `output` for the first answer, written by hand."""
-    recorded_problem: dict[str, JsonValue]
-    """The cassette's one problem, written by hand."""
-    problem: OutputProblem
-    """The same problem, as the refusal carries it."""
+    recorded_problems: list[JsonValue]
+    """The cassette's problems, written by hand."""
+    problems: tuple[OutputProblem, ...]
+    """The same problems, as the refusal carries them."""
     described: str
-    """How the refusal's message describes it."""
+    """How the refusal's message describes them."""
 
 
 REPAIRED_CALLS = {
     "an answer that does not fit the schema": RepairedCall(
-        first_answer=INVALID_PASSAGE,
-        recorded_output={"paragraph_id": "the third", "start_offset": 0, "end_offset": 42},
-        recorded_problem={
-            "loc": ["paragraph_id"],
-            "msg": "Input should be a valid integer",
-            "type": "int_type",
-        },
-        problem=OutputProblem(loc=("paragraph_id",), type="int_type", msg="Input should be a valid integer"),
-        described="paragraph_id: Input should be a valid integer [int_type]",
+        first_answer={"paragraph_id": "the third", "start_offset": 0},
+        recorded_output={"paragraph_id": "the third", "start_offset": 0},
+        recorded_problems=[
+            {"loc": ["paragraph_id"], "msg": "Input should be a valid integer", "type": "int_type"},
+            {"loc": ["end_offset"], "msg": "Field required", "type": "missing"},
+        ],
+        problems=(
+            OutputProblem(loc=("paragraph_id",), type="int_type", msg="Input should be a valid integer"),
+            OutputProblem(loc=("end_offset",), type="missing", msg="Field required"),
+        ),
+        described="2 problems: paragraph_id: Input should be a valid integer [int_type]; "
+        "end_offset: Field required [missing]",
     ),
     "an answer that never called the tool": RepairedCall(
         first_answer=None,
         recorded_output=None,
-        recorded_problem={
-            "loc": [],
-            "msg": "the model did not call the ContractPassage tool (stopReason 'end_turn')",
-            "type": "missing_tool_call",
-        },
-        problem=NO_TOOL_CALL,
-        described="(answer): the model did not call the ContractPassage tool (stopReason 'end_turn') "
-        "[missing_tool_call]",
+        recorded_problems=[
+            {
+                "loc": [],
+                "msg": "the model did not call the ContractPassage tool (stopReason 'end_turn')",
+                "type": "missing_tool_call",
+            }
+        ],
+        problems=(NO_TOOL_CALL,),
+        described="1 problem: (answer): the model did not call the ContractPassage tool "
+        "(stopReason 'end_turn') [missing_tool_call]",
     ),
     "a fitting answer refused for a cut-off turn": RepairedCall(
         first_answer=CutOff(PASSAGE),
         recorded_output={"paragraph_id": 3, "start_offset": 0, "end_offset": 42},
-        recorded_problem={
-            "loc": [],
-            "msg": "the model stopped with 'max_tokens', which is not a finished answer",
-            "type": "unfinished_answer",
-        },
-        problem=CUT_OFF,
-        described="(answer): the model stopped with 'max_tokens', which is not a finished answer "
-        "[unfinished_answer]",
+        recorded_problems=[
+            {
+                "loc": [],
+                "msg": "the model stopped with 'max_tokens', which is not a finished answer",
+                "type": "unfinished_answer",
+            }
+        ],
+        problems=(CUT_OFF,),
+        described="1 problem: (answer): the model stopped with 'max_tokens', which is not a finished "
+        "answer [unfinished_answer]",
     ),
 }
 
@@ -704,7 +711,7 @@ def test_record_a_repaired_call_writes_both_halves_and_replay_gives_the_same_err
     assert response == {
         "model_id": "stand-in-high_volume",
         "output": case.recorded_output,
-        "problems": [case.recorded_problem],
+        "problems": case.recorded_problems,
         "prompt_id": "example.select-passage",
         "prompt_version": "1.0.0",
         "usage": {"input_tokens": 100, "latency_ms": 310.0, "output_tokens": 12},
@@ -717,12 +724,11 @@ def test_record_a_repaired_call_writes_both_halves_and_replay_gives_the_same_err
     assert replay_seen.outcomes == recorder_seen.outcomes
     assert replay_seen.outcomes[0] == (
         "refused",
-        "invalid output from stand-in-high_volume for prompt example.select-passage@1.0.0: "
-        f"1 problem: {case.described}",
+        f"invalid output from stand-in-high_volume for prompt example.select-passage@1.0.0: {case.described}",
         "example.select-passage",
         "1.0.0",
         "stand-in-high_volume",
-        (case.problem,),
+        case.problems,
         ModelUsage(input_tokens=100, output_tokens=12, latency_ms=310.0),
     )
     assert (

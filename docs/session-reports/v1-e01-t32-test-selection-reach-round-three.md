@@ -511,9 +511,58 @@ PM questions from v1-e01-t32 (test selection, round three)
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-27
 
 **Notes:**
+
+Every edge the spec named is cut, and the gain is honestly measured: modest, with the floor named.
+1. **ac1 passes.**
+   * Red first: 14 failed, the 12 command modules that imported another and the two package
+     modules.
+   * Each of the 21 command modules, imported alone in a fresh interpreter, loads no other. At the
+     base, `verify` loaded 20.
+   * Each guard fails on its re-added import (mutants 27 to 30), the lazy one inside a function
+     included.
+2. **ac2 passes.** 66 cases, each expected selection written by hand, red against the previous
+   script. The cases that must not change (a pytest-table edit stays whole) are among them.
+3. **ac3 passes.**
+   * t38's 20 merges: median 46.8% to 41.0% of files, 41.4% to 34.2% of tests.
+   * t27's seven API auth files are gone. Its slow smoke and bucket-mode files remain, through
+     `app.py`, as reported.
+   * Collected ids: 0 lost, 58 added, all this task's own.
+4. **Planted breaks:** the five new ones are each caught. The import-linter-only break selects 10
+   files, not the whole selection. The retrieval exit-4 break did not finish in the session, but its
+   ten nearest files are the same as at the base. Validate-dev's slow tier runs the whole set, so
+   operator follow-up 1 is not required.
+5. **Mutants: 30.** Mutants 12 and 17 survived at first and were caught after the cases were
+   strengthened. That is the right response, and the report says so plainly.
+6. **Deviations 1 to 4 accepted.** Deviation 2 widens the PM's quoted-path wording in the one safe
+   direction: it never selects fewer tests than a real read needs.
+7. **Decisions accepted:**
+   * what two commands share lives outside the commands package;
+   * every conftest is read fixture by fixture, failing toward more tests;
+   * the root `pyproject.toml` is compared as TOML, table by table, with a comment-only change
+     still the whole selection;
+   * each measurement column uses its own version's script;
+   * `app.py` was counted and proposed, not built.
+8. **PM question 1: (b).** `UnknownCaselistEvent`'s hint will name `debate_cli.caselist_events`.
+   The output change is ruled into the container task below.
+9. **PM question 2: (a).** The PM files Decision 6's proposal as an E01 task. Lazy integration
+   imports in the container are an accepted change of import timing, on two conditions:
+   * a test builds every factory, so an integration that fails to import still fails `ci`;
+   * every command's output is otherwise unchanged.
+10. **Follow-ups:**
+    * the API conftest split (`PilotWorld` by surface, the corpus in a fixture) becomes an E39
+      task;
+    * the planted-break harness's nearest-ten ordering becomes an E01 p3 task;
+    * the 1.7 s path index and the 730 unfollowable bases are noted, not filed.
+11. **The hand `git fetch`** was read-only and was reported. Network calls go to the operator,
+    except `scripts/task sync`.
+12. **The affected set** (207 files) is left to the PR's `ci` under agreement 10. The always-run
+    list, the CLI tests in two groups and the core suites the change reaches all passed, as did the
+    static checks.
+
+No re-review is needed. The Goal is `Succeeded`, and the PR merges in full.

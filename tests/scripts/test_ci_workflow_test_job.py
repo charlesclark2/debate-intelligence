@@ -380,7 +380,14 @@ def test_a_pull_request_part_keeps_no_coverage_and_the_push_parts_combine_into_t
     push_temps = [tmp_path / f"push-runner-temp-{part}" for part in (1, 2)]
     for runner_temp in push_temps:
         runner_temp.mkdir()
-    data_files = [Path(in_a_part(DATA_FILE_OF_A_PART, part, 2, push_temps[part - 1])) for part in (1, 2)]
+    # Where the push step tells coverage to write, and where the upload step reads, each read out of
+    # ci.yml: the data has to be where its artifact is taken from.
+    data_files = [
+        Path(in_a_part(pytest_step(ON_A_PUSH)["env"]["COVERAGE_FILE"], part, 2, push_temps[part - 1]))
+        for part in (1, 2)
+    ]
+    [upload] = [step for step in jobs()["test"]["steps"] if step.get("uses") == UPLOAD_ARTIFACT]
+    uploaded = [Path(in_a_part(upload["with"]["path"], part, 2, push_temps[part - 1])) for part in (1, 2)]
     unsplit_data = tmp_path / "unsplit-coverage"
 
     with ThreadPoolExecutor() as pool:
@@ -415,7 +422,7 @@ def test_a_pull_request_part_keeps_no_coverage_and_the_push_parts_combine_into_t
     for part, completed in enumerate(on_a_push, start=1):
         assert "1 passed" in completed.stdout, f"part {part} of 2 did not run one of the two tests"
         assert "TOTAL" not in completed.stdout, "a part printed a report of its own share"
-        assert data_files[part - 1].is_file(), f"part {part} left no data where its artifact uploads from"
+        assert uploaded[part - 1].is_file(), f"part {part} left no data where its artifact uploads from"
         assert sorted(path.name for path in push_temps[part - 1].iterdir()) == [data_files[part - 1].name]
 
     combined, calls = run_the_combining_step(tmp_path, data_files)

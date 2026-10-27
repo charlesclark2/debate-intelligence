@@ -1,0 +1,83 @@
+# TASK v1-e01-t42-coverage-measured-in-the-parts - Coverage measured in the test parts and combined, so the push run is never held by one unsplit job
+# Epic: E01 Repository & Delivery Foundation | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t42-coverage-measured-in-the-parts
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: "Coverage measured in the test parts and combined, so the push run is never held by one unsplit job"
+spec:
+  # Filed by the PM, 2026-10-27, from the operator's finding of 2026-10-27: no dev pre-release since v1.1.0-dev.159, read by the PM.
+  description: >-
+    From 2026-10-26 the push run's `coverage` job, one unsplit run of the whole default
+    selection, passed its 20-minute limit on every push to dev, while every part of `test`
+    passed in about 3.5 minutes. Each push run concluded `failure`, so the dev pre-release made
+    no build for about thirty merges, validate-dev had nothing to validate, and no tag could
+    carry an image. The PM's batch of 2026-10-27 (v) let the push run succeed without it
+    (`continue-on-error`, 40 minutes). Measure coverage in each part on a push instead (the same
+    `--cov` settings, a data file per part), and combine the parts' data in one short job that
+    prints the same report. Count first: the unsplit job's time and the parts' time with
+    coverage on, from the last runs' logs or a measured run. The push run then waits only for
+    the parts. The parts together are still exactly the default selection (the partition proof),
+    and `continue-on-error` comes off the combining job.
+  priority: 2
+  constraints:
+    packages: [.github/workflows, tests/scripts, tests/pytest_plugins, pyproject.toml]
+    forbidden:
+      - Coverage measured on a pull request
+      - A test deselected to save time
+      - A paid runner or larger runner size
+  context:
+    - kind: TaskRef
+      name: v1-e01-t38-ci-affected-tests-on-dev-pull-requests
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Counts first: the unsplit coverage job's time and each part's time with coverage on,
+        in the report.
+    - id: ac2
+      description: >-
+        On a push, each part measures coverage and one job combines it into the report the
+        unsplit job printed; the push run's slowest job is a part; workflow tests pin it,
+        shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t42-coverage-measured-in-the-parts-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Measure coverage per part on a push and combine it in one short job.
+  goalRef:
+    name: v1-e01-t42-coverage-measured-in-the-parts
+  graph:
+    nodes:
+      - id: coverage-in-parts
+        kind: Task
+        name: Coverage in parts
+        description: >-
+          Measure coverage per part on a push and combine it in one short job.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: CI workflow tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, -k, ci_workflow]
+status:
+  phase: Pending

@@ -378,9 +378,9 @@ spec:
         - v1-e05-t15-monthly-model-budget
     - id: t16
       kind: Task
-      name: 'An AWS budget alarm on the account''s model spend at 80% and 100% of $50'
+      name: 'An AWS budget alarm on the account''s model spend, $100 a month with a first notice at $50'
       description: >-
-        An AWS budget alarm on the account's model spend at 80% and 100% of $50.
+        An AWS budget alarm on the account's model spend, $100 a month with a first notice at $50.
       inputs:
         specRef: plan_specs/v1/e05-model-router/t16-bedrock-budget-alarm.yaml
         goalRef: v1-e05-t16-bedrock-budget-alarm

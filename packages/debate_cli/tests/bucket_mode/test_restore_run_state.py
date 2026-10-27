@@ -436,6 +436,11 @@ def blobs_in(directory: Path) -> dict[str, str]:
     }
 
 
+def inodes(directory: Path) -> dict[str, int]:
+    """Each file's inode: a source renamed over identical bytes leaves the bytes and changes this."""
+    return {path.relative_to(directory).as_posix(): path.stat().st_ino for path in directory.rglob("*")}
+
+
 def restore_with_sources(world: World, into: Path, *more: str) -> tuple[dict[str, Any], str]:
     """The envelope, and everything the command said, stdout and stderr together."""
     result = world.invoke(
@@ -459,6 +464,7 @@ def test_with_sources_the_copy_holds_every_source_its_manifests_name_and_nothing
     live = seeded(world)
     live_rows = rows(live / "debate.sqlite3")
     live_before = files(live)
+    live_inodes = inodes(live)
     bucket_before = without_the_lock(world.everything())
     world.monkeypatch.setenv("DEBATE_CASELIST__SYNC_CASELISTS", json.dumps([CASELIST]))
     copy = tmp_path / "copy"
@@ -481,6 +487,7 @@ def test_with_sources_the_copy_holds_every_source_its_manifests_name_and_nothing
     assert rows(copy / "debate.sqlite3") == live_rows
 
     assert files(live) == live_before, "the data directory is left exactly as it was"
+    assert inodes(live) == live_inodes, "nothing was renamed into the data directory, even over the same bytes"
     assert without_the_lock(world.everything()) == bucket_before, "the lock is the only object written"
     assert world.lock()["state"] == "free"
     for word in (*FICTIONAL_NAMES, str(tmp_path), *named):

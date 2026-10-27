@@ -10,7 +10,9 @@ profile, region and parameters all come from there, and none is written in this 
   cards checked 2026-10-16, cited in v1-e05-t01's report; amended spec, ac2). The tool's input is
   validated as the schema. A response that does not call the tool, or calls it with input the
   schema refuses, raises :class:`~debate_core.application.errors.InvalidModelOutput`, which the
-  structured-output guard repairs (v1-e05-t05).
+  structured-output guard repairs (v1-e05-t05). The answer is first handed to record mode
+  (:mod:`debate_core.integrations.models.received_answer`), which writes a refused one to its
+  cassette, so a repaired call recorded live replays both halves (v1-e05-t10).
 * **Embeddings** go through InvokeModel on Titan Text Embeddings V2, one text per request, which
   is how that model takes them; `dimensions` comes from the embeddings route when it names one.
 * **Rerank** goes through InvokeModel on Cohere Rerank, every document in one request.
@@ -77,6 +79,7 @@ from debate_core.domain.model_contracts import (
 )
 from debate_core.integrations.bedrock.failures import PROVIDER, is_retried, translate_bedrock_error
 from debate_core.integrations.bedrock.prompt_rendering import PromptRenderer, refuse_unregistered_prompt
+from debate_core.integrations.models.received_answer import hand_over_answer
 from debate_core.integrations.models.routing_policy import RoutingPolicy
 
 __all__ = [
@@ -449,6 +452,7 @@ def _structured_output[OutputT: BaseModel](
     message = _as_mapping(_as_mapping(response.get("output")).get("message"))
     calls = [_as_mapping(_as_mapping(block).get("toolUse")) for block in _as_list(message.get("content"))]
     ours = [call for call in calls if call.get("name") == name]
+    hand_over_answer(_received_answer(ours))
     if stop_reason not in ACCEPTED_STOP_REASONS:
         raise refuse(
             OutputProblem(
@@ -472,6 +476,15 @@ def _structured_output[OutputT: BaseModel](
     return validate_model_output(
         schema, ours[0].get("input"), prompt=prompt, model_id=route.model_id, usage=usage
     )
+
+
+def _received_answer(calls: Sequence[Mapping[str, Any]]) -> Any:
+    """What the model answered, for record mode: its call's input, every input when it called the
+    tool more than once, and `None` when it never called it (v1-e05-t10)."""
+    inputs = [call.get("input") for call in calls]
+    if not inputs:
+        return None
+    return inputs[0] if len(inputs) == 1 else inputs
 
 
 def _invoke(route: ResolvedRoute, body: Mapping[str, Any]) -> dict[str, Any]:

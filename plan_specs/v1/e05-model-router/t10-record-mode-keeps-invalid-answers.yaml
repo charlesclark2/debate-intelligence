@@ -45,7 +45,7 @@ spec:
         InvalidModelOutput, the same repair request and the same result; a no-tool answer
         records as output null; a provider error records nothing; tests shown failing first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

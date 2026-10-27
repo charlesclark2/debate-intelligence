@@ -54,9 +54,16 @@ wrong name, or left behind by a prompt version bump, is refused rather than serv
 which Bedrock's `toolChoice` `auto` allows. Both routers refuse it as invalid output, and the
 structured-output guard repairs it like any other (`v1-e05-t05`, ac5). A repair is a second call,
 to `model.repair`, and needs a fixture or cassette of its own; `tests/fixtures/model_outputs/malformed/`
-has worked examples. Record mode writes nothing for a call whose answer was invalid, so the first
-half of a repaired call's pair is written by hand. A call with no
+has worked examples. A call with no
 fixture fails with `MissingFixtureError`, naming the prompt and the key; it never gets a default.
+
+Record mode writes an invalid answer too (`v1-e05-t10`), so both halves of a repaired call are
+recorded live and neither is written by hand. Its response holds the answer as the real router
+received it (`"output": null` when the model called no tool) and the router's `problems` and
+`usage`; replay raises that same `InvalidModelOutput`, and the guard's repair finds its own
+cassette. It holds what the model said, as every cassette does, so the rules above apply to it
+unchanged. Nothing is recorded for a provider error, a budget refusal or a call that never reached
+the provider.
 
 ## Recording cassettes
 

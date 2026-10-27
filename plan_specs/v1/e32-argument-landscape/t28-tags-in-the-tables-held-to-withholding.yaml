@@ -28,7 +28,9 @@ spec:
     same way.
   priority: 3
   constraints:
-    packages: [debate_core.arguments, debate_core.application, debate_core.domain, packages/debate_core/tests, tests/fixtures/landscape, scripts, tests/scripts, docs/guides]
+    # PM amendment 2026-10-27, from the review (Deviation): the landscape command's scan cases,
+    # which planted a team code the ruling now withholds.
+    packages: [debate_core.arguments, debate_core.application, debate_core.domain, packages/debate_core/tests, tests/fixtures/landscape, scripts, tests/scripts, docs/guides, packages/debate_cli/tests]
     forbidden:
       - A matched word, school, team code or tag text committed or printed in the counts
       - A model call

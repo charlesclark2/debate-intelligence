@@ -234,3 +234,12 @@ spots are.
 
 No re-review is needed. The Goal is `Succeeded`, and the PR merges in full. It changes nothing the
 weekly run calls, so it may merge before Thursday's image.
+
+### The coach's word on note 5, recorded by the PM 2026-10-27
+
+Added in the PM batch of 2026-10-27 (w), since the note was written after this task's pull request was
+pushed. The coach accepts $100 a month across the two environments ($50 in each profile, as built), on
+one condition: model work is never duplicated between them. Note 5's split is withdrawn. The PM batch of
+2026-10-27 (v) amended `v1-e05-t17` and `v1-e32-t07` so that a card's classification is made once, in
+dev, and reused by prod, and `v1-e05-t16` to a $100 budget with its first notification at $50. Nothing in
+this task changes.

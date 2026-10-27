@@ -32,7 +32,9 @@
 #   division    varsity, junior-varsity or novice.
 #   placing     first place (to tenth place), top speaker, second speaker (to tenth speaker),
 #               champion, finalist, semifinalist, quarterfinalist, octofinalist,
-#               double-octofinalist or triple-octofinalist.
+#               double-octofinalist, triple-octofinalist, or state qualifying leg (a leg toward
+#               the Wisconsin State Debate Tournament earned there; never numbered or counted,
+#               policy version 1.2).
 #   students    Optional. The student's name exactly as content/media-consent.yaml publishes it,
 #               or both partners' names. The page adds the graduation year.
 #
@@ -42,7 +44,7 @@
 season: '2026-27'
 
 # The day this file was last changed. Update it with every edit: the page shows it.
-revised: 2026-10-23
+revised: 2026-10-27
 
 # The words around the results. House style: no em dashes, and no acronym left unexplained.
 labels:
@@ -74,3 +76,16 @@ results:
     division: varsity
     placing: top speaker
     students: [Anya Prakash]
+
+  # Ronald Reagan, from Charlie on 2026-10-27.
+  - scheduleId: ronald-reagan-2026
+    event: lincoln-douglas
+    division: novice
+    placing: third speaker
+    students: [Daksh Chauhan]
+
+  - scheduleId: ronald-reagan-2026
+    event: lincoln-douglas
+    division: novice
+    placing: state qualifying leg
+    students: [Marianna Troicki]

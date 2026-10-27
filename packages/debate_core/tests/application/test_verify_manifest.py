@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -37,15 +38,19 @@ from debate_core.application.errors import (
     StoreUnavailable,
 )
 from debate_core.application.evidence_verifier import EvidenceVerifier
+from debate_core.application.export_service import ExportService
 from debate_core.application.verify_manifest import (
     InvalidManifest,
     ManifestVerificationReport,
+    NewerManifestVersion,
     VerificationCouldNotRun,
     VerifyManifest,
     render_verify_result_schema,
 )
 from debate_core.domain import Card, SourceSnapshot, VerificationStatus
+from debate_core.evidence.manifest import CardManifest
 from debate_core.evidence.verification_types import ReasonCode, VerificationCheck, VerificationResult
+from debate_core.testing.fakes.clock_and_ids import FixedClock
 from debate_core.testing.fakes.persistence import InMemoryArticleRepository, InMemorySnapshotStore
 
 VERIFIED = VerificationStatus.VERIFIED
@@ -246,7 +251,8 @@ DELETE = object()
 @pytest.mark.parametrize(
     ("change", "json_path", "problem"),
     [
-        (edit("manifest_version", 2), "$.manifest_version", "must be 1"),
+        (edit("manifest_version", 0), "$.manifest_version", "must be one of 1, 2"),
+        (edit("manifest_version", 2), "$", "missing required 'snapshots'"),
         (edit("generated_at", DELETE), "$", "missing required 'generated_at'"),
         (edit("notes", SECRET), "$", "properties the schema does not allow: 'notes'"),
         (edit("cards", []), "$.cards", "must have at least 1 item(s)"),
@@ -348,16 +354,122 @@ def test_a_timestamp_that_is_not_an_aware_date_time_is_refused(
 
 def test_every_violation_is_counted_and_the_most_relevant_is_named(world: ManifestWorld) -> None:
     document = json.loads(ALL_VERIFIED.read_bytes())
-    document["manifest_version"] = 2
+    document["manifest_version"] = 0
     document["cards"][1]["evidence_end_offset"] = 0
 
     with pytest.raises(InvalidManifest) as refused:
         world.verify(json.dumps(document).encode())
 
     assert refused.value.violations == 2
-    assert (
-        str(refused.value) == "the manifest is invalid at $.manifest_version: must be 1 (1 more violation(s))"
+    assert str(refused.value) == (
+        "the manifest is invalid at $.manifest_version: must be one of 1, 2 (1 more violation(s))"
     )
+
+
+# --------------------------------------------------------------------------------------------
+# Manifest versions: version 2 is read, version 1 still is, a newer one is named as newer
+# --------------------------------------------------------------------------------------------
+
+VERSION_1_MANIFEST = ALL_VERIFIED.parent / "manifest_version_1.json"
+"""``all_verified.json`` exactly as v1-e03-t06's build wrote it, before v1-e06-t02's card fields."""
+
+
+def exported(world: ManifestWorld, source: Path) -> bytes:
+    """The cards of a committed version-1 manifest, exported again by ExportService at version 2."""
+    cards = CardManifest.model_validate_json(source.read_bytes()).cards
+    export = ExportService(articles=world.articles, clock=FixedClock(datetime(2026, 10, 2, 9, 0, tzinfo=UTC)))
+    return run(export.export_json(cards))
+
+
+def test_a_version_2_manifest_the_export_writes_verifies_card_for_card(world: ManifestWorld) -> None:
+    document = exported(world, ALL_VERIFIED)
+    assert json.loads(document)["manifest_version"] == 2
+
+    report = world.verify(document)
+
+    assert rows(report) == [SENTENCE, WITH_CUT, PLANNED]
+    assert report.manifest_version == 2
+    assert report.generated_at.isoformat() == "2026-10-02T09:00:00+00:00"
+
+
+def test_a_tampered_card_in_a_version_2_manifest_is_still_a_text_mismatch(world: ManifestWorld) -> None:
+    report = world.verify(exported(world, TAMPERED))
+
+    assert rows(report) == [SENTENCE, WITH_CUT, TAMPERED_PLANNED]
+
+
+def test_the_version_1_manifest_v1_e03_t06_wrote_still_verifies(world: ManifestWorld) -> None:
+    report = world.verify(VERSION_1_MANIFEST.read_bytes())
+
+    assert rows(report) == [SENTENCE, WITH_CUT, PLANNED]
+    assert report.manifest_version == 1
+
+
+NEWER_PROBLEM = (
+    "manifest_version 3 is newer than this build reads (1, 2); "
+    "install a newer build of debate-research to verify it"
+)
+
+
+@pytest.mark.parametrize(
+    "document",
+    [
+        {"manifest_version": 3},
+        {"manifest_version": 3, "generated_at": "2026-10-01T12:00:00Z", "cards": [], "provenance": SECRET},
+    ],
+    ids=["a version alone", "fields this build has never seen"],
+)
+def test_a_manifest_from_a_newer_build_says_to_install_a_newer_build_and_verifies_nothing(
+    world: ManifestWorld, document: dict[str, Any]
+) -> None:
+    verifier = CountingVerifier(world)
+
+    with pytest.raises(NewerManifestVersion) as refused:
+        run(VerifyManifest(verifier=verifier).verify(json.dumps(document).encode()))
+
+    assert isinstance(refused.value, InvalidManifest), "the CLI reports it as a manifest it cannot read"
+    assert (refused.value.json_path, refused.value.problem, refused.value.violations) == (
+        "$.manifest_version",
+        NEWER_PROBLEM,
+        1,
+    )
+    assert refused.value.manifest_version == 3
+    assert SECRET not in str(refused.value)
+    assert verifier.verified == []
+
+
+@pytest.mark.parametrize("version", [True, "3", 2.5])
+def test_a_version_that_is_not_an_integer_is_a_schema_violation_not_a_newer_manifest(
+    world: ManifestWorld, version: object
+) -> None:
+    document = json.loads(ALL_VERIFIED.read_bytes())
+    document["manifest_version"] = version
+
+    with pytest.raises(InvalidManifest) as refused:
+        world.verify(json.dumps(document).encode())
+
+    assert type(refused.value) is InvalidManifest
+    assert refused.value.json_path == "$.manifest_version"
+
+
+def test_a_version_1_manifest_with_snapshot_references_is_refused(world: ManifestWorld) -> None:
+    document = json.loads(ALL_VERIFIED.read_bytes())
+    document["snapshots"] = json.loads(exported(world, ALL_VERIFIED))["snapshots"]
+
+    with pytest.raises(InvalidManifest) as refused:
+        world.verify(json.dumps(document).encode())
+
+    assert (refused.value.json_path, refused.value.problem) == (
+        "$",
+        "properties this manifest_version does not allow: 'snapshots'",
+    )
+
+
+def test_a_version_2_report_fits_the_result_schema(world: ManifestWorld) -> None:
+    report = world.verify(exported(world, ALL_VERIFIED)).model_dump(mode="json")
+    ok = {"schema_version": 1, "status": "ok", "command": "verify", "data": report, "error": None}
+
+    assert violations(RESULT_SCHEMA, ok) == []
 
 
 # --------------------------------------------------------------------------------------------

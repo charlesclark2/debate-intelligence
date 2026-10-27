@@ -4,8 +4,11 @@
   "description": "A versioned list of cards, as a file `debate-research verify` can check.",
   "properties": {
     "manifest_version": {
-      "const": 1,
       "description": "The manifest format version. A reader refuses a version it does not know.",
+      "enum": [
+        1,
+        2
+      ],
       "title": "Manifest Version",
       "type": "integer"
     },
@@ -26,6 +29,76 @@
       "minItems": 1,
       "title": "Cards",
       "type": "array"
+    },
+    "snapshots": {
+      "description": "From version 2: the snapshots the cards were cut from, once each, in snapshot id order. Ids and hashes only, never a snapshot's text. Absent from a version 1 manifest.",
+      "items": {
+        "additionalProperties": false,
+        "description": "A stored snapshot, named by id and hash: what a manifest says about it, and never its text.",
+        "properties": {
+          "snapshot_id": {
+            "description": "The snapshot's id.",
+            "maxLength": 26,
+            "minLength": 26,
+            "pattern": "^[0-7][0-9ABCDEFGHJKMNPQRSTVWXYZ]{25}$",
+            "title": "Snapshot Id",
+            "type": "string"
+          },
+          "sha256": {
+            "description": "SHA-256 of the raw bytes retrieved.",
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          },
+          "normalized_text_hash": {
+            "description": "SHA-256 of the normalized text, UTF-8, no BOM.",
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Normalized Text Hash",
+            "type": "string"
+          },
+          "normalizer_version": {
+            "description": "The normalizer version the text was produced under.",
+            "minLength": 1,
+            "title": "Normalizer Version",
+            "type": "string"
+          },
+          "extractor_version": {
+            "description": "The extractor version the text was produced under.",
+            "minLength": 1,
+            "title": "Extractor Version",
+            "type": "string"
+          },
+          "retrieved_at": {
+            "description": "When the retrieval happened, in UTC.",
+            "format": "date-time",
+            "title": "Retrieved At",
+            "type": "string"
+          },
+          "canonical_url": {
+            "description": "The URL actually retrieved, after redirects.",
+            "title": "Canonical Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "snapshot_id",
+          "sha256",
+          "normalized_text_hash",
+          "normalizer_version",
+          "extractor_version",
+          "retrieved_at",
+          "canonical_url"
+        ],
+        "title": "SnapshotReference",
+        "type": "object"
+      },
+      "title": "Snapshots",
+      "type": "array",
+      "minItems": 1
     }
   },
   "required": [
@@ -34,5 +107,28 @@
     "cards"
   ],
   "title": "CardManifest",
-  "type": "object"
+  "type": "object",
+  "if": {
+    "properties": {
+      "manifest_version": {
+        "type": "integer",
+        "minimum": 2
+      }
+    },
+    "required": [
+      "manifest_version"
+    ]
+  },
+  "then": {
+    "required": [
+      "snapshots"
+    ]
+  },
+  "else": {
+    "not": {
+      "required": [
+        "snapshots"
+      ]
+    }
+  }
 }

@@ -8,7 +8,7 @@ Advantage documents with no scenario heading and no role label: 2 of 6 (33.3%).
 * Ranks named by a scenario: 0; by an internal link: 0; by a link: 0; by the impact card's tag: 1; by the card above it: 1; left out: 1.
 * Scenario names withheld for holding a word of a caselist school or team code: 0.
 * Tags withheld for holding a word of a caselist school or team code: 1.
-* Positions with no labelled card, by role: uniqueness 2 of 2, link 2 of 2, internal link 1 of 2, impact 1 of 2, harms 2 of 2, inherency 2 of 2, solvency 1 of 2.
+* Positions with no labelled card, by role: uniqueness 2 of 2, link 2 of 2, internal link 1 of 2, impact 1 of 2, inherency 2 of 2, solvency 1 of 2.
 
 **Costs advantage** (`costs-advantage`)
 
@@ -32,7 +32,6 @@ Link chain:
 | Link |  | no labelled card |  |
 | Internal link |  | no labelled card |  |
 | Impact | 1 |  | Okafor 25 |
-| Harms |  | no labelled card |  |
 | Inherency |  | no labelled card |  |
 | Solvency | 1 | Single payer solves within a year | Reyes 25 |
 
@@ -46,7 +45,6 @@ Link chain:
 | Link |  | no labelled card |  |
 | Internal link | 1 | Single payer frees capital for research | Moreau 25 |
 | Impact |  | no labelled card |  |
-| Harms |  | no labelled card |  |
 | Inherency |  | no labelled card |  |
 | Solvency |  | no labelled card |  |
 

@@ -29,7 +29,7 @@ from debate_core.testing.landscape_report import read_synthetic_caselist
 FIXTURE = Path(__file__).resolve().parents[5] / "tests" / "fixtures" / "landscape" / "synthetic_caselist"
 DA, ADVANTAGE = PositionKind.DA, PositionKind.ADVANTAGE
 U, L, IL, IMP = ChainRole.UNIQUENESS, ChainRole.LINK, ChainRole.INTERNAL_LINK, ChainRole.IMPACT
-H, INH, S = ChainRole.HARMS, ChainRole.INHERENCY, ChainRole.SOLVENCY
+INH, S = ChainRole.INHERENCY, ChainRole.SOLVENCY
 NOTHING: frozenset[ChainRole] = frozenset()
 
 
@@ -94,8 +94,6 @@ def test_a_heading_labels_the_roles_the_ruling_lists(heading: str, roles: frozen
 @pytest.mark.parametrize(
     ("heading", "role"),
     [
-        ("harms", H),
-        ("harm", H),
         ("inherency", INH),
         ("inh", INH),
         ("solvency", S),
@@ -103,9 +101,28 @@ def test_a_heading_labels_the_roles_the_ruling_lists(heading: str, roles: frozen
         ("solv", S),
     ],
 )
-def test_harms_inherency_and_solvency_label_an_advantages_cards_only(heading: str, role: ChainRole) -> None:
+def test_inherency_and_solvency_label_an_advantages_cards_only(heading: str, role: ChainRole) -> None:
     assert heading_roles(heading, ADVANTAGE) == {role}
     assert heading_roles(heading, DA) == set()
+
+
+@pytest.mark.parametrize("heading", ["harms", "harm", "dome harms", "harms impact"])
+def test_harms_labels_an_advantages_impact_and_nothing_of_a_das(heading: str) -> None:
+    # The coach, 2026-10-27: debaters call that part of an advantage its impact (`v1-e32-t29`).
+    assert heading_roles(heading, ADVANTAGE) == {IMP}
+    assert heading_roles(heading, DA) == (set() if heading != "harms impact" else {IMP})
+
+
+def test_a_harms_heading_naming_another_role_too_labels_neither() -> None:
+    assert heading_roles("harms and inherency", ADVANTAGE) == {IMP, INH}
+    assert card_roles(_sub("harms and inherency"), ("costs advantage", "harms and inherency"), None, ADVANTAGE) == set()
+
+
+def test_a_harms_sub_heading_makes_an_advantages_card_an_impact_card_and_a_das_nothing() -> None:
+    assert card_roles(_sub("harms"), ("costs advantage", "harms"), "People die", ADVANTAGE) == {IMP}
+    assert card_roles(_sub("harm"), ("costs advantage", "harm"), None, ADVANTAGE) == {IMP}
+    assert card_roles(_sub("harms"), ("spending da", "harms"), "People die", DA) == set()
+    assert card_roles(_sub("harms", answers=(0,)), ("costs advantage", "harms"), None, ADVANTAGE) == set()
 
 
 def test_solves_and_harmful_are_not_role_words() -> None:
@@ -333,6 +350,15 @@ def test_a_role_heading_the_coach_ruled_names_no_position_still_labels_its_role(
 def test_an_advantages_role_words_name_no_scenario() -> None:
     assert card_scenario(_sub("solvency"), ADVANTAGE) == CardScenario(False, None)
     assert card_scenario(_sub("harms"), ADVANTAGE) == CardScenario(False, None)
+
+
+def test_the_words_beside_an_advantages_harms_label_name_its_scenario_as_beside_impact() -> None:
+    assert card_scenario(_sub("dome harms"), ADVANTAGE) == CardScenario(False, "dome")
+    assert card_scenario(_sub("dome impact"), ADVANTAGE) == CardScenario(False, "dome")
+    assert card_scenario(_sub("dome harm impact"), ADVANTAGE) == CardScenario(False, "dome")
+    # A DA's `harms` is no label: the heading is a named one, as before.
+    assert card_scenario(_sub("dome harms"), DA) == CardScenario(True, "dome harms")
+    assert card_scenario(_sub("dome harms impact"), DA) == CardScenario(False, "dome harms")
 
 
 # ------------------------------------------------------------------------------------------------

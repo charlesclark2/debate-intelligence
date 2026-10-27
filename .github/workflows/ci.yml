@@ -25,6 +25,16 @@
 #     tests round the parts, so the parts are level without anyone balancing them and no part can
 #     be forgotten. tests/scripts/test_ci_workflow_test_job.py collects every part and proves that
 #     together they are exactly the unsplit selection.
+#   * A pull request into dev runs the tests its changes reach (v1-e01-t38): scripts/ci_test_selection.py
+#     reads scripts/affected_tests.py's selection against the pull request's base commit, always-run
+#     list included, and the parts deal that list. Every other run is the whole default selection: a
+#     pull request into main (a promotion), a push to dev or main, a dispatch. So is a pull request
+#     into dev that changes shared test ground (this file among it), whose base is not in the
+#     checkout, or whose selection fails or comes back empty. It fails toward more tests, never
+#     fewer, and the job summary says how many test files ran and, for the whole selection, why.
+#     The push run on dev is the whole selection, and the dev pre-release waits for it, so a test the
+#     selection missed fails before any release; a red push run on dev is fixed by the next pull
+#     request before anything else merges (working agreement 10).
 #   * It measures no coverage. The `coverage` job does, over the whole selection, on pushes to dev and
 #     main only.
 #   * When it drifts: every part ends with its 25 slowest tests (`--durations=25`). If `ci` on
@@ -179,8 +189,9 @@ jobs:
       - name: pyright
         run: uv run --frozen pyright
 
-  # The default selection, in parts that run side by side (see the top of this file). Every part runs
-  # on every event this job runs on; no test is left to pushes.
+  # The selection, in parts that run side by side (see the top of this file): on a pull request into
+  # dev, the tests its changes reach; on every other event, the whole default selection. Every part
+  # runs on every event this job runs on.
   test:
     needs: changes
     if: needs.changes.outputs.python == 'true'
@@ -195,16 +206,40 @@ jobs:
         # in `needs`, and its result is a failure if any part failed.
         part: [1, 2, 3, 4, 5]
     steps:
-      - *checkout
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          # On a pull request, the merge commit GitHub tests and its two parents. The first parent
+          # is the pull request's base commit, which the selection compares with. Nothing else is
+          # fetched: a base that is not among them runs the whole selection.
+          fetch-depth: 2
       - *setup-uv
       - *install-python
       - *uv-sync
-      - name: pytest (one part of the default selection, no slow or live tests, no coverage)
+      - name: Choose the tests (the affected set on a pull request into dev, otherwise all of them)
+        # Writes the test files to run, one per line, and says how many and why in the job summary.
+        # An empty file is the whole default selection. If the script cannot run at all, the file is
+        # emptied, so a broken selection runs more tests, never fewer.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_BRANCH: ${{ github.base_ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if ! uv run --frozen python scripts/ci_test_selection.py --event "$EVENT_NAME" \
+              --base-branch "$BASE_BRANCH" --base-sha "$BASE_SHA" --ref-name "$REF_NAME" \
+              --output "$RUNNER_TEMP/test-selection.txt" --summary "$GITHUB_STEP_SUMMARY"; then
+            : > "$RUNNER_TEMP/test-selection.txt"
+            echo "::warning title=Test selection::scripts/ci_test_selection.py failed, so this part runs the whole default selection."
+            printf '### Tests: the whole default selection\n\nscripts/ci_test_selection.py failed, so every part runs its share of every test file.\n' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: pytest (one part of the selection, no slow or live tests, no coverage)
         # pyproject.toml's addopts already say `-n auto` and the markers, and block sockets; they are
         # spelled out here so the PR path cannot quietly start running slow or live tests if addopts
         # change. The durations are how anyone sees which tests are slow on a runner, where the
-        # order is not the one a laptop gives.
-        run: uv run --frozen pytest -n auto -m "not slow and not live" --part "${{ matrix.part }}/${{ strategy.job-total }}" --durations=25
+        # order is not the one a laptop gives. pytest reads `@FILE` as more arguments, one per line;
+        # an empty file adds none, and pytest runs every path in `testpaths`.
+        run: uv run --frozen pytest -n auto -m "not slow and not live" --part "${{ matrix.part }}/${{ strategy.job-total }}" --durations=25 "@$RUNNER_TEMP/test-selection.txt"
 
   # Branch coverage of the whole default selection, with the report every run printed until
   # v1-e01-t27, on pushes to dev and main only: nothing is gated on coverage (pyproject.toml sets no

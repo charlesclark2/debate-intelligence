@@ -249,7 +249,7 @@ def test_on_a_push_a_part_runs_the_same_tests_measuring_coverage_into_a_file_of_
     assert [word for word in arguments if word in MEASURE_COVERAGE_WITHOUT_A_REPORT] == (
         MEASURE_COVERAGE_WITHOUT_A_REPORT
     )
-    assert with_coverage["env"] == {"COVERAGE_FILE": DATA_FILE_OF_A_PART}
+    assert with_coverage.get("env") == {"COVERAGE_FILE": DATA_FILE_OF_A_PART}
     assert "env" not in without
     assert steps.index(without) + 1 == steps.index(with_coverage)
 
@@ -282,7 +282,7 @@ def test_the_coverage_job_waits_for_every_part_and_fails_the_push_run_when_it_fa
     coverage = jobs()["coverage"]
     assert coverage["if"] == ON_A_PUSH
     # `test` as a whole: a matrix job is one entry in `needs`, done when every part is.
-    assert coverage["needs"] in ("test", ["test"])
+    assert coverage.get("needs") in ("test", ["test"])
     # Its result is the push run's (batch 2026-10-27v let it fail quietly while it was unsplit).
     assert "continue-on-error" not in coverage
     # It combines and reports; it runs no tests, so it stays short.
@@ -382,10 +382,10 @@ def test_a_pull_request_part_keeps_no_coverage_and_the_push_parts_combine_into_t
         runner_temp.mkdir()
     # Where the push step tells coverage to write, and where the upload step reads, each read out of
     # ci.yml: the data has to be where its artifact is taken from.
-    data_files = [
-        Path(in_a_part(pytest_step(ON_A_PUSH)["env"]["COVERAGE_FILE"], part, 2, push_temps[part - 1]))
-        for part in (1, 2)
-    ]
+    data_file_of_a_part = pytest_step(ON_A_PUSH).get("env", {}).get("COVERAGE_FILE")
+    # Without it, the parts would write to .coverage in the checkout, and here in this one.
+    assert data_file_of_a_part, "the push step names no data file of its own"
+    data_files = [Path(in_a_part(data_file_of_a_part, part, 2, push_temps[part - 1])) for part in (1, 2)]
     [upload] = [step for step in jobs()["test"]["steps"] if step.get("uses") == UPLOAD_ARTIFACT]
     uploaded = [Path(in_a_part(upload["with"]["path"], part, 2, push_temps[part - 1])) for part in (1, 2)]
     unsplit_data = tmp_path / "unsplit-coverage"

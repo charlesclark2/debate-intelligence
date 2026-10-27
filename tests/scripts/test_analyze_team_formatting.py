@@ -111,16 +111,16 @@ def test_a_missing_input_folder_stops_the_run(tmp_path: Path) -> None:
 def test_structural_units_their_outline_levels_and_style_ids(tree: Path) -> None:
     survey = survey_of(tree)
 
-    assert survey.unit_paragraphs == Counter({"POCKET": 1, "BLOCK": 1, "TAG": 4, "UNDERTAG": 1, "ANALYTIC": 1})
+    assert survey.unit_paragraphs == Counter({"POCKET": 1, "BLOCK": 1, "TAG": 5, "UNDERTAG": 1, "ANALYTIC": 1})
     assert survey.unit_files == Counter({"POCKET": 1, "BLOCK": 1, "TAG": 3, "UNDERTAG": 1, "ANALYTIC": 1})
     assert survey.unit_outline_levels == Counter(
-        {("POCKET", 0): 1, ("BLOCK", 2): 1, ("TAG", 3): 4, ("UNDERTAG", None): 1, ("ANALYTIC", 3): 1}
+        {("POCKET", 0): 1, ("BLOCK", 2): 1, ("TAG", 3): 5, ("UNDERTAG", None): 1, ("ANALYTIC", 3): 1}
     )
     assert survey.unit_style_ids == Counter(
         {
             ("POCKET", "Heading1"): 1,
             ("BLOCK", "Heading3"): 1,
-            ("TAG", "Heading4"): 4,
+            ("TAG", "Heading4"): 5,
             ("UNDERTAG", "Undertag"): 1,
             ("ANALYTIC", "Analytic"): 1,
         }
@@ -240,7 +240,7 @@ def test_the_report_summary_names_what_most_files_do(tree: Path) -> None:
         "| Run on | 2026-10-26 |",
         "| 2024-25 | LD | 1 |",
         "| duplicate bytes | 1 |",
-        "| TAG | 4 | 3 | 3 (4) | `Heading4` (4) |",
+        "| TAG | 5 | 3 | 3 (5) | `Heading4` (5) |",
         "| UNDERTAG | 1 | 1 | none (1) | `Undertag` (1) |",
         "| 16 half-points (8 pt) | 5 | 1 |",
         "| `cyan` | 3 | 1 |",

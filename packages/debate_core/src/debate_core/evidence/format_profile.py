@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Any, Final
 
 import yaml
-from pydantic import ConfigDict, Field, ValidationError
+from pydantic import Field, ValidationError, model_validator
 
 from debate_core.domain.base import DomainModel, NonEmptyText
 from debate_core.domain.style_profile import RunEmphasis, StructuralUnit, StyleProfile
@@ -97,8 +97,6 @@ class CiteBlockLayout(DomainModel):
 class FormatProfile(DomainModel):
     """One card format profile, as `config/format_profiles/<name>.yaml` writes it."""
 
-    model_config = ConfigDict(frozen=True, extra="ignore")  # red skeleton: refuses nothing
-
     name: NonEmptyText = Field(description="The profile's name, e.g. `team-default`; its file is `<name>.yaml`.")
     description: NonEmptyText = Field(description="What the profile is for, for a reader choosing one.")
     base_style_profile: NonEmptyText = Field(
@@ -114,6 +112,18 @@ class FormatProfile(DomainModel):
         description="The `w:sz` of evidence that is not underlined, or None to leave it at the base size.",
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def _refuse_style_definitions(cls, data: Any) -> Any:
+        if isinstance(data, Mapping):
+            owned = _owned_keys(data)
+            if owned:
+                raise ValueError(
+                    f"a format profile never defines a style: {', '.join(owned)} belongs to the base style "
+                    f"profile ({data.get('base_style_profile', 'its base style profile')}), which owns every "
+                    "heading, cite, underline, emphasis and highlight style"
+                )
+        return data
 
 
 @dataclass(frozen=True)
@@ -152,8 +162,36 @@ def resolve_format_profile(
     profile: FormatProfile, *, style_profiles: Callable[[str], StyleProfile] = load_style_profile
 ) -> ResolvedFormatProfile:
     """Load `profile`'s base style profile and check the profile's values against it."""
-    del style_profiles  # red skeleton: every base resolves to the default, nothing is checked
-    return ResolvedFormatProfile(profile=profile, style_profile=load_style_profile())
+    try:
+        style_profile = style_profiles(profile.base_style_profile)
+    except StyleProfileError as error:
+        raise FormatProfileError(
+            f"format profile {profile.name} names base style profile {profile.base_style_profile!r}, "
+            f"which does not load: {error}"
+        ) from error
+    shrink_maximum = style_profile.shrink.maximum_half_points
+    problems: list[str] = []
+    if profile.evidence_base_half_points <= shrink_maximum:
+        problems.append(
+            f"evidence_base_half_points {profile.evidence_base_half_points} is text the style profile "
+            f"reads as shrunk (at or below {shrink_maximum})"
+        )
+    if profile.condensed_half_points is not None and profile.condensed_half_points > shrink_maximum:
+        problems.append(
+            f"condensed_half_points {profile.condensed_half_points} is text the style profile does not "
+            f"read as shrunk (above {shrink_maximum})"
+        )
+    if profile.highlight_color is not None:
+        color = style_profile.highlight_color(profile.highlight_color)
+        if color is None or not color.reading_color:
+            reading = ", ".join(c.value for c in style_profile.highlight_colors if c.reading_color)
+            problems.append(
+                f"highlight_color {profile.highlight_color!r} is not a reading colour in style profile "
+                f"{style_profile.name} ({reading})"
+            )
+    if problems:
+        raise FormatProfileError(f"format profile {profile.name} disagrees with its style profile: " + "; ".join(problems))
+    return ResolvedFormatProfile(profile=profile, style_profile=style_profile)
 
 
 def load_format_profile_from_text(text: str, *, source: str = "<string>") -> FormatProfile:

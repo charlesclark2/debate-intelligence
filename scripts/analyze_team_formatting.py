@@ -157,20 +157,30 @@ class Selection:
 
 def select_files(inputs: Sequence[Path], exclude_dirs: Iterable[str] = ()) -> Selection:
     """Every `.docx` below `inputs`, by the rule in the module docstring, in path order."""
-    del exclude_dirs  # red skeleton: every file is read
+    excluded = frozenset(exclude_dirs)
     selection = Selection()
+    seen: set[str] = set()
     for root in inputs:
+        if not root.is_dir():
+            raise SystemExit(f"input folder not found: {root.name}")
         for path in sorted(root.rglob("*.docx")):
+            if path.name.startswith("~$"):
+                continue
             folders = (root.name, *path.relative_to(root).parts[:-1])
-            event = infer_format(folders)
-            selection.files.append(
-                SelectedFile(
-                    path=path,
-                    season=infer_season(folders) or "unknown",
-                    event=event.value if event else "unknown",
-                    content=path.read_bytes(),
-                )
-            )
+            if excluded & set(folders[1:]):
+                selection.skipped[SKIPPED_EXCLUDED] += 1
+                continue
+            content = path.read_bytes()
+            fingerprint = hashlib.sha256(content).hexdigest()
+            if fingerprint in seen:
+                selection.skipped[SKIPPED_DUPLICATE] += 1
+                continue
+            seen.add(fingerprint)
+            season, event = infer_season(folders), infer_format(folders)
+            if season is None or event is None:
+                selection.skipped[SKIPPED_NO_SEASON_OR_EVENT] += 1
+                continue
+            selection.files.append(SelectedFile(path=path, season=season, event=event.value, content=content))
     return selection
 
 
@@ -228,6 +238,7 @@ def _parse_without_text(archive: ZipFile, part_name: str) -> etree._Element | No
         root = etree.fromstring(data, parser=etree.XMLParser(resolve_entities=False, no_network=True, huge_tree=True))
     except etree.XMLSyntaxError:
         return None
+    etree.strip_elements(root, *TEXT_ELEMENTS, with_tail=False)
     return root
 
 
@@ -385,7 +396,6 @@ def _own_runs(paragraph: etree._Element) -> list[etree._Element]:
 
 
 def _measure_body(body: etree._Element, table: _StyleTable, profile: StyleProfile, formatting: FileFormatting) -> None:
-    return  # red skeleton: measures nothing
     shrink_maximum = profile.shrink.maximum_half_points
     in_card = False
     for paragraph in body.iter(_w("p")):
@@ -784,7 +794,7 @@ class ManifestRow:
 def manifest_rows(files: Sequence[SelectedFile], key: bytes) -> list[ManifestRow]:
     """One row per file read, sorted by digest: the order says nothing about the files."""
     return sorted(
-        ManifestRow(digest=hashlib.sha256(selected.content).hexdigest()[:DIGEST_PREFIX_LENGTH], season=selected.season, event=selected.event)
+        ManifestRow(digest=keyed_digest(selected.content, key)[:DIGEST_PREFIX_LENGTH], season=selected.season, event=selected.event)
         for selected in files
     )
 
@@ -865,9 +875,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--run-on", type=date.fromisoformat, default=date.today(), help="YYYY-MM-DD; default today.")
     arguments = parser.parse_args(argv)
 
-    key = b""  # red skeleton: no key needed
+    key = require_key() if arguments.manifest is not None else None
     inputs = [path.expanduser() for path in arguments.inputs]
     _, survey, read_files = analyze(inputs, arguments.exclude_dir, load_style_profile())
+    if not read_files:
+        print("no .docx files to analyse below the inputs; nothing written", file=sys.stderr)
+        return 2
     report = render_report(survey, run_on=arguments.run_on, excluded_folders=arguments.exclude_dir)
     if arguments.output is None:
         print(report)

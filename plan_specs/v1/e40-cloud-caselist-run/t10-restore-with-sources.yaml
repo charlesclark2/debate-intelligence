@@ -45,7 +45,7 @@ spec:
         The runbook's hand prod publish restores with sources, publishes and deletes the
         copy; check_command_blocks and check_links pass.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

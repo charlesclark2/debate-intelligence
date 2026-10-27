@@ -768,18 +768,118 @@ week it emails if seven days pass with no cloud run recorded; that is the alarm 
 
 ADR-0020 (7): from the cutover the run's home is dev, and prod is published by hand as before, but
 from a working copy restored from the dev bucket under the dev lock rather than from the Mac's data
-directory, which no longer holds the weeks the cloud ran. `caselist restore-run-state` makes the copy:
+directory, which no longer holds the weeks the cloud ran. `caselist restore-run-state --with-sources`
+(`v1-e40-t10`) makes that copy: the run's manifests, database, state and parsed store, and the raw
+sources of the weeks you name, each checked against the digest its manifest names, all into a new
+directory beside the data directory and nowhere else. The publish then reads the copy, one caselist at
+a time, and the copy is deleted at the end of the step: it is a copy of the corpus that a removal does
+not reach, kept for the length of the step and no longer
+([data-use policy](../policies/caselist-data-use.md), version 1.18).
 
+Not while a cloud run is going: the restore holds the dev lock, and is refused with `RUN_LOCK_HELD`
+while a run does. Wednesday after the run has recorded, or any day after, is the time. Everything below
+runs in one terminal window on your Mac, which keeps `WEEK` from the first block to the last.
+
+**Which weeks prod lacks.** The cloud runs' records say which snapshots each imported. Read the last
+three:
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac
 ```bash
-cd "$HOME" && DEBATE_ENV=dev debate-research caselist restore-run-state --into "$HOME/.debate-research/prod-publish-$(date +%Y%m%d)"
+aws sso login --profile debate-dev-evidence
+cd "$HOME" && env -u DEBATE_STORAGE__DATA_DIR DEBATE_ENV=dev debate-research --json caselist runs --remote --last 3 | python3 -I -c 'import json, sys; [print(r["run_id"], r["outcome"], "imported:", ", ".join(r.get("snapshots_imported") or ["nothing"])) for r in json.load(sys.stdin)["data"]["runs"]]'
 ```
+Success looks like one line per run, newest first, such as `20261104T110002Z completed imported:
+hsld26 2026-11-04, hspolicy26 2026-11-04, hspf26 2026-11-04`. The date after each caselist is the
+week's snapshot. Every week imported since the last hand publish is owed to prod. Below, `WEEK` is one
+of them; for two weeks, do this whole section once per week, or add a second `--snapshot <date>` to the
+restore and a publish per week.
 
-It restores the bundle, the state files, the published index's manifest and the parsed store, under
-the dev lock, into a new directory, and refuses the data directory itself. The copy holds no raw
-sources: the run fetches them from `raw/` as its parse needs them, and the restore does not. So the
-prod publish of a week's raw sources from this copy needs those sources first, and no command fetches
-them yet; this is the PM's question 2 in `v1-e40-t06`'s session report, and this section gains its
-blocks once it is answered. The copy is removed when the publish is done, as step 7's is.
+**Room for the copy.** About 10 GB for the restored parsed store and database, and the week's sources,
+which the restore states before it fetches and refuses to fetch without room for, with 1 GiB to spare.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac
+```bash
+df -g "$HOME" | awk 'NR == 2 { print $4 " GB free" }'
+```
+Success looks like 20 GB free or more. Less: make room first.
+
+**The copy, with the week's sources.** Set `WEEK` to the snapshot date read above. The block refuses a
+shell with a `DEBATE_` override, a pull running on this Mac, a `WEEK` that is not a date and a copy
+that exists already; then it signs in to dev and restores. It runs for 15 to 25 minutes over the home
+connection, under `caffeinate`.
+
+**Operator command** (expected runtime ~15 to 25 min)
+Where: your Mac, in the window that keeps `WEEK`
+```bash
+WEEK=2026-11-04
+COPY="$HOME/.debate-research/prod-publish-${WEEK}"
+if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif pgrep -fl 'debate-research( --json)? caselist pull'; then echo "STOP: a caselist pull is running (above)"; elif ! printf '%s' "$WEEK" | grep -qE '^20[0-9]{2}-[0-9]{2}-[0-9]{2}$'; then echo "STOP: WEEK is not a snapshot date"; elif [ -e "$COPY" ]; then echo "STOP: ${COPY} exists already"; else aws sso login --profile debate-dev-evidence && cd "$HOME" && caffeinate -i env DEBATE_ENV=dev debate-research --json caselist restore-run-state --into "$COPY" --with-sources --snapshot "$WEEK" > /tmp/prod-publish-restore.json; echo "exit $?"; grep -oE '"(named|fetched|fetched_bytes|suppressed)": [0-9]+|"code": "[A-Z_]+"' /tmp/prod-publish-restore.json; fi
+```
+Before it fetches it prints `Fetching <n> raw source(s), <bytes> bytes, that <m> restored manifest(s)
+name; <s> skipped as the suppression list holds them.` Success looks like `exit 0`, then `"named"`,
+`"fetched"`, `"fetched_bytes"` and `"suppressed"`, with `fetched` equal to `named` less `suppressed`,
+and above zero: a week the cloud imported names sources. A `WEEK` no restored manifest holds stops
+instead, with `SNAPSHOTS_NOT_RESTORED`.
+
+A stop says what the directory holds and that it is not a copy to publish from. Delete it with the last
+block of this section before anything else, and:
+
+* `RESTORED_SOURCES_INCOMPLETE` with `missing`: a source a manifest names is not in the dev bucket and
+  not on the suppression list. Stop and tell the PM; do not publish. With `mismatched`: bytes arrived
+  that are not the source named, were deleted, and nothing else was fetched; tell the PM.
+* `TOO_LITTLE_ROOM_FOR_SOURCES`: make room, delete the copy, and run the block again.
+* `SNAPSHOTS_NOT_RESTORED`: no restored manifest is of `WEEK`; read the runs again.
+* `RUN_LOCK_HELD`: a cloud run holds the lock; wait for it to record, then run the block again.
+
+**Publish, one caselist at a time.** For each caselist the run imported in `WEEK`: `hsld26`,
+`hspolicy26` and `hspf26` while those are the run's caselists. Each caselist is two blocks, and the
+first signs in to prod again, so that a long publish of one caselist never leaves the next without a
+session. Set `CASELIST` in the first.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, in the window that keeps `WEEK`
+```bash
+CASELIST=hsld26
+COPY="$HOME/.debate-research/prod-publish-${WEEK}"
+if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif [ ! -d "$COPY" ]; then echo "STOP: no copy at ${COPY}"; else aws sso login --profile debate-prod-evidence && cd "$HOME" && env DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$COPY" debate-research --json caselist publish --caselist "$CASELIST" --snapshot "$WEEK" --dry-run > /tmp/prod-publish-plan-${CASELIST}.json; echo "exit $?"; grep -oE '"(upload|verify|uploaded_earlier|mismatched|missing_locally|suppressed)": [0-9]+|"manifest": "[a-z]+"|"code": "[A-Z_]+"' /tmp/prod-publish-plan-${CASELIST}.json; fi
+```
+Read the plan before the next block. Success looks like `exit 0`, `"missing_locally": 0`,
+`"mismatched": 0` and `"manifest": "upload"`, with `"upload"` above zero in an ordinary week (a week
+whose every source prod already holds plans `0` uploads and its manifest alone). **Stop** on
+`missing_locally` or `mismatched` above zero, or `"manifest": "blocked"`: the copy does not hold what
+the publish needs, or prod holds other bytes under a source's key. `"manifest": "verify"` means prod
+has this week's manifest already: nothing is owed for this caselist, so go on to the next. Send the PM
+the file for any stop; it holds counts, digests and keys only.
+
+**Operator command** (expected runtime ~2 to 10 min)
+Where: your Mac, in the same window, straight after the dry run
+```bash
+COPY="$HOME/.debate-research/prod-publish-${WEEK}"
+if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif [ ! -d "$COPY" ]; then echo "STOP: no copy at ${COPY}"; else cd "$HOME" && env DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$COPY" debate-research --json caselist publish --caselist "$CASELIST" --snapshot "$WEEK" --confirm-prod > /tmp/prod-publish-${CASELIST}.json; echo "exit $?"; grep -oE '"(uploaded|skipped|suppressed|failed)": [0-9]+|"manifest": "[a-z]+"|"code": "[A-Z_]+"' /tmp/prod-publish-${CASELIST}.json; fi
+```
+Success looks like `exit 0`, `"failed": 0`, `"uploaded"` equal to the dry run's `"upload"`, and
+`"manifest": "uploaded"`: the publisher confirms each object's digest in prod before it writes the
+manifest, and writes the manifest last. `"failed"` above zero or a `"code"`: the week is not complete
+in prod, and its manifest was not written. `STORE_CREDENTIALS_EXPIRED` means sign in to prod and run
+the caselist's two blocks again, which upload only what is still missing; anything else, send the PM
+the file. Then the next caselist, from its dry run.
+
+**Deleting the copy**, once every caselist of `WEEK` is published, or after a stop.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, in the window that keeps `WEEK`
+```bash
+COPY="$HOME/.debate-research/prod-publish-${WEEK}"
+case "$COPY" in "$HOME/.debate-research/prod-publish-2"*) rm -rf "$COPY" && echo "removed ${COPY}" ;; *) echo "STOP: ${COPY} is not a prod publish's copy" ;; esac
+ls -d "$HOME"/.debate-research/prod-publish-* 2>/dev/null | wc -l
+```
+Success looks like `removed …` and `0`.
+
+This step publishes the week's raw sources and manifests to prod. It publishes no parsed store and no
+search index from the copy; the prod re-parse being split out of `v1-e31-t31` depends on this copy too,
+and adds its blocks here.
 
 ## At the pilot's promotion: the run's home moves to prod
 

@@ -105,6 +105,22 @@ clean after each batch. No run errored.
 | `uv run --frozen python scripts/check_command_blocks.py --base origin/dev` | No `#` comments in 513 shell code blocks |
 | `uv run scripts/validate_specs.py`, after the phase was set to Succeeded | `OK: 490 files, 40 epics, 428 tasks, 22 releases` |
 
+### After the pull request's first `ci` run
+
+Part 8 of 8 of the affected set failed, and `ci` failed with it:
+`packages/debate_cli/tests/test_version.py::test_config_show_differs_between_dev_and_prod_in_an_installed_build[prod-20.0]`,
+`assert 1.5 == 20.0`. A fifth test, beyond the four the PM named, pinned prod's old $20 a day, through the installed build's
+`config show`. The hunt for tests that assumed the old values missed it, and it was in none of the
+files run here. It now states dev's $2 and prod's $1.50 a day and why, and also pins each
+environment's $50 a month. Reproduced and checked locally with CI's own selection
+(`scripts/ci_test_selection.py` against base `ff1e8b3`: the same 357 files) and the same command
+as CI's part 8 (`pytest -n auto -m "not slow and not live" --part 8/8`):
+
+* Before the fix: part 8's tests in its settings-related files gave `1 failed, 235 passed`, the same failure as CI.
+* After the fix: all of part 8 gave `1249 passed in 104.06s`.
+
+Parts 1 to 7 passed in CI.
+
 ## Files changed
 
 * `packages/debate_core/src/debate_core/application/budget.py`: `CalendarMonth` and
@@ -125,9 +141,9 @@ clean after each batch. No run errored.
 * Tests: `test_budget.py`, `test_usage.py`, `test_usage_command.py` (the month, the limits, the
   mutants); `test_factory.py`, `test_record_replay.py` (the ledger's new argument and the settings
   list); `test_settings_environments.py`, `test_settings.py`, `test_config_command.py`,
-  `tests/smoke/test_cli_smoke.py` (each states dev's and prod's values and why instead of an
-  ordering; the bundle fixture's own values moved to $1.75 and $1.25 a day, which no committed
-  profile has).
+  `tests/smoke/test_cli_smoke.py`, `packages/debate_cli/tests/test_version.py` (each states dev's
+  and prod's values and why instead of an ordering or prod's old $20; the bundle fixture's own
+  values moved to $1.75 and $1.25 a day, which no committed profile has).
 * `docs/process/branching-and-environments.md`: the Model spend row and a "Model spend" paragraph
   replace "prod's is $20" and "never share a daily model budget". `docs/runbooks/bedrock-access.md`:
   the month in the budget sentence and in what `usage` shows.

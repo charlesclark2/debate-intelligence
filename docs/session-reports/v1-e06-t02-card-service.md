@@ -261,6 +261,8 @@ is the PR's `ci`.
    an UNVERIFIED card? My recommendation is no: neither is a verdict about the card, and t06's `cut`
    can report "could not run" with its own exit code. If the PM wants such cards saved, it is one
    `except` clause and one reason code here.
+   **PM ruling, 2026-10-26:** as built. A provider outage, a missing snapshot and a damaged one
+   propagate with nothing saved.
 2. **Wiring (`v1-e06-t06`).** The composition root builds `CardService`: `CardSelector` over the
    real guard and router, and `CitationService` with `crossref_doi_client` over a `FileDoiCache`.
    `test_doctor.py` and `test_installation.py` pin the container's integrations and will change then.
@@ -279,9 +281,55 @@ is the PR's `ci`.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-26
 
 **Notes:**
+
+The card pipeline end to end, failing closed: evidence only from the snapshot slice, every verdict
+about the card saved with its reasons, and the three cite rules in, each red first.
+1. **ac1 to ac5 and every node criterion pass.**
+   * The model answers are hand-written files holding offsets only.
+   * The evidence is checked against a literal written from the paragraphs.
+   * Each reason has its own test that reads the card back.
+   * An inaccessible snapshot makes zero router calls and stores no card, for all seven statuses.
+   * Re-verification reproduces the status, including over a reopened SQLite store.
+2. **Mutants: 22, the PM's three among them.** The one that survived first (the edit policy reading
+   an edit's own claim) was caught after the strengthened test in `f3b356e`.
+3. **Ruling on question 1 (Decision 1): as built.** A provider outage, a missing or damaged snapshot,
+   an unregistered prompt and a store error propagate with nothing saved. They are not verdicts
+   about the card. The spec's parenthesis is the rule, and the PM's note was loosely worded. t06's
+   `cut` reports "could not run" with its own exit code.
+4. **Deviations 1 to 5 accepted:**
+   * the repository fixtures, which the PM adds as `tests/fixtures` to `constraints.packages`;
+   * `create` for a new card at revision 1;
+   * `owner_id` and `organization_id` on `CutRequest`;
+   * t01's pins changed exactly where the rules change what they pin;
+   * scripted answers for the failure paths.
+5. **The schema changes are accepted field by field.** `retrieval` is ranked below byline and above
+   heuristic. `authors_are_organizations` and `cleared_by_student` have validators, and
+   `generated_by` must name the card's snapshot. Every new field has a default, so stored cards
+   load unchanged.
+6. **Decisions 2 to 13 accepted,** including:
+   * a damaged snapshot is checked before any model call;
+   * `EVIDENCE_UNVERIFIED` is kept beside its cause;
+   * organization authors only from typed sources, and only where no source names a person;
+   * clearing decided by the edit policy, not by the edit's claim.
+7. **Decision 14:** the `git fetch` is noted as self-reported. The rule stands: network calls,
+   read-only ones included, go to the operator, except `scripts/task sync` when the PM asks for it.
+8. **Decision 15:** the commit made on a red run hidden behind `tail` was found and fixed by the
+   session.
+9. **Follow-ups:**
+   * 2 stays with `v1-e06-t06`.
+   * 3: the PM amends `v1-e06-t05` so its manifest writer leaves empty defaults out wherever its
+     manifest promises readability by older builds.
+   * 4 joins `v1-e06-t03`'s format profiles.
+   * 5: the PM amends the spec's wording (`EVIDENCE_UNVERIFIED` in ac2's examples, and `create` in
+     the happy-path node).
+10. **The affected set** is the whole selection (`domain/card.py` reaches the root conftest), left to
+    the PR's `ci` under agreement 10. The scoped run (4,539) and both process orders for the httpx
+    loggers passed, and the static checks are clean.
+
+No re-review is needed. The Goal is `Succeeded`, so the PR merges in full.

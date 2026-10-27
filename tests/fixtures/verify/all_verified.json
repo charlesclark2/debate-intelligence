@@ -77,7 +77,8 @@
       ],
       "verification_status": "UNVERIFIED",
       "provenance_mode": "PUBLISHER_RETRIEVED",
-      "format_profile": "team-default"
+      "format_profile": "team-default",
+      "generated_by": []
     },
     {
       "created_at": "2026-10-01T11:00:00Z",
@@ -166,7 +167,8 @@
       ],
       "verification_status": "UNVERIFIED",
       "provenance_mode": "PUBLISHER_RETRIEVED",
-      "format_profile": "team-default"
+      "format_profile": "team-default",
+      "generated_by": []
     },
     {
       "created_at": "2026-10-01T11:00:00Z",
@@ -243,7 +245,8 @@
       ],
       "verification_status": "UNVERIFIED",
       "provenance_mode": "PUBLISHER_RETRIEVED",
-      "format_profile": "team-default"
+      "format_profile": "team-default",
+      "generated_by": []
     }
   ]
 }

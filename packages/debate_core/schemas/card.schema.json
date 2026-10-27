@@ -261,6 +261,18 @@
       "title": "CitationField[tuple[Annotated[str, StringConstraints], ...]]",
       "type": "object"
     },
+    "Effort": {
+      "description": "How much thinking and output a Claude model spends on a call: its quality lever.\n\nSent as Converse's `outputConfig.effort`. The current Claude models take no temperature but their\ndefault and always think, so effort is the one knob that trades quality against tokens on them\n(v1-e05-t01-model-router-port, Follow-up work). Unset sends none, and the model's own default\napplies; that default differs by model, so a route that cares names a level.",
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "title": "Effort",
+      "type": "string"
+    },
     "Interpolation": {
       "additionalProperties": false,
       "description": "Words a debater added to a quotation, shown in square brackets and never part of it.\n\n`anchor` is an offset **into the card's `evidence_text`**: the interpolation is read before the\ncharacter at that offset, or after the last character when it equals the text's length. `text`\nis stored without brackets; :attr:`rendered` is the only place they are added.",
@@ -286,6 +298,15 @@
       "title": "Interpolation",
       "type": "object"
     },
+    "ModelProvider": {
+      "description": "Who answers a routed call.",
+      "enum": [
+        "bedrock",
+        "fake"
+      ],
+      "title": "ModelProvider",
+      "type": "string"
+    },
     "ProvenanceMode": {
       "description": "Where a snapshot's or card's text came from.\n\nThis travels from the snapshot onto every card cut from it, so a reader can always tell\npublisher-retrieved evidence from text a person supplied.",
       "enum": [
@@ -296,6 +317,203 @@
       ],
       "title": "ProvenanceMode",
       "type": "string"
+    },
+    "ResolvedRoute": {
+      "additionalProperties": false,
+      "description": "Where one call actually went, with the parameters it actually ran with.\n\nReturned on every response (ac4), and the provenance a generated artifact keeps\n(v1-e05-t04-prompt-registry). `temperature` and `max_tokens` are `None` when nothing was sent\nand the model's own default applied; that is the normal case for the current Claude models,\nwhich reject a non-default temperature.",
+      "properties": {
+        "task_class": {
+          "$ref": "#/$defs/TaskClass",
+          "description": "The task class the call was routed as."
+        },
+        "provider": {
+          "$ref": "#/$defs/ModelProvider",
+          "description": "Who answered the call."
+        },
+        "model_id": {
+          "description": "The provider's identifier of the foundation model.",
+          "minLength": 1,
+          "title": "Model Id",
+          "type": "string"
+        },
+        "inference_profile": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Inference profile the call was sent through, when the model is reached through one.",
+          "title": "Inference Profile"
+        },
+        "region": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Region the call was sent to; None for an offline router.",
+          "title": "Region"
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Temperature sent with the call; None means none was sent.",
+          "title": "Temperature"
+        },
+        "max_tokens": {
+          "anyOf": [
+            {
+              "maximum": 1000000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Output cap sent with the call.",
+          "title": "Max Tokens"
+        },
+        "timeout_seconds": {
+          "description": "Wall-clock limit the call ran under.",
+          "exclusiveMinimum": 0,
+          "maximum": 3600.0,
+          "title": "Timeout Seconds",
+          "type": "number"
+        },
+        "effort": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Effort"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Effort level sent with the call; None means none was sent."
+        }
+      },
+      "required": [
+        "task_class",
+        "provider",
+        "model_id",
+        "timeout_seconds"
+      ],
+      "title": "ResolvedRoute",
+      "type": "object"
+    },
+    "SourcedArtifactMetadata": {
+      "additionalProperties": false,
+      "description": "Provenance with the call's inputs recorded: the only metadata a generated artifact accepts.\n\n:meth:`GeneratedArtifactMetadata.with_inputs` returns one. Its `snapshot_ids` and\n`retrieval_ids` have no default, so a stored document without them does not load, and it is a\ntype of its own, so a field declared as it refuses the bare metadata a response carries.",
+      "properties": {
+        "prompt_id": {
+          "description": "Identifier of the registered prompt that was run.",
+          "minLength": 1,
+          "title": "Prompt Id",
+          "type": "string"
+        },
+        "prompt_version": {
+          "description": "The exact version of that prompt.",
+          "minLength": 1,
+          "title": "Prompt Version",
+          "type": "string"
+        },
+        "route": {
+          "$ref": "#/$defs/ResolvedRoute",
+          "description": "The route the call took: model id, inference profile, region, and the temperature and other parameters actually sent."
+        },
+        "provider_request_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The provider's id for the request, when it gave one.",
+          "title": "Provider Request Id"
+        },
+        "snapshot_ids": {
+          "description": "The source snapshots whose text the prompt was given, in the order given.",
+          "items": {
+            "maxLength": 26,
+            "minLength": 26,
+            "pattern": "^[0-7][0-9ABCDEFGHJKMNPQRSTVWXYZ]{25}$",
+            "type": "string"
+          },
+          "title": "Snapshot Ids",
+          "type": "array"
+        },
+        "retrieval_ids": {
+          "description": "The retrieved items (search results, cards) the prompt was given, in order, if any.",
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Retrieval Ids",
+          "type": "array"
+        },
+        "created_at": {
+          "description": "When the model call was made, in UTC.",
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "repair_attempted": {
+          "default": false,
+          "description": "Whether the first answer failed validation and this output came from the repair call.",
+          "title": "Repair Attempted",
+          "type": "boolean"
+        },
+        "repair_prompt_version": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The version of the `model.repair` prompt that produced it, when repaired.",
+          "title": "Repair Prompt Version"
+        }
+      },
+      "required": [
+        "prompt_id",
+        "prompt_version",
+        "route",
+        "snapshot_ids",
+        "retrieval_ids",
+        "created_at"
+      ],
+      "title": "SourcedArtifactMetadata",
+      "type": "object"
     },
     "SpanPurpose": {
       "description": "What argumentative work a marked region of evidence does.",
@@ -315,6 +533,18 @@
         "highlight"
       ],
       "title": "SpanStyle",
+      "type": "string"
+    },
+    "TaskClass": {
+      "description": "What kind of work a model call is, which is what routing is decided on.\n\nApplication code names a task class, never a model id. Routing a class to a model, a region\nand an inference profile is configuration, so a Bedrock model upgrade is a change to the\nrouting files rather than to code across the platform (architecture proposal §10, ADR-0005).",
+      "enum": [
+        "complex_reasoning",
+        "high_volume",
+        "deep_audit",
+        "embeddings",
+        "rerank"
+      ],
+      "title": "TaskClass",
       "type": "string"
     },
     "VerificationStatus": {
@@ -522,6 +752,15 @@
       "minLength": 1,
       "title": "Format Profile",
       "type": "string"
+    },
+    "generated_by": {
+      "default": [],
+      "description": "The model calls that chose this card's evidence, tag and markup, in order: model, prompt id and version, parameters, and the snapshot each was shown. Empty for a card no model shaped.",
+      "items": {
+        "$ref": "#/$defs/SourcedArtifactMetadata"
+      },
+      "title": "Generated By",
+      "type": "array"
     }
   },
   "required": [

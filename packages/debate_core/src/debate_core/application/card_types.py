@@ -126,8 +126,8 @@ class CutRequest:
 class CutResult:
     """A cut card as saved, the verifier's verdict on it, its model provenance, and why it is not VERIFIED.
 
-    Constructed only consistent: the verdict is about this card and states its status, a VERIFIED
-    result carries no reason, and an UNVERIFIED one carries at least one.
+    Constructed only consistent: the verdict is about this card and states its status, the metadata is
+    the card's own, a VERIFIED result carries no reason, and an UNVERIFIED one carries at least one.
     """
 
     card: Card
@@ -141,6 +141,8 @@ class CutResult:
             raise ValueError(
                 f"the verdict is about card {self.verification.card_id}, not {self.card.card_id}"
             )
+        if self.metadata != self.card.generated_by:
+            raise ValueError("a result's model metadata is the card's own generated_by")
         if self.verification.status is not self.card.verification_status:
             raise ValueError(
                 f"the card's status is {self.card.verification_status}, "

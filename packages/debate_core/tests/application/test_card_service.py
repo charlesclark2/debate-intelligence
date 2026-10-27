@@ -37,8 +37,8 @@ from debate_core.domain import (
     SpanStyle,
     VerificationStatus,
 )
-from debate_core.domain.model_contracts import ModelProvider, TaskClass
 from debate_core.domain.card import DEFAULT_FORMAT_PROFILE
+from debate_core.domain.model_contracts import ModelProvider, TaskClass
 from debate_core.evidence.verification_types import (
     REQUIRED_CHECKS,
     ReasonCode,
@@ -168,6 +168,14 @@ def test_a_result_whose_verdict_is_about_another_card_is_refused() -> None:
         )
 
 
+async def test_a_result_whose_metadata_is_not_its_cards_is_refused(world: CardWorld) -> None:
+    source = await world.add_page("news-article")
+    cut = await world.card_service.cut_card(news_request(source.snapshot.snapshot_id))
+
+    with pytest.raises(ValueError, match="metadata"):
+        CutResult(card=cut.card, verification=cut.verification, metadata=cut.metadata[:1], reasons=())
+
+
 def test_an_unverified_result_has_to_say_why() -> None:
     card = blank_card()
 
@@ -240,7 +248,8 @@ SEGMENT_ONE: Final = (
 SEGMENT_TWO: Final = (
     "Conservation biologists who have criticized the project said the timeline was never realistic. "
     "\u201cEvery year this slips, the money raised for it is money that did not go to elephants that are "
-    "alive now,\u201d said Priya Ramaswamy, who studies elephant populations and was not involved in the work."
+    "alive now,\u201d said Priya Ramaswamy, who studies elephant populations and was not involved in the "
+    "work."
 )
 NEWS_TAG: Final = "Each delay in reviving the mammoth costs living elephants funding"
 

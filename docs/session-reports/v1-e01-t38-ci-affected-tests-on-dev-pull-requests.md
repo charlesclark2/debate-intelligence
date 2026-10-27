@@ -288,9 +288,44 @@ selection. The design makes those failures safe, and the summary is what the tes
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-26
 
 **Notes:**
+
+The operator's request built so that every failure falls toward more tests: an empty or missing
+selection file is pytest's `testpaths`, which is exactly the old command.
+1. **ac1 passes.** Over the last 20 merges the median is 46.3% of test files (50.1% for the 14 task
+   and PM pull requests). That is below the 60% line, so `v1-e01-t32` is not forced next. The hub
+   analysis names what carries the large selections: `debate_cli/app.py`, `settings.py`,
+   `errors.py`, and two package-level conftests.
+2. **ac2 and the node's criterion pass.**
+   * Red against two skeletons: one trusts the selection everywhere, the other always runs the
+     whole selection.
+   * 20 mutants, the PM's three among them, all aimed at the new tests caught.
+   * Mutant 19 rightly shows what the old whole-selection proof could not see, which is why the
+     given-selection proof was added.
+3. **Decisions accepted:**
+   * `@FILE`, with `run_in_parts.py` unchanged. A file is dealt by its path's checksum, so a
+     selection's parts are subsets of the whole selection's parts.
+   * Each part chooses for itself, with no extra job in series.
+   * `fetch-depth: 2`, with a missing base as the whole selection, and no fetch added.
+   * An empty selection is the whole selection.
+   * No second union with the always-run list, held instead by tests.
+   * Every part writes the summary.
+4. **The red-push-run rule's last sentence is accepted as the PM's own.** The fixing session runs the
+   failing tests by name as well as its affected set.
+5. **The Deviation (red against a skeleton) is accepted.**
+6. **actionlint** is left to CI's `workflow-lint` job, since the session cannot download it.
+7. **Follow-ups:**
+   * `CLAUDE.md`'s line is changed by the PM in the next batch, in the wording proposed.
+   * The two package-level conftests and `debate_cli/app.py`'s reach are added by the PM to
+     `v1-e01-t32`. `settings.py` and `errors.py` are real imports, and are left alone.
+   * Refresh pull requests keep their 25 files: `tests/specs` reads `ROADMAP.md`.
+8. **ac3 is the operator's.** The pull request's own run should report the whole selection because of
+   `ci.yml`, and the push run after the merge the whole selection because of the push. The PM
+   records both.
+
+No re-review is needed. The PR merges `--partial`, phase `InProgress`, until ac3's push run is read.

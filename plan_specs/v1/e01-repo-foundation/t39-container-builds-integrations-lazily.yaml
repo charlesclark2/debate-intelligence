@@ -51,7 +51,7 @@ spec:
       description: >-
         The 20 merges re-measured with --graph, and the collected count unchanged.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

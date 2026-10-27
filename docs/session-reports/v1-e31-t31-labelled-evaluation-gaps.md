@@ -41,9 +41,12 @@ relay prompt the PM ruled on, is kept below [as it was sent](#relay-prompt-for-t
    - The code shows the cloud run parses only the caselists it imported that week, and has no
      parse-only mode. My relay's Q5 (ii) was wrong about that.
    - The steps below parse in full from a copy restored from the bucket, then publish.
-   - That publish from a copy is in no runbook. It needs your ruling
+   - That publish from a copy is in no runbook. The PM allowed it for this re-parse (ruling (a),
+     2026-10-27), before the image's apply
      ([the code check](#the-re-parse-in-the-cloud-world-what-the-code-shows),
      [Deviation 4](#deviations-from-the-spec)).
+   - [What C7 writes](#what-c7-writes-to-the-bucket): one object outside the version directory,
+     the bucket's run lock.
 2. **Two guards beyond the ruled shapes.** They keep `v1-e31-t12`'s deliberate pins
    ([Deviation 2](#deviations-from-the-spec)). The labelled counts are unchanged by them.
 3. **The image-plan check in the cutover runbook stops on every image apply since the cutover**
@@ -255,7 +258,7 @@ code claim myself:
   - The parse stage parses `caselists_to_parse(tally.publish_targets)`, the caselists this run
     imported (`caselist_sync.py:4187`, defined at `:5090`).
   - For each, a parser version the store has no directory of starts an empty directory, so every
-    live source is to parse (`caselist_parse.py:384-394`, and the skip key at `:347-356`). The run
+    live source is to parse (`application/caselist_parse.py:384-394`, and the skip key at `:347-356`). The run
     counts it as `full_parse` (`caselist_pull_parse.py:68`).
   - The module says so at `caselist_sync.py:292-299`: "A caselist the run did not import into is
     not touched".
@@ -277,13 +280,60 @@ code claim myself:
 - **What does work: a full parse of a restored copy.**
   - `caselist parse` in bucket mode fetches the raw sources a copy lacks from `raw/`
     (`container.py:840`).
-  - It takes the bucket lock around its publish only (`caselist_parse.py:168-176`).
+  - It takes the bucket lock around its publish only (`commands/caselist_parse.py:168-176`).
   - `ops/caselist_run/compare_cloud_run.py` already restores a copy and parses it in full, without
     `--publish`.
   - The steps below do the same and publish. No runbook has published from a restored copy, and
     scheduled-sync's "One data directory for each bucket" warns against a second data directory
     publishing. Here the copy is the bucket's own state, restored under the lock, but that is the
     PM's call ([Deviation 4](#deviations-from-the-spec)).
+
+### What C7 writes to the bucket
+
+The PM's condition on ruling (a): the code for every key `caselist parse --publish` writes in bucket
+mode. Read from the command down.
+
+**1. The version directory: `parsed/<caselist>/2026.10.27-docx-7/`.** This is the publish, and its
+only write call.
+
+- `ParsedStorePublisher.publish` (`parsed_publish.py:183-218`) lists the local keys under
+  `<caselist>/<version>/` (`:186`, `:193`).
+- Of those keys it sends the per-source files under `sha256/` (`:196`), then the aggregates
+  `index.jsonl`, `failures.jsonl` and `occurrences.jsonl` directly in the directory (`:197-199`,
+  `:210`).
+- Each goes through `_object`, whose one write is `self._remote.put_file(remote_key, path)`
+  (`:288`), with `remote_key = parsed/` plus that local key (`:233`, `:256`).
+- The version is `plan.version` (the CLI's `commands/caselist_parse.py:168-176`): the new `docx-7`
+  directory, since the store holds none (`application/caselist_parse.py:384-394`).
+- Everything else the publish does is a read: `list_objects` (`:194`), `head` (`:237`, `:269`,
+  `:289`), and `get_file` of the bucket's occurrence table for the fingerprint guard (`:244`).
+
+**2. The run lock: `reports/sync/run-lock.json`. This is outside the version directory.**
+
+- The command publishes inside `run_holding_the_bucket_lock` (`commands/caselist_parse.py:168-176`;
+  `bucket_lock.py`), which enters `BucketWriteGuard.held` (`run_lock.py`).
+- In bucket mode that takes the lease: a conditional `replace` of the lock object (`run_lock.py:527`;
+  `create` at `:557` only where none exists).
+- It renews the lease every five minutes while the publish runs (`:697`).
+- It releases with `state: free` (`:645`). The object is never deleted.
+- The key is `RUN_LOCK_KEY` (`run_lock.py:105`). The lock's own docstring says every bucket-writing
+  command holds it this way (`bucket_lock.py:1-8`).
+
+**Nothing else.**
+
+- The parse itself writes only the copy: `CaselistParseService.run` writes the local store.
+- Its raw-source fetch reads `raw/` with `get_file` and writes the copy's blob tree
+  (`run_state.py:376-409`).
+- The suppression list is read, not written:
+  - `entries()` and `path_holds()` read every copy (`suppression.py:268-279`, `:210-219`);
+  - the one `reconcile()` is `restore-run-state`'s (`run_state_restore.py:140`, step C3), and writes
+    only the copy, as its comment says (`:137-138`).
+- No run-state bundle, manifest, run record or search index is written by `caselist parse
+  --publish`.
+
+**Why this stops at the checkpoint:** the PM's condition was "anything besides
+`parsed/<caselist>/2026.10.27-docx-7/`". The run lock is an object besides it: not a bundle, manifest
+or index, but a write all the same.
 
 ## The checks run before this report
 
@@ -445,7 +495,7 @@ Q6. ac1 says "(operator)"; the session ran it, read-only, in 2.9 s (working agre
      rule judged.
    - The longest labelled cites the rules take are 765, 488 and 540 characters. The labelled takes
      are unchanged (23, 19, 4, and no other row), and the guards cost 1 unlabelled line.
-   - The PM may want to rule on t12's pins against rule (2) directly.
+   - The PM accepted this; no separate ruling on t12's pins is needed.
 3. **"White is not read as highlight" is read as the formatting spans.**
    - The classifier's `has_highlighted_run`, which decides units, still sees a white run, so a
      paragraph whose only marking is white is still marked-up body.
@@ -456,8 +506,8 @@ Q6. ac1 says "(operator)"; the session ran it, read-only, in 2.9 s (working agre
      ([the code](#the-re-parse-in-the-cloud-world-what-the-code-shows)).
    - The steps below restore a copy under the lock, parse it in full with the installed `docx-7`
      build in bucket mode, and publish each caselist's version directory with `caselist parse
-     --publish`. No runbook has published a parsed store from a restored copy, so **the PM's ruling
-     is needed before step C7**.
+     --publish`. No runbook has published a parsed store from a restored copy. **The PM allowed it
+     for this re-parse** (ruling (a), 2026-10-27), with C6 and C7 before the image's apply (C8).
    - The other way is to wait for `v1-e40-t08` (a run parses what is owed without an import),
      extended to a parse every caselist owes after a bump.
 5. **The cutover runbook's image-plan check refuses every image apply since the cutover.**
@@ -465,8 +515,8 @@ Q6. ac1 says "(operator)"; the session ran it, read-only, in 2.9 s (working agre
      (`caselist-cutover.md:357`), and it expects the schedule `DISABLED` (`:349`).
    - "A new image, later" (`caselist-cloud-run.md:746`) points at step 6's plan, which is the
      first apply's shape.
-   - Step C5 therefore uses whatever check Thursday 2026-10-29's `v1-e40-t13` image apply uses. I
-     have not written a check of my own.
+   - The PM's batch adds a post-cutover plan block to "A new image, later". C5's plan and C8's
+     apply point at it, and use its reading in place of `IMAGEPLAN`.
 6. **Outside `constraints.packages`:**
    - the structural fixtures' and the writer sidecars' version lines;
    - the writer's test directory (version pins, and the white paragraph test the PM asked for);
@@ -556,9 +606,18 @@ counts only. The bar is at least 18 of 20 cites.
 
 ### C. The dev re-parse, after the merge and the operator's return
 
-Run in this order, Thursday to Monday. **Steps C1 to C6 are read-only or local**, apart from the
-image push and apply in C5, which the PM reads first. **C7 publishes, and waits for the PM's ruling
-on [Deviation 4](#deviations-from-the-spec).**
+Run in this order, Thursday to Monday, never during a Wednesday run (the PM's ruling (a) on
+[Deviation 4](#deviations-from-the-spec), 2026-10-27).
+
+- C1 to C4 and C6 are read-only or local.
+- C5 (the image's dry run, push, digest line and plan) may run before or after C6 and C7.
+- **C7 publishes each caselist's `docx-7` directory before the image is applied.** C8, the apply,
+  follows only after all four C7 publishes exit 0.
+
+**Why this order.** A `docx-6` run ignores a `docx-7` directory: the run restores only
+`parsed/<store>/<its own parser version>/` (`run_state.py:349`, with the version from
+`container.py:1555`). So a failed C7 changes nothing the weekly run reads. Once C8 applies the
+`docx-7` image, every store the next run's index stage reads already holds `docx-7`.
 
 **Time and disk:**
 
@@ -566,7 +625,7 @@ on [Deviation 4](#deviations-from-the-spec).**
 |---|---|
 | C3 restore | a few minutes, about 15,000 parsed objects |
 | C7 parse and publish | unmeasured: the Mac's full parse took about 30 minutes in October, plus fetching every raw source from `raw/` |
-| C9 clusters | about 20 minutes |
+| C10 clusters | about 20 minutes |
 
 Have at least 10 GiB free.
 
@@ -608,7 +667,7 @@ merge: wait for the next dev pre-release, whose validate-dev run (image job incl
 **C3. The copy, restored with the build still installed** (a few minutes). Where: your Mac.
 
 The installed `docx-6` build restores the `docx-6` parsed store, which is the "before" the clusters
-are compared with in C9. It holds the bucket lock while it restores.
+are compared with in C10. It holds the bucket lock while it restores.
 
 ```bash
 cd "$HOME"
@@ -635,7 +694,8 @@ Success ends with the build's `complete` line. Then run the cutover runbook's "E
 can run is one with the lock" block (`caselist-cutover.md`, step 3). Every `==` line must name
 `$TAG`, `bucket` and `['hsld26', 'hspolicy26', 'hspf26']`.
 
-**C5. The run's image: dry run, push, digest, plan, apply.** Where: `$WT`.
+**C5. The run's image: dry run, push, digest, plan.** Where: `$WT`. Before or after C6 and C7; its
+apply is C8.
 
 The dry run (several minutes):
 
@@ -663,34 +723,10 @@ Success looks like `pushed: …@sha256:<64 hex>`, a `registered:` line, and the
 The digest line: use the replacement block of `caselist-cloud-run.md`, "A new image, later",
 unchanged. Success is its `replaced:` line, then `1`.
 
-The plan:
-
-```bash
-cd "$WT"
-if env | grep -qE '^(TF_VAR_|TF_WORKSPACE=|TF_DATA_DIR=|TF_CLI_ARGS)'; then echo "STOP: a Terraform override is set in this shell"; else AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev init -input=false >/dev/null && AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev plan -input=false -no-color -out=t31-image.tfplan | tee /tmp/t31-image-plan.txt | tail -5; fi
-grep -E '^Plan:|must be replaced|will be destroyed' /tmp/t31-image-plan.txt
-grep -c 'aws_ssoadmin' /tmp/t31-image-plan.txt
-```
-
-Expect `Plan: 2 to add, 4 to change, 2 to destroy.`, the two `must be replaced` lines of the login
-and run task definitions, and `0`. Then run the plan check Thursday 2026-10-29's `v1-e40-t13` apply
-used, against `t31-image.tfplan`. The cutover's `IMAGEPLAN` as written stops on the enabled schedule
-([Deviation 5](#deviations-from-the-spec)). **Send the PM the plan's lines and the check's output.**
-The apply waits for the PM.
-
-The apply, after the PM has read the plan:
-
-```bash
-cd "$WT"
-if env | grep -qE '^(TF_VAR_|TF_WORKSPACE=|TF_DATA_DIR=|TF_CLI_ARGS)'; then echo "STOP: a Terraform override is set in this shell"; else AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev apply -input=false t31-image.tfplan; fi
-AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output caselist_run_schedule_state
-```
-
-Success looks like `Apply complete! Resources: 2 added, 4 changed, 2 destroyed.`, then
-`"ENABLED"`. One `-login-task-changed` email is expected.
-
-**From this apply on, the next Wednesday run uses `docx-7`.** C7 must publish all four caselists
-before then. Otherwise that run parses in full only what it imports, and its index stage fails.
+The plan: run the post-cutover plan block of `caselist-cloud-run.md`, "A new image, later", which the
+PM's batch adds ([Deviation 5](#deviations-from-the-spec)). Read it as that section says, in place of
+the cutover's `IMAGEPLAN`. **Send the PM the plan's lines and that reading.** The apply is C8, and
+waits for C7 and for the PM.
 
 **C6. The full parse's dry run, in the copy** (seconds; writes nothing). Where: your Mac.
 
@@ -704,7 +740,7 @@ above zero, and `skipped` 0. `version` `2026.10.20-docx-6` means the installed b
 stop.
 
 **C7. The full parse and publish, one caselist at a time** (unmeasured; see the table). Where: your
-Mac. **Only after the PM's ruling on Deviation 4.**
+Mac. Before C8. [What it writes to the bucket](#what-c7-writes-to-the-bucket) is listed above.
 
 First the lock and the session:
 
@@ -726,11 +762,21 @@ if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this 
 for c in hsld26 hspolicy26 hspf26 openev; do jq -c '(.data // .error.details) | {caselist, version, sources, parsed, cards, unsupported, failed, publish: .publish.counts}' "$HOME/t31-dev-${c}.json"; done
 ```
 
-Success looks like four `exit 0`, then four lines with `version` `2026.10.27-docx-7`, `parsed` above
-zero and equal to `sources` less `unsupported`, `failed` 0, and a publish count above zero. On
+C8 waits for all four to exit 0. Success looks like four `exit 0`, then four lines with `version`
+`2026.10.27-docx-7`, `parsed` above zero and equal to `sources` less `unsupported`, `failed` 0, and a publish count above zero. On
 `PARSED_PUBLISH_INCOMPLETE`, run that caselist's parse line again. Paste back the four `jq` lines.
 
-**C8. The second run: the next scheduled Wednesday run** (it starts at 06:00 and takes up to about
+**C8. The image's apply: C5's, moved here by the PM's ruling.** Where: `$WT`. Only after all four
+C7 publishes exit 0, and after the PM has read C5's plan.
+
+Apply with the apply block of `caselist-cloud-run.md`, "A new image, later", using the plan its plan
+block wrote in C5.
+
+Success looks like `Apply complete! Resources: 2 added, 4 changed, 2 destroyed.`, and the run's
+schedule `ENABLED`. One `-login-task-changed` email is expected. **From this apply on, the next
+Wednesday run uses `docx-7`**, and every store it reads already holds `docx-7`.
+
+**C9. The second run: the next scheduled Wednesday run** (it starts at 06:00 and takes up to about
 2.5 hours). Where: your Mac, after it has finished.
 
 ```bash
@@ -747,7 +793,7 @@ Success looks like:
 A failed `search_index` stage means a store the run read has no `docx-7` directory. Paste the line
 to the PM.
 
-**C9. The clusters against the `docx-6` tables** (about 20 minutes). Where: `$WT`. This reads the
+**C10. The clusters against the `docx-6` tables** (about 20 minutes). Where: `$WT`. This reads the
 copy only.
 
 ```bash
@@ -761,7 +807,7 @@ Success looks like four `exit 0`, and each line `before_version` `2026.10.20-doc
 and, for the tag-style shape, its tag and first paragraph. So expect few `exact_fingerprints_changed`.
 Paste the four lines.
 
-**C10. The search function, with the index C8 published** (minutes; the same day as C8). Where:
+**C11. The search function, with the index C9 published** (minutes; the same day as C9). Where:
 `$WT`.
 
 The function's parser must match the index's, or card download is off (`evidence-search.md`,
@@ -783,14 +829,14 @@ scripts/tub_deploy.sh dev
 Success looks like `{"status":"ok"}` and `Deployed <sha> to dev`. Download is back within five
 minutes.
 
-**C11. Remove the copy** (seconds). Where: your Mac. First see what goes:
+**C12. Remove the copy** (seconds). Where: your Mac. First see what goes:
 
 ```bash
 du -sh "$HOME/.debate-research/t31-reparse-copy"
 ls "$HOME/.debate-research/t31-reparse-copy"
 ```
 
-Then, once C9's lines are pasted:
+Then, once C10's lines are pasted:
 
 ```bash
 rm -rf "$HOME/.debate-research/t31-reparse-copy"
@@ -811,9 +857,57 @@ rm -rf "$HOME/.debate-research/t31-reparse-copy"
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-27
 
 **Notes:**
+
+Phase 2 is built to the rulings, measured honestly, and the code check corrected the plan's one
+wrong premise before anyone ran it.
+1. **ac3 passes.**
+   * Each rule is red first, failing by assertion; white is red first too.
+   * Full tier: CITE 0.985/0.623 to 0.989/0.837, TAG F1 0.935 to 0.959, and labelled cards with no
+     cite fall from 31 to 10. Non-Verbatim CITE and Verbatim TAG now meet their targets.
+   * No precision or F1 falls, by unit or by group, on either tier, and the gate passes. The ruled
+     set's what-if figures were exact.
+2. **ac4's first half passes:** one bump, `2026.10.27-docx-7`. The second half (the re-parse) is
+   the operator's, after the merge and his return, so the PR merges `--partial` and the Goal stays
+   `InProgress`.
+3. **openev's store diff** is clean: 172 cards gain a cite, 259 cites gain a line, 6 cards lose only
+   white highlight, and 0 others change. 142 of openev's 356 no-cite documents gain a cite.
+4. **Mutation: 20 mutants and 3 re-runs.** The 3 survivors each became a fixture and are caught.
+5. **Deviation 2 accepted:** the two guards keep `v1-e31-t12`'s deliberate pins. The labelled takes
+   are unchanged (23, 19 and 4, nothing else), and the guards cost 1 unlabelled line. No separate
+   ruling on t12's pins is needed.
+6. **Deviation 3 accepted:** white leaves the formatting spans only, and unit readings don't move.
+7. **Deviation 4: ruling (a), the publish from a restored copy is allowed for this re-parse, with
+   two conditions.**
+   * **Order:** C6 and C7 (the full parse and the publish of each caselist's `docx-7` directory)
+     run **before** C5's apply, in the same Thursday-to-Monday window. C5's apply follows only after
+     all four publishes exit 0. A docx-6 run ignores a `docx-7` directory, so a failed C7 changes
+     nothing the weekly run reads. The image is applied only once every store the next run's index
+     stage reads holds `docx-7`.
+   * **What C7 writes:** before the merge, the session cites the code for every key `caselist parse
+     --publish` writes in bucket mode. If anything besides `parsed/<caselist>/2026.10.27-docx-7/`
+     is written (a run-state bundle, a manifest or an index), the session stops and says so.
+   * The lasting fix is the PM's new E40 task: after a parser bump, the scheduled run parses every
+     caselist the new version owes. It extends `v1-e40-t08`.
+8. **Deviation 5 taken:** the PM's batch of 2026-10-27 (u) adds a post-cutover plan block to
+   `caselist-cloud-run.md`, "A new image, later": Plan 2/4/2, the two task definitions replaced, no
+   Identity Center change, and no schedule state change. C5 and Thursday's `v1-e40-t13` apply use
+   it. A check script of its own is an E40 follow-up.
+9. **Deviations 1, 6, 7 and 8 accepted.** The PM's batch adds the writer tests and `tests/fixtures`
+   to `constraints.packages`.
+10. **Operator follow-ups A and B** may run before 2026-11-01, from this task's worktree. Both are
+    read-only, and B writes only the coach's file under the data directory. The coach's sample bar
+    stands: at least 18 of 20 cites, or rule (2) comes out before any run image carries it.
+11. **Merge order stands:** the PR merges only after Thursday 2026-10-29's image apply. After it
+    merges, no dev run image is applied until the operator is back.
+12. **The affected set** (277 files) is left to the PR's `ci` under agreement 10. The changed
+    directories and the always-run list passed (3,560), and so did pyright, ruff, the import
+    contracts and the docs checks.
+
+After the session's two edits (the C-step order and the C7 key check), the PR merges `--partial`.
+No re-review is needed unless the key check finds a write beyond the version directory.

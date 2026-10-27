@@ -38,6 +38,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from debate_core.application.errors import DomainError
+from debate_core.application.ports.card_document import CardDocumentRenderer
 from debate_core.application.ports.persistence import ArticleRepository
 from debate_core.application.ports.providers import Clock
 from debate_core.domain import Card
@@ -58,9 +59,12 @@ class ExportRefused(DomainError):
 class ExportService:
     """Writes cards as a card manifest, referencing the snapshots they were cut from."""
 
-    def __init__(self, *, articles: ArticleRepository, clock: Clock) -> None:
+    def __init__(
+        self, *, articles: ArticleRepository, clock: Clock, render_docx: CardDocumentRenderer | None = None
+    ) -> None:
         self._articles = articles
         self._clock = clock
+        self._render_docx = render_docx
 
     async def manifest(self, cards: Sequence[Card]) -> CardManifest:
         """The current-version manifest of ``cards``, in their order, with their snapshots' references."""
@@ -90,3 +94,6 @@ class ExportService:
     async def export_json(self, cards: Sequence[Card]) -> bytes:
         """``cards`` as the manifest's JSON: keys sorted, indented, UTF-8, the same bytes every time."""
         return serialize_manifest(await self.manifest(cards))
+
+    async def export_docx(self, cards: Sequence[Card], **_: object) -> bytes:
+        raise ExportRefused("skeleton")

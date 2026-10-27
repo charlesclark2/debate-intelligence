@@ -20,7 +20,7 @@
 # no_labelled_impact_advantage=3/6
 # no_labelled_impact_da=2/6
 position_id,rank,fingerprint,teams_reading,tag,short_cite,source_object_key,element_index,source_snapshot,provenance_mode,scenario,internal_link_tag
-costs-advantage,1,0202020202020202020202020202020202020202020202020202020202020202,1,2. Extinction from a Cedarvale collapse,Okafor 25,raw/caselist/synthpolicy26/sha256/a1/a1/a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1,6,2026-09-08,FILE_IMPORT,,
+costs-advantage,1,0202020202020202020202020202020202020202020202020202020202020202,1,,Okafor 25,raw/caselist/synthpolicy26/sha256/a1/a1/a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1,6,2026-09-08,FILE_IMPORT,,
 costs-advantage,2,0303030303030303030303030303030303030303030303030303030303030303,1,Bulk purchasing lowers drug prices,Haddad 23,raw/caselist/synthpolicy26/sha256/a4/a4/a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4,3,2026-09-15,FILE_IMPORT,,
 costs-advantage,3,3737373737373737373737373737373737373737373737373737373737373737,1,,Okafor 26,raw/caselist/synthpolicy26/sha256/a3/a3/a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3,15,2026-09-08,FILE_IMPORT,,
 spending-da,1,1515151515151515151515151515151515151515151515151515151515151515,2,Debt ceiling fights are near,Ruiz 26,raw/caselist/synthpolicy26/sha256/b1/b1/b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1,3,2026-09-08,FILE_IMPORT,Market crash,

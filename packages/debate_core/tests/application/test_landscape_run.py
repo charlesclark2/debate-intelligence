@@ -73,7 +73,12 @@ pytestmark = pytest.mark.anyio
 CASELIST = SYNTHETIC_RUN_CASELIST
 NEWEST = date(2026, 9, 15)
 PLANTED_CODE = {("neg-two", 0): "As PX argued, new spending triggers a crowd-out"}
-"""`PX` is Harrowgate Prep's code, planted in the tag of a spending card every report lists."""
+"""`PX` is Harrowgate Prep's code, planted in the tag of a spending card every report lists. Since
+`v1-e32-t28` the report withholds that tag, so the scan never sees it."""
+PLANTED_TOURNAMENT = {("neg-two", 0): "At Thistle Open, new spending triggers a crowd-out"}
+"""`Thistle Open` is a tournament of the caselist, planted in the same tag. The report withholds no
+tournament's word (`v1-e32-t28`), so the tag is quoted and the scan before sharing finds the name."""
+SECOND_TOURNAMENT = {("neg-one", 2): "At Lantern Classic, the states can"}
 
 
 def _service(
@@ -561,20 +566,28 @@ async def test_a_dry_run_holds_in_memory_the_files_a_run_writes(world: Synthetic
 # ------------------------------------------------------------------------------------------------
 
 
-async def test_the_scan_lists_a_planted_team_code_with_its_line(tmp_path: Path) -> None:
+async def test_a_planted_team_code_is_withheld_before_the_scan(tmp_path: Path) -> None:
     world = plant_synthetic_run(tmp_path, planted_tags=PLANTED_CODE)
     result = await _run(_service(world))
 
+    assert result.scan.hits == ()
+    assert "PX" not in (result.directory / "top_cards.csv").read_text(encoding="utf-8")
+
+
+async def test_the_scan_lists_a_planted_tournament_with_its_line(tmp_path: Path) -> None:
+    world = plant_synthetic_run(tmp_path, planted_tags=PLANTED_TOURNAMENT)
+    result = await _run(_service(world))
+
     assert [(hit.file, hit.kind, hit.term) for hit in result.scan.hits] == [
-        ("top_cards.csv", ScanKind.TEAM_CODE, "PX")
+        ("top_cards.csv", ScanKind.TOURNAMENT, "Thistle Open")
     ]
-    assert "As PX argued" in result.scan.hits[0].line
+    assert "At Thistle Open" in result.scan.hits[0].line
     assert result.scan.pending == result.scan.hits
     assert result.scan.digest == hits_digest(result.scan.hits)
 
 
 async def test_publish_with_a_hit_nobody_accepted_is_refused_and_writes_locally(tmp_path: Path) -> None:
-    world = plant_synthetic_run(tmp_path, planted_tags=PLANTED_CODE)
+    world = plant_synthetic_run(tmp_path, planted_tags=PLANTED_TOURNAMENT)
     bucket = FsEvidenceObjectStore(tmp_path / "bucket")
     result = await _run(_service(world, bucket=bucket), publish=True)
 
@@ -587,7 +600,7 @@ async def test_publish_with_a_hit_nobody_accepted_is_refused_and_writes_locally(
 
 
 async def test_publish_with_the_digest_of_the_hits_goes_ahead_and_records_them(tmp_path: Path) -> None:
-    world = plant_synthetic_run(tmp_path, planted_tags=PLANTED_CODE)
+    world = plant_synthetic_run(tmp_path, planted_tags=PLANTED_TOURNAMENT)
     bucket = FsEvidenceObjectStore(tmp_path / "bucket")
     service = _service(world, bucket=bucket)
     digest = (await _run(service)).scan.digest
@@ -602,11 +615,11 @@ async def test_publish_with_the_digest_of_the_hits_goes_ahead_and_records_them(t
 
 
 async def test_a_digest_of_other_hits_is_stale_and_refused(tmp_path: Path) -> None:
-    world = plant_synthetic_run(tmp_path, planted_tags=PLANTED_CODE)
+    world = plant_synthetic_run(tmp_path, planted_tags=PLANTED_TOURNAMENT)
     bucket = FsEvidenceObjectStore(tmp_path / "bucket")
     service = _service(world, bucket=bucket)
     read_earlier = (await _run(service)).scan.digest
-    plant_synthetic_run(tmp_path, planted_tags={**PLANTED_CODE, ("neg-one", 2): "QW says the states can"})
+    plant_synthetic_run(tmp_path, planted_tags={**PLANTED_TOURNAMENT, **SECOND_TOURNAMENT})
 
     result = await _run(service, publish=True, accept_scan_hits=read_earlier)
 
@@ -618,7 +631,7 @@ async def test_a_digest_of_other_hits_is_stale_and_refused(tmp_path: Path) -> No
 
 
 async def test_a_later_run_stops_only_on_hits_not_yet_accepted(tmp_path: Path) -> None:
-    world = plant_synthetic_run(tmp_path, planted_tags=PLANTED_CODE)
+    world = plant_synthetic_run(tmp_path, planted_tags=PLANTED_TOURNAMENT)
     bucket = FsEvidenceObjectStore(tmp_path / "bucket")
     service = _service(world, bucket=bucket)
     first = await _run(service)
@@ -628,15 +641,15 @@ async def test_a_later_run_stops_only_on_hits_not_yet_accepted(tmp_path: Path) -
     assert again.publish is not None and again.publish.refused is None
     assert again.scan.pending == () and len(again.scan.hits) == 1
 
-    plant_synthetic_run(tmp_path, planted_tags={**PLANTED_CODE, ("neg-one", 2): "QW says the states can"})
+    plant_synthetic_run(tmp_path, planted_tags={**PLANTED_TOURNAMENT, **SECOND_TOURNAMENT})
     later = await _run(service, publish=True)
     assert later.publish is not None and later.publish.refused is PublishRefusal.SCAN_HITS_NOT_ACCEPTED
-    assert [hit.term for hit in later.scan.pending] == ["QW"]
+    assert [hit.term for hit in later.scan.pending] == ["Lantern Classic"]
     assert len(later.scan.hits) == 2
 
 
 async def test_a_dry_run_records_no_acceptance(tmp_path: Path) -> None:
-    world = plant_synthetic_run(tmp_path, planted_tags=PLANTED_CODE)
+    world = plant_synthetic_run(tmp_path, planted_tags=PLANTED_TOURNAMENT)
     bucket = FsEvidenceObjectStore(tmp_path / "bucket")
     service = _service(world, bucket=bucket)
     digest = (await _run(service, dry_run=True)).scan.digest

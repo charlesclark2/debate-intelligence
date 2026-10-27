@@ -3,8 +3,8 @@
 `v1-e32-t25` names each impact rank under "What each impact runs through" by the first of these it
 has: the scenario (`v1-e32-t14`, under the coach's list of `v1-e32-t22`), a labelled internal link, the
 impact card's own tag, and the card above it in its block. A tag, internal link or card above holding a
-word of a caselist school, team code or tournament is withheld, counted, and the next source names the
-rank. A rank with none of these is left out and counted.
+word of a caselist school or team code is withheld, counted, and the next source names the rank
+(`v1-e32-t28`: a tournament's words are not withheld). A rank with none of these is left out and counted.
 
 On the synthetic caselist read unchanged (`../golden/report.md`), every impact card has a tag, so every
 rank is named by its scenario or its tag. This directory's [`edits.yaml`](edits.yaml) changes two
@@ -20,9 +20,10 @@ rank are reached:
 Everything else report.md holds is `../golden/report.md`'s, and the test checks that too.
 
 The caselist's withholding words are the school words over three characters (`ashgrove`, `birchmoor`,
-`cedarvale`, `driftwood`, `fictional`), the tournament words (`classic`, `imaginary`, `invitational`,
-`later`, `tournament`) and the team codes (`jj`, `kk`, `qq`, `vv`, `ww`, `xx`, `yy`, `zz`). No tag of
-the unchanged caselist holds one.
+`cedarvale`, `driftwood`, `fictional`) and the team codes (`jj`, `kk`, `qq`, `vv`, `ww`, `xx`, `yy`,
+`zz`). Since `v1-e32-t28` the tournament words (`classic`, `imaginary`, `invitational`, `later`,
+`tournament`) are not. No tag of the unchanged caselist holds a school word, a team code or a tournament
+word.
 
 ## Through 2026-09-15, by hand
 
@@ -49,8 +50,8 @@ the named heading `economic collapse`, becomes a document with no scenario headi
 
 Per kind: rows with a scenario 0; named by a scenario 0, an internal link 0, a tag 1, the card above 1;
 left out 1; tags withheld 1; scenario names withheld 0. The link chain's impact row is rank 1, with its
-edited tag. The table's and the chain's Tag column are `v1-e32-t10`'s and `v1-e32-t14`'s, which quote a
-card's tag as parsed; only the lines under "What each impact runs through" withhold one.
+edited tag. Since `v1-e32-t28` the table's and the chain's Tag column withhold it too: rank 1's
+table row and the chain's Impact row keep their teams and cite, with the tag cell empty.
 
 ### Spending DA (`Market crash` for `cedarvale crash`; `not_scenarios: [recession]`)
 
@@ -72,6 +73,6 @@ card's tag as parsed; only the lines under "What each impact runs through" withh
 Per kind: rows with a scenario 1; named by a scenario 1, an internal link 1, a tag 2, the card above 0;
 left out 0; tags withheld 0; scenario names withheld 0.
 
-In impact_cards.csv: `costs-advantage` rank 1's tag is the edited one and its scenario is empty, rank 3's
+In impact_cards.csv: `costs-advantage` rank 1's tag is withheld (`v1-e32-t28`) and its scenario is empty, rank 3's
 tag is empty; `spending-da` rank 1's scenario is `Market crash` and rank 3's is empty. Every other cell
 is `../golden/impact_cards.csv`'s.

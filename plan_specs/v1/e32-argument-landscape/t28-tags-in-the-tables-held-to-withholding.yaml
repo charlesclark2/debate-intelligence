@@ -46,7 +46,7 @@ spec:
         After the ruling, on synthetic fixtures, the tables withhold as ruled, matching
         hand-written golden files; tests shown failing first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

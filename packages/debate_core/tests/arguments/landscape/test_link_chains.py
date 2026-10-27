@@ -340,30 +340,37 @@ def test_an_advantages_role_words_name_no_scenario() -> None:
 # ------------------------------------------------------------------------------------------------
 
 
-def test_the_caselist_words_are_its_schools_tournaments_and_team_codes() -> None:
+def test_the_caselist_words_are_its_school_words_and_team_codes() -> None:
     words = caselist_words(read_synthetic_caselist(FIXTURE).disclosures)
-    for word in ("ashgrove", "birchmoor", "cedarvale", "driftwood", "fictional", "invitational"):
-        assert word in words
-    for word in ("imaginary", "classic", "later", "tournament", "xx", "yy", "kk"):
-        assert word in words
+    assert words == {
+        *("ashgrove", "birchmoor", "cedarvale", "driftwood", "fictional"),
+        *("xx", "yy", "qq", "zz", "vv", "ww", "jj", "kk"),
+    }
+
+
+def test_a_tournaments_words_are_no_caselist_words() -> None:
+    # `v1-e32-t28`, the PM's ruling (b): `fictional` stays, as a school's word too.
+    words = caselist_words(read_synthetic_caselist(FIXTURE).disclosures)
+    for word in ("invitational", "imaginary", "classic", "later", "tournament"):
+        assert word not in words
 
 
 def test_a_name_holding_a_caselist_word_is_withheld() -> None:
     words = caselist_words(read_synthetic_caselist(FIXTURE).disclosures)
     assert is_withheld("cedarvale crash", words)
-    assert is_withheld("crash at the invitational", words)
+    assert is_withheld("crash at the fictional invitational", words)
     assert is_withheld("qq surge", words)
+    assert not is_withheld("crash at the invitational", words)
+    assert not is_withheld("a classic recession, later", words)
     assert not is_withheld("recession", words)
     assert not is_withheld("economic collapse", words)
 
 
-def test_a_short_word_of_a_school_or_tournament_is_not_a_caselist_word() -> None:
+def test_a_short_word_of_a_school_is_not_a_caselist_word_and_no_tournament_word_is() -> None:
     disclosure = read_synthetic_caselist(FIXTURE).disclosures[0]
     short = disclosure.model_copy(update={"school": "Oak Fictional", "tournament": "Big Elm Open"})
     words = caselist_words([short])
-    assert "oak" not in words and "elm" not in words and "big" not in words
-    assert {"fictional", "open"} <= words
-    assert disclosure.team_code.casefold() in words
+    assert words == {"fictional", disclosure.team_code.casefold()}
 
 
 # ------------------------------------------------------------------------------------------------

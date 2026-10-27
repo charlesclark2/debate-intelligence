@@ -51,7 +51,9 @@ id; cards by rank). Nothing here computes a count; the service did.
 
 ## What is written exactly, and what is escaped
 
-A card's tag and short cite are written exactly as parsed in the CSV. A position's label, an
+A card's tag and short cite are written exactly as parsed in the CSV, but a tag holding a word of a
+caselist school or team code, which the report left out (`v1-e32-t28`), is an empty cell there and in
+report.md's tables. A position's label, an
 impact card's tag and cite, and a quoted CP text, alternative or role of the ballot, in Markdown,
 where a `|` would split a table cell and a `*` start emphasis, have those characters escaped with a
 backslash and runs of whitespace made one space, so the cell shows the same text. Shares are
@@ -93,6 +95,7 @@ from debate_core.domain.landscape_report import (
     LandscapeReport,
     LeadInSource,
     PositionStats,
+    TableTagsWithheld,
     TopCard,
 )
 from debate_core.domain.landscape_schools import SchoolRow, SchoolView
@@ -156,7 +159,7 @@ TOP_CARD_COLUMNS: Final = (
 IMPACT_CARD_COLUMNS: Final = (*TOP_CARD_COLUMNS, "scenario", "internal_link_tag")
 """impact_cards.csv's columns: a top card's, of the cluster's labelled copies (`v1-e32-t10`), then its
 scenario and its labelled internal link's tag (`v1-e32-t14`), empty when that holds a word of a caselist
-school, team code or tournament (`v1-e32-t25`). The card above it is report.md's only."""
+school or team code (`v1-e32-t25`). The card above it is report.md's only."""
 
 TREND_COLUMNS: Final = (
     "position_id",
@@ -488,16 +491,29 @@ def _header_section(report: LandscapeReport, trends: LandscapeTrends | None = No
         "**tag**; and the **card above** it, the card "
         "directly above it in its block when that is not an impact card itself: where it sits, not what it "
         "does. None is guessed. A rank with none of these is left out, and the position says how many "
-        "were. A scenario name or a tag holding a word of a caselist school, team code or tournament is "
-        "withheld, and the next one names the rank.",
+        "were. A scenario name or a tag holding a word of a caselist school or team code is withheld, and "
+        "the next one names the rank.",
         "* **The link chain** of each advantage and DA is its most-read card for each role a team labelled, "
         "by a heading under the position or the tag's first words: uniqueness (`U`, `UQ`), link, internal "
         "link (`IL`) and impact, and for an advantage harms, inherency and solvency. An `AT:` heading, a "
         "heading naming two roles, and a card that answers the position or is read on the other side fill "
         "no role. A role no team labelled says so.",
+        _tags_left_empty(report.table_tags_withheld),
         *([_trends_bullet(trends)] if trends is not None else []),
         "",
     ]
+
+
+def _tags_left_empty(withheld: TableTagsWithheld) -> str:
+    """The header's line on the tags the tables withhold (`v1-e32-t28`), with how many per table."""
+    return (
+        "* **Tags left empty**: a tag holding a word of a caselist school or team code is withheld wherever "
+        "the report quotes one. In the impact cards, the link chains, `top_cards.csv` and `impact_cards.csv` "
+        "its cell is left empty and its row kept, with its rank, teams and cite: "
+        f"{withheld.impact_cards:,} in the impact cards, {withheld.chain_cards:,} in the link chains and "
+        f"{withheld.top_cards:,} in `top_cards.csv`. A tournament's words are not withheld: they are as "
+        "often the topic's own words, and name no team without a team code."
+    )
 
 
 def _no_positions_section(report: LandscapeReport) -> list[str]:
@@ -708,10 +724,9 @@ def _chain_coverage_lines(kind: PositionKind, chains: ChainCoverage) -> list[str
         "",
         f"* Impact rows: {rows:,}; with a scenario two or more teams name: {chains.rows_with_scenario:,}.",
         f"* Ranks named {named}; left out: {chains.rows_left_out:,}.",
-        "* Scenario names withheld for holding a word of a caselist school, team code or tournament: "
+        "* Scenario names withheld for holding a word of a caselist school or team code: "
         f"{chains.withheld_names:,}.",
-        "* Tags withheld for holding a word of a caselist school, team code or tournament: "
-        f"{chains.withheld_tags:,}.",
+        f"* Tags withheld for holding a word of a caselist school or team code: {chains.withheld_tags:,}.",
         f"* Positions with no labelled card, by role: {gaps}.",
         "",
     ]

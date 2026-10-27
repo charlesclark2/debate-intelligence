@@ -551,6 +551,11 @@ list, `report.md` comes in three parts (`v1-e32-t20`, from your read of 2026-10-
 * **Neither side**: positions either side reads, the overviews (counted on both sides), new this week,
   rising and falling, and what the report could not count.
 
+**What the tables withhold** (`v1-e32-t28`). A tag holding a word of a caselist school or a team code is
+left empty in the impact cards, the link chains, `top_cards.csv` and `impact_cards.csv`, its row kept
+with its rank, teams and cite, and the header counts the cells per table. A tournament's words are not
+withheld: they are often your topic's own words, and without a team code they name no team.
+
 ## Who reads each position: the school view
 
 Beside the report, each run writes the school view, `schools.md` and `schools.csv`, which name schools
@@ -607,8 +612,8 @@ says in brackets where the name came from, so you can judge it:
 
 A rank none of these names is left out rather than shown empty, and the position says how many were
 ("Ranks left out, with no scenario, internal link, link, tag or card above to name them: 1."). A tag, a
-link or a card above holding a word of a caselist school, team code or tournament is withheld like a scenario
-name, and the next source names the rank.
+link or a card above holding a word of a caselist school or team code is withheld like a scenario name,
+and the next source names the rank.
 
 Each kind says how many of its documents carry no scenario heading and no role label, how many ranks
 each source names and how many are left out, and how many scenario names and tags were withheld. On
@@ -652,9 +657,9 @@ documents beside each as a comment:
   after the seed shows nothing until you add it. The operator's dry run counts, per kind, the words two
   or more teams use under a position with a list that its list does not hold: when that count is above
   zero, it is time to look at the lists again. The words themselves are never printed.
-* **Never write** a school, a team code or a tournament's word, in a name or a form: the report withholds
-  a name holding one anyway, and counts it. Never change or remove an `id`. A form is listed once per
-  position, and a name once.
+* **Never write** a school or a team code in a name or a form: the report withholds a name holding one
+  anyway, and counts it. Avoid a tournament's name too, though the report no longer withholds its words.
+  Never change or remove an `id`. A form is listed once per position, and a name once.
 * **A list edit moves counts,** so once the file's version is released it comes with a minor bump
   ([Bump `taxonomy_version`](#bump-taxonomy_version)); 1.4.0 is not released yet, so the seed's edit needs
   none. Check it with `uv run pytest tests/config`.

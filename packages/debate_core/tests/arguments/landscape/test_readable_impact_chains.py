@@ -130,10 +130,15 @@ def test_the_impact_sections_match_the_hand_written_golden() -> None:
     assert sections == (READABLE / "impact_sections.md").read_text(encoding="utf-8")
 
 
-def test_the_rest_of_report_md_is_the_unchanged_caselists() -> None:
+def test_the_rest_of_report_md_is_the_unchanged_caselists_but_for_the_tags_left_empty() -> None:
+    # `v1-e32-t28`: the Costs advantage's rank 1, holding `cedarvale`, leaves its impact and chain cells
+    # empty.
     _, rest = _split(_bundle_files()["report.md"])
     _, base_rest = _split((GOLDEN / "report.md").read_text(encoding="utf-8"))
-    assert rest == base_rest
+    assert rest == base_rest.replace(
+        "0 in the impact cards, 0 in the link chains and 0 in `top_cards.csv`",
+        "1 in the impact cards, 1 in the link chains and 0 in `top_cards.csv`",
+    )
 
 
 def test_impact_cards_csv_matches_the_hand_written_golden() -> None:
@@ -195,11 +200,12 @@ def test_a_blank_tag_is_no_tag() -> None:
 
 
 def test_a_withheld_tag_falls_through_to_the_card_above() -> None:
+    # `v1-e32-t28`: the row keeps no withheld tag either; the impact table leaves its cell empty.
     report = _report(_with_edits(_edits()))
     rank_1 = report.impact_cards[0]
     assert (rank_1.position_id, rank_1.tag, rank_1.card_above_tag, rank_1.named_by) == (
         "costs-advantage",
-        "2. Extinction from a Cedarvale collapse",
+        None,
         "Single payer cuts administrative costs",
         CARD_ABOVE,
     )

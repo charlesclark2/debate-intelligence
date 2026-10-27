@@ -81,7 +81,7 @@ BUNDLE = (
     "report.md",
 )
 KEYS = [f"reports/landscape/{CASELIST}/2026-09-15/{name}" for name in BUNDLE]
-PLANTED_CODE = {("neg-two", 0): "As PX argued, new spending triggers a crowd-out"}
+PLANTED_TOURNAMENT = {("neg-two", 0): "At Thistle Open, new spending triggers a crowd-out"}
 
 
 def _installation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, world: SyntheticRun) -> None:
@@ -139,8 +139,12 @@ def world(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> SyntheticRun:
 
 @pytest.fixture
 def planted_world(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> SyntheticRun:
-    """`synthetic26` with Harrowgate Prep's code `PX` in a tag every report lists."""
-    planted = plant_synthetic_run(tmp_path / "world", planted_tags=PLANTED_CODE)
+    """`synthetic26` with the tournament `Thistle Open` in a tag every report lists.
+
+    Since `v1-e32-t28` the report withholds a tag holding a team code, and quotes one holding a
+    tournament's words, which the scan before sharing looks for.
+    """
+    planted = plant_synthetic_run(tmp_path / "world", planted_tags=PLANTED_TOURNAMENT)
     _installation(monkeypatch, tmp_path, planted)
     return planted
 
@@ -822,15 +826,15 @@ def test_publish_in_the_test_environment_is_refused(
 # ------------------------------------------------------------------------------------------------
 
 
-def test_publish_with_a_planted_team_code_is_refused_printing_the_hit_and_its_digest(
+def test_publish_with_a_planted_tournament_is_refused_printing_the_hit_and_its_digest(
     planted_world: SyntheticRun, buckets: S3Client
 ) -> None:
     result = landscape(planted_world, "--caselist", CASELIST, "--publish", json_output=False)
 
     assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
     assert "Scan: 1 hit(s), 1 not yet accepted (digest " in result.stdout
-    assert "top_cards.csv:" in result.stdout and "team_code 'PX'" in result.stdout
-    assert "As PX argued" in result.stdout
+    assert "top_cards.csv:" in result.stdout and "tournament 'Thistle Open'" in result.stdout
+    assert "At Thistle Open" in result.stdout
     assert "SCAN_HITS_NOT_ACCEPTED" in result.output and "--accept-scan-hits" in result.output
     assert _keys(buckets, DEV_BUCKET) == []
     assert (

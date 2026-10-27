@@ -22,6 +22,8 @@ module is the report as values; `LandscapeReportService` builds it and the rende
 * under each impact row its scenario and internal link, and per DA and advantage one
   :class:`ChainCard` per chain role, with a :class:`ChainCoverage` per kind (`v1-e32-t14`); and what
   names each impact row, a :class:`LeadInSource`, counted per kind (`v1-e32-t25`);
+* how many tags the tables left empty for holding a word of a caselist school or team code, a
+  :class:`TableTagsWithheld` (`v1-e32-t28`);
 * an :class:`UnclassifiedSummary`: what the report could not count, by cards and by rounds;
 * how affirmative rounds were identified, one :class:`AffIdentification` per method;
 * :class:`AdvantagesByAff` (`v1-e32-t15`): under each aff `v1-e32-t09` assigned rounds to, and each
@@ -92,6 +94,7 @@ __all__ = [
     "PositionStats",
     "ReportHeader",
     "RoleGap",
+    "TableTagsWithheld",
     "TopCard",
     "TransitionPlans",
     "UnassignedAdvantageReads",
@@ -437,6 +440,20 @@ class ImpactCoverage(DomainModel):
         return self.documents - self.labelled_documents
 
 
+class TableTagsWithheld(DomainModel):
+    """How many rows of each table had their tag withheld and left empty (`v1-e32-t28`).
+
+    A row's tag holding a word of a caselist school or team code is withheld; the row stays with its
+    rank, teams, cite and source.
+    """
+
+    impact_cards: int = Field(
+        default=0, ge=0, description="Impact rows: report.md's impact tables and impact_cards.csv."
+    )
+    chain_cards: int = Field(default=0, ge=0, description="Link-chain rows.")
+    top_cards: int = Field(default=0, ge=0, description="top_cards.csv's rows.")
+
+
 class AffIdentification(DomainModel):
     """How many affirmative rounds one method identified the aff of."""
 
@@ -687,6 +704,10 @@ class LandscapeReport(DomainModel):
     )
     chain_coverage: tuple[ChainCoverage, ...] = Field(
         default=(), description="One per kind of :data:`IMPACT_KINDS` (`v1-e32-t14`)."
+    )
+    table_tags_withheld: TableTagsWithheld = Field(
+        default_factory=TableTagsWithheld,
+        description="The tags the tables left empty for holding a caselist word (`v1-e32-t28`).",
     )
     unclassified: UnclassifiedSummary
     aff_identification: tuple[AffIdentification, ...] = Field(

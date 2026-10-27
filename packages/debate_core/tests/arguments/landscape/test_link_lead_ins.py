@@ -136,10 +136,15 @@ def test_the_impact_sections_match_the_hand_written_golden() -> None:
     assert sections == (LINKS / "impact_sections.md").read_text(encoding="utf-8")
 
 
-def test_the_rest_of_report_md_is_the_unchanged_caselists() -> None:
+def test_the_rest_of_report_md_is_the_unchanged_caselists_but_for_the_tags_left_empty() -> None:
+    # `v1-e32-t28`: cluster 41 (`b5` paragraph 9), holding `birchmoor`, is the Spending DA's internal-link
+    # row and its top_cards.csv rank 5; both leave the tag cell empty.
     _, rest = _split(_files(_with_edits(_edits()))["report.md"])
     _, base_rest = _split((GOLDEN / "report.md").read_text(encoding="utf-8"))
-    assert rest == base_rest
+    assert rest == base_rest.replace(
+        "0 in the impact cards, 0 in the link chains and 0 in `top_cards.csv`",
+        "0 in the impact cards, 1 in the link chains and 1 in `top_cards.csv`",
+    )
 
 
 def test_impact_cards_csv_matches_the_hand_written_golden() -> None:

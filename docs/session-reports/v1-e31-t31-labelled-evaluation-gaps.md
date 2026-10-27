@@ -940,16 +940,9 @@ published all four caselists' `docx-7` directories**, wherever and whenever C7 i
 before this PR merges, and its Terraform runs from a worktree at that tag's commit, so this PR may merge
 once that tag's validate-dev run is green.
 
-## PM review, second
+### The two edits and the `ci` fix, checked by the PM 2026-10-27
 
-**Verdict:** ACCEPTED
-<!-- ACCEPTED / CHANGES_REQUESTED -->
-
-**Reviewed by / date:** PM (Claude), 2026-10-27
-
-**Notes:**
-
-The two edits the first review asked for are made, and the one fix the PR's `ci` needed is right.
+Recorded under the review above, which stands. The two edits the first review asked for are made, and the one fix the PR's `ci` needed is right.
 1. **The C steps are reordered as ruled.** C5 now pushes and plans without applying. C6 and C7 parse
    and publish every caselist's `docx-7` directory, and C8 applies the image only after all four C7
    publishes exit 0 and the PM has read C5's plan. The reason under the C heading is cited from the

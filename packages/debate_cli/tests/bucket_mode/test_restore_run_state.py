@@ -537,6 +537,7 @@ def test_bytes_that_are_not_the_digest_named_stop_the_command_and_none_of_them_i
 
     stopped, _ = restore_with_sources(world, copy, "--caselist", CASELIST)
 
+    assert stopped["exit_code"] == ExitCode.DOMAIN_FAILURE, stopped
     assert stopped["error"]["code"] == "RESTORED_SOURCES_INCOMPLETE", stopped
     assert stopped["error"]["details"]["mismatched"] == 1
     assert victim not in blobs_in(copy)
@@ -553,6 +554,7 @@ def test_a_disk_without_room_for_the_sources_is_refused_before_any_fetch(
 
     refused, said = restore_with_sources(world, copy, "--caselist", CASELIST)
 
+    assert refused["exit_code"] == ExitCode.DOMAIN_FAILURE, refused
     assert refused["error"]["code"] == "TOO_LITTLE_ROOM_FOR_SOURCES", refused
     assert "Fetching " in said, "the count and bytes are said before the refusal"
     assert blobs_in(copy) == {}
@@ -587,5 +589,6 @@ def test_a_snapshot_the_copy_has_no_manifest_of_fetches_nothing(world: World, tm
 
     refused, _ = restore_with_sources(world, copy, "--caselist", CASELIST, "--snapshot", "2026-08-25")
 
+    assert refused["exit_code"] == ExitCode.DOMAIN_FAILURE, refused
     assert refused["error"]["code"] == "SNAPSHOTS_NOT_RESTORED", refused
     assert blobs_in(copy) == {}

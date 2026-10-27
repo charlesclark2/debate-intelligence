@@ -178,9 +178,43 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-27
 
 **Notes:**
+
+The month is held the way the day is, by the same comparison, and the counts showed where its blind
+spots are.
+1. **ac1 passes.** One usage log (`~/.debate-research/dev/usage/`) sees every model call that can be
+   made today. Its blind spots are named: another data directory, prod once its grant exists, the
+   unlogged probe and another machine. They are exactly what `v1-e05-t16`'s AWS alarm is for. No
+   checkpoint was needed.
+2. **ac2 and ac3 pass.** Red against the skeleton: 28 failed plus the smoke check, each at an
+   assertion for its reason. Green: 408. The month turns at midnight in Chicago, with files named in
+   Chicago or in UTC. Both profiles set $50 a month, and prod's daily limit is $1.50.
+3. **Mutants: 17, the PM's four among them.** One survived (a file's month total overwritten) and was
+   caught after the ledger test asserted the month. The `dev.toml` mutant needed the source pin first,
+   because the built-in $50 would have masked it, and that pin was written before the run.
+4. **Decisions accepted:**
+   * the month read from each record's UTC timestamp, not the file name;
+   * one margin day each side of the month;
+   * the day still the machine's local day, as `v1-e05-t07` built it;
+   * `usage` with no date showing this month in Chicago;
+   * the remaining amount in the refusal;
+   * the `test` profile without a month;
+   * built-in values equal to the bundled ones;
+   * the ceiling as a named constant, checked per budget.
+   The 30 to 33 file opens per guarded call are fine at this volume (e32-t07's sample is about 500
+   calls).
+5. **The follow-up is taken.** When `v1-e05-t17` applies prod's grant, dev and prod would each hold
+   $50, or $100 together. The PM amends `v1-e05-t17` so that the coach splits the $50 between the
+   two profiles' monthly limits in that task, with dev $40 and prod $10 unless he says otherwise. The
+   AWS alarm stays the account-wide check.
+6. **The affected set** (357 files, widened by `settings.py` under the root conftest) is left to the
+   PR's `ci` under agreement 10. The touched files, the router's directories, the always-run list and
+   the docs checks passed (1,419), as did the static checks.
+
+No re-review is needed. The Goal is `Succeeded`, and the PR merges in full. It changes nothing the
+weekly run calls, so it may merge before Thursday's image.

@@ -212,7 +212,10 @@ def test_each_of_several_omissions_sits_after_all_the_kept_text_before_it() -> N
         evidence_text="x" * 40,
         evidence_start_offset=10,
         evidence_end_offset=60,
-        omitted_ranges=(CardOmission(start_offset=20, end_offset=25), CardOmission(start_offset=40, end_offset=45)),
+        omitted_ranges=(
+            CardOmission(start_offset=20, end_offset=25),
+            CardOmission(start_offset=40, end_offset=45),
+        ),
         spans=(),
     )
 
@@ -276,7 +279,11 @@ def test_a_card_with_no_evidence_lays_out_nothing() -> None:
 def cut_cards(draw: st.DrawFn) -> Card:
     """A card whose evidence has random cuts, interpolations and spans; its text is letters only."""
     length = draw(st.integers(min_value=1, max_value=40))
-    cuts = sorted(draw(st.sets(st.integers(min_value=1, max_value=length - 1), max_size=3))) if length > 1 else []
+    cuts = (
+        sorted(draw(st.sets(st.integers(min_value=1, max_value=length - 1), max_size=3)))
+        if length > 1
+        else []
+    )
     anchors = sorted(draw(st.sets(st.integers(min_value=0, max_value=length), max_size=3)))
     spans: list[CardSpan] = []
     for style in (U, H):
@@ -319,7 +326,9 @@ def cut_places(card: Card) -> list[int]:
 
 @PROPERTY_SETTINGS
 @given(cut_cards())
-def test_the_layout_reads_the_evidence_in_order_with_every_cut_and_interpolation_in_its_place(card: Card) -> None:
+def test_the_layout_reads_the_evidence_in_order_with_every_cut_and_interpolation_in_its_place(
+    card: Card,
+) -> None:
     pieces: tuple[EvidencePiece, ...] = lay_out_evidence(card)
     position = 0
     cuts: list[int] = []

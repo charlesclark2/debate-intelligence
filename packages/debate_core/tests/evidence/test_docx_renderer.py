@@ -23,6 +23,8 @@ from __future__ import annotations
 import hashlib
 import io
 import re
+import shutil
+import subprocess
 import zipfile
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
@@ -979,3 +981,62 @@ def test_a_manifest_an_xml_part_cannot_carry_is_refused_before_anything_is_writt
 
     with pytest.raises(RenderRefused, match=re.escape("the manifest holds U+FFFF")):
         render(CardToRender(card, HAND_CITE))
+
+
+# --------------------------------------------------------------------------------------------
+# Node renderer-suite: LibreOffice opens the file (slow; validate-dev's slow job installs soffice)
+# --------------------------------------------------------------------------------------------
+
+
+@pytest.mark.slow
+def test_libreoffice_opens_a_rendered_document_headless_and_reads_every_paragraph(tmp_path: Path) -> None:
+    """A file Word or LibreOffice would offer to repair does not load headless, so nothing is converted.
+
+    It skips only where soffice is absent, which is a laptop: validate-dev's slow job installs it, and
+    a skip there fails the tier (v1-e01-t10).
+    """
+    soffice = shutil.which("soffice") or shutil.which("libreoffice")
+    if soffice is None:
+        pytest.skip("LibreOffice (soffice) is not installed here; validate-dev's slow job installs it")
+    unverified = hand_card(card_id="0CARD000000000000000000002", tag="An unverified card")
+    source = tmp_path / "cards.docx"
+    source.write_bytes(
+        render(
+            CardToRender(verified(unicode_card()), HAND_CITE),
+            CardToRender(unverified, HAND_CITE, ("CITATION_UNVERIFIED",)),
+            headings=DocumentHeadings(pocket="Aff", hat="Methane", block="Feedbacks"),
+        )
+    )
+
+    result = subprocess.run(
+        [
+            soffice,
+            "--headless",
+            "--norestore",
+            f"-env:UserInstallation={(tmp_path / 'profile').as_uri()}",
+            "--convert-to",
+            "txt:Text (encoded):UTF8",
+            "--outdir",
+            str(tmp_path / "converted"),
+            str(source),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=180,
+        check=False,
+    )
+
+    converted = tmp_path / "converted" / "cards.txt"
+    assert result.returncode == 0, result.stderr
+    assert converted.exists(), f"LibreOffice converted nothing: {result.stdout} {result.stderr}"
+    text = converted.read_text(encoding="utf-8-sig")
+    for expected in (
+        "Aff",
+        "Feedbacks",
+        "Arctic methane feedback is already measurable",
+        "UNVERIFIED — not a finished card: CITATION_UNVERIFIED",
+        HAND_CITE.full_cite,
+        "[the island]Ærø’s “café” — naïve 🐘",
+        f"ts.{MARKER}[and]Ice melts[emphasis added]",
+    ):
+        assert expected in text, expected

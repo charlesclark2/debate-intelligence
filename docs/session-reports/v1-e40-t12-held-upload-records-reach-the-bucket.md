@@ -340,9 +340,46 @@ for `v1-e40-t13`, it rides in the same image. No deploy commands are drafted her
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-27
 
 **Notes:**
+
+Built as ruled. The most useful part is the correction the session found for itself.
+1. **ac1 passes, with its correction.** The counts missed the search index stage's bound-method
+   reconcile (`v1-e39-t09`). The session found it when a local-mode test passed that should have
+   failed, and reported it first rather than burying it. The ruling stands: the gaps this closes are
+   narrower but real. A task that stops between its post-publish save and its index stage loses the
+   record for good, and the backfile import never runs the index stage.
+2. **ac2 passes.** Red with `run_state.py` at the start commit: 10 failed, each on the record's
+   absence. The 4 that passed hold either way, and the report says why. Green: 14 passed. The
+   whole-week CLI test over moto covers status, the removal's dry run and `--execute` from another
+   data directory, the lock held at every upload, and a rule-3 scan of every key, metadata value and
+   line.
+3. **Mutants: 9, the PM's four among them.** 8 were caught. Mutant 2 is accepted as equivalent:
+   after the save, an extra write finds nothing missing, and in bucket mode the fence refuses it.
+   Mutant 1 is the version of that write that matters, and it was caught.
+4. **Deviations 1 to 3 accepted.**
+   * The amended rule now names both writers of `manifests/_suppression/`, which had not been true
+     since `v1-e39-t09`.
+   * The PM adds `docs/architecture` to `constraints.packages` in the next batch.
+   * The extra docstrings sit inside `debate_core.application` and correct what had become false.
+5. **Decisions accepted:**
+   * the record is written before the withheld and confirmed checks;
+   * it goes through the union's existing set-union append, with no second implementation;
+   * the one known edge (a redone download no longer carries the upload) matches an upload never
+     seen, as ruled;
+   * a failed record write stops that save, like any other bucket write under the same lease.
+6. **Follow-ups:**
+   * 1 is the PM's (packages).
+   * 2 is taken: the PM's next batch has the layout document's exception name every record beside
+     the list that the index stage reconciles, not only this one.
+   * The kill switch repeated from `test_bucket_mode_kills.py` could move to a helper module beside
+     the tests, as `tests/smoke/installed_build.py` is. Noted, not filed.
+7. **The affected set** (340 files, widened by hub-module docstrings) is left to the PR's `ci` under
+   agreement 10. Five batches within the line and the static checks passed.
+
+No re-review is needed. The Goal is `Succeeded`, and the PR merges in full. If it merges before
+Thursday 2026-10-29, it rides in `v1-e40-t13`'s image.

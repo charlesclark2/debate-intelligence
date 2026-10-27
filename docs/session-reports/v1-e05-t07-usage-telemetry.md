@@ -23,6 +23,10 @@ wrapped. An invalid answer now carries its usage (`InvalidModelOutput.usage`, se
 adapter). That puts both attempts of a repaired call in the log and in the budget, which the spec's
 2026-10-24 amendment asks for. A test shows the first attempt's tokens in the log.
 
+*Superseded by the prices (2026-10-26):* the next paragraph, its two questions and the "Look first
+at" line. The PM ruled on both (Deviations 1 and 2), the Goal is Succeeded, and the PM's prices are
+committed, so dev and prod no longer refuse calls as unpriced.
+
 Every plan-node criterion passes, and ac2, ac3 and ac4 pass. All 21 mutants are caught, including
 the PM's three; one first survived and a test was added for it. The phase stays **InProgress**
 because two things need the PM:
@@ -276,6 +280,9 @@ are the results shown.
 
 ## Operator follow-ups
 
+*Superseded by the prices:* done: the PM's prices of 2026-10-26 are committed (`ea9281a`). The request
+below is kept as it was handed over.
+
 **Read the prices for `config/model_pricing.yaml`.** The PM commits them in a batch. This is
 read-only and finishes in under a second. Where: your Mac, in the task worktree.
 
@@ -379,3 +386,31 @@ two open questions, so the Goal can be `Succeeded`.
    agreement 10. The changed directories and the always-run list passed, as did the static checks.
 
 No re-review is needed. Set the Goal to `Succeeded`, and the PR merges in full.
+
+## PM review, second
+
+**Verdict:** ACCEPTED
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:** PM (Claude), 2026-10-26
+
+**Notes:**
+
+1. **The prices are as the PM gave them.** `config/model_pricing.yaml` holds the operator's
+   2026-10-26 read, converted to per 1,000 and each with `as_of` and `source`:
+   * Haiku 0.0001 / 0.0005, Sonnet 0.002 / 0.01 and Opus 0.004 / 0.02 per 1,000 input / output
+     tokens;
+   * Titan 0.00002 per 1,000 input tokens;
+   * Cohere 2.0 per 1,000 search units.
+2. **The pins** now check the committed table and one hand-worked cost per kind of call. Changing
+   one price fails two of them, and the file was restored byte for byte.
+3. **FYI 1's gap closes with this branch.** Calls in dev and prod are held to their daily limits at
+   these prices rather than refused as unpriced, so `v1-e32-t07`'s live run no longer waits on a
+   price batch.
+4. **The Cohere note** (a document over 512 tokens counted as several) is recorded where the
+   ceiling's gaps are listed.
+5. **The Goal is `Succeeded`** after the first review's rulings.
+
+Two lines went stale with the prices: the Summary's "The phase stays InProgress" paragraph and the
+Operator follow-ups' price request. The session marks both as superseded in this commit. Nothing
+else changes, and the PR merges in full.

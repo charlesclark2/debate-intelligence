@@ -39,10 +39,10 @@ from tests.fixtures.verification.verification_world import run
 from debate_core.application.export_service import ExportService
 from debate_core.domain import (
     Card,
-    CitationField,
-    CitationFieldSource,
     CardOmission,
     CardSpan,
+    CitationField,
+    CitationFieldSource,
     Interpolation,
     SpanStyle,
     VerificationStatus,
@@ -237,7 +237,8 @@ FULLY_VERIFIED_CITATION: Final = DEFAULT_CITATION.evolve(
 
 
 def hand_card(**changes: Any) -> Card:
-    return build_card(**{"citation": FULLY_VERIFIED_CITATION, **changes})
+    changes.setdefault("citation", FULLY_VERIFIED_CITATION)
+    return build_card(**changes)
 
 
 def verified(card: Card) -> Card:

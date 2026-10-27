@@ -57,7 +57,7 @@ from xml.sax.saxutils import quoteattr
 import docx
 from docx.document import Document
 from docx.enum.text import WD_COLOR_INDEX
-from docx.shared import Pt
+from docx.shared import Pt, RGBColor
 from docx.styles.style import CharacterStyle, ParagraphStyle
 from docx.text.paragraph import Paragraph
 from docx.text.run import Run
@@ -70,7 +70,13 @@ from debate_core.domain.style_profile import (
     WriterDocumentDefaults,
     WriterStyleDefinition,
 )
-from debate_core.evidence.card_rendering import CardToRender, DocumentHeadings, RenderRefused
+from debate_core.evidence.card_rendering import (
+    CardToRender,
+    DocumentHeadings,
+    RenderRefused,
+    banner_text,
+    cite_marks,
+)
 from debate_core.evidence.format_profile import ResolvedFormatProfile
 from debate_core.evidence.manifest import CardManifest
 from debate_core.evidence.run_segmentation import (
@@ -242,6 +248,11 @@ class _CardDocumentWriter:
 
         self._paragraph(StructuralUnit.TAG).add_run(card.tag)
 
+        banner = banner_text(item)
+        if banner is not None:
+            run = self._paragraph(StructuralUnit.OTHER).add_run(banner)
+            run.font.color.rgb = RGBColor.from_string(layout.unverified_banner_color)
+
         cite = self._paragraph(StructuralUnit.CITE)
         short = cite.add_run(item.cite.short_cite)
         if layout.cite_block.short_cite_bold:
@@ -250,6 +261,9 @@ class _CardDocumentWriter:
             _size(short, layout.cite_block.full_cite_half_points)
         if item.cite.cite_line:
             _size(cite.add_run(item.cite.cite_line), layout.cite_block.full_cite_half_points)
+        marks = cite_marks(card.citation)
+        if marks:
+            _size(cite.add_run(" " + " ".join(marks)), layout.cite_block.full_cite_half_points)
 
         if card.evidence_text:
             self._write_evidence(

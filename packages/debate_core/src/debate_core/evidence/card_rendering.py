@@ -10,6 +10,15 @@ layer, by the application, and are handed to it as plain values in :class:`CardT
   the verifier's codes. Only codes are accepted, upper-case words joined by underscores, so a banner
   can never carry a sentence, and with it a word of the snapshot.
 
+Two texts are decided here, from those values and the card alone:
+
+* :func:`banner_text`, the banner over every card that is not VERIFIED: its status, "not a finished
+  card", and its reason codes, as the spec words it ("UNVERIFIED — not a finished card: <reasons>");
+* :func:`cite_marks`, one mark per cite field the cite shows without verifying, from the citation's
+  own flags: "[author unverified]" for a field shown unverified, or a required field that is not
+  verified at all; "[author cleared by student]" for a field the student's last cite edit emptied
+  (`Citation.cleared_by_student`), which is the student's decision, not a failure to verify.
+
 This module imports no document library, so the application layer can build these values and
 `v1-e06-t07`'s reader can share them without reaching python-docx (the import contract "Document
 libraries stay inside debate_core.integrations.docx_parser" holds `debate_core.application` off it).
@@ -21,12 +30,32 @@ import re
 from dataclasses import dataclass
 from typing import Final
 
-from debate_core.domain import Card, VerificationStatus
+from debate_core.domain import Card, Citation, CitationField, VerificationStatus
+from debate_core.domain.citation import CITATION_FIELD_NAMES, REQUIRED_CITATION_FIELDS
 
-__all__ = ["CardToRender", "CiteText", "DocumentHeadings", "RenderRefused"]
+__all__ = [
+    "CITE_FIELD_LABELS",
+    "CardToRender",
+    "CiteText",
+    "DocumentHeadings",
+    "RenderRefused",
+    "banner_text",
+    "cite_marks",
+]
 
 REASON_CODE: Final = re.compile(r"^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$")
 """A failure reason as a program reads it: `CITATION_UNVERIFIED`, `TEXT_MISMATCH`."""
+
+CITE_FIELD_LABELS: Final = {
+    "authors": "author",
+    "author_credentials": "credentials",
+    "title": "title",
+    "publication": "publication",
+    "published_at": "date",
+    "canonical_url": "URL",
+    "accessed_at": "accessed date",
+}
+"""How a mark names each cite field, in cite order."""
 
 
 class RenderRefused(ValueError):
@@ -83,3 +112,24 @@ class DocumentHeadings:
     pocket: str | None = None
     hat: str | None = None
     block: str | None = None
+
+
+def banner_text(item: CardToRender) -> str | None:
+    """The banner over `item`'s card, or None for a VERIFIED card, which has none."""
+    status = item.card.verification_status
+    if status is VerificationStatus.VERIFIED:
+        return None
+    return f"{status.value} — not a finished card: {', '.join(item.unverified_reasons)}"
+
+
+def cite_marks(citation: Citation) -> tuple[str, ...]:
+    """A mark for each cite field shown unverified or cleared by the student, in cite order."""
+    marks: list[str] = []
+    for name in CITATION_FIELD_NAMES:
+        field: CitationField[object] = getattr(citation, name)
+        label = CITE_FIELD_LABELS[name]
+        if name in citation.cleared_by_student:
+            marks.append(f"[{label} cleared by student]")
+        elif not field.verified and (field.is_present or name in REQUIRED_CITATION_FIELDS):
+            marks.append(f"[{label} unverified]")
+    return tuple(marks)

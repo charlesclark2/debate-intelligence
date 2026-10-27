@@ -182,6 +182,16 @@ operator can still set a lower value, or a higher one through `DEBATE_MODELS__BU
 their own machine, and `config show` names where it came from.
 """
 
+MONTHLY_MODEL_BUDGET_CEILING_USD: Final = 50.0
+"""The coach's ceiling on model spend, in USD a calendar month, across dev and prod (2026-10-27).
+
+`models.budget_usd_monthly` holds a month to it, in America/Chicago (v1-e05-t15). Both bundled
+profiles set exactly this until the promotion, because only one environment calls models today, and
+prod's daily limit is it over thirty days, rounded down to $1.50. No committed profile sets a model
+budget above it, which `test_settings_environments.py` checks. The AWS Budgets alarm
+(v1-e05-t16) watches the account's real total, which no one machine's usage log can see.
+"""
+
 type SourceLabeller = Callable[[str], str]
 """A layer that labels itself per field, given the field's dotted path."""
 
@@ -1109,9 +1119,20 @@ class ModelSettings(SettingsGroup):
         description=(
             "Ceiling on model spend per local day, across every run on this machine, in USD; unset is "
             "no limit. Enforced by the BudgetGuard (debate_core.application.budget, v1-e05-t07) "
-            "against the day's usage log; the dev and prod values are set by "
-            "v1-e01-t09-dev-prerelease-channel. With a limit, a model with no price in "
-            "config/model_pricing.yaml is refused rather than treated as free."
+            "against the day's usage log. Dev's is $2, the capped sample's allowance; prod's $1.50, "
+            "the coach's $50 a month over thirty days (v1-e05-t15). With a limit, a model with no "
+            "price in config/model_pricing.yaml is refused rather than treated as free."
+        ),
+    )
+    budget_usd_monthly: float | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Ceiling on model spend per calendar month in America/Chicago, across every run on this "
+            "machine, in USD; unset is no limit. Enforced by the BudgetGuard as the daily limit is, "
+            "against every record of the month in the usage log, each placed by its own timestamp "
+            "(v1-e05-t15). With a limit, a model with no price in config/model_pricing.yaml is "
+            "refused rather than treated as free."
         ),
     )
     budget_usd_per_run: float | None = Field(
@@ -1387,6 +1408,7 @@ def _builtin_profiles() -> dict[Environment, dict[str, Any]]:
             "models": {
                 "routing_file": Path("config/model_routing.dev.yaml"),
                 "budget_usd_daily": DEV_DAILY_BUDGET_CAP_USD,
+                "budget_usd_monthly": MONTHLY_MODEL_BUDGET_CEILING_USD,
             },
         },
         Environment.PROD: {
@@ -1397,7 +1419,8 @@ def _builtin_profiles() -> dict[Environment, dict[str, Any]]:
             },
             "models": {
                 "routing_file": Path("config/model_routing.prod.yaml"),
-                "budget_usd_daily": 20.0,
+                "budget_usd_daily": 1.5,
+                "budget_usd_monthly": MONTHLY_MODEL_BUDGET_CEILING_USD,
             },
         },
         Environment.TEST: {

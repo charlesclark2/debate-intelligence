@@ -11,7 +11,10 @@ and read back by `debate-research usage`:
   and nowhere in code. A model with no price there costs `null`, with a warning, never a guess.
 * :class:`UsageLog`, the records: `<data_dir>/usage/YYYY-MM-DD.jsonl`, one file per local day
   (:func:`~debate_core.application.budget.local_day`), appended safely by calls running in
-  parallel. It is also the per-day ledger the budget guard reads; there is no second state file.
+  parallel. It is also the ledger the budget guard reads, for the run, the day and the month; there
+  is no second state file. A file is named by the date in this machine's zone, and the month is
+  America/Chicago's (:class:`~debate_core.application.budget.CalendarMonth`), so a month is added
+  up from each record's own timestamp, over its files and one either side (v1-e05-t15).
 
 Only calls a real router makes are recorded, in record and live mode. Replay serves cassettes and
 the fake router answers from fixtures, so neither costs anything or logs anything.
@@ -26,14 +29,14 @@ import threading
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from datetime import date, tzinfo
+from datetime import date, timedelta, tzinfo
 from pathlib import Path
 from typing import Any, Final, Literal, Self
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from debate_core.application.budget import Spend, UnreadableUsageLog, local_day
+from debate_core.application.budget import CalendarMonth, Spend, UnreadableUsageLog, local_day
 from debate_core.application.settings import ConfigurationError
 from debate_core.domain.base import UtcDatetime
 
@@ -43,6 +46,7 @@ __all__ = [
     "USAGE_DIRECTORY",
     "ModelPrice",
     "ModelPricing",
+    "MonthUsage",
     "UsageGroup",
     "UsageLog",
     "UsageRecord",
@@ -58,6 +62,10 @@ PRICING_FILE_NAME: Final = "model_pricing.yaml"
 
 USAGE_DIRECTORY: Final = "usage"
 """Where the usage log's files are, under the data directory."""
+
+MONTH_FILE_MARGIN: Final = timedelta(days=1)
+"""How far outside a month's dates its records can be filed. A file is named by the date in this
+machine's zone, and no zone's date is more than a day from Chicago's."""
 
 DOCUMENTS_PER_SEARCH_UNIT: Final = 100
 """How many documents one rerank search unit covers: one query over up to 100 documents."""
@@ -253,6 +261,19 @@ class UsageSummary:
         return sum(group.unpriced_calls for group in self.groups)
 
 
+@dataclass(frozen=True, slots=True)
+class MonthUsage:
+    """A calendar month's model usage in America/Chicago, in totals: what the monthly budget counts."""
+
+    month: CalendarMonth
+    calls: int
+    input_tokens: int
+    output_tokens: int
+    estimated_cost_usd: float
+    """The priced calls' cost; the unpriced calls are counted in `unpriced_calls`, not here."""
+    unpriced_calls: int
+
+
 def summarize(day: date, records: Iterable[UsageRecord]) -> UsageSummary:
     """`records` grouped by prompt id and model id, sorted by them, embed and rerank calls first.
 
@@ -296,6 +317,8 @@ class _Tail:
     lines: int = 0
     day_usd: float = 0.0
     run_usd: dict[str, float] = field(default_factory=dict[str, float])
+    month_usd: dict[CalendarMonth, float] = field(default_factory=dict[CalendarMonth, float])
+    """By each record's own month in Chicago, which is not always the month of the file's name."""
 
 
 class UsageLog:
@@ -348,7 +371,9 @@ class UsageLog:
         Raises :class:`~debate_core.application.budget.UnreadableUsageLog` naming the file and line
         of a line that is not a record.
         """
-        path = self.path_for(day)
+        return self._read_path(self.path_for(day))
+
+    def _read_path(self, path: Path) -> tuple[UsageRecord, ...]:
         try:
             data = path.read_bytes()
         except FileNotFoundError:
@@ -361,22 +386,53 @@ class UsageLog:
         """`day`'s records, summarized."""
         return summarize(day, self.read(day))
 
-    def spent(self, run_id: str, day: date) -> Spend:
-        """What `run_id` and `day` have spent, from the lines written so far.
+    def month_paths(self, month: CalendarMonth) -> tuple[Path, ...]:
+        """Every file a record of `month` can be in: its days' files and the one either side."""
+        first = month.first_day - MONTH_FILE_MARGIN
+        last = month.last_day + MONTH_FILE_MARGIN
+        return tuple(
+            self.path_for(first + timedelta(days=offset)) for offset in range((last - first).days + 1)
+        )
+
+    def month_usage(self, month: CalendarMonth) -> MonthUsage:
+        """Every record whose own time falls in `month` in Chicago, in totals.
+
+        Raises :class:`~debate_core.application.budget.UnreadableUsageLog` as :meth:`read` does.
+        """
+        records = [
+            record
+            for path in self.month_paths(month)
+            for record in self._read_path(path)
+            if CalendarMonth.of(record.recorded_at) == month
+        ]
+        return MonthUsage(
+            month=month,
+            calls=len(records),
+            input_tokens=sum(record.input_tokens or 0 for record in records),
+            output_tokens=sum(record.output_tokens or 0 for record in records),
+            estimated_cost_usd=sum((record.estimated_cost_usd or 0.0 for record in records), 0.0),
+            unpriced_calls=sum(1 for record in records if record.estimated_cost_usd is None),
+        )
+
+    def spent(self, run_id: str, day: date, month: CalendarMonth) -> Spend:
+        """What `run_id`, `day` and `month` have spent, from the lines written so far.
 
         Each file is read once, from where the last read stopped, so a long run does not read its
         day again for every call; lines another process appended since count too. A run's spend is
-        every line of it in any file this log has read; a line with no cost adds nothing. Raises
+        every line of it in any file this log has read; a month's is every line whose own time is
+        in it, from :meth:`month_paths`; a line with no cost adds nothing. Raises
         :class:`~debate_core.application.budget.UnreadableUsageLog` for a line that is not a record:
         what was spent is then unknown.
         """
         with self._lock:
             path = self.path_for(day)
-            self._tails.setdefault(path, _Tail())
+            for wanted in (path, *self.month_paths(month)):
+                self._tails.setdefault(wanted, _Tail())
             for tailed, tail in self._tails.items():
                 _catch_up(tailed, tail)
             run_usd = sum((tail.run_usd.get(run_id, 0.0) for tail in self._tails.values()), 0.0)
-            return Spend(run_usd=run_usd, day_usd=self._tails[path].day_usd)
+            month_usd = sum((tail.month_usd.get(month, 0.0) for tail in self._tails.values()), 0.0)
+            return Spend(run_usd=run_usd, day_usd=self._tails[path].day_usd, month_usd=month_usd)
 
 
 def _catch_up(path: Path, tail: _Tail) -> None:
@@ -401,6 +457,8 @@ def _catch_up(path: Path, tail: _Tail) -> None:
         cost = record.estimated_cost_usd or 0.0
         tail.day_usd += cost
         tail.run_usd[record.run_id] = tail.run_usd.get(record.run_id, 0.0) + cost
+        month = CalendarMonth.of(record.recorded_at)
+        tail.month_usd[month] = tail.month_usd.get(month, 0.0) + cost
     tail.offset += end
     tail.lines += len(records)
 

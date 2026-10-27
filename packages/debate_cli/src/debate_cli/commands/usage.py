@@ -12,6 +12,11 @@ mode appends to; replayed and fake calls cost nothing and are not there. A call 
 price in `config/model_pricing.yaml` has no cost, and is counted as unpriced rather than as free.
 Embedding and rerank calls run no prompt, and show as `-`.
 
+Under the day's total, the limits the budget guard holds calls to (v1-e05-t15): the daily limit,
+the calendar month's spend in America/Chicago, the month the budget counts, and the monthly limit.
+The month is the one the date is in, or without `--date` the one it is now in Chicago; its spend is
+every record whose own time falls in it, as the guard adds it up. An unset limit shows as `none`.
+
 The records and their summary are `debate_core.integrations.models.usage`'s; this is the rendering.
 """
 
@@ -24,12 +29,15 @@ import typer
 
 from debate_cli.context import cli_context, command_name
 from debate_cli.output import JsonValue, TableSpec
-from debate_core.application.budget import local_day
+from debate_core.application.budget import BUDGET_MONTH_ZONE, CalendarMonth, local_day
 
 __all__ = ["usage"]
 
 NO_PROMPT: Final = "-"
 """What the prompt column says for an embedding or rerank call, which runs no prompt."""
+
+NO_LIMIT: Final = "none"
+"""What the cost column says for a limit that is not set."""
 
 
 class InvalidUsageDate(typer.BadParameter):
@@ -50,8 +58,13 @@ def usage(
     cli = cli_context(ctx)
     services = cli.services
     log = services.usage_log()
-    wanted = _parse_day(day) if day is not None else local_day(services.clock()(), log.local_zone)
+    now = services.clock()()
+    wanted = _parse_day(day) if day is not None else local_day(now, log.local_zone)
+    month = CalendarMonth.containing(wanted) if day is not None else CalendarMonth.of(now)
     summary = log.summary(wanted)
+    month_usage = log.month_usage(month)
+    daily_limit = services.settings.models.budget_usd_daily
+    monthly_limit = services.settings.models.budget_usd_monthly
     groups: list[JsonValue] = [
         {
             "prompt_id": group.prompt_id,
@@ -74,6 +87,16 @@ def usage(
             "estimated_cost_usd": summary.estimated_cost_usd,
             "unpriced_calls": summary.unpriced_calls,
         },
+        "month": {
+            "month": month.isoformat(),
+            "zone": BUDGET_MONTH_ZONE.key,
+            "calls": month_usage.calls,
+            "input_tokens": month_usage.input_tokens,
+            "output_tokens": month_usage.output_tokens,
+            "estimated_cost_usd": month_usage.estimated_cost_usd,
+            "unpriced_calls": month_usage.unpriced_calls,
+        },
+        "limits": {"daily_usd": daily_limit, "monthly_usd": monthly_limit},
     }
     rows = [
         [
@@ -86,8 +109,8 @@ def usage(
         ]
         for group in summary.groups
     ]
-    if rows:
-        rows.append(
+    rows.extend(
+        [
             [
                 "Total",
                 "",
@@ -95,8 +118,19 @@ def usage(
                 str(summary.input_tokens),
                 str(summary.output_tokens),
                 _cost(summary.estimated_cost_usd, summary.unpriced_calls),
-            ]
-        )
+            ],
+            ["Daily limit", "", "", "", "", _limit(daily_limit)],
+            [
+                f"Month {month.isoformat()} ({BUDGET_MONTH_ZONE.key})",
+                "",
+                str(month_usage.calls),
+                str(month_usage.input_tokens),
+                str(month_usage.output_tokens),
+                _cost(month_usage.estimated_cost_usd, month_usage.unpriced_calls),
+            ],
+            ["Monthly limit", "", "", "", "", _limit(monthly_limit)],
+        ]
+    )
     cli.output.success(
         command_name(ctx),
         payload,
@@ -120,6 +154,10 @@ def _cost(usd: float, unpriced_calls: int) -> str:
     """The priced calls' cost, and how many calls had no price, which it does not include."""
     cost = f"{usd:.4f}"
     return f"{cost} (+{unpriced_calls} unpriced)" if unpriced_calls else cost
+
+
+def _limit(usd: float | None) -> str:
+    return NO_LIMIT if usd is None else f"{usd:.4f}"
 
 
 def _caption(calls: int, unpriced_calls: int) -> str | None:

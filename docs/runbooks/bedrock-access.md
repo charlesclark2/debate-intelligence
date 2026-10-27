@@ -504,7 +504,7 @@ for region in us-east-1 us-east-2 us-west-2; do printf '%s ' "$region"; aws bedr
 Success looks like each region followed by `inherit`. Run step 7 once more to see the rows accepted
 again.
 
-**What the models cost after that.** Every call a command makes in record or live mode is logged to `<data_dir>/usage/YYYY-MM-DD.jsonl`, priced from `config/model_pricing.yaml`, and refused before it is made when it could take the run or the day past `models.budget_usd_per_run` or `models.budget_usd_daily` (an unpriced model is refused whenever a limit is set); `debate-research usage --date YYYY-MM-DD` shows a day's calls, tokens and cost. The probe above calls the adapter directly and is not logged.
+**What the models cost after that.** Every call a command makes in record or live mode is logged to `<data_dir>/usage/YYYY-MM-DD.jsonl`, priced from `config/model_pricing.yaml`, and refused before it is made when it could take the run, the day or the calendar month in America/Chicago past `models.budget_usd_per_run`, `models.budget_usd_daily` or `models.budget_usd_monthly` (an unpriced model is refused whenever a limit is set). A refusal names the limit it hit, `per-run`, `per-day` or `per-month`, and what remains of it. `debate-research usage --date YYYY-MM-DD` shows a day's calls, tokens and cost, the month's spend under them, and both limits. The probe above calls the adapter directly and is not logged.
 
 ## Prod
 

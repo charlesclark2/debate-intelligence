@@ -268,7 +268,10 @@ def test_dev_and_prod_get_their_own_data_directory_routing_file_and_budget(
     assert prod["storage.data_dir"] == str(installed_cli.home / ".debate-research" / "prod")
     assert Path(dev["models.routing_file"]).name == "model_routing.dev.yaml"
     assert Path(prod["models.routing_file"]).name == "model_routing.prod.yaml"
-    assert (dev["models.budget_usd_daily"], prod["models.budget_usd_daily"]) == (2.0, 20.0)
+    # Dev's $2 a day is the capped sample's allowance; prod's $1.50 is the coach's $50 a month over
+    # thirty days; both hold the month to that $50 (v1-e05-t15). Bundled and built in alike.
+    assert (dev["models.budget_usd_daily"], prod["models.budget_usd_daily"]) == (2.0, 1.5)
+    assert (dev["models.budget_usd_monthly"], prod["models.budget_usd_monthly"]) == (50.0, 50.0)
     if installed_cli.build.installed:
         # The bundled profiles name each environment's Bedrock profile (v1-e05-t08); the built-in
         # ones, which the checkout's script reads out here, name none.

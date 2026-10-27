@@ -24,6 +24,7 @@ from debate_core.application.budget import (
     BudgetExceededError,
     BudgetGuard,
     BudgetLimits,
+    CalendarMonth,
     CallCeiling,
     Spend,
     UnpricedModelError,
@@ -339,6 +340,104 @@ async def test_the_day_is_the_local_date_of_the_clock(log: UsageLog, pricing: Mo
 
 
 # ---------------------------------------------------------------------------------------------
+# The per-month limit and the month it is read in (v1-e05-t15)
+# ---------------------------------------------------------------------------------------------
+
+EARLY_IN_SEPTEMBER = datetime(2026, 9, 2, 15, 0, tzinfo=UTC)
+"""10:00 on 2026-09-02 in Chicago: fifteen days before LATE_EVENING, in the same month."""
+
+OCTOBER_LAST_EVENING = datetime(2026, 11, 1, 3, 0, tzinfo=UTC)
+"""22:00 CDT on Saturday 2026-10-31 in Chicago, and already November in UTC."""
+
+
+async def test_the_month_counts_every_day_of_it_and_not_only_today(
+    log: UsageLog, pricing: ModelPricing
+) -> None:
+    # $49.9999 spent on 2 September: on the 17th, $49.9999 + $0.000523 = $50.000423 is over $50,
+    # though the 17th itself has spent nothing. A day limit of $2 has room for it; the month has not.
+    log.append(earlier_record(49.9999, at=EARLY_IN_SEPTEMBER))
+    delegate = MeteredRouter([(VALID, 1, 1)])
+    guard = metered_chain(delegate, log, pricing, BudgetLimits(per_day_usd=2.0, per_month_usd=50.0))
+
+    with pytest.raises(BudgetExceededError) as raised:
+        await guard.generate_structured(TaskClass.HIGH_VOLUME, WARMING, ContractPassage)
+
+    assert delegate.calls == []
+    error = raised.value
+    assert (error.limit_name, error.limit_usd, error.model_id) == ("per-month", 50.0, "test.haiku")
+    assert error.spent_usd == pytest.approx(49.9999)
+    assert error.remaining_usd == pytest.approx(0.0001)
+    assert log.read(THE_DAY) == ()
+
+
+async def test_the_next_month_starts_from_nothing(log: UsageLog, pricing: ModelPricing) -> None:
+    log.append(earlier_record(49.9999, at=EARLY_IN_SEPTEMBER))
+    delegate = MeteredRouter([(VALID, 1, 1)])
+    first_of_october = FixedClock(datetime(2026, 10, 1, 15, 0, tzinfo=UTC))
+
+    await metered_chain(
+        delegate, log, pricing, BudgetLimits(per_month_usd=50.0), clock=first_of_october
+    ).generate_structured(TaskClass.HIGH_VOLUME, WARMING, ContractPassage)
+
+    assert delegate.calls == ["example.select-passage"]
+
+
+@pytest.mark.parametrize("filed_in", [CHICAGO, UTC], ids=["files-named-in-chicago", "files-named-in-utc"])
+async def test_the_month_turns_at_midnight_in_chicago_not_in_utc(
+    filed_in: ZoneInfo, tmp_path: Path, pricing: ModelPricing
+) -> None:
+    """October's last evening in Chicago is November in UTC. Its spend is October's, wherever it is filed.
+
+    A machine in UTC files it under 2026-11-01.jsonl, so the month is read from each record's
+    timestamp, not from the name of its file: at 23:30 that evening the call is refused, and at
+    01:30 the next morning, November in Chicago too, it is made.
+    """
+    log = UsageLog(tmp_path / "usage", local_zone=filed_in)
+    log.append(earlier_record(49.9999, at=OCTOBER_LAST_EVENING))
+    delegate = MeteredRouter([(VALID, 1, 1)])
+
+    def guard_at(moment: datetime) -> BudgetGuard:
+        return metered_chain(
+            delegate, log, pricing, BudgetLimits(per_month_usd=50.0), clock=FixedClock(moment)
+        )
+
+    with pytest.raises(BudgetExceededError) as raised:
+        await guard_at(OCTOBER_LAST_EVENING + timedelta(hours=1, minutes=30)).generate_structured(
+            TaskClass.HIGH_VOLUME, WARMING, ContractPassage
+        )
+    await guard_at(OCTOBER_LAST_EVENING + timedelta(hours=3, minutes=30)).generate_structured(
+        TaskClass.HIGH_VOLUME, WARMING, ContractPassage
+    )
+
+    assert raised.value.limit_name == "per-month"
+    assert delegate.calls == ["example.select-passage"]
+
+
+@pytest.mark.parametrize(
+    ("moment", "month"),
+    [
+        (datetime(2026, 11, 1, 3, 0, tzinfo=UTC), CalendarMonth(2026, 10)),
+        (datetime(2026, 11, 1, 6, 30, tzinfo=UTC), CalendarMonth(2026, 11)),
+        (datetime(2027, 1, 1, 5, 59, tzinfo=UTC), CalendarMonth(2026, 12)),
+        (datetime(2027, 1, 1, 6, 0, tzinfo=UTC), CalendarMonth(2027, 1)),
+    ],
+    ids=["october-evening", "november-small-hours", "new-years-eve-cst", "new-year-cst"],
+)
+def test_a_moment_s_month_is_its_month_in_chicago(moment: datetime, month: CalendarMonth) -> None:
+    # CDT is UTC-5 until 02:00 on 2026-11-01; CST is UTC-6 after it.
+    assert CalendarMonth.of(moment) == month
+
+
+def test_a_month_knows_its_first_and_last_day() -> None:
+    assert (CalendarMonth(2026, 2).first_day, CalendarMonth(2026, 2).last_day) == (
+        date(2026, 2, 1),
+        date(2026, 2, 28),
+    )
+    assert CalendarMonth(2026, 12).last_day == date(2026, 12, 31)
+    assert CalendarMonth(2026, 9).isoformat() == "2026-09"
+
+
+# ---------------------------------------------------------------------------------------------
 # Fail closed: what cannot be priced is not free
 # ---------------------------------------------------------------------------------------------
 
@@ -353,6 +452,25 @@ async def test_an_unpriced_model_is_refused_naming_it_when_a_limit_is_set(
         await guard.generate_structured(TaskClass.COMPLEX_REASONING, WARMING, ContractPassage)
 
     assert raised.value.model_id == "test.unpriced"
+    assert delegate.calls == []
+
+
+@pytest.mark.parametrize(
+    "limits",
+    [BudgetLimits(per_run_usd=100.0), BudgetLimits(per_day_usd=100.0), BudgetLimits(per_month_usd=100.0)],
+    ids=["run-limit-only", "day-limit-only", "month-limit-only"],
+)
+async def test_an_unpriced_model_is_refused_whichever_limit_alone_is_set(
+    limits: BudgetLimits, log: UsageLog, pricing: ModelPricing
+) -> None:
+    delegate = MeteredRouter([(VALID, 1, 1)])
+
+    with pytest.raises(UnpricedModelError, match="test.unpriced"):
+        await metered_chain(delegate, log, pricing, limits).generate_structured(
+            TaskClass.COMPLEX_REASONING, WARMING, ContractPassage
+        )
+
+    assert limits.enforced is True
     assert delegate.calls == []
 
 
@@ -480,12 +598,12 @@ class FixedPricer:
 class StillLedger:
     """A ledger whose spend never moves: only the guard's own holds change what it sees."""
 
-    def __init__(self, run_usd: float = 0.0, day_usd: float = 0.0) -> None:
-        self.spend = Spend(run_usd=run_usd, day_usd=day_usd)
-        self.asked: list[tuple[str, date]] = []
+    def __init__(self, run_usd: float = 0.0, day_usd: float = 0.0, month_usd: float = 0.0) -> None:
+        self.spend = Spend(run_usd=run_usd, day_usd=day_usd, month_usd=month_usd)
+        self.asked: list[tuple[str, date, CalendarMonth]] = []
 
-    def spent(self, run_id: str, day: date) -> Spend:
-        self.asked.append((run_id, day))
+    def spent(self, run_id: str, day: date, month: CalendarMonth) -> Spend:
+        self.asked.append((run_id, day, month))
         return self.spend
 
 
@@ -570,7 +688,7 @@ async def test_a_finished_or_failed_call_lets_go_of_its_hold() -> None:
     assert delegate.planned == []
 
 
-async def test_the_guard_asks_the_ledger_for_this_run_on_the_local_day() -> None:
+async def test_the_guard_asks_the_ledger_for_this_run_on_the_local_day_in_the_chicago_month() -> None:
     ledger = StillLedger()
     guard = guard_over(
         MeteredRouter([(VALID, 1, 1)]), BudgetLimits(per_run_usd=1.0), FixedPricer(0.01), ledger
@@ -578,7 +696,7 @@ async def test_the_guard_asks_the_ledger_for_this_run_on_the_local_day() -> None
 
     await guard.generate_structured(TaskClass.HIGH_VOLUME, WARMING, ContractPassage)
 
-    assert ledger.asked == [(RUN, THE_DAY)]
+    assert ledger.asked == [(RUN, THE_DAY, CalendarMonth(2026, 9))]
 
 
 async def test_spend_exactly_at_the_limit_is_allowed_and_a_cent_more_is_not() -> None:
@@ -600,9 +718,74 @@ async def test_spend_exactly_at_the_limit_is_allowed_and_a_cent_more_is_not() ->
         await over.generate_structured(TaskClass.HIGH_VOLUME, WARMING, ContractPassage)
 
 
-def test_a_negative_limit_is_refused() -> None:
-    with pytest.raises(ValueError, match="per_day_usd"):
-        BudgetLimits(per_day_usd=-1.0)
+@pytest.mark.parametrize("limit", ["per-run", "per-day", "per-month"])
+async def test_every_limit_lets_a_call_land_exactly_on_it_and_refuses_one_a_cent_over(limit: str) -> None:
+    """The boundary rule is one rule: $0.04 spent and a $0.01 ceiling is made under $0.05, $0.02 is not."""
+
+    def guard(ceiling_usd: float) -> BudgetGuard:
+        limits = {
+            "per-run": BudgetLimits(per_run_usd=0.05),
+            "per-day": BudgetLimits(per_day_usd=0.05),
+            "per-month": BudgetLimits(per_month_usd=0.05),
+        }[limit]
+        spent = {"per-run": "run_usd", "per-day": "day_usd", "per-month": "month_usd"}[limit]
+        return guard_over(
+            MeteredRouter([(VALID, 1, 1)]), limits, FixedPricer(ceiling_usd), StillLedger(**{spent: 0.04})
+        )
+
+    await guard(0.01).generate_structured(TaskClass.HIGH_VOLUME, WARMING, ContractPassage)
+    with pytest.raises(BudgetExceededError) as raised:
+        await guard(0.02).generate_structured(TaskClass.HIGH_VOLUME, WARMING, ContractPassage)
+
+    assert raised.value.limit_name == limit
+
+
+async def test_the_month_is_checked_when_the_run_and_the_day_have_room() -> None:
+    # The run and the day have spent nothing against $1 and $2; the month has $49.995 against $50,
+    # so a $0.01 ceiling is refused by the month alone.
+    delegate = MeteredRouter([(VALID, 1, 1)])
+    guard = guard_over(
+        delegate,
+        BudgetLimits(per_run_usd=1.0, per_day_usd=2.0, per_month_usd=50.0),
+        FixedPricer(0.01),
+        StillLedger(month_usd=49.995),
+    )
+
+    with pytest.raises(BudgetExceededError) as raised:
+        await guard.generate_structured(TaskClass.HIGH_VOLUME, WARMING, ContractPassage)
+
+    assert (raised.value.limit_name, raised.value.limit_usd) == ("per-month", 50.0)
+    assert raised.value.remaining_usd == pytest.approx(0.005)
+    assert delegate.calls == []
+
+
+async def test_calls_in_flight_hold_their_ceilings_against_the_month_too() -> None:
+    # $49.50 spent; each call could cost $0.25: one fits ($49.75), a second lands on $50.00 and is
+    # made, a third would make $50.25. (Amounts a float holds exactly, so the boundary is the rule's.)
+    delegate = GatedRouter()
+    guard = guard_over(
+        delegate, BudgetLimits(per_month_usd=50.0), FixedPricer(0.25), StillLedger(month_usd=49.5)
+    )
+
+    calls = [
+        asyncio.ensure_future(guard.generate_structured(TaskClass.HIGH_VOLUME, WARMING, ContractPassage))
+        for _ in range(3)
+    ]
+    await asyncio.sleep(0)
+    delegate.gate.set()
+    outcomes = await asyncio.gather(*calls, return_exceptions=True)
+
+    assert [type(outcome).__name__ for outcome in outcomes] == [
+        "ModelResponse[ContractPassage]",
+        "ModelResponse[ContractPassage]",
+        "BudgetExceededError",
+    ]
+
+
+@pytest.mark.parametrize("name", ["per_run_usd", "per_day_usd", "per_month_usd"])
+def test_a_negative_limit_is_refused(name: str) -> None:
+    with pytest.raises(ValueError, match=name):
+        BudgetLimits(**{name: -1.0})
 
 
 def test_the_refusal_names_the_model_the_limit_and_the_amounts() -> None:
@@ -612,8 +795,20 @@ def test_the_refusal_names_the_model_the_limit_and_the_amounts() -> None:
 
     assert str(error) == (
         "model call to test.haiku refused: the per-run budget is $0.0500, $0.0600 is already spent or "
-        "held, and this call could cost up to $0.0005"
+        "held, $0.0000 remains, and this call could cost up to $0.0005"
     )
+
+
+def test_a_month_refusal_names_the_month_and_what_remains_of_it_in_counts_only() -> None:
+    error = BudgetExceededError(
+        limit_name="per-month", limit_usd=50.0, spent_usd=49.99, ceiling_usd=0.0205, model_id="test.haiku"
+    )
+
+    assert str(error) == (
+        "model call to test.haiku refused: the per-month budget is $50.0000, $49.9900 is already spent "
+        "or held, $0.0100 remains, and this call could cost up to $0.0205"
+    )
+    assert error.remaining_usd == pytest.approx(0.01)
 
 
 def test_the_log_ledger_is_what_the_guard_reads(log: UsageLog) -> None:
@@ -621,7 +816,9 @@ def test_the_log_ledger_is_what_the_guard_reads(log: UsageLog) -> None:
     log.append(earlier_record(0.25, run_id=RUN))
 
     assert json.loads(log.path_for(THE_DAY).read_text(encoding="utf-8"))["estimated_cost_usd"] == 0.25
-    assert log.spent(RUN, THE_DAY) == Spend(run_usd=0.25, day_usd=0.25)
+    assert log.spent(RUN, THE_DAY, CalendarMonth(2026, 9)) == Spend(
+        run_usd=0.25, day_usd=0.25, month_usd=0.25
+    )
 
 
 # ---------------------------------------------------------------------------------------------
@@ -690,6 +887,55 @@ async def test_build_model_router_holds_a_real_router_to_the_settings_run_budget
     assert delegate.calls == ["example.select-passage"]
     assert (raised.value.limit_name, raised.value.model_id) == ("per-run", "anthropic.claude-haiku-5-5")
     assert raised.value.ceiling_usd == pytest.approx(0.010263)
+
+
+HAIKU_PRICED_AS_TEST_HAIKU = (
+    "  anthropic.claude-haiku-5-5:\n"
+    "    input_usd_per_1k_tokens: 0.001\n"
+    "    output_usd_per_1k_tokens: 0.005\n"
+    "    as_of: 2026-10-26\n"
+    "    source: https://pricing.example.test/bedrock\n"
+)
+
+
+async def test_build_model_router_holds_a_real_router_to_the_settings_monthly_budget(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # $49.995 spent on 2 September; the example route's ceiling is $0.010263 (as above): $50.005263
+    # is over the $50 month, with no run or day limit set at all.
+    pricing = tmp_path / "model_pricing.yaml"
+    pricing.write_text(FIXTURE_PRICES + HAIKU_PRICED_AS_TEST_HAIKU, encoding="utf-8")
+    settings = bedrock_settings(tmp_path, monkeypatch, budget_usd_daily=None, budget_usd_monthly=50.0)
+    UsageLog.for_data_dir(settings.storage.data_dir, local_zone=CHICAGO).append(
+        earlier_record(49.995, at=EARLY_IN_SEPTEMBER)
+    )
+    delegate = MeteredRouter([(VALID, 1, 1)])
+
+    with pytest.raises(BudgetExceededError) as raised:
+        await factory_router(settings, delegate, "live", tmp_path, pricing).generate_structured(
+            TaskClass.HIGH_VOLUME, WARMING, ContractPassage
+        )
+
+    assert delegate.calls == []
+    assert (raised.value.limit_name, raised.value.limit_usd) == ("per-month", 50.0)
+    assert raised.value.remaining_usd == pytest.approx(0.005)
+
+
+async def test_build_model_router_refuses_an_unpriced_model_when_only_the_monthly_budget_is_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The fixture prices have no entry for the example route's anthropic.claude-haiku-5-5.
+    pricing = tmp_path / "model_pricing.yaml"
+    pricing.write_text(FIXTURE_PRICES, encoding="utf-8")
+    settings = bedrock_settings(tmp_path, monkeypatch, budget_usd_daily=None, budget_usd_monthly=50.0)
+    delegate = MeteredRouter([(VALID, 1, 1)])
+
+    with pytest.raises(UnpricedModelError, match="anthropic.claude-haiku-5-5"):
+        await factory_router(settings, delegate, "live", tmp_path, pricing).generate_structured(
+            TaskClass.HIGH_VOLUME, WARMING, ContractPassage
+        )
+
+    assert delegate.calls == []
 
 
 async def test_the_test_profile_s_zero_daily_budget_refuses_a_live_call_at_the_committed_prices(

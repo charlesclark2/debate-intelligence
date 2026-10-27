@@ -524,7 +524,7 @@ def test_every_environment_has_a_committed_profile() -> None:
 
 
 @pytest.mark.skipif(REPOSITORY_ROOT is None, reason="not running from a source checkout")
-def test_the_committed_profiles_give_dev_and_prod_different_everything() -> None:
+def test_the_committed_profiles_give_dev_and_prod_their_own_data_dir_routing_file_and_budgets() -> None:
     assert REPOSITORY_ROOT is not None
     profiles = REPOSITORY_ROOT / "config" / "profiles"
     development = load_settings(environment="dev", profile_dir=profiles)
@@ -532,9 +532,10 @@ def test_the_committed_profiles_give_dev_and_prod_different_everything() -> None
 
     assert development.storage.data_dir != production.storage.data_dir
     assert development.models.routing_file != production.models.routing_file
-    assert development.models.budget_usd_daily is not None
-    assert production.models.budget_usd_daily is not None
-    assert development.models.budget_usd_daily < production.models.budget_usd_daily
+    # Dev: $2 a day, the capped sample's allowance (PM ruling, 2026-10-27). Prod: $1.50 a day, the
+    # coach's $50 a month over thirty days. Both: the $50 month itself (v1-e05-t15).
+    assert (development.models.budget_usd_daily, production.models.budget_usd_daily) == (2.0, 1.5)
+    assert (development.models.budget_usd_monthly, production.models.budget_usd_monthly) == (50.0, 50.0)
 
 
 @pytest.mark.skipif(REPOSITORY_ROOT is None, reason="not running from a source checkout")

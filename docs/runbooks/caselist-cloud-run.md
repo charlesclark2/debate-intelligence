@@ -959,10 +959,10 @@ plan to the PM. Either way the PM reads the plan before the apply.
 ### The apply, after the PM's word
 
 **Operator command** (expected runtime ~1 min)
-Where: `$WT`
+Where: `$WT`, after the PM's word, on any day but Wednesday
 ```bash
 cd "$WT"
-if env | grep -qE '^(TF_VAR_|TF_WORKSPACE=|TF_DATA_DIR=|TF_CLI_ARGS)'; then echo "STOP: a Terraform override is set in this shell"; else AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev apply -input=false caselist-backfile-alert.tfplan; fi
+if env | grep -qE '^(TF_VAR_|TF_WORKSPACE=|TF_DATA_DIR=|TF_CLI_ARGS)'; then echo "STOP: a Terraform override is set in this shell"; elif [ "$(date +%A)" = "Wednesday" ]; then echo "STOP: it is Wednesday, the run's day; apply on another day"; else AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev apply -input=false caselist-backfile-alert.tfplan; fi
 ```
 Success looks like `Apply complete! Resources: 0 added, 1 changed, 0 destroyed.` A stale plan: plan
 again. Never `-target`.

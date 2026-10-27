@@ -28,10 +28,9 @@ A sub-heading labels a role when it holds the role's words, as whole words:
 A tag labels uniqueness when it opens `uniqueness` or `uq`, a link when it opens `link`, `links` or
 `the link` and names no answer, and an internal link when it opens `internal link`, `internal`, `il` or
 `i l`. A link tag names an answer when, past a leading `the`, it opens with one of the heading's answers
-(`link turn`, `no link`, …), or the words after `link` or `links` open with `turn(s)`, `defense` or a
-non-unique (`non unique`, `is not unique`, …): `The link turns`, `Links are non-unique`
-(`v1-e32-t27`). `u` never labels in a tag: on hspolicy26, 105 of the 106 counted tags
-opening `u` open `U.S.`.
+(`link turn`, `no link`, …), or the words after `link` or `links` call it non-unique (`non unique`, `is
+not unique`, …): `The link turns`, `Links are non-unique` (`v1-e32-t27`). `u` never labels in a tag:
+on hspolicy26, 105 of the 106 counted tags opening `u` open `U.S.`.
 
 An answer sub-heading (`AT: No Link`, the team's own frontline) fills no role, and a heading holding
 two roles' labels fills neither. A card's impact role is `v1-e32-t10`'s impact card, whatever else
@@ -129,9 +128,6 @@ NOT_A_LINK: Final = (
 """Answers and turns filed with a link word: a heading holding one, or a tag opening one, labels no link."""
 
 _LINK_ANSWERS: Final = (
-    "turn",
-    "turns",
-    "defense",
     "non unique",
     "nonunique",
     "not unique",
@@ -142,7 +138,7 @@ _LINK_ANSWERS: Final = (
     "are nonunique",
     "are not unique",
 )
-"""What the words after a tag's `link` or `links` open with when the tag answers a link (`v1-e32-t27`)."""
+"""What the words after a tag's `link` or `links` open with when they call it non-unique (`v1-e32-t27`)."""
 
 _INTERNAL_LINK_WORDS: Final = ("internal link", "internal links", "internal", "internals", "il", "i l")
 _ADVANTAGE_WORDS: Final = {

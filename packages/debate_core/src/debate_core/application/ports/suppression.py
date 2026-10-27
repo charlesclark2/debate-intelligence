@@ -111,9 +111,12 @@ Nothing is appended to release one.
     its request, so the same bytes arriving later at another path are stopped as well.
 
 The import writes it, to this machine's copy alone: it runs offline (`caselist import`), or in a
-pull that may not reach the bucket, and only the takedown credential writes under the bucket's
-`manifests/_suppression/`. The removal reads every copy and gives each the lines it lacks, which is
-how the bucket's copy is written. A line has no date, so the same upload held again, by an import of
+pull that may not reach the bucket. The removal reads every copy and gives each the lines it lacks,
+and so does the pull's search index stage, which reconciles the list before it publishes
+(`v1-e39-t09`). `held-digests.jsonl` is also appended by a bucket-mode run under its lock
+(`v1-e40-t12`): every save of the run-state bundle first gives the bucket's copy the lines the
+working copy holds, because a cloud task's copy vanishes when it stops. Each writer only adds lines
+the copy lacks. A line has no date, so the same upload held again, by an import of
 the same archive, is the same line, and a set-union append adds it once. No build before this one
 opens the file, for the reason each record above is a file of its own.
 """

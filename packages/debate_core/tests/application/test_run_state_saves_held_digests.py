@@ -1,4 +1,6 @@
-"""A save of the run-state bundle first gives the bucket the held uploads the working copy recorded (`v1-e40-t12`).
+"""A save of the run-state bundle first gives the bucket the held uploads the working copy recorded.
+
+`v1-e40-t12`.
 
 An import that refuses an upload at a path a removal holds records it in the working copy's
 `held-digests.jsonl` (`v1-e30-t23`). A cloud task's working copy vanishes when the task stops, so in
@@ -92,12 +94,16 @@ def a_working_copy(root: Path) -> Path:
     manifest = data_dir / "objects" / MANIFEST
     manifest.parent.mkdir(parents=True)
     manifest.write_text(ROW, encoding="utf-8")
-    asyncio.run(record_held_digests(RecordedSuppressionList(local_suppression_list_file(data_dir)), [HELD_IN_THE_TASK]))
+    asyncio.run(
+        record_held_digests(
+            RecordedSuppressionList(local_suppression_list_file(data_dir)), [HELD_IN_THE_TASK]
+        )
+    )
     return data_dir
 
 
 def run_state(data_dir: Path, store: S3EvidenceObjectStore) -> RunState:
-    """A run's state over `data_dir`, with the suppression list over its copy and the bucket's, as the container builds it."""
+    """A run's state over `data_dir`, its suppression list over both copies, as the container builds it."""
     return RunState(
         bucket=store,
         files=LocalRunStateFiles(data_dir),

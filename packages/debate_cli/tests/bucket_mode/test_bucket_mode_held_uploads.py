@@ -1,4 +1,6 @@
-"""A held upload a cloud task's import refused reaches the bucket, and another machine finds it (`v1-e40-t12`).
+"""A held upload a cloud task's import refused reaches the bucket, and another machine finds it.
+
+`v1-e40-t12`.
 
 An import refuses an upload at a path a removal holds and records it in the working copy's
 `held-digests.jsonl` (`v1-e30-t23`). The removal run again, and `caselist status`, find it through

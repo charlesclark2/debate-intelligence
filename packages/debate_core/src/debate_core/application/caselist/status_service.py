@@ -98,8 +98,10 @@ digest, the held path's digest and the request holding the path. The same remova
 each one: whole where no other path holds the bytes, and withdrawn from the held path where one does.
 Until it has, the removal is owed, and once the archive has left the inbox nothing but the record
 says so. So, asked with `held_in_inbox=True`, the comparison reads the record too, from every copy
-of the list as the removal reads it (the import writes this machine's copy alone, the removal the
-bucket's), and names a line whose request holds that path in a caselist compared, and which the list
+of the list as the removal reads it (the import writes this machine's copy alone; a removal, the
+pull's index stage and, in bucket mode, each save of the run-state bundle give the bucket's copy
+what it lacks, `v1-e40-t12`, so a cloud task's refusals are read from any machine), and names a
+line whose request holds that path in a caselist compared, and which the list
 does not stop there, whole or as the held path's disclosure. A hold an un-suppress lifted holds
 nothing, and the re-run lists nothing for it, so nothing is owed for it either. The record holds no
 date, so `--snapshot` does not narrow it.

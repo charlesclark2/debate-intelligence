@@ -180,6 +180,14 @@ its own, `removable_index_prefix`, apart from the five prefixes of disclosed mat
 | Write | Any object | `manifests/_suppression/` only |
 | Delete | **Nothing** | Objects and noncurrent versions under those six prefixes |
 
+Under `manifests/_suppression/`, the suppression list, the removal log and the records beside them
+are written by `caselist remove` and `unsuppress`, with one exception. `held-digests.jsonl`, the
+uploads an import refused at a held path (`v1-e30-t23`), is also appended by a bucket-mode run under
+its lock, at each save of the run-state bundle and before it, with the everyday credential, and by
+the pull's search index stage, which reconciles every copy of the list before it publishes
+(`v1-e39-t09`). Each of these only adds lines the object lacks (ADR-0020 (3), amended 2026-10-27 by
+`v1-e40-t12`). No grant changed for it.
+
 The rest of `reports/` is deliberately absent from the removal column. A report is derived and
 cites evidence rather than holding it, so a takedown regenerates it rather than deleting it — and
 leaving it out is what makes "this credential deletes disclosed material and nothing else" a

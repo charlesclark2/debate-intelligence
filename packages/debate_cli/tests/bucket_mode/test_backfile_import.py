@@ -576,7 +576,8 @@ def test_an_upload_a_backfile_import_refused_at_a_held_path_is_found_from_anothe
     assert execute(world)["exit_code"] == ExitCode.OK
     macs_copy = tmp_path / "the-macs-copy"
     world.use(macs_copy)
-    remove = ("caselist", "remove", "--source", digest_of("direct"), "--reason", "REQUESTED_BY_TEAM", "--request", "RM-2026-06")  # fmt: skip
+    remove = ("caselist", "remove", "--source", digest_of("direct"), "--reason", "REQUESTED_BY_TEAM")
+    remove = (*remove, "--request", "RM-2026-06")
     assert world.run(*remove, "--execute")["exit_code"] == ExitCode.OK
     later = {R1: BODIES["verbatim"], R2: BODIES["wiki"], R6: BODIES["cardmirror"]}
     site.offer(BACKFILE, (ARCHIVE_DATE, zipped(MEMBERS)), (LATER_ARCHIVE_DATE, zipped(later)))
@@ -584,7 +585,7 @@ def test_an_upload_a_backfile_import_refused_at_a_held_path_is_found_from_anothe
     cloud = world.use(tmp_path / "cloud-task-later")
     imported = execute(world)
     assert imported["exit_code"] == ExitCode.OK, json.dumps(imported.get("error"))[:800]
-    held =(cloud / "suppression" / "held-digests.jsonl").read_text(encoding="utf-8")
+    held = (cloud / "suppression" / "held-digests.jsonl").read_text(encoding="utf-8")
     assert digest_of("cardmirror") in held, "the premise: the task's import refused it, and recorded it"
     shutil.rmtree(cloud)
     world.use(macs_copy)

@@ -451,6 +451,26 @@ select stage reads what is held from the manifests.
   here by never importing from a stale copy: in bucket mode a run with no session cannot read the
   lock and does not start.
 
+  **Amended 2026-10-27 (PM rulings on `v1-e40-t12`):** `held-digests.jsonl` is also appended by a
+  bucket-mode run under its lock. This is the record of each upload an import refused at a path a
+  removal holds (`v1-e30-t23`): two digests and a request id. Until this amendment the import wrote
+  it to the working copy alone, which a cloud task loses when it stops. So in bucket mode every save
+  of the run-state bundle first appends to `manifests/_suppression/held-digests.jsonl` whatever lines
+  the working copy holds and the bucket lacks. That covers the pull after its publish stage, at its
+  end and on SIGTERM, the backfile import's locked step, the seed and a removal's rewrite. The append
+  comes before the bundle, and happens whether or not the bundle is then saved. It only adds: a line
+  already there, a removal's own included, stays byte for byte. Every save site holds the lease, and
+  the write goes through the fenced client like the bundle's. The removal run again and `caselist
+  status` already read this key beside the working copy's, so no reader changes and the record's
+  format is unchanged. IAM is unchanged as well: the run role holds the everyday policy, which already
+  writes any key. `store sync` still skips `manifests/_suppression/`.
+  Two things were found while building this. The pull's search index stage already reconciles every
+  copy of the list before it publishes (`v1-e39-t09`), so a pull that reached that stage carried the
+  record already. A task that stops after its publish stage and before its index stage has saved a
+  bundle recording the week, so no later run meets the upload again, and the backfile import never
+  runs that stage at all. A task killed before its first save leaves the previous bundle: the next
+  run redoes the week and meets the upload again, unless the redone archive no longer carries it.
+
 **A working copy, restored, not streamed.** At its start a run restores, to its ephemeral storage:
 the run-state bundle, the state files, the published index manifest, and **the parsed store's current
 version directory** for each configured caselist and `openev` (9.1 GB in 15,344 objects today,

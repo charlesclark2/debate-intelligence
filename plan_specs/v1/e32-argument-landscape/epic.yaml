@@ -662,5 +662,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e32-t27-branches-and-mechanisms-counted-first
+    - id: t28
+      kind: Task
+      name: 'Tags quoted in the impact and link-chain tables, held to the report''s withholding, counted first'
+      description: >-
+        Tags quoted in the impact and link-chain tables, held to the report's withholding,
+        counted first.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t28-tags-in-the-tables-held-to-withholding.yaml
+        goalRef: v1-e32-t28-tags-in-the-tables-held-to-withholding
+      dependsOn:
+      - t25
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t28-tags-in-the-tables-held-to-withholding reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t28-tags-in-the-tables-held-to-withholding
 status:
   phase: Pending

@@ -1,0 +1,81 @@
+# TASK v1-e32-t28-tags-in-the-tables-held-to-withholding - Tags quoted in the impact and link-chain tables, held to the report's withholding, counted first
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t28-tags-in-the-tables-held-to-withholding
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "Tags quoted in the impact and link-chain tables, held to the report's withholding, counted first"
+spec:
+  # Filed by the PM, 2026-10-26, from v1-e32-t25's question 2 and the PM's ruling (2026-10-26).
+  description: >-
+    Since v1-e32-t25, the lines under "What each impact runs through" withhold a tag, internal
+    link or card above holding a caselist word (`is_withheld`). The impact table's Tag column,
+    the link-chain table (v1-e32-t10, v1-e32-t14) and `top_cards.csv` still quote every tag as
+    parsed: on hspolicy26, 6 own impact tags and 7 card-above tags hold a caselist word, though
+    t22's scan found no hit there. The circuit-wide report names no school or team code, so
+    nothing stands beside one (policy 1.13). Count first, read-only: per table, the tags holding
+    a caselist word, and by kind of word matched (school word, team-code shape, tournament
+    word), as counts only. An operator block may show the matched words on the operator's own
+    screen for the coach, never committed. Then the PM rules whether those tables withhold the
+    same way.
+  priority: 3
+  constraints:
+    packages: [debate_core.arguments, debate_core.application, debate_core.domain, packages/debate_core/tests, tests/fixtures/landscape, scripts, tests/scripts, docs/guides]
+    forbidden:
+      - A matched word, school, team code or tag text committed or printed in the counts
+      - A model call
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e32-t25-readable-impact-chains
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Counts first, read-only, per table and by kind of word matched, sent to the PM.
+    - id: ac2
+      description: >-
+        After the ruling, on synthetic fixtures, the tables withhold as ruled, matching
+        hand-written golden files; tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t28-tags-in-the-tables-held-to-withholding-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    Count the tags the tables quote that hold a caselist word, then withhold as ruled.
+  goalRef:
+    name: v1-e32-t28-tags-in-the-tables-held-to-withholding
+  graph:
+    nodes:
+      - id: tags-in-the-tables
+        kind: Task
+        name: Tags in the tables
+        description: >-
+          Count the tags the tables quote that hold a caselist word, then withhold as
+          ruled.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Landscape tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/landscape]
+status:
+  phase: Pending

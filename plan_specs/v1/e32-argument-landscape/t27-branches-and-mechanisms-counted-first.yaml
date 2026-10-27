@@ -30,6 +30,12 @@ spec:
     stage (v1-e32-t07). Send the counts to the PM with three options: a two-level scenario
     (branch, then impact) in the taxonomy; the mechanism as a named link per DA, beside
     v1-e32-t25's names; or splitting DAs by link. Build only the option the PM rules.
+    (PM clarification 2026-10-26, from the PM's context.) The counts print ids and numbers only.
+    For the coach's ruling, the session report may list two sets of words: the outer branch
+    headings and the Economy DA's link-tag word groups that two or more teams use. Each is
+    screened against the hspolicy26 disclosures as v1-e32-t22's seed was, every word holding a
+    caselist word is withheld by `is_withheld` and counted, and a word one team uses is never
+    listed. No team code, school, tournament word or card text is printed anywhere.
   priority: 2
   constraints:
     packages: [debate_core.arguments, debate_core.application, debate_core.domain, packages/debate_core/tests, tests/fixtures/landscape, config/landscape, scripts, tests/scripts, tests/config, docs/guides]

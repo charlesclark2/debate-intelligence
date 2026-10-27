@@ -866,5 +866,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e01-t37-licence-check-over-the-lock
+    - id: t38
+      kind: Task
+      name: 'A pull request into dev runs the tests its changes reach; a push to dev and a pull request into main run them all'
+      description: >-
+        A pull request into dev runs the tests its changes reach; a push to dev and a pull
+        request into main run them all.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t38-ci-affected-tests-on-dev-pull-requests.yaml
+        goalRef: v1-e01-t38-ci-affected-tests-on-dev-pull-requests
+      dependsOn:
+      - t28
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t38-ci-affected-tests-on-dev-pull-requests reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t38-ci-affected-tests-on-dev-pull-requests
 status:
   phase: Pending

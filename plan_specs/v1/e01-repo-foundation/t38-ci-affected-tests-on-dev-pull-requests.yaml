@@ -1,0 +1,96 @@
+# TASK v1-e01-t38-ci-affected-tests-on-dev-pull-requests - A pull request into dev runs the tests its changes reach; a push to dev and a pull request into main run them all
+# Epic: E01 Repository & Delivery Foundation | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t38-ci-affected-tests-on-dev-pull-requests
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: "A pull request into dev runs the tests its changes reach; a push to dev and a pull request into main run them all"
+spec:
+  # Filed by the PM, 2026-10-26, from the operator's request of 2026-10-26, as the ci check nears its 5-minute budget.
+  description: >-
+    The `test` job runs the whole default selection, in five parts, on every pull request, and
+    the `ci` check now nears its 5-minute budget (working agreement 1). v1-e01-t28's
+    `scripts/affected_tests.py` already computes the test files a branch's changes reach, with
+    its always-run list and its whole-selection rule for shared test ground (`pyproject.toml`,
+    `uv.lock`, the root `conftest.py`, `tests/pytest_plugins/`, `ci.yml`). On a pull request
+    into dev, the test job runs that selection against the pull request's base commit, still
+    dealt round the parts. On a push to dev or main, and on a pull request into main (a
+    promotion), it runs the whole selection as today, and the coverage job is unchanged. When
+    the selection cannot be computed, or names the whole selection, the job runs everything: it
+    fails toward more tests, never fewer. The job summary says how many test files were selected
+    and, for the whole selection, why. Dev's push run stays the whole selection and the dev
+    pre-release still cuts only after it is green, so a test the selection missed fails before
+    any release; a red push run on dev is fixed by the next pull request before anything else
+    merges. Working agreement 10 and the workflow's header say the new rule. Measure first,
+    read-only: over the last 20 pull requests merged into dev (v1-e01-t28's method), the test
+    files and tests each would have selected and their share of the whole selection.
+  priority: 1
+  constraints:
+    packages: [.github/workflows, scripts, tests/scripts, tests/pytest_plugins, docs/process]
+    forbidden:
+      - A pull request into main, or a push, running less than the whole selection
+      - A selection error or a missing base commit that runs fewer tests
+      - Moving a test off the PR path or marking it slow
+      - Reading a secret or adding network use to the workflow
+  context:
+    - kind: TaskRef
+      name: v1-e01-t28-affected-test-selection
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Counts first: over the last 20 pull requests merged into dev, the test files and
+        tests each would have selected and their share of the whole selection, recorded in
+        the report.
+    - id: ac2
+      description: >-
+        On synthetic diffs and events, the selection step gives the affected files for a
+        pull request into dev, and the whole selection for a pull request into main, a push,
+        shared test ground, a selection error or a missing base; the parts together are
+        exactly the selection given; tests shown failing first.
+    - id: ac3
+      description: >-
+        This task's own pull request shows its selection in the job summary, and the push
+        run after its merge runs the whole selection, read from the run pages (operator).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t38-ci-affected-tests-on-dev-pull-requests-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Run the affected tests on pull requests into dev, and everything on pushes and promotions.
+  goalRef:
+    name: v1-e01-t38-ci-affected-tests-on-dev-pull-requests
+  graph:
+    nodes:
+      - id: ci-affected-tests
+        kind: Task
+        name: CI affected tests on dev pull requests
+        description: >-
+          Run the affected tests on pull requests into dev, and everything on pushes and
+          promotions.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: CI workflow and selection tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, -k, ci_workflow or affected]
+status:
+  phase: Pending

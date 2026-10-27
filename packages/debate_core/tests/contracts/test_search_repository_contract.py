@@ -10,7 +10,8 @@ from __future__ import annotations
 import pytest
 
 from debate_core.integrations.local import SqliteDatabase, SqliteSearchRepository
-from debate_core.testing.contracts import SearchRepositoryContract, SearchRepositoryFactory
+from debate_core.testing.contracts.harness import SearchRepositoryFactory
+from debate_core.testing.contracts.repositories import SearchRepositoryContract
 from debate_core.testing.fakes.persistence import InMemorySearchRepository
 
 

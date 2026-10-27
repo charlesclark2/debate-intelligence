@@ -23,13 +23,13 @@ import pytest
 from debate_core.application.errors import BlobIntegrityError, NotFound
 from debate_core.application.ports.persistence import BlobKey, SnapshotStore
 from debate_core.integrations.s3 import SHA256_METADATA_NAME, S3SnapshotStore
-from debate_core.testing.contracts import (
+from debate_core.testing.contracts.harness import (
     ASYNC_BACKEND,
     BlobCopyCounter,
     BlobCorruptor,
-    SnapshotStoreContract,
     SnapshotStoreFactory,
 )
+from debate_core.testing.contracts.snapshot_store import SnapshotStoreContract
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
     from mypy_boto3_s3.client import S3Client

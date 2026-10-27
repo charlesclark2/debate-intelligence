@@ -80,7 +80,8 @@ from debate_core.integrations.models.received_answer import hand_over_answer
 from debate_core.integrations.models.record_replay import CassetteDirectory, RecordReplayModelRouter
 from debate_core.integrations.models.redaction import REDACTED, redact, redactions
 from debate_core.integrations.models.usage import UsageLog
-from debate_core.testing.contracts import (
+from debate_core.testing.contracts.model_router import (
+    ContractPassage,
     EmbeddingAnswer,
     ModelRouterContract,
     ModelRouterFactory,
@@ -89,7 +90,6 @@ from debate_core.testing.contracts import (
     RouteExpectation,
     StructuredAnswer,
 )
-from debate_core.testing.contracts.model_router import ContractPassage
 from debate_core.testing.fakes.clock_and_ids import FixedClock
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[5]

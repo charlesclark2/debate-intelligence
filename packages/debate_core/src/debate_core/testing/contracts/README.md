@@ -39,7 +39,8 @@ in full:
 import pytest
 
 from debate_core.integrations.aws import DynamoDbCardRepository
-from debate_core.testing.contracts import CardRepositoryContract, CardRepositoryFactory
+from debate_core.testing.contracts.harness import CardRepositoryFactory
+from debate_core.testing.contracts.repositories import CardRepositoryContract
 
 
 class TestDynamoDbCardRepository(CardRepositoryContract):

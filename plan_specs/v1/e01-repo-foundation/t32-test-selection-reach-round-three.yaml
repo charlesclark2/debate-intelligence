@@ -65,7 +65,7 @@ spec:
         The 20 commits re-measured with --graph against v1-e01-t30's figures, and the
         collected count unchanged, recorded in the report.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

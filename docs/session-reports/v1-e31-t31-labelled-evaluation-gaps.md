@@ -66,7 +66,7 @@ relay prompt the PM ruled on, is kept below [as it was sent](#relay-prompt-for-t
 | ac2: tallies of missed CITE, TAG and highlight rows, by caselist, template family and format, counts only, sent to the PM before any rule | PASS | Phase 1, `scripts/tally_missed_units.py`. Relay sent 2026-10-27; the PM ruled the same day. The first rule commit, `63bcfaa`, came after the ruling |
 | ac3: each ruled rule a synthetic fixture shown failing first; the pr-subset gate holds; tag and cite precision do not fall; before and after in the report | PASS | [Red then green](#red-then-green): `63bcfaa` red, **5 failed, 6 passed**, with the 5 positives failing by assertion; `8b79d51` green. White: `7eff266` red, **3 failed, 35 passed**; `c1a2025` green. The gate passed on both tiers (`run_parser_eval.py --tier both`, 2.8 s). CITE precision 0.985 → 0.989, TAG precision 0.952 → 0.976, and no unit, span or card figure falls in any group on either tier (a script compared every group of the two reports). [Before and after](#before-and-after) |
 | ac4, first half: `parser_version` is bumped once | PASS | `b893505`: `DOCX_PARSER_VERSION = "2026.10.27-docx-7"`, once for (1), (2), (4) and (H). `TestTheParserVersion` in `test_cite_lines_by_their_place.py` |
-| ac4, second half: the operator's re-parse written out in full | NOT RUN | The dev steps are written as commands in [Operator follow-ups](#operator-follow-ups), each with where it runs and what success looks like. The full parse rests on a publish from a restored copy that the PM has not yet ruled on ([Deviation 4](#deviations-from-the-spec)). Prod is a separate E40 task, after `v1-e40-t10` (the PM's Q5). Running it is the operator's, after the merge and his return |
+| ac4, second half: the operator's re-parse written out in full | NOT RUN | The dev steps are written as commands in [Operator follow-ups](#operator-follow-ups), each with where it runs and what success looks like. The full parse rests on a publish from a restored copy, which the PM allowed for this re-parse (ruling (a), 2026-10-27; [Deviation 4](#deviations-from-the-spec)). Prod is a separate E40 task, after `v1-e40-t10` (the PM's Q5). Running it is the operator's, after the merge, in the order the PM narrowed on 2026-10-27 |
 | Node `missed-units`: `uv run pytest packages/debate_core/tests/integrations/docx_parser` | PASS | `1002 passed, 2 xfailed in 2.70s` (the two xfails are `v1-e31-t12`'s labelled leftovers) |
 | `uv run scripts/validate_specs.py` | PASS | `OK: 480 files, 40 epics, 418 tasks, 22 releases`; phase `InProgress` |
 
@@ -555,11 +555,18 @@ Q6. ac1 says "(operator)"; the session ran it, read-only, in 2.9 s (working agre
 
 ## Operator follow-ups
 
-**Merge order (the PM's Q5):**
+**Merge order** (the PM's Q5, narrowed by the PM on 2026-10-27 in
+[the section at the end of this report](#the-merge-order-narrowed-recorded-by-the-pm-2026-10-27)):
 
-- The phase 2 pull request merges only after Thursday 2026-10-29's image (`v1-e40-t13`) is applied.
-- After it merges, no dev run image is applied until the operator is back. The switch is the image,
-  not the merge, and any image applied after the merge carries the full re-parse.
+- The phase 2 pull request may merge once the validate-dev run is green for the tag that Thursday
+  2026-10-29's image (`v1-e40-t13`) is built from. That image is built from a tag cut before this
+  PR merges, and its Terraform runs from a worktree at that tag's commit, so it does not carry
+  `docx-7`.
+- Images may be deployed while the operator travels. **No run image carrying `docx-7` is applied
+  until C7 has published all four caselists' `docx-7` directories**, wherever and whenever C7 is
+  run, or until `v1-e40-t08` lets the run parse what a bump owes. The switch is the image, not the
+  merge: any run image built from a release after the merge carries `docx-7`, so it waits for C7
+  too.
 - The re-parse runs Thursday to Monday, never during a Wednesday run.
 - The image also waits for the coach's sample, whatever it says (Q2 (c)). If fewer than 18 of 20 are
   cites, rule (2) is removed before any run image carries it.
@@ -615,7 +622,7 @@ stop. An `other` that is not `{}` is a change I did not expect: paste it as it i
 verdict`. Write `cite`, `not cite` or `unsure` in `verdict` for each row. Then send the PM the three
 counts only. The bar is at least 18 of 20 cites.
 
-### C. The dev re-parse, after the merge and the operator's return
+### C. The dev re-parse, after the merge
 
 Run in this order, Thursday to Monday, never during a Wednesday run (the PM's ruling (a) on
 [Deviation 4](#deviations-from-the-spec), 2026-10-27).

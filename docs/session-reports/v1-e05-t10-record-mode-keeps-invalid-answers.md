@@ -256,9 +256,41 @@ None. The pull request's `ci` check runs the affected set (279 files) or the who
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-27
 
 **Notes:**
+
+A repaired call recorded live now replays both halves, with nothing written by hand, and
+`InvalidModelOutput` still carries no part of the answer.
+1. **ac1 and the node's criterion pass.**
+   * Three kinds of invalid first answer replay to the same error, the same repair request and the
+     same result. The first cassette is compared with a hand-written value.
+   * A no-tool answer records as `null`.
+   * Provider errors, budget refusals and calls that never reached the provider record nothing, each
+     tested.
+   * Red first: 11 failed, all for the one cause. The record-nothing tests pass red by nature, and
+     mutants 2, 4, 6 and 12 show they bite.
+   * No committed cassette changed.
+2. **Mutants: 16, the PM's three among them.** Mutant 10 survived first, and the two-problem case
+   added for it catches it.
+3. **Deviation 1 is accepted, and is the right call.** Re-validating on replay would change the
+   repair request's key for a no-tool answer, and would return a result for an answer refused for its
+   stop reason. Recording the router's own problems, which hold no part of the answer, keeps replay
+   exact. The PM amends the spec's description in the next batch.
+4. **Deviation 2 accepted** (the one README row).
+5. **Decisions accepted:**
+   * the hand-over through a context variable that only record mode listens on, safe under
+     `asyncio.gather`;
+   * no hand-over means no cassette, rather than a false `null`;
+   * repeated tool calls recorded as the list of inputs;
+   * replay logging nothing, held by the built-router test;
+   * removal unchanged.
+6. **Follow-up:** the two t05 hand-written cassettes stay in the older form until re-recorded.
+7. **The affected set** (279 files, through the root conftest's import of `fake_router`) is left to
+   the PR's `ci` under agreement 10. The changed directories, the cassette consumers, the contract
+   suite and the always-run list passed (1,611), and the static checks are clean.
+
+No re-review is needed. The Goal is `Succeeded`, so the PR merges in full.

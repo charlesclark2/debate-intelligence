@@ -11,6 +11,12 @@ directory. The restore must:
   before it takes the lock;
 * be refused, like any runner, while another holds the lease, and in local mode or on a bucket never
   seeded.
+
+With `--with-sources` (`v1-e40-t10`) it must also fetch exactly the raw sources the restored
+manifests name, or those of the `--snapshot` named, into the copy and nowhere else; stop non-zero when
+a named source is missing from the bucket or arrives with another digest, keeping no mismatched byte;
+refuse a disk without room before fetching; and keep every refusal above, which are each run with it
+too.
 """
 
 from __future__ import annotations
@@ -274,9 +280,16 @@ REFUSED: Final[dict[str, tuple[Callable[[Path, Path], Path], str]]] = {
 is what tells the refusals apart."""
 
 
+WITH_AND_WITHOUT_SOURCES: Final = pytest.mark.parametrize(
+    "extra", [(), ("--with-sources",)], ids=["without sources", "with sources"]
+)
+"""`--with-sources` adds no refusal that skips one of these, so each is run with it too."""
+
+
+@WITH_AND_WITHOUT_SOURCES
 @pytest.mark.parametrize("which", sorted(REFUSED))
 def test_a_directory_it_must_not_write_into_is_refused_before_the_lock_is_taken(
-    world: World, tmp_path: Path, which: str
+    world: World, tmp_path: Path, which: str, extra: tuple[str, ...]
 ) -> None:
     live = seeded(world)
     make, reason = REFUSED[which]
@@ -285,7 +298,7 @@ def test_a_directory_it_must_not_write_into_is_refused_before_the_lock_is_taken(
     bucket_before = world.everything()
     versions_before = len(world.versions(RUN_LOCK_KEY))
 
-    refused = restore(world, target)
+    refused = restore(world, target, *extra)
 
     assert refused["exit_code"] == ExitCode.DOMAIN_FAILURE, refused
     assert refused["error"]["code"] == "RESTORE_TARGET_REFUSED", refused["error"]
@@ -320,8 +333,9 @@ def test_a_fresh_machines_data_directory_not_yet_made_is_refused_too(
 # ------------------------------------------------------------------------------------------------
 
 
+@WITH_AND_WITHOUT_SOURCES
 def test_it_is_refused_while_the_cloud_run_holds_the_lock_and_restores_nothing(
-    world: World, tmp_path: Path
+    world: World, tmp_path: Path, extra: tuple[str, ...]
 ) -> None:
     """The cutover's second-runner check: a Mac command meets the cloud run's lease and does nothing."""
     seeded(world)
@@ -329,7 +343,7 @@ def test_it_is_refused_while_the_cloud_run_holds_the_lock_and_restores_nothing(
     before = world.everything()
     copy = tmp_path / "copy"
 
-    refused = restore(world, copy)
+    refused = restore(world, copy, *extra)
 
     assert refused["exit_code"] == ExitCode.DOMAIN_FAILURE, refused
     assert refused["error"]["code"] == "RUN_LOCK_HELD", refused["error"]
@@ -338,31 +352,38 @@ def test_it_is_refused_while_the_cloud_run_holds_the_lock_and_restores_nothing(
     assert not copy.exists() or not any(copy.iterdir()), "nothing restored"
 
 
-def test_in_local_mode_it_restores_nothing_and_takes_nothing(world: World, tmp_path: Path) -> None:
+@WITH_AND_WITHOUT_SOURCES
+def test_in_local_mode_it_restores_nothing_and_takes_nothing(
+    world: World, tmp_path: Path, extra: tuple[str, ...]
+) -> None:
     seeded(world)
     world.mode("local")
     before = world.everything()
     copy = tmp_path / "copy"
 
-    refused = restore(world, copy)
+    refused = restore(world, copy, *extra)
 
     assert refused["error"]["code"] == "RUN_STATE_IS_LOCAL", refused
     assert world.everything() == before
     assert not copy.exists()
 
 
-def test_a_bucket_never_seeded_is_refused_with_nothing_restored(world: World, tmp_path: Path) -> None:
+@WITH_AND_WITHOUT_SOURCES
+def test_a_bucket_never_seeded_is_refused_with_nothing_restored(
+    world: World, tmp_path: Path, extra: tuple[str, ...]
+) -> None:
     world.mode("bucket")
     copy = tmp_path / "copy"
 
-    refused = restore(world, copy)
+    refused = restore(world, copy, *extra)
 
     assert refused["error"]["code"] == "RUN_STATE_NOT_SEEDED", refused
     assert RUN_LOCK_KEY not in world.object_keys()
     assert not copy.exists()
 
 
-def test_in_prod_it_needs_confirm_prod(world: World, tmp_path: Path) -> None:
+@WITH_AND_WITHOUT_SOURCES
+def test_in_prod_it_needs_confirm_prod(world: World, tmp_path: Path, extra: tuple[str, ...]) -> None:
     """Holding prod's lock turns a scheduled run away, so prod asks, as the seed's --execute does."""
     (world.root / "profiles" / "prod.toml").write_text(
         f'[storage]\ndata_dir = "{world.root / "prod-data"}"\n'
@@ -375,7 +396,196 @@ def test_in_prod_it_needs_confirm_prod(world: World, tmp_path: Path) -> None:
         world.monkeypatch.delenv(name)
     world.mode("bucket")
 
-    refused = restore(world, tmp_path / "copy")
+    refused = restore(world, tmp_path / "copy", *extra)
 
     assert refused["error"]["code"] == "CONFIRMATION_REQUIRED", refused["error"]
     assert "--confirm-prod" in refused["error"]["message"]
+
+
+# ------------------------------------------------------------------------------------------------
+# With sources (`v1-e40-t10`)
+# ------------------------------------------------------------------------------------------------
+
+STORED: Final = frozenset({"NEW", "UNCHANGED", "CHANGED", "DUPLICATE"})
+"""The importer's stored classifications: a row with one names a source its snapshot holds."""
+
+FICTIONAL_NAMES: Final = ("Maple Grove", "Riverbend", "Cedar Hollow", "Northgate", ".docx")
+
+
+def named_by(directory: Path, *, caselist: str = "", snapshot: str | None = None) -> dict[str, int]:
+    """Each digest the directory's manifests name in a stored row, with its size. Read here, by hand."""
+    named: dict[str, int] = {}
+    for manifest in sorted((directory / "objects" / "manifests" / caselist).rglob("*.jsonl")):
+        if snapshot is not None and manifest.stem != snapshot:
+            continue
+        for line in manifest.read_text(encoding="utf-8").splitlines():
+            row = json.loads(line) if line.strip() else {}
+            if row.get("kind") == "member" and row.get("classification") in STORED:
+                named[row["sha256"]] = row["byte_size"]
+    return named
+
+
+def blobs_in(directory: Path) -> dict[str, str]:
+    """Each blob in a data directory's blob tree, by its digest, with the SHA-256 of its bytes."""
+    return {
+        path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in sorted((directory / "blobs").rglob("*"))
+        if path.is_file()
+    }
+
+
+def restore_with_sources(world: World, into: Path, *more: str) -> tuple[dict[str, Any], str]:
+    """The envelope, and everything the command said, stdout and stderr together."""
+    result = world.invoke(
+        "--json", "caselist", "restore-run-state", "--into", str(into), "--with-sources", *more
+    )
+    lines = [line for line in result.stdout.splitlines() if line.strip()]
+    assert lines, f"no JSON on stdout: {result.output!r} {result.exception!r}"
+    envelope = json.loads(lines[-1])
+    envelope["exit_code"] = result.exit_code
+    return envelope, result.stdout + result.stderr
+
+
+def raw_key_of(world: World, digest: str) -> str:
+    (key,) = [key for key in world.object_keys("raw/") if key.endswith(f"/{digest}")]
+    return key
+
+
+def test_with_sources_the_copy_holds_every_source_its_manifests_name_and_nothing_else_is_written(
+    world: World, tmp_path: Path
+) -> None:
+    live = seeded(world)
+    live_rows = rows(live / "debate.sqlite3")
+    live_before = files(live)
+    bucket_before = without_the_lock(world.everything())
+    world.monkeypatch.setenv("DEBATE_CASELIST__SYNC_CASELISTS", json.dumps([CASELIST]))
+    copy = tmp_path / "copy"
+
+    restored, said = restore_with_sources(world, copy)
+
+    assert restored["exit_code"] == ExitCode.OK, restored
+    named = named_by(copy)
+    assert len(list((copy / "objects" / "manifests").glob("*/*.jsonl"))) == 3, "the premise: openev's too"
+    assert set(named) <= set(blobs_in(live)), "the premise: the live store holds every one"
+    assert restored["data"]["sources"] == {
+        "manifests": len(list((copy / "objects" / "manifests").rglob("*.jsonl"))),
+        "named": len(named),
+        "fetched": len(named),
+        "fetched_bytes": sum(named.values()),
+        "suppressed": 0,
+    }
+    assert blobs_in(copy) == {digest: digest for digest in named}, "each named source, its bytes its digest"
+    assert f"Fetching {len(named)} raw source(s), {sum(named.values())} bytes" in said
+    assert rows(copy / "debate.sqlite3") == live_rows
+
+    assert files(live) == live_before, "the data directory is left exactly as it was"
+    assert without_the_lock(world.everything()) == bucket_before, "the lock is the only object written"
+    assert world.lock()["state"] == "free"
+    for word in (*FICTIONAL_NAMES, str(tmp_path), *named):
+        assert word not in said, word
+
+
+def test_with_a_snapshot_only_that_snapshots_sources_are_fetched(world: World, tmp_path: Path) -> None:
+    seeded(world)
+    copy = tmp_path / "copy"
+
+    restored, _ = restore_with_sources(world, copy, "--caselist", CASELIST, "--snapshot", WEEK_1.isoformat())
+
+    assert restored["exit_code"] == ExitCode.OK, restored
+    first_week = named_by(copy, caselist=CASELIST, snapshot=WEEK_1.isoformat())
+    assert set(first_week) < set(named_by(copy, caselist=CASELIST)), "the premise: a later week names more"
+    assert set(blobs_in(copy)) == set(first_week)
+    assert restored["data"]["sources"]["manifests"] == 1
+
+
+def test_a_named_source_missing_from_the_bucket_and_not_suppressed_stops_the_command(
+    world: World, tmp_path: Path
+) -> None:
+    """The planted store: a source the second week's manifest names, deleted from the bucket."""
+    live = seeded(world)
+    later = sorted(set(named_by(live)) - set(named_by(live, snapshot=WEEK_1.isoformat())))
+    world.client.delete_object(Bucket=world.bucket, Key=raw_key_of(world, later[0]))
+    live_before = files(live)
+    copy = tmp_path / "copy"
+
+    stopped, said = restore_with_sources(world, copy, "--caselist", CASELIST)
+
+    assert stopped["exit_code"] == ExitCode.DOMAIN_FAILURE, stopped
+    error = stopped["error"]
+    assert error["code"] == "RESTORED_SOURCES_INCOMPLETE", error
+    assert (error["details"]["missing"], error["details"]["mismatched"]) == (1, 0)
+    assert "not a copy to publish from" in error["message"]
+    assert "holds what was restored before the stop" in said
+    assert later[0] not in blobs_in(copy)
+    assert files(live) == live_before
+    assert world.lock()["state"] == "free"
+
+
+def test_bytes_that_are_not_the_digest_named_stop_the_command_and_none_of_them_is_kept(
+    world: World, tmp_path: Path
+) -> None:
+    live = seeded(world)
+    victim = sorted(named_by(live))[0]
+    other = b"bytes that are not the source the manifest names\n"
+    world.client.put_object(
+        Bucket=world.bucket,
+        Key=raw_key_of(world, victim),
+        Body=other,
+        Metadata={"sha256": hashlib.sha256(other).hexdigest()},
+    )
+    copy = tmp_path / "copy"
+
+    stopped, _ = restore_with_sources(world, copy, "--caselist", CASELIST)
+
+    assert stopped["error"]["code"] == "RESTORED_SOURCES_INCOMPLETE", stopped
+    assert stopped["error"]["details"]["mismatched"] == 1
+    assert victim not in blobs_in(copy)
+    assert hashlib.sha256(other).hexdigest() not in files(copy).values(), "no file in the copy keeps them"
+    assert world.lock()["state"] == "free"
+
+
+def test_a_disk_without_room_for_the_sources_is_refused_before_any_fetch(
+    world: World, tmp_path: Path
+) -> None:
+    seeded(world)
+    world.monkeypatch.setattr("debate_core.application.caselist.run_state_sources._free_bytes", lambda _: 0)
+    copy = tmp_path / "copy"
+
+    refused, said = restore_with_sources(world, copy, "--caselist", CASELIST)
+
+    assert refused["error"]["code"] == "TOO_LITTLE_ROOM_FOR_SOURCES", refused
+    assert "Fetching " in said, "the count and bytes are said before the refusal"
+    assert blobs_in(copy) == {}
+    assert world.lock()["state"] == "free"
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [("--snapshot", "2026-09-01"), ("--with-sources", "--snapshot", "last-week")],
+    ids=["a snapshot without --with-sources", "a snapshot that is no snapshot's name"],
+)
+def test_a_snapshot_the_command_cannot_use_is_a_usage_error_before_the_lock(
+    world: World, tmp_path: Path, arguments: tuple[str, ...]
+) -> None:
+    seeded(world)
+    versions_before = len(world.versions(RUN_LOCK_KEY))
+    copy = tmp_path / "copy"
+
+    result = world.invoke(
+        "caselist", "restore-run-state", "--into", str(copy), "--caselist", CASELIST, *arguments
+    )
+
+    assert result.exit_code == 2, result.output
+    assert "--snapshot" in result.output
+    assert len(world.versions(RUN_LOCK_KEY)) == versions_before, "the lock was not taken"
+    assert not copy.exists()
+
+
+def test_a_snapshot_the_copy_has_no_manifest_of_fetches_nothing(world: World, tmp_path: Path) -> None:
+    seeded(world)
+    copy = tmp_path / "copy"
+
+    refused, _ = restore_with_sources(world, copy, "--caselist", CASELIST, "--snapshot", "2026-08-25")
+
+    assert refused["error"]["code"] == "SNAPSHOTS_NOT_RESTORED", refused
+    assert blobs_in(copy) == {}

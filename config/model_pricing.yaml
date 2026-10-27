@@ -10,10 +10,12 @@
 #                                                        one query covering up to 100 documents)
 # A price that is set needs `as_of` (the day it was read) and `source` (the page's URL) beside it.
 #
-# Every price below is set, as read by the operator from that page on 2026-10-26 and committed by the
-# PM. When Bedrock's prices change, read them again and change `as_of` with them. A model with no
-# price costs null, with a warning, and a run with a budget limit refuses its calls (fail closed:
-# an unpriced call is not a free one). Replay and the fake router cost nothing.
+# Every price below is set, as read by the operator from that page and committed by the PM: on
+# 2026-10-26, and on 2026-10-27 for Claude Haiku 4.5 and Sonnet 4.6, which dev routes to while the
+# account's 5.5 quotas are held at zero (v1-e05-t13; the page gives them per million tokens, $1.00 and
+# $5.00, and $3.00 and $15.00). When Bedrock's prices change, read them again and change `as_of` with
+# them. A model with no price costs null, with a warning, and a run with a budget limit refuses its
+# calls (fail closed: an unpriced call is not a free one). Replay and the fake router cost nothing.
 
 version: 1
 
@@ -34,6 +36,18 @@ models:
     input_usd_per_1k_tokens: 0.004
     output_usd_per_1k_tokens: 0.02
     as_of: 2026-10-26
+    source: https://aws.amazon.com/bedrock/pricing/
+
+  anthropic.claude-haiku-4-5-20251001-v1:0:
+    input_usd_per_1k_tokens: 0.001
+    output_usd_per_1k_tokens: 0.005
+    as_of: 2026-10-27
+    source: https://aws.amazon.com/bedrock/pricing/
+
+  anthropic.claude-sonnet-4-6:
+    input_usd_per_1k_tokens: 0.003
+    output_usd_per_1k_tokens: 0.015
+    as_of: 2026-10-27
     source: https://aws.amazon.com/bedrock/pricing/
 
   amazon.titan-embed-text-v2:0:

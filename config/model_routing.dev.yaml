@@ -15,30 +15,41 @@
 #
 # Dev and prod must never share this file (the task spec forbids it). Identifiers checked against
 # the AWS Bedrock model cards on 2026-10-16 (v1-e05-t01-model-router-port).
+#
+# Until the 5.5 quotas are restored, the three Claude routes go to the models this account can call
+# (v1-e05-t13-dev-routes-to-callable-claude-models). On 2026-10-27 the account's applied
+# cross-region tokens-per-minute quotas for Claude Haiku, Sonnet and Opus 5.5 were all 0, so Bedrock
+# refuses every call to them as "not available for this account", and they are held at zero under an
+# open AWS support case. Claude Haiku 4.5 and Sonnet 4.6 hold non-zero quotas and answered a first
+# call that day (v1-e05-t08's PM record). complex_reasoning and high_volume go to Haiku 4.5 and
+# deep_audit to Sonnet 4.6, each route keeping its region, max_tokens and timeout. Prod is unchanged.
+# When the support case restores the quotas, a later change switches dev back to Haiku 5.5 and
+# Sonnet 5.5. Haiku 4.5 costs ten times Haiku 5.5 (config/model_pricing.yaml), so high_volume runs
+# cost more here than in prod until then.
 
 version: 1
 
 routes:
   complex_reasoning:
     provider: bedrock
-    model_id: anthropic.claude-haiku-5-5
-    inference_profile: us.anthropic.claude-haiku-5-5
+    model_id: anthropic.claude-haiku-4-5-20251001-v1:0
+    inference_profile: us.anthropic.claude-haiku-4-5-20251001-v1:0
     region: us-east-1
     max_tokens: 8192
     timeout_seconds: 300
 
   high_volume:
     provider: bedrock
-    model_id: anthropic.claude-haiku-5-5
-    inference_profile: us.anthropic.claude-haiku-5-5
+    model_id: anthropic.claude-haiku-4-5-20251001-v1:0
+    inference_profile: us.anthropic.claude-haiku-4-5-20251001-v1:0
     region: us-east-1
     max_tokens: 2048
     timeout_seconds: 60
 
   deep_audit:
     provider: bedrock
-    model_id: anthropic.claude-sonnet-5-5
-    inference_profile: us.anthropic.claude-sonnet-5-5
+    model_id: anthropic.claude-sonnet-4-6
+    inference_profile: us.anthropic.claude-sonnet-4-6
     region: us-east-1
     max_tokens: 16384
     timeout_seconds: 600

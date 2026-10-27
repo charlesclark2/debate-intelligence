@@ -12,12 +12,13 @@
 #
 #   * one permission set per environment, Debate<Env>BedrockInvoker, assigned to the users named;
 #   * bedrock:InvokeModel and no other action, Allow only, in every statement;
-#   * on exactly the resources v1-e05-t02's report lists: the three us. inference profiles in
-#     us-east-1, the three Claude models behind them in us-east-1, us-east-2 and us-west-2, and the
-#     Titan embedding and Cohere rerank models in us-east-1. Fourteen ARNs, written out by hand
-#     below (working agreement 6), each once;
+#   * on exactly the resources the routing files name: the five us. inference profiles in
+#     us-east-1 (prod's three 5.5 models, and dev's Haiku 4.5 and Sonnet 4.6 while the account's 5.5
+#     quotas are held at zero, v1-e05-t13), the five Claude models behind them in us-east-1,
+#     us-east-2 and us-west-2, and the Titan embedding and Cohere rerank models in us-east-1.
+#     Twenty-two ARNs, written out by hand below (working agreement 6), each once;
 #   * the Claude models only through the profiles: their statement carries
-#     bedrock:InferenceProfileArn, equal to the three profiles' ARNs, and no other statement does.
+#     bedrock:InferenceProfileArn, equal to the five profiles' ARNs, and no other statement does.
 #
 # The account id and user name below are invented.
 
@@ -86,6 +87,8 @@ run "the_set_may_invoke_and_do_nothing_else" {
       "arn:aws:bedrock:us-east-1:111122223333:inference-profile/us.anthropic.claude-haiku-5-5",
       "arn:aws:bedrock:us-east-1:111122223333:inference-profile/us.anthropic.claude-opus-5-5",
       "arn:aws:bedrock:us-east-1:111122223333:inference-profile/us.anthropic.claude-sonnet-5-5",
+      "arn:aws:bedrock:us-east-1:111122223333:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "arn:aws:bedrock:us-east-1:111122223333:inference-profile/us.anthropic.claude-sonnet-4-6",
       "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-haiku-5-5",
       "arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-haiku-5-5",
       "arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-haiku-5-5",
@@ -95,10 +98,16 @@ run "the_set_may_invoke_and_do_nothing_else" {
       "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-5-5",
       "arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-sonnet-5-5",
       "arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-sonnet-5-5",
+      "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
+      "arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
+      "arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
+      "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-4-6",
+      "arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-sonnet-4-6",
+      "arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-sonnet-4-6",
       "arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v2:0",
       "arn:aws:bedrock:us-east-1::foundation-model/cohere.rerank-v3-5:0",
     ]))
-    error_message = "The resources are exactly the fourteen v1-e05-t02's report lists, each once: no wildcard, no other model, region or profile."
+    error_message = "The resources are exactly the twenty-two the routing files name, each once: no wildcard, no other model, region or profile."
   }
 
   assert {
@@ -108,14 +117,16 @@ run "the_set_may_invoke_and_do_nothing_else" {
       || (
         jsonencode(keys(try(statement.Condition, {}))) == jsonencode(["StringEquals"])
         && jsonencode(keys(try(statement.Condition.StringEquals, {}))) == jsonencode(["bedrock:InferenceProfileArn"])
-        && jsonencode(sort(flatten([try(statement.Condition.StringEquals["bedrock:InferenceProfileArn"], [])]))) == jsonencode([
+        && jsonencode(sort(flatten([try(statement.Condition.StringEquals["bedrock:InferenceProfileArn"], [])]))) == jsonencode(sort([
           "arn:aws:bedrock:us-east-1:111122223333:inference-profile/us.anthropic.claude-haiku-5-5",
           "arn:aws:bedrock:us-east-1:111122223333:inference-profile/us.anthropic.claude-opus-5-5",
           "arn:aws:bedrock:us-east-1:111122223333:inference-profile/us.anthropic.claude-sonnet-5-5",
-        ])
+          "arn:aws:bedrock:us-east-1:111122223333:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0",
+          "arn:aws:bedrock:us-east-1:111122223333:inference-profile/us.anthropic.claude-sonnet-4-6",
+        ]))
       )
     ])
-    error_message = "A statement naming a Claude model carries bedrock:InferenceProfileArn, StringEquals the three profiles and nothing else: the models are called through the profiles only."
+    error_message = "A statement naming a Claude model carries bedrock:InferenceProfileArn, StringEquals the five profiles and nothing else: the models are called through the profiles only."
   }
 
   assert {
@@ -180,8 +191,8 @@ run "prod_names_its_own_set_and_grants_the_same_models" {
   }
 
   assert {
-    condition     = length(flatten([for statement in jsondecode(output.policy_json).Statement : flatten([statement.Resource])])) == 14
-    error_message = "prod grants the same fourteen resources: both roots read both routing files."
+    condition     = length(flatten([for statement in jsondecode(output.policy_json).Statement : flatten([statement.Resource])])) == 22
+    error_message = "prod grants the same twenty-two resources: both roots read both routing files."
   }
 }
 

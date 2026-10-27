@@ -503,6 +503,19 @@ def test_the_default_file_routes_each_class_to_the_family_the_spec_names() -> No
 
 
 @pytest.mark.skipif(REPOSITORY_ROOT is None, reason="not running from a source checkout")
+def test_dev_routes_differ_from_prod_in_the_model_alone() -> None:
+    """Dev's cheaper or fallback models keep each class's region, max_tokens and timeout (v1-e05-t13)."""
+    assert REPOSITORY_ROOT is not None
+    development = RoutingPolicy.load(REPOSITORY_ROOT / "config" / "model_routing.dev.yaml").routes
+    production = RoutingPolicy.load(REPOSITORY_ROOT / "config" / "model_routing.prod.yaml").routes
+
+    assert set(development) == set(production)
+    for task_class, route in production.items():
+        which_model = {"model_id": route.model_id, "inference_profile": route.inference_profile}
+        assert development[task_class].model_copy(update=which_model) == route, task_class
+
+
+@pytest.mark.skipif(REPOSITORY_ROOT is None, reason="not running from a source checkout")
 @pytest.mark.parametrize("name", ROUTING_FILES)
 def test_no_committed_claude_route_sends_a_temperature(name: str) -> None:
     """The current Claude models reject any temperature but their default (PM ruling, 2026-10-16)."""

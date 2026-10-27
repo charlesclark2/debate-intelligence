@@ -939,3 +939,34 @@ published all four caselists' `docx-7` directories**, wherever and whenever C7 i
 `v1-e40-t08` lets the run parse what a bump owes). Thursday 2026-10-29's image is built from a tag cut
 before this PR merges, and its Terraform runs from a worktree at that tag's commit, so this PR may merge
 once that tag's validate-dev run is green.
+
+## PM review, second
+
+**Verdict:** ACCEPTED
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:** PM (Claude), 2026-10-27
+
+**Notes:**
+
+The two edits the first review asked for are made, and the one fix the PR's `ci` needed is right.
+1. **The C steps are reordered as ruled.** C5 now pushes and plans without applying. C6 and C7 parse
+   and publish every caselist's `docx-7` directory, and C8 applies the image only after all four C7
+   publishes exit 0 and the PM has read C5's plan. The reason under the C heading is cited from the
+   code (`run_state.py:349`).
+2. **The C7 key check is accepted: ruling (a), recorded here.** `caselist parse --publish` writes
+   `parsed/<caselist>/2026.10.27-docx-7/` through one `put_file` call, and the bucket's run lock
+   (`reports/sync/run-lock.json`: taken, renewed, released `free`). The lock is the concurrency
+   control ruling (a) relies on, and every bucket-writing command holds it. It is no bundle, manifest
+   or index, so the condition holds. The section's closing "Why this stops at the checkpoint" is the
+   question as it was asked, and this note answers it.
+3. **The `ci` fix is accepted.** `tests/scripts/test_sample_cite_shapes.py` failed 4 tests on PR #568
+   because its invented "left, nothing" line is now read as a cite by rule (2), the reading the rule
+   was written for. Switching t31's pass off in that sampler, as it already does for t24's rule, is
+   right: its strata were planned before this task. The 48 affected files that read the parser
+   passed locally after the fix, and the PR's `ci` is the check.
+4. **The merge order** is the narrowed one recorded above. The PR merges `--partial` once Thursday
+   2026-10-29's tag has a green validate-dev run. No run image carrying `docx-7` is applied until C7
+   has published all four caselists.
+
+No further review is needed.

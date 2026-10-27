@@ -41,19 +41,23 @@ Seasons before 2021-22 are never imported, and the setting refuses one.
   ledger (`reports/sync/state/caselist-backfile-download-starts.json`). Every machine that runs the
   command reads the same ledger. The weekly run's ledger is never read or written, so the weekly
   run's five downloads a day are its own.
-* **Not before the first scheduled cloud weekly run has succeeded**, on Wednesday 2026-11-04 (the PM's
-  ruling of 2026-10-25), so that no larger run-state bundle is in play during the cutover's first
-  run. The earliest import is Thursday 2026-11-05.
+* **Not before the first scheduled cloud weekly run has succeeded** (the PM's ruling of 2026-10-25),
+  so that no larger run-state bundle is in play during the cutover's first run. That run is
+  Wednesday 2026-10-28; the cloud dry run follows it, and the imports wait for the operator's return
+  after 2026-11-01 (the PM, 2026-10-27).
 * **In bucket mode, on a seeded bucket.** The ledger and the lock are the bucket's: local mode is
   refused (`NOT_IN_BUCKET_MODE`), and so is a bucket the cutover has not seeded
   (`RUN_STATE_NOT_SEEDED`).
 
 ## Where it runs
 
-**In the cloud**, as a one-off task with larger scratch storage (the PM's ruling Q4; the task is
-filed under E40). The command reads only settings, so the same build runs it unchanged in the
-caselist image. The data directory, the inbox and the Tabroom token's backend come from the task's
-environment, as the weekly run's do.
+**In the cloud**, as a one-off task of the weekly run's own task definition, started by hand with its
+command overridden to this one, never on a schedule (`v1-e40-t09`, the PM's rulings of 2026-10-27):
+[caselist-cloud-run.md, "Backfile imports"](caselist-cloud-run.md#backfile-imports) is how, with
+`ops/caselist_run/start_backfile_import.py`. The command reads only settings, so the same build runs
+it unchanged in the caselist image. The data directory, the inbox and the Tabroom token's backend
+come from the task's environment, as the weekly run's do, and the run's 100 GiB volume holds the
+largest import.
 
 **Not on the Mac**, whose data volume had 12 GiB free on 2026-10-25. One import keeps, by its own
 estimate, the archive in the inbox, its blobs and its parsed store (4 times its sources' bytes),
@@ -75,7 +79,9 @@ Each takes an estimated 1.5 to 2.5 hours end to end: download, import, parse and
 
 ## The dry run
 
-Always first. It lists the caselist's downloads, asks the file host the size of its newest complete
+Always first. In the cloud the script starts it with `--dry-run`, and its result is the task's log
+([caselist-cloud-run.md, "The dry run"](caselist-cloud-run.md#the-dry-run-v1-e40-t09-ac2)); the block
+below is the same command on a machine that has the room. It lists the caselist's downloads, asks the file host the size of its newest complete
 archive with a `HEAD`, reads the bucket's backfile ledger and the data directory's volume, and
 names every refusal the import would meet. It downloads nothing, writes nothing and takes no lock.
 
@@ -141,7 +147,8 @@ A whole-file removal deletes the parsed store's aggregates (`index.jsonl`, `fail
 `occurrences.jsonl`) of every caselist it touches, backfiles included ([removal runbook, step
 5](caselist-removal.md#step-5--execute-in-dev)). A backfile's parsed store is not on the Mac, so
 `caselist parse --caselist <slug> --publish` there cannot rebuild it. **The rebuild is the import run
-again**, dry run first, then `--execute`, where the import runs. Imported already, it downloads
+again**, dry run first, then `--execute`, where the import runs: in the cloud, the same task an import
+is, started the same way ([caselist-cloud-run.md, "Backfile imports"](caselist-cloud-run.md#backfile-imports)). Imported already, it downloads
 nothing and spends no budget. It restores the backfile's parsed store, rebuilds the aggregates
 without what the removal took out, and publishes them. The window applies as to any import.
 

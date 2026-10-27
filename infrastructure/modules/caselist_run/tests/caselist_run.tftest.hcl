@@ -2011,3 +2011,144 @@ run "an_alert_address_that_is_not_one_email_is_refused" {
 
   expect_failures = [var.alert_email]
 }
+
+# ---------------------------------------------------------------------------------------------
+# A backfile import, started by hand on the run's own task definition (v1-e40-t09)
+# ---------------------------------------------------------------------------------------------
+#
+# The PM's rulings of 2026-10-27: each of the four backfile imports is a task of the run's own task
+# definition, started by ops/caselist_run/start_backfile_import.py with its command overridden to
+# `caselist backfile-import --caselist <slug>`. So what this module owes an import is what it gives
+# the run, held here for the import's sake: the room it needs, no schedule that starts one, the run
+# role with no grant the import added, the run's alert when one fails, and the late-run alarm that an
+# import can never satisfy.
+
+run "the_runs_storage_holds_the_largest_backfile_import_with_its_image_and_its_restore" {
+  command = apply
+
+  variables {
+    image_digest = "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+  }
+
+  # hsld25's complete archive, 4,366,678,808 bytes (docs/data/caselist-backfile-seasons.md), needs
+  # 32,750,091,060 bytes free by v1-e34-t34's estimate with its 25% headroom (`space_needed`): the
+  # largest of the four. On Fargate the volume holds the image's layers too, allowed 5 GiB, and the
+  # restore's bundle and state files, allowed 1 GiB (the bundle measured 9 MB at the cutover).
+  # tests/docs/test_backfile_import_plan_check.py holds the first figure to t34's own function.
+  assert {
+    condition     = aws_ecs_task_definition.run[0].ephemeral_storage[0].size_in_gib * 1073741824 >= 32750091060 + 5 * 1073741824 + 1 * 1073741824
+    error_message = "The run's ephemeral storage must hold the largest backfile import, hsld25's 32,750,091,060 bytes with headroom, beside the image (5 GiB) and the restore (1 GiB): at least 37 GiB."
+  }
+}
+
+run "no_schedule_starts_a_backfile_import" {
+  command = apply
+
+  variables {
+    image_digest = "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+  }
+
+  assert {
+    condition = (
+      try(aws_scheduler_schedule.run[0].target[0].input, null) == null
+      && try(aws_scheduler_schedule.login[0].target[0].input, null) == null
+    )
+    error_message = "Neither schedule passes an input: an input is a RunTask override, and an override is how a schedule would start a backfile import. Imports are started by hand only."
+  }
+
+  assert {
+    condition = (
+      aws_scheduler_schedule.run[0].target[0].ecs_parameters[0].task_definition_arn == aws_ecs_task_definition.run[0].arn
+      && jsondecode(aws_ecs_task_definition.run[0].container_definitions)[0].command == ["--json", "caselist", "pull"]
+      && !strcontains(aws_ecs_task_definition.run[0].container_definitions, "backfile")
+    )
+    error_message = "The run's schedule starts the run's own revision, whose command is the weekly pull and names no backfile."
+  }
+}
+
+run "a_backfile_import_needs_no_grant_the_run_role_lacks" {
+  command = apply
+
+  # Every call v1-e34-t34's steps make is the everyday evidence document's (the lock, the backfile
+  # ledger, the manifest's HEAD, the restore and the publishes), the token's read or the alert topic
+  # (the session report's checkpoint, accepted by the PM on 2026-10-27). So the run role's three
+  # policies are exactly as t03 and t05 left them; this pins the one not pinned whole elsewhere.
+  assert {
+    condition = jsonencode(jsondecode(aws_iam_role_policy.run_credentials.policy).Statement) == jsonencode([
+      {
+        Sid      = "ReadTheToken"
+        Effect   = "Allow"
+        Action   = "secretsmanager:GetSecretValue"
+        Resource = "arn:aws:secretsmanager:us-east-1:111122223333:secret:debate-mock-caselist-token-ToKeNx"
+      },
+      {
+        Sid      = "DecryptTheTokenThroughSecretsManager"
+        Effect   = "Allow"
+        Action   = "kms:Decrypt"
+        Resource = "arn:aws:kms:us-east-1:111122223333:key/00000000-0000-0000-0000-00000000c0de"
+        Condition = {
+          StringEquals = {
+            "kms:ViaService"                  = "secretsmanager.us-east-1.amazonaws.com"
+            "kms:EncryptionContext:SecretARN" = "arn:aws:secretsmanager:us-east-1:111122223333:secret:debate-mock-caselist-token-ToKeNx"
+          }
+        }
+      },
+    ])
+    error_message = "The run role's caselist-credentials policy is the token's read and its decrypt, and nothing a backfile import added."
+  }
+
+  assert {
+    condition = (
+      aws_iam_role_policies_exclusive.run.policy_names == toset(["caselist-credentials", "everyday-evidence", "caselist-alerts"])
+      && aws_iam_role_policy.run_evidence.policy == var.evidence_policy_json
+      && jsonencode(jsondecode(aws_iam_role_policy.run_alerts.policy).Statement) == jsonencode([{ Sid = "TellTheCoachARunFailed", Effect = "Allow", Action = "sns:Publish", Resource = "arn:aws:sns:us-east-1:111122223333:debate-mock-caselist-run-alerts" }])
+    )
+    error_message = "The run role keeps its three policies and no fourth: the evidence document itself, and the alert topic's publish."
+  }
+}
+
+run "a_backfile_import_that_stops_non_zero_emails_the_coach_as_a_failed_run_does" {
+  command = apply
+
+  variables {
+    image_digest = "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+  }
+
+  # An import is a task of the run's family, so the run's own rule is the import's alert: it matches
+  # every revision by the family's prefix, and nothing in it tells a hand-started task from the
+  # schedule's (no startedBy, no group, no command).
+  assert {
+    condition = (
+      startswith(aws_ecs_task_definition.run[0].arn, jsondecode(aws_cloudwatch_event_rule.task_stopped["run"].event_pattern).detail.taskDefinitionArn[0].prefix)
+      && endswith(jsondecode(aws_cloudwatch_event_rule.task_stopped["run"].event_pattern).detail.taskDefinitionArn[0].prefix, "task-definition/debate-mock-caselist-run:")
+      && toset(keys(jsondecode(aws_cloudwatch_event_rule.task_stopped["run"].event_pattern).detail)) == toset(["$or", "clusterArn", "lastStatus", "taskDefinitionArn"])
+    )
+    error_message = "The run-stopped rule matches every task of the run's family, whoever started it and whatever its command, so a failed backfile import emails the coach as a failed weekly run does."
+  }
+
+  assert {
+    condition = (
+      strcontains(aws_cloudwatch_event_target.task_stopped["run"].input_transformer[0].input_template, "or a backfile import someone started by hand")
+      && strcontains(aws_cloudwatch_event_target.task_stopped["run"].input_transformer[0].input_template, "docs/runbooks/caselist-cloud-run.md, Backfile imports")
+      && !strcontains(aws_cloudwatch_event_target.task_stopped["login"].input_transformer[0].input_template, "backfile")
+    )
+    error_message = "The run-stopped email names a hand-started backfile import as well as the weekly run, and where to read which it was; the login's email is unchanged."
+  }
+}
+
+run "a_backfile_import_never_counts_as_a_weekly_run" {
+  command = apply
+
+  # The late-run alarm counts RunsRecorded, which only this filter writes, and the filter counts only
+  # `caselist pull` envelopes carrying a run record. An import's envelope says `caselist
+  # backfile-import` and carries none (packages/debate_cli/tests/bucket_mode/test_backfile_import.py),
+  # so an import that finishes cannot hide a Wednesday with no run.
+  assert {
+    condition = (
+      startswith(aws_cloudwatch_log_metric_filter.runs_recorded.pattern, "{ ($.command = \"caselist pull\") && ")
+      && aws_cloudwatch_metric_alarm.late_run.metric_name == aws_cloudwatch_log_metric_filter.runs_recorded.metric_transformation[0].name
+      && aws_cloudwatch_metric_alarm.late_run.namespace == aws_cloudwatch_log_metric_filter.runs_recorded.metric_transformation[0].namespace
+    )
+    error_message = "A run is counted for the late-run alarm only from a `caselist pull` envelope: a backfile import, whose command is `caselist backfile-import`, never counts."
+  }
+}

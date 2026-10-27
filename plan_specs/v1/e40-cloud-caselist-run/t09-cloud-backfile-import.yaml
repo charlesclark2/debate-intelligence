@@ -73,7 +73,7 @@ spec:
         The four imports, at most one a day, with counts in docs/data, and the next weekly
         cloud run after the first one restores and finishes in its usual time (operator).
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -28,14 +28,17 @@ Nothing here is real caselist content, and no test opens a socket.
 from __future__ import annotations
 
 import gzip
+import importlib.util
 import io
 import json
 import shutil
+import sys
 import tarfile
 import zipfile
 from collections.abc import Iterator
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from types import ModuleType
 from typing import Any, Final
 
 import httpx
@@ -600,3 +603,75 @@ def test_an_upload_a_backfile_import_refused_at_a_held_path_is_found_from_anothe
     assert planned["exit_code"] == ExitCode.OK, planned
     sources = {one["sha256"]: one for one in planned["data"]["sources"]}
     assert sources[digest_of("cardmirror")]["inclusion"] == "held_at_import", sorted(sources)
+
+
+# ------------------------------------------------------------------------------------------------
+# The command a cloud task is started with (v1-e40-t09)
+# ------------------------------------------------------------------------------------------------
+#
+# ops/caselist_run/start_backfile_import.py starts the run's task definition with its command
+# overridden. These run that very command, as the script builds it, through the CLI over the stand-in
+# bucket and site: the budget and the window are the command's own refusals in the task, and its
+# result is never a weekly run's (the PM's rulings of 2026-10-27).
+
+START_SCRIPT: Final = (
+    Path(__file__).resolve().parents[4] / "ops" / "caselist_run" / "start_backfile_import.py"
+)
+
+
+def start_script() -> ModuleType:
+    spec = importlib.util.spec_from_file_location("start_backfile_import", START_SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def cloud_command(caselist: str, *, execute: bool = True) -> list[str]:
+    """The container's command as the script starts it, less the `--json` the world adds itself."""
+    started = start_script().import_command(caselist, execute=execute, environment="dev")
+    assert started[0] == "--json"
+    return list(started[1:])
+
+
+def test_the_command_a_cloud_task_is_started_with_refuses_inside_the_window_before_any_download(
+    backfiles: tuple[World, Site],
+) -> None:
+    world, site = backfiles
+    world.clock.now = ON_A_WEDNESDAY
+
+    assert refusals(world.run(*cloud_command(BACKFILE))) == ["INSIDE_NO_IMPORT_WINDOW"]
+    assert refusals(world.run(*cloud_command(BACKFILE, execute=False))) == ["INSIDE_NO_IMPORT_WINDOW"]
+    assert site.fetched == []
+    assert BACKFILE_LEDGER_KEY not in world.object_keys("reports/sync/state/"), "no budget was spent"
+    assert world.object_keys(f"manifests/{BACKFILE}/") == set()
+
+
+def test_the_command_a_cloud_task_is_started_with_refuses_without_budget_before_any_download(
+    backfiles: tuple[World, Site], tmp_path: Path
+) -> None:
+    world, site = backfiles
+    assert world.run(*cloud_command(BACKFILE))["exit_code"] == ExitCode.OK
+    world.use(tmp_path / "the-next-task")
+    world.clock.advance(timedelta(hours=23, minutes=59))
+
+    assert refusals(world.run(*cloud_command(OTHER_BACKFILE))) == ["BACKFILE_BUDGET_SPENT"]
+    assert len(site.fetched) == 1, "only the first import downloaded"
+    assert world.object_keys(f"manifests/{OTHER_BACKFILE}/") == set()
+
+
+def test_what_a_cloud_import_prints_is_never_counted_as_a_weekly_run(backfiles: tuple[World, Site]) -> None:
+    """The late-run alarm counts `caselist pull` envelopes that carry a run record
+    (infrastructure/modules/caselist_run/alerts.tf, `runs_recorded`): an import's is neither."""
+    world, _ = backfiles
+    runs_before = world.object_keys("reports/sync-runs/")
+
+    planned = world.run(*cloud_command(BACKFILE, execute=False))
+    imported = world.run(*cloud_command(BACKFILE))
+
+    for envelope in (planned, imported):
+        assert envelope["exit_code"] == ExitCode.OK, envelope
+        assert envelope["command"] == "caselist backfile-import"
+        assert "run_record" not in json.dumps(envelope)
+    assert world.object_keys("reports/sync-runs/") == runs_before, "no run record published"

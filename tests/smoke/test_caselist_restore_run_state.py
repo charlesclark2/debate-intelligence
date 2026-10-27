@@ -3,6 +3,8 @@
 What the cutover's runbook relies on before anything reaches AWS: the build has the command, its
 bundled dev profile names the weekly run's caselists and keeps the run's state in the bucket, and the
 command refuses this environment's own data directory before it builds a client or takes a lock. The
+hand prod publish's restore (`v1-e40-t10`) adds `--with-sources`, which keeps that refusal and takes
+`--snapshot` only with it. The
 restore itself, against a bucket, is tested in-process against moto
 (`packages/debate_cli/tests/bucket_mode/test_restore_run_state.py`); here nothing reaches a network,
 and the guard would fail the check if anything tried.
@@ -12,6 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
 from tests.smoke.installed_build import InstalledCli
 
 from debate_cli.exit_codes import ExitCode
@@ -46,13 +49,20 @@ IN_BUCKET_MODE: dict[str, str | None] = {
 }
 
 
+@pytest.mark.parametrize("extra", [(), ("--with-sources",)], ids=["without sources", "with sources"])
 def test_restore_run_state_refuses_the_data_directory_before_it_reaches_the_bucket(
-    installed_cli: InstalledCli,
+    installed_cli: InstalledCli, extra: tuple[str, ...]
 ) -> None:
     installed_cli.data_dir.mkdir(parents=True, exist_ok=True)
 
     run = installed_cli.run(
-        "--json", "caselist", "restore-run-state", "--into", str(installed_cli.data_dir), env=IN_BUCKET_MODE
+        "--json",
+        "caselist",
+        "restore-run-state",
+        "--into",
+        str(installed_cli.data_dir),
+        *extra,
+        env=IN_BUCKET_MODE,
     )
 
     assert run.exit_code == ExitCode.DOMAIN_FAILURE, run.output
@@ -85,3 +95,26 @@ def test_restore_run_state_says_what_it_takes(installed_cli: InstalledCli) -> No
     assert run.exit_code == 0, run.output
     assert "--into" in run.stdout
     assert "under its lock" in run.stdout
+
+
+def test_restore_run_state_offers_sources_and_takes_a_snapshot_only_with_them(
+    installed_cli: InstalledCli,
+) -> None:
+    shown = installed_cli.run("caselist", "restore-run-state", "--help", env={"COLUMNS": "200"})
+    assert shown.exit_code == 0, shown.output
+    assert "--with-sources" in shown.stdout
+    assert "--snapshot" in shown.stdout
+
+    refused = installed_cli.run(
+        "caselist",
+        "restore-run-state",
+        "--into",
+        str(installed_cli.home / "copy"),
+        "--snapshot",
+        "2026-11-04",
+        env=IN_BUCKET_MODE,
+    )
+
+    assert refused.exit_code == ExitCode.USAGE_ERROR, refused.output
+    assert "--with-sources" in refused.output
+    assert not (installed_cli.home / "copy").exists()

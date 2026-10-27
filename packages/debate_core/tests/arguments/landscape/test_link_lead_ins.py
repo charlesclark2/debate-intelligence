@@ -25,6 +25,7 @@ import yaml
 
 from debate_core.application.landscape_report import LandscapeReportInputs, LandscapeReportService
 from debate_core.domain.landscape import Taxonomy
+from debate_core.domain.landscape_classification import PositionRole
 from debate_core.domain.landscape_report import ImpactCard, LandscapeReport, LeadInSource
 from debate_core.testing.landscape_report import read_synthetic_caselist, synthetic_staleness
 
@@ -216,6 +217,33 @@ def test_a_link_in_another_section_names_nothing() -> None:
     report = _report(read_synthetic_caselist(FIXTURE))
     assert _named(report, "hospital-closures-da") == [TAG]
     assert _rank(report, "hospital-closures-da", 1).link_tag is None
+
+
+def test_a_link_under_another_heading_of_the_position_names_nothing() -> None:
+    # b5's link card moves under `neg file > spending da`: still the Spending DA's, but another section
+    # of the file than rank 3's `spending da`, so the walk up from rank 3 stops before it.
+    inputs = _with_edits(_edits())
+    cards = tuple(
+        card.model_copy(update={"headings": ("neg file", "spending da")})
+        if (card.source_sha256[:2], card.element_index) == B5_LINK
+        else card
+        for card in inputs.cards
+    )
+    rank_3 = _rank(_report(dataclasses.replace(inputs, cards=cards)), "spending-da", 3)
+    assert (rank_3.link_tag, rank_3.named_by) == (None, TAG)
+
+
+def test_a_link_on_a_card_that_answers_the_position_names_nothing() -> None:
+    # b5's link card is classified as answering the Spending DA, so it is not counted for it.
+    inputs = _with_edits(_edits())
+    classifications = tuple(
+        one.model_copy(update={"role": PositionRole.ANSWERS})
+        if (one.source_sha256[:2], one.first_element_index) == B5_LINK
+        else one
+        for one in inputs.classifications
+    )
+    rank_3 = _rank(_report(dataclasses.replace(inputs, classifications=classifications)), "spending-da", 3)
+    assert (rank_3.link_tag, rank_3.named_by) == (None, TAG)
 
 
 def test_no_advantage_rank_is_named_by_a_link_when_no_advantage_card_labels_one() -> None:

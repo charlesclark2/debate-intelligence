@@ -705,6 +705,102 @@ def test_a_path_to_a_deleted_fixture_still_names_it(workspace: Workspace) -> Non
 
 
 # --------------------------------------------------------------------------------------------
+# A conftest below the root, fixture by fixture (v1-e01-t32)
+# --------------------------------------------------------------------------------------------
+
+WORLD = f"{CORE_TESTS}/world"
+WORLD_TESTS = {
+    "light": f"{WORLD}/test_uses_light.py",
+    "heavy": f"{WORLD}/test_uses_heavy.py",
+    "none": f"{WORLD}/test_uses_no_fixture.py",
+    "composed": f"{WORLD}/deeper/test_composed.py",
+}
+FIXTURE_WORLD = {
+    f"{CORE}/world_light.py": "LIGHT = 1\n",
+    f"{CORE}/world_heavy.py": "HEAVY = 1\n",
+    f"{CORE}/world_lazy.py": "LAZY = 1\n",
+    f"{CORE}/world_hooks.py": "def mark(items):\n    pass\n",
+    f"{CORE}/world_unused.py": "NOTHING = 1\n",
+    f"{WORLD}/cases/one.json": "{}\n",
+    f"{WORLD}/conftest.py": (
+        "from pathlib import Path\n\n"
+        "import pytest\n"
+        "from debate_core.world_heavy import HEAVY\n"
+        "from debate_core.world_hooks import mark\n"
+        "from debate_core.world_light import LIGHT\n"
+        "from debate_core.world_unused import NOTHING\n\n"
+        'CASES = Path(__file__).parent / "cases"\n\n\n'
+        "@pytest.fixture\n"
+        "def light():\n"
+        "    return LIGHT\n\n\n"
+        "@pytest.fixture\n"
+        "def heavy(light):\n"
+        "    from debate_core.world_lazy import LAZY\n\n"
+        "    return HEAVY + LAZY + light\n\n\n"
+        "def pytest_collection_modifyitems(items):\n"
+        "    mark(items)\n"
+    ),
+    f"{WORLD}/deeper/conftest.py": (
+        "import pytest\n\n\n@pytest.fixture\ndef composed(heavy):\n    return heavy\n"
+    ),
+    WORLD_TESTS["light"]: "def test_light(light):\n    assert light\n",
+    WORLD_TESTS["heavy"]: "def test_heavy(heavy):\n    assert heavy\n",
+    WORLD_TESTS["none"]: "def test_plain():\n    pass\n",
+    WORLD_TESTS["composed"]: "def test_composed(composed):\n    assert composed\n",
+}
+
+
+@pytest.mark.parametrize(
+    ("module", "users"),
+    [
+        # `heavy` requests `light`, and the deeper conftest's `composed` requests `heavy`.
+        pytest.param("world_light", {"light", "heavy", "composed"}, id="a fixture and what requests it"),
+        pytest.param("world_heavy", {"heavy", "composed"}, id="one fixture"),
+        # Imported inside the fixture's own function: it counts for that fixture, as a top-level one does.
+        pytest.param("world_lazy", {"heavy", "composed"}, id="an import inside a fixture"),
+        pytest.param("world_hooks", {"light", "heavy", "none", "composed"}, id="a pytest hook"),
+        # Nothing uses it, but an import that fails would fail every test beneath the conftest.
+        pytest.param("world_unused", {"light", "heavy", "none", "composed"}, id="an import nothing uses"),
+    ],
+)
+def test_what_a_conftests_fixture_needs_selects_the_tests_using_that_fixture(
+    workspace: Workspace, module: str, users: set[str]
+) -> None:
+    result = describe(workspace, FIXTURE_WORLD, changed_text(FIXTURE_WORLD, f"{CORE}/{module}.py"))
+    assert_selected(result, {WORLD_TESTS[user] for user in users} | ALWAYS | READS_SOURCE)
+
+
+def test_a_file_a_conftest_names_still_selects_every_test_beneath_it(workspace: Workspace) -> None:
+    result = describe(workspace, FIXTURE_WORLD, {f"{WORLD}/cases/one.json": '{"changed": 1}\n'})
+    assert_selected(result, set(WORLD_TESTS.values()) | ALWAYS)
+
+
+def test_a_conftest_reached_by_a_fixtures_import_and_by_a_name_reaches_every_test_beneath_it(
+    workspace: Workspace,
+) -> None:
+    change = {
+        **changed_text(FIXTURE_WORLD, f"{CORE}/world_light.py"),
+        f"{WORLD}/cases/one.json": '{"changed": 1}\n',
+    }
+    result = describe(workspace, FIXTURE_WORLD, change)
+    assert_selected(result, set(WORLD_TESTS.values()) | ALWAYS | READS_SOURCE)
+
+
+def test_explain_names_the_fixture_a_test_reaches_a_change_through(workspace: Workspace) -> None:
+    workspace.commit(FIXTURE_WORLD, "setup")
+    workspace.commit(changed_text(FIXTURE_WORLD, f"{CORE}/world_lazy.py"), "described")
+    lines = workspace.run("--diff", "HEAD", "--explain").stdout.splitlines()
+    assert (
+        f"{WORLD_TESTS['heavy']}  <- uses the heavy fixture of {WORLD}/conftest.py, which needs "
+        f"debate_core.world_lazy ({CORE}/world_lazy.py), which changed"
+    ) in lines
+
+
+def changed_text(files: dict[str, str], path: str) -> dict[str, str]:
+    return {path: files[path] + "\n# changed\n"}
+
+
+# --------------------------------------------------------------------------------------------
 # The root pyproject.toml, table by table (v1-e01-t32)
 # --------------------------------------------------------------------------------------------
 

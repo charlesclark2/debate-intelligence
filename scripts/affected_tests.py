@@ -455,6 +455,8 @@ RUNS = "runs"
 NAMES = "names"
 READS_SOURCE = "reads the Python source of"
 ROOT_CONFTEST = "conftest.py"
+# The edges a conftest read fixture by fixture is reached by when its fixtures' own edges carry them.
+FIXTURE_EDGES = frozenset({IMPORTS, RUNS})
 
 
 @dataclass
@@ -463,6 +465,9 @@ class Graph:
     dependents: dict[str, list[tuple[str, str]]] = field(default_factory=dict)  # target -> (who, how)
     notes: list[str] = field(default_factory=list)
     root_conftest_unread: bool = False
+    # Conftests below the root read fixture by fixture: reaching one through a file it imports or
+    # runs does not reach every test beneath it (v1-e01-t32).
+    narrowed_conftests: set[str] = field(default_factory=set)
 
     def add(self, dependent: str, how: str, target: str) -> None:
         if dependent != target:
@@ -498,6 +503,9 @@ def build_graph(tree: Tree, layout: Layout) -> Graph:
                 graph.add(test, CONFTEST, conftest)
     if ROOT_CONFTEST in tree.texts:
         add_root_conftest_fixtures(tree, layout, resolver, graph, conftests)
+    for conftest in conftests:
+        if conftest != ROOT_CONFTEST and conftest in tree.texts:
+            add_conftest_fixtures(tree, layout, resolver, graph, conftest, conftests)
     return graph
 
 
@@ -514,74 +522,186 @@ def add_root_conftest_fixtures(
     a test or a conftest beneath it that names it. Autouse fixtures, and the conftest's module-level
     code, reach every test, so what they need is counted for every test.
     """
-    syntax = tree.syntax(ROOT_CONFTEST)
-    if syntax is None:
+    reading = read_conftest(tree, resolver, ROOT_CONFTEST)
+    if reading is None:
         graph.root_conftest_unread = True
         return
-    imported: dict[str, set[str]] = {}
-    for node in ast.walk(syntax):
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                local = alias.asname or alias.name.split(".")[0]
-                imported.setdefault(local, set()).update(resolver.resolve(ROOT_CONFTEST, 0, alias.name, ()))
-        elif isinstance(node, ast.ImportFrom):
-            for alias in node.names:
-                files = resolver.resolve(ROOT_CONFTEST, node.level, node.module or "", (alias.name,))
-                imported.setdefault(alias.asname or alias.name, set()).update(files)
-    definitions: dict[str, set[str]] = {}  # a module-level name -> the names its definition uses
-    everywhere: set[str] = set()  # names module-level code and autouse fixtures use
-    fixtures: dict[str, set[str]] = {}  # fixture name -> the names its function uses
-    for statement in syntax.body:
-        if isinstance(statement, ast.Import | ast.ImportFrom):
+    for file in sorted(reading.files(reading.everywhere)):
+        for test in layout.test_files:
+            graph.add(
+                test, "is beneath the root conftest.py, whose module code or autouse fixtures need", file
+            )
+    for name, used in sorted(reading.fixtures.items()):
+        files = reading.files(used)
+        if not files:
             continue
-        used = {node.id for node in ast.walk(statement) if isinstance(node, ast.Name)}
-        if isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
-            definitions[statement.name] = used
-            fixture = fixture_of(statement)
-            if fixture is not None:
-                name, autouse = fixture
-                if autouse:
-                    everywhere |= used
-                else:
-                    fixtures[name] = used
-        elif isinstance(statement, ast.Assign | ast.AnnAssign):
-            targets = statement.targets if isinstance(statement, ast.Assign) else [statement.target]
-            for target in targets:
-                for node in ast.walk(target):
-                    if isinstance(node, ast.Name):
-                        definitions[node.id] = used
-            everywhere |= used
-        else:
-            everywhere |= used
+        users = fixture_users(tree, layout, ROOT_CONFTEST, name, set(layout.test_files), conftests)
+        for file in sorted(files):
+            for test in sorted(users):
+                graph.add(test, f"uses the root conftest.py's {name} fixture, which needs", file)
 
-    def needs(names: set[str]) -> set[str]:
+
+def add_conftest_fixtures(
+    tree: Tree, layout: Layout, resolver: Resolver, graph: Graph, conftest: str, conftests: list[str]
+) -> None:
+    """The same for a conftest below the root: a test beneath it reaches what its fixtures need (v1-e01-t32).
+
+    `packages/debate_core/tests/application/caselist/conftest.py` imports the removal, publish and
+    suppression services for its `removal_world` fixture; a test that uses only `local` reached
+    them all. Now each file the conftest imports or runs reaches:
+
+    * every test beneath it, when module code, an autouse fixture or a `pytest_*` hook needs it,
+      or when nothing in the conftest does (an import that fails still fails every test beneath);
+    * otherwise the tests beneath that use a fixture needing it, by name, directly or through a
+      conftest further down that names it.
+
+    An import inside a fixture's function counts for that fixture, as one at the top of the file
+    does: what decides is which code uses the name. A file the conftest names (a fixture folder)
+    still reaches every test beneath it, and so does a change to the conftest itself
+    (:meth:`Walk.run`). A conftest that does not parse is read whole, as before.
+    """
+    reading = read_conftest(tree, resolver, conftest)
+    if reading is None:
+        return
+    folder = str(PurePosixPath(conftest).parent) + "/"
+    beneath = {test for test in layout.test_files if test.startswith(folder)}
+    reached: dict[str, dict[str, str]] = {}  # file -> test -> how
+    everywhere = (
+        reading.files(reading.everywhere) | reading.runs(reading.everywhere) | reading.run_by.get("", set())
+    )
+    used_anywhere = reading.needs(reading.everywhere.union(*reading.fixtures.values()))
+    unused = set(resolver.imports_of(conftest)) - reading.files(used_anywhere)
+    for file in everywhere | unused:
+        for test in beneath:
+            reached.setdefault(file, {})[test] = (
+                f"is beneath {conftest}, whose module code, hooks or imports need"
+            )
+    for name, used in sorted(reading.fixtures.items()):
+        files = reading.files(used) | reading.runs(used)
+        if not files:
+            continue
+        users = fixture_users(tree, layout, conftest, name, beneath, conftests)
+        for file in files:
+            for test in users:
+                reached.setdefault(file, {}).setdefault(
+                    test, f"uses the {name} fixture of {conftest}, which needs"
+                )
+    for file, tests in sorted(reached.items()):
+        for test, how in sorted(tests.items()):
+            graph.add(test, how, file)
+    graph.narrowed_conftests.add(conftest)
+
+
+def fixture_users(
+    tree: Tree, layout: Layout, conftest: str, name: str, beneath: set[str], conftests: list[str]
+) -> set[str]:
+    """The tests beneath `conftest` that use its fixture `name`: by the word, or through a lower conftest."""
+    word = re.compile(rf"\b{re.escape(name)}\b")
+    users = {test for test in beneath if word.search(tree.texts.get(test, ""))}
+    for other in conftests:
+        if other != conftest and other != ROOT_CONFTEST and word.search(tree.texts.get(other, "")):
+            folder = str(PurePosixPath(other).parent) + "/"
+            users |= {test for test in beneath if test.startswith(folder)}
+    return users
+
+
+@dataclass
+class ConftestReading:
+    """Which names a conftest's module code and each of its fixtures use, and the files those bring.
+
+    `everywhere` is what runs for every test beneath it: module-level statements, autouse fixtures
+    and `pytest_*` hooks. `definitions` is what each top-level function, class or assignment uses,
+    so a fixture's needs are followed through the helpers it calls.
+    """
+
+    imported: dict[str, set[str]]  # a name the conftest binds by importing -> the files that brings
+    definitions: dict[str, set[str]]
+    everywhere: set[str]
+    fixtures: dict[str, set[str]]
+    run_by: dict[str, set[str]]  # a top-level name, or "" for module code -> the modules it runs
+
+    def needs(self, names: set[str]) -> set[str]:
         seen: set[str] = set()
         pending = list(names)
         while pending:
             name = pending.pop()
             if name not in seen:
                 seen.add(name)
-                pending.extend(definitions.get(name, ()))
-        return {file for name in seen for file in imported.get(name, ())}
+                pending.extend(self.definitions.get(name, ()))
+        return seen
 
-    for file in sorted(needs(everywhere)):
-        for test in layout.test_files:
-            graph.add(
-                test, "is beneath the root conftest.py, whose module code or autouse fixtures need", file
-            )
-    for name, used in sorted(fixtures.items()):
-        files = needs(used)
-        if not files:
+    def files(self, names: set[str]) -> set[str]:
+        return {file for name in self.needs(names) for file in self.imported.get(name, ())}
+
+    def runs(self, names: set[str]) -> set[str]:
+        return {module for name in self.needs(names) for module in self.run_by.get(name, ())}
+
+
+def read_conftest(tree: Tree, resolver: Resolver, conftest: str) -> ConftestReading | None:
+    syntax = tree.syntax(conftest)
+    if syntax is None:
+        return None
+    imported: dict[str, set[str]] = {}
+    for node in ast.walk(syntax):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                local = alias.asname or alias.name.split(".")[0]
+                imported.setdefault(local, set()).update(resolver.resolve(conftest, 0, alias.name, ()))
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                files = resolver.resolve(conftest, node.level, node.module or "", (alias.name,))
+                imported.setdefault(alias.asname or alias.name, set()).update(files)
+    reading = ConftestReading(imported, {}, set(), {}, {})
+    for statement in syntax.body:
+        if isinstance(statement, ast.Import | ast.ImportFrom):
             continue
-        word = re.compile(rf"\b{re.escape(name)}\b")
-        users = {test for test in layout.test_files if word.search(tree.texts.get(test, ""))}
-        for conftest in conftests:
-            if conftest != ROOT_CONFTEST and word.search(tree.texts.get(conftest, "")):
-                folder = str(PurePosixPath(conftest).parent) + "/"
-                users |= {test for test in layout.test_files if test.startswith(folder)}
-        for file in sorted(files):
-            for test in sorted(users):
-                graph.add(test, f"uses the root conftest.py's {name} fixture, which needs", file)
+        used = {node.id for node in ast.walk(statement) if isinstance(node, ast.Name)}
+        runs = resolver.runs_of(literals_in(statement))
+        if isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+            if isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef):
+                used |= {
+                    argument.arg for argument in ast.walk(statement.args) if isinstance(argument, ast.arg)
+                }
+            reading.definitions[statement.name] = used
+            reading.run_by[statement.name] = runs
+            fixture = fixture_of(statement)
+            if fixture is not None:
+                name, autouse = fixture
+                if autouse:
+                    reading.everywhere |= used | {statement.name}
+                else:
+                    reading.fixtures[name] = used | {statement.name}
+            elif statement.name.startswith("pytest_"):
+                reading.everywhere |= used | {statement.name}
+        elif isinstance(statement, ast.Assign | ast.AnnAssign):
+            targets = statement.targets if isinstance(statement, ast.Assign) else [statement.target]
+            for target in targets:
+                for node in ast.walk(target):
+                    if isinstance(node, ast.Name):
+                        reading.definitions[node.id] = used
+                        reading.run_by[node.id] = runs
+            reading.everywhere |= used
+            reading.run_by.setdefault("", set()).update(runs)
+        else:
+            reading.everywhere |= used
+            reading.run_by.setdefault("", set()).update(runs)
+    return reading
+
+
+def literals_in(node: ast.AST) -> str:
+    """The string literals of one statement as `Tree.literals` gives a file's: docstrings left out."""
+    prose = {
+        id(child.value)
+        for child in ast.walk(node)
+        if isinstance(child, ast.Expr) and isinstance(child.value, ast.Constant)
+    }
+    strings = [
+        child
+        for child in ast.walk(node)
+        if isinstance(child, ast.Constant) and isinstance(child.value, str) and id(child) not in prose
+    ]
+    strings.sort(key=lambda child: (child.lineno, child.col_offset))
+    return ", ".join(f'"{child.value}"' for child in strings)
 
 
 def fixture_of(definition: ast.stmt) -> tuple[str, bool] | None:
@@ -1251,6 +1371,15 @@ class Walk:
         if path not in self.why:
             self.why[path] = (how, via)
             self.queue.append(path)
+        elif self.reached_by_fixtures(path) and how not in FIXTURE_EDGES:
+            # First reached through an import its fixtures carry, now by a name or a change: every
+            # test beneath it is reached after all.
+            self.why[path] = (how, via)
+            self.queue.append(path)
+
+    def reached_by_fixtures(self, path: str) -> bool:
+        """A conftest read fixture by fixture, reached only through a file it imports or runs."""
+        return path in self.graph.narrowed_conftests and self.why[path][0] in FIXTURE_EDGES
 
     def start(self, change: Change) -> None:
         path = change.path
@@ -1280,8 +1409,10 @@ class Walk:
                         "selected for that, and an import failure there would fail every test."
                     )
                     continue
+                through_fixtures = self.reached_by_fixtures(path)
                 for dependent, how in self.graph.dependents.get(path, ()):
-                    self.reach(dependent, how, path)
+                    if not (through_fixtures and how == CONFTEST):
+                        self.reach(dependent, how, path)
                 if (
                     path not in self.searched
                     and path not in self.to_search

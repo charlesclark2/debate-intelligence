@@ -225,8 +225,9 @@ tests its changes reach, and the whole selection runs once per merge instead (`v
   measures it on every push. The dev pre-release waits for dev's push run, so a test the affected set
   missed fails there, before any release.
 * **A red push run on `dev` is fixed by the next pull request, before anything else merges.** A red
-  push run means a test the affected set did not reach is failing on `dev`. Nothing else merges
-  into `dev` until a pull request fixes it. That pull request's session runs the failing tests by
+  push run means a test is failing on `dev` that a pull request's affected set did not reach, or
+  that two pull requests broke only together. Nothing else merges into `dev` until a pull request
+  fixes it. That pull request's session runs the failing tests by
   name as well as its affected set, because the fix's own selection may not reach them.
 * **A session never runs the whole default selection**, in one command or in parts. Not at red, not
   before the report, not after a sync. The whole-suite run is CI's: the pull request's `ci` check
@@ -245,8 +246,8 @@ tests its changes reach, and the whole selection runs once per merge instead (`v
     nothing: that run is CI's, or the operator's under the exception below;
   * **when the affected set would take longer than about two minutes,** the session does not hand it
     to the operator: it says so in the report and leaves it to the pull request's `ci` check, which
-    runs the same affected set, or the whole selection. It still runs, within the two minutes, the test directories of
-    what it changed and the always-run list (the PM's ruling of 2026-10-19, written in 2026-10-20);
+    runs the same affected set, or the whole selection. It still runs, within the two minutes, the
+    test directories of what it changed and the always-run list (the PM's ruling of 2026-10-19, written in 2026-10-20);
   * `ruff format --check`, `ruff check`, `pyright packages/<changed packages>`, `lint-imports`,
     `scripts/validate_specs.py`, and the docs checks when docs changed. These take seconds.
 * **A time limit goes on the interpreter, not on `uv`.** `perl -e 'alarm 115; exec @ARGV' uv run

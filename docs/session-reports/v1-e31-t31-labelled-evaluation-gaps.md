@@ -350,6 +350,17 @@ or index, but a write all the same.
 | `.venv/bin/python scripts/check_links.py` | `OK: 2751 relative links and anchors in 419 Markdown files` |
 | `uv run scripts/validate_specs.py` | `OK` (phase `InProgress`) |
 
+**CI on the pull request (#568), parts 2, 3, 4 and 8.** Four tests of `tests/scripts/test_sample_cite_shapes.py`
+failed. That file was in the affected set but outside what the session ran. Its invented store's
+"left, nothing" line (t19's stratum: a cite behind an unbolded first name, under a tag, with a year,
+over a body) is now read as the card's cite by rule (2), the reading it was written for. So the
+strata shifted by one. The file now switches t31's pass off, as it already switches t24's rule off
+for t24's sample: its samples were planned before this task. Run locally:
+
+- before the fix, `4 failed, 1193 passed` over the 48 affected files that read the parser and were
+  not run before;
+- after it, `19 passed` in that file.
+
 **A killed run orphaned its workers.** When the alarm stopped the hspolicy26 diff, its pool's nine
 workers outlived it. I found them by their command line (this worktree's virtualenv,
 `spawn_main`), stopped those ten PIDs, and checked that none was left. Nothing they did writes

@@ -174,6 +174,18 @@ def data_dir(tmp_path: Path) -> Path:
     return tmp_path
 
 
+@pytest.fixture(autouse=True)
+def without_the_cite_lines_by_their_place(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every sample here was planned on a parser before `v1-e31-t31`: switch its cite-by-place pass off.
+
+    `2026.10.27-docx-7` reads the "left, nothing" stratum's line, a cite behind an unbolded first name
+    directly under a tag, as that card's cite (`assembly-cite-line-below-a-tag`): it holds a year and
+    a body follows. That is the reading the line was written for, and it is no longer in the stratum
+    `v1-e31-t19`'s rule left. t24's rule is switched off the same way, below, for its own sample.
+    """
+    monkeypatch.setattr(DebateDocxParser, "_cite_lines_by_their_place", lambda *_: {})
+
+
 def parsed_with_reads() -> tuple[list[Any], ParsedDocument]:
     source = script._Source(CASELIST, DIGEST, Path("unused"), Path("unused"), VERSION)  # pyright: ignore[reportPrivateUsage]
     parser = script._ReadingParser()  # pyright: ignore[reportPrivateUsage]

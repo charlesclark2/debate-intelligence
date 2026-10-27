@@ -18,10 +18,10 @@
     "publication": {"value": "Federal Office of Synthetic Wildlife", "source": "opengraph", "verified": true},
     "published_at": {"value": "2026-06-02T00:00:00Z", "source": "meta_tag", "verified": true},
     "canonical_url": {"value": "https://www.fosw.example.gov/news/2026/06/agency-announces-grants", "source": "meta_tag", "verified": true},
-    "accessed_at": {"value": "2026-10-26T15:00:00Z", "source": "heuristic", "verified": false}
+    "accessed_at": {"value": "2026-10-26T15:00:00Z", "source": "retrieval", "verified": true}
   },
   "short_cite": "Federal Office of Synthetic Wildlife 26",
   "full_cite": "Federal Office of Synthetic Wildlife 26 [\"Agency Announces Grants for Habitat Protection | Federal Office of Synthetic Wildlife\"; Federal Office of Synthetic Wildlife; June 2, 2026; https://www.fosw.example.gov/news/2026/06/agency-announces-grants; accessed October 26, 2026]",
-  "unverified_fields": ["title", "accessed_at"],
+  "unverified_fields": ["title"],
   "missing_fields": ["authors", "author_credentials"]
 }

@@ -18,10 +18,10 @@
     "publication": {"value": "Harwell Institute", "source": "json_ld", "verified": true},
     "published_at": {"value": "2026-03-03T00:00:00Z", "source": "json_ld", "verified": true},
     "canonical_url": {"value": "https://www.harwell-institute.example/research/opportunity-cost-of-de-extinction", "source": "meta_tag", "verified": true},
-    "accessed_at": {"value": "2026-10-26T15:00:00Z", "source": "heuristic", "verified": false}
+    "accessed_at": {"value": "2026-10-26T15:00:00Z", "source": "retrieval", "verified": true}
   },
   "short_cite": "Ellery et al. 26",
   "full_cite": "Ellery et al. 26 [Marcus Ellery and Hana Okafor (Marcus Ellery is a senior fellow at the Harwell Institute. Hana Okafor directs its biodiversity program.); \"The Opportunity Cost of De-Extinction\"; Harwell Institute; March 3, 2026; https://www.harwell-institute.example/research/opportunity-cost-of-de-extinction; accessed October 26, 2026]",
-  "unverified_fields": ["accessed_at"],
+  "unverified_fields": [],
   "missing_fields": []
 }

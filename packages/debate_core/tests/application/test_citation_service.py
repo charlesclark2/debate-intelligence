@@ -50,6 +50,7 @@ META_TAG: Final = CitationFieldSource.META_TAG
 OPENGRAPH: Final = CitationFieldSource.OPENGRAPH
 BYLINE: Final = CitationFieldSource.BYLINE
 HEURISTIC: Final = CitationFieldSource.HEURISTIC
+RETRIEVAL: Final = CitationFieldSource.RETRIEVAL
 MISSING: Final = CitationFieldSource.MISSING
 PUBLISHER: Final = ProvenanceMode.PUBLISHER_RETRIEVED
 USER_SUPPLIED: Final = ProvenanceMode.USER_SUPPLIED
@@ -172,7 +173,7 @@ PAGE_METADATA_OF_THE_JOURNAL: Final = {
         "meta_tag",
         True,
     ),
-    "accessed_at": ("2026-10-26T15:00:00Z", "heuristic", False),
+    "accessed_at": ("2026-10-26T15:00:00Z", "retrieval", True),
 }
 """The landing page's cite with no Crossref answer, written by hand from the page."""
 
@@ -321,8 +322,8 @@ def test_a_deposited_author_with_no_name_is_left_out() -> None:
 PAGE_SOURCES: Final = SOURCE_PRECEDENCE[1:]
 
 
-def test_the_precedence_is_crossref_json_ld_meta_tag_opengraph_byline_heuristic() -> None:
-    assert SOURCE_PRECEDENCE == (CROSSREF, JSON_LD, META_TAG, OPENGRAPH, BYLINE, HEURISTIC)
+def test_the_precedence_is_crossref_json_ld_meta_tag_opengraph_byline_retrieval_heuristic() -> None:
+    assert SOURCE_PRECEDENCE == (CROSSREF, JSON_LD, META_TAG, OPENGRAPH, BYLINE, RETRIEVAL, HEURISTIC)
 
 
 @pytest.mark.parametrize(
@@ -734,3 +735,61 @@ def test_the_expected_files_name_every_field() -> None:
     for case in CASES:
         assert set(load_case(case)["citation"]) == set(CITATION_FIELD_NAMES), case
     assert json.dumps(CITATION_FIELD_NAMES)
+
+
+# --------------------------------------------------------------------------------------------
+# v1-e06-t02 ac5: the platform's own retrieval record is a source, verified only when the
+# platform retrieved the text
+# --------------------------------------------------------------------------------------------
+
+
+async def test_the_accessed_date_of_a_publisher_retrieved_snapshot_is_a_verified_retrieval_value(
+    world: CitationWorld,
+) -> None:
+    resolution = await resolved(world, "news-article")
+
+    assert resolution.citation.accessed_at == CitationField[datetime](
+        value=RETRIEVED_AT, source=RETRIEVAL, verified=True, raw="2026-10-26T15:00:00+00:00"
+    )
+
+
+async def test_a_canonical_less_url_of_a_publisher_retrieved_snapshot_is_a_verified_retrieval_value(
+    world: CitationWorld,
+) -> None:
+    resolution = await resolved(world, "open-access-pdf")
+
+    url = resolution.citation.canonical_url
+    assert (url.value, url.source, url.verified) == (
+        "https://journal.synthetic-conservation.example/doi/pdf/10.5555/jscs.2026.0012",
+        RETRIEVAL,
+        True,
+    )
+    assert resolution.citation.is_fully_verified
+
+
+@pytest.mark.parametrize(
+    "mode", [mode for mode in ProvenanceMode if mode is not ProvenanceMode.PUBLISHER_RETRIEVED]
+)
+def test_retrieval_values_of_text_the_platform_did_not_retrieve_are_unverified(mode: ProvenanceMode) -> None:
+    candidates = CitationCandidates(
+        canonical_url=(Harvested("https://site.example/story", RETRIEVAL, "https://site.example/story"),)
+    )
+
+    citation = resolve_citation(candidates, None, provenance_mode=mode, accessed_at=RETRIEVED_AT)
+
+    for name in ("canonical_url", "accessed_at"):
+        field_: CitationField[Any] = getattr(citation, name)
+        assert (field_.source, field_.verified) == (RETRIEVAL, False), name
+
+
+def test_a_page_canonical_url_outranks_the_retrieval_record() -> None:
+    candidates = CitationCandidates(
+        canonical_url=(
+            Harvested("https://site.example/story", RETRIEVAL, "https://site.example/story?x=1"),
+            Harvested("https://site.example/canonical", BYLINE, "https://site.example/canonical"),
+        )
+    )
+
+    url = resolve(candidates, None).canonical_url
+
+    assert (url.value, url.source) == ("https://site.example/canonical", BYLINE)

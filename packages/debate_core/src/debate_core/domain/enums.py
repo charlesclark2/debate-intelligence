@@ -179,6 +179,12 @@ class CitationFieldSource(StrEnum):
     BYLINE = "byline"
     """An explicit byline or author bio on the page."""
 
+    RETRIEVAL = "retrieval"
+    """The platform's own record of retrieving the source: when it was retrieved (the accessed date),
+    and the URL it was retrieved from, canonicalized, when the page declares no canonical URL of its
+    own. Verified for a PUBLISHER_RETRIEVED snapshot, where the platform is the witness, and for no
+    other provenance (`v1-e06-t02`)."""
+
     HEURISTIC = "heuristic"
     """Inferred from a weaker signal such as a URL slug. Never counts as verified."""
 

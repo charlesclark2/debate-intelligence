@@ -115,7 +115,10 @@ def test_harms_labels_an_advantages_impact_and_nothing_of_a_das(heading: str) ->
 
 def test_a_harms_heading_naming_another_role_too_labels_neither() -> None:
     assert heading_roles("harms and inherency", ADVANTAGE) == {IMP, INH}
-    assert card_roles(_sub("harms and inherency"), ("costs advantage", "harms and inherency"), None, ADVANTAGE) == set()
+    assert (
+        card_roles(_sub("harms and inherency"), ("costs advantage", "harms and inherency"), None, ADVANTAGE)
+        == set()
+    )
 
 
 def test_a_harms_sub_heading_makes_an_advantages_card_an_impact_card_and_a_das_nothing() -> None:

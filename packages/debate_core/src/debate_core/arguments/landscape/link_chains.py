@@ -2,8 +2,8 @@
 
 The coach asked, of each DA's and advantage's impact cards, what the impact runs through, and for a
 first deterministic link chain per position: its uniqueness, link, internal link and impact, and for
-an advantage its harms, inherency and solvency. The rules are the PM's rulings of 2026-10-25 on
-counts over hspolicy26. Only what a team wrote down counts, and a role or scenario no heading or label
+an advantage its inherency and solvency. The rules are the PM's rulings of 2026-10-25 on counts over
+hspolicy26. Only what a team wrote down counts, and a role or scenario no heading or label
 gives is counted, never guessed.
 
 ## Where a card's labels are read
@@ -22,8 +22,14 @@ A sub-heading labels a role when it holds the role's words, as whole words:
   `lt`, `l t`, `non unique`, `nonunique` or `not unique`, which name answers (`v1-e32-t27`), and not the
   `link` of `internal link`;
 * **internal link:** `internal link(s)`, `internal`, `internals`, `il`, `i l`;
-* **impact:** `v1-e32-t10`'s impact heading, reused, not rewritten;
-* **advantages only:** harms `harms`, `harm`; inherency `inherency`, `inh`; solvency `solvency`, `solv`.
+* **impact:** `v1-e32-t10`'s impact heading, reused, not rewritten, and for an advantage `harms` or
+  `harm` (:data:`HARMS_WORDS`, `v1-e32-t29`);
+* **advantages only:** inherency `inherency`, `inh`; solvency `solvency`, `solv`.
+
+**Harms is an advantage's impact** (`v1-e32-t29`, the PM's ruling of 2026-10-27). The coach: Policy
+debate no longer says "Harms"; debaters call that part of an advantage its impact. So a harms heading
+labels an advantage's impact, read where the Harms role read it until then (a sub-heading, not an
+answer, naming no other role), and there is no Harms role. A DA's `harms` heading labels nothing.
 
 A tag labels uniqueness when it opens `uniqueness` or `uq`, a link when it opens `link`, `links` or
 `the link` and names no answer, and an internal link when it opens `internal link`, `internal`, `il` or
@@ -34,7 +40,9 @@ on hspolicy26, 105 of the 106 counted tags opening `u` open `U.S.`.
 
 An answer sub-heading (`AT: No Link`, the team's own frontline) fills no role, and a heading holding
 two roles' labels fills neither. A card's impact role is `v1-e32-t10`'s impact card, whatever else
-its heading holds, so the chain's impact is the impact section's first row. A heading the coach ruled
+its heading holds, or for an advantage a sub-heading labelling only its impact: a harms heading. The
+report reads an advantage's or a DA's impact cards from these roles, so the chain's impact is the impact
+section's first row. A heading the coach ruled
 names no position still labels a role: `link`, `u` and `solvency` are such rulings. Whether a card
 counts at all (READS, on the position's side) is the report's, so an answering or other-side card
 never reaches these functions as a reading.
@@ -48,8 +56,8 @@ role label, no answer, no heading the coach ruled names no position, and none of
 
 1. a numbered heading's words after `scenario N (is)`;
 2. a named heading's words;
-3. the words beside an impact or internal-link label (`Dome impact`, `Dome internal`), when what is
-   left is not on the list either.
+3. the words beside an impact or internal-link label (`Dome impact`, `Dome internal`, and for an
+   advantage `Dome harms`), when what is left is not on the list either.
 
 The innermost heading of each kind wins. Whether a name is shown (two or more teams of the position
 use it) and whether it is withheld (:func:`is_withheld`) is the report's.
@@ -96,6 +104,7 @@ from debate_core.domain.landscape import Position, PositionKind
 from debate_core.domain.landscape_report import CHAIN_ROLES, LEAD_IN_ORDER, ChainRole, LeadInSource
 
 __all__ = [
+    "HARMS_WORDS",
     "LINK_TAG_OPENINGS",
     "MINIMUM_WITHHELD_WORD",
     "NOT_A_LINK",
@@ -141,8 +150,10 @@ _LINK_ANSWERS: Final = (
 """What the words after a tag's `link` or `links` open with when they call it non-unique (`v1-e32-t27`)."""
 
 _INTERNAL_LINK_WORDS: Final = ("internal link", "internal links", "internal", "internals", "il", "i l")
+HARMS_WORDS: Final = ("harms", "harm")
+"""An advantage's harms heading labels its impact: debaters call that part of an advantage its impact (the
+coach, 2026-10-27, `v1-e32-t29`). A DA's labels nothing."""
 _ADVANTAGE_WORDS: Final = {
-    ChainRole.HARMS: ("harms", "harm"),
     ChainRole.INHERENCY: ("inherency", "inh"),
     ChainRole.SOLVENCY: ("solvency", "solv"),
 }
@@ -218,7 +229,9 @@ def heading_roles(heading: str, kind: PositionKind) -> frozenset[ChainRole]:
         found.add(ChainRole.LINK)
     if any(_holds(heading, phrase) for phrase in _INTERNAL_LINK_WORDS):
         found.add(ChainRole.INTERNAL_LINK)
-    if is_impact_heading(heading):
+    if is_impact_heading(heading) or (
+        kind is PositionKind.ADVANTAGE and any(_holds(heading, one) for one in HARMS_WORDS)
+    ):
         found.add(ChainRole.IMPACT)
     if kind is PositionKind.ADVANTAGE:
         found |= {
@@ -258,14 +271,16 @@ def card_roles(
 ) -> frozenset[ChainRole]:
     """The roles a counted card of a `kind` position fills: its sub-headings', its tag's, and impact.
 
-    `headings` are all the card's normalized headings, which `v1-e32-t10`'s impact rule reads.
+    `headings` are all the card's normalized headings, which `v1-e32-t10`'s impact rule reads. A
+    sub-heading labelling only an impact adds one only for an advantage's harms heading: an impact word
+    there is `v1-e32-t10`'s already.
     """
     found: set[ChainRole] = set()
     for sub in sub_headings:
         if sub.answer:
             continue
         labels = heading_roles(sub.text, kind)
-        if len(labels) == 1 and ChainRole.IMPACT not in labels:
+        if len(labels) == 1:
             found |= labels
     opening = tag_role(tag)
     if opening is not None:
@@ -288,6 +303,7 @@ def card_scenario(
     """
     decided = frozenset(no_position)
     dropped = frozenset(not_scenarios)
+    label_words = _LABEL_WORDS | frozenset(HARMS_WORDS) if kind is PositionKind.ADVANTAGE else _LABEL_WORDS
     heading = False
     numbered: str | None = None
     named: str | None = None
@@ -300,7 +316,7 @@ def card_scenario(
             continue
         if labels:
             if labels <= {ChainRole.IMPACT, ChainRole.INTERNAL_LINK}:
-                words = " ".join(word for word in sub.text.split() if word not in _LABEL_WORDS)
+                words = " ".join(word for word in sub.text.split() if word not in label_words)
                 if words and words not in dropped and not NOT_A_SCENARIO.search(words):
                     beside = words
             continue

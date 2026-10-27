@@ -22,7 +22,14 @@ import yaml
 
 from debate_core.application.landscape_report import LandscapeReportInputs, LandscapeReportService
 from debate_core.domain.landscape import PositionKind
-from debate_core.domain.landscape_report import CHAIN_ROLES, ChainRole, LandscapeReport, TableTagsWithheld
+from debate_core.domain.landscape_report import (
+    CHAIN_ROLES,
+    DEFAULT_IMPACT_CARDS,
+    ChainRole,
+    LandscapeCard,
+    LandscapeReport,
+    TableTagsWithheld,
+)
 from debate_core.testing.landscape_report import read_synthetic_caselist, synthetic_staleness
 
 LANDSCAPE = Path(__file__).resolve().parents[5] / "tests" / "fixtures" / "landscape"
@@ -51,7 +58,7 @@ def _with_edits(
 def _edited(
     inputs: LandscapeReportInputs, headings: dict[Key, tuple[str, ...]], tags: dict[Key, str]
 ) -> LandscapeReportInputs:
-    cards = []
+    cards: list[LandscapeCard] = []
     for card in inputs.cards:
         key = (card.source_sha256[:2], card.element_index)
         update: dict[str, Any] = {}
@@ -63,8 +70,8 @@ def _edited(
     return dataclasses.replace(inputs, cards=tuple(cards))
 
 
-def _report(inputs: LandscapeReportInputs, **limits: int) -> LandscapeReport:
-    return LandscapeReportService(**limits).build(inputs, synthetic_staleness())
+def _report(inputs: LandscapeReportInputs, impact_cards: int = DEFAULT_IMPACT_CARDS) -> LandscapeReport:
+    return LandscapeReportService(impact_cards=impact_cards).build(inputs, synthetic_staleness())
 
 
 def _files(inputs: LandscapeReportInputs | None = None) -> dict[str, str]:
@@ -87,7 +94,9 @@ def _split(report_md: str) -> tuple[str, str]:
 
 def _impact_rows(report: LandscapeReport, position_id: str) -> list[tuple[str, int]]:
     return [
-        (one.fingerprint[:2], one.teams_reading) for one in report.impact_cards if one.position_id == position_id
+        (one.fingerprint[:2], one.teams_reading)
+        for one in report.impact_cards
+        if one.position_id == position_id
     ]
 
 
@@ -237,7 +246,13 @@ def test_a_tag_the_fold_adds_is_withheld_as_any_other() -> None:
     # a6's copy of cluster 6, the one Innovation's row shows, now holds `Birchmoor`, a school's word.
     report = _report(_with_edits(tags={("a6", 3): "Birchmoor research funding prevents extinction"}))
     row = next(one for one in report.impact_cards if one.position_id == "innovation-advantage")
-    assert (row.rank, row.teams_reading, row.tag, row.short_cite, row.named_by) == (1, 2, None, "Moreau 25", None)
+    assert (row.rank, row.teams_reading, row.tag, row.short_cite, row.named_by) == (
+        1,
+        2,
+        None,
+        "Moreau 25",
+        None,
+    )
     chain = next(
         one
         for one in report.chain_cards

@@ -477,9 +477,11 @@ def _header_section(report: LandscapeReport, trends: LandscapeTrends | None = No
         f"* **Impact cards**, under each advantage and DA, are up to {header.impact_cards_per_position:,} "
         "of its cards labelled as an impact, ranked by the teams reading them: a heading over the card says "
         "`impact` or `impacts` (not `no impact`, `impact defense` or `impact turn`) or `turns case`, or its "
-        "tag opens with an impact word such as `extinction`, `existential` or `the impact`. Only the "
-        "labelled copies of a card count. An impact nobody labelled is not found, so each kind says how "
-        "many of its documents carry no labelled impact. They are also in `impact_cards.csv`.",
+        "tag opens with an impact word such as `extinction`, `existential` or `the impact`. Under an "
+        "advantage, a heading saying `harms` or `harm` labels its impact too: debaters call that part of an "
+        "advantage its impact. Only the labelled copies of a card count. An impact nobody labelled is not "
+        "found, so each kind says how many of its documents carry no labelled impact. They are also in "
+        "`impact_cards.csv`.",
         "* **What each impact runs through**, under its impact cards, names each rank by the first of these "
         "it has, marked with where the name came from: its **scenario**, heading words two or more teams "
         "use under the position (a `Scenario 1` heading's name, a named heading, or the words beside an "
@@ -495,7 +497,7 @@ def _header_section(report: LandscapeReport, trends: LandscapeTrends | None = No
         "the next one names the rank.",
         "* **The link chain** of each advantage and DA is its most-read card for each role a team labelled, "
         "by a heading under the position or the tag's first words: uniqueness (`U`, `UQ`), link, internal "
-        "link (`IL`) and impact, and for an advantage harms, inherency and solvency. An `AT:` heading, a "
+        "link (`IL`) and impact, and for an advantage inherency and solvency. An `AT:` heading, a "
         "heading naming two roles, and a card that answers the position or is read on the other side fill "
         "no role. A role no team labelled says so.",
         _tags_left_empty(report.table_tags_withheld),
@@ -703,7 +705,6 @@ _ROLE_LABELS: Final = {
     ChainRole.LINK: "Link",
     ChainRole.INTERNAL_LINK: "Internal link",
     ChainRole.IMPACT: "Impact",
-    ChainRole.HARMS: "Harms",
     ChainRole.INHERENCY: "Inherency",
     ChainRole.SOLVENCY: "Solvency",
 }

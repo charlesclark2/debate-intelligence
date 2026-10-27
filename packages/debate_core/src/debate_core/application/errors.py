@@ -58,7 +58,10 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import ClassVar, Final
+from typing import TYPE_CHECKING, ClassVar, Final
+
+if TYPE_CHECKING:  # pragma: no cover - only the annotation of InvalidModelOutput.usage reads it
+    from debate_core.domain.model_contracts import ModelUsage
 
 __all__ = [
     "LOCAL_STORE_ACCESS_DENIED_HINT",
@@ -497,6 +500,7 @@ class InvalidModelOutput(DomainError):
         *,
         model_id: str | None = None,
         problems: Sequence[OutputProblem] = (),
+        usage: ModelUsage | None = None,
     ) -> None:
         self.prompt_id = prompt_id
         """Identifier of the prompt whose output failed validation."""
@@ -506,6 +510,9 @@ class InvalidModelOutput(DomainError):
         """The model that produced the output, when the router resolved one."""
         self.problems = tuple(problems)
         """Why the answer is not the schema, without its values; empty when the router gave none."""
+        self.usage = usage
+        """What the call that produced the answer used: an invalid answer was still a billed call
+        (v1-e05-t07). `None` when the router reported none, as a replayed or scripted answer may."""
         by_model = "" if model_id is None else f" from {model_id}"
         super().__init__(f"invalid output{by_model} for prompt {prompt_id}@{prompt_version}: {message}")
 

@@ -67,9 +67,19 @@ def no_inherited_settings(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 
 @pytest.fixture
 def settings(tmp_path: Path) -> Settings:
-    """The test profile with the Bedrock provider: the example routing file, no `.env`."""
+    """The test profile with the Bedrock provider: the example routing file, no `.env`.
+
+    No budget limit, and a data directory of the test's own: the profile's $0 daily limit refuses
+    every live call to a model with no price (v1-e05-t07), and a live call is logged under the data
+    directory.
+    """
     return load_settings(
-        environment="test", overrides={"models": {"provider": "bedrock"}}, env_file=tmp_path / "no.env"
+        environment="test",
+        overrides={
+            "models": {"provider": "bedrock", "budget_usd_daily": None},
+            "storage": {"data_dir": str(tmp_path / "data")},
+        },
+        env_file=tmp_path / "no.env",
     )
 
 
@@ -130,8 +140,13 @@ def test_live_mode_sends_a_structured_call_with_the_text_the_registry_renders(
     settings: Settings, registry: PromptRegistry, stubber: Stubber, tmp_path: Path
 ) -> None:
     plan_answer(stubber)
+    cassettes = tmp_path / "cassettes"
     router = build_model_router(
-        settings, mode="live", environ={}, real_router=bedrock_router_factory(registry), cassette_dir=tmp_path
+        settings,
+        mode="live",
+        environ={},
+        real_router=bedrock_router_factory(registry),
+        cassette_dir=cassettes,
     )
     prompt = registry.prompt("example.select-passage", {"tag": "Warming kills"})
 
@@ -142,7 +157,14 @@ def test_live_mode_sends_a_structured_call_with_the_text_the_registry_renders(
     assert response.metadata.route.provider is ModelProvider.BEDROCK
     assert response.metadata.prompt_version == "1.0.0"
     assert response.metadata.provider_request_id == "example-request-0003"
-    assert list(tmp_path.iterdir()) == []
+    assert not cassettes.exists()
+    [day_file] = (settings.storage.data_dir / "usage").iterdir()
+    [logged] = [json.loads(line) for line in day_file.read_text(encoding="utf-8").splitlines()]
+    assert (logged["prompt_id"], logged["input_tokens"], logged["output_tokens"]) == (
+        "example.select-passage",
+        140,
+        20,
+    )
 
 
 def test_record_mode_sends_the_call_and_writes_a_cassette_replay_then_serves(

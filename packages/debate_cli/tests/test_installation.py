@@ -80,7 +80,8 @@ def test_the_container_wires_these_integrations() -> None:
     # sync_notifier (v1-e40-t05), and for the landscape's model stage (v1-e32-t07) `models.factory`,
     # `models.model_mode` and `models.prompt_registry` at module level, with `bedrock` inside its
     # factory for a record or live run; and for `fetch` (v1-e04-t06) `http_fetcher`, `html_extractor`
-    # and `pdf_extractor` inside the article fetch factory.
+    # and `pdf_extractor` inside the article fetch factory; and `models.usage` at module level for the
+    # usage log `usage` reads and every real model call is recorded in (v1-e05-t07).
     assert wired_integrations() == (
         "debate_core.integrations.bedrock",
         "debate_core.integrations.cloudwatch_audit",
@@ -106,6 +107,7 @@ def test_the_container_wires_these_integrations() -> None:
         "debate_core.integrations.models.model_mode",
         "debate_core.integrations.models.prompt_registry",
         "debate_core.integrations.models.routing_policy",
+        "debate_core.integrations.models.usage",
         "debate_core.integrations.opencaselist",
         "debate_core.integrations.pdf_extractor",
         "debate_core.integrations.s3",
@@ -244,7 +246,7 @@ def test_the_check_exits_zero_and_reports_json_for_this_checkout(capsys: pytest.
     report = json.loads(capsys.readouterr().out)
     assert report["complete"] is True
     assert report["covered"] is True
-    assert len(report["imported"]) == len(report["wired"]) == 32
+    assert len(report["imported"]) == len(report["wired"]) == 33
 
 
 # ---------------------------------------------------------------------------------------------

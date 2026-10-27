@@ -1,0 +1,47 @@
+# What each routed model charges, read by debate_core.integrations.models.usage.ModelPricing
+# (v1-e05-t07-usage-telemetry). Every model_id in config/model_routing.*.yaml has an entry here;
+# test_usage.py fails a routing file whose model is missing, or a price that is not set.
+#
+# Prices are USD, read off the AWS Bedrock pricing page for us-east-1 on-demand, never written from
+# memory and never in code:
+#   input_usd_per_1k_tokens / output_usd_per_1k_tokens  the Claude models (per 1,000 tokens)
+#   input_usd_per_1k_tokens                              the Titan embedding model
+#   usd_per_1k_search_units                              the Cohere reranker (per 1,000 queries,
+#                                                        one query covering up to 100 documents)
+# A price that is set needs `as_of` (the day it was read) and `source` (the page's URL) beside it.
+#
+# Every price below is set, as read by the operator from that page on 2026-10-26 and committed by the
+# PM. When Bedrock's prices change, read them again and change `as_of` with them. A model with no
+# price costs null, with a warning, and a run with a budget limit refuses its calls (fail closed:
+# an unpriced call is not a free one). Replay and the fake router cost nothing.
+
+version: 1
+
+models:
+  anthropic.claude-haiku-5-5:
+    input_usd_per_1k_tokens: 0.0001
+    output_usd_per_1k_tokens: 0.0005
+    as_of: 2026-10-26
+    source: https://aws.amazon.com/bedrock/pricing/
+
+  anthropic.claude-sonnet-5-5:
+    input_usd_per_1k_tokens: 0.002
+    output_usd_per_1k_tokens: 0.01
+    as_of: 2026-10-26
+    source: https://aws.amazon.com/bedrock/pricing/
+
+  anthropic.claude-opus-5-5:
+    input_usd_per_1k_tokens: 0.004
+    output_usd_per_1k_tokens: 0.02
+    as_of: 2026-10-26
+    source: https://aws.amazon.com/bedrock/pricing/
+
+  amazon.titan-embed-text-v2:0:
+    input_usd_per_1k_tokens: 0.00002
+    as_of: 2026-10-26
+    source: https://aws.amazon.com/bedrock/pricing/
+
+  cohere.rerank-v3-5:0:
+    usd_per_1k_search_units: 2.0
+    as_of: 2026-10-26
+    source: https://aws.amazon.com/bedrock/pricing/

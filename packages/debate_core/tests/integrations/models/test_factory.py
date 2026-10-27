@@ -52,8 +52,20 @@ def no_inherited_settings(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 
 
 def settings_with(tmp_path: Path, **models: object) -> Settings:
-    """The test profile, with `models` overriding its model settings and no `.env` file."""
-    return load_settings(environment="test", overrides={"models": models}, env_file=tmp_path / "no.env")
+    """The test profile, with `models` overriding its model settings and no `.env` file.
+
+    No budget limit unless `models` sets one, and a data directory of the test's own: the profile's
+    $0 daily limit refuses every live call to a model with no price, and a live call is logged
+    under the data directory (v1-e05-t07).
+    """
+    return load_settings(
+        environment="test",
+        overrides={
+            "models": {"budget_usd_daily": None} | models,
+            "storage": {"data_dir": str(tmp_path / "data")},
+        },
+        env_file=tmp_path / "no.env",
+    )
 
 
 class RealRouterSpy:
@@ -243,7 +255,14 @@ def test_no_setting_chooses_record_replay_or_live(tmp_path: Path) -> None:
     every_setting = settings_with(tmp_path).redacted_dict()
 
     # aws_profile (v1-e05-t08) says which credential a live call is signed with, never whether one is made.
-    assert set(ModelSettings.model_fields) == {"provider", "routing_file", "budget_usd_daily", "aws_profile"}
+    # The two budgets (v1-e05-t07) say how much may be spent, never whether a call is made live.
+    assert set(ModelSettings.model_fields) == {
+        "provider",
+        "routing_file",
+        "budget_usd_daily",
+        "budget_usd_per_run",
+        "aws_profile",
+    }
     assert [key for key in every_setting if "mode" in key.rsplit(".", 1)[-1]] == []
 
 

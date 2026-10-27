@@ -6,12 +6,13 @@
 | Spec | [`plan_specs/v1/e32-argument-landscape/t25-readable-impact-chains.yaml`](../../plan_specs/v1/e32-argument-landscape/t25-readable-impact-chains.yaml) |
 | Epic / release | `v1-e32-argument-landscape` / `v1.2` |
 | Branch | `task/v1-e32-t25-readable-impact-chains` |
-| Session status | PARTIAL <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
-**Built and tested. The Goal stays `InProgress`: ac3 is the operator's dry run, drafted
-[below](#operator-follow-ups) and not run yet.** ac1 and ac2 pass.
+**Complete. Every criterion passed, and the Goal is `Succeeded`.** The operator's dry run (ac3,
+2026-10-26, 70.7 s) printed exactly the counts the session predicted
+([below](#the-operators-dry-run-ac3)).
 
 **What is built.** Under each DA's and advantage's impact cards, "What each impact runs through" names
 every rank by the first of these it has, and marks where the name came from:
@@ -141,12 +142,36 @@ At `c73b8df`, with the same wiring (`counts/count_named_after.py`, 45.9 s), the 
 * "Card above kept on the row" fell from 30 to 24 and from 11 to 10. Those 7 card-above texts hold a
   caselist word and are no longer kept on the row. Only 2 of them would have named a rank.
 
+## The operator's dry run (ac3)
+
+**What ran:** [Operator follow-up 1](#operator-follow-ups) at `f572269`, on 2026-10-26. The guards
+passed, nothing was written, and it took 70.7 s.
+
+| Dry run line | Expected in this report | Measured |
+|---|---|---|
+| Taxonomy and writes | 1.4.0, nothing written | `taxonomy 1.4.0: nothing written; 7 files planned` |
+| Scenarios, advantage / DA | 43 / 44 rows, 0 / 9 with a scenario, 1 / 0 names withheld (t22's run) | 43 / 44, 0 / 9, 1 / 0; documents 676 of 1164 and 253 of 662, as in t22's |
+| Impact ranks named, advantage | 0 / 0 / 39 / 2; 2 left out; 4 tags withheld | **0 by a scenario, 0 by an internal link, 39 by a tag, 2 by the card above; 2 left out; 4 tags withheld** |
+| Impact ranks named, DA | 9 / 4 / 29 / 0; 2 left out; 2 tags withheld | **9 by a scenario, 4 by an internal link, 29 by a tag, 0 by the card above; 2 left out; 2 tags withheld** |
+| Scan | t22's 9 hits, all accepted; none in the impact-card sections | **9 hits, 0 not yet accepted**: 1 in a plank table, 8 in `top_cards.csv`; none in the impact-card sections |
+
+**Before and after**, per kind:
+* **Before** (ac1, t14's lines): a labelled internal link on 0 advantage and 7 DA ranks, only a card
+  above on 30 and 11, and neither on 13 and 26. Every rank without an internal link read "no labelled
+  internal link".
+* **After:** every rank is named except 2 advantage and 2 DA ranks, which are left out and counted.
+* **The Economy DA's 3 ranks** are each named `(tag)` in the session's recount at `c73b8df`
+  ([after the build](#after-the-build-the-same-store-read-only)). The dry run builds the same report
+  and counts per kind, as ruled ([question 3](#questions-for-the-pm)).
+
+The report is local: the republish follows the cloud cutover.
+
 ## Questions for the PM
 
 The same questions as a paste-ready relay prompt:
 
 ```text
-v1-e32-t25 (readable impact chains): built as specified, ac1 and ac2 pass, ac3 waits on the operator's dry run.
+v1-e32-t25 (readable impact chains): built as specified; ac1, ac2 and ac3 pass (the operator's dry run matched every predicted count).
 Three questions, each with my recommendation.
 
 1. The tag names most ranks. On hspolicy26 every one of the 87 impact cards has its own tag, so under the
@@ -180,7 +205,7 @@ pre-approved.
 
 | Node | Status | Notes |
 |---|---|---|
-| readable-impact-chains | Done, except the operator's dry run | In order:<br>1. ac1's counts, read-only;<br>2. hand-written goldens, committed before any code (`b2efa7a`);<br>3. tests, red against a skeleton (`6d7fa34`);<br>4. the rule, the domain checks, the service, report.md and the dry-run line (`c73b8df`);<br>5. 21 mutants;<br>6. the guide (`a479c74`);<br>7. the recount after the build;<br>8. ac3's dry-run block, drafted for the operator |
+| readable-impact-chains | Done | In order:<br>1. ac1's counts, read-only;<br>2. hand-written goldens, committed before any code (`b2efa7a`);<br>3. tests, red against a skeleton (`6d7fa34`);<br>4. the rule, the domain checks, the service, report.md and the dry-run line (`c73b8df`);<br>5. 21 mutants;<br>6. the guide (`a479c74`);<br>7. the recount after the build;<br>8. the operator's dry run (ac3), matching every prediction |
 
 ## Acceptance criteria
 
@@ -188,7 +213,7 @@ pre-approved.
 |---|---|---|
 | ac1: counts before building, per DA and advantage: ranks with a labelled internal link, with only a card above, and with neither | PASS | [The counts](#the-counts-before-building-ac1): read-only, 51.1 s, ids and counts only. Advantage 0 / 30 / 13 and DA 7 / 11 / 26 of 43 and 44 ranks. Per position, the Economy DA is 0 / 2 / 1, and all 3 of its impact cards have a tag. |
 | ac2: on synthetic fixtures, each rank takes the first name in the order, an empty rank is left out and counted, no quoted tag beside a school or team code, matching hand-written goldens; tests shown failing first | PASS | **Goldens** (`b2efa7a`, before any code): `golden/report.md`, `scenario_vocabulary/impact_sections.md`, and `readable_impact_chains/`, a variant reaching every source, a withheld tag and a left-out rank. They pass: `test_the_impact_sections_match_the_hand_written_golden` (both suites), `test_impact_cards_csv_matches_the_hand_written_golden`, `test_rendering_the_fixture_matches_the_golden_file[report.md]`. **Order:** `test_each_row_takes_the_first_source_it_has`, `test_the_order_is_scenario_internal_link_tag_card_above`. **Left out:** `test_an_empty_row_is_left_out_and_counted_never_shown`. **Policy 1.13:** `test_no_line_under_what_each_impact_runs_through_holds_a_caselist_word` (4 cases), `test_a_withheld_*`. The circuit-wide report carries no school or team code at all; these lines also withhold a tag holding any caselist word. **Red:** [below](#checks-shown-failing-for-their-reason). |
-| ac3: the operator's dry run on hspolicy26 shows the Economy DA's ranks named, with the counts before and after | NOT RUN | The operator's run. The block is drafted under [Operator follow-ups](#operator-follow-ups), with the expected lines. The "before" counts are ac1's. The session's read-only recount at `c73b8df` already names the Economy DA's 3 ranks `(tag)` ([after the build](#after-the-build-the-same-store-read-only)). |
+| ac3: the operator's dry run on hspolicy26 shows the Economy DA's ranks named, with the counts before and after | PASS | [The operator's dry run](#the-operators-dry-run-ac3), 2026-10-26, 70.7 s: `Impact ranks named, advantage: 0 by a scenario, 0 by an internal link, 39 by a tag, 2 by the card above; 2 left out; 4 tags withheld.` and `Impact ranks named, da: 9 by a scenario, 4 by an internal link, 29 by a tag, 0 by the card above; 2 left out; 2 tags withheld.` These are exactly the predicted counts. Before: ac1's counts. The Economy DA's 3 ranks are named `(tag)` in the session's recount at `c73b8df`. No scan hit in the impact-card sections. |
 | readable-impact-chains: `uv run pytest packages/debate_core/tests/arguments/landscape` | PASS | **977 passed in 27.66s** (load average 4.0) |
 
 ### Checks shown failing for their reason
@@ -377,7 +402,7 @@ On `a479c74`:
 
 ## Operator follow-ups
 
-1. **ac3: the dry run on hspolicy26.**
+1. **ac3: the dry run on hspolicy26. Done** (2026-10-26, 70.7 s; [results](#the-operators-dry-run-ac3)). For a later run:
    * It is the landscape service as a dry run without `--publish`: read-only, no bucket lock, nothing
      written. Expected runtime: about 75 s on the caches t22's refill left warm (t22's run: 70.9 s).
    * It prints counts and ids only, never a name, tag, text, team or school.

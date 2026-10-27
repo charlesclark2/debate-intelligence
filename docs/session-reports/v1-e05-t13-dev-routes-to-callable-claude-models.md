@@ -264,9 +264,18 @@ the PM `/tmp/bedrock-first-call-dev.md`.
 >    **Recommendation:** run that check before the plan. It takes seconds and decides whether this
 >    branch is enough as it stands.
 
-* When the support case restores the 5.5 quotas: a task switches dev back to Haiku 5.5 and Sonnet 5.5,
-  takes the grant back to 14 resources, updates the update-case check's expected resources (as removals),
-  and decides whether the 4.x prices stay in `config/model_pricing.yaml` (the routed-models test asserts
+**The PM's rulings, 2026-10-27** (with the review below):
+
+* **Question 1: (a).** Dev's daily budget stays at $2. v1-e32-t07's first live pass in dev is a
+  capped sample (`max_model_items`, about 500 cards), so its usage log gives a measured cost per card.
+  The PM re-scopes v1-e05-t14 to project that sample's tokens at both Haiku 4.5's and Haiku 5.5's
+  prices, against the coach's ceiling of $50 a month across dev and prod.
+* **Question 2: yes.** The operator runs follow-up 2 (the two profiles' regions) before the plan. A
+  fourth region stops everything and comes back to the PM.
+
+* When the support case restores the 5.5 quotas, the PM files the task that switches dev back to
+  Haiku 5.5 and Sonnet 5.5, takes the grant back to 14 resources, updates the update-case check's
+  expected resources (as removals), and decides whether the 4.x prices stay in `config/model_pricing.yaml` (the routed-models test asserts
   they do not; [Decisions](#decisions-and-assumptions)). Epic `v1-e05-model-router`.
 
 ## PM review
@@ -274,9 +283,43 @@ the PM `/tmp/bedrock-first-call-dev.md`.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-27
 
 **Notes:**
+
+Dev's fallback built tightly: prod untouched and now pinned, the grant exact at 22 resources, and a
+plan check of its own for the update.
+1. **ac1 and the node's criterion pass.**
+   * Red first in both Python and Terraform, each failing on its own assertion.
+   * `terraform test` reads 9 of 9 passed, and `scripts/terraform_checks.sh` passes offline.
+   * The new identifier-free rule (dev equals prod apart from the model) closes a gap no test covered
+     before.
+2. **Mutants: 21, the PM's two among them, all caught.** They include five wildcard and region
+   variants, and a prod max_tokens or timeout change.
+3. **Both runbook checks were run against synthetic plans** built from the module's real policies:
+   `PLAN OK` for this change, and `PLAN STOP` for ten wrong ones.
+4. **Ruling on question 1: (a).**
+   * Dev's $2 daily budget stays.
+   * v1-e32-t07's first live pass runs capped with `max_model_items` at a sample (about 500 cards),
+     so its usage log gives a measured cost per card.
+   * The coach's ceiling is $50 a month across dev and prod. The PM re-scopes v1-e05-t14 to project
+     that sample's tokens at both Haiku 4.5's and Haiku 5.5's prices, since the fallback costs ten
+     times the intended model.
+5. **Ruling on question 2: yes.** The operator runs follow-up 2 (the profiles' regions) before the
+   plan. A fourth region stops everything and comes back to the PM.
+6. **Decisions accepted:**
+   * the prod pin in the routed-models table;
+   * every committed price for a routed model, flagged for the switch back;
+   * the first-apply check recounted;
+   * the update check pinned to this change's eight additions;
+   * step 7's exit 1 read by its rows.
+7. **The switch back** is filed by the PM when the support case restores the 5.5 quotas.
+8. **The affected set** (161 files) passed what ran before the two-minute line, and the rest is left to
+   the PR's `ci` under agreement 10. The changed directories, the config readers, the always-run list
+   and the static checks are clean.
+
+No re-review is needed. The PR merges `--partial`, phase `InProgress`, until ac2's plan, apply and
+first call. The PM reads the plan before the apply.

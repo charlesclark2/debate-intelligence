@@ -38,7 +38,7 @@ dev is the pre-production validation environment.)
 | **V1 (CLI, v1.0–v1.3)** | Pre-release build `vX.Y.Z-dev.N` published as a GitHub pre-release; installed with `uv tool install` from the pre-release tag; `DEBATE_ENV=dev` uses a separate data dir and dev provider/model config | Stable tagged release `vX.Y.Z` the team installs; `DEBATE_ENV=prod` |
 | **V2+ (AWS)** | Separate AWS account/state (`infrastructure/envs/dev`), dev Cognito pool, dev domain | `infrastructure/envs/prod`, prod Cognito pool, prod domain |
 | Data | Cloud dev (V2+): synthetic/test accounts and scrubbed fixtures only — **never real student data**. V1 dev channel: runs on the tester's own machine against public sources; nothing leaves it | Real users (students may be minors — §14) |
-| Model spend | Low daily budget; replay router where possible | Production quotas (E19) |
+| Model spend | $2 a day and $50 a month; replay router where possible | $1.50 a day and $50 a month (E19 sets production quotas) |
 | Deploy | Automatic on merge to `dev` | Automatic on merge to `main`, **after** the `production` environment approval |
 
 ## What "validated in dev" means
@@ -311,6 +311,14 @@ wheel, the ones it was built and validated with, from any working directory; `DE
 overrides them. That includes the E34 `[caselist] api_enabled` gate: it is fixed per build, so
 turning the API off for an installed build means installing a build whose profile says so, or
 setting `DEBATE_CASELIST__API_ENABLED=false` in its environment. Editing `config/` in a checkout
-does not reach it. Dev and prod never share a data directory (`~/.debate-research/dev` and `…/prod`),
-a model-routing file (`config/model_routing.dev.yaml` routes to cheaper models) or a daily model
-budget. The dev budget is capped at **$2/day** (`DEV_DAILY_BUDGET_CAP_USD`), prod's is $20.
+does not reach it. Dev and prod never share a data directory (`~/.debate-research/dev` and `…/prod`)
+or a model-routing file (`config/model_routing.dev.yaml` routes to cheaper models).
+
+**Model spend.** The coach's ceiling is **$50 a month** of model spend across dev and prod
+(`MONTHLY_MODEL_BUDGET_CEILING_USD`, 2026-10-27), and no committed budget is above it. Both
+profiles set `models.budget_usd_monthly = 50.0`, a calendar month in America/Chicago, because only
+one environment calls models today; the AWS Budgets alarm (`v1-e05-t16`) watches the account's real
+total, which no one machine's usage log sees. The dev budget is capped at **$2/day**
+(`DEV_DAILY_BUDGET_CAP_USD`), the capped landscape sample's allowance (the PM's ruling of
+2026-10-27). Prod's is **$1.50/day**, the $50 over thirty days, rounded down. Dev's daily limit is
+above prod's on purpose: dev is where the first live pass runs (`v1-e05-t15`).

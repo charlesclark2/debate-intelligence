@@ -12,9 +12,9 @@
 # the polite-pool contact address come from the environment or from an uncommitted .env; see
 # .env.example.
 #
-# The routing file and daily budget are owned by v1-e01-t09-dev-prerelease-channel. An installed
-# stable build carries this file inside its wheel and defaults to DEBATE_ENV=prod when DEBATE_ENV
-# is unset.
+# The routing file is owned by v1-e01-t09-dev-prerelease-channel, the model budgets by v1-e05-t15.
+# An installed stable build carries this file inside its wheel and defaults to DEBATE_ENV=prod when
+# DEBATE_ENV is unset.
 
 allow_network = true
 
@@ -41,8 +41,13 @@ request_timeout_seconds = 30.0
 
 [models]
 routing_file = "config/model_routing.prod.yaml"
-# Production spend ceiling per day, enforced by the E05 BudgetGuard. Never the same as dev's.
-budget_usd_daily = 20.0
+# Production spend ceiling per day, enforced by the E05 BudgetGuard: the coach's $50 a month over
+# thirty days, rounded down (v1-e05-t15).
+budget_usd_daily = 1.5
+# The coach's ceiling: $50 of model spend a calendar month in America/Chicago, across dev and prod.
+# The same $50 as dev's until the promotion, because only one environment calls models today; the
+# AWS Budgets alarm (v1-e05-t16) watches the account's real total.
+budget_usd_monthly = 50.0
 # The AWS profile every Bedrock call is signed with, never AWS_PROFILE (v1-e05-t08): the SSO profile
 # of DebateProdBedrockInvoker, as `terraform -chdir=infrastructure/envs/prod output bedrock_profile_name`
 # reports it, written here for the same reason as storage.s3.aws_profile. A name, not a secret.

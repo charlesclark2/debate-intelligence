@@ -145,7 +145,7 @@ class BudgetLimits:
     @property
     def enforced(self) -> bool:
         """Whether any limit is set."""
-        return self.per_run_usd is not None or self.per_day_usd is not None
+        return any(limit is not None for limit in (self.per_run_usd, self.per_day_usd, self.per_month_usd))
 
 
 @dataclass(frozen=True, slots=True)
@@ -224,14 +224,16 @@ class BudgetExceededError(DomainError):
         """The limit's value."""
         self.spent_usd = spent_usd
         """What was already spent or held by calls in flight, against that limit."""
+        self.remaining_usd = max(0.0, limit_usd - spent_usd)
+        """What is left of that limit, which this call's ceiling is more than."""
         self.ceiling_usd = ceiling_usd
         """The most the refused call could have cost."""
         self.model_id = model_id
         """The model the refused call was routed to."""
         super().__init__(
             f"model call to {model_id} refused: the {limit_name} budget is ${limit_usd:.4f}, "
-            f"${spent_usd:.4f} is already spent or held, and this call could cost up to "
-            f"${ceiling_usd:.4f}"
+            f"${spent_usd:.4f} is already spent or held, ${self.remaining_usd:.4f} remains, and this "
+            f"call could cost up to ${ceiling_usd:.4f}"
         )
 
 
@@ -335,6 +337,7 @@ class BudgetGuard:
             for limit_name, limit_usd, spent_usd in (
                 ("per-run", self.limits.per_run_usd, spend.run_usd),
                 ("per-day", self.limits.per_day_usd, spend.day_usd),
+                ("per-month", self.limits.per_month_usd, spend.month_usd),
             ):
                 if limit_usd is not None and spent_usd + self._held_usd + ceiling.usd > limit_usd:
                     raise BudgetExceededError(

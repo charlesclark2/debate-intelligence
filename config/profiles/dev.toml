@@ -51,10 +51,16 @@ request_timeout_seconds = 30.0
 [models]
 # Cheaper models than prod for every text class; see the file's own header.
 routing_file = "config/model_routing.dev.yaml"
-# The documented dev cap: at most $2 of model spend per day, enforced by the E05 BudgetGuard.
-# Raising it above 2.0 fails test_settings_environments.py; change the documented cap first
+# The documented dev cap: at most $2 of model spend per day, enforced by the E05 BudgetGuard. It is
+# the capped landscape sample's allowance (the PM's ruling of 2026-10-27, v1-e05-t15), above prod's
+# $1.50 on purpose: dev is where the first live pass runs. Raising it above 2.0 fails
+# test_settings_environments.py; change the documented cap first
 # (docs/process/branching-and-environments.md).
 budget_usd_daily = 2.0
+# The coach's ceiling: $50 of model spend a calendar month in America/Chicago, across dev and prod
+# (v1-e05-t15). Both profiles set the whole $50 until the promotion, because only one environment
+# calls models today; the AWS Budgets alarm (v1-e05-t16) watches the account's real total.
+budget_usd_monthly = 50.0
 # The AWS profile every Bedrock call is signed with, never AWS_PROFILE (v1-e05-t08): the SSO profile
 # of DebateDevBedrockInvoker, as `terraform -chdir=infrastructure/envs/dev output bedrock_profile_name`
 # reports it, written here for the same reason as storage.s3.aws_profile. A name, not a secret.

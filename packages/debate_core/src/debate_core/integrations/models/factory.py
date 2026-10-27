@@ -31,9 +31,10 @@ In record and live mode the real router is wrapped before the record-and-replay 
     RecordReplayModelRouter( BudgetGuard( UsageRecordingRouter( real router ) ) )
 
 so every real call is logged to `<data_dir>/usage/YYYY-MM-DD.jsonl`, priced from the
-`model_pricing.yaml` beside the routing file, and refused beforehand when it could take the run or
-the day past `models.budget_usd_per_run` or `models.budget_usd_daily`. The guard is left out when
-neither is set. Replay serves cassettes and the fake answers from fixtures: neither costs anything,
+`model_pricing.yaml` beside the routing file, and refused beforehand when it could take the run, the
+day or the calendar month in America/Chicago past `models.budget_usd_per_run`,
+`models.budget_usd_daily` or `models.budget_usd_monthly` (the month v1-e05-t15). The guard is left
+out when none is set. Replay serves cassettes and the fake answers from fixtures: neither costs anything,
 and neither is wrapped. One call of this function is one run, named by `run_id`.
 """
 
@@ -152,9 +153,11 @@ def build_model_router(
 
 
 def budget_limits(settings: Settings) -> BudgetLimits:
-    """The limits `settings` set on model spend: `models.budget_usd_per_run` and `models.budget_usd_daily`."""
+    """The limits `settings` set on model spend: `models.budget_usd_per_run`, `_daily` and `_monthly`."""
     return BudgetLimits(
-        per_run_usd=settings.models.budget_usd_per_run, per_day_usd=settings.models.budget_usd_daily
+        per_run_usd=settings.models.budget_usd_per_run,
+        per_day_usd=settings.models.budget_usd_daily,
+        per_month_usd=settings.models.budget_usd_monthly,
     )
 
 

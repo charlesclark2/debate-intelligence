@@ -1119,9 +1119,9 @@ class ModelSettings(SettingsGroup):
         description=(
             "Ceiling on model spend per local day, across every run on this machine, in USD; unset is "
             "no limit. Enforced by the BudgetGuard (debate_core.application.budget, v1-e05-t07) "
-            "against the day's usage log; the dev and prod values are set by "
-            "v1-e01-t09-dev-prerelease-channel. With a limit, a model with no price in "
-            "config/model_pricing.yaml is refused rather than treated as free."
+            "against the day's usage log. Dev's is $2, the capped sample's allowance; prod's $1.50, "
+            "the coach's $50 a month over thirty days (v1-e05-t15). With a limit, a model with no "
+            "price in config/model_pricing.yaml is refused rather than treated as free."
         ),
     )
     budget_usd_monthly: float | None = Field(
@@ -1408,6 +1408,7 @@ def _builtin_profiles() -> dict[Environment, dict[str, Any]]:
             "models": {
                 "routing_file": Path("config/model_routing.dev.yaml"),
                 "budget_usd_daily": DEV_DAILY_BUDGET_CAP_USD,
+                "budget_usd_monthly": MONTHLY_MODEL_BUDGET_CEILING_USD,
             },
         },
         Environment.PROD: {
@@ -1418,7 +1419,8 @@ def _builtin_profiles() -> dict[Environment, dict[str, Any]]:
             },
             "models": {
                 "routing_file": Path("config/model_routing.prod.yaml"),
-                "budget_usd_daily": 20.0,
+                "budget_usd_daily": 1.5,
+                "budget_usd_monthly": MONTHLY_MODEL_BUDGET_CEILING_USD,
             },
         },
         Environment.TEST: {

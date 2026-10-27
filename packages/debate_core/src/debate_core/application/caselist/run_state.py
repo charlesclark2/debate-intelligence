@@ -45,6 +45,13 @@ where the key is the digest and the check is the key.
   none is one the publisher withholds. Otherwise the bucket keeps the previous bundle, and the next
   run redoes the weeks after it, downloading them again within the ledger's limit. A week redone is
   late, never lost (ADR-0017 decision 3).
+* **The held uploads**, at every save of the bundle and before it, whether or not the bundle is then
+  saved (:meth:`RunState.save_held_digests`, `v1-e40-t12`): what this working copy's imports refused
+  at a held path, appended to `manifests/_suppression/held-digests.jsonl`, which a removal and
+  `caselist status` read from any machine. A working copy vanishes with its task, and this record
+  is the one thing that names a refused upload once its archive has gone. Every save site holds the
+  run's lock, so no bundle recording a snapshot is in the bucket without the uploads its import
+  refused.
 
 ## What is logged
 
@@ -80,7 +87,7 @@ from debate_core.application.evidence_sync import WithheldManifests
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectInfo, ObjectKey
 from debate_core.application.ports.parsed_store import OPENEV_STORE
 from debate_core.application.ports.run_state import RUN_STATE_BUNDLE_KEY, RUN_STATE_PREFIX, RunStateFiles
-from debate_core.application.ports.suppression import SuppressionList
+from debate_core.application.ports.suppression import HeldDigestList, SuppressionList
 from debate_core.application.search_index_refresh import RESTORED_INDEX_MARKER, SEARCH_INDEX_DIRECTORY
 from debate_core.application.sync_runs import SYNC_RUN_DETAILS_FILENAME, SYNC_RUN_LOG_FILENAME
 from debate_core.domain.search_index import (
@@ -452,8 +459,10 @@ class RunState:
     async def save_bundle(self) -> BundleSave:
         """Save the bundle if every snapshot it records is confirmed in the bucket. See the module docstring.
 
-        Raises :class:`RunStateWithheld` when a local manifest is one the publisher withholds.
+        Raises :class:`RunStateWithheld` when a local manifest is one the publisher withholds. The held
+        uploads are given to the bucket first either way (:meth:`save_held_digests`).
         """
+        await self.save_held_digests()
         await self._refuse_withheld(self._local, saving=True)
         unconfirmed = await self.unconfirmed_manifests()
         if unconfirmed:
@@ -481,6 +490,16 @@ class RunState:
             sha256=stored.sha256,
             version_id=stored.version_id,
         )
+
+    async def save_held_digests(self) -> None:
+        """Give the bucket's held-digest record the lines this working copy holds and it lacks (`v1-e40-t12`).
+
+        Appended after what is there, which stays byte for byte, a removal's own lines among them; a
+        line already there is not written again, and with none to give nothing is written. Through
+        the suppression list's own set-union append, over the same fenced adapter as the bundle.
+        """
+        if isinstance(self._suppression, HeldDigestList):
+            await self._suppression.append_held_digests(())
 
     async def local_manifests(self) -> tuple[ObjectInfo, ...]:
         """This machine's manifests, which the bundle holds."""

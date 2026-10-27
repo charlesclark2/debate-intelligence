@@ -501,7 +501,7 @@ async def test_each_fixture_cite_formats_as_the_fixture_expects(world: CitationW
 
 
 def cite_of(**fields: CitationField[Any]) -> Citation:
-    return Citation(**fields)
+    return Citation().evolve(**fields)
 
 
 @pytest.mark.parametrize(

@@ -19,7 +19,7 @@ All in the environment's own names, `debate-dev-...` in dev and `debate-prod-...
 | What goes wrong | What notices | What the email says |
 |---|---|---|
 | A run fails | The run itself: `caselist.notifier = sns` sends what the Mac's banners say, including `RUN_TERMINATED` and `RUN_LOCK_LOST` | Subject `debate dev: caselist pull failed: ...`; the run id, the environment, the failed stage and its codes, the fix |
-| A run or a login stops non-zero, or never starts | The rules `debate-dev-caselist-run-stopped` and `-login-stopped` on ECS task state changes | `The dev weekly caselist run task stopped with exit code N (stop code: reason). Task <arn>.` |
+| A run or a login stops non-zero, or never starts | The rules `debate-dev-caselist-run-stopped` and `-login-stopped` on ECS task state changes | `The dev weekly caselist run task stopped with exit code N (stop code: reason). Task <arn>.` For the run's family it adds that the task may be a backfile import started by hand (`v1-e40-t09`), whose result names its command |
 | The weekly login fails | The login itself, through the same notifier | Subject `debate dev: Weekly caselist login failed`; its code and the two fixes, never the account |
 | No run recorded in seven days | The alarm `debate-dev-caselist-run-late` on `RunsRecorded` from the run's log group. **Its email is off until the cutover's first recorded run** | An `ALARM` email naming the alarm |
 | A schedule could not start its task | The queues `debate-dev-caselist-login-dlq` and `-run-dlq`, and the alarm `debate-dev-caselist-schedule-failed` | An `ALARM` email naming the alarm and the two queues |

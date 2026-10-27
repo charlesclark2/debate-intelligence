@@ -82,9 +82,24 @@ downloaded, wrote and locked nothing. Exit `1`, `BACKFILE_IMPORT_REFUSED`, as ex
 The Mac cannot hold one backfile import, so the imports run in the cloud (the PM's ruling Q4). The
 window and budget refusals are shown by the tests (`packages/debate_cli/tests/bucket_mode/test_backfile_import.py`).
 
-## Imports
+## Cloud imports (v1-e40-t09)
 
-_Not yet run._ The imports run in the cloud from Thursday 2026-11-05 at the earliest, one a day
-outside the no-import window. Each import's counts go here, one row per caselist: members, stored,
-suppressed, held, sources uploaded, parsed, unsupported, failed, cards, parsed objects uploaded, and
-each step's seconds.
+_Not yet run._ Each import runs as a task of the dev weekly run's task definition, started by hand
+([caselist-cloud-run.md, "Backfile imports"](../runbooks/caselist-cloud-run.md#backfile-imports)), one a
+day outside the no-import window, after the operator's return after 2026-11-01. Each row is filled
+from the task's result line: counts only, never a school, team or file name. "Parsed" is parsed,
+unsupported and failed sources; "Held" is the sources held by a removal request, summed; the steps are
+restore, download, import, parse, publish and parsed publish, in seconds.
+
+**The cloud dry run** (ac2), `hspolicy25`: not yet run. Its free bytes on the task's volume go here,
+beside the 29,687,044,928 it needs.
+
+| Caselist | Date (Chicago) | Revision | Downloaded bytes | Members | Stored | Suppressed | Held | Sources uploaded | Parsed | Cards | Parsed objects uploaded | Steps (s) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `hspolicy25` | not yet run | | | | | | | | | | | |
+| `hsld25` | not yet run | | | | | | | | | | | |
+| `hspolicy24` | not yet run | | | | | | | | | | | |
+| `hsld24` | not yet run | | | | | | | | | | | |
+
+**The weekly run after the first import** (ac3): not yet run. Its run id, outcome and minutes, and
+the three weeks before it, go here.

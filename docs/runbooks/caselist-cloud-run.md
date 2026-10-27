@@ -1,4 +1,4 @@
-<!-- docs-index: The weekly cloud run's container: applying its network, cluster, repository and deployer, checking whether a new login ends the Mac's token, pushing its image, the login and run tasks with their schedules, a dry-run rehearsal, and one run by hand -->
+<!-- docs-index: The weekly cloud run's container: applying its network, cluster, repository and deployer, checking whether a new login ends the Mac's token, pushing its image, the login and run tasks with their schedules, a dry-run rehearsal, one run by hand, and the backfile imports started by hand on the run's task definition -->
 # Runbook: the weekly caselist run as a container on a schedule
 
 How the weekly caselist run becomes a Fargate task in the team's AWS account: its network, cluster,
@@ -815,6 +815,330 @@ and the task stops with a non-zero exit (ADR-0020 (1) 6). To stop a run sooner, 
 aws ecs stop-task --profile debate-dev-caselist-run-deployer --region us-east-1 --cluster debate-dev-caselist-run --task "$TASK" --reason "stopped by the operator" --query 'task.desiredStatus' --output text
 ```
 Success looks like `STOPPED`. ECS sends SIGTERM and gives the same two minutes.
+
+## Backfile imports
+
+The four backfile complete archives (`hspolicy25`, `hsld25`, `hspolicy24`, `hsld24`) are imported
+once each by a one-off task of **the run's own task definition**, started by hand with its command
+overridden to `v1-e34-t34`'s `caselist backfile-import --caselist <slug>`, and never on a schedule
+(the PM's rulings of 2026-10-27 on
+[`v1-e40-t09`](../../plan_specs/v1/e40-cloud-caselist-run/t09-cloud-backfile-import.yaml)). The import's
+rules, its refusals and its rebuild after a removal are [caselist-backfiles.md](caselist-backfiles.md)'s;
+this section is how the cloud runs it.
+
+* **The task.** The run's task definition, the revision Terraform made and the schedule starts: 8
+  vCPU, 16 GB, the run role, and the run's 6-hour deadline (an import is estimated at 1.5 to 2.5
+  hours). Its 100 GiB of ephemeral storage holds the largest import, `hsld25`, which needs
+  32,750,091,060 bytes free by t34's estimate with 25% headroom, beside the image and the restore.
+  The module's tests hold that figure.
+* **What Terraform changes.** One thing: the run-stopped alert's email now says the task may be a
+  backfile import started by hand. No task definition, schedule, role, policy or permission set
+  changes, and no grant is added: every call the import makes is one the run role already holds.
+* **Who it runs as.** `ops/caselist_run/start_backfile_import.py` reads the bucket's run lock as the
+  everyday evidence profile (`debate-dev-evidence`, one `GetObject`) and starts the task as the run
+  deployer (`debate-dev-caselist-run-deployer`). **Both must be signed in.** The plan, the apply and
+  the root's outputs are `debate-admin`'s, as everywhere in this runbook.
+* **What refuses.** The script refuses inside the no-import window, Tuesday 06:00 to Thursday 00:00
+  America/Chicago, and while a run holds the bucket's lock; nothing is started. In the task, the
+  import refuses again before any download: the window, the backfile budget (one complete archive in
+  any 24 hours, in the bucket's ledger), free space, and a token that is expired or missing.
+* **A failed or refused import emails the coach**, as a failed weekly run does: the task stops with a
+  non-zero exit and the run-stopped rule matches every task of the run's family. The email says it
+  may be a backfile import. A refused dry run sends one too.
+* **An import never counts as a weekly run.** The late-run alarm counts only `caselist pull` results
+  that carry a run record, and an import's result is `caselist backfile-import` with none, so a
+  finished import cannot hide a Wednesday with no run.
+
+**When.** This task's pull request merges into `dev` only after Thursday 2026-10-29's image apply, so
+that its plan is not part of that one. The dry run waits until Wednesday 2026-10-28's first scheduled
+cloud run has succeeded. The four imports wait until the operator is back, after 2026-11-01.
+
+### The plan, which the PM reads before the apply
+
+**The worktree**, `$WT` from "Before you start", moved to `origin/dev` with this task merged.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`
+```bash
+cd "$WT"
+git fetch origin
+git switch --detach origin/dev
+test -f ops/caselist_run/start_backfile_import.py && echo "ok: origin/dev $(git rev-parse --short HEAD), the backfile import merged" || echo "NOT MERGED: wait for v1-e40-t09 to merge"
+grep -cE '^caselist_image_digest += "sha256:[0-9a-f]{64}"$' infrastructure/envs/dev/owner.auto.tfvars
+```
+Success looks like `ok: origin/dev <commit>, the backfile import merged`, then `1`: the digest line
+Thursday's image apply left.
+
+**The plan**, saved to a file, so that what the apply applies is what was read.
+
+**Operator command** (expected runtime ~2 min)
+Where: `$WT`
+```bash
+cd "$WT"
+if env | grep -qE '^(TF_VAR_|TF_WORKSPACE=|TF_DATA_DIR=|TF_CLI_ARGS)'; then echo "STOP: a Terraform override is set in this shell"; else AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev init -input=false >/dev/null && AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev plan -input=false -no-color -out=caselist-backfile-alert.tfplan | tee /tmp/caselist-backfile-alert-plan.txt | tail -5; fi
+grep -E '^Plan:|must be replaced|will be destroyed|will be created' /tmp/caselist-backfile-alert-plan.txt
+grep -c 'aws_ssoadmin' /tmp/caselist-backfile-alert-plan.txt
+grep -E '^ +~ +input_template' /tmp/caselist-backfile-alert-plan.txt
+```
+Expect `Plan: 0 to add, 1 to change, 0 to destroy.`, no line saying a resource is replaced, destroyed
+or created, then `0`, then the one `input_template` line: the run-stopped email's text, before and
+after. **The PM reads that line.** The new text is the old with one sentence added after `Task
+<task>.`: `It is the weekly run, or a backfile import someone started by hand
+(docs/runbooks/caselist-cloud-run.md, Backfile imports): the command on the last line of its log says
+which.` **An account assignment, a permission set, a schedule or a task definition anywhere in the
+plan stops everything**: never apply it.
+
+**The plan checked against exactly that shape.** It prints `PLAN OK` only for one in-place update of
+`module.caselist_run.aws_cloudwatch_event_target.task_stopped["run"]` whose text gains that sentence and
+changes in nothing else, with nothing else in the plan. Anything else prints `PLAN STOP` with the
+reason.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`
+```bash
+cd "$WT"
+AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev show -json caselist-backfile-alert.tfplan > /tmp/caselist-backfile-alert-plan.json
+python3 -I - /tmp/caselist-backfile-alert-plan.json <<'BACKFILEPLAN'
+import json, sys
+plan = json.load(open(sys.argv[1]))
+m = "module.caselist_run."
+target = m + 'aws_cloudwatch_event_target.task_stopped["run"]'
+added = " It is the weekly run, or a backfile import someone started by hand (docs/runbooks/caselist-cloud-run.md, Backfile imports): the command on the last line of its log says which."
+changes = [c for c in plan.get("resource_changes", []) if c["change"]["actions"] not in (["no-op"], ["read"])]
+problems = []
+def unknown(value):
+    if value is True:
+        return True
+    if isinstance(value, dict):
+        return any(unknown(v) for v in value.values())
+    if isinstance(value, list):
+        return any(unknown(v) for v in value)
+    return False
+sso = sorted(c["address"] for c in changes if "aws_ssoadmin" in c["address"])
+if sso:
+    problems.append("an account assignment or permission set changes: " + str(sso))
+schedules = sorted(c["address"] + " " + "/".join(c["change"]["actions"]) for c in changes if "aws_scheduler_schedule" in c["address"])
+if schedules:
+    problems.append("a schedule is added or changed: " + str(schedules))
+outside = sorted(c["address"] for c in changes if not c["address"].startswith(m))
+if outside:
+    problems.append("changes outside module.caselist_run " + str(outside))
+others = sorted(c["address"] + " " + "/".join(c["change"]["actions"]) for c in changes if c["address"] != target)
+if others:
+    problems.append("changes other than the run-stopped alert's text: " + str(others))
+found = [c["change"] for c in changes if c["address"] == target]
+if not found:
+    problems.append("the run-stopped alert's text does not change: is v1-e40-t09 merged in this checkout?")
+for change in found:
+    if change["actions"] != ["update"]:
+        problems.append(target + " is " + "/".join(change["actions"]) + ", expected an update in place")
+    before, after = change["before"] or {}, change["after"] or {}
+    unknowns = {k for k, v in (change.get("after_unknown") or {}).items() if unknown(v)}
+    changed = sorted(k for k in set(before) | set(after) if before.get(k) != after.get(k) or k in unknowns)
+    if changed != ["input_transformer"]:
+        problems.append(target + " changes " + str(changed) + ", expected only input_transformer")
+        continue
+    old, new = (before.get("input_transformer") or [{}])[0], (after.get("input_transformer") or [{}])[0]
+    if old.get("input_paths") != new.get("input_paths"):
+        problems.append(target + " changes its input paths")
+    text_before, text_after = str(old.get("input_template", "")), str(new.get("input_template", ""))
+    if added not in text_after:
+        problems.append("the new text does not name a hand-started backfile import as v1-e40-t09 wrote it")
+    elif text_after.replace(added, "", 1) != text_before:
+        problems.append("the text changes beyond the sentence naming a backfile import")
+if problems:
+    print("PLAN STOP: " + "; ".join(problems))
+else:
+    print("PLAN OK: 0 to add, 1 to change, 0 to destroy; the run-stopped alert's text names a hand-started backfile import and nothing else in it changed; no schedule, task definition, role, policy or permission set changes; nothing else")
+BACKFILEPLAN
+```
+Success looks like `PLAN OK: 0 to add, 1 to change, 0 to destroy; the run-stopped alert's text names a
+hand-started backfile import …; nothing else`. **`PLAN STOP` stops everything**: send its line and the
+plan to the PM. Either way the PM reads the plan before the apply.
+
+### The apply, after the PM's word
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`
+```bash
+cd "$WT"
+if env | grep -qE '^(TF_VAR_|TF_WORKSPACE=|TF_DATA_DIR=|TF_CLI_ARGS)'; then echo "STOP: a Terraform override is set in this shell"; else AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev apply -input=false caselist-backfile-alert.tfplan; fi
+```
+Success looks like `Apply complete! Resources: 0 added, 1 changed, 0 destroyed.` A stale plan: plan
+again. Never `-target`.
+
+### Before each start: both profiles, the network and the revision
+
+**Sign in.** One SSO session covers the deployer and the everyday profile; each is checked by name.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, anywhere
+```bash
+aws sso login --sso-session debate
+aws sts get-caller-identity --profile debate-dev-caselist-run-deployer --query Arn --output text
+aws sts get-caller-identity --profile debate-dev-evidence --query Arn --output text
+```
+Success looks like one ARN containing `AWSReservedSSO_DebateDevCaselistRunDeployer` and one containing
+`AWSReservedSSO_DebateDevEvidenceOperator`. An error on either: that profile is not configured or not
+signed in, and the script would refuse.
+
+**The network and the revision the schedule starts**, from the root's outputs. The deployer cannot
+read the schedule, so the runbook passes the script Terraform's own revision; without
+`--task-definition`, the script starts the family's newest ACTIVE revision, which the deploy script
+may have replaced with a later image.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`
+```bash
+cd "$WT"
+SUBNETS=$(AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output -json caselist_run_subnet_ids | tr -d '[]" \n')
+SECURITY_GROUP=$(AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output -raw caselist_run_security_group_id)
+REVISION=$(AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output -raw caselist_run_task_definition_arn)
+DIGEST=$(grep -oE 'sha256:[0-9a-f]{64}' infrastructure/envs/dev/owner.auto.tfvars)
+echo "subnets ${SUBNETS}; security group ${SECURITY_GROUP}; revision ${REVISION}; image ${DIGEST}"
+```
+Success looks like two `subnet-` ids joined by a comma, one `sg-` id, a
+`…:task-definition/debate-dev-caselist-run:<n>` ARN, and one `sha256:` digest.
+
+### The dry run (`v1-e40-t09` ac2)
+
+Listings and a `HEAD` in the task, as the run role, with the run's token: nothing is downloaded,
+written or locked, and no budget is spent. It also measures the free space on the task's volume.
+Not inside the window, and not before Wednesday 2026-10-28's scheduled run has succeeded.
+
+**Start it.** The caselist is the first to import.
+
+**Operator command** (expected runtime ~1 min to start)
+Where: `$WT`, in the shell that set `REVISION`
+```bash
+cd "$WT"
+CASELIST=hspolicy25
+rm -f "/tmp/backfile-${CASELIST}-dry-run.txt"
+if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif [ -z "$REVISION" ] || [ -z "$SUBNETS" ]; then echo "STOP: REVISION or SUBNETS is not set; run the block above first"; else python3 -I ops/caselist_run/start_backfile_import.py --env dev --caselist "$CASELIST" --subnets "$SUBNETS" --security-group "$SECURITY_GROUP" --task-definition "$REVISION" --dry-run | tee "/tmp/backfile-${CASELIST}-dry-run.txt"; fi
+TASK_ID=$(sed -n 's/^task id: //p' "/tmp/backfile-${CASELIST}-dry-run.txt" 2>/dev/null)
+echo "task ${TASK_ID}"
+```
+Success looks like `outside the no-import window`, `run lock: free`, `task definition: <REVISION>
+(revision <n>)`, `image digest: <DIGEST>`, `ephemeral storage: 100 GiB`, `started arn:aws:ecs:…`, and
+`task <32 hex digits>`. **Before the first import, the revision and the digest printed must be
+`REVISION` and `DIGEST` above**: if either differs, stop and tell the PM. A `REFUSED:` line started
+nothing; it says why. Inside the window: start it after Thursday 00:00. The lock held: a run is
+working, so start it once that run's task has stopped.
+
+**Watch it** until it stops; a dry run takes a few minutes.
+
+**Operator command** (expected runtime ~1 min each time)
+Where: `$WT`, in the same shell
+```bash
+aws ecs describe-tasks --profile debate-dev-caselist-run-deployer --region us-east-1 --cluster debate-dev-caselist-run --tasks "$TASK_ID" --query 'tasks[0].[lastStatus,stopCode,containers[0].exitCode]' --output text
+```
+Success looks like `STOPPED	EssentialContainerExited	0`. `RUNNING` or `PENDING`: not done yet. Exit
+`1` is a refusal: read its result below.
+
+**Its result**, the import's `--json` line in the task's log.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`, in the same shell
+```bash
+aws logs tail debate-dev-caselist-run --profile debate-dev-caselist-run-deployer --region us-east-1 --log-stream-names "run/run/${TASK_ID}" --since 6h | grep '"command": "caselist backfile-import"' | grep -oE '"status": "(ok|error)"|"applied": (true|false)|"archive_bytes": [0-9]+|"already_imported": (true|false)|"backfile_downloads_left": [0-9]+|"inside_no_import_window": (true|false)|"required_bytes": [0-9]+|"free_bytes": [0-9]+|"enough": (true|false)|"code": "[A-Z_]+"'
+```
+Success (ac2) looks like `"status": "ok"`, `"applied": false`, `"archive_bytes": 3958272657` for
+`hspolicy25`, `"already_imported": false`, `"backfile_downloads_left": 1`,
+`"inside_no_import_window": false`, `"required_bytes": 29687044928`, a `"free_bytes"` above it,
+`"enough": true`, and **no `"code"` line**. Record the free bytes in the report: they are the task
+volume's measured room. Nothing printed at all: the task did not reach the import; send the log's
+last lines (`aws logs tail` without the `grep`s) to the PM.
+
+**A `"code"` line names why it stopped**:
+
+* `CASELIST_AUTH_EXPIRED`, `CASELIST_TOKEN_MISSING` or `CASELIST_TOKEN_UNREADABLE`: the token the run's
+  login stored has expired, or there is none. **The Wednesday 03:00 login renews it. Nobody logs in by
+  hand for an import**, which would be a second login: start the import again after Thursday 00:00.
+  The task's own message still says to run `caselist auth login`; that wording is the Mac's, and a
+  later image changes it.
+* `INSIDE_NO_IMPORT_WINDOW`, `BACKFILE_BUDGET_SPENT`, `NOT_ENOUGH_FREE_SPACE`,
+  `RUN_STATE_NOT_SEEDED`, `NOT_A_BACKFILE`, `NO_COMPLETE_ARCHIVE`: as
+  [caselist-backfiles.md, "What each refusal means"](caselist-backfiles.md#what-each-refusal-means) says.
+* `RUN_LOCK_HELD` or another lock code: a run took the lock after the script read it. Start again once
+  that run's task has stopped.
+* Anything else goes to the PM with the log's last lines.
+
+### The four imports (`v1-e40-t09` ac3)
+
+In the order of [caselist-backfiles.md](caselist-backfiles.md#the-order), **at most one a day**,
+outside the window and **never on a Wednesday**, each its dry run first:
+
+| Order | Caselist | Earliest | Its dry run's `archive_bytes` | `required_bytes` |
+|---|---|---|---|---|
+| 1 | `hspolicy25` | the operator's return, after 2026-11-01 | 3958272657 | 29687044928 |
+| 2 | `hsld25` | the Thursday after the first import's weekly run is checked (below) | 4366678808 | 32750091060 |
+| 3 | `hspolicy24` | a day after the second | 2563267685 | 19224507638 |
+| 4 | `hsld24` | a day after the third | 3967721058 | 29757907935 |
+
+**For each:** "Before each start" above (the sign-in, and the block that sets `REVISION`), then the
+dry run with `CASELIST` set to this caselist, read as above. Its `archive_bytes` and `required_bytes`
+are the table's, `"backfile_downloads_left": 1`, and no `"code"` line. **Only then the import**, in a
+block of its own.
+
+**Operator command** (expected runtime ~1 min to start; the import takes 1.5 to 2.5 hours)
+Where: `$WT`, in the shell that ran this caselist's dry run
+```bash
+cd "$WT"
+rm -f "/tmp/backfile-${CASELIST}-import.txt"
+if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif [ -z "$REVISION" ] || [ -z "$CASELIST" ]; then echo "STOP: REVISION or CASELIST is not set; run the dry run first"; else python3 -I ops/caselist_run/start_backfile_import.py --env dev --caselist "$CASELIST" --subnets "$SUBNETS" --security-group "$SECURITY_GROUP" --task-definition "$REVISION" | tee "/tmp/backfile-${CASELIST}-import.txt"; fi
+TASK_ID=$(sed -n 's/^task id: //p' "/tmp/backfile-${CASELIST}-import.txt" 2>/dev/null)
+echo "task ${TASK_ID}"
+```
+Success looks like the dry run's lines and `task <32 hex digits>`.
+
+**Watch it** every half hour with the dry run's `describe-tasks` block, until `STOPPED
+EssentialContainerExited 0`.
+
+**Its counts.**
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`, in the same shell
+```bash
+aws logs tail debate-dev-caselist-run --profile debate-dev-caselist-run-deployer --region us-east-1 --log-stream-names "run/run/${TASK_ID}" --since 6h | grep '"command": "caselist backfile-import"' | grep -oE '"status": "(ok|error)"|"applied": (true|false)|"downloaded_bytes": [0-9]+|"members": [0-9]+|"stored": [0-9]+|"suppressed": [0-9]+|"held_by_request": [{][^}]*[}]|"sources_uploaded": [0-9]+|"sources_skipped": [0-9]+|"parsed": [0-9]+|"unsupported": [0-9]+|"failed": [0-9]+|"cards": [0-9]+|"parsed_uploaded": [0-9]+|"archive_left_inbox": (true|false)|"(restore|download|import|parse|publish|publish_parsed)": [0-9.]+|"code": "[A-Z_]+"'
+```
+Success looks like `"status": "ok"`, `"applied": true`, `"downloaded_bytes"` equal to the dry run's
+`archive_bytes`, and `"members"`, `"sources_uploaded"`, `"parsed"`, `"cards"` and `"parsed_uploaded"`
+each **above zero**, `"archive_left_inbox": true`, the six step times in seconds, any `"held_by_request"` counts, and no `"code"` line.
+A zero there is not a success, even with `"status": "ok"`: send the lines to the PM.
+`BACKFILE_IMPORT_INCOMPLETE` or `BUNDLE_CHANGED_SINCE_RESTORE`: start it again the next day; it
+resumes from what was published and does not download again. A window that opened part-way
+(`INSIDE_NO_IMPORT_WINDOW`): start it again after Thursday 00:00.
+
+**Record the counts** in
+[docs/data/caselist-backfile-seasons.md, "Cloud imports"](../data/caselist-backfile-seasons.md#cloud-imports-v1-e40-t09):
+paste the lines above, with the date and the revision, into a session, which commits the row. Counts
+only: no school, team or file name is in them.
+
+**The next weekly run after the first import.** The first import's manifest goes into the run-state
+bundle that every weekly run restores. On the Thursday after that import's Wednesday, check that run
+restored, finished, and took about as long as the weeks before it. The second import waits for this.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, the installed build
+```bash
+debate-research --json caselist runs --remote --last 4 > /tmp/caselist-runs.json
+python3 -I - /tmp/caselist-runs.json <<'RUNS'
+import json, sys
+from datetime import datetime
+for run in json.load(open(sys.argv[1]))["data"]["runs"]:
+    started = datetime.fromisoformat(run["started_at"].replace("Z", "+00:00"))
+    finished = datetime.fromisoformat(run["finished_at"].replace("Z", "+00:00"))
+    print(run["run_id"], run["outcome"], "%.0f min" % ((finished - started).total_seconds() / 60))
+RUNS
+```
+Success looks like four lines, newest first, the newest Wednesday's run with the outcome the weeks
+before had and a time within about a quarter of theirs. A failed run, or one much slower, goes to the
+PM before the second import, with its log's last lines.
+
+**A rebuild after a whole-file removal** is this same import, dry run first, for each backfile the
+removal's plan listed ([caselist-removal.md](caselist-removal.md), step 5): imported already, it
+downloads nothing and spends no budget, so `"already_imported": true` and `"downloaded_bytes": 0` are
+its success. The window still applies.
 
 ## Prod, at the pilot's promotion (follow-up)
 

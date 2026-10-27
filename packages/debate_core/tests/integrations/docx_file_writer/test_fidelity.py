@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from lxml import etree
 
 from debate_core.application.ports.evidence_file_writer import (
     BuiltEvidenceFile,
@@ -479,3 +480,54 @@ def test_a_stretch_underlined_by_an_alias_beside_the_profiles_own_style_reads_ba
         if s.emphasis is RunEmphasis.UNDERLINE
     ]
     assert len(rebuilt) == 1
+
+
+WORDML = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+
+
+def runs_of_the_paragraph(docx: bytes, text: str) -> list[tuple[str, bytes]]:
+    """Each run of the one body paragraph whose text is `text`: its text and its properties as XML."""
+    body = etree.fromstring(zipfile.ZipFile(BytesIO(docx)).read("word/document.xml"))
+    found = [
+        element
+        for element in body.iter(f"{WORDML}p")
+        if "".join(t.text or "" for t in element.iter(f"{WORDML}t")) == text
+    ]
+    assert len(found) == 1, len(found)
+    return [
+        (
+            "".join(t.text or "" for t in run.iter(f"{WORDML}t")),
+            b""
+            if run.find(f"{WORDML}rPr") is None
+            else etree.tostring(run.find(f"{WORDML}rPr"), method="c14n"),
+        )
+        for run in found[0].iter(f"{WORDML}r")
+    ]
+
+
+def test_a_white_highlighted_paragraph_is_copied_as_its_source_wrote_it(parser: DebateDocxParser) -> None:
+    """`v1-e31-t31`: the parser no longer reads white as highlight; the writer still copies it.
+
+    The writer copies a card's paragraphs from its source (`v1-e33-t02`), so the white run reaches the
+    built file with its `w:highlight` as the source wrote it, and the card reads back as its source.
+    """
+    runs = [
+        ("Supply ", SMALL),
+        ("freezes in place", {"underline": "single", "highlight": "cyan", **SMALL}),
+        (" while the grid waits", {"highlight": "white", **SMALL}),
+        (" this year.", SMALL),
+    ]
+    text = "".join(run_text for run_text, _ in runs)
+    content = build_docx(tag("Moratoria raise prices") + styled_cite("Lindqvist 26") + paragraph(runs))
+    source = _source_card(parser, content)
+    assert [
+        span.highlight_color for span in source.formatting_spans if span.emphasis is RunEmphasis.HIGHLIGHT
+    ] == ["cyan"]
+
+    cards, result = build_all(parser, content)
+
+    assert_every_card_reads_as_its_source(parser, cards, result)
+    assert isinstance(result, BuiltEvidenceFile)
+    copied = runs_of_the_paragraph(result.docx, text)
+    assert copied == runs_of_the_paragraph(content, text)
+    assert any(b'w:val="white"' in properties for _, properties in copied)

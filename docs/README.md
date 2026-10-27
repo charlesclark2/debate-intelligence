@@ -30,6 +30,7 @@ regenerates it on `dev` ([`v1-e01-t16`](../plan_specs/v1/e01-repo-foundation/t16
 | [data/parsed-card-store.md](data/parsed-card-store.md) | Layout and record shapes of the parsed card store that caselist parse writes |
 | [data/parser-eval-2026-10.md](data/parser-eval-2026-10.md) | Parser evaluation baseline on 2026.10.18-docx-5: per-unit scores for the labelled tiers |
 | [data/search-index.md](data/search-index.md) | The student search pilot's SQLite FTS5 index: its schema, manifest and pointer, and the record of each full-store build |
+| [data/team-format-survey.md](data/team-format-survey.md) | How the team formats its cards (sizes, highlight colours, cite layout), measured from its own files without reading their text |
 | [evidence/normalization.md](evidence/normalization.md) | Evidence text normalization policy: the frozen, versioned rules every snapshot offset, hash and verification depends on |
 | [evidence/snapshot-text-format.md](evidence/snapshot-text-format.md) | `debate-snapshot-text/1`: how a snapshot's normalized text and paragraph map are stored, the canonical encoding, the key check every read makes, and what `SnapshotService.load` verifies |
 | [guides/coach-website-editing.md](guides/coach-website-editing.md) | For coaches: adding, changing and removing events and announcements on the team website, with no code |

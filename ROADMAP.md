@@ -63,7 +63,7 @@ v2.3's extension work.
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 51 | 45 | 244 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 108 | 83 | 498 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 50 | 35 | 270 |
-| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 16 | 9 | 114 |
+| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 16 | 10 | 114 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 22 | 13 | 154 |
@@ -383,7 +383,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 |---|---|---|---|
 | [CitationService with per-field provenance](plan_specs/v1/e06-card-cutting/t01-citation-service.yaml) `v1-e06-t01-citation-service` | Succeeded | 1 | 9.0 |
 | [CardService pipeline](plan_specs/v1/e06-card-cutting/t02-card-service.yaml) `v1-e06-t02-card-service` | Succeeded | 3 | 10.0 |
-| [Card format profiles from team conventions](plan_specs/v1/e06-card-cutting/t03-format-profiles.yaml) `v1-e06-t03-format-profiles` | Pending | 2 | 9.5 |
+| [Card format profiles from team conventions](plan_specs/v1/e06-card-cutting/t03-format-profiles.yaml) `v1-e06-t03-format-profiles` | Succeeded | 2 | 9.5 |
 | [DOCX renderer](plan_specs/v1/e06-card-cutting/t04-docx-renderer.yaml) `v1-e06-t04-docx-renderer` | Pending | 3 | 11.0 |
 | [JSON manifest export](plan_specs/v1/e06-card-cutting/t05-json-manifest-export.yaml) `v1-e06-t05-json-manifest-export` | Succeeded | 2 | 6.0 |
 | [`debate-research cut` command](plan_specs/v1/e06-card-cutting/t06-cut-command.yaml) `v1-e06-t06-cut-command` | Pending | 3 | 7.0 |

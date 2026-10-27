@@ -126,14 +126,27 @@ def test_a_withheld_tag_leaves_its_row_with_its_counts_in_every_table() -> None:
         assert [(one.position_id, one.rank, one.fingerprint) for one in edited] == [
             (one.position_id, one.rank, one.fingerprint) for one in before
         ]
-    impact = next(one for one in report.impact_cards if one.position_id == "costs-advantage" and one.rank == 1)
-    assert (impact.tag, impact.teams_reading, impact.short_cite, impact.element_index) == (None, 1, "Okafor 25", 6)
+    impact = next(
+        one for one in report.impact_cards if one.position_id == "costs-advantage" and one.rank == 1
+    )
+    assert (impact.tag, impact.teams_reading, impact.short_cite, impact.element_index) == (
+        None,
+        1,
+        "Okafor 25",
+        6,
+    )
     chain = next(
-        one for one in report.chain_cards if one.position_id == "costs-advantage" and one.role is ChainRole.IMPACT
+        one
+        for one in report.chain_cards
+        if one.position_id == "costs-advantage" and one.role is ChainRole.IMPACT
     )
     assert (chain.tag, chain.teams_reading, chain.short_cite) == (None, 1, "Okafor 25")
     top = {(one.position_id, one.rank): one for one in report.top_cards}
-    assert (top["nhi-t", 2].tag, top["nhi-t", 2].teams_reading, top["nhi-t", 2].short_cite) == (None, 1, "Lund 21")
+    assert (top["nhi-t", 2].tag, top["nhi-t", 2].teams_reading, top["nhi-t", 2].short_cite) == (
+        None,
+        1,
+        "Lund 21",
+    )
     assert (top["condo-bad", 1].tag, top["condo-bad", 1].teams_reading) == (None, 1)
 
 

@@ -74,7 +74,7 @@ cards counted for a position fill its roles or name its scenarios, so an answer 
 side never does. Per DA and advantage:
 
 * **A scenario name** shows when two or more teams' counted cards under the position carry it, and is
-  withheld, and counted, when it holds a word of a caselist school, team code or tournament. A row's
+  withheld, and counted, when it holds a word of a caselist school or team code. A row's
   scenario is the shown name the most teams of its labelled copies carry, ties by name. Where the
   coach has listed the position's scenarios (`v1-e32-t22`), a card's name is the coach's for its words
   and none for words the list does not hold, so a name's teams are those of every form under it.
@@ -87,7 +87,7 @@ side never does. Per DA and advantage:
   copy that is labelled a link, for report.md only.
 * **What names a row** (`v1-e32-t25`) is the first of its scenario, its internal link, its link, its own
   tag and the card above it (:func:`~debate_core.arguments.landscape.link_chains.rank_name`). An internal
-  link, link or card above holding a word of a caselist school, team code or tournament is not kept on
+  link, link or card above holding a word of a caselist school or team code is not kept on
   the row, so impact_cards.csv never quotes one. Such a text the row reaches, its own tag included, is
   counted and the next source names the row; a row nothing names is left out and counted.
 * **Its link chain** is its most-read cluster per role, ranked as impact cards are, by the teams of the
@@ -95,6 +95,16 @@ side never does. Per DA and advantage:
 * **Per kind**, the documents with no scenario heading and no role label, the rows with a scenario, an
   internal link or the card above, the rows each source names and those left out, the names and tags
   withheld, and the positions with no card for each role.
+
+## Tags in the tables (`v1-e32-t28`)
+
+A row of top_cards.csv, of the impact tables and impact_cards.csv, or of a link chain whose tag holds a
+word of a caselist school or team code keeps its rank, teams, cite and source, and its tag is left out;
+the report counts those rows per table (:class:`~debate_core.domain.landscape_report.TableTagsWithheld`).
+The words are :func:`~debate_core.arguments.landscape.link_chains.caselist_words`, built once per report
+for every text it withholds, so no table and no lead-in holds a tournament's word back (the PM's ruling
+(b) of 2026-10-27). An impact row's own tag is left out after what names the row is read, so a withheld
+tag is still passed over and counted there.
 
 ## What never leaves this module
 
@@ -203,6 +213,7 @@ from debate_core.domain.landscape_report import (
     PositionStats,
     ReportHeader,
     RoleGap,
+    TableTagsWithheld,
     TopCard,
     TransitionPlans,
     UnclassifiedSummary,
@@ -557,11 +568,15 @@ class LandscapeReportService:
             )
         ]
 
-        chains = _LinkChains(inputs, in_range, card_reads, labelled, cards_by_key)
-        impact_cards = [chains.with_lead_in(card) for card in impact_cards]
-        chain_cards = [
-            card for stats in positions if stats.kind in IMPACT_KINDS for card in chains.chain(stats)
-        ]
+        words = caselist_words(inputs.disclosures)
+        chains = _LinkChains(inputs, in_range, card_reads, labelled, cards_by_key, words)
+        impact_cards, impact_withheld = _without_withheld_tags(
+            [chains.with_lead_in(card) for card in impact_cards], words
+        )
+        chain_cards, chain_withheld = _without_withheld_tags(
+            [card for stats in positions if stats.kind in IMPACT_KINDS for card in chains.chain(stats)], words
+        )
+        top_cards, top_withheld = _without_withheld_tags(top_cards, words)
 
         aff_positions = {one.id for one in taxonomy.positions if one.kind is PositionKind.AFF}
         neg_positions = {
@@ -622,6 +637,9 @@ class LandscapeReportService:
             chain_cards=tuple(chain_cards),
             chain_coverage=tuple(
                 chains.coverage(kind, positions, impact_cards, chain_cards) for kind in IMPACT_KINDS
+            ),
+            table_tags_withheld=TableTagsWithheld(
+                impact_cards=impact_withheld, chain_cards=chain_withheld, top_cards=top_withheld
             ),
             unclassified=UnclassifiedSummary(
                 cards=cards,
@@ -937,6 +955,7 @@ class _LinkChains:
         card_reads: Mapping[str, dict[tuple[str, int], set[str]]],
         labelled: Mapping[str, dict[tuple[str, int], set[str]]],
         cards: dict[tuple[str, int], LandscapeCard],
+        words: frozenset[str],
     ) -> None:
         self._taxonomy = inputs.taxonomy
         self._caselist = inputs.caselist
@@ -948,7 +967,7 @@ class _LinkChains:
         self._no_position = frozenset(
             one.heading for one in inputs.overrides.overrides if one.position_id is None
         )
-        self._words_of_caselist = caselist_words(inputs.disclosures)
+        self._words_of_caselist = words
         files: defaultdict[str, list[LandscapeCard]] = defaultdict(list)
         for card in inputs.cards:
             files[card.source_sha256].append(card)
@@ -1211,8 +1230,25 @@ def _most_teams(found: Mapping[str, set[tuple[str, str]]]) -> str | None:
 
 
 def _not_withheld(text: str | None, words: frozenset[str]) -> str | None:
-    """`text`, unless it holds a word of a caselist school, team code or tournament."""
+    """`text`, unless it holds a word of a caselist school or team code."""
     return None if text is None or is_withheld(text, words) else text
+
+
+def _without_withheld_tags[RowT: TopCard](
+    rows: Iterable[RowT], words: frozenset[str]
+) -> tuple[list[RowT], int]:
+    """The rows, each tag holding a caselist word left out, and how many were (`v1-e32-t28`).
+
+    A row whose tag is withheld stays, with its rank, teams, cite and source.
+    """
+    kept: list[RowT] = []
+    withheld = 0
+    for row in rows:
+        if row.tag is not None and is_withheld(row.tag, words):
+            row = row.model_copy(update={"tag": None})
+            withheld += 1
+        kept.append(row)
+    return kept, withheld
 
 
 def _is_impact(card: LandscapeCard | None) -> bool:

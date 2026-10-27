@@ -78,7 +78,8 @@ each impact runs through" do: its cell is left empty, and the row keeps its team
 * **Link.** Cluster 14's link-labelled copies are now `b1` paragraph 0 (`YY`, `JJ`) and `b5` paragraph
   3 (`ZZ`): 3 teams. Their tags differ, one copy each, so the first in text order shows: `Link:
   deficits follow new spending`, `b5`'s cite `Ito 2026`.
-* **Internal link.** Cluster 41, `Lee 26`, 1 team. Its tag holds `birchmoor`, so the cell is empty.
+* **Internal link.** Cluster 41, `Lee 26`, 1 team. Its tag holds `birchmoor`, so the cell is empty,
+  as is its tag in top_cards.csv, where it is the Spending DA's rank 5.
 * **Uniqueness and impact.** Unchanged.
 
 ### The advantages

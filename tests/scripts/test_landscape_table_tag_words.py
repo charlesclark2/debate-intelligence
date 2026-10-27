@@ -15,8 +15,8 @@ the 18 words:
 * **The edits.** The Costs advantage's rank-1 impact card (`a1`, paragraph 6, cluster 2) is tagged
   `2. Extinction from a Cedarvale collapse`, so the impact table and that position's chain Impact row each
   have one tag holding `cedarvale`, a school word, withheld. top_cards.csv shows the tag most of
-  cluster 2's cards carry, which is not the edited one. `a3`'s paragraph 15, cluster 37's only card, loses its tag, so an
-  impact row and a top_cards.csv row have none.
+  cluster 2's cards carry, which is not the edited one. `a3`'s paragraph 15, cluster 37's only card,
+  loses its tag, so an impact row and a top_cards.csv row have none.
 * **t28's edits** add `later` to the Costs advantage's rank-2 impact tag (`a4`, paragraph 3) and
   `classic` to the Spending DA's uniqueness tag (`b5`, paragraph 6), tournament words, both shown; and
   `birchmoor` and `VV` to two top_cards.csv rows (`nhi-t` rank 2, `condo-bad` rank 1), both withheld.
@@ -107,10 +107,10 @@ def test_the_edited_tag_is_counted_in_the_impact_and_link_chain_tables_and_no_wo
     lines = _lines(_with_edits())
     assert lines == [
         *HEADER,
-        f"{IMPACT}: 7 rows, 6 with a tag, 1 {HOLDING} (16.7%), 1 of them withheld (16.7%); by kind of word: "
-        "school word 1, team-code shape 0, tournament word 0; the most-matched word is in 1.",
-        f"Link-chain table: 9 rows, 9 with a tag, 1 {HOLDING} (11.1%), 1 of them withheld (11.1%); by kind of "
+        f"{IMPACT}: 7 rows, 6 with a tag, 1 {HOLDING} (16.7%), 1 of them withheld (16.7%); by kind of "
         "word: school word 1, team-code shape 0, tournament word 0; the most-matched word is in 1.",
+        f"Link-chain table: 9 rows, 9 with a tag, 1 {HOLDING} (11.1%), 1 of them withheld (11.1%); by kind "
+        "of word: school word 1, team-code shape 0, tournament word 0; the most-matched word is in 1.",
         f"top_cards.csv: 23 rows, 22 with a tag, 0 {HOLDING} (0.0%), 0 of them withheld (0.0%); by kind of "
         "word: school word 0, team-code shape 0, tournament word 0; the most-matched word is in 0.",
     ]
@@ -120,10 +120,10 @@ def test_the_edited_tag_is_counted_in_the_impact_and_link_chain_tables_and_no_wo
 def test_a_tournament_word_is_counted_and_not_withheld() -> None:
     lines = _lines(_with_edits(edits_file=T28_EDITS))
     assert lines[2:] == [
-        f"{IMPACT}: 7 rows, 6 with a tag, 2 {HOLDING} (33.3%), 1 of them withheld (16.7%); by kind of word: "
-        "school word 1, team-code shape 0, tournament word 1; the most-matched word is in 1.",
-        f"Link-chain table: 9 rows, 9 with a tag, 2 {HOLDING} (22.2%), 1 of them withheld (11.1%); by kind of "
+        f"{IMPACT}: 7 rows, 6 with a tag, 2 {HOLDING} (33.3%), 1 of them withheld (16.7%); by kind of "
         "word: school word 1, team-code shape 0, tournament word 1; the most-matched word is in 1.",
+        f"Link-chain table: 9 rows, 9 with a tag, 2 {HOLDING} (22.2%), 1 of them withheld (11.1%); by kind "
+        "of word: school word 1, team-code shape 0, tournament word 1; the most-matched word is in 1.",
         f"top_cards.csv: 23 rows, 22 with a tag, 4 {HOLDING} (18.2%), 2 of them withheld (9.1%); by kind of "
         "word: school word 1, team-code shape 1, tournament word 2; the most-matched word is in 1.",
     ]
@@ -133,8 +133,8 @@ def test_a_tag_holding_two_kinds_counts_under_both() -> None:
     """`b5`'s paragraph 6, cluster 40's only card, is the Spending DA's Uniqueness row, by its `u` heading."""
     lines = _lines(_with_edits({("b5", 6): "XX says Fictional spending is at a record high"}))
     assert lines[3] == (
-        f"Link-chain table: 9 rows, 9 with a tag, 2 {HOLDING} (22.2%), 2 of them withheld (22.2%); by kind of "
-        "word: school word 2, team-code shape 1, tournament word 1; the most-matched word is in 1."
+        f"Link-chain table: 9 rows, 9 with a tag, 2 {HOLDING} (22.2%), 2 of them withheld (22.2%); by kind "
+        "of word: school word 2, team-code shape 1, tournament word 1; the most-matched word is in 1."
     )
 
 
@@ -142,11 +142,11 @@ def test_the_words_are_shown_only_when_asked_with_a_warning() -> None:
     assert _lines(_with_edits(), show_words=True) == [
         *HEADER,
         "The words below are for this screen only: never paste them into a report, a log or a commit.",
-        f"{IMPACT}: 7 rows, 6 with a tag, 1 {HOLDING} (16.7%), 1 of them withheld (16.7%); by kind of word: "
-        "school word 1, team-code shape 0, tournament word 0; the most-matched word is in 1.",
-        "  cedarvale (school word): 1",
-        f"Link-chain table: 9 rows, 9 with a tag, 1 {HOLDING} (11.1%), 1 of them withheld (11.1%); by kind of "
+        f"{IMPACT}: 7 rows, 6 with a tag, 1 {HOLDING} (16.7%), 1 of them withheld (16.7%); by kind of "
         "word: school word 1, team-code shape 0, tournament word 0; the most-matched word is in 1.",
+        "  cedarvale (school word): 1",
+        f"Link-chain table: 9 rows, 9 with a tag, 1 {HOLDING} (11.1%), 1 of them withheld (11.1%); by kind "
+        "of word: school word 1, team-code shape 0, tournament word 0; the most-matched word is in 1.",
         "  cedarvale (school word): 1",
         f"top_cards.csv: 23 rows, 22 with a tag, 0 {HOLDING} (0.0%), 0 of them withheld (0.0%); by kind of "
         "word: school word 0, team-code shape 0, tournament word 0; the most-matched word is in 0.",
@@ -157,6 +157,8 @@ def test_a_report_withholding_other_tags_than_the_rule_is_refused() -> None:
     inputs = _with_edits()
     report = LandscapeReportService().build(inputs, synthetic_staleness())
     first = report.top_cards[0]
-    tampered = report.model_copy(update={"top_cards": (first.model_copy(update={"tag": None}), *report.top_cards[1:])})
+    tampered = report.model_copy(
+        update={"top_cards": (first.model_copy(update={"tag": None}), *report.top_cards[1:])}
+    )
     with pytest.raises(ValueError, match="withheld"):
         script.report_lines(tampered, inputs.disclosures, inputs.cards)

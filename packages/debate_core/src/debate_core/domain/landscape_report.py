@@ -447,7 +447,9 @@ class TableTagsWithheld(DomainModel):
     rank, teams, cite and source.
     """
 
-    impact_cards: int = Field(default=0, ge=0, description="Impact rows: report.md's impact tables and impact_cards.csv.")
+    impact_cards: int = Field(
+        default=0, ge=0, description="Impact rows: report.md's impact tables and impact_cards.csv."
+    )
     chain_cards: int = Field(default=0, ge=0, description="Link-chain rows.")
     top_cards: int = Field(default=0, ge=0, description="top_cards.csv's rows.")
 

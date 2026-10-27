@@ -131,7 +131,8 @@ def test_the_impact_sections_match_the_hand_written_golden() -> None:
 
 
 def test_the_rest_of_report_md_is_the_unchanged_caselists_but_for_the_tags_left_empty() -> None:
-    # `v1-e32-t28`: the Costs advantage's rank 1, holding `cedarvale`, leaves its impact and chain cells empty.
+    # `v1-e32-t28`: the Costs advantage's rank 1, holding `cedarvale`, leaves its impact and chain cells
+    # empty.
     _, rest = _split(_bundle_files()["report.md"])
     _, base_rest = _split((GOLDEN / "report.md").read_text(encoding="utf-8"))
     assert rest == base_rest.replace(

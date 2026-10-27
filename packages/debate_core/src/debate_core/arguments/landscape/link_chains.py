@@ -77,8 +77,8 @@ An impact row under "What each impact runs through" is named by the first of the
 4. the impact card's own tag;
 5. the tag of the card above it in its block, when that card is no impact card.
 
-A text holding a word of a caselist school, team code or tournament (:func:`is_withheld`) is passed
-over and counted, and the next names the row. A row none of them names is left out and counted, never
+A text holding a word of a caselist school or team code (:func:`is_withheld`) is passed over and
+counted, and the next names the row. A row none of them names is left out and counted, never
 shown empty. A tag is quoted whole, as parsed, as every tag in the report is.
 
 Pure and deterministic: no model, no I/O.
@@ -171,9 +171,8 @@ NOT_A_SCENARIO: Final = re.compile(
 answers (`no link`, `no impact`)."""
 
 MINIMUM_WITHHELD_WORD: Final = 4
-"""A school's or tournament's word is looked for when it is over three characters, as the scan before
-sharing looks for a whole name: a shorter one is a word in every line. A team code is looked for at any
-length."""
+"""A school's word is looked for when it is over three characters, as the scan before sharing looks for
+a whole name: a shorter one is a word in every line. A team code is looked for at any length."""
 
 
 class SubHeading(NamedTuple):
@@ -361,17 +360,26 @@ def rank_name(texts: Mapping[LeadInSource, str | None], words: frozenset[str]) -
 
 
 def caselist_words(disclosures: Iterable[Disclosure]) -> frozenset[str]:
-    """Every word of the caselist's schools and tournaments over three characters, and every team code."""
+    """The words the report withholds a text for: every word of a caselist school over three
+    characters, and every word of a team code.
+
+    The rule of the PM's ruling (b) of 2026-10-27 (`v1-e32-t28`): school words and team codes, and no
+    tournament's word. A tournament's words are as often the topic's own (on hspolicy26, 93 of the 105
+    top_cards.csv tags a tournament word would have withheld), and the data-use policy counts a
+    tournament label as personal only beside a team code, which the circuit-wide report never carries.
+    Every text the report withholds is held to these words: scenario names, the lead-ins under each
+    impact (`v1-e32-t25`) and the tags of every table (`v1-e32-t28`).
+    """
     words: set[str] = set()
     for one in disclosures:
-        for name in (one.school, one.tournament or ""):
-            words |= {word for word in _plain_words(name) if len(word) >= MINIMUM_WITHHELD_WORD}
+        words |= {word for word in _plain_words(one.school) if len(word) >= MINIMUM_WITHHELD_WORD}
         words |= set(_plain_words(one.team_code))
     return frozenset(words)
 
 
 def is_withheld(name: str, words: frozenset[str]) -> bool:
-    """`name` holds a word of a caselist school, team code or tournament, so the report never shows it.
+    """`name` holds a word of a caselist school or team code (:func:`caselist_words`), so the report never
+    shows it.
 
     A name is read as the caselist's words are, by its letters and digits without case, so the coach's
     `Golden dome` is read as `golden dome` is.

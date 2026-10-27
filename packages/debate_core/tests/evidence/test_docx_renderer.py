@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import re
 import zipfile
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
@@ -32,7 +33,7 @@ from xml.etree import ElementTree
 import docx
 import pytest
 from docx.text.paragraph import Paragraph
-from tests.fixtures.card.card_world import FIXTURES, CardWorld, news_request
+from tests.fixtures.card.card_world import CardWorld, news_request
 from tests.fixtures.verification.verification_world import run
 
 from debate_core.application.export_service import ExportService
@@ -75,7 +76,8 @@ NEWS_CITE: Final = CiteText(
     short_cite="Whitfield 26",
     full_cite=(
         'Whitfield 26 [Dana Whitfield; "Scientists Say Mammoth Revival Is Years Away"; The Daily Meridian; '
-        "September 14, 2026; https://www.dailymeridian.example/science/2026/09/14/mammoth-revival-years-away; "
+        "September 14, 2026; "
+        "https://www.dailymeridian.example/science/2026/09/14/mammoth-revival-years-away; "
         "accessed October 26, 2026]"
     ),
 )
@@ -136,7 +138,9 @@ def read_paragraphs(data: bytes) -> list[ReadParagraph]:
     return paragraphs
 
 
-def evidence_read_back(paragraph: ReadParagraph, card: Card, marker: str = MARKER) -> tuple[str, list[ReadRun]]:
+def evidence_read_back(
+    paragraph: ReadParagraph, card: Card, marker: str = MARKER
+) -> tuple[str, list[ReadRun]]:
     """The paragraph's evidence, with each renderer addition taken out where the card says it goes.
 
     An omission goes where the kept snapshot text before it ends; an interpolation before the
@@ -151,7 +155,7 @@ def evidence_read_back(paragraph: ReadParagraph, card: Card, marker: str = MARKE
         previous_end = omission.end_offset
     additions.extend((i.anchor, f"[{i.text}]") for i in card.interpolations)
     additions.sort(key=lambda addition: (addition[0], addition[1] != marker))
-    text, evidence_runs = "", []
+    text, evidence_runs = "", list[ReadRun]()
     for each in paragraph.runs:
         if additions and additions[0] == (len(text), each.text):
             additions.pop(0)
@@ -166,7 +170,9 @@ def marks_per_character(runs: list[ReadRun]) -> list[tuple[bool, bool]]:
     """(underlined, highlighted) for every evidence character, from the runs that carry it."""
     marks: list[tuple[bool, bool]] = []
     for each in runs:
-        marks.extend([(each.character_style == "StyleUnderline", each.highlight is not None)] * len(each.text))
+        marks.extend(
+            [(each.character_style == "StyleUnderline", each.highlight is not None)] * len(each.text)
+        )
     return marks
 
 
@@ -177,7 +183,8 @@ def marks_from_spans(card: Card) -> list[tuple[bool, bool]]:
         return any(s.style is style and s.start_offset <= offset < s.end_offset for s in card.spans)
 
     return [
-        (covered(i, SpanStyle.UNDERLINE), covered(i, SpanStyle.HIGHLIGHT)) for i in range(len(card.evidence_text))
+        (covered(i, SpanStyle.UNDERLINE), covered(i, SpanStyle.HIGHLIGHT))
+        for i in range(len(card.evidence_text))
     ]
 
 
@@ -250,12 +257,19 @@ NEWS_EVIDENCE_RUNS: Final = [
     (". “Every year this slips, ", False, False, 16),
     ("the money raised for it is ", True, False, 22),
     ("money that did not go to elephants that are alive now", True, True, 22),
-    (",” said Priya Ramaswamy, who studies elephant populations and was not involved in the work.", False, False, 16),
+    (
+        ",” said Priya Ramaswamy, who studies elephant populations and was not involved in the work.",
+        False,
+        False,
+        16,
+    ),
 ]
 
 
 def as_tuples(runs: tuple[ReadRun, ...] | list[ReadRun]) -> list[tuple[str, bool, bool, int | None]]:
-    return [(r.text, r.character_style == "StyleUnderline", r.highlight is not None, r.half_points) for r in runs]
+    return [
+        (r.text, r.character_style == "StyleUnderline", r.highlight is not None, r.half_points) for r in runs
+    ]
 
 
 # --------------------------------------------------------------------------------------------
@@ -293,7 +307,9 @@ def test_structure_the_evidence_reads_back_as_exactly_the_cards_evidence_text(
     news: tuple[Card, CardManifest],
 ) -> None:
     card, _ = news
-    card = card.evolve(interpolations=(Interpolation(anchor=108, text="critics"), Interpolation(anchor=398, text="sic")))
+    card = card.evolve(
+        interpolations=(Interpolation(anchor=108, text="critics"), Interpolation(anchor=398, text="sic"))
+    )
 
     evidence = read_paragraphs(render(CardToRender(card, NEWS_CITE)))[2]
     text, runs = evidence_read_back(evidence, card)
@@ -301,7 +317,9 @@ def test_structure_the_evidence_reads_back_as_exactly_the_cards_evidence_text(
     assert text == card.evidence_text
     assert marks_per_character(runs) == marks_from_spans(card)
     assert evidence.text.count(MARKER) == 1
-    assert [r.text for r in evidence.runs].index("[critics]") == [r.text for r in evidence.runs].index(MARKER) + 1
+    assert [r.text for r in evidence.runs].index("[critics]") == [r.text for r in evidence.runs].index(
+        MARKER
+    ) + 1
     assert evidence.runs[-1].text == "[sic]"
 
 
@@ -334,7 +352,7 @@ def unicode_card() -> Card:
 
 
 def test_structure_unicode_tabs_breaks_overlaps_cuts_and_interpolations_read_back_exactly() -> None:
-    card = unicode_card()
+    card = verified(unicode_card())
 
     evidence = read_paragraphs(render(CardToRender(card, HAND_CITE)))[-1]
     text, runs = evidence_read_back(evidence, card)
@@ -346,8 +364,8 @@ def test_structure_unicode_tabs_breaks_overlaps_cuts_and_interpolations_read_bac
         "Ærø’s ",
         "“café” — ",
         "naïve 🐘",
-        "\n\nHerd\tcou",
-        "nts.",
+        "\n\nHerd\tcoun",
+        "ts.",
         MARKER,
         "[and]",
         "Ice",
@@ -389,7 +407,12 @@ def test_structure_headings_left_out_are_not_written() -> None:
 
 @pytest.mark.parametrize(
     ("style_id", "name", "outline_level"),
-    [("Heading1", "heading 1", "0"), ("Heading2", "heading 2", "1"), ("Heading3", "heading 3", "2"), ("Heading4", "heading 4", "3")],
+    [
+        ("Heading1", "heading 1", "0"),
+        ("Heading2", "heading 2", "1"),
+        ("Heading3", "heading 3", "2"),
+        ("Heading4", "heading 4", "3"),
+    ],
 )
 def test_structure_heading_styles_carry_the_style_profiles_names_and_outline_levels(
     style_id: str, name: str, outline_level: str
@@ -429,9 +452,13 @@ def test_structure_the_short_cite_carries_the_cite_style_and_the_rest_the_full_c
 
 
 def test_structure_a_profile_without_a_bold_short_cite_writes_it_at_the_full_cite_size() -> None:
-    text = (PROFILES / "team-default.yaml").read_text(encoding="utf-8").replace(
-        "short_cite_bold: true", "short_cite_bold: false"
-    ).replace("full_cite_half_points: 22", "full_cite_half_points: 18").replace("name: team-default", "name: small")
+    text = (
+        (PROFILES / "team-default.yaml")
+        .read_text(encoding="utf-8")
+        .replace("short_cite_bold: true", "short_cite_bold: false")
+        .replace("full_cite_half_points: 22", "full_cite_half_points: 18")
+        .replace("name: team-default", "name: small")
+    )
     profile = resolve_format_profile(load_format_profile_from_text(text))
 
     cite = read_paragraphs(render(CardToRender(verified(build_card()), HAND_CITE), profile=profile))[1]
@@ -442,13 +469,17 @@ def test_structure_a_profile_without_a_bold_short_cite_writes_it_at_the_full_cit
     ]
 
 
-def test_structure_plain_writes_no_highlight_and_keeps_every_underline(news: tuple[Card, CardManifest]) -> None:
+def test_structure_plain_writes_no_highlight_and_keeps_every_underline(
+    news: tuple[Card, CardManifest],
+) -> None:
     card, manifest = news
 
     evidence = read_paragraphs(render_cards_docx(manifest, [CardToRender(card, NEWS_CITE)], PLAIN))[2]
 
     assert {r.highlight for r in evidence.runs} == {None}
-    assert [(t, u, s) for t, u, _, s in as_tuples(evidence.runs)] == [(t, u, s) for t, u, _, s in NEWS_EVIDENCE_RUNS]
+    assert [(t, u, s) for t, u, _, s in as_tuples(evidence.runs)] == [
+        (t, u, s) for t, u, _, s in NEWS_EVIDENCE_RUNS
+    ]
 
 
 def test_structure_a_card_with_no_evidence_has_no_evidence_paragraph() -> None:
@@ -466,19 +497,38 @@ def test_structure_the_cards_must_be_the_manifests_cards_in_its_order() -> None:
     manifest = manifest_of(first, second)
 
     with pytest.raises(RenderRefused, match="the manifest's cards"):
-        render_cards_docx(manifest, [CardToRender(second, HAND_CITE), CardToRender(first, HAND_CITE)], TEAM_DEFAULT)
+        render_cards_docx(
+            manifest, [CardToRender(second, HAND_CITE), CardToRender(first, HAND_CITE)], TEAM_DEFAULT
+        )
     with pytest.raises(RenderRefused, match="the manifest's cards"):
         render_cards_docx(manifest, [CardToRender(first, HAND_CITE)], TEAM_DEFAULT)
     with pytest.raises(RenderRefused, match="the manifest's cards"):
-        render_cards_docx(manifest, [CardToRender(first, HAND_CITE), CardToRender(second.evolve(tag="Changed"), HAND_CITE)], TEAM_DEFAULT)
+        render_cards_docx(
+            manifest,
+            [CardToRender(first, HAND_CITE), CardToRender(second.evolve(tag="Changed"), HAND_CITE)],
+            TEAM_DEFAULT,
+        )
 
 
-@pytest.mark.parametrize(("character", "name"), [("\r", "U+000D"), ("\x00", "U+0000"), ("\x0b", "U+000B"), ("￾", "U+FFFE")])
-def test_structure_evidence_a_docx_cannot_carry_as_written_is_refused_never_altered(character: str, name: str) -> None:
+@pytest.mark.parametrize(
+    ("character", "name"), [("\r", "U+000D"), ("\x00", "U+0000"), ("\x0b", "U+000B"), ("￾", "U+FFFE")]
+)
+def test_structure_evidence_a_docx_cannot_carry_as_written_is_refused_never_altered(
+    character: str, name: str
+) -> None:
     text = f"Before{character}after"
-    card = verified(build_card(evidence_text=text, evidence_start_offset=0, evidence_end_offset=len(text), spans=(CardSpan(start_offset=0, end_offset=6, style=SpanStyle.UNDERLINE),)))
+    card = verified(
+        build_card(
+            evidence_text=text,
+            evidence_start_offset=0,
+            evidence_end_offset=len(text),
+            spans=(CardSpan(start_offset=0, end_offset=6, style=SpanStyle.UNDERLINE),),
+        )
+    )
 
-    with pytest.raises(RenderRefused, match=f"evidence of card {card.card_id} holds {name} at offset 6"):
+    with pytest.raises(
+        RenderRefused, match=re.escape(f"evidence of card {card.card_id} holds {name} at offset 6")
+    ):
         render(CardToRender(card, HAND_CITE))
 
 
@@ -494,7 +544,9 @@ def test_structure_the_same_cards_and_profile_give_the_same_bytes(news: tuple[Ca
         assert {info.date_time for info in package.infolist()} == {(2026, 10, 27, 9, 30, 0)}
 
 
-def test_structure_the_document_properties_name_the_tool_and_no_student(news: tuple[Card, CardManifest]) -> None:
+def test_structure_the_document_properties_name_the_tool_and_no_student(
+    news: tuple[Card, CardManifest],
+) -> None:
     card, manifest = news
 
     data = render_cards_docx(manifest, [CardToRender(card, NEWS_CITE)], TEAM_DEFAULT)
@@ -502,17 +554,26 @@ def test_structure_the_document_properties_name_the_tool_and_no_student(news: tu
     properties = docx.Document(io.BytesIO(data)).core_properties
     assert properties.author == "debate-research"
     assert properties.last_modified_by in ("", "debate-research")
-    assert (properties.created, properties.modified) == (GENERATED_AT.replace(tzinfo=None), GENERATED_AT.replace(tzinfo=None))
-    assert (properties.title, properties.subject, properties.comments, properties.keywords) == ("", "", "", "")
+    assert (properties.created, properties.modified) == (GENERATED_AT, GENERATED_AT)
+    assert (properties.title, properties.subject, properties.comments, properties.keywords) == (
+        "",
+        "",
+        "",
+        "",
+    )
     with zipfile.ZipFile(io.BytesIO(data)) as package:
         names = package.namelist()
-        documents = {name: package.read(name).decode("utf-8") for name in names if name.startswith("docProps/")}
+        documents = {
+            name: package.read(name).decode("utf-8") for name in names if name.startswith("docProps/")
+        }
     assert sorted(documents) == ["docProps/core.xml"]
     assert "@" not in documents["docProps/core.xml"]
     assert card.owner_id not in documents["docProps/core.xml"]
 
 
-def test_structure_the_verbatim_parser_reads_the_card_back_under_its_headings(news: tuple[Card, CardManifest]) -> None:
+def test_structure_the_verbatim_parser_reads_the_card_back_under_its_headings(
+    news: tuple[Card, CardManifest],
+) -> None:
     card, manifest = news
     data = render_cards_docx(
         manifest,
@@ -538,4 +599,3 @@ def test_structure_the_verbatim_parser_reads_the_card_back_under_its_headings(ne
     assert parsed_card.section_path == ("Neg", "De-extinction DA", "Link")
     assert parsed_card.short_cite == "Whitfield 26"
     assert parsed_card.evidence_text.replace(MARKER, "") == card.evidence_text
-

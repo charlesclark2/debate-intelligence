@@ -12,18 +12,42 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-from collections.abc import Coroutine, Mapping, Sequence
-from datetime import UTC, datetime
+import os
+from collections.abc import Coroutine, Iterator, Mapping, Sequence
+from dataclasses import dataclass
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
 from pydantic import BaseModel, JsonValue
 
-from debate_core.application.errors import ProviderUnavailable
+from debate_core.application.budget import (
+    BudgetExceededError,
+    BudgetGuard,
+    BudgetLimits,
+    CallCeiling,
+    Spend,
+    UnpricedModelError,
+)
+from debate_core.application.errors import (
+    InvalidModelOutput,
+    ModelAccessDenied,
+    ModelRequestRejected,
+    ModelUnavailableError,
+    OutputProblem,
+    ProviderRateLimited,
+    ProviderUnavailable,
+)
+from debate_core.application.model_errors import ValidationPolicy, describe_problems
 from debate_core.application.ports.model_router import ModelRouter
-from debate_core.application.settings import ConfigurationError
-from debate_core.application.structured_output import validate_model_output
+from debate_core.application.settings import ConfigurationError, Settings, load_settings
+from debate_core.application.structured_output import (
+    StructuredOutputGuard,
+    StructuredResult,
+    missing_tool_call,
+    validate_model_output,
+)
 from debate_core.domain.model_contracts import (
     EmbeddingResponse,
     ModelParams,
@@ -36,11 +60,12 @@ from debate_core.domain.model_contracts import (
     RerankResult,
     TaskClass,
 )
-from debate_core.integrations.models import ModelRoute, RoutingPolicy
+from debate_core.integrations.models import ModelRoute, RoutingPolicy, build_model_router
 from debate_core.integrations.models.errors import (
     FixtureFileError,
     MissingFixtureError,
     ModelModeError,
+    PromptRenderError,
     RecordingRefusedError,
 )
 from debate_core.integrations.models.fixture_key import fixture_key
@@ -50,8 +75,11 @@ from debate_core.integrations.models.model_mode import (
     resolve_model_mode,
     running_in_ci,
 )
+from debate_core.integrations.models.prompt_registry import PromptRegistry, load_prompt_file
+from debate_core.integrations.models.received_answer import hand_over_answer
 from debate_core.integrations.models.record_replay import CassetteDirectory, RecordReplayModelRouter
 from debate_core.integrations.models.redaction import REDACTED, redact, redactions
+from debate_core.integrations.models.usage import UsageLog
 from debate_core.testing.contracts import (
     EmbeddingAnswer,
     ModelRouterContract,
@@ -62,6 +90,7 @@ from debate_core.testing.contracts import (
     StructuredAnswer,
 )
 from debate_core.testing.contracts.model_router import ContractPassage
+from debate_core.testing.fakes.clock_and_ids import FixedClock
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[5]
 COMMITTED_CASSETTES = REPOSITORY_ROOT / "tests" / "fixtures" / "model_cassettes"
@@ -398,6 +427,544 @@ def test_the_committed_example_cassette_replays() -> None:
     assert response.route.model_id == "example-recorded-model"
     assert response.usage == ModelUsage(input_tokens=120, output_tokens=18, latency_ms=850.0)
     assert response.invoked_at == datetime(2026, 1, 1, tzinfo=UTC)
+
+
+# ---------------------------------------------------------------------------------------------
+# Record mode keeps an invalid answer, so a repaired call replays both halves (v1-e05-t10)
+# ---------------------------------------------------------------------------------------------
+
+EXAMPLE_PROMPT = ModelPrompt(
+    prompt_id="example.select-passage",
+    prompt_version="1.0.0",
+    variables={"tag": "A tag invented for recording a repaired call"},
+)
+"""The worked example prompt, registered as `high_volume` with `ContractPassage` as its schema."""
+
+INVALID_PASSAGE: Mapping[str, JsonValue] = {"paragraph_id": "the third", "start_offset": 0, "end_offset": 42}
+
+NO_TOOL_CALL = missing_tool_call("the model did not call the ContractPassage tool (stopReason 'end_turn')")
+"""The Bedrock adapter's wording, which is not `validate_model_output`'s, so replay must keep it."""
+
+CUT_OFF = OutputProblem(
+    loc=(), type="unfinished_answer", msg="the model stopped with 'max_tokens', which is not a finished answer"
+)
+
+FAIL_CLOSED = ValidationPolicy(fail_closed=True)
+
+
+@dataclass(frozen=True)
+class CutOff:
+    """An answer the router refuses before validating it, as Bedrock refuses a turn cut off at max_tokens."""
+
+    answer: Mapping[str, JsonValue]
+
+
+@dataclass(frozen=True)
+class NotHandedOver:
+    """An invalid answer that the router refuses without handing it to record mode."""
+
+    answer: Mapping[str, JsonValue]
+
+
+@dataclass(frozen=True)
+class FailsAfterAnswering:
+    """A provider error raised after the router had handed an answer over."""
+
+    error: Exception
+
+
+type LiveStep = Mapping[str, JsonValue] | None | CutOff | NotHandedOver | FailsAfterAnswering | Exception
+"""What one structured call to :class:`StandInLiveRouter` does: answer with a tool input, answer
+without calling the tool (`None`), be refused for how the turn ended, or fail."""
+
+
+class StandInLiveRouter:
+    """The real router record mode wraps: each structured call takes the next planned step.
+
+    Like the Bedrock adapter, it hands record mode the answer it received before validating it,
+    and refuses an invalid one with the call's usage on the error. Call N reports 100 * N input
+    tokens, so each half of a repaired call has usage of its own.
+    """
+
+    def __init__(self, steps: Sequence[LiveStep], *, policy: RoutingPolicy = STAND_IN_POLICY) -> None:
+        self._steps = list(steps)
+        self._policy = policy
+        self.requests: list[ModelRequest] = []
+
+    async def generate_structured[OutputT: BaseModel](
+        self,
+        task_class: TaskClass,
+        prompt: ModelPrompt,
+        schema: type[OutputT],
+        params: ModelParams | None = None,
+    ) -> ModelResponse[OutputT]:
+        request = ModelRequest.build(task_class, prompt, schema, params)
+        self.requests.append(request)
+        step = self._steps.pop(0)
+        if isinstance(step, Exception):
+            raise step
+        route = self._policy.resolve(task_class, request.params)
+        usage = ModelUsage(input_tokens=100 * len(self.requests), output_tokens=12, latency_ms=310.0)
+
+        def refuse(problem: OutputProblem) -> InvalidModelOutput:
+            return InvalidModelOutput(
+                prompt.prompt_id,
+                prompt.prompt_version,
+                describe_problems((problem,)),
+                model_id=route.model_id,
+                problems=(problem,),
+                usage=usage,
+            )
+
+        match step:
+            case FailsAfterAnswering(error=error):
+                hand_over_answer(dict(PASSAGE))
+                raise error
+            case NotHandedOver(answer=answer):
+                answered: JsonValue | None = dict(answer)
+            case CutOff(answer=answer):
+                hand_over_answer(dict(answer))
+                raise refuse(CUT_OFF)
+            case None:
+                hand_over_answer(None)
+                raise refuse(NO_TOOL_CALL)
+            case _:
+                answered = dict(step)
+                hand_over_answer(answered)
+        output = validate_model_output(schema, answered, prompt=prompt, model_id=route.model_id, usage=usage)
+        return ModelResponse[schema](
+            output=output,
+            route=route,
+            usage=usage,
+            prompt_id=prompt.prompt_id,
+            prompt_version=prompt.prompt_version,
+            provider_request_id=f"stand-in-request-{len(self.requests):04d}",
+            invoked_at=RECORDED_AT,
+        )
+
+    async def embed(self, texts: Sequence[str]) -> EmbeddingResponse:
+        raise AssertionError("these tests make structured calls only")
+
+    async def rerank(self, query: str, documents: Sequence[str]) -> RerankResponse:
+        raise AssertionError("these tests make structured calls only")
+
+
+type Outcome = tuple[object, ...]
+"""What one structured call came back with, in the terms a live run and its replay can be compared in."""
+
+
+def refusal(error: InvalidModelOutput) -> Outcome:
+    return (
+        "refused",
+        str(error),
+        error.prompt_id,
+        error.prompt_version,
+        error.model_id,
+        error.problems,
+        error.usage,
+    )
+
+
+class ObservingRouter:
+    """Passes each call on, keeping each structured request and what came back: an answer or a refusal."""
+
+    def __init__(self, router: ModelRouter) -> None:
+        self._router = router
+        self.requests: list[ModelRequest] = []
+        self.outcomes: list[Outcome] = []
+
+    async def generate_structured[OutputT: BaseModel](
+        self,
+        task_class: TaskClass,
+        prompt: ModelPrompt,
+        schema: type[OutputT],
+        params: ModelParams | None = None,
+    ) -> ModelResponse[OutputT]:
+        self.requests.append(ModelRequest.build(task_class, prompt, schema, params))
+        try:
+            response = await self._router.generate_structured(task_class, prompt, schema, params)
+        except InvalidModelOutput as error:
+            self.outcomes.append(refusal(error))
+            raise
+        self.outcomes.append(("answered", response.output, response.usage, response.route.model_id))
+        return response
+
+    async def embed(self, texts: Sequence[str]) -> EmbeddingResponse:
+        return await self._router.embed(texts)
+
+    async def rerank(self, query: str, documents: Sequence[str]) -> RerankResponse:
+        return await self._router.rerank(query, documents)
+
+
+@pytest.fixture(scope="module")
+def registry() -> PromptRegistry:
+    """The committed prompts, `model.repair` among them, plus the worked example."""
+    committed = PromptRegistry.load(REPOSITORY_ROOT / "prompts")
+    example = load_prompt_file(REPOSITORY_ROOT / "tests" / "fixtures" / "prompts" / "example" / "select-passage.md")
+    return PromptRegistry([*committed.prompts, example])
+
+
+def guarded_call(router: ModelRouter, registry: PromptRegistry) -> StructuredResult[ContractPassage]:
+    guard = StructuredOutputGuard(router, registry)
+    return run(guard.generate(TaskClass.HIGH_VOLUME, EXAMPLE_PROMPT, ContractPassage, policy=FAIL_CLOSED))
+
+
+def recording(root: Path, live: ModelRouter) -> RecordReplayModelRouter:
+    return RecordReplayModelRouter(live, mode=ModelMode.RECORD, cassette_dir=root, environ=NO_CI)
+
+
+def written(root: Path) -> list[Path]:
+    return sorted(path.relative_to(root) for path in root.rglob("*") if path.is_file())
+
+
+def cassette_response(root: Path, request: ModelRequest) -> dict[str, Any]:
+    path = CassetteDirectory(root).structured_path(request)
+    return json.loads(path.read_text(encoding="utf-8"))["response"]
+
+
+REPAIRED_CALLS = {
+    "an answer that does not fit the schema": (
+        INVALID_PASSAGE,
+        {"paragraph_id": "the third", "start_offset": 0, "end_offset": 42},
+        [{"loc": ["paragraph_id"], "msg": "Input should be a valid integer", "type": "int_type"}],
+        "paragraph_id: Input should be a valid integer [int_type]",
+    ),
+    "an answer that never called the tool": (
+        None,
+        None,
+        [
+            {
+                "loc": [],
+                "msg": "the model did not call the ContractPassage tool (stopReason 'end_turn')",
+                "type": "missing_tool_call",
+            }
+        ],
+        "(answer): the model did not call the ContractPassage tool (stopReason 'end_turn') [missing_tool_call]",
+    ),
+    "a fitting answer refused for a cut-off turn": (
+        CutOff(PASSAGE),
+        {"paragraph_id": 3, "start_offset": 0, "end_offset": 42},
+        [
+            {
+                "loc": [],
+                "msg": "the model stopped with 'max_tokens', which is not a finished answer",
+                "type": "unfinished_answer",
+            }
+        ],
+        "(answer): the model stopped with 'max_tokens', which is not a finished answer [unfinished_answer]",
+    ),
+}
+
+
+@pytest.mark.parametrize(
+    ("first_answer", "recorded_output", "recorded_problems", "described"),
+    list(REPAIRED_CALLS.values()),
+    ids=list(REPAIRED_CALLS),
+)
+def test_record_a_repaired_call_writes_both_halves_and_replay_gives_the_same_error_repair_and_result(
+    tmp_path: Path,
+    registry: PromptRegistry,
+    first_answer: LiveStep,
+    recorded_output: JsonValue,
+    recorded_problems: list[dict[str, JsonValue]],
+    described: str,
+) -> None:
+    """ac1. The expected cassette and error are written by hand from the stand-in's plan."""
+    live = StandInLiveRouter([first_answer, PASSAGE])
+    recorder_seen = ObservingRouter(recording(tmp_path, live))
+    recorded = guarded_call(recorder_seen, registry)
+
+    first, repair = live.requests
+    assert repair.prompt.prompt_id == "model.repair"
+    assert written(tmp_path) == sorted(
+        [
+            Path("example.select-passage") / f"{fixture_key(first)}.json",
+            Path("model.repair") / f"{fixture_key(repair)}.json",
+        ]
+    )
+    response = cassette_response(tmp_path, first)
+    assert response == {
+        "model_id": "stand-in-high_volume",
+        "output": recorded_output,
+        "problems": recorded_problems,
+        "prompt_id": "example.select-passage",
+        "prompt_version": "1.0.0",
+        "usage": {"input_tokens": 100, "latency_ms": 310.0, "output_tokens": 12},
+    }
+
+    replay_seen = ObservingRouter(replayer(tmp_path))
+    replayed = guarded_call(replay_seen, registry)
+
+    assert replay_seen.requests == recorder_seen.requests == [first, repair]
+    assert replay_seen.outcomes == recorder_seen.outcomes
+    problems = tuple(
+        OutputProblem(loc=tuple(problem["loc"]), type=problem["type"], msg=problem["msg"])  # pyright: ignore[reportArgumentType]
+        for problem in recorded_problems
+    )
+    assert replay_seen.outcomes[0] == (
+        "refused",
+        f"invalid output from stand-in-high_volume for prompt example.select-passage@1.0.0: 1 problem: {described}",
+        "example.select-passage",
+        "1.0.0",
+        "stand-in-high_volume",
+        problems,
+        ModelUsage(input_tokens=100, output_tokens=12, latency_ms=310.0),
+    )
+    assert replayed.output == recorded.output == ContractPassage(paragraph_id=3, start_offset=0, end_offset=42)
+    assert replayed.attempts == recorded.attempts
+    assert len(replayed.attempts) == 2
+
+
+def test_record_an_answer_that_never_called_the_tool_as_output_null(tmp_path: Path) -> None:
+    router = recording(tmp_path, StandInLiveRouter([None]))
+
+    with pytest.raises(InvalidModelOutput):
+        run(router.generate_structured(TaskClass.HIGH_VOLUME, EXAMPLE_PROMPT, ContractPassage))
+
+    response = cassette_response(tmp_path, ModelRequest.build(TaskClass.HIGH_VOLUME, EXAMPLE_PROMPT, ContractPassage))
+    assert "output" in response
+    assert response["output"] is None
+
+
+def test_replay_of_a_recorded_invalid_answer_raises_it_without_the_guard(tmp_path: Path) -> None:
+    with pytest.raises(InvalidModelOutput) as live:
+        run(
+            recording(tmp_path, StandInLiveRouter([INVALID_PASSAGE])).generate_structured(
+                TaskClass.HIGH_VOLUME, EXAMPLE_PROMPT, ContractPassage
+            )
+        )
+
+    with pytest.raises(InvalidModelOutput) as replayed:
+        run(replayer(tmp_path).generate_structured(TaskClass.HIGH_VOLUME, EXAMPLE_PROMPT, ContractPassage))
+
+    assert type(replayed.value) is InvalidModelOutput
+    assert refusal(replayed.value) == refusal(live.value)
+    assert replayed.value.__cause__ is None
+    assert replayed.value.__context__ is None
+
+
+PROVIDER_ERRORS = {
+    "access denied": ModelAccessDenied("bedrock", "stand-in-high_volume", "not authorized"),
+    "throttled": ProviderRateLimited("bedrock"),
+    "unavailable": ModelUnavailableError("bedrock", "stand-in-high_volume"),
+    "request rejected": ModelRequestRejected(
+        "bedrock", "stand-in-high_volume", "ValidationException", "temperature is not supported"
+    ),
+}
+
+
+@pytest.mark.parametrize("error", list(PROVIDER_ERRORS.values()), ids=list(PROVIDER_ERRORS))
+@pytest.mark.parametrize("answered_first", [False, True], ids=["no-answer", "after-an-answer"])
+def test_record_a_provider_error_records_nothing(tmp_path: Path, error: Exception, answered_first: bool) -> None:
+    step = FailsAfterAnswering(error) if answered_first else error
+    router = recording(tmp_path, StandInLiveRouter([step]))
+
+    with pytest.raises(type(error)) as raised:
+        run(router.generate_structured(TaskClass.HIGH_VOLUME, EXAMPLE_PROMPT, ContractPassage))
+
+    assert raised.value is error
+    assert written(tmp_path) == []
+
+
+class FixedCeiling:
+    """Prices every call at `usd`; `None` is a call it cannot price."""
+
+    def __init__(self, usd: float | None) -> None:
+        self._ceiling = CallCeiling(
+            model_id="stand-in-high_volume", usd=usd, unpriced_reason=None if usd is not None else "no price"
+        )
+
+    def structured_ceiling(self, task_class: TaskClass, prompt: ModelPrompt, params: ModelParams | None) -> CallCeiling:
+        return self._ceiling
+
+    def embedding_ceiling(self, texts: Sequence[str]) -> CallCeiling:
+        return self._ceiling
+
+    def rerank_ceiling(self, query: str, documents: Sequence[str]) -> CallCeiling:
+        return self._ceiling
+
+
+class NothingSpent:
+    def spent(self, run_id: str, day: date) -> Spend:
+        return Spend(run_usd=0.0, day_usd=0.0)
+
+
+@pytest.mark.parametrize(
+    ("ceiling_usd", "refusal_type"),
+    [(1.0, BudgetExceededError), (None, UnpricedModelError)],
+    ids=["over-the-limit", "unpriced"],
+)
+def test_record_a_budget_refusal_records_nothing_and_reaches_no_model(
+    tmp_path: Path, ceiling_usd: float | None, refusal_type: type[Exception]
+) -> None:
+    live = StandInLiveRouter([INVALID_PASSAGE])
+    budgeted = BudgetGuard(
+        live,
+        limits=BudgetLimits(per_run_usd=0.01),
+        pricer=FixedCeiling(ceiling_usd),
+        ledger=NothingSpent(),
+        run_id="a-budgeted-run",
+        clock=FixedClock(RECORDED_AT),
+    )
+
+    with pytest.raises(refusal_type):
+        run(recording(tmp_path, budgeted).generate_structured(TaskClass.HIGH_VOLUME, EXAMPLE_PROMPT, ContractPassage))
+
+    assert live.requests == []
+    assert written(tmp_path) == []
+
+
+def test_record_a_call_that_never_reached_the_provider_records_nothing(tmp_path: Path) -> None:
+    unrenderable = PromptRenderError("example.select-passage", "1.0.0", "it uses `tag`, which the call did not give")
+    router = recording(tmp_path, StandInLiveRouter([unrenderable]))
+
+    with pytest.raises(PromptRenderError):
+        run(router.generate_structured(TaskClass.HIGH_VOLUME, EXAMPLE_PROMPT, ContractPassage))
+    with pytest.raises(ValueError, match="rerank"):
+        run(router.generate_structured(TaskClass.RERANK, EXAMPLE_PROMPT, ContractPassage))
+
+    assert written(tmp_path) == []
+
+
+def test_record_never_writes_an_invalid_answer_it_was_not_handed(tmp_path: Path) -> None:
+    """A router that refuses an answer without handing it over leaves record mode nothing true to write."""
+    router = recording(tmp_path, StandInLiveRouter([NotHandedOver(INVALID_PASSAGE)]))
+
+    with pytest.raises(InvalidModelOutput):
+        run(router.generate_structured(TaskClass.HIGH_VOLUME, EXAMPLE_PROMPT, ContractPassage))
+
+    assert written(tmp_path) == []
+
+
+def test_live_mode_keeps_no_invalid_answer(tmp_path: Path) -> None:
+    router = RecordReplayModelRouter(
+        StandInLiveRouter([INVALID_PASSAGE, None]), mode=ModelMode.LIVE, cassette_dir=tmp_path, environ=NO_CI
+    )
+
+    for _ in range(2):
+        with pytest.raises(InvalidModelOutput):
+            run(router.generate_structured(TaskClass.HIGH_VOLUME, EXAMPLE_PROMPT, ContractPassage))
+
+    assert written(tmp_path) == []
+
+
+def test_a_recorded_invalid_answer_is_scrubbed_like_any_cassette(tmp_path: Path) -> None:
+    leaky: Mapping[str, JsonValue] = {
+        "paragraph_id": f"Authorization: {SIGNED_HEADER}",
+        "start_offset": 0,
+        "end_offset": f"arn:aws:iam::{ACCOUNT_ID}:role/x",
+    }
+    router = recording(tmp_path, StandInLiveRouter([leaky]))
+
+    with pytest.raises(InvalidModelOutput):
+        run(router.generate_structured(TaskClass.HIGH_VOLUME, EXAMPLE_PROMPT, ContractPassage))
+
+    (cassette,) = tmp_path.rglob("*.json")
+    text = cassette.read_text(encoding="utf-8")
+    for secret in (ACCOUNT_ID, ACCESS_KEY_ID, SIGNATURE, "AWS4-HMAC-SHA256"):
+        assert secret not in text
+    assert redactions(json.loads(text)) == []
+    assert json.loads(text)["response"]["output"]["end_offset"] == f"arn:aws:iam::{REDACTED}:role/x"
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "reason"),
+    [
+        ("problems", [{"loc": [], "type": "missing_tool_call"}], "recorded problems are not valid"),
+        ("problems", "the model did not call the tool", "recorded problems are not valid"),
+        ("usage", {"input_tokens": -1, "latency_ms": 1.0}, "ModelUsage"),
+        ("model_id", 7, "recorded model id"),
+    ],
+    ids=["a-problem-without-its-message", "problems-not-a-list", "negative-tokens", "model-id-not-text"],
+)
+def test_a_recorded_invalid_answer_that_cannot_be_read_is_refused(
+    tmp_path: Path, field: str, value: JsonValue, reason: str
+) -> None:
+    with pytest.raises(InvalidModelOutput):
+        run(
+            recording(tmp_path, StandInLiveRouter([None])).generate_structured(
+                TaskClass.HIGH_VOLUME, EXAMPLE_PROMPT, ContractPassage
+            )
+        )
+    request = ModelRequest.build(TaskClass.HIGH_VOLUME, EXAMPLE_PROMPT, ContractPassage)
+    path = CassetteDirectory(tmp_path).structured_path(request)
+    document = json.loads(path.read_text(encoding="utf-8"))
+    document["response"][field] = value
+    path.write_text(json.dumps(document), encoding="utf-8")
+
+    with pytest.raises(FixtureFileError, match=reason):
+        run(replayer(tmp_path).generate_structured(TaskClass.HIGH_VOLUME, EXAMPLE_PROMPT, ContractPassage))
+
+
+@pytest.fixture
+def no_inherited_settings(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    for name in list(os.environ):
+        if name.startswith("DEBATE_"):
+            monkeypatch.delenv(name, raising=False)
+    yield
+
+
+def bedrock_settings(tmp_path: Path) -> Settings:
+    """The test profile on the bedrock provider, the example routing file, and no budget."""
+    return load_settings(
+        environment="test",
+        overrides={
+            "models": {
+                "provider": "bedrock",
+                "routing_file": str(REPOSITORY_ROOT / "config" / "model_routing.example.yaml"),
+                "budget_usd_daily": None,
+            },
+            "storage": {"data_dir": str(tmp_path / "data")},
+        },
+        env_file=tmp_path / "no.env",
+    )
+
+
+def usage_lines(usage_dir: Path) -> list[tuple[object, ...]]:
+    return [
+        (line["prompt_id"], line["attempt"], line["input_tokens"], line["output_tokens"])
+        for path in sorted(usage_dir.iterdir())
+        for line in map(json.loads, path.read_text(encoding="utf-8").splitlines())
+    ]
+
+
+@pytest.mark.usefixtures("no_inherited_settings")
+def test_record_through_the_built_router_logs_both_halves_once_and_replay_logs_nothing(
+    tmp_path: Path, registry: PromptRegistry
+) -> None:
+    """RecordReplay(BudgetGuard(UsageRecordingRouter(real))): the usage recorder sits inside replay."""
+    settings = bedrock_settings(tmp_path)
+    live = StandInLiveRouter([INVALID_PASSAGE, PASSAGE], policy=RoutingPolicy.from_settings(settings))
+
+    def real_router(policy: RoutingPolicy, *, aws_profile: str | None) -> ModelRouter:
+        return live
+
+    cassettes = tmp_path / "cassettes"
+    recorder_seen = ObservingRouter(
+        build_model_router(
+            settings,
+            mode="record",
+            environ=NO_CI,
+            real_router=real_router,
+            cassette_dir=cassettes,
+            clock=FixedClock(RECORDED_AT),
+            run_id="a-recording-run",
+            usage_log=UsageLog.for_data_dir(settings.storage.data_dir),
+        )
+    )
+    guarded_call(recorder_seen, registry)
+    usage_dir = tmp_path / "data" / "usage"
+    logged = [("example.select-passage", 1, 100, 12), ("model.repair", 2, 200, 12)]
+    assert usage_lines(usage_dir) == logged
+    log_files = written(usage_dir)
+
+    replay_seen = ObservingRouter(build_model_router(settings, mode="replay", environ=NO_CI, cassette_dir=cassettes))
+    guarded_call(replay_seen, registry)
+
+    assert replay_seen.outcomes == recorder_seen.outcomes
+    assert replay_seen.outcomes[0][-1] == ModelUsage(input_tokens=100, output_tokens=12, latency_ms=310.0)
+    assert usage_lines(usage_dir) == logged
+    assert written(usage_dir) == log_files
 
 
 # ---------------------------------------------------------------------------------------------

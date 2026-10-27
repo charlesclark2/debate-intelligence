@@ -117,6 +117,8 @@ also had assertion failures, which are what is counted.
 | After this report: `uv run --frozen python scripts/check_command_blocks.py --base origin/dev` | OK: no `#` comments in 505 shell code blocks in 185 Markdown files (1 session report changed) |
 | `uv run --frozen python scripts/docs_index.py --check-descriptions` | All 54 indexed documents under docs/ have a description |
 | `pytest tests/docs tests/scripts/test_check_command_blocks.py tests/scripts/test_docs_index.py` | 191 passed in 9.87s |
+| **After the sync onto dev at `8051c77`** (PM review, note 9): the same scoped run, `uv sync --frozen --all-packages --offline` first | The first attempt, in one command under `alarm 115`, was stopped by the alarm at 115 s, with the load average at 13 from other work on the machine. It printed no summary, so it is no result; `pgrep` found no orphaned workers. Run again in two halves, each under `alarm 115`, with `-n auto -m "not slow and not live" -p no:randomly`: `packages/debate_core/tests/application` → 4199 passed in 86.99s; the rest of the list → 1859 passed, 5 warnings in 35.57s. 6058 in all, as before the sync. The warnings are pytest-socket's "a test tried to use socket.socket" in three tests this task did not change (`test_extractor.py::test_nothing_in_debate_core_produces_extracted_evidence_from_free_text`, `test_snapshot_text.py::test_nothing_in_debate_core_turns_serialized_text_into_a_snapshot_text_without_a_key`, `test_app.py::test_doctor_renders_a_table`). That matches the known lazy-boto3-import warning, whose appearance depends on which worker imports boto3 first. The run before the sync had none. |
+| After the sync: `uv run scripts/export_schemas.py --check` / `uv run scripts/validate_specs.py --require-succeeded v1-e06-t05-json-manifest-export` | OK: 10 schemas up to date / Succeeded |
 
 ## Files changed
 
@@ -234,8 +236,9 @@ also had assertion failures, which are what is counted.
 ## Operator follow-ups
 
 None to run for this task. Before `scripts/task pr`, the branch needs `scripts/task sync`
-(`origin/dev` is at `fb846bb`). After the sync the session runs its changed test directories again
-(the PM's review, note 9), and adds the result below.
+(`origin/dev` was at `fb846bb`). The operator synced onto `8051c77` and opened the pull request.
+The changed test directories passed again after the sync (under Checks before the report). This
+commit needs a push to the open pull request: `git -C <worktree> push`.
 
 ## Follow-up work
 

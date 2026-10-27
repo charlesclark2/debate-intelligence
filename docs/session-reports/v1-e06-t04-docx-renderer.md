@@ -26,11 +26,13 @@ is embedded byte for byte in a custom XML part, and `read_embedded_manifest` (st
 for t07) gives it back. `ExportService.export_docx` is the DOCX side of the service; it receives the
 renderer as a port.
 
-**The Goal stays `InProgress`.** Every criterion passes except ac5, which is NOT RUN:
+**The Goal stays `InProgress`.** Every criterion passes except ac5, which is half done:
 
-* The LibreOffice open check is written, marked `slow`, and skips on this Mac (no soffice).
-* validate-dev's slow job now installs LibreOffice, so the check first runs there, after merge.
-* The Word half needs a person with Word (Operator follow-ups).
+* **Word: PASS.** The operator opened the rendered sample in Word on 2026-10-27: no repair prompt,
+  and the navigation pane shows the headings.
+* **LibreOffice: NOT RUN.** The open check is written, marked `slow`, and skips on this Mac (no
+  soffice). validate-dev's slow job now installs LibreOffice, so the check first runs there, after
+  merge.
 
 All 22 mutants were caught, including two variants of each of the PM's three.
 
@@ -60,10 +62,10 @@ What to look at first:
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
 | ac1: the evidence paragraph concatenates to exactly `Card.evidence_text` once the renderer's markers and interpolations are taken out; runs carry underline/highlight exactly over the CardSpan ranges (read back) | PASS | All read back with python-docx, independently of the renderer. `test_structure_the_evidence_runs_are_the_card_spans_condensed_where_nothing_is_read`: t02's VERIFIED news card against 11 runs written by hand from t04's paragraphs and t02's `NEWS_SPANS` (text, underline, highlight, size), the marker at the cut. `test_structure_the_evidence_reads_back_as_exactly_the_cards_evidence_text`: the same card with two interpolations, one at the cut. `test_structure_unicode_tabs_breaks_overlaps_cuts_and_interpolations_read_back_exactly`: a hand-built card with Æ, ø, curly quotes, an em dash, 🐘, a tab, a blank line, overlapping spans across a cut, and interpolations at the start, at the cut and at the end. Each strips the additions where the *card* says they go (`evidence_read_back`, its own arithmetic) and compares text and per-character underline/highlight against the spans. Mutants 3 to 6 caught. |
-| ac2: tags, cites and pocket/hat/block use the profile's style names and outline levels, so the file opens with navigable headings in Word with Verbatim | PASS (Word with Verbatim: see ac5) | `-k structure`, 23 passed. `test_structure_heading_styles_carry_the_style_profiles_names_and_outline_levels`: `Heading1` to `Heading4`, names `heading 1` to `heading 4`, outline levels 0 to 3, written by hand. `test_structure_the_style_table_is_the_one_the_lossless_writer_generates_from_the_style_profile`: `word/styles.xml` is canonically equal to E33's `render_styles_xml(profile)`. `test_structure_the_verbatim_parser_reads_the_card_back_under_its_headings`: the project's own Verbatim parser reads the rendered file as one card, with the tag, the section path (pocket, hat, block) and short cite `Whitfield 26`. Opening in Word with Verbatim is part of the operator's Word check. |
+| ac2: tags, cites and pocket/hat/block use the profile's style names and outline levels, so the file opens with navigable headings in Word with Verbatim | PASS (Word with Verbatim: see ac5) | `-k structure`, 23 passed. `test_structure_heading_styles_carry_the_style_profiles_names_and_outline_levels`: `Heading1` to `Heading4`, names `heading 1` to `heading 4`, outline levels 0 to 3, written by hand. `test_structure_the_style_table_is_the_one_the_lossless_writer_generates_from_the_style_profile`: `word/styles.xml` is canonically equal to E33's `render_styles_xml(profile)`. `test_structure_the_verbatim_parser_reads_the_card_back_under_its_headings`: the project's own Verbatim parser reads the rendered file as one card, with the tag, the section path (pocket, hat, block) and short cite `Whitfield 26`. In Word, the operator saw the headings in the navigation pane (2026-10-27). Verbatim's own navigation was not reported. |
 | ac3: UNVERIFIED cards render a banner listing reasons; unverified cite fields are marked | PASS | `-k unverified`, 16 passed. The banner is `UNVERIFIED — not a finished card: CITATION_UNVERIFIED, EVIDENCE_UNVERIFIED, CARD_INCOMPLETE`, in red `FF0000` from the profile, in the base's Normal style, under the tag. A FAILED card's banner says FAILED. A mix of four cards has a banner on exactly the two that are not VERIFIED. Reasons are codes only, required exactly when the card is not VERIFIED. The banner holds no evidence word. Marks: `[author unverified] [date unverified] [URL unverified]` from the citation's flags; an optional field only when shown unverified; `[author cleared by student]` for a cleared field, never "unverified". Mutants 1, 2, 15 to 18 and 22 caught. |
 | ac4: a custom XML part in namespace `urn:debate-intelligence:manifest:v1` with one entry per card, readable back via a helper t07 uses | PASS | `-k manifest`, 11 passed. The part (`customXml/item1.xml`) is one `manifest` element in the namespace, with no children, whose text is `serialize_manifest(manifest)` byte for byte. It is related from the document, with an `itemProps1.xml` naming the namespace. `read_embedded_manifest(path)` returns an equal `CardManifest`, and `read_embedded_manifest_bytes(path)` the same bytes. Both survive a python-docx save and reopen with a bibliography-style custom XML part added beside it. "One entry per card" is the manifest's `cards` list: one manifest per document, its cards in document order (`test_one_manifest_lists_every_card_of_the_document_in_document_order`, 3 cards). The reader refuses no manifest, two, a DOCTYPE, and an element holding more than text. Mutants 19 and 20 caught. |
-| ac5: opens without repair prompts in Word and LibreOffice (LibreOffice headless conversion test, `slow`, run in validate-dev's slow tier, which installs LibreOffice) | NOT RUN | `test_libreoffice_opens_a_rendered_document_headless_and_reads_every_paragraph` is marked `slow`. `uv run pytest packages/debate_core/tests/evidence/test_docx_renderer.py -m slow -rs` → `1 skipped` ("LibreOffice (soffice) is not installed here"). validate-dev's slow job did not install LibreOffice, so it now does (`Install LibreOffice for the rendered-DOCX open check`). `tests/scripts/test_validate_dev_workflow.py` → 21 passed, the 3 new tests failing first against the old workflow. The check first runs in validate-dev after merge, and Word needs a person: Operator follow-ups 1 and 2. |
+| ac5: opens without repair prompts in Word and LibreOffice (LibreOffice headless conversion test, `slow`, run in validate-dev's slow tier, which installs LibreOffice) | Word: PASS. LibreOffice: NOT RUN | **Word:** the operator opened the rendered sample (Operator follow-up 1) in Word on 2026-10-27 and reported no repair prompt, with the headings in the navigation pane. **LibreOffice:** `test_libreoffice_opens_a_rendered_document_headless_and_reads_every_paragraph` is marked `slow`. `uv run pytest packages/debate_core/tests/evidence/test_docx_renderer.py -m slow -rs` → `1 skipped` ("LibreOffice (soffice) is not installed here"). validate-dev's slow job did not install LibreOffice, so it now does (`Install LibreOffice for the rendered-DOCX open check`). `tests/scripts/test_validate_dev_workflow.py` → 21 passed, the 3 new tests failing first against the old workflow. The check first runs in validate-dev after merge (Operator follow-up 2). |
 | ac6: each omitted range is marked at its evidence-text offset with the profile's omission marker, each interpolation rendered at its anchor with `Interpolation.rendered`; neither is ever in `evidence_text` or read back as evidence | PASS | The marker is `FormatProfile.omission_marker` (`" … "`), which may hold no bracket (validator, mutant 21). The renderer adds brackets only through `Interpolation.rendered` (mutant 12). Placement: `test_an_omission_sits_where_its_kept_text_before_it_ends`, `test_each_of_several_omissions_sits_after_all_the_kept_text_before_it`, the layout example, and two properties against an oracle over random cards with cuts, interpolations and spans. The read-backs in ac1 show neither is read as evidence. PM mutants 5 and 6 caught. |
 | Node `span-runs`: `uv run pytest packages/debate_core/tests/evidence/test_run_segmentation.py` | PASS | 22 passed in 1.92s |
 | Node `document-structure`: `uv run pytest packages/debate_core/tests/evidence/test_docx_renderer.py -k structure` | PASS | 23 passed in 1.79s |
@@ -189,7 +191,8 @@ What to look at first:
    Segmentation is generic over `SpanStyle`, and the renderer maps span styles to character styles
    in one table (`_CHARACTER_STYLE_OF_SPAN`). An `EMPHASIS` span style would be one entry there, plus
    the domain enum and the `card.markup` contract (E05). See question 3.
-5. **ac5 is NOT RUN** (see the criteria table), so the Goal stays `InProgress`.
+5. **ac5's LibreOffice half is NOT RUN** (its Word half passed; see the criteria table), so the Goal
+   stays `InProgress`.
 
 ## Decisions and assumptions
 
@@ -286,6 +289,9 @@ Success looks like:
 If you have Verbatim, its heading navigation should show the same. Tell the session or the PM what
 you saw. If the scratch file is gone, the PM can ask the session to render it again.
 
+**Result (2026-10-27):** the operator ran the command above and reported no repair prompt, and the
+navigation pane shows the headings. The other items in the list were not reported on.
+
 **2. After the merge into dev, check validate-dev's slow tier.** It now installs LibreOffice and runs
 `test_libreoffice_opens_a_rendered_document_headless_and_reads_every_paragraph`. A pass there,
 with no skip, closes ac5's LibreOffice half. Nothing to run by hand. To run it locally before then,
@@ -300,12 +306,13 @@ Success looks like `1 passed` in under a minute; `1 skipped` means soffice is no
 
 ### For the PM (relay prompt)
 
-> v1-e06-t04 is done except ac5, which is NOT RUN, so the Goal stays InProgress. Four things:
+> v1-e06-t04 is done except ac5's LibreOffice half, so the Goal stays InProgress. Four things:
 >
-> 1. **ac5.** The LibreOffice check is written and marked slow; validate-dev's slow job now installs
->    libreoffice-writer (with workflow tests). It first runs after merge, and Word needs the operator
->    (follow-up 1). Recommendation: merge `--partial`, and close ac5 when validate-dev's slow tier
->    passes and the operator reports the Word open.
+> 1. **ac5.** Word passed: the operator opened the rendered sample with no repair prompt and the
+>    headings in the navigation pane (2026-10-27). The LibreOffice check is written and marked slow;
+>    validate-dev's slow job now installs libreoffice-writer (with workflow tests), and the check
+>    first runs there after merge. Recommendation: merge `--partial`, and close ac5 when
+>    validate-dev's slow tier passes with no skip.
 > 2. **t03 amendment (pre-approved).** FormatProfile has `omission_marker` (`" … "`, no brackets
 >    allowed) and `unverified_banner_color` (`FF0000`), in all three profiles. Proposed ac3 wording:
 >    "FormatProfile names its base style profile and defines only cite layout, base size,

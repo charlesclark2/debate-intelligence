@@ -674,6 +674,11 @@ def test_a_folder_joined_to_the_files_own_folder_is_not_another_folder_of_that_n
         "packages/debate_cli/tests/test_own_landscape.py": (
             'from pathlib import Path\n\nOWN = Path(__file__).resolve().parent / "fixtures" / "landscape"\n'
         ),
+        # The same folder from a test one level down: parents[1] is packages/debate_cli/tests.
+        "packages/debate_cli/tests/deeper/test_own_landscape_from_below.py": (
+            "from pathlib import Path\n\n"
+            'OWN = Path(__file__).resolve().parents[1] / "fixtures" / "landscape"\n'
+        ),
         "tests/test_shared_landscape.py": (
             'from pathlib import Path\n\nSHARED = Path(__file__).parent / "fixtures" / "landscape"\n'
         ),
@@ -735,6 +740,7 @@ FIXTURE_WORLD = {
         'CASES = Path(__file__).parent / "cases"\n\n\n'
         "@pytest.fixture\n"
         "def light():\n"
+        "    mark([])\n"
         "    return LIGHT\n\n\n"
         "@pytest.fixture\n"
         "def heavy(light):\n"
@@ -762,6 +768,7 @@ FIXTURE_WORLD = {
         pytest.param("world_heavy", {"heavy", "composed"}, id="one fixture"),
         # Imported inside the fixture's own function: it counts for that fixture, as a top-level one does.
         pytest.param("world_lazy", {"heavy", "composed"}, id="an import inside a fixture"),
+        # A hook runs for every test; `light` uses the same import, so it is not one nothing uses.
         pytest.param("world_hooks", {"light", "heavy", "none", "composed"}, id="a pytest hook"),
         # Nothing uses it, but an import that fails would fail every test beneath the conftest.
         pytest.param("world_unused", {"light", "heavy", "none", "composed"}, id="an import nothing uses"),

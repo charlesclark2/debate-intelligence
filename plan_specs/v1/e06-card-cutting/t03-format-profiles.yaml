@@ -67,7 +67,7 @@ spec:
         Charlie reviews the analysis report against the generated profile values and signs off that
         team-default matches the team's Verbatim conventions.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

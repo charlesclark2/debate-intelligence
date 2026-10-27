@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e06-card-cutting/t03-format-profiles.yaml`](../../plan_specs/v1/e06-card-cutting/t03-format-profiles.yaml) |
 | Epic / release | `v1-e06-card-cutting` / `v1.3` |
 | Branch | `task/v1-e06-t03-format-profiles` |
-| Session status | COMPLETE, awaiting the coach's sign-off (ac4) <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -29,9 +29,10 @@ digest per file, and the tests run on a synthetic tree.
 All 77 new tests were shown red against a skeleton first. All 21 mutants were caught, including
 the PM's three.
 
-**The Goal stays `InProgress`: ac4 is the coach's sign-off.** Two things to look at first:
+**The Goal is `Succeeded`.** The coach signed off on ac4 on 2026-10-27 with no value changed
+(answers under Operator follow-ups). Two things to look at first:
 
-* `flow` is a proposal, because the spec names it without defining it.
+* `flow` was a proposal, because the spec names it without defining it; the coach confirmed it.
 * The spec's ac2 command fails as written (exit 2): under the amendment there is nothing in
   `tests/fixtures/team_samples` to analyse.
 
@@ -43,7 +44,7 @@ the PM's three.
 | `analyze-formatting`: formatting analysis script | Done as amended | `scripts/analyze_team_formatting.py`. Run over the operator's folders, not over copies. Tested on `tests/fixtures/debate_files/team_format/`, written by `scripts/generate_team_format_fixtures.py`, and on the style profile's `verbatim-cut-card.docx`. |
 | `profile-model`: FormatProfile model and loader | Done | `packages/debate_core/src/debate_core/evidence/format_profile.py`: `FormatProfile`, `CiteBlockLayout`, `ResolvedFormatProfile`, `load_format_profiles` / `load_format_profile` / `resolve_format_profile`. |
 | `profile-configs`: team-default, flow and plain | Done | `team-default` from the survey. `plain` is `team-default` without highlighting. `flow` is a proposal (Decisions 5). |
-| `coach-signoff` | NOT RUN | The coach's, in the PR. What to check is under Operator follow-ups. |
+| `coach-signoff` | Done | The coach answered the six checklist questions on 2026-10-27 and changed no value. Answers under Operator follow-ups. |
 
 Red first: `51068ae` holds the tests with a skeleton that refuses nothing and measures nothing.
 That run was 42 failed, 35 passed (new test files only, `-n 0 -p no:randomly`):
@@ -69,13 +70,13 @@ wrong, not the code.
 | ac1: 6-10 scrubbed `.docx` copies in `tests/fixtures/team_samples/` with a MANIFEST of season, event and scrub date | FAIL as written / PASS as amended | The amendment makes it a manifest of files held elsewhere. `tests/fixtures/team_samples/` holds only `MANIFEST.md`: 314 rows of season, event and digest, written by the analysis (see Deviations 1). `uv run pytest tests/fixtures/test_team_samples_scrubbed.py` → `3 passed`. |
 | ac2: the analysis script reports style names, heading levels, underline/bold/highlight and font sizes found in the samples | PASS as amended | The real run (below) wrote `docs/data/team-format-survey.md`: units with outline levels and published style ids, short- and full-cite sizes and bold, underlined and not-underlined sizes, highlight colours, bold evidence runs, by season. A second run to scratch was byte-identical to the committed survey and manifest. `tests/scripts/test_analyze_team_formatting.py` → `25 passed`. |
 | ac3: FormatProfile names its base style profile and defines only cite layout, base size, highlight colour and condensed size; the three profiles validate and resolve | PASS | `uv run pytest packages/debate_core/tests/evidence/test_format_profile.py` → `49 passed`. Includes `test_the_committed_profiles_validate_and_resolve_against_the_shared_style_profile`, `test_the_card_default_names_a_committed_profile` and `test_every_team_default_value_cites_the_survey_line_it_comes_from`. |
-| ac4: the coach signs off that team-default matches the team's Verbatim conventions | NOT RUN | A sign-off, which no session can give. Checklist under Operator follow-ups. |
+| ac4: the coach signs off that team-default matches the team's Verbatim conventions | PASS | The coach's answers, relayed by the PM on 2026-10-27: (1) cyan is right; (2) 11 pt and 8 pt are right; (3) the full cite is not shrunk; (4) `flow` as proposed; (5) `plain` as proposed; (6) the Novice Packet stays included. No profile value changed. |
 | Node `curate-samples`: Sample manifest exists | PASS | `tests/fixtures/team_samples/MANIFEST.md` exists. |
 | Node `curate-samples`: Scrub check finds no author metadata in samples | PASS (the check now asserts there are no samples) | `uv run pytest tests/fixtures/test_team_samples_scrubbed.py` → `3 passed`. |
 | Node `analyze-formatting`: Analysis runs over the samples | FAIL as written / PASS as amended | As written, `uv run scripts/analyze_team_formatting.py tests/fixtures/team_samples` prints `no .docx files to analyse below the inputs; nothing written` and exits 2. That is deliberate: an empty corpus is a failure, not an empty report. As amended, `uv run scripts/analyze_team_formatting.py tests/fixtures/debate_files/team_format --exclude-dir Opencaselist` exits 0 (`3 files read, 4 skipped`). |
 | Node `profile-model`: Profile loader tests pass | PASS | `test_format_profile.py` → `49 passed`. |
 | Node `profile-configs`: team-default profile exists, contentMatch `tag` | PASS | `config/format_profiles/team-default.yaml` exists; `grep -c tag` → 2. |
-| Node `coach-signoff`: Coach approves team-default profile | NOT RUN | As ac4. |
+| Node `coach-signoff`: Coach approves team-default profile | PASS | As ac4. |
 
 The real run, read-only, in place, under an alarm on the interpreter:
 
@@ -276,6 +277,17 @@ three files in `config/format_profiles/`, and check:
 6. **Which files counted.** The 2026-27 `Policy Debate/Novice Packet` folder (12 files) is
    included by the rule. If that packet came from elsewhere, say so and it can be excluded.
 
+**The coach's answers (2026-10-27, relayed by the PM):**
+
+1. Cyan is right.
+2. 11 pt for read text and 8 pt for unread text are right.
+3. The full cite is not shrunk: 11 pt stays.
+4. `flow` as proposed.
+5. `plain` as proposed: no highlighting, unread text still condensed.
+6. The Novice Packet stays included.
+
+No profile value changed, so the survey, the manifest and the three profiles stand as committed.
+
 **Refreshing the survey later** (about 25 s, read-only). Run it in the task worktree; it rewrites
 both committed files:
 
@@ -337,9 +349,53 @@ fails until they do.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-27
 
 **Notes:**
+
+Profiles measured from the team's own files without one of them entering the repository, and a
+model that refuses anything the style profile owns.
+1. **ac2, ac3 and the node criteria pass,** ac1 and the analysis node as amended.
+   * The real run read 314 files in place, styles and run formatting only, with `w:t` removed
+     first, in 22 s. A second run was byte-identical.
+   * Each `team-default` value cites its survey line, held by a test.
+   * Red first: 42 failed against a skeleton. The no-text passes are vacuous on a skeleton, and
+     mutants pm2 and 6 show they bite.
+2. **Mutants: 21, the PM's three among them.** The condensed-below-base validator, which no mutant
+   could tell from its absence, was rightly deleted.
+3. **Deviations 1 to 4 accepted.** The PM writes the amendment in the next batch, in the relay's
+   wording:
+   * ac1 and the `curate-samples` node;
+   * the `analyze-formatting` args;
+   * the forbidden item's parenthetical;
+   * the packages (`scripts`, `tests/scripts`, `docs/data`, `tests/fixtures/debate_files/team_format`).
+4. **Decisions accepted:**
+   * every file by rule, with the exclusions counted;
+   * the manifest keyed with the parser evaluation's key;
+   * measurement by position, by runs, resolved as Word resolves;
+   * the base checks (a condensed size the base reads as shrunk, a base size it does not, a
+     reading colour);
+   * `plain` as `team-default` without highlighting.
+5. **`flow`** is accepted as the proposed reading copy unless the coach names something else.
+6. **Organization short cites (t02's follow-up 4) close here with no profile option.** A profile
+   cannot tell an untyped organization from a person, and the survey reads no words. A student can
+   edit the short cite.
+7. **Follow-ups:**
+   * 3 (quoted words such as `"flow"` and `"LD"`) is covered by `v1-e01-t32`'s rule that a quoted
+     string names a file only if it resolves to an existing path.
+   * 4 (highlighted runs outside the underlining) is noted for E31 and not filed now.
+   * 1 is t04's.
+8. **ac4 is the coach's.** The coach's answers to the six checklist questions are recorded in this
+   report by the session. Any value they change is applied with its survey line, and `flow` takes
+   the coach's meaning.
+   * If the coach's `flow` is not a FormatProfile shape (tags and cites only, say), `flow` stays as
+     proposed and t04 gets a rendering mode by the PM's amendment.
+9. **The affected set** (199 files, widened by quoted-word edges) is left to the PR's `ci` under
+   agreement 10. The changed directories and the always-run list passed, and the static checks are
+   clean.
+
+No re-review is needed unless the coach's answers change a profile's shape. With them recorded, set
+the Goal to `Succeeded`, and the PR merges in full.

@@ -2,8 +2,8 @@
 # keeps team-default's size and colour, and everything that is not read is shrunk one step
 # further, so the tag, the short cite and the highlighted words are what take the page.
 #
-# A proposal for the coach's sign-off, not a measured convention: the spec names `flow` without
-# defining it. Loaded by debate_core.evidence.format_profile. Owned by
+# Proposed in v1-e06-t03, since the spec names `flow` without defining it, and confirmed by the
+# coach on 2026-10-27; not a measured convention. Loaded by debate_core.evidence.format_profile. Owned by
 # v1-e06-t03-format-profiles. The two values that differ from team-default cite the survey rows
 # they are taken from; the rest are team-default's.
 ---

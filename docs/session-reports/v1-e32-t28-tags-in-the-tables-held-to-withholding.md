@@ -433,9 +433,45 @@ Success looks like `Uploaded N, unchanged M` to `reports/landscape/hspolicy26/<s
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-27
 
 **Notes:**
+
+One rule in one place, a withheld tag kept as an empty cell with its row, and the counts land exactly
+where the ruling said they would.
+1. **ac1 passes:** the first session's counts and its stop at condition (a), which was the right stop.
+2. **ac2 passes.**
+   * The goldens were written by hand before the code; red on the skeleton, 30 failed.
+   * Green: 1,028 landscape tests, and 1,147 with the report and scripts.
+   * On hspolicy26, 2 / 2 / 18, confirmed by the script's own refusal check.
+   * The one hand-written expectation that was wrong (t27's top_cards.csv) was found and its cause
+     named. The code was right.
+3. **Mutants: 10 of 10, the PM's four among them.** The order mutant (impact tags withheld before
+   t25 reads what names the row) is the right extra.
+4. **The pre-build count is accepted as read.** Every withheld or left-out count fell or stayed. The
+   rises in "rows named by" are rows handed back to an earlier source, the other side of the falls,
+   so not stopping was right.
+5. **The Deviation is accepted:** `test_landscape_command.py`'s scan cases now plant a tournament's
+   name, since the team code is withheld before the scan. The PM adds `packages/debate_cli/tests` to
+   the spec's packages in the next batch.
+6. **Decisions accepted:**
+   * withheld in the report service, so every reader gets the same rows;
+   * after `with_lead_in`;
+   * one header line;
+   * one word set per report;
+   * the scan unchanged;
+   * the counts script reading parsed tags.
+7. **A consequence to watch, not a change:** whole tournament names in tags now reach the bundle, so
+   the scan before sharing may hold a republish until its hits are read. The first republish shows
+   how often. If it is routine, the PM may file a task to make the scan's tournament hits match the
+   policy (a tournament name is personal only beside a team code). The dry run printing the tables'
+   counts is noted, not filed.
+8. **The affected set** (213 files) is left to the PR's `ci` under agreement 10. The landscape and
+   report tests, the scan tests after their fix, and the static checks passed. The two alarm-stopped
+   runs showed no failure besides the scan tests, which are now fixed.
+
+No re-review is needed. The Goal is `Succeeded`, and the PR merges in full. The republish is the
+operator's, after the merge, on any day but Wednesday.

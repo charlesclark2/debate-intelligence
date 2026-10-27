@@ -263,3 +263,27 @@ The runbook's steps in dev, on 2026-10-27, from the `caselist-credentials-dev` w
     next version records this, with the coach's decision on zero-retention mode.
 * **Still open, so the Goal stays `InProgress`:** ac5's first call (step 7), after `v1-e05-t13`
   re-plans the invoker policy for the dev models.
+
+### Step 7 and the Goal, recorded 2026-10-27
+
+After `v1-e05-t13` re-planned the invoker policy for dev's models (its report holds the plan, the
+check and the apply):
+
+* **Step 7, the first call** (the runbook's `first_call` probe over both routing files):
+  * **Haiku 4.5** (`us.anthropic.claude-haiku-4-5-20251001-v1:0`) and **Sonnet 4.6**
+    (`us.anthropic.claude-sonnet-4-6`): the adapter's own call, `toolChoice any`, `toolChoice tool`,
+    `temperature 0.5`, structured output and the strict tool were all accepted. `effort low` was
+    refused on both: `ValidationException`, "This model doesn't support the effort field".
+  * **Titan** embeddings answered with 1,024 dimensions, and **Cohere Rerank 3.5** answered.
+  * **Haiku, Sonnet and Opus 5.5** were refused as "not available for this account"
+    (`AccessDeniedException`, the zero quota), so their other probes read `not tried`.
+  * `first call exit=1`, as the runbook says to expect while the 5.5 quotas are held at zero. The
+    summary line: 14 requests accepted and billed, 6,861 input and 484 output tokens; 5 refused.
+    Priced at Sonnet 4.6's rates throughout, that is under 3 cents.
+
+* **ac4 and ac5 are amended** in the PM batch of 2026-10-27 (u): prod's plan and apply, and the 5.5
+  models' answers, move to `v1-e05-t17`, which waits for the support case to restore the quotas.
+  Prod routes only to the 5.5 models, so nothing could be learned from prod sooner.
+* **ac4** (dev's plan read before its apply; the probe run with the new profile) and **ac5** (the
+  first call on each of dev's routes) pass. The probe's tables are summarised in `v1-e05-t02`'s
+  report. The Goal is `Succeeded`.

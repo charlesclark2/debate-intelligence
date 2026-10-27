@@ -399,3 +399,16 @@ the manifest embedded byte for byte.
 
 No re-review is needed. The PR merges `--partial`, phase `InProgress`, until validate-dev's slow tier
 runs the LibreOffice check.
+
+## PM record, 2026-10-27
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+* **validate-dev has not yet run the LibreOffice check on a build that carries this task.** Its last
+  three runs (two dispatched on 2026-10-26 and the scheduled run of 2026-10-27) validated
+  `v1.1.0-dev.159` (#541), from before this task merged. Each failed in its smoke tier on
+  `tests/smoke/test_caselist_backfile.py`. That was not this task's code: the bundled dev profile
+  turns the API gate on (`v1-e40-t06`), and the test assumed it off.
+* The PM batch of 2026-10-27 (u) pins the gate in that test, and `v1-e01-t41` makes the pull
+  request's smoke tier read the bundled profiles. ac5's LibreOffice half closes on the first green
+  validate-dev run of a pre-release carrying this task. The Goal stays `InProgress` until then.

@@ -475,3 +475,20 @@ line instead of writing past it.
    passed, before and after the rulings.
 
 The PR merges `--partial`, with the phase `InProgress`, until ac5. No re-review is needed.
+
+## PM record, 2026-10-27
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+ac5's dev half, after the cutover's step 9, from a scratch data directory, as Operator follow-ups 1
+to 3 give it:
+
+* **The build:** the three synthetic example files were built, and each quality report read
+  `PASS`.
+* **The dry run:** one `WOULD_PUBLISH` row each, to `debate-dev-evidence-a7508de8`.
+* **The publish:** `1 PUBLISHED` each, then `store ls files/` listed 15 objects, five per file.
+* **Again:** `1 SKIPPED` each, with the same 15 objects.
+* **The scratch directory** was removed after the step.
+
+Recorded in `docs/data/file-publish-log.md`. The prod half waits for the coach's first approved real
+files, so the Goal stays `InProgress`.

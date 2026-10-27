@@ -442,5 +442,23 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e39-t19-identical-rebuild-records-its-suppression-list
+    - id: t20
+      kind: Task
+      name: 'The pilot API''s test world split by surface, so a change selects only the tests it reaches'
+      description: >-
+        The pilot API's test world split by surface, so a change selects only the tests it
+        reaches.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t20-api-conftest-split-by-surface.yaml
+        goalRef: v1-e39-t20-api-conftest-split-by-surface
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t20-api-conftest-split-by-surface reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t20-api-conftest-split-by-surface
 status:
   phase: Pending

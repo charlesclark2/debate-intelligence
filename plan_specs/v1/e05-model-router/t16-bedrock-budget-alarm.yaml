@@ -1,0 +1,83 @@
+# TASK v1-e05-t16-bedrock-budget-alarm - An AWS budget alarm on the account's model spend at 80% and 100% of $50
+# Epic: E05 Model Router & Structured LLM Contracts | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e05-t16-bedrock-budget-alarm
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e05-model-router
+  annotations:
+    debate/title: "An AWS budget alarm on the account's model spend at 80% and 100% of $50"
+spec:
+  # Filed by the PM, 2026-10-27, from the coach's ceiling of 2026-10-27 ($50 a month, preferably).
+  description: >-
+    The usage log prices calls from the committed price file; AWS bills by its own. Count first,
+    from Cost Explorer, read by the operator: which services and usage types a Bedrock call to a
+    Claude, Titan or Cohere model is billed under (Amazon Bedrock, or AWS Marketplace for a
+    model sold there), so the budget's filter catches every model charge and nothing else. Then
+    a Terraform module: one AWS Budgets cost budget of $50 a month on those charges, with
+    notifications at 80% and 100% of actual spend and at 100% of forecast, to the coach's
+    address through the run's alert topic or a subscription of its own. The PM reads the plan
+    before the apply. No permission set or account assignment changes.
+  priority: 2
+  constraints:
+    packages: [infrastructure, docs/runbooks, docs/data]
+    forbidden:
+      - A permission set or account assignment changed
+      - Network or AWS access in any test
+      - An account id committed
+  context:
+    - kind: TaskRef
+      name: v1-e05-t08-bedrock-invoke-access
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Counts first: the services and usage types model calls are billed under, read by the
+        operator, recorded as names only, before the filter is written.
+    - id: ac2
+      description: >-
+        Terraform tests show one budget of 50 USD a month, the filter, the three
+        notifications and no grant, shown failing first.
+    - id: ac3
+      description: >-
+        The PM reads the plan, the operator applies it, and the budget reads its first
+        month's spend (operator).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e05-t16-bedrock-budget-alarm-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e05-model-router
+spec:
+  description: >-
+    Find what model calls are billed under, then alarm on it.
+  goalRef:
+    name: v1-e05-t16-bedrock-budget-alarm
+  graph:
+    nodes:
+      - id: budget-alarm
+        kind: Task
+        name: Model spend alarm
+        description: >-
+          Find what model calls are billed under, then alarm on it.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Terraform checks pass
+            command: uv
+            args: [run, bash, scripts/terraform_checks.sh]
+status:
+  phase: Pending

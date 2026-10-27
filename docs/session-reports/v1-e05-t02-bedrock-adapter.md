@@ -310,3 +310,25 @@ Added by the PM. Nothing above is changed, and this section is not a review.
   Stubber tests.
 * Every other criterion was met and accepted in the review above, so the Goal is set to
   `Succeeded` in the PM batch of 2026-10-22 (d).
+
+## PM record, 2026-10-27
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+The first real call on each of dev's Claude routes, as `v1-e05-t08`'s ac4 asks to be recorded here:
+
+* **Step 7, the first call** (the runbook's `first_call` probe over both routing files):
+  * **Haiku 4.5** (`us.anthropic.claude-haiku-4-5-20251001-v1:0`) and **Sonnet 4.6**
+    (`us.anthropic.claude-sonnet-4-6`): the adapter's own call, `toolChoice any`, `toolChoice tool`,
+    `temperature 0.5`, structured output and the strict tool were all accepted. `effort low` was
+    refused on both: `ValidationException`, "This model doesn't support the effort field".
+  * **Titan** embeddings answered with 1,024 dimensions, and **Cohere Rerank 3.5** answered.
+  * **Haiku, Sonnet and Opus 5.5** were refused as "not available for this account"
+    (`AccessDeniedException`, the zero quota), so their other probes read `not tried`.
+  * `first call exit=1`, as the runbook says to expect while the 5.5 quotas are held at zero. The
+    summary line: 14 requests accepted and billed, 6,861 input and 484 output tokens; 5 refused.
+    Priced at Sonnet 4.6's rates throughout, that is under 3 cents.
+
+The adapter's defaults hold on both dev models. A forced tool choice, a non-default temperature,
+structured output and the strict tool were accepted. `effort` is refused by both 4.x models, and
+dev's routes send none (`v1-e05-t11` pins it).

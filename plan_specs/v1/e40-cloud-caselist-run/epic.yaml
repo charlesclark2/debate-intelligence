@@ -340,5 +340,44 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e40-t14-deploy-script-region-test-under-load
+    - id: t15
+      kind: Task
+      name: 'A plan check for a new run image after the cutover, with the schedule left enabled'
+      description: >-
+        A plan check for a new run image after the cutover, with the schedule left enabled.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t15-image-plan-check-after-the-cutover.yaml
+        goalRef: v1-e40-t15-image-plan-check-after-the-cutover
+      dependsOn:
+      - t06
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t15-image-plan-check-after-the-cutover reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t15-image-plan-check-after-the-cutover
+    - id: t16
+      kind: Task
+      name: 'Prod''s parsed store re-parsed after a parser bump, from a copy restored with its sources'
+      description: >-
+        Prod's parsed store re-parsed after a parser bump, from a copy restored with its
+        sources.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t16-prod-reparse-after-a-parser-bump.yaml
+        goalRef: v1-e40-t16-prod-reparse-after-a-parser-bump
+      dependsOn:
+      - t10
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t16-prod-reparse-after-a-parser-bump reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t16-prod-reparse-after-a-parser-bump
 status:
   phase: Pending

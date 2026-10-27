@@ -650,3 +650,32 @@ Added by the PM. Nothing above is changed, and this section is not a review.
   score. The proxy's review-queue ordering is filed as `v1-e32-t26`. Removal and the annual purge
   now delete `<data dir>/landscape/local-classifier/<caselist>/` (the removal runbook, and
   `v1-e30-t28`'s amendment).
+
+### The coach's labels and the score, recorded 2026-10-27
+
+* **The labels:** the coach labelled the 60-card sample. The scorer refused at first because the
+  feature table was placed under taxonomy 1.2.0 and the topic was at 1.4.0. The table was rebuilt
+  for the same snapshot (`features --caselist hspolicy26 --snapshot 2026-10-20`: 3,825 sources,
+  126,681 cards, 50.5 s), leaving the sample and its predictions as they were. A check found all 60
+  sampled sources in the rebuilt table.
+* **The score:** 47 of 60 cards were scored; 13 were blank or `unsure`. The coach said 7 of the 47
+  belong to no position.
+
+  | | Proxy | Specified |
+  |---|---|---|
+  | Right, of 47 | 17 (36.2%) | 15 (31.9%) |
+  | At its threshold | 13 of 24 (54.2%) at 0.5 | 15 of 47 at 0.0 |
+  | Weighted accuracy / precision at the threshold | 33.5% / 75.6% | 29.9% / 29.9% |
+  | Top / middle / bottom stratum | 13 of 24, 4 of 17, 0 of 6 | 11 of 24, 3 of 17, 1 of 6 |
+
+  The proxy by predicted kind: advantage 3 of 7, aff 0 of 7, CP 3 of 7, DA 5 of 7, K 4 of 9, T 2 of 6,
+  theory 0 of 4.
+* **The decision, by the ruled bar** (27 of 30 in the top stratum, 90% weighted precision, no kind
+  under 4 of 5): none is met, so the local model is **dropped as a placer**. Its confidence orders
+  the cards well (54%, 24%, 0% by stratum), so it is kept for the review queue's ordering
+  (`v1-e32-t26`, amended). Both models were trained under taxonomy 1.2.0 and cannot predict
+  `kritikal-aff`, which may cost each a card or two. That does not change the decision.
+* **What the labels say beyond the bar:** the coach could not place 13 of 60 cards from their tag
+  and headings, so placing the rest needs the evidence text, which is `v1-e32-t07`'s model stage.
+
+ac2 is complete, and the Goal is `Succeeded`.

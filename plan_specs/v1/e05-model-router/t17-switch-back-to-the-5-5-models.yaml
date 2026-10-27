@@ -1,0 +1,87 @@
+# TASK v1-e05-t17-switch-back-to-the-5-5-models - Dev back on the 5.5 models, and prod's Bedrock grant applied, once the quotas are restored
+# Epic: E05 Model Router & Structured LLM Contracts | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e05-t17-switch-back-to-the-5-5-models
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e05-model-router
+  annotations:
+    debate/title: "Dev back on the 5.5 models, and prod's Bedrock grant applied, once the quotas are restored"
+spec:
+  # Filed by the PM, 2026-10-27, from v1-e05-t13's ruling 7 and v1-e05-t08's amended ac4 and ac5.
+  description: >-
+    Starts only when the account's support case has restored the 5.5 models' cross-region quotas
+    (the operator reads them, as bedrock-access.md step 5 says). Dev's routing goes back to
+    Haiku 5.5 and Sonnet 5.5 as before v1-e05-t13, the invoker grant drops the 4.x models no
+    route names, and the prices v1-e05-t13 flagged for the switch back are restated from the
+    operator's reading of the pricing page. Then the operator's step 7 on dev, and prod's plan,
+    apply and first call on each prod route (moved here from v1-e05-t08), the PM reading each
+    plan before its apply.
+  priority: 3
+  constraints:
+    packages: [config, infrastructure/modules/bedrock_access, infrastructure/envs, packages/debate_core/tests, docs/runbooks, docs/data]
+    forbidden:
+      - Starting before the quotas read non-zero
+      - A price written from memory
+      - A wildcard resource in the grant
+      - A real model call in a test
+  context:
+    - kind: TaskRef
+      name: v1-e05-t13-dev-routes-to-callable-claude-models
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e05-t08-bedrock-invoke-access
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Dev's routing names the 5.5 models again, the grant names exactly what the routing
+        files route to, the prices are restated, and the module's tests pin it, shown
+        failing first.
+    - id: ac2
+      description: >-
+        Dev's plan and apply, then step 7's first call answered on dev's 5.5 routes
+        (operator).
+    - id: ac3
+      description: >-
+        Prod's plan and apply after the promotion, the PM reading the plan, and the first
+        call answered on each prod route (operator).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e05-t17-switch-back-to-the-5-5-models-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e05-model-router
+spec:
+  description: >-
+    Route dev back to 5.5, trim the grant, then apply and call in dev and prod.
+  goalRef:
+    name: v1-e05-t17-switch-back-to-the-5-5-models
+  graph:
+    nodes:
+      - id: switch-back
+        kind: Task
+        name: Switch back to 5.5
+        description: >-
+          Route dev back to 5.5, trim the grant, then apply and call in dev and prod.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Routing and pricing tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/models, -k, routing or pricing]
+status:
+  phase: Pending

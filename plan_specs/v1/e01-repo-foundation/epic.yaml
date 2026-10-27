@@ -886,5 +886,65 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e01-t38-ci-affected-tests-on-dev-pull-requests
+    - id: t39
+      kind: Task
+      name: 'The container imports each integration in its own factory, and selection follows a command to its factories'
+      description: >-
+        The container imports each integration in its own factory, and selection follows a
+        command to its factories.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t39-container-builds-integrations-lazily.yaml
+        goalRef: v1-e01-t39-container-builds-integrations-lazily
+      dependsOn:
+      - t32
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t39-container-builds-integrations-lazily reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t39-container-builds-integrations-lazily
+    - id: t40
+      kind: Task
+      name: 'The planted-break check runs the tests nearest a break by what reads it, not by path'
+      description: >-
+        The planted-break check runs the tests nearest a break by what reads it, not by
+        path.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t40-planted-break-nearest-ordering.yaml
+        goalRef: v1-e01-t40-planted-break-nearest-ordering
+      dependsOn:
+      - t32
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t40-planted-break-nearest-ordering reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t40-planted-break-nearest-ordering
+    - id: t41
+      kind: Task
+      name: 'The pull request''s smoke tier reads the bundled profiles, as the installed build does'
+      description: >-
+        The pull request's smoke tier reads the bundled profiles, as the installed build
+        does.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t41-pr-smoke-reads-the-bundled-profiles.yaml
+        goalRef: v1-e01-t41-pr-smoke-reads-the-bundled-profiles
+      dependsOn:
+      - t21
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t41-pr-smoke-reads-the-bundled-profiles reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t41-pr-smoke-reads-the-bundled-profiles
 status:
   phase: Pending

@@ -1,0 +1,79 @@
+# TASK v1-e40-t16-prod-reparse-after-a-parser-bump - Prod's parsed store re-parsed after a parser bump, from a copy restored with its sources
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t16-prod-reparse-after-a-parser-bump
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "Prod's parsed store re-parsed after a parser bump, from a copy restored with its sources"
+spec:
+  # Filed by the PM, 2026-10-27, from v1-e31-t31's ruling Q5 (prod's re-parse is its own E40 task).
+  description: >-
+    Prod's evidence store is published by hand from dev's state until the run's home moves
+    (caselist-cutover.md, "Until the promotion"). After a parser bump, dev's re-parse
+    (v1-e31-t31's runbook steps, recorded in its report) publishes the new version directories
+    to the dev bucket; prod needs the same. With v1-e40-t10's restore with sources, write and
+    run the steps: a copy restored under the dev lock with its raw sources, the new version's
+    parse checked against dev's counts, a publish to prod with a sign-in before each caselist,
+    prod's search index and function together, and the copy deleted after (data-use policy
+    1.18). Starts after v1-e31-t31's dev re-parse is recorded.
+  priority: 2
+  constraints:
+    packages: [docs/runbooks, docs/data, ops, tests/scripts]
+    forbidden:
+      - A prod publish whose counts differ from dev's without the PM's word
+      - The copy kept after the step
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e40-t10-restore-with-sources
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The steps written in the runbook, each with where it runs and what success looks
+        like; check_command_blocks and check_links pass.
+    - id: ac2
+      description: >-
+        Prod's parsed store at the new version, its counts equal to dev's, its index and
+        function together, and the copy deleted (operator).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t16-prod-reparse-after-a-parser-bump-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    Write and run prod's re-parse from a copy restored with its sources.
+  goalRef:
+    name: v1-e40-t16-prod-reparse-after-a-parser-bump
+  graph:
+    nodes:
+      - id: prod-reparse
+        kind: Task
+        name: Prod re-parse
+        description: >-
+          Write and run prod's re-parse from a copy restored with its sources.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Docs checks pass
+            command: uv
+            args: [run, pytest, tests/docs]
+status:
+  phase: Pending

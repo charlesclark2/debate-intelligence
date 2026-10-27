@@ -1,0 +1,86 @@
+# TASK v1-e01-t39-container-builds-integrations-lazily - The container imports each integration in its own factory, and selection follows a command to its factories
+# Epic: E01 Repository & Delivery Foundation | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t39-container-builds-integrations-lazily
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: "The container imports each integration in its own factory, and selection follows a command to its factories"
+spec:
+  # Filed by the PM, 2026-10-27, from v1-e01-t32's Decision 6 and PM question 2 (ruled (a), 2026-10-27).
+  description: >-
+    `app.py` reaches every command, and every command module reaches every integration through
+    the container, so a test that runs the app is selected by any change: 521 of the 3,529 files
+    t38's 20 merges selected came only through it, and t27's slow bucket-mode and smoke tests
+    sit behind it. Count first, then build v1-e01-t32's proposal: the container imports each
+    integration inside the factory that builds it; `affected_tests.py` reads a function-level
+    import in `container.py` as that factory's; a command module's `cli.services.X` reaches
+    factory X; a test that runs the app reaches the commands its literal arguments name; a test
+    whose arguments the script cannot read reaches every command, as now. Ruled: the change of
+    import timing is accepted, on two conditions: a test builds every factory, so an integration
+    that fails to import still fails `ci`, and every command's output is otherwise unchanged.
+    `UnknownCaselistEvent`'s hint names `debate_cli.caselist_events` (t32's PM question 1, ruled
+    (b)).
+  priority: 2
+  constraints:
+    packages: [debate_cli, packages/debate_cli/tests, scripts, tests/scripts, tests/architecture]
+    forbidden:
+      - A command's output changed, apart from the one hint
+      - A test removed or deselected to narrow a selection
+  context:
+    - kind: TaskRef
+      name: v1-e01-t32-test-selection-reach-round-three
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Counts first: the files selected only through `app.py` over t38's 20 merges, before
+        and after the rule, in the report.
+    - id: ac2
+      description: >-
+        A test builds every factory and fails on an integration that fails to import; a
+        planted break in a lazily imported integration is caught; tests shown failing first.
+    - id: ac3
+      description: >-
+        The 20 merges re-measured with --graph, and the collected count unchanged.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t39-container-builds-integrations-lazily-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Import integrations in their factories, follow commands to factories, and measure.
+  goalRef:
+    name: v1-e01-t39-container-builds-integrations-lazily
+  graph:
+    nodes:
+      - id: lazy-integrations
+        kind: Task
+        name: Lazy integrations
+        description: >-
+          Import integrations in their factories, follow commands to factories, and
+          measure.
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Selection tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, -k, affected]
+status:
+  phase: Pending

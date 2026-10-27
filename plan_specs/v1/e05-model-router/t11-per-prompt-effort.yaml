@@ -23,6 +23,10 @@ spec:
     telemetry. Count first: which prompts use `high_volume`, and the output tokens a replayed
     run of `landscape.classify_position` spends at each effort, from recorded fixtures. Send the
     counts to the PM before changing any prompt's effort.
+    (PM note 2026-10-27, from v1-e05-t08's first call on dev's routes.) Haiku 4.5 and Sonnet 4.6
+    refuse the effort field ("This model doesn't support the effort field"). A prompt's effort
+    is passed only to a model that accepts it; a route on a 4.x model sends none, and a test
+    pins it.
   priority: 3
   constraints:
     packages: [debate_core.application, debate_core.integrations, packages/debate_core/tests, prompts, config, scripts]

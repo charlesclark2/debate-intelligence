@@ -29,7 +29,8 @@ spec:
     another machine.
   priority: 2
   constraints:
-    packages: [debate_core.application, debate_core.integrations, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, docs/runbooks, docs/adr]
+    # PM amendment 2026-10-27, pre-approved at the checkpoint: evidence-store-layout.md's exception.
+    packages: [debate_core.application, debate_core.integrations, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, docs/runbooks, docs/adr, docs/architecture]
     forbidden:
       - A school, team code or path in a key or object metadata (data-use policy rule 3)
       - A bucket write outside the run's lock

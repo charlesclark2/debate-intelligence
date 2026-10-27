@@ -35,6 +35,14 @@ spec:
     failed import alerts the coach through the run's alert topic, as a failed weekly run does. Running
     the import again, with no download and no budget, is a backfile's rebuild after a whole-file
     removal, so the same task definition runs it, and the removal runbook names it.
+    (PM amendment 2026-10-27, rulings Q1 to Q3 of the checkpoint.) The import is started on the
+    run's own task definition, the revision the schedule targets, with a command override; no
+    new family, and no grant on any role or permission set. The run's ephemeral storage covers
+    the largest import. The run-stopped alert's text may be edited in place to name a
+    hand-started import. An import task never counts as a weekly run in the late-run alarm or
+    any run record. The ops script reads the run lock with the everyday evidence profile and
+    starts the task with the deployer's. An expired or missing token is read by the runbook's
+    watch step, and the in-image wording waits for the next image.
   priority: 2
   constraints:
     packages: [infrastructure, ops, docs/runbooks, docs/data, debate_core.application, packages/debate_core/tests, tests/smoke]

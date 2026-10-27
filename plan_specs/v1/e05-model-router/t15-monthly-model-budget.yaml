@@ -1,0 +1,87 @@
+# TASK v1-e05-t15-monthly-model-budget - A monthly model budget beside the daily one, at the coach's $50 ceiling
+# Epic: E05 Model Router & Structured LLM Contracts | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e05-t15-monthly-model-budget
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e05-model-router
+  annotations:
+    debate/title: "A monthly model budget beside the daily one, at the coach's $50 ceiling"
+spec:
+  # Filed by the PM, 2026-10-27, from the coach's ceiling of 2026-10-27 ($50 a month, preferably) and v1-e05-t13's ruling 1.
+  description: >-
+    BudgetGuard refuses a call that could take the run or the day past
+    `models.budget_usd_per_run` or `models.budget_usd_daily`, from the usage log under the data
+    directory (v1-e05-t07). Nothing holds a month. Count first, read-only: where model calls are
+    made and logged today (the Mac's dev data directory, prod's, a cloud task), and whether one
+    usage log sees every call a month makes. Then add `models.budget_usd_monthly`: a call that
+    could take the calendar month (America/Chicago) past it is refused before it is made, like
+    the daily limit, and an unpriced model is refused whenever it is set. Both bundled profiles
+    set it to 50.0 until the promotion, since only one environment calls models today; the AWS
+    Budgets alarm (v1-e05-t16) watches the account's real total. Prod's `budget_usd_daily` falls
+    from 20.0 to 1.5 (the ceiling over thirty days), and the tests and the documented cap that
+    assume dev's daily limit is below prod's are restated. `debate-research usage` shows the
+    month's spend beside the day's.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, config, tests/smoke, docs/process, docs/runbooks]
+    forbidden:
+      - A real model call in a test
+      - A price written from memory
+      - Raising any budget above the coach's ceiling
+  context:
+    - kind: TaskRef
+      name: v1-e05-t07-usage-telemetry
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Counts first: where calls are made and logged, and whether one log sees a month's
+        calls, in the report.
+    - id: ac2
+      description: >-
+        A call that could take the month past `models.budget_usd_monthly` is refused before
+        it is made, across a month's boundary in America/Chicago, by tests shown failing
+        first; both profiles set 50.0 and prod's daily limit is 1.5.
+    - id: ac3
+      description: >-
+        `debate-research usage` shows the month's spend and the limit, by test.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e05-t15-monthly-model-budget-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e05-model-router
+spec:
+  description: >-
+    Count where calls are logged, then hold the month as the day is held.
+  goalRef:
+    name: v1-e05-t15-monthly-model-budget
+  graph:
+    nodes:
+      - id: monthly-budget
+        kind: Task
+        name: Monthly model budget
+        description: >-
+          Count where calls are logged, then hold the month as the day is held.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Model router tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/models]
+status:
+  phase: Pending

@@ -223,3 +223,16 @@ first, and the pilot proven to need nothing.
    passed.
 
 The PR merges `--partial`, with the phase `InProgress`, until ac3. No re-review is needed.
+
+## PM record, 2026-10-27
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+ac3, after the cutover's step 9, on a day with no cloud run:
+
+* **The dry run:** every one of the 9 scan hits was accepted, and 7 objects were planned.
+* **The publish:** `Uploaded 7`.
+* **The pilot:** the coach reviewed the republished hspolicy26 report on the dev pilot the same day.
+  His one piece of feedback, that Policy debate no longer says "Harms", is filed as `v1-e32-t29`.
+
+ac3 passes, and the Goal is `Succeeded`.

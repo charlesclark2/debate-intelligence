@@ -357,5 +357,64 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e05-t14-cheaper-model-for-high-volume-evaluated-first
+    - id: t15
+      kind: Task
+      name: 'A monthly model budget beside the daily one, at the coach''s $50 ceiling'
+      description: >-
+        A monthly model budget beside the daily one, at the coach's $50 ceiling.
+      inputs:
+        specRef: plan_specs/v1/e05-model-router/t15-monthly-model-budget.yaml
+        goalRef: v1-e05-t15-monthly-model-budget
+      dependsOn:
+      - t07
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e05-t15-monthly-model-budget reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e05-t15-monthly-model-budget
+    - id: t16
+      kind: Task
+      name: 'An AWS budget alarm on the account''s model spend at 80% and 100% of $50'
+      description: >-
+        An AWS budget alarm on the account's model spend at 80% and 100% of $50.
+      inputs:
+        specRef: plan_specs/v1/e05-model-router/t16-bedrock-budget-alarm.yaml
+        goalRef: v1-e05-t16-bedrock-budget-alarm
+      dependsOn:
+      - t08
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e05-t16-bedrock-budget-alarm reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e05-t16-bedrock-budget-alarm
+    - id: t17
+      kind: Task
+      name: 'Dev back on the 5.5 models, and prod''s Bedrock grant applied, once the quotas are restored'
+      description: >-
+        Dev back on the 5.5 models, and prod's Bedrock grant applied, once the quotas are
+        restored.
+      inputs:
+        specRef: plan_specs/v1/e05-model-router/t17-switch-back-to-the-5-5-models.yaml
+        goalRef: v1-e05-t17-switch-back-to-the-5-5-models
+      dependsOn:
+      - t13
+      - t08
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e05-t17-switch-back-to-the-5-5-models reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e05-t17-switch-back-to-the-5-5-models
 status:
   phase: Pending

@@ -1,0 +1,77 @@
+# TASK v1-e32-t29-harms-headings-under-impact - Harms headings counted under Impact, the word the coach's debaters use
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t29-harms-headings-under-impact
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "Harms headings counted under Impact, the word the coach's debaters use"
+spec:
+  # Filed by the PM, 2026-10-27, from the coach's review of the republished Policy report, 2026-10-27.
+  description: >-
+    The coach: Policy debate no longer says "Harms"; debaters call that part of an advantage its
+    impact. Count first, on the synthetic fixtures and over hspolicy26 read-only: where "harms"
+    reaches the report today (a heading the normalizer keeps, a section or column name, an
+    impact or link-chain row) and how many headings and cards each carries. Then fold harms
+    headings into the advantage's impact, as the coach asked, so the report never shows "Harms"
+    as its own section, and every count it carried is under Impact. Taxonomy ids are unchanged.
+  priority: 3
+  constraints:
+    packages: [debate_core.arguments, packages/debate_core/tests, config/landscape, tests/fixtures/landscape, scripts, tests/scripts]
+    forbidden:
+      - A taxonomy id renamed or reused
+      - Card text, a school or team code in any fixture
+      - A count lost: every card under harms reaches Impact
+  context:
+    - kind: TaskRef
+      name: v1-e32-t25-readable-impact-chains
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Counts first: where harms reaches the report and what it carries, in the report.
+    - id: ac2
+      description: >-
+        On the synthetic fixtures, no section reads "Harms", and its cards and headings are
+        counted under the advantage's impact with no count lost, matching hand-written
+        golden files; tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t29-harms-headings-under-impact-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    Count where harms reaches the report, then fold it into Impact.
+  goalRef:
+    name: v1-e32-t29-harms-headings-under-impact
+  graph:
+    nodes:
+      - id: harms-under-impact
+        kind: Task
+        name: Harms under Impact
+        description: >-
+          Count where harms reaches the report, then fold it into Impact.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Landscape tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/landscape]
+status:
+  phase: Pending

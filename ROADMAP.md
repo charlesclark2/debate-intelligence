@@ -60,7 +60,7 @@ v2.3's extension work.
 
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
-| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 54 | 47 | 252 |
+| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 47 | 254 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 108 | 83 | 498 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 56 | 40 | 282 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 16 | 10 | 114 |
@@ -134,6 +134,7 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 | [The container imports each integration in its own factory, and selection follows a command to its factories](plan_specs/v1/e01-repo-foundation/t39-container-builds-integrations-lazily.yaml) `v1-e01-t39-container-builds-integrations-lazily` | Pending | 1 | 4.0 |
 | [The planted-break check runs the tests nearest a break by what reads it, not by path](plan_specs/v1/e01-repo-foundation/t40-planted-break-nearest-ordering.yaml) `v1-e01-t40-planted-break-nearest-ordering` | Pending | 1 | 1.0 |
 | [The pull request's smoke tier reads the bundled profiles, as the installed build does](plan_specs/v1/e01-repo-foundation/t41-pr-smoke-reads-the-bundled-profiles.yaml) `v1-e01-t41-pr-smoke-reads-the-bundled-profiles` | Pending | 1 | 2.0 |
+| [Coverage measured in the test parts and combined, so the push run is never held by one unsplit job](plan_specs/v1/e01-repo-foundation/t42-coverage-measured-in-the-parts.yaml) `v1-e01-t42-coverage-measured-in-the-parts` | Pending | 1 | 2.0 |
 
 #### [E02 — Domain Core: Entities, Ports & Local Persistence](plan_specs/v1/e02-domain-core/epic.yaml)
 
@@ -315,7 +316,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [Dev routes to Claude models this account can call while the 5.5 quotas are held at zero](plan_specs/v1/e05-model-router/t13-dev-routes-to-callable-claude-models.yaml) `v1-e05-t13-dev-routes-to-callable-claude-models` | Succeeded | 1 | 2.0 |
 | [A cheaper model for the high-volume route, chosen by the coach-labelled evaluation](plan_specs/v1/e05-model-router/t14-cheaper-model-for-high-volume-evaluated-first.yaml) `v1-e05-t14-cheaper-model-for-high-volume-evaluated-first` | Pending | 1 | 3.0 |
 | [A monthly model budget beside the daily one, at the coach's $50 ceiling](plan_specs/v1/e05-model-router/t15-monthly-model-budget.yaml) `v1-e05-t15-monthly-model-budget` | Pending | 1 | 2.0 |
-| [An AWS budget alarm on the account's model spend at 80% and 100% of $50](plan_specs/v1/e05-model-router/t16-bedrock-budget-alarm.yaml) `v1-e05-t16-bedrock-budget-alarm` | Pending | 1 | 2.0 |
+| [An AWS budget alarm on the account's model spend, $100 a month with a first notice at $50](plan_specs/v1/e05-model-router/t16-bedrock-budget-alarm.yaml) `v1-e05-t16-bedrock-budget-alarm` | Pending | 1 | 2.0 |
 | [Dev back on the 5.5 models, and prod's Bedrock grant applied, once the quotas are restored](plan_specs/v1/e05-model-router/t17-switch-back-to-the-5-5-models.yaml) `v1-e05-t17-switch-back-to-the-5-5-models` | Pending | 2 | 2.0 |
 
 #### [E32 — Argument Landscape Reports](plan_specs/v1/e32-argument-landscape/epic.yaml)

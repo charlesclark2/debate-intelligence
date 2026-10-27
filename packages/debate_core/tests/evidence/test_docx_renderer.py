@@ -32,6 +32,8 @@ from xml.etree import ElementTree
 
 import docx
 import pytest
+from docx.opc.packuri import PackURI
+from docx.opc.part import Part
 from docx.text.paragraph import Paragraph
 from tests.fixtures.card.card_world import CardWorld, news_request
 from tests.fixtures.verification.verification_world import run
@@ -50,6 +52,11 @@ from debate_core.domain import (
 from debate_core.domain.caselist import SourceDocument, SourceFormat, SourceOrigin
 from debate_core.domain.debate_files import ParsedDocument
 from debate_core.evidence.card_rendering import CardToRender, CiteText, DocumentHeadings, RenderRefused
+from debate_core.evidence.docx_manifest_part import (
+    EmbeddedManifestError,
+    read_embedded_manifest,
+    read_embedded_manifest_bytes,
+)
 from debate_core.evidence.docx_renderer import render_cards_docx
 from debate_core.evidence.format_profile import (
     FORMAT_PROFILES_DIRECTORY,
@@ -58,7 +65,12 @@ from debate_core.evidence.format_profile import (
     load_format_profile_from_text,
     resolve_format_profile,
 )
-from debate_core.evidence.manifest import MANIFEST_VERSION, CardManifest, SnapshotReference
+from debate_core.evidence.manifest import (
+    MANIFEST_VERSION,
+    CardManifest,
+    SnapshotReference,
+    serialize_manifest,
+)
 from debate_core.integrations.docx_file_writer.base_template import render_styles_xml
 from debate_core.integrations.docx_parser.parser import DebateDocxParser
 from debate_core.testing.builders import DEFAULT_CITATION, build_card, build_source_snapshot
@@ -793,3 +805,169 @@ def test_a_fully_verified_cite_has_no_unverified_mark(news: tuple[Card, CardMani
     cite = read_paragraphs(render_cards_docx(manifest, [CardToRender(card, NEWS_CITE)], TEAM_DEFAULT))[1]
 
     assert cite.text == NEWS_CITE.full_cite
+
+
+# --------------------------------------------------------------------------------------------
+# Node manifest-part: the embedded custom XML manifest, and reading it back
+# --------------------------------------------------------------------------------------------
+
+MANIFEST_NAMESPACE: Final = "urn:debate-intelligence:manifest:v1"
+CUSTOM_XML: Final = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml"
+
+
+def custom_xml_items(data: bytes) -> dict[str, bytes]:
+    """Every custom XML data item in the package, by member name, without their properties parts."""
+    with zipfile.ZipFile(io.BytesIO(data)) as package:
+        return {
+            name: package.read(name)
+            for name in package.namelist()
+            if name.startswith("customXml/item") and not name.startswith("customXml/itemProps")
+        }
+
+
+def test_the_manifest_part_holds_the_manifests_serialized_bytes_in_one_namespaced_element(
+    news: tuple[Card, CardManifest],
+) -> None:
+    card, manifest = news
+
+    data = render_cards_docx(manifest, [CardToRender(card, NEWS_CITE)], TEAM_DEFAULT)
+
+    [(name, item)] = custom_xml_items(data).items()
+    root = ElementTree.fromstring(item)
+    assert name == "customXml/item1.xml"
+    assert root.tag == f"{{{MANIFEST_NAMESPACE}}}manifest"
+    assert len(root) == 0
+    assert (root.text or "").encode("utf-8") == serialize_manifest(manifest)
+
+
+def test_the_manifest_part_is_related_from_the_document_with_its_properties_part(
+    news: tuple[Card, CardManifest],
+) -> None:
+    card, manifest = news
+
+    data = render_cards_docx(manifest, [CardToRender(card, NEWS_CITE)], TEAM_DEFAULT)
+
+    with zipfile.ZipFile(io.BytesIO(data)) as package:
+        relationships = ElementTree.fromstring(package.read("word/_rels/document.xml.rels"))
+        item_relationships = ElementTree.fromstring(package.read("customXml/_rels/item1.xml.rels"))
+        properties = ElementTree.fromstring(package.read("customXml/itemProps1.xml"))
+        content_types = package.read("[Content_Types].xml").decode("utf-8")
+    assert [r.get("Target") for r in relationships if r.get("Type") == CUSTOM_XML] == [
+        "../customXml/item1.xml"
+    ]
+    assert [r.get("Target") for r in item_relationships] == ["itemProps1.xml"]
+    schema_refs = properties.iter(
+        "{http://schemas.openxmlformats.org/officeDocument/2006/customXml}schemaRef"
+    )
+    assert [
+        ref.get("{http://schemas.openxmlformats.org/officeDocument/2006/customXml}uri") for ref in schema_refs
+    ] == [MANIFEST_NAMESPACE]
+    assert 'PartName="/customXml/itemProps1.xml"' in content_types
+
+
+def test_read_embedded_manifest_gives_back_the_same_manifest_and_bytes(
+    news: tuple[Card, CardManifest], tmp_path: Path
+) -> None:
+    card, manifest = news
+    path = tmp_path / "evidence.docx"
+    path.write_bytes(render_cards_docx(manifest, [CardToRender(card, NEWS_CITE)], TEAM_DEFAULT))
+
+    assert read_embedded_manifest(path) == manifest
+    assert read_embedded_manifest_bytes(path) == serialize_manifest(manifest)
+
+
+def test_the_embedded_manifest_survives_a_save_and_reopen_beside_another_custom_xml_part(
+    news: tuple[Card, CardManifest], tmp_path: Path
+) -> None:
+    """Word keeps custom XML parts, and may add its own (a bibliography) and renumber them."""
+    card, manifest = news
+    rendered = tmp_path / "rendered.docx"
+    rendered.write_bytes(render_cards_docx(manifest, [CardToRender(card, NEWS_CITE)], TEAM_DEFAULT))
+    document = docx.Document(str(rendered))
+    sources = Part(
+        PackURI("/customXml/item2.xml"),
+        "application/xml",
+        b'<b:Sources xmlns:b="http://schemas.openxmlformats.org/officeDocument/2006/bibliography"/>',
+        document.part.package,
+    )
+    document.part.relate_to(sources, CUSTOM_XML)
+    saved = tmp_path / "saved.docx"
+    document.save(str(saved))
+
+    assert len(custom_xml_items(saved.read_bytes())) == 2
+    assert read_embedded_manifest_bytes(saved) == serialize_manifest(manifest)
+    assert read_embedded_manifest(saved) == manifest
+
+
+def test_one_manifest_lists_every_card_of_the_document_in_document_order(tmp_path: Path) -> None:
+    cards = [
+        CardToRender(verified(hand_card(card_id=f"0CARD00000000000000000000{n}", tag=f"Tag {n}")), HAND_CITE)
+        for n in (3, 1, 2)
+    ]
+    path = tmp_path / "three.docx"
+    path.write_bytes(render(*cards))
+
+    embedded = read_embedded_manifest(path)
+    tags = [p.text for p in read_paragraphs(path.read_bytes()) if p.style_id == "Heading4"]
+    assert [c.card_id for c in embedded.cards] == [c.card.card_id for c in cards]
+    assert tags == [c.tag for c in embedded.cards] == ["Tag 3", "Tag 1", "Tag 2"]
+    assert len(custom_xml_items(path.read_bytes())) == 1
+
+
+def test_a_manifest_holding_xml_markup_characters_round_trips_exactly(tmp_path: Path) -> None:
+    card = verified(hand_card(tag='Methane <b>"rises"</b> & ]]> the feedback runs'))
+    path = tmp_path / "markup.docx"
+    path.write_bytes(render(CardToRender(card, HAND_CITE)))
+
+    assert read_embedded_manifest(path).cards == (card,)
+    assert read_embedded_manifest_bytes(path) == serialize_manifest(manifest_of(card))
+
+
+def rewritten(data: bytes, replace: dict[str, bytes | None]) -> bytes:
+    """`data` with members replaced (or removed, for None), every other member as it was."""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(data)) as source, zipfile.ZipFile(buffer, "w") as target:
+        for name in source.namelist():
+            if name not in replace:
+                target.writestr(name, source.read(name))
+        for name, content in replace.items():
+            if content is not None:
+                target.writestr(name, content)
+    return buffer.getvalue()
+
+
+def test_a_document_with_no_manifest_or_two_is_refused_by_the_reader(tmp_path: Path) -> None:
+    data = render(CardToRender(verified(hand_card()), HAND_CITE))
+    item = custom_xml_items(data)["customXml/item1.xml"]
+    none = tmp_path / "none.docx"
+    none.write_bytes(rewritten(data, {"customXml/item1.xml": None}))
+    two = tmp_path / "two.docx"
+    two.write_bytes(rewritten(data, {"customXml/item7.xml": item}))
+
+    with pytest.raises(EmbeddedManifestError, match="holds no embedded manifest"):
+        read_embedded_manifest(none)
+    with pytest.raises(EmbeddedManifestError, match="holds 2 embedded manifests"):
+        read_embedded_manifest(two)
+
+
+def test_the_manifest_reader_refuses_a_custom_xml_part_that_declares_a_document_type(tmp_path: Path) -> None:
+    data = render(CardToRender(verified(hand_card()), HAND_CITE))
+    hostile = (
+        b'<?xml version="1.0"?><!DOCTYPE m [<!ENTITY a "aaaaaaaaaa">]>'
+        b'<manifest xmlns="urn:debate-intelligence:manifest:v1">&a;</manifest>'
+    )
+    path = tmp_path / "hostile.docx"
+    path.write_bytes(rewritten(data, {"customXml/item1.xml": hostile}))
+
+    with pytest.raises(EmbeddedManifestError, match="declares a document type"):
+        read_embedded_manifest_bytes(path)
+
+
+def test_a_manifest_element_with_more_than_text_in_it_is_refused(tmp_path: Path) -> None:
+    data = render(CardToRender(verified(hand_card()), HAND_CITE))
+    nested = b'<manifest xmlns="urn:debate-intelligence:manifest:v1">{}<extra/></manifest>'
+    path = tmp_path / "nested.docx"
+    path.write_bytes(rewritten(data, {"customXml/item1.xml": nested}))
+
+    with pytest.raises(EmbeddedManifestError, match="holds only the manifest's text"):
+        read_embedded_manifest_bytes(path)

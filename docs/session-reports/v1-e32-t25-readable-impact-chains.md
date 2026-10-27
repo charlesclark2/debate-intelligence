@@ -168,7 +168,15 @@ The report is local: the republish follows the cloud cutover.
 
 ## Questions for the PM
 
-The same questions as a paste-ready relay prompt:
+**The PM's rulings (2026-10-26, with the verdict ACCEPTED):**
+1. **(a), the order as specified:** scenario, internal link, tag, card above. Nothing changes.
+2. **Withheld tags in the impact table and the link-chain table** become a follow-up task that the PM
+   files, counted first. Nothing changes here.
+3. **The recount is accepted for the per-position view.** The dry run stays per kind.
+
+The PR merges in full.
+
+The questions as they were sent, a paste-ready relay prompt:
 
 ```text
 v1-e32-t25 (readable impact chains): built as specified; ac1, ac2 and ac3 pass (the operator's dry run matched every predicted count).
@@ -468,9 +476,47 @@ scripts/task pr v1-e32-t25-readable-impact-chains
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-26
 
 **Notes:**
+
+Every impact rank is now named, with its source marked, and the real store moved exactly as
+counted.
+1. **ac1 to ac3 and the node's criterion pass.**
+   * The counts came first and kept to the stop condition: all 3 of the Economy DA's impact cards
+     have their own tag.
+   * The goldens were written by hand before any code (`b2efa7a`).
+   * Red first: 30 failed against a skeleton. The 3 passes are must-not cases, and the mutants show
+     they bite.
+   * The operator's dry run matched every predicted count per kind. The Economy DA's ranks are
+     named `(tag)` in the session's recount at `c73b8df`.
+2. **Mutants: 21, all caught,** the PM's three among them.
+3. **Ruling on question 1: (a), the order as specified.**
+   * The mark tells the coach what each line is. (c) would leave out most ranks.
+   * What the Economy DA's impact runs through, its mechanism, is `v1-e32-t27`'s question. That
+     task counts it first and may change what names a DA's ranks there.
+4. **Ruling on question 2: a follow-up, counted first.**
+   * The impact table's Tag column and the link-chain table quote 6 own tags and 7 card-above tags
+     holding a caselist word.
+   * The circuit-wide report names no school or team code anywhere, so nothing stands beside one,
+     and policy 1.13 holds.
+   * The PM files an E32 task (p3): count which words they are, then decide whether those tables
+     withhold too.
+5. **Ruling on question 3: accepted.** The recount gives the per-position view, and the dry run
+   stays per kind.
+6. **Deviations 1 to 3 accepted.** The PM adds `debate_core.domain` to `constraints.packages`
+   (`scripts` and `tests/scripts` are already added). The session's read-only counts took 51 s.
+7. **Decisions accepted:**
+   * withholding applies only where a rank reaches a text;
+   * a withheld internal link or card above is kept off the row and the CSV;
+   * t14's kind line is replaced, since it would now be untrue;
+   * the CSV's columns are unchanged.
+8. **The affected set** (232 files) is left to the PR's `ci` under agreement 10. Its first 76%
+   passed with no failure, the changed directories and the always-run list passed (3,073), and the
+   static checks are clean.
+
+No re-review is needed. The Goal is `Succeeded`, so the PR merges in full. The report goes out with
+the landscape republish.

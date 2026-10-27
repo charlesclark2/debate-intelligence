@@ -12,8 +12,14 @@
 state files, the published index's manifest and the parsed store's current version directory of each
 caselist named and `openev`, each checked against the SHA-256 its publisher recorded. Then the copy's
 suppression list is reconciled with the bucket's, so that a parse or an index build in the copy
-leaves out what the bucket's list stops. Raw sources are not restored: a parse in the copy fetches
-from `raw/` the ones it needs, as a cloud run's does.
+leaves out what the bucket's list stops. Raw sources are not restored unless asked for: a parse in
+the copy fetches from `raw/` the ones it needs, as a cloud run's does.
+
+**With sources** (`--with-sources`, `v1-e40-t10`), the restore then fetches, still under the lock and
+into the same directory, the raw sources the restored manifests name, optionally only those of some
+caselists and snapshots: what a hand publish to prod from the copy needs. Each is checked against its
+digest, and a source missing from the bucket stops the command unless the copy's suppression list,
+just reconciled, holds it. :mod:`debate_core.application.caselist.run_state_sources` is that rule.
 
 **Under the lock.** A run saves its state at several moments: the download ledger before each
 download, the bundle after its publish stage and again at its end, the run log at its end. A copy
@@ -38,7 +44,13 @@ from pathlib import Path
 from typing import Final
 
 from debate_core.application.caselist.run_state import RestoreReport, RunState
-from debate_core.application.caselist.suppression import RecordedSuppressionList
+from debate_core.application.caselist.run_state_sources import (
+    RestoredSources,
+    SourceSelection,
+    SourcesFetched,
+    SourcesPlan,
+)
+from debate_core.application.caselist.suppression import RecordedSuppressionList, load_suppression_state
 from debate_core.application.errors import DomainError
 
 __all__ = [
@@ -92,6 +104,8 @@ class RestoredCopy:
     report: RestoreReport
     manifests: int
     suppression_entries: int
+    sources: SourcesFetched | None = None
+    """The raw sources fetched with `--with-sources`; `None` without it."""
 
 
 class RunStateRestore:
@@ -100,6 +114,7 @@ class RunStateRestore:
     Args:
         state_in: The run's state in the bucket, over a given data directory.
         suppression_in: The suppression list over a given data directory's copy and the bucket's.
+        sources_in: The raw sources of a copy restored into a given directory (`--with-sources`).
         live_data_dir: This environment's own data directory, which is refused.
         parsed_version: The parsed store's version directory this build reads.
     """
@@ -109,11 +124,13 @@ class RunStateRestore:
         *,
         state_in: Callable[[Path], RunState],
         suppression_in: Callable[[Path], RecordedSuppressionList],
+        sources_in: Callable[[Path], RestoredSources],
         live_data_dir: Path,
         parsed_version: str,
     ) -> None:
         self._state_in = state_in
         self._suppression_in = suppression_in
+        self._sources_in = sources_in
         self._live_data_dir = Path(live_data_dir)
         self._parsed_version = parsed_version
 
@@ -121,11 +138,22 @@ class RunStateRestore:
         """Why `target` is refused, or `None`: see :func:`restore_target_refusal`."""
         return restore_target_refusal(target, live_data_dir=self._live_data_dir)
 
-    async def restore(self, target: Path, caselists: Sequence[str]) -> RestoredCopy:
+    async def restore(
+        self,
+        target: Path,
+        caselists: Sequence[str],
+        *,
+        sources: SourceSelection | None = None,
+        on_sources_planned: Callable[[SourcesPlan], None] | None = None,
+    ) -> RestoredCopy:
         """Restore the working copy into `target`. Call it holding the bucket's run lock.
 
+        With `sources`, then fetch the raw sources the selected manifests name, calling
+        `on_sources_planned` with the counts and bytes before the first fetch.
+
         Raises :class:`RestoreTargetRefused` before anything is written, and otherwise what
-        :meth:`RunState.restore` raises.
+        :meth:`RunState.restore` and, with `sources`,
+        :class:`~debate_core.application.caselist.run_state_sources.RestoredSources` raise.
         """
         refusal = self.refusal(target)
         if refusal is not None:
@@ -138,8 +166,17 @@ class RunStateRestore:
         # everything the copy's does.
         suppression = self._suppression_in(directory)
         await suppression.reconcile()
+        fetched = None
+        if sources is not None:
+            restored_sources = self._sources_in(directory)
+            plan = await restored_sources.plan(sources, await load_suppression_state(suppression))
+            if on_sources_planned is not None:
+                on_sources_planned(plan)
+            restored_sources.refuse_too_little_room(plan)
+            fetched = await restored_sources.fetch(plan)
         return RestoredCopy(
             report=report,
             manifests=len(await state.local_manifests()),
             suppression_entries=len(await suppression.entries()),
+            sources=fetched,
         )

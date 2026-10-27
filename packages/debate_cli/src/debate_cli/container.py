@@ -166,6 +166,7 @@ from debate_core.application.caselist.run_lock import (
 from debate_core.application.caselist.run_state import RunState
 from debate_core.application.caselist.run_state_restore import RunStateRestore
 from debate_core.application.caselist.run_state_seed import RunStateSeed
+from debate_core.application.caselist.run_state_sources import RestoredSources
 from debate_core.application.caselist.status_service import CaselistStatusService
 from debate_core.application.caselist.suppression import (
     REMOVAL_LOG_KEY,
@@ -1521,8 +1522,8 @@ class ServiceContainer:
     def run_state_restore(self) -> RunStateRestore:
         """`caselist restore-run-state`: a working copy restored into a directory of its own (`v1-e40-t06`).
 
-        The run state and the suppression list it writes are built over the directory named, never
-        over this environment's data directory, which it refuses.
+        The run state, the suppression list and (`v1-e40-t10`) the raw sources it writes are built over
+        the directory named, never over this environment's data directory, which it refuses.
         """
         return self.singleton("run_state_restore", self._build_run_state_restore)
 
@@ -1533,9 +1534,15 @@ class ServiceContainer:
         def state_in(data_dir: Path) -> RunState:
             return self._run_state_in(data_dir, self._suppression_list_in(data_dir))
 
+        def sources_in(data_dir: Path) -> RestoredSources:
+            return RestoredSources(
+                bucket=self._evidence_bucket(), local=self._local_evidence(data_dir), directory=data_dir
+            )
+
         return RunStateRestore(
             state_in=state_in,
             suppression_in=self._suppression_list_in,
+            sources_in=sources_in,
             live_data_dir=self.settings.storage.data_dir,
             parsed_version=DebateDocxParser().parser_version,
         )

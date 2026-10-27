@@ -6,29 +6,44 @@
 | Spec | [`plan_specs/v1/e40-cloud-caselist-run/t12-held-upload-records-reach-the-bucket.yaml`](../../plan_specs/v1/e40-cloud-caselist-run/t12-held-upload-records-reach-the-bucket.yaml) |
 | Epic / release | `v1-e40-cloud-caselist-run` / `v1.8` |
 | Branch | `task/v1-e40-t12-held-upload-records-reach-the-bucket` |
-| Session status | PARTIAL: stopped at the counts checkpoint (ac1), waiting for the PM's ruling. Nothing is built. |
+| Session status | COMPLETE |
 
 ## Summary
 
-This session stopped at the counts checkpoint, as the PM's brief asks. The counts were read from code
-and tests only, with no store and no AWS. The held-upload record is `held-digests.jsonl`. It has
-four fields and no date, and its one writer is the import pipeline. Today, in every bucket-capable
-command, that writer appends to this machine's copy only. Both readers, the removal plan and
-`caselist status`, already read this machine's copy and `manifests/_suppression/held-digests.jsonl`
-together. So in the cloud the readers are already looking in the right place, but nothing puts the
-line there: the line is written into the task's working copy and is lost when the task stops. The
-run-state bundle does not carry the record, and its member check refuses anything but the manifests
-and the database. **Recommendation:** keep the record at its existing key under
-`manifests/_suppression/`. In bucket mode, every save of the run-state bundle first gives that key
-the lines the working copy holds. Every save already runs under the run's lock, and the backfile
-import's import step does not. Readers change in no code. The relay prompt below asks for that
-ruling, plus three smaller questions.
+In bucket mode, every save of the run-state bundle now does one thing first, under the run's lock.
+It appends to `manifests/_suppression/held-digests.jsonl` every held-upload line the working copy
+holds and the bucket lacks, before the bundle, whether or not the bundle is then saved
+(`RunState.save_held_digests`). The append only adds lines: a removal's line already there stays
+byte for byte. No reader, format or IAM grant changed. This is what the PM ruled on 2026-10-27.
 
-**Look first at:** Q1 and Q2 in the relay prompt (the place, and when the write happens), and
-Deviation candidate 1. The rule "only the takedown credential writes under `manifests/_suppression/`"
-is a code convention, not IAM.
+Against moto, two cases are found from another data directory by both `caselist status` and the
+removal run again: a cloud task that refuses an upload at a held path and then dies, and a backfile
+import that does the same. The re-run's `--execute` then suppresses the upload. All of these tests
+failed first. Of 9 mutants, 8 were caught, including the PM's three and the PM's sixth. The survivor
+is equivalent, for a reason given below. ADR-0020 (3) has its dated amendment, and the layout
+document, the removal runbook (steps 8 and 9) and the docstrings say who writes the key.
 
-## Counts (ac1)
+**Look first at:** Deviation 1. My ac1 counts missed a writer: the pull's search index stage already
+reconciles the held-digest record to the bucket. The change still closes two real gaps, but they are
+narrower than the counts implied. A task that dies between its publish stage and its index stage
+loses the record for good on `dev` today, and the backfile import never carries it at all.
+
+## The build, against the rulings
+
+| Ruling | What was done |
+|---|---|
+| The existing key, no reader or format change | `manifests/_suppression/held-digests.jsonl`. Readers, `HeldDigestEntry` and IAM are untouched. |
+| `save_bundle` first gives the bucket the working copy's lines, under the lease, at every save site | [run_state.py](../../packages/debate_core/src/debate_core/application/caselist/run_state.py) `save_held_digests`, called first in `save_bundle`, before the withheld and confirmed checks. All four save sites (pull, seed, backfile step 3, removal rewrite) hold the lease, and the write goes through the fenced adapter. |
+| Append only what the bucket lacks; never rewrite or drop a line; test it | Through the list's own set-union append (`ObjectStoreAppendOnlyRecord`: read, extend, write, check the old bytes are still the prefix). Tested: a removal's line stays byte for byte, the bucket keeps both versions, and a line already present is not written again. |
+| Say what a run killed before any save leaves | Tested: the next run redoes the week and meets the upload again. The known edge is under Decisions. |
+| Amend the rule | ADR-0020 (3), a dated amendment; the three named docstrings; evidence-store-layout.md's "Who may touch what". |
+| Local mode unchanged; `caselist import` local-only; status's inbox section this machine's | No code path changed in local mode. A local-mode pull that dies before its index stage leaves the bucket without the record, as before (test). `caselist import` is untouched. The runbook line is in step 9. |
+
+## Counts (ac1), as sent to the PM
+
+The counts and proposal below are as they went to the PM at the checkpoint (commit `88e5dcc`, whose
+version of this report also holds the relay prompt). **Correction:** there is a fourth writer, the
+pull's search index stage. See Deviation 1.
 
 Read on 2026-10-27 from `dev` at `877f49d`, on this branch.
 
@@ -143,114 +158,182 @@ every `put_file` sets: the content digest. Its lines are three digests or ids. T
 a test that lists every key and every metadata value the scenario leaves in the moto bucket and finds
 no school, team code or path.
 
-## Relay prompt for the PM
-
-```text
-PM: v1-e40-t12 (held upload records reach the bucket) stopped at the counts checkpoint. The counts
-are in docs/session-reports/v1-e40-t12-held-upload-records-reach-the-bucket.md under "Counts (ac1)".
-Nothing is built. Four questions; a recommendation leads each.
-
-Facts. The record is held-digests.jsonl: schema_version, sha256, disclosure (a digest of the held
-path), request_id. No date, no name, no path. Its one writer (the import pipeline) appends to the
-working copy alone in every command, the cloud pull and the backfile import included. Both readers
-(the removal plan and caselist status, "REFUSED AT IMPORT AT A HELD PATH") already read the working
-copy AND manifests/_suppression/held-digests.jsonl as one. Today only caselist remove --execute
-writes that bucket key, and only with lines its own machine has. The run-state bundle does not
-carry the record, and its member check refuses anything but manifests and the database.
-
-Q1. Where in the bucket?
-  (a) RECOMMENDED: the existing key, manifests/_suppression/held-digests.jsonl. No reader changes,
-      no format change, and builds older than this task are unaffected.
-  (b) Inside the run-state bundle: builds older than this task refuse such a bundle (fallback week,
-      image rollback), caselist status would have to download the bundle, and the removal's rewrite
-      would carry a second copy.
-  (c) A new key under reports/sync/state/: both readers gain a third copy, and the state files are
-      saved as written, which in the backfile import is outside the lock.
-
-Q2. When is it written?
-  (a) RECOMMENDED: in bucket mode, RunState.save_bundle first gives the bucket's held-digest record
-      the lines the working copy holds, before its withheld and confirmed checks. Every save site
-      (pull after publish, at the end and on SIGTERM; backfile step 3; seed; removal rewrite) already
-      holds the lease through the fenced client. A bundle that records a snapshot is never in the
-      bucket without the held uploads its import refused.
-  (b) As the import meets each upload, through the union: this works in the pull, which holds the
-      lock, but the backfile import imports unlocked (its step 2), so its write would be refused
-      RUN_LOCK_NOT_HELD, and the backfile would need a second path.
-
-Q3. The everyday credential (the run role) then writes one key under manifests/_suppression/.
-  IAM already allows it: the run role holds exactly the EvidenceOperator document, PutObject on
-  every key, and the store layout document's table says the same ("Write: Any object"). But the
-  code says otherwise in three places: the ports/suppression.py docstring, the docstring of
-  LocalFallbackSuppressionList.append_held_digests ("may not write under manifests/_suppression/"),
-  and is_suppression_key ("which only remove and unsuppress may write"). store sync still skips the
-  prefix.
-  RECOMMENDED: amend the rule to "held-digests.jsonl is also appended by a bucket-mode run under
-  its lock"; write that in ADR-0020 (3) as an amendment and in those docstrings; IAM unchanged.
-  This needs docs/architecture added to the spec's constraints.packages, for one line in
-  evidence-store-layout.md's table of what writes where. Or tell me to leave the layout document
-  alone and say it in the ADR only.
-
-Q4. Confirm the edges. RECOMMENDED: yes to each.
-  - Local mode unchanged: the import still writes this machine's copy only, and the next removal
-    from that machine carries it to the bucket.
-  - caselist import (never writes a bucket) stays local-only in both modes.
-  - caselist status keeps reading only this machine's inbox for "HELD UPLOADS IN THE DOWNLOAD
-    INBOX". A cloud task's held upload shows under "REFUSED AT IMPORT AT A HELD PATH" and
-    "RM-... is owed again"; one runbook line in caselist-removal.md step 9 says so.
-
-After the ruling: moto only, red first; then mutants under agreement 8, including your three
-(written outside the lock; a removal reading only the local record in bucket mode; a path or team
-code reaching a key), plus "save_bundle skips the write when the bundle is not saved" and "local
-mode writes the bucket". The change reaches the cloud with t13's image (caselist-cloud-run.md,
-"A new image, later"); I draft no deploy commands.
-```
 
 ## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
-| `held-upload-records` | In progress | Counts done and the relay prompt written. The build waits for the PM's ruling. |
+| `held-upload-records` | Done | Counts and a relay prompt to the PM; then, after the rulings: the save, the tests (red first), 9 mutants, the ADR amendment, the docs and the runbook lines. |
 
 ## Acceptance criteria
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| ac1: counts first (what the record holds, its readers, whether the bundle carries it), sent to the PM with the proposed place in the bucket | PASS (pending the PM's ruling) | Read-only, from code and tests: see "Counts (ac1)". The relay prompt above carries it to the PM. |
-| ac2: against moto, a held upload one task records is found by a removal run and by `caselist status` from another data directory in bucket mode; tests shown failing first | NOT RUN | Nothing is built before the ruling (the PM's brief). |
-| Node `held-upload-records`: `uv run pytest packages/debate_core/tests/application -k held` | NOT RUN | The same reason. |
+| ac1: counts first (what the record holds, its readers, whether the bundle carries it), sent to the PM with the proposed place in the bucket | PASS, with a correction | Sent at the checkpoint (commit `88e5dcc`), and the PM ruled on 2026-10-27. The counts missed one writer, the pull's search index stage (Deviation 1). The place and the timing the PM chose are unaffected. |
+| ac2: against moto, a held upload one task records is found by a removal run and by `caselist status` from another data directory in bucket mode; tests shown failing first | PASS | **Red**, with `run_state.py` at the task's start commit (`git show 9a20f23:…`), every other file as built: `.venv/bin/python -m pytest packages/debate_core/tests/application/test_run_state_saves_held_digests.py packages/debate_cli/tests/bucket_mode/test_bucket_mode_held_uploads.py "packages/debate_cli/tests/bucket_mode/test_backfile_import.py::test_an_upload_a_backfile_import_refused_at_a_held_path_is_found_from_another_data_directory" -n 4 -p no:randomly -q --tb=line` → `10 failed, 4 passed in 15.49s`. Each failure was the record's absence from the bucket: `assert None == b'{…}'` (core ×4), `NoSuchKey` (record and rule 3), `the task uploaded the record` (lock), `KeyError: '1ec6eecb…'` (the re-run's plan lacks the upload), and `{'uploads': 0, …}` (status, pull and backfile). The 4 that passed hold either way: a line already in the bucket is not written again; an empty copy creates nothing; local mode; and a task killed before any save, whose next full run carries the record through its index stage on `dev` too. **Green**, the same command → `14 passed`. |
+| Node `held-upload-records`: `uv run pytest packages/debate_core/tests/application -k held` | PASS | Run as `perl -e 'alarm 115; exec @ARGV' .venv/bin/python -m pytest packages/debate_core/tests/application -k held -q -p no:randomly` (agreement 10: the alarm goes on the interpreter) → `211 passed in 87.58s`. |
+
+### The tests
+
+[test_run_state_saves_held_digests.py](../../packages/debate_core/tests/application/test_run_state_saves_held_digests.py)
+covers the save's rules on their own, against moto:
+
+- the held lines are written before the bundle (the upload order is recorded);
+- a removal's line already in the bucket stays byte for byte, and the bucket keeps two versions;
+- a line already present is not written again;
+- an unconfirmed manifest, or a withheld one, stops the bundle but not the record;
+- an empty copy creates nothing.
+
+[test_bucket_mode_held_uploads.py](../../packages/debate_cli/tests/bucket_mode/test_bucket_mode_held_uploads.py)
+runs the whole week through the CLI over moto. The Mac pulls two weeks, seeds the bucket and removes
+a file by `--source`, which holds its path. A later weekly carries new bytes at that path. A cloud
+task refuses them, publishes, and is hard-killed at the start of its parse stage, the way
+`test_bucket_mode_kills.py` kills one. Its directory is then deleted. From the Mac's data directory:
+
+- the record is in the bucket;
+- `caselist status` names the upload under refused-at-import;
+- the removal's dry run plans it as `held_at_import`, and `--execute` puts it on the list, after
+  which status says nothing is owed;
+- every upload of the record happened while the lock was `held` by the pull;
+- no key or metadata value in the bucket holds a school, a team code, a path, the working copy's
+  directory or `cloud-task`, and each line of the record has exactly its four fields.
+
+The same file holds two further cases. In the known edge, a task killed before any save, the next
+run meets the upload again. In local mode, a pull that dies before its index stage leaves the
+bucket without the record.
+
+[test_backfile_import.py](../../packages/debate_cli/tests/bucket_mode/test_backfile_import.py) gains
+the backfile case: the import runs unlocked, the record reaches the bucket at the locked step's save,
+and status and the re-run find it from the Mac's copy.
+
+### Mutants (working agreement 8)
+
+9 runs, each through
+`/private/tmp/claude-501/-Users-charlesclark-Documents-debate-debate-intelligence-tool-debate-intelligence-worktrees-v1-e40-t12-held-upload-records-reach-the-bucket/640d9673-e78a-4ffb-a227-a4f1d67b3c54/scratchpad/run_mutant.sh`.
+The script refuses a dirty tree, applies one named mutant
+(`/private/tmp/claude-501/-Users-charlesclark-Documents-debate-debate-intelligence-tool-debate-intelligence-worktrees-v1-e40-t12-held-upload-records-reach-the-bucket/640d9673-e78a-4ffb-a227-a4f1d67b3c54/scratchpad/mutate.py`),
+and runs the three covering files with `-n 4 -p no:randomly` and a fresh
+`HYPOTHESIS_STORAGE_DIRECTORY` (none of these files uses Hypothesis). It then restores from git, and
+the tree was clean after each run.
+
+| # | Mutant | Result |
+|---|---|---|
+| 1 | **PM 1**, the record written outside the lock: the write moved out of `save_bundle` to after the lease's release in `BucketRun.finish` | CAUGHT: 10 failed. The record was missing, and the lock test failed with `the task uploaded the record` |
+| 2 | **PM 1**, sharper: the save still writes, and an extra write follows the release | **SURVIVED** (14 passed), equivalent. By the release, the save has already given the bucket every line, so the extra write finds nothing missing and sends nothing. In bucket mode the fence would refuse it anyway (`RUN_LOCK_NOT_HELD`). Mutant 7 is the realistic way to write outside the lock |
+| 3 | **PM 2**, a removal reads only the local record in bucket mode (the planner built over the local copy) | CAUGHT: 2 failed (the re-run from another directory, pull and backfile) |
+| 4 | **PM 2**, its status half: `caselist status` reads only the local record in bucket mode | CAUGHT: 2 failed (status, pull and backfile) |
+| 5 | **PM 3**, a path reaches a key: the record keyed under the working copy's directory, `manifests/_suppression/cloud-task/held-digests.jsonl` | CAUGHT: 10 failed. The rule-3 scan names the key: `AssertionError: ('manifests/_suppression/cloud-task/held-digests.jsonl', {'sha256': …})`. The save site holds no school, team code or member path to leak, and the record's lines hold none; the scan covers every key, metadata value and line regardless |
+| 6 | Mine: the write skipped when the bundle is not saved (moved below the confirmed check) | CAUGHT: 2 failed (unconfirmed, withheld) |
+| 7 | Mine: local mode writes the bucket. The import appends to every copy, whatever the mode | CAUGHT: 3 failed. Local mode found the key; the backfile import failed `RUN_LOCK_NOT_HELD` ("in bucket mode a write to the evidence bucket needs the bucket's run lock, and this command does not hold it"), the import being its unlocked step; and the before-any-save case found the record written before any save |
+| 8 | **PM 6**, an append that rewrites the key whole: the local file uploaded over it | CAUGHT: 2 failed (the removal's line dropped; a line written again) |
+| 9 | Mine: the record written after the bundle rather than before it | CAUGHT: 3 failed (the upload order, the unconfirmed and the withheld cases) |
+
+### Before the report
+
+- **Affected set:** `uv run scripts/affected_tests.py` → `340 of 546 test files (62.3%) chosen in
+  7.4 s from 12 changed files`. The docstrings the ruling asked for sit in hub modules
+  (`suppression.py`, `ports/suppression.py`, `status_service.py`), which widens the selection. At
+  62% of a roughly six-minute suite this is over the two-minute line, so under agreement 10 it is
+  left to the pull request's `ci` check and not handed to the operator. Within the line I ran the
+  following, each `.venv/bin/python -m pytest … -m "not slow and not live"` under a 110 s alarm:
+  - `tests/specs tests/docs tests/scripts/test_check_command_blocks.py tests/scripts/test_docs_index.py packages/debate_cli/tests/test_app.py packages/debate_cli/tests/test_help_rendering.py` → `307 passed in 10.74s`
+  - `tests/architecture` → `209 passed in 6.20s`
+  - the 11 test files that read the removal runbook, the layout document or ADR-0020, plus `test_caselist_sync_run_state.py` → `225 passed in 104.59s`
+  - `packages/debate_cli/tests/bucket_mode` except the kills suite → `90 passed in 61.64s`; `test_bucket_mode_kills.py` → `21 passed in 33.45s`
+  - `packages/debate_core/tests/application/caselist` → `1625 passed in 75.33s`
+
+  A first attempt to run the always-run list and the document readers in one command was stopped
+  by its alarm at 115 s. Another worktree's tests had the load at 26, and nothing was reported. I
+  checked that no worker was orphaned, then ran the batches above.
+- `uv run ruff format --check .` → `1524 files already formatted`; `uv run ruff check .` → `All checks passed!`
+- `uv run pyright packages/debate_core packages/debate_cli` → `0 errors, 0 warnings, 0 informations`
+- `uv run lint-imports` → `Contracts: 18 kept, 0 broken.`; `uv run python scripts/check_thin_handlers.py` → `OK: 67 … handlers within 25 statements`
+- `uv run python scripts/check_command_blocks.py --base origin/dev` → OK; `uv run python scripts/docs_index.py --check-descriptions` → `All 55 indexed documents under docs/ have a description`
+- `uv run scripts/validate_specs.py` → `OK: 480 files, 40 epics, 418 tasks, 22 releases`
 
 ## Files changed
 
-- `docs/session-reports/v1-e40-t12-held-upload-records-reach-the-bucket.md`: this report, with the
-  counts and the relay prompt.
+- `packages/debate_core/src/debate_core/application/caselist/run_state.py`: `save_held_digests`,
+  called first in `save_bundle`; the module docstring's "What is saved".
+- `packages/debate_core/src/debate_core/application/caselist/suppression.py`,
+  `application/ports/suppression.py`, `application/caselist/status_service.py`: docstrings only.
+  They now say who writes the bucket's held-digest record.
+- `packages/debate_core/tests/application/test_run_state_saves_held_digests.py` (new),
+  `packages/debate_cli/tests/bucket_mode/test_bucket_mode_held_uploads.py` (new),
+  `packages/debate_cli/tests/bucket_mode/test_backfile_import.py` (one test added).
+- `docs/adr/0020-weekly-caselist-run-in-the-cloud.md`: the dated amendment in (3).
+- `docs/architecture/evidence-store-layout.md`: the exception under "Who may touch what"
+  (pre-approved by the PM).
+- `docs/runbooks/caselist-removal.md`: step 8's "who writes the bucket's copy", and step 9's line on
+  how a cloud task's held upload is found.
+- `plan_specs/v1/e40-cloud-caselist-run/t12-held-upload-records-reach-the-bucket.yaml`: phase
+  `Succeeded`.
 
 ## Deviations from the spec
 
-None yet. Two candidates are raised in the relay prompt (Q3) for the PM to rule on, not acted on:
-
-1. **The "takedown credential alone" rule for `manifests/_suppression/` is a code convention.** IAM
-   lets the everyday credential, and so the run role, write every key. The recommended place means
-   the run writes `held-digests.jsonl` there with that credential. ADR-0020 (3) and three docstrings
-   would be amended.
-2. **`docs/architecture` is not in `constraints.packages`.** The store layout document's table of
-   writers would need one line if the PM wants it there.
+1. **The ac1 counts missed a writer.** The pull's search index stage reconciles every copy of the
+   suppression list before it publishes, held-digest record included (`v1-e39-t09`;
+   `search_index_refresh.py`, step 1 of `_keep_current`). It is wired as
+   `reconcile=self.suppression_list().reconcile` (container.py:1761). My search looked for
+   `.reconcile()` calls and so missed the bound method passed in. I found it when the first
+   local-mode test failed: the bucket held the record after a plain local pull at the task's start
+   commit, with no change of mine. What follows from it:
+   - On `dev`, a pull that reaches its index stage with a session already carries the record to the
+     bucket, in either mode. The cloud gap this task closes is narrower than the counts said. First,
+     a task that stops after its post-publish save of the bundle and before its index stage: the
+     bundle records the week, so no later run meets the upload again, and the record is lost for
+     good. The pull test is that case. Second, the backfile import, which never runs the index stage.
+   - My Q4 answer for local mode was incomplete. There, the same pull's index stage carries the
+     record too, not only the next removal. "Local mode unchanged" holds for this change: no local
+     path was touched, and a test pins it.
+   - The rule the PM amended ("only remove and unsuppress write `manifests/_suppression/`") had not
+     been true since `v1-e39-t09`, because the index stage already wrote `held-digests.jsonl` with
+     the everyday credential. The amendment and the layout document now name both writers.
+2. **`docs/architecture` is not yet in `constraints.packages`.** The PM pre-approved it and will add it
+   in the next batch.
+3. **Docstrings beyond the three named.** These said only a removal writes the bucket's copy, and are
+   now true again: `HELD_DIGESTS_KEY`, the "And the held-digest record" paragraph of
+   `suppression.py`, `RecordedSuppressionList.append_held_digests` and `status_service.py`'s "What an
+   import refused". All are inside `debate_core.application`.
 
 ## Decisions and assumptions
 
-- The counts are from code and tests only, as the brief asks. No store, bucket or AWS call was made,
-  and no test was run, because nothing changed.
-- `v1-e40-t09-cloud-backfile-import` is still `Pending`, but its service (`BackfileImportService`,
-  `v1-e34-t34`) is on `dev`, so the counts cover it as the spec asks.
+- **Before both checks.** `save_held_digests` runs before the withheld check and the confirmed-manifest
+  check, so a bundle that is refused or not yet confirmed still leaves the record behind. The record
+  holds no personal data and depends on no snapshot.
+- **Through the union's own append.** `append_held_digests(())` on `RecordedSuppressionList` is the
+  removal's existing set-union append. It also gives the working copy the bucket's lines, which is
+  harmless. No second implementation of "append what is missing" was written.
+- **What a run killed before any save leaves.** A hard kill, or a lost lease, between the import and
+  the save after the publish stage leaves the previous bundle. The next run redoes the week and its
+  import meets the upload again (tested), late but never lost, within the ledger's five downloads a
+  day. **Known edge (one):** if the redone download no longer carries the upload, because the team
+  took it down or the weekly is no longer listed, the line is never written. Those bytes never
+  entered the store or the bucket either, so the state matches an upload that was never seen. If the
+  same bytes later arrive at a path no removal holds, they are imported, as they would have been
+  before `v1-e30-t23`. Nothing is built around this, as ruled.
+- **`caselist status` from a stale copy reports drift.** The Mac's copy lacks the week the task
+  published, so `status` exits 1 (`CASELIST_DRIFT`) with its report in the error's details. The test
+  reads refused-at-import there. That is existing behaviour, and a restore closes it.
+- **Shared test helper.** The kill switch in `test_bucket_mode_held_uploads.py` repeats about 30
+  lines of `test_bucket_mode_kills.py`'s. A test module cannot import another under this repo's
+  import mode.
 
 ## Operator follow-ups
 
-None at this checkpoint. After the build, the change reaches the cloud only with a new run image:
-`docs/runbooks/caselist-cloud-run.md`, "A new image, later". If this merges before Thursday's t13
-deploy, it rides in the same image.
+None for this task. The change reaches the cloud only with a new run image, through the steps in
+`docs/runbooks/caselist-cloud-run.md`, "A new image, later". If this merges before Thursday's deploy
+for `v1-e40-t13`, it rides in the same image. No deploy commands are drafted here.
 
 ## Follow-up work
 
-None.
+1. **Add `docs/architecture` to this task's `constraints.packages`.** The PM will, in the next batch
+   (Deviation 2).
+2. **The writer count, for the next record of this kind.** The search index stage's reconcile writes
+   every record beside the list in the bucket, not only this one (path holds, withdrawals), with the
+   everyday credential. That is intended by `v1-e39-t09`, and here it is said only for the
+   held-digest record. The PM may want the layout document's exception to say it of the whole
+   prefix's beside-records. Out of this task's scope.
 
 ## PM review
 

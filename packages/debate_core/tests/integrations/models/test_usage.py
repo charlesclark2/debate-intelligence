@@ -25,6 +25,7 @@ import pytest
 import yaml
 from pydantic import BaseModel, JsonValue
 
+from debate_core.application.budget import CalendarMonth
 from debate_core.application.errors import InvalidModelOutput, ModelUnavailableError
 from debate_core.application.model_errors import ModelOutputError, ValidationPolicy
 from debate_core.application.ports.model_router import ModelRouter
@@ -46,6 +47,7 @@ from debate_core.integrations.models.prompt_registry import PromptRegistry, load
 from debate_core.integrations.models.routing_policy import ModelRoute
 from debate_core.integrations.models.usage import (
     ModelPricing,
+    MonthUsage,
     UsageLog,
     UsageRecord,
     search_units,
@@ -68,6 +70,9 @@ LATE_EVENING = datetime(2026, 9, 18, 3, 30, tzinfo=UTC)
 """22:30 on 2026-09-17 in Chicago: its record goes in 2026-09-17.jsonl, not 2026-09-18.jsonl."""
 
 RUN = "run-0001"
+
+SEPTEMBER = CalendarMonth(2026, 9)
+"""The month every record of `record()` is in, at its default time, in Chicago and in UTC alike."""
 
 FIXTURE_PRICES = """\
 version: 1
@@ -737,7 +742,7 @@ def test_record_ledger_spent_counts_this_run_and_this_day(log: UsageLog) -> None
     log.append(record(run_id="run-a", estimated_cost_usd=0.125))
     log.append(record(run_id="run-a", estimated_cost_usd=None))
 
-    spent = log.spent("run-a", date(2026, 9, 17))
+    spent = log.spent("run-a", date(2026, 9, 17), SEPTEMBER)
 
     # run-a: 0.25 + 0.125 (the unpriced call adds nothing); the day: 0.25 + 0.5 + 0.125.
     assert (spent.run_usd, spent.day_usd) == (pytest.approx(0.375), pytest.approx(0.875))
@@ -745,26 +750,26 @@ def test_record_ledger_spent_counts_this_run_and_this_day(log: UsageLog) -> None
 
 def test_record_ledger_reads_lines_appended_after_its_last_read(log: UsageLog) -> None:
     log.append(record(estimated_cost_usd=0.25))
-    assert log.spent(RUN, date(2026, 9, 17)).day_usd == pytest.approx(0.25)
+    assert log.spent(RUN, date(2026, 9, 17), SEPTEMBER).day_usd == pytest.approx(0.25)
 
     other_process = UsageLog(log.directory, local_zone=CHICAGO)
     other_process.append(record(run_id="run-other", estimated_cost_usd=0.5))
 
-    assert log.spent(RUN, date(2026, 9, 17)).day_usd == pytest.approx(0.75)
+    assert log.spent(RUN, date(2026, 9, 17), SEPTEMBER).day_usd == pytest.approx(0.75)
 
 
 def test_record_ledger_counts_a_run_across_midnight_and_each_day_on_its_own(log: UsageLog) -> None:
     log.append(record(estimated_cost_usd=0.25))
-    log.spent(RUN, date(2026, 9, 17))
+    log.spent(RUN, date(2026, 9, 17), SEPTEMBER)
     log.append(record(estimated_cost_usd=0.5, recorded_at=LATE_EVENING + timedelta(hours=2)))
 
-    spent = log.spent(RUN, date(2026, 9, 18))
+    spent = log.spent(RUN, date(2026, 9, 18), SEPTEMBER)
 
     assert (spent.run_usd, spent.day_usd) == (pytest.approx(0.75), pytest.approx(0.5))
 
 
 def test_record_ledger_of_a_day_with_no_file_is_zero(log: UsageLog) -> None:
-    spent = log.spent(RUN, date(2026, 9, 17))
+    spent = log.spent(RUN, date(2026, 9, 17), SEPTEMBER)
 
     assert (spent.run_usd, spent.day_usd) == (0.0, 0.0)
 
@@ -777,7 +782,81 @@ def test_record_ledger_refuses_a_line_it_cannot_read_rather_than_skip_its_cost(l
         file.write('{"run_id": "run-0001", "estimated_cost_usd": \n')
 
     with pytest.raises(UnreadableUsageLog, match=r"2026-09-17\.jsonl, line 2"):
-        log.spent(RUN, date(2026, 9, 17))
+        log.spent(RUN, date(2026, 9, 17), SEPTEMBER)
+
+
+def a_month_filed_in_utc(tmp_path: Path) -> UsageLog:
+    """Five records around September 2026, filed by a machine whose zone is UTC.
+
+    September in Chicago, by timestamp: $0.25 on the 2nd, $0.5 on the 17th, and $0.125 at 22:00 CDT
+    on the 30th, which this machine files under 2026-10-01. Not September: $1.0 at 23:00 CDT on
+    31 August, filed under 2026-09-01, and $2.0 on 5 October.
+    """
+    log = UsageLog(tmp_path / "utc-usage", local_zone=UTC)
+    for cost, at in (
+        (0.25, datetime(2026, 9, 2, 15, 0, tzinfo=UTC)),
+        (0.5, LATE_EVENING),
+        (0.125, datetime(2026, 10, 1, 3, 0, tzinfo=UTC)),
+        (1.0, datetime(2026, 9, 1, 4, 0, tzinfo=UTC)),
+        (2.0, datetime(2026, 10, 5, 15, 0, tzinfo=UTC)),
+    ):
+        log.append(record(estimated_cost_usd=cost, recorded_at=at))
+    return log
+
+
+def test_record_ledger_counts_the_month_from_each_record_s_timestamp_across_its_files(tmp_path: Path) -> None:
+    log = a_month_filed_in_utc(tmp_path)
+
+    assert sorted(path.name for path in log.directory.iterdir()) == [
+        "2026-09-01.jsonl",
+        "2026-09-02.jsonl",
+        "2026-09-18.jsonl",
+        "2026-10-01.jsonl",
+        "2026-10-05.jsonl",
+    ]
+    # $0.25 + $0.5 + $0.125. The day, in this log's zone, is the 18th, holding the $0.5 alone.
+    spent = log.spent(RUN, date(2026, 9, 18), SEPTEMBER)
+    assert (spent.day_usd, spent.month_usd) == (pytest.approx(0.5), pytest.approx(0.875))
+    assert log.spent(RUN, date(2026, 10, 5), CalendarMonth(2026, 10)).month_usd == pytest.approx(2.0)
+    assert log.spent(RUN, date(2026, 8, 31), CalendarMonth(2026, 8)).month_usd == pytest.approx(1.0)
+
+
+def test_record_ledger_month_counts_lines_appended_after_its_last_read(tmp_path: Path) -> None:
+    log = a_month_filed_in_utc(tmp_path)
+    assert log.spent(RUN, date(2026, 9, 18), SEPTEMBER).month_usd == pytest.approx(0.875)
+
+    other_process = UsageLog(log.directory, local_zone=UTC)
+    other_process.append(
+        record(
+            run_id="run-other", estimated_cost_usd=0.0625, recorded_at=datetime(2026, 9, 9, 12, 0, tzinfo=UTC)
+        )
+    )
+
+    assert log.spent(RUN, date(2026, 9, 18), SEPTEMBER).month_usd == pytest.approx(0.9375)
+
+
+def test_record_month_usage_totals_the_month_s_records_by_their_timestamps(tmp_path: Path) -> None:
+    log = a_month_filed_in_utc(tmp_path)
+    log.append(record(estimated_cost_usd=None, input_tokens=7, output_tokens=None, recorded_at=LATE_EVENING))
+
+    usage = log.month_usage(SEPTEMBER)
+
+    # Four calls: three priced ($0.875), one not; each record() call is 1000 input and 100 output
+    # tokens, except the unpriced one's 7 and none.
+    assert usage == MonthUsage(
+        month=SEPTEMBER,
+        calls=4,
+        input_tokens=3007,
+        output_tokens=300,
+        estimated_cost_usd=pytest.approx(0.875),  # pyright: ignore[reportArgumentType]
+        unpriced_calls=1,
+    )
+
+
+def test_record_month_usage_of_a_month_with_no_files_is_empty(log: UsageLog) -> None:
+    assert log.month_usage(SEPTEMBER) == MonthUsage(
+        month=SEPTEMBER, calls=0, input_tokens=0, output_tokens=0, estimated_cost_usd=0.0, unpriced_calls=0
+    )
 
 
 def test_record_summary_groups_by_prompt_and_model_and_keeps_unpriced_calls_apart() -> None:

@@ -33,7 +33,7 @@ from typing import Any, Final, Literal, Self
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from debate_core.application.budget import Spend, UnreadableUsageLog, local_day
+from debate_core.application.budget import CalendarMonth, Spend, UnreadableUsageLog, local_day
 from debate_core.application.settings import ConfigurationError
 from debate_core.domain.base import UtcDatetime
 
@@ -43,6 +43,7 @@ __all__ = [
     "USAGE_DIRECTORY",
     "ModelPrice",
     "ModelPricing",
+    "MonthUsage",
     "UsageGroup",
     "UsageLog",
     "UsageRecord",
@@ -253,6 +254,19 @@ class UsageSummary:
         return sum(group.unpriced_calls for group in self.groups)
 
 
+@dataclass(frozen=True, slots=True)
+class MonthUsage:
+    """A calendar month's model usage in America/Chicago, in totals: what the monthly budget counts."""
+
+    month: CalendarMonth
+    calls: int
+    input_tokens: int
+    output_tokens: int
+    estimated_cost_usd: float
+    """The priced calls' cost; the unpriced calls are counted in `unpriced_calls`, not here."""
+    unpriced_calls: int
+
+
 def summarize(day: date, records: Iterable[UsageRecord]) -> UsageSummary:
     """`records` grouped by prompt id and model id, sorted by them, embed and rerank calls first.
 
@@ -361,7 +375,13 @@ class UsageLog:
         """`day`'s records, summarized."""
         return summarize(day, self.read(day))
 
-    def spent(self, run_id: str, day: date) -> Spend:
+    def month_usage(self, month: CalendarMonth) -> MonthUsage:
+        """Every record of `month`."""
+        return MonthUsage(
+            month=month, calls=0, input_tokens=0, output_tokens=0, estimated_cost_usd=0.0, unpriced_calls=0
+        )
+
+    def spent(self, run_id: str, day: date, month: CalendarMonth) -> Spend:
         """What `run_id` and `day` have spent, from the lines written so far.
 
         Each file is read once, from where the last read stopped, so a long run does not read its
@@ -376,7 +396,7 @@ class UsageLog:
             for tailed, tail in self._tails.items():
                 _catch_up(tailed, tail)
             run_usd = sum((tail.run_usd.get(run_id, 0.0) for tail in self._tails.values()), 0.0)
-            return Spend(run_usd=run_usd, day_usd=self._tails[path].day_usd)
+            return Spend(run_usd=run_usd, day_usd=self._tails[path].day_usd, month_usd=0.0)
 
 
 def _catch_up(path: Path, tail: _Tail) -> None:

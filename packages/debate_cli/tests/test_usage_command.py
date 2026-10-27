@@ -2,7 +2,8 @@
 
 Through Typer's `CliRunner` against the real application, in a `test` environment whose data
 directory is the test's own. The day's usage log is written by hand below, line by line, and every
-expected group and total is added up by hand from those lines.
+expected group and total is added up by hand from those lines. The month's spend and the limits
+beside the day's are v1-e05-t15's (ac3).
 """
 
 from __future__ import annotations
@@ -151,6 +152,49 @@ EXPECTED_TOTALS = {
 }
 
 
+def month_line(cost: float, input_tokens: int, output_tokens: int, recorded_at: str) -> str:
+    return (
+        json.dumps(
+            {
+                "run_id": "r0",
+                "prompt_id": "landscape.classify-position",
+                "prompt_version": "1.0.0",
+                "model_id": "test.haiku",
+                "attempt": 1,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "latency_ms": 500.0,
+                "estimated_cost_usd": cost,
+                "recorded_at": recorded_at,
+            }
+        )
+        + "\n"
+    )
+
+
+MONTH_FILES = {
+    # 10:00 CDT on 2 September.
+    "2026-09-02.jsonl": month_line(0.01, 100, 10, "2026-09-02T15:00:00Z"),
+    # 22:00 CDT on 30 September, filed under 1 October as a machine in UTC files it: September's.
+    "2026-10-01.jsonl": month_line(0.02, 200, 20, "2026-10-01T03:00:00Z"),
+    # 23:00 CDT on 31 August, filed under 1 September by the same machine: not September's.
+    "2026-09-01.jsonl": month_line(0.04, 300, 30, "2026-09-01T04:00:00Z"),
+}
+"""Three more calls around September 2026, each placed in its month by its own time in Chicago."""
+
+EXPECTED_SEPTEMBER = {
+    # The day's five calls, and 2 and 30 September's: 4900 + 100 + 200 input, 650 + 10 + 20 output,
+    # $0.00658 + $0.01 + $0.02, and the day's one unpriced call. 31 August's $0.04 is not in it.
+    "month": "2026-09",
+    "zone": "America/Chicago",
+    "calls": 7,
+    "input_tokens": 5200,
+    "output_tokens": 680,
+    "estimated_cost_usd": 0.03658,
+    "unpriced_calls": 1,
+}
+
+
 @pytest.fixture
 def data_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Path]:
     """A `test` environment with its own data directory, read in Chicago at 22:30 on 2026-09-17."""
@@ -173,6 +217,18 @@ def write_day(data_dir: Path, name: str = "2026-09-17.jsonl", text: str = DAY_FI
     usage = data_dir / "usage"
     usage.mkdir(parents=True, exist_ok=True)
     (usage / name).write_text(text, encoding="utf-8")
+
+
+def write_month(data_dir: Path) -> None:
+    write_day(data_dir)
+    for name, text in MONTH_FILES.items():
+        write_day(data_dir, name, text)
+
+
+def with_limits(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The bundled prod values: $1.50 a day and $50 a month."""
+    monkeypatch.setenv("DEBATE_MODELS__BUDGET_USD_DAILY", "1.5")
+    monkeypatch.setenv("DEBATE_MODELS__BUDGET_USD_MONTHLY", "50.0")
 
 
 def invoke(*arguments: str) -> Result:
@@ -222,6 +278,55 @@ def test_usage_table_shows_the_same_groups_and_a_total(data_dir: Path) -> None:
     assert "not in the totals" in " ".join(result.output.split())
 
 
+def test_usage_json_shows_the_month_s_spend_and_both_limits_beside_the_day_s(
+    data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with_limits(monkeypatch)
+    write_month(data_dir)
+
+    data = as_json("usage", "--date", "2026-09-17")
+
+    assert data["totals"] == approximately([EXPECTED_TOTALS])[0]
+    assert data["month"] == approximately([EXPECTED_SEPTEMBER])[0]
+    assert data["limits"] == {"daily_usd": 1.5, "monthly_usd": 50.0}
+
+
+def test_usage_table_shows_the_month_s_spend_and_both_limits_under_the_day_s_total(
+    data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with_limits(monkeypatch)
+    write_month(data_dir)
+
+    result = invoke("usage", "--date", "2026-09-17")
+
+    assert result.exit_code == 0, result.output
+    rows = [" ".join(line.replace("│", " ").split()) for line in result.output.splitlines()]
+    assert "Total 5 4900 650 0.0066 (+1 unpriced)" in rows
+    assert "Daily limit 1.5000" in rows
+    assert "Month 2026-09 (America/Chicago) 7 5200 680 0.0366 (+1 unpriced)" in rows
+    assert "Monthly limit 50.0000" in rows
+
+
+def test_usage_without_a_date_shows_this_month_in_chicago(data_dir: Path) -> None:
+    write_month(data_dir)
+
+    data = as_json("usage")
+
+    assert data["month"] == approximately([EXPECTED_SEPTEMBER])[0]
+
+
+def test_usage_shows_an_unset_limit_as_none(data_dir: Path) -> None:
+    """The test profile sets the day's limit to $0 and leaves the month's unset."""
+    write_day(data_dir)
+
+    result = invoke("usage", "--date", "2026-09-17")
+
+    rows = [" ".join(line.replace("│", " ").split()) for line in result.output.splitlines()]
+    assert "Daily limit 0.0000" in rows
+    assert "Monthly limit none" in rows
+    assert as_json("usage", "--date", "2026-09-17")["limits"] == {"daily_usd": 0.0, "monthly_usd": None}
+
+
 def test_usage_without_a_date_reads_today_on_the_local_clock(data_dir: Path) -> None:
     """At 22:30 on the 17th in Chicago it is the 18th in UTC; today is the 17th."""
     write_day(data_dir)
@@ -248,6 +353,16 @@ def test_usage_of_a_day_with_no_calls_says_so(data_dir: Path) -> None:
             "estimated_cost_usd": 0.0,
             "unpriced_calls": 0,
         },
+        "month": {
+            "month": "2026-09",
+            "zone": "America/Chicago",
+            "calls": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "estimated_cost_usd": 0.0,
+            "unpriced_calls": 0,
+        },
+        "limits": {"daily_usd": 0.0, "monthly_usd": None},
     }
 
 
@@ -324,5 +439,15 @@ def test_max_cost_is_the_limit_the_router_s_budget_guard_is_built_with(settings:
     limited = with_max_cost(settings, 0.05)
 
     assert budget_limits(limited) == BudgetLimits(
-        per_run_usd=0.05, per_day_usd=settings.models.budget_usd_daily
+        per_run_usd=0.05,
+        per_day_usd=settings.models.budget_usd_daily,
+        per_month_usd=settings.models.budget_usd_monthly,
     )
+
+
+def test_the_router_s_budget_guard_is_built_with_the_monthly_limit(settings: Settings) -> None:
+    monthly = settings.model_copy(
+        update={"models": settings.models.model_copy(update={"budget_usd_monthly": 50.0})}
+    )
+
+    assert budget_limits(monthly).per_month_usd == 50.0

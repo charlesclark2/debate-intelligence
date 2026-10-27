@@ -26,6 +26,7 @@ from debate_core.application.budget import (
     BudgetExceededError,
     BudgetGuard,
     BudgetLimits,
+    CalendarMonth,
     CallCeiling,
     Spend,
     UnpricedModelError,
@@ -839,8 +840,8 @@ class FixedCeiling:
 
 
 class NothingSpent:
-    def spent(self, run_id: str, day: date) -> Spend:
-        return Spend(run_usd=0.0, day_usd=0.0)
+    def spent(self, run_id: str, day: date, month: CalendarMonth) -> Spend:
+        return Spend(run_usd=0.0, day_usd=0.0, month_usd=0.0)
 
 
 @pytest.mark.parametrize(

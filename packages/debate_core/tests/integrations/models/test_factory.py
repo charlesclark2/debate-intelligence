@@ -255,11 +255,13 @@ def test_no_setting_chooses_record_replay_or_live(tmp_path: Path) -> None:
     every_setting = settings_with(tmp_path).redacted_dict()
 
     # aws_profile (v1-e05-t08) says which credential a live call is signed with, never whether one is made.
-    # The two budgets (v1-e05-t07) say how much may be spent, never whether a call is made live.
+    # The three budgets (v1-e05-t07, the month's v1-e05-t15) say how much may be spent, never whether
+    # a call is made live.
     assert set(ModelSettings.model_fields) == {
         "provider",
         "routing_file",
         "budget_usd_daily",
+        "budget_usd_monthly",
         "budget_usd_per_run",
         "aws_profile",
     }

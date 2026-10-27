@@ -50,7 +50,7 @@ def isolated_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Ite
     )
     (profiles / "prod.toml").write_text(
         f'[storage]\ndata_dir = "{tmp_path / "prod-data"}"\n'
-        f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 20.0\n',
+        f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.5\n',
         encoding="utf-8",
     )
     (profiles / "test.toml").write_text(
@@ -212,10 +212,11 @@ def test_dev_and_prod_report_different_data_dirs(monkeypatch: pytest.MonkeyPatch
     production = envelope_of(runner.invoke(create_app(), ["--json", "config", "show"]))["data"]
 
     assert development["settings"]["storage.data_dir"] != production["settings"]["storage.data_dir"]
+    # Each environment's own profile is read: this test's dev.toml says $2 a day, its prod.toml $1.50.
     assert (
-        development["settings"]["models.budget_usd_daily"]
-        < (production["settings"]["models.budget_usd_daily"])
-    )
+        development["settings"]["models.budget_usd_daily"],
+        production["settings"]["models.budget_usd_daily"],
+    ) == (2.0, 1.5)
 
 
 def test_an_unusable_debate_env_fails_the_command_without_a_traceback(
@@ -293,7 +294,9 @@ def test_version_does_not_load_settings(monkeypatch: pytest.MonkeyPatch) -> None
 
 @pytest.mark.parametrize(
     ("environment", "budget"),
-    [("dev", 2.0), ("prod", 20.0)],
+    # Dev's $2 a day is the capped sample's allowance (PM ruling, 2026-10-27); prod's $1.50 is the
+    # coach's $50 a month over thirty days (v1-e05-t15).
+    [("dev", 2.0), ("prod", 1.5)],
 )
 def test_the_committed_dev_and_prod_profiles_differ_in_config_show(
     environment: str, budget: float, monkeypatch: pytest.MonkeyPatch
@@ -312,4 +315,4 @@ def test_the_committed_dev_and_prod_profiles_differ_in_config_show(
     assert settings["storage.data_dir"] == str(Path(f"~/.debate-research/{environment}").expanduser())
     assert settings["models.routing_file"] == str(root / "config" / f"model_routing.{environment}.yaml")
     assert settings["models.budget_usd_daily"] == budget
-    assert budget <= 2.0 or environment == "prod"
+    assert settings["models.budget_usd_monthly"] == 50.0

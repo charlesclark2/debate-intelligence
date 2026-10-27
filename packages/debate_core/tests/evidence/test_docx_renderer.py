@@ -538,7 +538,7 @@ def test_structure_the_cards_must_be_the_manifests_cards_in_its_order() -> None:
 
 
 @pytest.mark.parametrize(
-    ("character", "name"), [("\r", "U+000D"), ("\x00", "U+0000"), ("\x0b", "U+000B"), ("￾", "U+FFFE")]
+    ("character", "name"), [("\r", "U+000D"), ("\x00", "U+0000"), ("\x0b", "U+000B"), ("\ufffe", "U+FFFE")]
 )
 def test_structure_evidence_a_docx_cannot_carry_as_written_is_refused_never_altered(
     character: str, name: str
@@ -976,7 +976,7 @@ def test_a_manifest_element_with_more_than_text_in_it_is_refused(tmp_path: Path)
 
 
 def test_a_manifest_an_xml_part_cannot_carry_is_refused_before_anything_is_written() -> None:
-    title = FULLY_VERIFIED_CITATION.title.evolve(value="Methane￿ release")
+    title = FULLY_VERIFIED_CITATION.title.evolve(value="Methane\uffff release")
     card = verified(hand_card(citation=FULLY_VERIFIED_CITATION.evolve(title=title)))
 
     with pytest.raises(RenderRefused, match=re.escape("the manifest holds U+FFFF")):

@@ -487,7 +487,7 @@ def test_with_sources_the_copy_holds_every_source_its_manifests_name_and_nothing
     assert rows(copy / "debate.sqlite3") == live_rows
 
     assert files(live) == live_before, "the data directory is left exactly as it was"
-    assert inodes(live) == live_inodes, "nothing was renamed into the data directory, even over the same bytes"
+    assert inodes(live) == live_inodes, "nothing was renamed into the data directory, even over equal bytes"
     assert without_the_lock(world.everything()) == bucket_before, "the lock is the only object written"
     assert world.lock()["state"] == "free"
     for word in (*FICTIONAL_NAMES, str(tmp_path), *named):

@@ -29,6 +29,7 @@ from tests.fixtures.card.card_world import (
 
 from debate_core.application.article_fetch import SOURCE_NOT_ACCESSIBLE_CODE
 from debate_core.application.card_selection import CardSelector
+from debate_core.application.card_service import failures_of
 from debate_core.application.card_types import (
     CardFailure,
     CardFailureReason,
@@ -704,3 +705,44 @@ async def test_a_model_provider_that_cannot_answer_is_rejected_and_nothing_is_sa
         await world.card_service.cut_card(news_request(source.snapshot.snapshot_id))
 
     assert (await world.cards.list_by_owner(STUDENT)).items == ()
+
+
+VERIFIER_CODE_TO_REASON: Final = {
+    ReasonCode.CITATION_UNVERIFIED: CardFailureReason.CITATION_UNVERIFIED,
+    ReasonCode.TEXT_MISMATCH: CardFailureReason.SPAN_MISMATCH,
+    ReasonCode.SPAN_OUT_OF_RANGE: CardFailureReason.SPAN_MISMATCH,
+    ReasonCode.SNAPSHOT_MISSING: CardFailureReason.EVIDENCE_UNVERIFIED,
+    ReasonCode.HASH_MISMATCH: CardFailureReason.EVIDENCE_UNVERIFIED,
+    ReasonCode.UNKNOWN_NORMALIZER_VERSION: CardFailureReason.EVIDENCE_UNVERIFIED,
+    ReasonCode.CARD_INCOMPLETE: CardFailureReason.EVIDENCE_UNVERIFIED,
+    ReasonCode.ARTICLE_MISMATCH: CardFailureReason.EVIDENCE_UNVERIFIED,
+    ReasonCode.PROVENANCE_MISMATCH: CardFailureReason.EVIDENCE_UNVERIFIED,
+    ReasonCode.CARD_INVALID: CardFailureReason.EVIDENCE_UNVERIFIED,
+}
+"""Every verifier code and the card failure it becomes, written out by hand."""
+
+
+@pytest.mark.parametrize("code", list(ReasonCode))
+def test_each_verifier_code_becomes_one_unverified_card_failure(code: ReasonCode) -> None:
+    card = blank_card()
+    offset = 4 if code is ReasonCode.TEXT_MISMATCH else None
+    result = VerificationResult(
+        card_id=card.card_id,
+        status=VerificationStatus.UNVERIFIED,
+        reasons=(VerificationReason(code, "offsets 0-3", offset),),
+        checks_run=frozenset(),
+        verified_at=WHEN,
+        verifier_version="evidence-verifier-v2",
+        normalizer_version=None,
+        snapshot_id=None,
+    )
+
+    (failure,) = failures_of(result, card)
+
+    assert (failure.reason, failure.verifier_code, failure.detail) == (
+        VERIFIER_CODE_TO_REASON[code],
+        code,
+        "offsets 0-3",
+    )
+    if code is ReasonCode.CITATION_UNVERIFIED:
+        assert failure.fields == card.citation.unverified_fields

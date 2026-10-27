@@ -287,7 +287,10 @@ class ImpactCard(TopCard):
     )
     link_tag: str | None = Field(
         default=None,
-        description="The tag, as parsed, of the labelled link card above it; None when none is. report.md only.",
+        description=(
+            "The tag, as parsed, of the labelled link card above it (`v1-e32-t27`); None when none is. "
+            "report.md only."
+        ),
     )
     card_above_tag: str | None = Field(
         default=None,

@@ -179,7 +179,7 @@ def test_an_empty_row_is_left_out_and_counted_never_shown() -> None:
     assert _runs_through_lines(_bundle_files()["report.md"])[:3] == [
         "* Rank 1: Single payer cuts administrative costs (card above)",
         "* Rank 2: Bulk purchasing lowers drug prices (tag)",
-        "* Ranks left out, with no scenario, internal link, tag or card above to name them: 1.",
+        "* Ranks left out, with no scenario, internal link, link, tag or card above to name them: 1.",
     ]
 
 

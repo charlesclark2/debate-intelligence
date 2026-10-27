@@ -49,6 +49,7 @@ PLANK_TABLE: str = ": plank table"
 NAMED_BY: dict[LeadInSource, str] = {
     LeadInSource.SCENARIO: "a scenario",
     LeadInSource.INTERNAL_LINK: "an internal link",
+    LeadInSource.LINK: "a link",
     LeadInSource.TAG: "a tag",
     LeadInSource.CARD_ABOVE: "the card above",
 }

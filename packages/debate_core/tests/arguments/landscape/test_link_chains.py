@@ -158,7 +158,14 @@ def test_a_tag_opening_labels_uniqueness_link_or_internal_link_and_never_by_u(
 
 @pytest.mark.parametrize(
     "heading",
-    ["link non unique", "links non unique", "link nonunique", "link not unique", "non unique link", "no links"],
+    [
+        "link non unique",
+        "links non unique",
+        "link nonunique",
+        "link not unique",
+        "non unique link",
+        "no links",
+    ],
 )
 def test_a_heading_naming_a_link_answer_labels_no_link(heading: str) -> None:
     assert heading_roles(heading, DA) == NOTHING

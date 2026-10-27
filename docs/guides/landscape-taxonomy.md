@@ -615,8 +615,8 @@ each source names and how many are left out, and how many scenario names and tag
 hspolicy26 nearly every impact card has a tag, so most ranks without a scenario, a labelled internal
 link or a labelled link are named by their own tag. A team that labels its blocks is what fills the
 scenario, internal link and link; most 1AC advantages carry no label at all. A link names a rank only
-where a team put a labelled link card above the impact under the same DA heading: on hspolicy26, 24 of
-44 DA ranks had one (`v1-e32-t27`).
+where a team put a labelled link card above the impact under the same DA heading: on hspolicy26 (through
+2026-10-20) a link names 12 of 44 DA ranks, and no advantage's (`v1-e32-t27`).
 
 ### Your scenario lists
 

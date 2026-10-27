@@ -1,0 +1,541 @@
+"""Tests for `debate_core.evidence.docx_renderer`: cut cards into a Verbatim .docx (`v1-e06-t04`).
+
+Every check reads the rendered bytes back with python-docx, independently of the renderer: the
+paragraphs in order with their style ids, and each run's text, character style, highlight, size and
+colour. What the renderer adds to a card's evidence (the omission marker, a bracketed interpolation)
+is taken out by :func:`evidence_read_back`, which finds each addition where the *card* says it goes,
+by its own arithmetic, so what is left must be `Card.evidence_text` character for character.
+
+Two kinds of card are rendered:
+
+* t02's news-article card, cut by `CardService` in `tests/fixtures/card/card_world.py` from t04's
+  synthetic page with the committed fake-router answers: VERIFIED, quoting [212, 712) less the
+  omission [320, 422), with five spans. Its expected runs below are written by hand from t04's
+  paragraphs and t02's `NEWS_SPANS`; its cite is t01's hand-written expected cite for the page.
+* Cards built here by hand, for what the world card lacks: interpolations, Unicode beyond curly
+  quotes, a tab and line breaks, overlapping spans across a cut, and UNVERIFIED cards.
+
+Names say which plan node a test belongs to (`-k structure`, `-k unverified`, `-k manifest`).
+"""
+
+from __future__ import annotations
+
+import hashlib
+import io
+import zipfile
+from dataclasses import dataclass
+from datetime import UTC, date, datetime
+from pathlib import Path
+from typing import Final
+from xml.etree import ElementTree
+
+import docx
+import pytest
+from docx.text.paragraph import Paragraph
+from tests.fixtures.card.card_world import FIXTURES, CardWorld, news_request
+from tests.fixtures.verification.verification_world import run
+
+from debate_core.application.export_service import ExportService
+from debate_core.domain import (
+    Card,
+    CardOmission,
+    CardSpan,
+    Interpolation,
+    SpanStyle,
+    VerificationStatus,
+)
+from debate_core.domain.caselist import SourceDocument, SourceFormat, SourceOrigin
+from debate_core.domain.debate_files import ParsedDocument
+from debate_core.evidence.card_rendering import CardToRender, CiteText, DocumentHeadings, RenderRefused
+from debate_core.evidence.docx_renderer import render_cards_docx
+from debate_core.evidence.format_profile import (
+    FORMAT_PROFILES_DIRECTORY,
+    ResolvedFormatProfile,
+    load_format_profile,
+    load_format_profile_from_text,
+    resolve_format_profile,
+)
+from debate_core.evidence.manifest import MANIFEST_VERSION, CardManifest, SnapshotReference
+from debate_core.integrations.docx_file_writer.base_template import render_styles_xml
+from debate_core.integrations.docx_parser.parser import DebateDocxParser
+from debate_core.testing.builders import build_card, build_source_snapshot
+from debate_core.testing.fakes.clock_and_ids import FixedClock
+
+REPOSITORY: Final = Path(__file__).resolve().parents[4]
+PROFILES: Final = REPOSITORY / FORMAT_PROFILES_DIRECTORY
+TEAM_DEFAULT: Final = load_format_profile("team-default", PROFILES)
+PLAIN: Final = load_format_profile("plain", PROFILES)
+GENERATED_AT: Final = datetime(2026, 10, 27, 9, 30, tzinfo=UTC)
+W: Final = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+
+MARKER: Final = " … "
+"""The committed profiles' omission marker, written here by hand."""
+
+NEWS_CITE: Final = CiteText(
+    short_cite="Whitfield 26",
+    full_cite=(
+        'Whitfield 26 [Dana Whitfield; "Scientists Say Mammoth Revival Is Years Away"; The Daily Meridian; '
+        "September 14, 2026; https://www.dailymeridian.example/science/2026/09/14/mammoth-revival-years-away; "
+        "accessed October 26, 2026]"
+    ),
+)
+"""t01's hand-written expected cite for the news-article page (`tests/fixtures/citation`)."""
+
+
+# --------------------------------------------------------------------------------------------
+# Reading a rendered file back, independently of the renderer
+# --------------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ReadRun:
+    text: str
+    character_style: str | None
+    highlight: str | None
+    half_points: int | None
+    color: str | None = None
+
+
+@dataclass(frozen=True)
+class ReadParagraph:
+    style_id: str
+    runs: tuple[ReadRun, ...]
+
+    @property
+    def text(self) -> str:
+        return "".join(r.text for r in self.runs)
+
+
+def read_run(paragraph: Paragraph) -> tuple[ReadRun, ...]:
+    runs: list[ReadRun] = []
+    for each in paragraph.runs:
+        properties = each.element.rPr
+        style = properties.rStyle.val if properties is not None and properties.rStyle is not None else None
+        highlight = each.font.highlight_color
+        size = each.font.size
+        rgb = each.font.color.rgb if each.font.color.type is not None else None
+        runs.append(
+            ReadRun(
+                text=each.text,
+                character_style=style,
+                highlight=highlight.xml_value if highlight is not None else None,
+                half_points=round(size.pt * 2) if size is not None else None,
+                color=str(rgb) if rgb is not None else None,
+            )
+        )
+    return tuple(runs)
+
+
+def read_paragraphs(data: bytes) -> list[ReadParagraph]:
+    document = docx.Document(io.BytesIO(data))
+    paragraphs: list[ReadParagraph] = []
+    for paragraph in document.paragraphs:
+        style = paragraph.style
+        assert style is not None
+        paragraphs.append(ReadParagraph(style_id=style.style_id, runs=read_run(paragraph)))
+    return paragraphs
+
+
+def evidence_read_back(paragraph: ReadParagraph, card: Card, marker: str = MARKER) -> tuple[str, list[ReadRun]]:
+    """The paragraph's evidence, with each renderer addition taken out where the card says it goes.
+
+    An omission goes where the kept snapshot text before it ends; an interpolation before the
+    character at its anchor, after any cut at the same place. Each must be a run of its own whose
+    text is exactly the marker or the bracketed interpolation, or it is read as evidence.
+    """
+    additions: list[tuple[int, str]] = []
+    kept, previous_end = 0, card.evidence_start_offset or 0
+    for omission in card.omitted_ranges:
+        kept += omission.start_offset - previous_end
+        additions.append((kept, marker))
+        previous_end = omission.end_offset
+    additions.extend((i.anchor, f"[{i.text}]") for i in card.interpolations)
+    additions.sort(key=lambda addition: (addition[0], addition[1] != marker))
+    text, evidence_runs = "", []
+    for each in paragraph.runs:
+        if additions and additions[0] == (len(text), each.text):
+            additions.pop(0)
+            continue
+        text += each.text
+        evidence_runs.append(each)
+    assert not additions, f"the renderer's additions were not found where they belong: {additions}"
+    return text, evidence_runs
+
+
+def marks_per_character(runs: list[ReadRun]) -> list[tuple[bool, bool]]:
+    """(underlined, highlighted) for every evidence character, from the runs that carry it."""
+    marks: list[tuple[bool, bool]] = []
+    for each in runs:
+        marks.extend([(each.character_style == "StyleUnderline", each.highlight is not None)] * len(each.text))
+    return marks
+
+
+def marks_from_spans(card: Card) -> list[tuple[bool, bool]]:
+    """The oracle: a character is underlined (highlighted) when an underline (highlight) span covers it."""
+
+    def covered(offset: int, style: SpanStyle) -> bool:
+        return any(s.style is style and s.start_offset <= offset < s.end_offset for s in card.spans)
+
+    return [
+        (covered(i, SpanStyle.UNDERLINE), covered(i, SpanStyle.HIGHLIGHT)) for i in range(len(card.evidence_text))
+    ]
+
+
+def styles_part(data: bytes) -> ElementTree.Element:
+    with zipfile.ZipFile(io.BytesIO(data)) as package:
+        return ElementTree.fromstring(package.read("word/styles.xml"))
+
+
+# --------------------------------------------------------------------------------------------
+# Cards, manifests and rendering
+# --------------------------------------------------------------------------------------------
+
+
+def manifest_of(*cards: Card) -> CardManifest:
+    snapshots = {
+        card.snapshot_id: SnapshotReference.of(build_source_snapshot(snapshot_id=card.snapshot_id))
+        for card in cards
+        if card.snapshot_id is not None
+    }
+    return CardManifest(
+        manifest_version=MANIFEST_VERSION,
+        generated_at=GENERATED_AT,
+        cards=cards,
+        snapshots=tuple(snapshots[key] for key in sorted(snapshots)),
+    )
+
+
+HAND_CITE: Final = CiteText(
+    short_cite="Rivera et al. 23",
+    full_cite='Rivera et al. 23 [Rivera, J. and Okonkwo, A.; "Arctic methane release is accelerating"]',
+)
+
+
+def render(
+    *cards: CardToRender,
+    profile: ResolvedFormatProfile = TEAM_DEFAULT,
+    headings: DocumentHeadings | None = None,
+) -> bytes:
+    return render_cards_docx(
+        manifest_of(*(c.card for c in cards)), cards, profile, headings=headings or DocumentHeadings()
+    )
+
+
+def verified(card: Card) -> Card:
+    return card.evolve(verification_status=VerificationStatus.VERIFIED)
+
+
+@pytest.fixture(scope="module")
+def news() -> tuple[Card, CardManifest]:
+    """t02's VERIFIED news-article card and the manifest ExportService writes for it."""
+    world = CardWorld()
+    snapshot_id = run(world.add_page()).snapshot.snapshot_id
+    card = run(world.card_service.cut_card(news_request(snapshot_id))).card
+    assert card.verification_status is VerificationStatus.VERIFIED
+    manifest = run(ExportService(articles=world.articles, clock=FixedClock(GENERATED_AT)).manifest([card]))
+    return card, manifest
+
+
+#: The news card's evidence paragraph, written by hand from t04's paragraphs and t02's NEWS_SPANS:
+#: (text, underlined, highlighted, half-points). Read text is 22 half-points, the rest 16, and the
+#: cut at evidence offset 108 (snapshot [320, 422)) is the profile's marker at the base size.
+NEWS_EVIDENCE_RUNS: Final = [
+    ("The delay follows two years of ", False, False, 16),
+    ("failed attempts", True, True, 22),
+    (" to grow edited elephant embryos to term", True, False, 22),
+    (" in surrogate animals.", False, False, 16),
+    (MARKER, False, False, 22),
+    ("Conservation biologists who have criticized the project said ", False, False, 16),
+    ("the timeline was never realistic", True, False, 22),
+    (". “Every year this slips, ", False, False, 16),
+    ("the money raised for it is ", True, False, 22),
+    ("money that did not go to elephants that are alive now", True, True, 22),
+    (",” said Priya Ramaswamy, who studies elephant populations and was not involved in the work.", False, False, 16),
+]
+
+
+def as_tuples(runs: tuple[ReadRun, ...] | list[ReadRun]) -> list[tuple[str, bool, bool, int | None]]:
+    return [(r.text, r.character_style == "StyleUnderline", r.highlight is not None, r.half_points) for r in runs]
+
+
+# --------------------------------------------------------------------------------------------
+# Node document-structure: headings, tag, cite and evidence
+# --------------------------------------------------------------------------------------------
+
+
+def test_structure_a_verified_card_is_its_tag_its_cite_and_its_evidence_in_that_order(
+    news: tuple[Card, CardManifest],
+) -> None:
+    card, manifest = news
+
+    paragraphs = read_paragraphs(render_cards_docx(manifest, [CardToRender(card, NEWS_CITE)], TEAM_DEFAULT))
+
+    assert [(p.style_id, p.text) for p in paragraphs[:2]] == [
+        ("Heading4", "Each delay in reviving the mammoth costs living elephants funding"),
+        ("Normal", NEWS_CITE.full_cite),
+    ]
+    assert paragraphs[2].style_id == "Normal"
+    assert len(paragraphs) == 3
+
+
+def test_structure_the_evidence_runs_are_the_card_spans_condensed_where_nothing_is_read(
+    news: tuple[Card, CardManifest],
+) -> None:
+    card, manifest = news
+
+    evidence = read_paragraphs(render_cards_docx(manifest, [CardToRender(card, NEWS_CITE)], TEAM_DEFAULT))[2]
+
+    assert as_tuples(evidence.runs) == NEWS_EVIDENCE_RUNS
+    assert {r.highlight for r in evidence.runs} == {None, "cyan"}
+
+
+def test_structure_the_evidence_reads_back_as_exactly_the_cards_evidence_text(
+    news: tuple[Card, CardManifest],
+) -> None:
+    card, _ = news
+    card = card.evolve(interpolations=(Interpolation(anchor=108, text="critics"), Interpolation(anchor=398, text="sic")))
+
+    evidence = read_paragraphs(render(CardToRender(card, NEWS_CITE)))[2]
+    text, runs = evidence_read_back(evidence, card)
+
+    assert text == card.evidence_text
+    assert marks_per_character(runs) == marks_from_spans(card)
+    assert evidence.text.count(MARKER) == 1
+    assert [r.text for r in evidence.runs].index("[critics]") == [r.text for r in evidence.runs].index(MARKER) + 1
+    assert evidence.runs[-1].text == "[sic]"
+
+
+#: A hand-built card for what the news card lacks. Evidence offsets, written out:
+#:   0-5 "Ærø’s" · 5 " " · 6-12 "“café”" · 12-15 " — " · 15-20 "naïve" · 20 " " · 21 "🐘" · 22-24 "\n\n"
+#:   24-28 "Herd" · 28 "\t" · 29-34 "counts" · 35 "." ; then, after a cut at 36, "Ice" at 36-39 and " melts"
+#:   at 39-45. The underline is 6-40, so it ends after the space; the highlights are 15-22 and 33-39.
+UNICODE_EVIDENCE: Final = "Ærø’s “café” — naïve 🐘\n\nHerd\tcounts.Ice melts"
+
+
+def unicode_card() -> Card:
+    assert len(UNICODE_EVIDENCE) == 45
+    return build_card(
+        evidence_text=UNICODE_EVIDENCE,
+        evidence_start_offset=500,
+        evidence_end_offset=560,
+        omitted_ranges=(CardOmission(start_offset=536, end_offset=551),),
+        spans=(
+            CardSpan(start_offset=6, end_offset=40, style=SpanStyle.UNDERLINE),
+            CardSpan(start_offset=15, end_offset=22, style=SpanStyle.HIGHLIGHT),
+            CardSpan(start_offset=33, end_offset=39, style=SpanStyle.HIGHLIGHT),
+        ),
+    ).evolve(
+        interpolations=(
+            Interpolation(anchor=0, text="the island"),
+            Interpolation(anchor=36, text="and"),
+            Interpolation(anchor=45, text="emphasis added"),
+        )
+    )
+
+
+def test_structure_unicode_tabs_breaks_overlaps_cuts_and_interpolations_read_back_exactly() -> None:
+    card = unicode_card()
+
+    evidence = read_paragraphs(render(CardToRender(card, HAND_CITE)))[-1]
+    text, runs = evidence_read_back(evidence, card)
+
+    assert text == UNICODE_EVIDENCE
+    assert marks_per_character(runs) == marks_from_spans(card)
+    assert [r.text for r in evidence.runs] == [
+        "[the island]",
+        "Ærø’s ",
+        "“café” — ",
+        "naïve 🐘",
+        "\n\nHerd\tcou",
+        "nts.",
+        MARKER,
+        "[and]",
+        "Ice",
+        " ",
+        "melts",
+        "[emphasis added]",
+    ]
+
+
+def test_structure_headings_are_written_once_above_the_cards_in_pocket_hat_block_order() -> None:
+    first = verified(build_card(card_id="0CARD000000000000000000001"))
+    second = verified(build_card(card_id="0CARD000000000000000000002", tag="A second tag"))
+
+    paragraphs = read_paragraphs(
+        render(
+            CardToRender(first, HAND_CITE),
+            CardToRender(second, HAND_CITE),
+            headings=DocumentHeadings(pocket="Aff", hat="Methane advantage", block="Feedbacks"),
+        )
+    )
+
+    assert [(p.style_id, p.text) for p in paragraphs if p.style_id.startswith("Heading")] == [
+        ("Heading1", "Aff"),
+        ("Heading2", "Methane advantage"),
+        ("Heading3", "Feedbacks"),
+        ("Heading4", "Arctic methane feedback is already measurable"),
+        ("Heading4", "A second tag"),
+    ]
+    assert len(paragraphs) == 3 + 2 * 3
+
+
+def test_structure_headings_left_out_are_not_written() -> None:
+    paragraphs = read_paragraphs(
+        render(CardToRender(verified(build_card()), HAND_CITE), headings=DocumentHeadings(hat="Only a hat"))
+    )
+
+    assert [p.style_id for p in paragraphs] == ["Heading2", "Heading4", "Normal", "Normal"]
+
+
+@pytest.mark.parametrize(
+    ("style_id", "name", "outline_level"),
+    [("Heading1", "heading 1", "0"), ("Heading2", "heading 2", "1"), ("Heading3", "heading 3", "2"), ("Heading4", "heading 4", "3")],
+)
+def test_structure_heading_styles_carry_the_style_profiles_names_and_outline_levels(
+    style_id: str, name: str, outline_level: str
+) -> None:
+    data = render(
+        CardToRender(verified(build_card()), HAND_CITE),
+        headings=DocumentHeadings(pocket="Pocket", hat="Hat", block="Block"),
+    )
+
+    [style] = [s for s in styles_part(data).iter(f"{W}style") if s.get(f"{W}styleId") == style_id]
+    name_element = style.find(f"{W}name")
+    level = style.find(f"{W}pPr/{W}outlineLvl")
+    assert name_element is not None and name_element.get(f"{W}val") == name
+    assert level is not None and level.get(f"{W}val") == outline_level
+
+
+def test_structure_the_style_table_is_the_one_the_lossless_writer_generates_from_the_style_profile() -> None:
+    data = render(CardToRender(verified(build_card()), HAND_CITE))
+
+    with zipfile.ZipFile(io.BytesIO(data)) as package:
+        rendered = package.read("word/styles.xml")
+    expected = render_styles_xml(TEAM_DEFAULT.style_profile)
+    assert ElementTree.canonicalize(rendered) == ElementTree.canonicalize(expected)
+
+
+def test_structure_the_short_cite_carries_the_cite_style_and_the_rest_the_full_cite_size(
+    news: tuple[Card, CardManifest],
+) -> None:
+    card, manifest = news
+
+    cite = read_paragraphs(render_cards_docx(manifest, [CardToRender(card, NEWS_CITE)], TEAM_DEFAULT))[1]
+
+    assert [(r.text, r.character_style, r.half_points) for r in cite.runs] == [
+        ("Whitfield 26", "Style13ptBold", None),
+        (NEWS_CITE.full_cite.removeprefix("Whitfield 26"), None, 22),
+    ]
+
+
+def test_structure_a_profile_without_a_bold_short_cite_writes_it_at_the_full_cite_size() -> None:
+    text = (PROFILES / "team-default.yaml").read_text(encoding="utf-8").replace(
+        "short_cite_bold: true", "short_cite_bold: false"
+    ).replace("full_cite_half_points: 22", "full_cite_half_points: 18").replace("name: team-default", "name: small")
+    profile = resolve_format_profile(load_format_profile_from_text(text))
+
+    cite = read_paragraphs(render(CardToRender(verified(build_card()), HAND_CITE), profile=profile))[1]
+
+    assert [(r.text, r.character_style, r.half_points) for r in cite.runs] == [
+        ("Rivera et al. 23", None, 18),
+        (HAND_CITE.cite_line, None, 18),
+    ]
+
+
+def test_structure_plain_writes_no_highlight_and_keeps_every_underline(news: tuple[Card, CardManifest]) -> None:
+    card, manifest = news
+
+    evidence = read_paragraphs(render_cards_docx(manifest, [CardToRender(card, NEWS_CITE)], PLAIN))[2]
+
+    assert {r.highlight for r in evidence.runs} == {None}
+    assert [(t, u, s) for t, u, _, s in as_tuples(evidence.runs)] == [(t, u, s) for t, u, _, s in NEWS_EVIDENCE_RUNS]
+
+
+def test_structure_a_card_with_no_evidence_has_no_evidence_paragraph() -> None:
+    card = build_card(evidence_text="", evidence_start_offset=None, evidence_end_offset=None, spans=())
+
+    paragraphs = read_paragraphs(render(CardToRender(card, HAND_CITE, ("MODEL_OUTPUT_INVALID",))))
+
+    assert (paragraphs[0].style_id, paragraphs[0].text) == ("Heading4", card.tag)
+    assert paragraphs[-1].text == HAND_CITE.full_cite
+
+
+def test_structure_the_cards_must_be_the_manifests_cards_in_its_order() -> None:
+    first = verified(build_card(card_id="0CARD000000000000000000001"))
+    second = verified(build_card(card_id="0CARD000000000000000000002"))
+    manifest = manifest_of(first, second)
+
+    with pytest.raises(RenderRefused, match="the manifest's cards"):
+        render_cards_docx(manifest, [CardToRender(second, HAND_CITE), CardToRender(first, HAND_CITE)], TEAM_DEFAULT)
+    with pytest.raises(RenderRefused, match="the manifest's cards"):
+        render_cards_docx(manifest, [CardToRender(first, HAND_CITE)], TEAM_DEFAULT)
+    with pytest.raises(RenderRefused, match="the manifest's cards"):
+        render_cards_docx(manifest, [CardToRender(first, HAND_CITE), CardToRender(second.evolve(tag="Changed"), HAND_CITE)], TEAM_DEFAULT)
+
+
+@pytest.mark.parametrize(("character", "name"), [("\r", "U+000D"), ("\x00", "U+0000"), ("\x0b", "U+000B"), ("￾", "U+FFFE")])
+def test_structure_evidence_a_docx_cannot_carry_as_written_is_refused_never_altered(character: str, name: str) -> None:
+    text = f"Before{character}after"
+    card = verified(build_card(evidence_text=text, evidence_start_offset=0, evidence_end_offset=len(text), spans=(CardSpan(start_offset=0, end_offset=6, style=SpanStyle.UNDERLINE),)))
+
+    with pytest.raises(RenderRefused, match=f"evidence of card {card.card_id} holds {name} at offset 6"):
+        render(CardToRender(card, HAND_CITE))
+
+
+def test_structure_the_same_cards_and_profile_give_the_same_bytes(news: tuple[Card, CardManifest]) -> None:
+    card, manifest = news
+    cards = [CardToRender(card, NEWS_CITE)]
+
+    first = render_cards_docx(manifest, cards, TEAM_DEFAULT)
+    second = render_cards_docx(manifest, cards, TEAM_DEFAULT)
+
+    assert hashlib.sha256(first).hexdigest() == hashlib.sha256(second).hexdigest()
+    with zipfile.ZipFile(io.BytesIO(first)) as package:
+        assert {info.date_time for info in package.infolist()} == {(2026, 10, 27, 9, 30, 0)}
+
+
+def test_structure_the_document_properties_name_the_tool_and_no_student(news: tuple[Card, CardManifest]) -> None:
+    card, manifest = news
+
+    data = render_cards_docx(manifest, [CardToRender(card, NEWS_CITE)], TEAM_DEFAULT)
+
+    properties = docx.Document(io.BytesIO(data)).core_properties
+    assert properties.author == "debate-research"
+    assert properties.last_modified_by in ("", "debate-research")
+    assert (properties.created, properties.modified) == (GENERATED_AT.replace(tzinfo=None), GENERATED_AT.replace(tzinfo=None))
+    assert (properties.title, properties.subject, properties.comments, properties.keywords) == ("", "", "", "")
+    with zipfile.ZipFile(io.BytesIO(data)) as package:
+        names = package.namelist()
+        documents = {name: package.read(name).decode("utf-8") for name in names if name.startswith("docProps/")}
+    assert sorted(documents) == ["docProps/core.xml"]
+    assert "@" not in documents["docProps/core.xml"]
+    assert card.owner_id not in documents["docProps/core.xml"]
+
+
+def test_structure_the_verbatim_parser_reads_the_card_back_under_its_headings(news: tuple[Card, CardManifest]) -> None:
+    card, manifest = news
+    data = render_cards_docx(
+        manifest,
+        [CardToRender(card, NEWS_CITE)],
+        TEAM_DEFAULT,
+        headings=DocumentHeadings(pocket="Neg", hat="De-extinction DA", block="Link"),
+    )
+
+    source = SourceDocument(
+        sha256=hashlib.sha256(data).hexdigest(),
+        byte_size=len(data),
+        source_format=SourceFormat.DOCX,
+        origin=SourceOrigin.CASELIST_ARCHIVE,
+        caselist="rendered26",
+        first_seen_snapshot=date(2026, 10, 27),
+        last_seen_snapshot=date(2026, 10, 27),
+    )
+    parsed = DebateDocxParser().parse(data, source, source_path="rendered.docx")
+
+    assert isinstance(parsed, ParsedDocument)
+    [parsed_card] = parsed.cards
+    assert parsed_card.tag == card.tag
+    assert parsed_card.section_path == ("Neg", "De-extinction DA", "Link")
+    assert parsed_card.short_cite == "Whitfield 26"
+    assert parsed_card.evidence_text.replace(MARKER, "") == card.evidence_text
+

@@ -12,8 +12,10 @@ re-exported four values it no longer defined. This test keeps all three from gro
   is a shared helper and imports no port. `all_ports` is the one exception, named below. Imports of
   another fakes module count as reaching what that module reaches, so a port cannot be laundered
   through a neighbour.
-* **The two package modules hold only a docstring:** `application/ports/__init__.py` and
-  `testing/fakes/__init__.py` define nothing and import nothing.
+* **The package modules hold only a docstring:** `application/ports/__init__.py` and
+  `testing/fakes/__init__.py` define nothing and import nothing. `v1-e01-t32` added two more:
+  `testing/contracts/__init__.py`, which re-exported every contract suite, and
+  `debate_cli/commands/__init__.py`, which imported every command module to register it.
 * **A port module's `__all__` names only what it defines,** so no caller is invited to import a
   value from a port that merely uses it.
 
@@ -209,6 +211,10 @@ def test_a_fakes_module_reaches_only_its_own_port(fake: str) -> None:
     [
         "packages/debate_core/src/debate_core/application/ports/__init__.py",
         "packages/debate_core/src/debate_core/testing/fakes/__init__.py",
+        # Added by v1-e01-t32: the contract suites' re-exports, and the command registration that
+        # imported every command module.
+        "packages/debate_core/src/debate_core/testing/contracts/__init__.py",
+        "packages/debate_cli/src/debate_cli/commands/__init__.py",
     ],
 )
 def test_the_package_module_holds_only_a_docstring(init: str) -> None:

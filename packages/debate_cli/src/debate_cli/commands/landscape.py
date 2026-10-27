@@ -102,10 +102,11 @@ from typing import Annotated, Final, NoReturn
 import typer
 
 from debate_cli.bucket_lock import run_holding_the_bucket_lock
-from debate_cli.commands.caselist import _snapshot_date  # pyright: ignore[reportPrivateUsage]
-from debate_cli.commands.store import CONFIRM_PROD_FLAG, SYNCABLE_ENVIRONMENTS
 from debate_cli.context import CliContext, cli_context, command_name
 from debate_cli.exit_codes import ExitCode
+from debate_cli.options.bucket_environment import CONFIRM_PROD_FLAG, SYNCABLE_ENVIRONMENTS
+from debate_cli.options.landscape_config import landscape_config_dir
+from debate_cli.options.snapshot_date import parse_snapshot_date
 from debate_cli.output import CliOutput, CommandFailure, JsonValue, OutputMode
 from debate_core.application.errors import error_code_of
 from debate_core.application.landscape_model_evaluation import TARGET_ACCURACY, FormatEvaluation
@@ -139,7 +140,6 @@ __all__ = [
     "run_summary",
 ]
 
-LANDSCAPE_CONFIG: Final = Path("config") / "landscape"
 POLICY_FILE: Final = Path("docs") / "policies" / "caselist-data-use.md"
 
 SCAN_NOTICE: Final = (
@@ -237,7 +237,7 @@ def report(
         _end(cli, ctx, refusal)
     request = LandscapeRunRequest(
         caselist=caselist,
-        snapshot=_snapshot_date(snapshot) if snapshot is not None else None,
+        snapshot=parse_snapshot_date(snapshot) if snapshot is not None else None,
         out=_outside_a_checkout(out),
         publish=publish,
         dry_run=dry_run,
@@ -245,7 +245,7 @@ def report(
         model_mode=model_mode,
         max_model_items=max_model_items,
     )
-    service = cli.services.landscape_run(config_dir=_config_dir(config_dir), with_bucket=publish)
+    service = cli.services.landscape_run(config_dir=landscape_config_dir(config_dir), with_bucket=publish)
     try:
         result = (
             run_holding_the_bucket_lock(cli, "landscape report --publish", lambda: service.run(request))
@@ -305,11 +305,13 @@ def evaluate(
     if refusal is not None:
         _end(cli, ctx, refusal)
     service = cli.services.landscape_evaluation(
-        config_dir=_config_dir(config_dir), record=model_mode is EvaluationMode.RECORD
+        config_dir=landscape_config_dir(config_dir), record=model_mode is EvaluationMode.RECORD
     )
     with sample.open(encoding="utf-8", newline="") as labels, sample_rows.open(encoding="utf-8") as rows:
         result = asyncio.run(
-            service.evaluate(caselist, labels, rows, snapshot=_snapshot_date(snapshot) if snapshot else None)
+            service.evaluate(
+                caselist, labels, rows, snapshot=parse_snapshot_date(snapshot) if snapshot else None
+            )
         )
     payload = evaluation_summary(result)
     passed = result.meets_target and result.sent.clean and result.cassettes.clean
@@ -413,20 +415,6 @@ def _policy_refusal() -> CommandFailure | None:
         details={"policy": str(POLICY_FILE), "open_question": POLICY_QUESTION},
         hint="Use --model-mode replay or none until the policy records the answer.",
     )
-
-
-def _config_dir(given: Path | None) -> Path:
-    """`--config-dir`, or `config/landscape` in the checkout around the working directory."""
-    if given is not None:
-        return given
-    root = find_repository_root()
-    if root is None or not (root / LANDSCAPE_CONFIG).is_dir():
-        raise typer.BadParameter(
-            "no config/landscape/ in a checkout around this directory; name the directory holding "
-            "topics.yaml with --config-dir",
-            param_hint="--config-dir",
-        )
-    return root / LANDSCAPE_CONFIG
 
 
 def _outside_a_checkout(out: Path | None) -> Path | None:

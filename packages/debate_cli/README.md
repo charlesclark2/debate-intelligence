@@ -26,7 +26,8 @@ That is why the envelope below is a contract rather than a convenience.
 | Module | What it is |
 |---|---|
 | `app.py` | The root Typer app: global options, the callback that builds the run's context, and `DebateResearchGroup`, which turns any failure into a reported error and an exit code. |
-| `commands/` | One module per command, all registered in `commands/__init__.py`. |
+| `commands/` | One module per command. A command module imports no other command module; what two share lives in `options/` or beside it. |
+| `command_registry.py` | Attaches every command to the root app. Only `app.py` imports it, so a test of one command does not import the rest. |
 | `container.py` | The composition root: the only place a command obtains a service. |
 | `context.py` | `CliContext` — the run's output and services — and how a command gets it. |
 | `output.py` | Rich tables and error panels, the `--json` envelope, and the stdout/stderr split. |
@@ -46,7 +47,7 @@ def verify(ctx: typer.Context, path: Path) -> None:
     )
 ```
 
-Then register it in `commands/__init__.py`, which also shows how to register a group with
+Then register it in `command_registry.py`, which also shows how to register a group with
 subcommands (`debate-research store sync`).
 
 Three things a command never does: catch a `DomainError` (the root group reports it and picks the

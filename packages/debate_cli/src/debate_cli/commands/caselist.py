@@ -32,9 +32,9 @@ binds to this installation's size ceilings as :meth:`debate_cli.container.Servic
 
 `--event` says which sides the caselist debates, and it decides whether `Aff` or `Pro` is a legal
 side on a disclosure. It is inferred from the slug for the caselists that exist
-(:data:`EVENTS_BY_SLUG_PREFIX`), because typing `--event LD` after `--caselist hsld26` every week
-is a way to eventually type the wrong one. A slug this build does not recognise is a refusal that
-names the flag, not a guess.
+(:data:`~debate_cli.caselist_events.EVENTS_BY_SLUG_PREFIX`), because typing `--event LD` after
+`--caselist hsld26` every week is a way to eventually type the wrong one. A slug this build does
+not recognise is a refusal that names the flag, not a guess.
 
 ## Nothing is written under `--dry-run`
 
@@ -191,16 +191,19 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Coroutine, Iterable, Sequence
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any, Final
 
 import typer
 
 from debate_cli.bucket_lock import run_holding_the_bucket_lock
-from debate_cli.commands.store import CONFIRM_PROD_FLAG, SYNCABLE_ENVIRONMENTS
-from debate_cli.context import CliContext, cli_context, command_name
+from debate_cli.caselist_events import EVENTS_BY_SLUG_PREFIX, event_for_caselist
+from debate_cli.caselist_publish_refusals import no_bucket, refuse, unconfirmed_production_write
+from debate_cli.context import cli_context, command_name
 from debate_cli.exit_codes import ExitCode, exit_code_for_failure_codes
+from debate_cli.options.bucket_environment import CONFIRM_PROD_FLAG
+from debate_cli.options.snapshot_date import parse_snapshot_date
 from debate_cli.output import CommandFailure, JsonValue, TableSpec
 from debate_core.application.caselist.camp_metadata import load_camp_aliases
 from debate_core.application.caselist.import_service import Classification, ImportReport
@@ -224,14 +227,11 @@ from debate_core.application.caselist.status_service import (
     SnapshotStatus,
 )
 from debate_core.application.caselist_sync import full_archive_of_inbox_name
-from debate_core.application.settings import ConfigurationError, Environment, Settings
+from debate_core.application.settings import ConfigurationError, Settings
 from debate_core.domain.caselist import Event
 
 __all__ = [
-    "EVENTS_BY_SLUG_PREFIX",
-    "InvalidSnapshotDate",
     "UnknownCaselistEvent",
-    "event_for_caselist",
     "import_archive",
     "import_openev",
     "import_summary",
@@ -243,31 +243,6 @@ __all__ = [
     "status",
     "status_summary",
 ]
-
-EVENTS_BY_SLUG_PREFIX: Final[dict[str, Event]] = {
-    "hsld": Event.LD,
-    "hspolicy": Event.POLICY,
-    "hspf": Event.PF,
-    "ndtceda": Event.POLICY,
-    "nfald": Event.LD,
-    # The synthetic caselist the test archives are built under (`tests/fixtures/caselist/`).
-    # Named here rather than special-cased in a test so that the smoke check runs the same code
-    # path an operator runs.
-    "testcl": Event.LD,
-}
-"""Which event each published caselist slug debates, by the letters before its season year.
-
-A table rather than a rule, because a slug is data (`CaselistSlug` is a validated string, not an
-enum) and next season's slugs are rows somebody adds here. A slug that is not in it is a refusal
-naming `--event`, never a guess: guessing wrong would file every disclosure in the archive under
-a side the event does not debate.
-"""
-
-
-def event_for_caselist(caselist: str) -> Event | None:
-    """The event a caselist slug implies, or `None` when this build does not know the slug."""
-    prefix = caselist.rstrip("0123456789")
-    return EVENTS_BY_SLUG_PREFIX.get(prefix)
 
 
 def import_archive(
@@ -311,7 +286,7 @@ def import_archive(
     cli.services.settings  # noqa: B018 - loaded first, so a broken profile is reported before a bad flag
     if full_archive_of_inbox_name(source.name) is not None:
         raise CompleteArchiveNotImportedByHand(source.name)
-    published = _snapshot_date(snapshot)
+    published = parse_snapshot_date(snapshot)
     resolved_event = event or event_for_caselist(caselist)
     if resolved_event is None:
         raise UnknownCaselistEvent(caselist)
@@ -384,7 +359,7 @@ def import_openev(
     cli = cli_context(ctx)
     cli.services.settings  # noqa: B018 - loaded first, so a broken profile is reported before a bad flag
     # UTC, because that is the calendar the domain's no-future-dates rule reads.
-    imported_on = _snapshot_date(snapshot) if snapshot is not None else datetime.now(UTC).date()
+    imported_on = parse_snapshot_date(snapshot) if snapshot is not None else datetime.now(UTC).date()
     aliases = load_camp_aliases(camp_aliases)
     manifest_path = cli.services.evidence_object_path(openev_manifest_key(year, event))
 
@@ -494,11 +469,11 @@ def publish(
     cli = cli_context(ctx)
     settings = cli.services.settings
     validate_publish_target(caselist, snapshot)
-    _refuse(
+    refuse(
         cli,
         ctx,
-        _no_bucket(settings, writing=not dry_run)
-        or _unconfirmed_production_write(settings, writing=not dry_run, confirmed=confirm_prod),
+        no_bucket(settings, writing=not dry_run)
+        or unconfirmed_production_write(settings, writing=not dry_run, confirmed=confirm_prod),
     )
 
     service = cli.services.caselist_publish()
@@ -540,7 +515,7 @@ def status(
         raise InvalidStatusRequest
     if caselist is not None:
         validate_publish_target(caselist, snapshot)
-    _refuse(cli, ctx, _no_bucket(settings, writing=False))
+    refuse(cli, ctx, no_bucket(settings, writing=False))
 
     report = _run(cli.services.caselist_status().status(caselist, snapshot, residue=True, held_in_inbox=True))
     payload = status_summary(report, settings)
@@ -760,56 +735,6 @@ class InvalidStatusRequest(ConfigurationError):
 # ------------------------------------------------------------------------------------------------
 # Publish and status guards
 # ------------------------------------------------------------------------------------------------
-
-
-def _refuse(cli: CliContext, ctx: typer.Context, refusal: CommandFailure | None) -> None:
-    """Report `refusal` and end the run, or return so the command can continue.
-
-    The same outcome-not-exception pattern as `store` (see :mod:`debate_cli.commands.store`).
-    """
-    if refusal is None:
-        return
-    cli.output.failure(refusal, command=command_name(ctx))
-    raise typer.Exit(code=refusal.exit_code)
-
-
-def _no_bucket(settings: Settings, *, writing: bool) -> CommandFailure | None:
-    """A publish needs dev or prod; even a dry run or a status needs a bucket to read."""
-    if writing and settings.environment not in SYNCABLE_ENVIRONMENTS:
-        return CommandFailure(
-            code="ENVIRONMENT_NOT_SYNCABLE",
-            message=f"`caselist publish` writes to dev or prod, not {settings.environment.value}",
-            exit_code=ExitCode.DOMAIN_FAILURE,
-            details={"environment": settings.environment.value},
-            hint="Set DEBATE_ENV=dev (or prod) and try again.",
-        )
-    if not settings.storage.s3.bucket:
-        return CommandFailure(
-            code="EVIDENCE_STORE_NOT_CONFIGURED",
-            message=f"the {settings.environment.value} environment names no evidence bucket",
-            exit_code=ExitCode.DOMAIN_FAILURE,
-            details={"environment": settings.environment.value},
-            hint="Set DEBATE_ENV to dev or prod, or set storage.s3.bucket for this environment.",
-        )
-    return None
-
-
-def _unconfirmed_production_write(
-    settings: Settings, *, writing: bool, confirmed: bool
-) -> CommandFailure | None:
-    """Publishing to the production bucket needs `--confirm-prod`; a dry run writes nothing."""
-    if not writing or settings.environment is not Environment.PROD or confirmed:
-        return None
-    return CommandFailure(
-        code="CONFIRMATION_REQUIRED",
-        message=(
-            "refusing to publish to the production evidence bucket without "
-            f"{CONFIRM_PROD_FLAG}: {settings.storage.s3.bucket}"
-        ),
-        exit_code=ExitCode.DOMAIN_FAILURE,
-        details={"environment": settings.environment.value, "bucket": settings.storage.s3.bucket},
-        hint=f"Run it with --dry-run first, then again with {CONFIRM_PROD_FLAG}.",
-    )
 
 
 # ------------------------------------------------------------------------------------------------
@@ -1344,19 +1269,6 @@ def _publish_failure(report: PublishReport, payload: dict[str, JsonValue]) -> Co
     )
 
 
-def _snapshot_date(value: str) -> date:
-    """Parse `--snapshot` as a plain calendar date.
-
-    Taken as a string and parsed here rather than declared as a `datetime` option, because a
-    snapshot is the day an archive was published and an option typed as a datetime would accept
-    `2026-09-15T06:00` and silently carry a time of day the source does not have.
-    """
-    try:
-        return date.fromisoformat(value.strip())
-    except ValueError as malformed:
-        raise InvalidSnapshotDate(value) from malformed
-
-
 class CompleteArchiveNotImportedByHand(ConfigurationError):
     """`caselist import` was given a complete archive (`<slug>-all-<date>.zip`, `v1-e34-t04`).
 
@@ -1371,17 +1283,6 @@ class CompleteArchiveNotImportedByHand(ConfigurationError):
             f"{name} is a complete archive, which `caselist import` would file into the weekly series; "
             "import it with `caselist pull --full-archive <slug>`, which files it as its own snapshot",
             field="source",
-            source="cli",
-        )
-
-
-class InvalidSnapshotDate(ConfigurationError):
-    """`--snapshot` was not a calendar date. It names the archive's publication day."""
-
-    def __init__(self, value: str) -> None:
-        super().__init__(
-            f"--snapshot must be a date as YYYY-MM-DD (the day the archive was published), not {value!r}",
-            field="--snapshot",
             source="cli",
         )
 

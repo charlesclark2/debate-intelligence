@@ -21,9 +21,9 @@ from typing import Annotated
 
 import typer
 
-from debate_cli.commands.store import CONFIRM_PROD_FLAG, SYNCABLE_ENVIRONMENTS
 from debate_cli.context import CliContext, cli_context, command_name
 from debate_cli.exit_codes import ExitCode
+from debate_cli.options.bucket_environment import CONFIRM_PROD_FLAG, SYNCABLE_ENVIRONMENTS
 from debate_cli.output import CommandFailure, JsonValue, TableSpec
 from debate_core.application.caselist.run_state import RUN_STATE_BUNDLE_KEY, STATE_FILES, state_key
 from debate_core.application.caselist.run_state_seed import SeedPlan, SeedReport

@@ -45,9 +45,9 @@ from typing import Annotated
 import typer
 
 from debate_cli.bucket_lock import run_holding_the_bucket_lock
-from debate_cli.commands.store import CONFIRM_PROD_FLAG, SYNCABLE_ENVIRONMENTS
 from debate_cli.context import CliContext, cli_context, command_name
 from debate_cli.exit_codes import ExitCode
+from debate_cli.options.bucket_environment import CONFIRM_PROD_FLAG, SYNCABLE_ENVIRONMENTS
 from debate_cli.output import CliOutput, CommandFailure, JsonValue, OutputMode, TableSpec
 from debate_core.application.caselist.version_retention import (
     DirectoryRow,

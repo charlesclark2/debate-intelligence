@@ -94,6 +94,8 @@ def test_committed_dev_and_prod_profiles_differ_in_data_dir_and_routing_file_and
     assert development.models.budget_usd_monthly == 50.0
     assert production.models.budget_usd_monthly == 50.0
     assert development.field_sources["models.budget_usd_daily"] == "profile:config/profiles/dev.toml"
+    assert development.field_sources["models.budget_usd_monthly"] == "profile:config/profiles/dev.toml"
+    assert production.field_sources["models.budget_usd_daily"] == "profile:config/profiles/prod.toml"
     assert production.field_sources["models.budget_usd_monthly"] == "profile:config/profiles/prod.toml"
     assert production.field_sources["models.routing_file"] == "profile:config/profiles/prod.toml"
 

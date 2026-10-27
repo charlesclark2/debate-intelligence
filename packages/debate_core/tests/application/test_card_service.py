@@ -17,9 +17,18 @@ from datetime import UTC, datetime
 from typing import Final
 
 import pytest
-from tests.fixtures.card.card_world import NEWS_ARGUMENT, NEWS_NEED, CardWorld, news_request
+from pydantic import JsonValue
+from tests.fixtures.card.card_world import (
+    NEWS_ARGUMENT,
+    NEWS_NEED,
+    CardWorld,
+    news_request,
+    page_bytes,
+    without_lines,
+)
 
 from debate_core.application.article_fetch import SOURCE_NOT_ACCESSIBLE_CODE
+from debate_core.application.card_selection import CardSelector
 from debate_core.application.card_types import (
     CardFailure,
     CardFailureReason,
@@ -27,7 +36,15 @@ from debate_core.application.card_types import (
     CutResult,
     SourceNotAccessibleError,
 )
-from debate_core.application.errors import DomainError, error_code_of
+from debate_core.application.errors import (
+    DomainError,
+    NotFound,
+    ProviderUnavailable,
+    SnapshotIntegrityError,
+    error_code_of,
+)
+from debate_core.application.snapshot_service import LoadedSnapshot
+from debate_core.application.structured_output import StructuredOutputGuard
 from debate_core.domain import (
     AccessStatus,
     Card,
@@ -39,6 +56,12 @@ from debate_core.domain import (
 )
 from debate_core.domain.card import DEFAULT_FORMAT_PROFILE
 from debate_core.domain.model_contracts import ModelProvider, TaskClass
+from debate_core.evidence.selection_contract import (
+    GeneratedCardMarkup,
+    GeneratedCardSelection,
+    MarkupSpan,
+    SelectedPassage,
+)
 from debate_core.evidence.verification_types import (
     REQUIRED_CHECKS,
     ReasonCode,
@@ -46,6 +69,7 @@ from debate_core.evidence.verification_types import (
     VerificationReason,
     VerificationResult,
 )
+from debate_core.testing.fakes.model_router import ScriptedModelRouter
 
 pytestmark = pytest.mark.anyio
 
@@ -412,3 +436,271 @@ async def test_the_model_is_asked_for_the_need_within_its_argument_before_a_veri
     assert [prompt.prompt_id for prompt in world.router.calls] == ["card.select", "card.markup"]
     assert world.router.calls[0].variables["research_need"] == f"{NEWS_ARGUMENT}: {NEWS_NEED}"
     assert str(world.router.calls[0].variables["numbered_snapshot"]).startswith("[P1] A private laboratory")
+
+
+# =============================================================================================
+# Every failure after the snapshot exists is saved UNVERIFIED with its reason (ac2), and an
+# inaccessible snapshot is rejected before any model call (ac3)
+# =============================================================================================
+
+NEWS_SELECTION: Final[dict[str, JsonValue]] = {
+    "passages": [
+        {"first_paragraph": 2, "last_paragraph": 2, "start_offset": 0, "end_offset": 108},
+        {"first_paragraph": 3, "last_paragraph": 3, "start_offset": 0, "end_offset": None},
+    ],
+    "tag": {"text": NEWS_TAG, "argument_role": "link", "need_alignment": "direct", "confidence": 0.8},
+    "rationale": "Paragraph 2 reports the failed attempts; paragraph 3 says each delay costs funding.",
+    "confidence": 0.75,
+}
+"""The committed `card.select` answer for the news article, for a scripted router."""
+
+PAST_THE_LAST_PARAGRAPH: Final[dict[str, JsonValue]] = {
+    **NEWS_SELECTION,
+    "passages": [{"first_paragraph": 9, "last_paragraph": 9, "start_offset": 0, "end_offset": None}],
+}
+"""A selection of paragraph 9 of a five-paragraph snapshot: the guard refuses it, and its repair."""
+
+HIGHLIGHT_NOT_UNDERLINED: Final[dict[str, JsonValue]] = {
+    "spans": [
+        {"paragraph": 3, "start_offset": 119, "end_offset": 199, "style": "highlight", "purpose": "impact"}
+    ],
+    "rationale": "The highlight carries the lost funding.",
+}
+"""A markup answer that highlights words it does not underline: refused, and its repair."""
+
+QUOTED_WORDS: Final = ("elephant", "mammoth", "embryos", "Ramaswamy", "funding")
+"""Words of the snapshot and the tag that no failure detail may contain."""
+
+
+def assert_quotes_nothing(failures: tuple[CardFailure, ...]) -> None:
+    for failure in failures:
+        for word in QUOTED_WORDS:
+            assert word.lower() not in failure.detail.lower(), (failure.reason, word)
+
+
+def scripted_world(*answers: dict[str, JsonValue] | Exception) -> CardWorld:
+    return CardWorld(ScriptedModelRouter(answers))
+
+
+async def assert_saved_unverified(world: CardWorld, result: CutResult) -> Card:
+    stored = await world.cards.get(result.card.card_id)
+    assert stored == result.card
+    assert (stored.verification_status, stored.revision) == (VerificationStatus.UNVERIFIED, 1)
+    assert not result.is_verified
+    assert_quotes_nothing(result.reasons)
+    return stored
+
+
+def codes(result: CutResult) -> list[tuple[CardFailureReason, ReasonCode | None]]:
+    return [(failure.reason, failure.verifier_code) for failure in result.reasons]
+
+
+async def test_a_selection_the_guard_refused_is_saved_unverified_with_model_output_invalid() -> None:
+    world = scripted_world(PAST_THE_LAST_PARAGRAPH, PAST_THE_LAST_PARAGRAPH)
+    source = await world.add_page("news-article")
+
+    result = await world.card_service.cut_card(news_request(source.snapshot.snapshot_id))
+
+    card = await assert_saved_unverified(world, result)
+    assert codes(result) == [
+        (CardFailureReason.MODEL_OUTPUT_INVALID, None),
+        (CardFailureReason.EVIDENCE_UNVERIFIED, ReasonCode.CARD_INCOMPLETE),
+    ]
+    assert result.reasons[0].detail == (
+        "card.select@1.0.0 was refused after 2 attempt(s): paragraph_out_of_bounds"
+    )
+    assert (card.evidence_text, card.spans, card.generated_by, card.tag) == ("", (), (), NEWS_NEED)
+    assert card.snapshot_id == source.snapshot.snapshot_id
+    assert [prompt.prompt_id for prompt in world.router.calls] == ["card.select", "model.repair"]
+
+
+async def test_a_markup_the_guard_refused_is_saved_unverified_holding_the_snapshot_slice_unmarked() -> None:
+    world = scripted_world(NEWS_SELECTION, HIGHLIGHT_NOT_UNDERLINED, HIGHLIGHT_NOT_UNDERLINED)
+    source = await world.add_page("news-article")
+
+    result = await world.card_service.cut_card(news_request(source.snapshot.snapshot_id))
+
+    card = await assert_saved_unverified(world, result)
+    assert codes(result) == [
+        (CardFailureReason.MODEL_OUTPUT_INVALID, None),
+        (CardFailureReason.EVIDENCE_UNVERIFIED, ReasonCode.CARD_INCOMPLETE),
+    ]
+    assert result.reasons[0].detail == (
+        "card.markup@1.0.0 was refused after 2 attempt(s): highlight_not_underlined"
+    )
+    assert card.evidence_text == SEGMENT_ONE + SEGMENT_TWO
+    assert (card.spans, card.tag) == ((), NEWS_TAG)
+    assert [metadata.prompt_id for metadata in card.generated_by] == ["card.select"]
+
+
+class SelectionOffTheEnd:
+    """A selector whose selection was never checked: it names paragraph 9 of five."""
+
+    def __init__(self, inner: CardSelector) -> None:
+        self.inner = inner
+        self.marked_up = False
+
+    async def select(self, loaded: LoadedSnapshot, research_need: str) -> GeneratedCardSelection:
+        selected = await self.inner.select(loaded, research_need)
+        passages = (SelectedPassage(first_paragraph=9, last_paragraph=9),)
+        return selected.evolve(selection=selected.selection.evolve(passages=passages))
+
+    async def mark_up(
+        self, loaded: LoadedSnapshot, selected: GeneratedCardSelection, research_need: str
+    ) -> GeneratedCardMarkup:
+        self.marked_up = True
+        return await self.inner.mark_up(loaded, selected, research_need)
+
+
+class MarkupAcrossTheCut:
+    """A selector whose markup was never checked: it underlines P2 100-150, past the passage's end at 108."""
+
+    def __init__(self, inner: CardSelector) -> None:
+        self.inner = inner
+
+    async def select(self, loaded: LoadedSnapshot, research_need: str) -> GeneratedCardSelection:
+        return await self.inner.select(loaded, research_need)
+
+    async def mark_up(
+        self, loaded: LoadedSnapshot, selected: GeneratedCardSelection, research_need: str
+    ) -> GeneratedCardMarkup:
+        marked = await self.inner.mark_up(loaded, selected, research_need)
+        across = MarkupSpan(paragraph=2, start_offset=100, end_offset=150, style=SpanStyle.UNDERLINE)
+        return marked.evolve(markup=marked.markup.evolve(spans=(across,)))
+
+
+def unchecked_world(selector: type[SelectionOffTheEnd | MarkupAcrossTheCut]) -> CardWorld:
+    plain = CardWorld()
+    return CardWorld(
+        plain.router.inner,
+        selector=selector(CardSelector(StructuredOutputGuard(plain.router, plain.registry))),
+    )
+
+
+async def test_a_selection_that_does_not_fit_the_snapshot_is_saved_unverified_with_span_mismatch() -> None:
+    world = unchecked_world(SelectionOffTheEnd)
+    source = await world.add_page("news-article")
+
+    result = await world.card_service.cut_card(news_request(source.snapshot.snapshot_id))
+
+    card = await assert_saved_unverified(world, result)
+    assert codes(result) == [
+        (CardFailureReason.SPAN_MISMATCH, None),
+        (CardFailureReason.EVIDENCE_UNVERIFIED, ReasonCode.CARD_INCOMPLETE),
+    ]
+    assert result.reasons[0].detail.startswith(
+        "the selection does not fit the snapshot: paragraph_out_of_bounds"
+    )
+    assert (card.evidence_text, card.spans, card.tag) == ("", (), NEWS_TAG)
+    assert [metadata.prompt_id for metadata in card.generated_by] == ["card.select"]
+    assert isinstance(world.selector, SelectionOffTheEnd) and not world.selector.marked_up
+
+
+async def test_markup_that_does_not_fit_the_evidence_is_saved_unverified_with_span_mismatch() -> None:
+    world = unchecked_world(MarkupAcrossTheCut)
+    source = await world.add_page("news-article")
+
+    result = await world.card_service.cut_card(news_request(source.snapshot.snapshot_id))
+
+    card = await assert_saved_unverified(world, result)
+    assert codes(result) == [
+        (CardFailureReason.SPAN_MISMATCH, None),
+        (CardFailureReason.EVIDENCE_UNVERIFIED, ReasonCode.CARD_INCOMPLETE),
+    ]
+    assert result.reasons[0].detail.startswith("the markup does not fit the evidence: ")
+    assert (card.evidence_text, card.spans) == (SEGMENT_ONE + SEGMENT_TWO, ())
+    assert [metadata.prompt_id for metadata in card.generated_by] == ["card.select", "card.markup"]
+
+
+NEWS_DATES: Final = (b'"datePublished"', b"article:published_time", b"<time datetime")
+NEWS_AUTHORS: Final = (b'<meta name="author"', b'"author": [', b'class="byline"')
+
+
+async def test_a_card_whose_page_states_no_date_is_saved_unverified_naming_published_at(
+    world: CardWorld,
+) -> None:
+    source = await world.add_page(
+        "news-article", raw_bytes=without_lines(page_bytes("news-article"), *NEWS_DATES)
+    )
+
+    result = await world.card_service.cut_card(news_request(source.snapshot.snapshot_id))
+
+    card = await assert_saved_unverified(world, result)
+    assert codes(result) == [(CardFailureReason.CITATION_UNVERIFIED, ReasonCode.CITATION_UNVERIFIED)]
+    assert result.reasons[0].fields == ("published_at",)
+    assert result.reasons[0].detail == "required citation fields not verified: published_at"
+    assert card.evidence_text == SEGMENT_ONE + SEGMENT_TWO and len(card.spans) == 5
+    assert card.citation.published_at.source.value == "heuristic"  # the URL's own /2026/09/14/
+
+
+async def test_a_card_whose_page_names_no_author_is_saved_unverified_naming_authors(world: CardWorld) -> None:
+    source = await world.add_page(
+        "news-article", raw_bytes=without_lines(page_bytes("news-article"), *NEWS_AUTHORS)
+    )
+
+    result = await world.card_service.cut_card(news_request(source.snapshot.snapshot_id))
+
+    card = await assert_saved_unverified(world, result)
+    assert codes(result) == [(CardFailureReason.CITATION_UNVERIFIED, ReasonCode.CITATION_UNVERIFIED)]
+    assert result.reasons[0].fields == ("authors",)
+    assert card.citation.authors.value is None
+
+
+async def test_re_verifying_a_saved_unverified_card_reproduces_its_status_and_reasons(
+    world: CardWorld,
+) -> None:
+    source = await world.add_page(
+        "news-article", raw_bytes=without_lines(page_bytes("news-article"), *NEWS_DATES)
+    )
+    result = await world.card_service.cut_card(news_request(source.snapshot.snapshot_id))
+
+    again = await world.verifier.verify(await world.cards.get(result.card.card_id))
+
+    assert again.status is result.verification.status is VerificationStatus.UNVERIFIED
+    assert again.reasons == result.verification.reasons
+
+
+@pytest.mark.parametrize(
+    "status", [status for status in AccessStatus if status is not AccessStatus.ACCESSIBLE]
+)
+async def test_a_snapshot_that_is_not_accessible_is_rejected_before_any_model_call(
+    world: CardWorld, status: AccessStatus
+) -> None:
+    source = await world.add_page("news-article", access_status=status)
+
+    with pytest.raises(SourceNotAccessibleError) as refused:
+        await world.card_service.cut_card(news_request(source.snapshot.snapshot_id))
+
+    assert (refused.value.snapshot_id, refused.value.access_status) == (source.snapshot.snapshot_id, status)
+    assert error_code_of(refused.value) == "SOURCE_NOT_ACCESSIBLE"
+    assert world.router.calls == []
+    assert (await world.cards.list_by_owner(STUDENT)).items == ()
+
+
+async def test_a_snapshot_that_is_not_stored_is_rejected_and_nothing_is_saved(world: CardWorld) -> None:
+    with pytest.raises(NotFound):
+        await world.card_service.cut_card(news_request(SNAPSHOT))
+
+    assert world.router.calls == []
+    assert (await world.cards.list_by_owner(STUDENT)).items == ()
+
+
+async def test_a_damaged_snapshot_is_rejected_before_any_model_call(world: CardWorld) -> None:
+    source = await world.add_page("news-article")
+    world.blobs.corrupt(source.snapshot.raw_blob_key, b"<p>Another page.</p>")
+
+    with pytest.raises(SnapshotIntegrityError):
+        await world.card_service.cut_card(news_request(source.snapshot.snapshot_id))
+
+    assert world.router.calls == []
+    assert (await world.cards.list_by_owner(STUDENT)).items == ()
+
+
+async def test_a_model_provider_that_cannot_answer_is_rejected_and_nothing_is_saved() -> None:
+    world = scripted_world(ProviderUnavailable("bedrock", "timed out"))
+    source = await world.add_page("news-article")
+
+    with pytest.raises(ProviderUnavailable):
+        await world.card_service.cut_card(news_request(source.snapshot.snapshot_id))
+
+    assert (await world.cards.list_by_owner(STUDENT)).items == ()

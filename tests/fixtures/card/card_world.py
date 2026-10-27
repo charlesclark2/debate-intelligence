@@ -65,6 +65,23 @@ def paragraphs_of(case: str) -> list[str]:
     return paragraphs
 
 
+def page_bytes(case: str) -> bytes:
+    """The page of citation case `case`, as t04 wrote it."""
+    page: str = load_case(case)["page"]
+    return (FIXTURES / page).read_bytes()
+
+
+def without_lines(raw: bytes, *needles: bytes) -> bytes:
+    """`raw` without the line holding each needle; each must be on exactly one line, so a page edit shows."""
+    lines = raw.splitlines(keepends=True)
+    for needle in needles:
+        holding = [line for line in lines if needle in line]
+        if len(holding) != 1:
+            raise AssertionError(f"{needle!r} is on {len(holding)} lines of the page, not one")
+        lines.remove(holding[0])
+    return b"".join(lines)
+
+
 class CountingRouter:
     """A model router that passes every call to `inner` and keeps the prompt of each structured call."""
 
@@ -114,9 +131,17 @@ class CardWorld(CitationWorld):
         self._page_article_ids = SequentialIdGenerator("PAGE")
 
     async def add_page(
-        self, case: str = "news-article", *, access_status: AccessStatus = AccessStatus.ACCESSIBLE
+        self,
+        case: str = "news-article",
+        *,
+        access_status: AccessStatus = AccessStatus.ACCESSIBLE,
+        raw_bytes: bytes | None = None,
     ) -> LoadedSnapshot:
-        """Store citation case `case`'s page with t04's paragraphs as its text; return it loaded."""
+        """Store citation case `case`'s page with t04's paragraphs as its text; return it loaded.
+
+        `raw_bytes` replaces the page's own bytes (a variant a test made of them); the text, and so the
+        numbered snapshot the model is shown, is t04's either way.
+        """
         stated = load_case(case)
         article = await self.articles.save(
             Article(
@@ -129,7 +154,7 @@ class CardWorld(CitationWorld):
         )
         snapshot = await self.snapshots.create(
             article_id=article.article_id,
-            raw_bytes=(FIXTURES / stated["page"]).read_bytes(),
+            raw_bytes=raw_bytes if raw_bytes is not None else page_bytes(case),
             extracted_text="\n\n".join(paragraphs_of(case)),
             canonical_url=stated["retrieved_url"],
             retrieved_at=RETRIEVED_AT,

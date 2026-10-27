@@ -6,12 +6,13 @@
 | Spec | [`plan_specs/v1/e32-argument-landscape/t27-branches-and-mechanisms-counted-first.yaml`](../../plan_specs/v1/e32-argument-landscape/t27-branches-and-mechanisms-counted-first.yaml) |
 | Epic / release | `v1-e32-argument-landscape` / `v1.2` |
 | Branch | `task/v1-e32-t27-branches-and-mechanisms-counted-first` |
-| Session status | PARTIAL <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
-**Built as ruled (2a), and checked. ac1 and ac2 pass. ac3 is the operator's dry run, drafted
-[below](#operator-follow-ups). The Goal stays `InProgress` until it is run.**
+**Complete. Every criterion passed, and the Goal is `Succeeded`.** The operator's dry run (ac3,
+2026-10-26, 66.1 s) matched every predicted count
+([below](#the-operators-dry-run-ac3)).
 
 **What is built.** Under each DA's and advantage's impact cards, "What each impact runs through" names
 every rank by the first of these it has:
@@ -265,6 +266,31 @@ session's words: non-unique, no links, takeout, turns, defense, overview and oth
     those tags further.
 * **After the build, against t14's old rule** (`count_after_build.py`): the widened reader refuses
   exactly **1 DA link tag in 1 document**, and no heading. No advantage card changes.
+
+## The operator's dry run (ac3)
+
+**What ran:** [Operator follow-up 1](#operator-follow-ups) at `9c1e6ee`, on 2026-10-26. The guards
+passed, nothing was written, and it took 66.1 s.
+
+| Dry run line | Expected in this report | Measured |
+|---|---|---|
+| Taxonomy and writes | 1.4.0, nothing written | `taxonomy 1.4.0: nothing written; 7 files planned` |
+| Scenarios, advantage / DA | 43 / 44 rows, 0 / 9 with a scenario, 1 / 0 names withheld; documents 676 of 1164 and 253 of 662 (t22's and t25's runs) | 43 / 44, 0 / 9, 1 / 0; documents 676 of 1164 and 253 of 662 |
+| Impact ranks named, advantage | 0 / 0 / 0 / 39 / 2; 2 left out; 4 tags withheld | **0 by a scenario, 0 by an internal link, 0 by a link, 39 by a tag, 2 by the card above; 2 left out; 4 tags withheld** |
+| Impact ranks named, DA | 9 / 4 / 12 / 18 / 0; 1 left out; 2 tags withheld | **9 by a scenario, 4 by an internal link, 12 by a link, 18 by a tag, 0 by the card above; 1 left out; 2 tags withheld** |
+| Scan | t25's 9 hits, all accepted; none in the impact-card sections | **9 hits, 0 not yet accepted**: 1 in a plank table, 8 in `top_cards.csv`; none in the impact-card sections |
+
+**Before and after**, per kind:
+* **Before** (t25's operator dry run, 2026-10-26): advantage 0 / 0 / 39 / 2, 2 left out, 4 withheld;
+  DA 9 / 4 / 29 / 0, 2 left out, 2 withheld.
+* **After:** 12 DA ranks are named by a link, 11 of them from their tag and 1 from left out. No
+  advantage rank changes.
+* **The Economy DA's rank 2** is named `(link)`, and ranks 1 and 3 keep their tag, in the session's
+  recount after the build ([above](#the-real-store-after-the-build-ac3s-prediction)). The dry run
+  builds the same report and counts per kind, as t25's ruling 3 set (Deviation 4).
+
+The other lines (affirmative methods, kritikal affirmatives, planks) are other tasks' and unchanged by
+this one. The report is local: nothing is published.
 
 ## The counts before building (ac1)
 
@@ -617,7 +643,7 @@ Q3. Two notes for the coach, no build here: hspolicy26's Midterms DA is run almo
 
 | Node | Status | Notes |
 |---|---|---|
-| branches-and-mechanisms | Done, but for the operator's ac3 | In order:<br>1. the counts and the relay prompt (`8dd6b9e`);<br>2. the PM's ruling, 2a;<br>3. the hand-written goldens (`f428e6f`);<br>4. the tests, red against a skeleton (`ccd0ba0`);<br>5. the build (`672ada4`), and its simplification (`a87cd88`);<br>6. 19 mutants, and the two tests the survivors showed missing (`646428b`);<br>7. the recount on hspolicy26 and the guide's figure (`ebd0678`). |
+| branches-and-mechanisms | Done | In order:<br>1. the counts and the relay prompt (`8dd6b9e`);<br>2. the PM's ruling, 2a;<br>3. the hand-written goldens (`f428e6f`);<br>4. the tests, red against a skeleton (`ccd0ba0`);<br>5. the build (`672ada4`), and its simplification (`a87cd88`);<br>6. 19 mutants, and the two tests the survivors showed missing (`646428b`);<br>7. the recount on hspolicy26 and the guide's figure (`ebd0678`);<br>8. the operator's dry run (ac3), matching every prediction. |
 
 ## Acceptance criteria
 
@@ -625,7 +651,7 @@ Q3. Two notes for the coach, no build here: hspolicy26's Midterms DA is run almo
 |---|---|---|
 | ac1: counts before building, read-only, (a) and (b), sent to the PM with the three options | PASS | `perl -e 'alarm 115; exec @ARGV' .venv/bin/python <scratchpad>/counts/count_branches_and_mechanisms.py config/landscape <scratchpad>/counts/word_lists_final.json` → exit 0 in 51.2 s; no process left; `debate.sqlite3` SHA-256 unchanged. [The counts](#the-counts-before-building-ac1), [the relay prompt](#questions-for-the-pm) and [the rulings](#the-pms-rulings-2026-10-26) |
 | ac2: after the ruling, on synthetic fixtures, the chosen option matches hand-written golden files; tests shown failing first | PASS | **Goldens** (`f428e6f`, before any code): `test_link_lead_ins.py::test_the_impact_sections_match_the_hand_written_golden`, `::test_impact_cards_csv_matches_the_hand_written_golden`, `::test_the_rest_of_report_md_is_the_unchanged_caselists`, `test_render.py::test_rendering_the_fixture_matches_the_golden_file[report.md]`, and t22's and t25's impact-section goldens, all passing. **Red:** 42 failed against the skeleton (`ccd0ba0`, [above](#red-against-a-skeleton-ccd0ba0)). **Mutants:** 19 of 19 caught, the PM's three among them |
-| ac3: the operator's dry run on hspolicy26 shows the Economy DA's mechanism as ruled, with counts before and after (operator) | NOT RUN | The operator's. The block is [below](#operator-follow-ups). It expects DA `9 by a scenario, 4 by an internal link, 12 by a link, 18 by a tag, 0 by the card above; 1 left out; 2 tags withheld` and the advantage line unchanged, from the session's recount after the build. The Economy DA's rank 2 `(link)` is from the recount, since the dry run counts per kind (t25's ruling 3) |
+| ac3: the operator's dry run on hspolicy26 shows the Economy DA's mechanism as ruled, with counts before and after (operator) | PASS | [The operator's dry run](#the-operators-dry-run-ac3), 2026-10-26, 66.1 s: `Impact ranks named, advantage: 0 by a scenario, 0 by an internal link, 0 by a link, 39 by a tag, 2 by the card above; 2 left out; 4 tags withheld.` and `Impact ranks named, da: 9 by a scenario, 4 by an internal link, 12 by a link, 18 by a tag, 0 by the card above; 1 left out; 2 tags withheld.` These are exactly the predicted counts. Before: t25's dry run (DA 29 by a tag, 2 left out). The Economy DA's rank 2 `(link)` is in the session's recount after the build, since the dry run counts per kind (t25's ruling 3). No scan hit in the impact-card sections |
 | branches-and-mechanisms: `uv run pytest packages/debate_core/tests/arguments/landscape` | PASS | `.venv/bin/python -m pytest -q -p no:randomly packages/debate_core/tests/arguments/landscape` on `ebd0678` → **1017 passed in 7.75s** (977 at the checkpoint; 40 new) |
 
 ## Before the report (working agreement 10)
@@ -763,7 +789,8 @@ All inside `constraints.packages`. No taxonomy, config or spec change.
 
 ## Operator follow-ups
 
-1. **ac3: the dry run on hspolicy26.**
+1. **ac3: the dry run on hspolicy26. Done** (2026-10-26, 66.1 s; [results](#the-operators-dry-run-ac3)).
+   For a later run:
    * It is the landscape service as a dry run, without `--publish`: read-only, no bucket lock, nothing
      written.
    * Expected runtime: about 75 s on the caches t22's refill left warm (t25's run: 70.7 s).
@@ -831,9 +858,43 @@ scripts/task pr v1-e32-t27-branches-and-mechanisms-counted-first
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-26
 
 **Notes:**
+
+The counts answered the coach's two questions honestly, and 2a was built as ruled.
+1. **ac1 passes.**
+   * Both readings of a branch were counted. Nesting gives 0, and file order gives no outer heading
+     two teams use, so the branch lives in the tags.
+   * The mechanism counts show one shared financing link, not separate DAs.
+   * The word lists were screened as ruled, with 0 scan hits. List 1 is empty.
+2. **ac2 passes.**
+   * The goldens were written by hand before any code, with a variant reaching `(link)` and a
+     withheld link.
+   * Red first: 42 failed against a skeleton. The passes are must-not cases, each named.
+   * 19 mutants, the PM's three among them. Two survived the first pass, and the tests they showed
+     missing were added in `646428b`.
+3. **The recount after the build** matches every prediction: 12 DA rows by a link, 1 left out, no
+   advantage row changed, and the Economy DA's rank 2 `(link)`.
+4. **The answer labels.** t14's reader read one link-turn tag as a link (`the link turns`). Widening
+   the reader's refusals is accepted, and so is applying them in the reader itself (Decision 9), so a
+   link answer is no link anywhere.
+   * `a87cd88` removed the entries no test could tell from their absence, as working agreement 8
+     asks.
+5. **Deviations 1 to 4 accepted.** The PM records the word-list clarification and ac3's per-kind
+   reading in the next batch.
+6. **Decisions 1 to 12 accepted.**
+7. **"For the coach"** is relayed to the coach by the PM. Branches from tags stay unfiled unless the
+   coach asks.
+8. **The checkpoint's affected run without an alarm** is self-reported. The rule stands: the alarm
+   goes on the interpreter.
+9. **The affected set** (234 files) is left to the PR's `ci` under agreement 10. The changed
+   directories, `tests/config`, `tests/scripts` and the always-run list passed, and the static checks
+   are clean.
+
+No re-review is needed. When the operator's dry run matches, the session records it, marks ac3 PASS
+and sets the Goal to `Succeeded`, and the PR merges in full. A number that differs comes back to the
+PM first.

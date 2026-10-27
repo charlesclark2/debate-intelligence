@@ -27,6 +27,7 @@ from tests.fixtures.citation.citation_world import (
     load_case,
 )
 
+from debate_core.application.card_service import failures_of
 from debate_core.application.citation_service import (
     CITATION_FIELD_NAMES,
     SOURCE_PRECEDENCE,
@@ -39,7 +40,8 @@ from debate_core.application.citation_service import (
 from debate_core.application.ports.doi_metadata import DoiAuthor, DoiDate, DoiWork
 from debate_core.domain import Card, Citation, CitationField, ProvenanceMode, VerificationStatus
 from debate_core.domain.enums import CitationFieldSource
-from debate_core.evidence.edits import EditCite
+from debate_core.evidence.edits import EditCite, EditKind
+from debate_core.evidence.verification_types import ReasonCode
 from debate_core.retrieval.citation_harvest import CitationCandidates, Harvested
 
 pytestmark = pytest.mark.anyio
@@ -698,14 +700,16 @@ async def test_a_card_never_cite_edited_takes_the_derived_cite_whole(world: Cita
     assert resolution.student_fields == ()
 
 
-async def test_a_field_the_student_emptied_is_derived_again(world: CitationWorld) -> None:
+async def test_a_field_the_student_cleared_stays_cleared_on_re_resolution(world: CitationWorld) -> None:
+    """Turned by v1-e06-t02 (ac5): t01's `test_a_field_the_student_emptied_is_derived_again`."""
     card = await card_with_derived_cite(world)
     card = await edited(world, card, author_credentials=CitationField[str]())
 
     resolution = await world.service.re_resolve(card)
 
-    assert resolution.citation.author_credentials.source is BYLINE
-    assert resolution.student_fields == ()
+    assert resolution.citation.author_credentials == CitationField[str]()
+    assert resolution.citation.cleared_by_student == ("author_credentials",)
+    assert resolution.student_fields == ("author_credentials",)
 
 
 async def test_a_card_with_no_snapshot_has_no_source_to_re_resolve_from(world: CitationWorld) -> None:
@@ -882,3 +886,84 @@ def test_the_short_cite_keeps_an_organization_name_whole() -> None:
 def test_a_cite_cannot_mark_missing_authors_as_organizations() -> None:
     with pytest.raises(ValueError, match="organization"):
         Citation(authors_are_organizations=True)
+
+
+# --------------------------------------------------------------------------------------------
+# v1-e06-t02 ac5: a cite field a student cleared is a student edit, never refilled
+# --------------------------------------------------------------------------------------------
+
+
+async def test_clearing_a_cite_field_is_recorded_on_the_cite_as_a_student_edit(world: CitationWorld) -> None:
+    card = await card_with_derived_cite(world)
+
+    card = await edited(world, card, author_credentials=CitationField[str]())
+
+    stored = await world.cards.get(card.card_id)
+    assert stored.citation.cleared_by_student == ("author_credentials",)
+    assert [entry.edit_kind for entry in await world.edit_log.entries_for(card.card_id)] == [
+        EditKind.EDIT_CITE
+    ]
+
+
+async def test_a_cleared_required_field_leaves_the_card_unverified_with_a_reason_naming_it(
+    world: CitationWorld,
+) -> None:
+    card = await card_with_derived_cite(world)
+    assert card.verification_status is VerificationStatus.VERIFIED
+    card = await edited(world, card, authors=CitationField[tuple[str, ...]]())
+
+    resolution = await world.service.re_resolve(card)
+    recorded, verdict = await world.verifier.verify_and_record(card.evolve(citation=resolution.citation))
+
+    assert resolution.citation.authors.value is None
+    assert recorded.verification_status is VerificationStatus.UNVERIFIED
+    assert [(reason.code, reason.detail) for reason in verdict.reasons] == [
+        (ReasonCode.CITATION_UNVERIFIED, "required citation fields not verified: authors")
+    ]
+    assert [failure.fields for failure in failures_of(verdict, recorded)] == [("authors",)]
+
+
+async def test_a_field_stays_cleared_through_a_later_cite_edit_of_another_field(world: CitationWorld) -> None:
+    card = await card_with_derived_cite(world)
+    card = await edited(world, card, authors=CitationField[tuple[str, ...]]())
+    card = await edited(world, card, title=field("A student's title", BYLINE))
+
+    resolution = await world.service.re_resolve(card)
+
+    assert card.citation.cleared_by_student == ("authors",)
+    assert resolution.citation.authors.value is None
+    assert resolution.student_fields == ("authors", "title")
+
+
+async def test_a_cleared_field_the_student_fills_again_is_no_longer_cleared(world: CitationWorld) -> None:
+    card = await card_with_derived_cite(world)
+    derived_title = card.citation.title
+    card = await edited(world, card, title=CitationField[str]())
+    card = await edited(world, card, title=field(derived_title.value, BYLINE))
+
+    resolution = await world.service.re_resolve(card)
+
+    assert card.citation.cleared_by_student == ()
+    assert resolution.citation.title == derived_title
+    assert resolution.student_fields == ()
+
+
+def test_keep_student_edits_keeps_a_cleared_field_cleared_whatever_the_source_says() -> None:
+    derived = Citation(title=field("Derived", JSON_LD, True), publication=field("Derived", OPENGRAPH, True))
+    stored = Citation(publication=field("Derived", OPENGRAPH, True), cleared_by_student=("title",))
+
+    kept, student_fields = keep_student_edits(stored, derived)
+
+    assert kept.title == CitationField[str]()
+    assert kept.publication == derived.publication
+    assert kept.cleared_by_student == ("title",)
+    assert student_fields == ("title",)
+
+
+def test_a_cite_cannot_record_a_cleared_field_that_holds_a_value_or_is_no_field() -> None:
+    with pytest.raises(ValueError, match="cleared"):
+        Citation(title=field("Kept", BYLINE), cleared_by_student=("title",))
+    with pytest.raises(ValueError, match="cite field"):
+        Citation(cleared_by_student=("weather",))
+    with pytest.raises(ValueError, match="cite order"):
+        Citation(cleared_by_student=("title", "authors"))

@@ -117,6 +117,14 @@ class Citation(DomainModel):
         ),
     )
 
+    cleared_by_student: tuple[str, ...] = Field(
+        default=(),
+        description=(
+            "Cite fields a student cleared through a cite edit, in cite order. Each is empty, and stays "
+            "empty when the cite is resolved again, until the student fills it."
+        ),
+    )
+
     @model_validator(mode="after")
     def _check_organization_authors(self) -> Self:
         if self.authors_are_organizations and not self.authors.is_present:

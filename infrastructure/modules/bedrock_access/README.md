@@ -30,7 +30,7 @@ Read from `routing_files`, which both roots set to `config/model_routing.dev.yam
 
 | Statement | Resources | Condition |
 |---|---|---|
-| `InvokeTheRoutedInferenceProfiles` | Each route's inference profile in the route's region: today `us.anthropic.claude-{haiku,sonnet,opus}-5-5` in us-east-1 | none: it is what a call names |
+| `InvokeTheRoutedInferenceProfiles` | Each route's inference profile in the route's region: today prod's `us.anthropic.claude-{haiku,sonnet,opus}-5-5` and dev's `us.anthropic.claude-haiku-4-5-20251001-v1:0` and `us.anthropic.claude-sonnet-4-6` (while the account's 5.5 quotas are held at zero, `v1-e05-t13`) in us-east-1 | none: it is what a call names |
 | `InvokeTheModelsBehindTheProfilesThroughThemOnly` | The model behind each profile in us-east-1, us-east-2 and us-west-2, the regions a `us.` profile sends calls to | `bedrock:InferenceProfileArn` equals one of the profiles above |
 | `InvokeTheModelsRoutedWithoutAProfile` | Each route with no profile, on its model in its region: Titan Text Embeddings V2 and Cohere Rerank 3.5 in us-east-1 | none |
 
@@ -40,7 +40,8 @@ is left out, since IAM refuses an empty one.
 
 **A routing change is a grant change.** A new model or profile in either routing file shows up in the
 next plan of both roots as an update to the inline policy, and the module's tests, which pin the
-fourteen resources the committed files name, fail until they are updated with it.
+twenty-two resources the committed files name (five profiles, the five Claude models behind them in
+three regions, and the two scoring models), fail until they are updated with it.
 
 ## Tests
 

@@ -23,13 +23,18 @@ each plan before its apply.
 | What it may do | `bedrock:InvokeModel`, nothing else | the same |
 
 **What it may call** is read from `config/model_routing.dev.yaml` and `config/model_routing.prod.yaml`
-by both roots, so both sets grant the same fourteen resources:
+by both roots, so both sets grant the same twenty-two resources:
 
-* the three `us.` inference profiles in us-east-1: `us.anthropic.claude-haiku-5-5`,
-  `us.anthropic.claude-sonnet-5-5`, `us.anthropic.claude-opus-5-5`;
-* the three Claude models behind them, in us-east-1, us-east-2 and us-west-2, and only through those
+* the five `us.` inference profiles in us-east-1: prod's `us.anthropic.claude-haiku-5-5`,
+  `us.anthropic.claude-sonnet-5-5` and `us.anthropic.claude-opus-5-5`, and dev's
+  `us.anthropic.claude-haiku-4-5-20251001-v1:0` and `us.anthropic.claude-sonnet-4-6`, which dev routes
+  to while the account's 5.5 quotas are held at zero (`v1-e05-t13`);
+* the five Claude models behind them, in us-east-1, us-east-2 and us-west-2, and only through those
   profiles (the condition `bedrock:InferenceProfileArn`);
 * `amazon.titan-embed-text-v2:0` and `cohere.rerank-v3-5:0` in us-east-1.
+
+When dev goes back to the 5.5 models, the grant shrinks to the fourteen resources of prod's three
+profiles again, and the counts below change with it.
 
 **Every Bedrock call is signed with `models.aws_profile`, never with `AWS_PROFILE`.** The client
 reads no profile from the environment, so a shell left holding `debate-dev-evidence`, or the other
@@ -111,11 +116,16 @@ permission set, its inline policy and your account assignment. Anything else sto
 plan (`/tmp/bedrock-access-dev-plan.txt`) to the PM and do not apply. No plan line at all means the
 plan failed: read the end of the file.
 
+**When the set already exists** (a routing change after the first apply, such as `v1-e05-t13`'s), the
+first `grep` prints exactly `Plan: 0 to add, 1 to change, 0 to destroy.` instead, and the rest reads
+the same: the one change is the inline policy, updated in place. Step 2 then has a block of its own.
+
 ## Step 2 — The plan checked against exactly that shape
 
-`PLAN OK` only for those three resources created, nothing else in the account changed, and a policy
-of `bedrock:InvokeModel` alone on fourteen resources, nine of them through the three profiles. It
-prints no account id.
+**The first apply.** `PLAN OK` only for those three resources created, nothing else in the account
+changed, and a policy of `bedrock:InvokeModel` alone on twenty-two resources, fifteen of them through
+the five profiles. It prints no account id. When the set already exists, skip this block and run
+[the next one](#when-the-set-already-exists-one-inline-policy-updated).
 
 **Operator command** (expected runtime ~1 min)
 Where: `$WT`
@@ -157,18 +167,91 @@ conditioned = [r for s in statements if "Condition" in s for r in s["Resource"]]
 profiles = [r for r in resources if ":inference-profile/" in r]
 if actions != ["bedrock:InvokeModel"]:
     problems.append("actions are " + str(actions))
-if len(resources) != 14 or len(set(resources)) != 14 or any("*" in r for r in resources):
-    problems.append(str(len(resources)) + " resources, " + str(len(set(resources))) + " distinct, expected 14 and no wildcard")
-if len(profiles) != 3 or len(conditioned) != 9 or not all(":foundation-model/anthropic." in r for r in conditioned):
-    problems.append(str(len(profiles)) + " profiles and " + str(len(conditioned)) + " models through them, expected 3 and 9")
+if len(resources) != 22 or len(set(resources)) != 22 or any("*" in r for r in resources):
+    problems.append(str(len(resources)) + " resources, " + str(len(set(resources))) + " distinct, expected 22 and no wildcard")
+if len(profiles) != 5 or len(conditioned) != 15 or not all(":foundation-model/anthropic." in r for r in conditioned):
+    problems.append(str(len(profiles)) + " profiles and " + str(len(conditioned)) + " models through them, expected 5 and 15")
 if any(s.get("Effect") != "Allow" or "NotAction" in s or "NotResource" in s for s in statements):
     problems.append("a statement that is not a plain Allow")
-print("PLAN OK: 3 to create, nothing else; bedrock:InvokeModel on 14 resources, 9 Claude models through the 3 profiles" if not problems else "PLAN STOP: " + "; ".join(problems))
+print("PLAN OK: 3 to create, nothing else; bedrock:InvokeModel on 22 resources, 15 Claude models through the 5 profiles" if not problems else "PLAN STOP: " + "; ".join(problems))
 BEDROCKPLAN
 ```
-Success looks like `PLAN OK: 3 to create, nothing else; bedrock:InvokeModel on 14 resources, 9
-Claude models through the 3 profiles`. **`PLAN STOP` stops everything**: send its line and the plan
+Success looks like `PLAN OK: 3 to create, nothing else; bedrock:InvokeModel on 22 resources, 15
+Claude models through the 5 profiles`. **`PLAN STOP` stops everything**: send its line and the plan
 to the PM. Either way the PM reads the plan before step 3.
+
+### When the set already exists: one inline policy updated
+
+A routing change after the first apply changes the grant and nothing else. `PLAN OK` only for exactly
+one change in the account, the set's inline policy updated in place; a new policy of
+`bedrock:InvokeModel` alone on twenty-two resources, fifteen of them through the five profiles, each
+of those models conditioned on exactly those profiles; every resource the old policy granted still
+granted; and exactly the eight resources `v1-e05-t13` adds: the Haiku 4.5 and Sonnet 4.6 profiles in
+us-east-1, and those two models in us-east-1, us-east-2 and us-west-2. It prints the account id as
+`<account-id>`.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`
+```bash
+cd "$WT"
+AWS_PROFILE=debate-admin terraform -chdir="infrastructure/envs/${ENVIRONMENT}" show -json bedrock-access.tfplan > "/tmp/bedrock-access-${ENVIRONMENT}-plan.json"
+python3 -I - "/tmp/bedrock-access-${ENVIRONMENT}-plan.json" <<'BEDROCKPOLICYUPDATE'
+import json, re, sys
+plan = json.load(open(sys.argv[1]))
+policy_address = "module.bedrock_access.aws_ssoadmin_permission_set_inline_policy.invoker[0]"
+expected_added = sorted(
+    ["arn:aws:bedrock:us-east-1:<account-id>:inference-profile/us.anthropic." + m for m in ("claude-haiku-4-5-20251001-v1:0", "claude-sonnet-4-6")]
+    + ["arn:aws:bedrock:" + r + "::foundation-model/anthropic." + m for r in ("us-east-1", "us-east-2", "us-west-2") for m in ("claude-haiku-4-5-20251001-v1:0", "claude-sonnet-4-6")]
+)
+def masked(arns):
+    return sorted(re.sub(r":[0-9]{12}:", ":<account-id>:", a) for a in arns)
+def listed(value):
+    return [value] if isinstance(value, str) else list(value or [])
+def statements_of(change, side):
+    text = (change.get(side) or {}).get("inline_policy")
+    return json.loads(text)["Statement"] if isinstance(text, str) else None
+changes = [c for c in plan.get("resource_changes", []) if c["change"]["actions"] not in (["no-op"], ["read"])]
+problems = []
+summary = sorted(c["address"] + " " + "/".join(c["change"]["actions"]) for c in changes)
+if summary != [policy_address + " update"]:
+    problems.append("changes are " + str(masked(summary)) + ", expected the inline policy's update alone")
+change = next((c["change"] for c in changes if c["address"] == policy_address), {})
+before, after = statements_of(change, "before"), statements_of(change, "after")
+if after is None:
+    problems.append("the new inline policy is not known at plan time")
+    after = []
+if before is None:
+    problems.append("the policy it replaces is not in the plan")
+    before = []
+actions = sorted({a for s in after for a in listed(s.get("Action"))})
+resources = [r for s in after for r in listed(s.get("Resource"))]
+old_resources = [r for s in before for r in listed(s.get("Resource"))]
+conditioned = [r for s in after if "Condition" in s for r in listed(s.get("Resource"))]
+profiles = sorted(r for r in resources if ":inference-profile/" in r)
+through = sorted({p for s in after if "Condition" in s for p in listed(s["Condition"].get("StringEquals", {}).get("bedrock:InferenceProfileArn"))})
+if actions != ["bedrock:InvokeModel"]:
+    problems.append("actions are " + str(actions))
+if len(resources) != 22 or len(set(resources)) != 22 or any("*" in r for r in resources):
+    problems.append(str(len(resources)) + " resources, " + str(len(set(resources))) + " distinct, expected 22 and no wildcard")
+if len(profiles) != 5 or len(conditioned) != 15 or not all(":foundation-model/anthropic." in r for r in conditioned):
+    problems.append(str(len(profiles)) + " profiles and " + str(len(conditioned)) + " models through them, expected 5 and 15")
+if through != profiles:
+    problems.append("the models are conditioned on " + str(masked(through)) + ", not on the profiles granted")
+if any(s.get("Effect") != "Allow" or "NotAction" in s or "NotResource" in s for s in after):
+    problems.append("a statement that is not a plain Allow")
+removed = masked(set(old_resources) - set(resources))
+added = masked(set(resources) - set(old_resources))
+if removed:
+    problems.append("no longer granted " + str(removed))
+if added != expected_added:
+    problems.append("added " + str(added) + ", expected " + str(expected_added))
+print("PLAN OK: 1 to update, nothing else; bedrock:InvokeModel on 22 resources, 15 Claude models through the 5 profiles; 8 added, none removed" if not problems else "PLAN STOP: " + "; ".join(problems))
+BEDROCKPOLICYUPDATE
+```
+Success looks like `PLAN OK: 1 to update, nothing else; bedrock:InvokeModel on 22 resources, 15
+Claude models through the 5 profiles; 8 added, none removed`. **`PLAN STOP` stops everything**: send
+its line and the plan to the PM. Either way the PM reads the plan before step 3. A later routing
+change adds or removes other resources, so its task rewrites `expected_added` and the counts here.
 
 ## Step 3 — The apply
 
@@ -183,7 +266,9 @@ AWS_PROFILE=debate-admin terraform -chdir="infrastructure/envs/${ENVIRONMENT}" o
 AWS_PROFILE=debate-admin terraform -chdir="infrastructure/envs/${ENVIRONMENT}" output bedrock_profile_name
 ```
 Success looks like `Apply complete! Resources: 3 added, 0 changed, 0 destroyed.`, then
-`"DebateDevBedrockInvoker"` and `"debate-dev-bedrock"`. `Saved plan is stale` means something changed
+`"DebateDevBedrockInvoker"` and `"debate-dev-bedrock"`. When the set already existed, it reads
+`Apply complete! Resources: 0 added, 1 changed, 0 destroyed.` instead, with the same two names, and
+steps 4 to 6 are not repeated: go on to step 7. `Saved plan is stale` means something changed
 in between: go back to step 1. Never `-target`, and never create a permission set by hand.
 
 ## Step 4 — The profile
@@ -310,17 +395,19 @@ aws s3api head-bucket --profile debate-admin --bucket "$BUCKET" --expected-bucke
 ## Step 7 — The first real call on each Claude route
 
 The spec's ac5, with the new profile, after steps 4 and 5. One run over both routing files: each model
-is asked its questions once, however many routes name it, so it asks the three Claude models seven
+is asked its questions once, however many routes name it, so it asks the five Claude models seven
 requests each (the adapter's own call, then `toolChoice any`, `toolChoice tool`, `temperature 0.5`,
-`effort low`, `structured output` and `strict tool`), one embedding and one rerank: 23 requests.
+`effort low`, `structured output` and `strict tool`), one embedding and one rerank: 37 requests.
 
 **What it costs.** Each request is about 400 input tokens with a 2,048-token output cap. A probe
 answer is a few dozen tokens, plus whatever the model thinks first (Opus 5.5 always thinks), and a
 request Bedrock refuses as invalid is refused before the model runs. At Anthropic's list prices (Opus
 5.5 $4 and $20, Sonnet 5.5 $2 and $10, Haiku 5.5 $0.10 and $0.50 per million input and output tokens),
-with 300 output tokens a request, the run is under ten cents; every request at its output cap would be
-about 45. Bedrock bills by its own price list, which may differ; the line under the
-table counts the tokens actually billed.
+with 300 output tokens a request, the three 5.5 models' requests are under ten cents; every request
+at its output cap would be about 45. Dev's Haiku 4.5 and Sonnet 4.6 add fourteen requests at
+Bedrock's $1 and $5, and $3 and $15 (`config/model_pricing.yaml`): about five cents at 300 output
+tokens a request, about 30 at the cap. Bedrock bills by its own price list, which may differ; the
+line under the table counts the tokens actually billed.
 
 **Operator command** (expected runtime ~2 min)
 Where: `$WT`
@@ -338,6 +425,16 @@ exit=0` means every probe got an answer: **a refusal is a finding, not a failure
 probe could not run (access denied, or no answer). Send the PM the whole file,
 `/tmp/bedrock-first-call-dev.md`, which is what the block printed after the exit line; account ids in Bedrock's messages are already masked as
 `<account-id>`.
+
+**While the account's 5.5 quotas are held at zero** (from 2026-10-27, `v1-e05-t13`), the run is read
+differently. The rows that matter are dev's: for `us.anthropic.claude-haiku-4-5-20251001-v1:0` and
+`us.anthropic.claude-sonnet-4-6`, the adapter's own call reads `accepted`, and the other six rows are
+`accepted` or `refused` (a refused probe is a finding). The three 5.5 models' rows are refused as "not
+available for this account", which is expected until the support case clears. If Bedrock sends that
+refusal as `AccessDeniedException`, each 5.5 model's six probes read `not tried` and the block prints
+`first call exit=1`: that exit is expected here, and the run is good when dev's two adapter calls are
+`accepted` and every 5.5 refusal names the account rather than `bedrock:InvokeModel`. Send the PM the
+whole file either way.
 
 **When the adapter's own call is refused:**
 

@@ -6,6 +6,11 @@ read off the classifier, not off a run: a second cite line with a link and no na
 nothing; a cite under a tag that opens in lower case is read as nothing; a cite set in the tag style
 is read as a second tag, and the tag above it, left with nothing under it, as an analytic.
 
+Those are `2026.10.20-docx-6`'s readings. `v1-e31-t31` (`2026.10.27-docx-7`) reads all three by their
+place, so a parser that misses them is the checkout's with that pass left out
+(:class:`CiteLinesAsDocx6ReadThem`): the tally is a count of what some parser misses, and these tests
+need one that misses. :class:`TestTheCheckoutsParser` shows the current one leaves none of them.
+
 The names, journals, links and sentences are invented.
 """
 
@@ -13,6 +18,7 @@ from __future__ import annotations
 
 import json
 from datetime import date
+from typing import Any
 
 import pytest
 from tests.evals.parser.digests import keyed_digest, text_digest
@@ -57,7 +63,7 @@ CITE = StructuralUnit.CITE
 EVIDENCE = StructuralUnit.EVIDENCE
 
 BODY = "Reserve margins fall below safe levels within two summers"
-WHITE = " and nobody plans for it"
+GREY = " and nobody plans for it"
 CYAN = "Older plants fail first"
 
 #: (markup, text, gold unit, card), in body order.
@@ -92,8 +98,8 @@ PARAGRAPHS = (
         1,
     ),
     (
-        paragraph_xml(run_xml(BODY, underline="single") + run_xml(WHITE, highlight="white")),
-        BODY + WHITE,
+        paragraph_xml(run_xml(BODY, underline="single") + run_xml(GREY, highlight="lightGray")),
+        BODY + GREY,
         EVIDENCE,
         1,
     ),
@@ -120,7 +126,7 @@ PARAGRAPHS = (
     (paragraph_xml(run_xml(BODY, underline="single")), BODY, EVIDENCE, 3),
 )
 
-#: Span rows: a highlight on paragraph 4 that the file does not carry, the white run on paragraph 7
+#: Span rows: a highlight on paragraph 4 that the file does not carry, the lightGray run on paragraph 7
 #: labelled as no highlight, and the cyan run on paragraph 10 labelled exactly.
 SPANS = (
     SpanLabel(index=4, underline=((0, len(BODY)),), highlight=((0, 7),)),
@@ -136,7 +142,14 @@ ENTRY_FIELDS = {
 }
 
 
-def _counted() -> tuple[ManifestEntry, FileCounts]:
+class CiteLinesAsDocx6ReadThem(ReadingParser):
+    """The checkout's parser, reading cite lines as `2026.10.20-docx-6` did: no cite line by its place."""
+
+    def _cite_lines_by_their_place(self, assembled: Any) -> dict[int, str]:  # pyright: ignore[reportIncompatibleMethodOverride]
+        return {}
+
+
+def _counted(parser: ReadingParser) -> tuple[ManifestEntry, FileCounts]:
     content = build_docx("".join(markup for markup, _, _, _ in PARAGRAPHS))
     digest = keyed_digest(content, TEST_DIGEST_KEY)
     labels = LabelFile(
@@ -163,7 +176,6 @@ def _counted() -> tuple[ManifestEntry, FileCounts]:
         spans=SPANS,
     )
     entry = ManifestEntry(digest=digest, **ENTRY_FIELDS)
-    parser = ReadingParser()
     source = SourceDocument(
         sha256="0" * 64,
         byte_size=len(content),
@@ -179,7 +191,7 @@ def _counted() -> tuple[ManifestEntry, FileCounts]:
 
 @pytest.fixture(scope="module")
 def counted() -> tuple[ManifestEntry, FileCounts]:
-    return _counted()
+    return _counted(CiteLinesAsDocx6ReadThem())
 
 
 @pytest.fixture(scope="module")
@@ -286,11 +298,13 @@ class TestTheTally:
         assert isinstance(highlight, dict)
         prefix = f"camp | verbatim | Policy | {entry.digest[:16]}"
         assert highlight["missed_characters"] == {f"{prefix} | no highlight on the run": 7}
-        assert highlight["added_characters"] == {f"{prefix} | white (not a reading colour)": len(WHITE)}
+        assert highlight["added_characters"] == {f"{prefix} | lightGray (not a reading colour)": len(GREY)}
         what_if = tallied["what_if"]
         assert isinstance(what_if, dict)
-        white = what_if[WHITE_HIGHLIGHT_VARIANT]["overall"]
-        assert white["highlight_f1"] == round(2 * len(CYAN) / (2 * len(CYAN) + 7), 4)
+        as_read = round(2 * len(CYAN) / (2 * len(CYAN) + len(GREY) + 7), 4)
+        assert what_if["as read"]["overall"]["highlight_f1"] == as_read
+        # lightGray is still read as highlight, so leaving out white changes nothing here.
+        assert what_if[WHITE_HIGHLIGHT_VARIANT]["overall"]["highlight_f1"] == as_read
 
     def test_no_text_leaves_the_tally(self, tallied: dict[str, object]) -> None:
         printed = json.dumps(tallied)
@@ -298,3 +312,15 @@ class TestTheTally:
             assert text not in printed
         for word in ("Okonkwo", "Lindqvist", "Adebayo", "example.org", "Invented"):
             assert word not in printed
+
+
+class TestTheCheckoutsParser:
+    def test_it_reads_every_cite_and_tag_the_invented_file_holds(self) -> None:
+        _, counts = _counted(ReadingParser())
+
+        assert counts.missed == ()
+        assert {
+            key: count
+            for key, count in counts.outcomes.items()
+            if key[:2] == ("cards with a labelled cite", "as read")
+        } == {("cards with a labelled cite", "as read", "all"): 4}

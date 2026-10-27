@@ -240,7 +240,7 @@ def test_verbose_gives_each_reasons_detail_on_stderr() -> None:
 @pytest.mark.parametrize(
     ("path", "value", "json_path", "problem"),
     [
-        (("manifest_version",), 2, "$.manifest_version", "must be 1"),
+        (("manifest_version",), 0, "$.manifest_version", "must be one of 1, 2"),
         (("cards", 1, "card_id"), None, "$.cards[1]", "missing required 'card_id'"),
         (
             ("cards", 2, "spans", 0, "end_offset"),

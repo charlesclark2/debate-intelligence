@@ -246,7 +246,8 @@ DELETE = object()
 @pytest.mark.parametrize(
     ("change", "json_path", "problem"),
     [
-        (edit("manifest_version", 2), "$.manifest_version", "must be 1"),
+        (edit("manifest_version", 0), "$.manifest_version", "must be one of 1, 2"),
+        (edit("manifest_version", 2), "$", "missing required 'snapshots'"),
         (edit("generated_at", DELETE), "$", "missing required 'generated_at'"),
         (edit("notes", SECRET), "$", "properties the schema does not allow: 'notes'"),
         (edit("cards", []), "$.cards", "must have at least 1 item(s)"),
@@ -348,15 +349,15 @@ def test_a_timestamp_that_is_not_an_aware_date_time_is_refused(
 
 def test_every_violation_is_counted_and_the_most_relevant_is_named(world: ManifestWorld) -> None:
     document = json.loads(ALL_VERIFIED.read_bytes())
-    document["manifest_version"] = 2
+    document["manifest_version"] = 0
     document["cards"][1]["evidence_end_offset"] = 0
 
     with pytest.raises(InvalidManifest) as refused:
         world.verify(json.dumps(document).encode())
 
     assert refused.value.violations == 2
-    assert (
-        str(refused.value) == "the manifest is invalid at $.manifest_version: must be 1 (1 more violation(s))"
+    assert str(refused.value) == (
+        "the manifest is invalid at $.manifest_version: must be one of 1, 2 (1 more violation(s))"
     )
 
 

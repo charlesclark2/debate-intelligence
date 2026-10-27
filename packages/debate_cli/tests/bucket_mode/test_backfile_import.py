@@ -582,8 +582,9 @@ def test_an_upload_a_backfile_import_refused_at_a_held_path_is_found_from_anothe
     site.offer(BACKFILE, (ARCHIVE_DATE, zipped(MEMBERS)), (LATER_ARCHIVE_DATE, zipped(later)))
     world.clock.advance(timedelta(days=2))
     cloud = world.use(tmp_path / "cloud-task-later")
-    assert execute(world)["exit_code"] == ExitCode.OK
-    held = (cloud / "suppression" / "held-digests.jsonl").read_text(encoding="utf-8")
+    imported = execute(world)
+    assert imported["exit_code"] == ExitCode.OK, json.dumps(imported.get("error"))[:800]
+    held =(cloud / "suppression" / "held-digests.jsonl").read_text(encoding="utf-8")
     assert digest_of("cardmirror") in held, "the premise: the task's import refused it, and recorded it"
     shutil.rmtree(cloud)
     world.use(macs_copy)

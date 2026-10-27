@@ -329,6 +329,15 @@ Success looks like `1 passed` in under a minute; `1 skipped` means soffice is no
 >
 > Deviation 2 lists one test file outside the approved paths (the workflow step's tests).
 
+**The PM's rulings (2026-10-27, review ACCEPTED):**
+
+1. **ac5:** the pull request merges `--partial`. ac5 closes when validate-dev's slow tier runs the
+   LibreOffice check with no skip; the Goal stays `InProgress` until then.
+2. **t03 amendment:** the PM amends t03's ac3 for `omission_marker` and `unverified_banner_color`.
+3. **Emphasis:** (a). No emphasis runs; `SpanStyle` and the `card.markup` contract are unchanged.
+4. **python-docx at runtime:** the PM amends t06 to add python-docx to debate-core's `docx` extra
+   when it wires the renderer.
+
 ## Follow-up work
 
 1. **`v1-e06-t06-cut-command`:**
@@ -350,9 +359,43 @@ Success looks like `1 passed` in under a minute; `1 skipped` means soffice is no
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-27
 
 **Notes:**
+
+The renderer that turns a cut card into a Verbatim document: evidence only as slices of
+`evidence_text`, additions as runs of their own, the banner on every card that is not VERIFIED, and
+the manifest embedded byte for byte.
+1. **ac1 to ac4, ac6 and every node criterion pass.**
+   * The read-back is independent of the renderer, through python-docx and the project's own
+     Verbatim parser, which reads the rendered file back as one card under its pocket, hat and block.
+   * The Unicode, tab, overlap, cut and interpolation case reads back exactly.
+   * The style table is canonically E33's, from the style profile.
+   * Red first per node, each pass explained.
+2. **ac5:** Word passed. The operator opened the sample on 2026-10-27 with no repair prompt and the
+   headings in the navigation pane. The LibreOffice half runs in validate-dev's slow tier, which now
+   installs `libreoffice-writer`, and the PM records it when that tier passes with no skip.
+3. **Mutants: 22, two variants of each of the PM's three among them.** The Hypothesis properties were
+   checked for what they generate.
+4. **Rulings on the relay:**
+   * 1: merge `--partial`, ac5 closed from validate-dev.
+   * 2: the PM amends t03's ac3 to the proposed wording.
+   * 3: (a), no emphasis, since neither `SpanStyle` nor the markup contract has it.
+   * 4: the PM amends `v1-e06-t06` to put `python-docx` in debate-core's `docx` extra and wire
+     `render_cards_docx` in the container.
+5. **Deviations 1 to 5 accepted,** including the workflow step's tests outside the approved paths.
+6. **Decisions 1 to 11 accepted,** including:
+   * a minimal base built from the style profile rather than python-docx's template;
+   * the renderer as an application port;
+   * the cite text and reason codes made in the application layer;
+   * byte-identical output from `generated_at`;
+   * a manifest reader that finds its element by name and refuses document types.
+7. **The affected set** (128 files) did not finish within two minutes under load, so it is left to
+   the PR's `ci` under agreement 10. The changed directories, the always-run list and the profile,
+   packaging and workflow tests passed, and the static checks are clean.
+
+No re-review is needed. The PR merges `--partial`, phase `InProgress`, until validate-dev's slow tier
+runs the LibreOffice check.

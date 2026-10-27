@@ -84,8 +84,9 @@ The prompt tells the session which spec to execute, to implement the plan nodes 
 hand you any command that runs longer than about 2 minutes, to commit locally but never push,
 and to finish by setting the phase to `Succeeded` and completing the session report.
 
-It also tells the session never to run the whole test suite: CI runs it on the pull request
-([working agreement 10](working-agreements.md#10-a-session-tests-what-it-changed-and-ci-tests-everything)).
+It also tells the session never to run the whole test suite: CI runs what the pull request's changes
+reach, and the whole suite on dev's push run after the merge
+([working agreement 10](working-agreements.md#10-a-session-tests-what-it-changed-a-pull-request-what-it-reaches-and-dev-and-main-everything)).
 Before the report the session runs the affected set once, with
 `uv run scripts/affected_tests.py --run`, which prints and runs the test files the branch's changes
 can reach (`--explain` says why each one was chosen). When the branch changes shared test ground,

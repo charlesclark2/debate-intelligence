@@ -152,6 +152,11 @@ class TestALaterLineOfACite:
 
 
 class TestALineUnderATag:
+    def test_a_blank_line_between_it_and_the_body_is_stepped_over(self, parser: DebateDocxParser) -> None:
+        document = parse(parser, TAG_MARKUP, UNDER_A_TAG_LINE, BLANK, BODY)
+
+        assert only_card(document).full_cite == UNDER_A_TAG_TEXT
+
     def test_a_line_with_a_link_or_a_year_is_the_cards_cite(self, parser: DebateDocxParser) -> None:
         document = parse(parser, TAG_MARKUP, UNDER_A_TAG_LINE, BODY)
 
@@ -195,6 +200,22 @@ class TestACiteInTheTagStyle:
         card = only_card(document)
         assert (card.tag, card.full_cite) == (SECOND_TAG_TEXT, "")
         assert unit_of(document, TAG)[0] is StructuralUnit.ANALYTIC
+
+    def test_a_name_and_year_further_in_than_the_head_leave_it_a_tag(self, parser: DebateDocxParser) -> None:
+        """The classifier's head is 40 characters; a name and year that start at 41 are not at it."""
+        markup, text = plain("x" * 40 + " Lindqvist 25, Professor of Grid Studies", "Heading4")
+
+        document = parse(parser, TAG_MARKUP, markup, BODY)
+
+        assert (only_card(document).tag, only_card(document).full_cite) == (text, "")
+
+    def test_with_no_tag_above_it_it_is_the_cards_tag(self, parser: DebateDocxParser) -> None:
+        block = paragraph_xml(run_xml("Grid Reliability"), style="Heading3")
+
+        document = parse(parser, block, TAG_STYLE_CITE, BODY)
+
+        card = only_card(document)
+        assert (card.tag, card.full_cite) == (TAG_STYLE_CITE_TEXT, "")
 
     def test_with_no_body_below_it_it_stays_a_tag(self, parser: DebateDocxParser) -> None:
         document = parse(parser, TAG_MARKUP, TAG_STYLE_CITE, SECOND_TAG, CITE_MARKUP, BODY)

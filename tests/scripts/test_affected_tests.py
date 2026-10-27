@@ -610,14 +610,17 @@ def describe(workspace: Workspace, setup: dict[str, str], change: dict[str, str]
 STAND_INS = {
     "tests/stand_ins/s3.py": "S3 = 1\n",
     "tests/stand_ins/abcd.py": "ABCD = 1\n",
-    "tests/clients/test_client_words.py": 'CLIENTS = ["s3", "abcd"]\n',
+    # Both words where a path is built from them, on a base the script cannot follow.
+    "tests/clients/test_client_words.py": 'def stand_ins(root):\n    return root / "s3", root / "abcd"\n',
+    # The same words as labels: not where a path is built, so they name no script at all.
+    "tests/clients/test_client_labels.py": 'CLIENTS = {"s3": 1, "abcd": 2}\n',
     "tests/clients/test_imports_the_stand_in.py": "from tests.stand_ins import s3\n",
 }
 
 
 def test_a_quoted_word_shorter_than_four_letters_names_no_script(workspace: Workspace) -> None:
     result = describe(workspace, STAND_INS, {"tests/stand_ins/s3.py": "S3 = 2\n"})
-    # `"s3"` is boto3's service name, not the stand-in; the test that imports the stand-in still reaches it.
+    # `"s3"` is too short to be read as the stand-in; the test that imports the stand-in still reaches it.
     assert_selected(result, {"tests/clients/test_imports_the_stand_in.py"} | ALWAYS | READS_SOURCE)
 
 
@@ -641,7 +644,9 @@ VERIFY_FIXTURES = {
     "tests/api/test_formats_its_path.py": 'ROOT = "."\nCASES = f"{ROOT}/tests/fixtures/verify"\n',
     # A pattern denotes the folder before its wildcard.
     "tests/api/test_globs_the_folder.py": 'PATTERN = "tests/fixtures/verify/*.json"\n',
-    # A bare word cannot tell, so it still names the folder: the command `verify` reading its cases.
+    # A word a path is built from, on a base the script cannot follow: it cannot tell, so it names it.
+    "tests/api/test_joins_an_unknown_base.py": 'def cases(root):\n    return root / "verify"\n',
+    # A command's argument is not a path: it names no folder.
     "tests/cli/test_verify_command.py": 'ARGUMENTS = ["verify", "--json"]\n',
     # A command line is not one path: its words are searched, and the file's name is among them.
     "tests/api/test_runs_a_command.py": 'COMMAND = "jq . tests/fixtures/verify/case.json"\n',
@@ -658,7 +663,7 @@ def test_a_route_names_no_fixture_folder_but_a_path_to_it_does(workspace: Worksp
             "tests/api/test_joins_its_path.py",
             "tests/api/test_formats_its_path.py",
             "tests/api/test_globs_the_folder.py",
-            "tests/cli/test_verify_command.py",
+            "tests/api/test_joins_an_unknown_base.py",
             "tests/api/test_runs_a_command.py",
         }
         | ALWAYS,

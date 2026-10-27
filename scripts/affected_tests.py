@@ -42,8 +42,11 @@ working tree's uncommitted and untracked files, and selects every test file one 
   or, when it starts with a slash, only one from the repository root or the file's own folder: a
   route (`"/account/email/verify"`) or an f-string's tail (`f"{CORE}/retrieval/identifiers.py"`)
   denotes nothing. A string with a wildcard denotes the folder before it; one with whitespace is
-  prose or a command, and its words are searched. A bare word shorter than four letters names no
-  folder or script (`"s3"`).
+  prose or a command, and its words are searched. Any other string is a word: it names a file by
+  its file name wherever it is, but a folder or a script by its bare name only where a path is
+  built from it (an operand of `/`, an argument of `Path` or `joinpath`, an item a `for` walks)
+  and only from four letters up. `"flow"` as a label and `"s3"` as boto3's service name name
+  nothing.
 * **Source readers.** A test that walks a directory and parses the Python it finds there
   (`ast.parse` with a glob, `rglob`, `iterdir` or `walk`) reads source as data, so any changed
   Python file selects it.
@@ -895,14 +898,10 @@ def imported_names(tree: ast.AST) -> Iterator[tuple[int, str, tuple[str, ...]]]:
 # --------------------------------------------------------------------------------------------
 
 
-class Corpus:
-    """Every searched file's text in one string, so a set of names is found in one pass.
+class Haystack:
+    """Many files' texts in one string, so a set of names is found in one pass."""
 
-    `denoting` maps an existing file or folder to the files whose path literals denote it
-    (:class:`PathIndex`); those literals are left out of `texts`, so their words are not searched.
-    """
-
-    def __init__(self, texts: dict[str, str], denoting: dict[str, set[str]] | None = None) -> None:
+    def __init__(self, texts: dict[str, str]) -> None:
         self.paths = sorted(texts)
         self.starts: list[int] = []
         pieces: list[str] = []
@@ -912,6 +911,27 @@ class Corpus:
             pieces.append(texts[path])
             offset += len(texts[path]) + 1
         self.text = "\0".join(pieces)
+
+    def holder(self, position: int) -> str:
+        return self.paths[bisect.bisect_right(self.starts, position) - 1]
+
+
+class Corpus:
+    """Every searched file's words, searched for file names, and its path segments, for folder names.
+
+    `texts` holds the words a file names other files with; `segments`, the ones it builds paths
+    from (v1-e01-t32), which default to all of them. `denoting` maps an existing file or folder to
+    the files whose path literals denote it (:class:`PathIndex`); those literals are in neither.
+    """
+
+    def __init__(
+        self,
+        texts: dict[str, str],
+        denoting: dict[str, set[str]] | None = None,
+        segments: dict[str, str] | None = None,
+    ) -> None:
+        self.words = Haystack(texts)
+        self.segments = self.words if segments is None else Haystack(segments)
         self.denoting = denoting or {}
 
     def find(self, file_names: Iterable[str], path_parts: Iterable[str]) -> dict[str, set[str]]:
@@ -924,25 +944,28 @@ class Corpus:
         parts = sorted(set(path_parts), key=len, reverse=True)
         long_parts = [part for part in parts if len(part) >= SHORTEST_QUOTED_WORD]
         short_parts = [part for part in parts if len(part) < SHORTEST_QUOTED_WORD]
-        alternatives: list[str] = []
-        if names:
-            alternatives.append(r"(?<![\w-])(?P<name>" + "|".join(map(re.escape, names)) + r")(?![\w-])")
+        part_alternatives: list[str] = []
         if long_parts:
-            alternatives.append(
+            part_alternatives.append(
                 r"(?<=[\"'/\\`])(?P<part>" + "|".join(map(re.escape, long_parts)) + r")(?=[\"'/\\`])"
             )
         if short_parts:
             short = "|".join(map(re.escape, short_parts))
-            alternatives.append(
+            part_alternatives.append(
                 rf"(?:(?<=/)(?P<short>{short})(?=[\"'/\\`])|(?<=[\"'/\\`])(?P<short_before>{short})(?=/))"
             )
         found: dict[str, set[str]] = {}
-        if not alternatives:
-            return found
-        for match in re.finditer("|".join(alternatives), self.text):
-            key = next(value for value in match.groupdict().values() if value)
-            path = self.paths[bisect.bisect_right(self.starts, match.start()) - 1]
-            found.setdefault(key, set()).add(path)
+        searches: list[tuple[Haystack, str]] = []
+        if names:
+            searches.append(
+                (self.words, r"(?<![\w-])(?P<name>" + "|".join(map(re.escape, names)) + r")(?![\w-])")
+            )
+        if part_alternatives:
+            searches.append((self.segments, "|".join(part_alternatives)))
+        for haystack, pattern in searches:
+            for match in re.finditer(pattern, haystack.text):
+                key = next(value for value in match.groupdict().values() if value)
+                found.setdefault(key, set()).add(haystack.holder(match.start()))
         return found
 
     def denoters(self, path: str, keys: Keys) -> set[str]:
@@ -1125,18 +1148,22 @@ def static_paths(syntax: ast.Module, reader: str) -> dict[int, str]:
     return built
 
 
-def naming_text(tree: Tree, path: str, index: PathIndex) -> tuple[str, set[str]]:
-    """A file's literals as searched for names (`"a", "b"`), and the existing paths it denotes.
+def naming_text(tree: Tree, path: str, index: PathIndex) -> tuple[str, str, set[str]]:
+    """A file's words (`"a", "b"`), the words it builds paths from, and the existing paths it denotes.
 
     A string a `Path(__file__)` join builds into an existing path denotes that path; a string with
     a slash denotes what :meth:`PathIndex.denoted` says. Either way it is left out of the words, so
     `"verify"` in a route or `"landscape"` in another package's fixture folder names nothing. Any
-    other string is a word, as before. A file that is not Python, or does not parse, is all words.
+    other string is a word, and names a file by its file name. It names a folder or a script by
+    its bare name only from a path position (:func:`path_segments`): `"flow"` as a label, `"prod"`
+    as an argument or `"synthetic"` as a dictionary key reads nothing. A file that is not Python,
+    or does not parse, is all words and all segments.
     """
     syntax = tree.syntax(path) if path.endswith(".py") else None
     if syntax is None:
-        return tree.literals(path), set()
+        return tree.literals(path), tree.literals(path), set()
     built = static_paths(syntax, path)
+    segment_ids = path_segments(syntax)
     prose = {
         id(node.value)
         for node in ast.walk(syntax)
@@ -1157,18 +1184,49 @@ def naming_text(tree: Tree, path: str, index: PathIndex) -> tuple[str, set[str]]
         else:
             denoted |= from_slash
     words.sort(key=lambda node: (node.lineno, node.col_offset))
-    return ", ".join(f'"{node.value}"' for node in words), denoted
+    segments = [node for node in words if id(node) in segment_ids]
+    return (
+        ", ".join(f'"{node.value}"' for node in words),
+        ", ".join(f'"{node.value}"' for node in segments),
+        denoted,
+    )
+
+
+PATH_CALLS = frozenset({"Path", "PurePath", "PurePosixPath", "joinpath", "join"})
+
+
+def path_segments(syntax: ast.Module) -> set[int]:
+    """The string nodes a file builds a path from, whatever the base: what a folder's name may be read in.
+
+    An operand of `/`, an argument of `Path(...)`, `.joinpath(...)` or `os.path.join(...)`, and an
+    item of a tuple or list a `for` walks (`for name in ("cards", "verify"): FIXTURES / name`).
+    """
+    found: set[int] = set()
+    for node in ast.walk(syntax):
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+            found |= {id(node.left), id(node.right)}
+        elif isinstance(node, ast.Call):
+            function = node.func
+            name = function.attr if isinstance(function, ast.Attribute) else getattr(function, "id", "")
+            if name in PATH_CALLS:
+                found |= {id(argument) for argument in node.args}
+        elif isinstance(node, ast.For | ast.AsyncFor | ast.comprehension) and isinstance(
+            node.iter, ast.Tuple | ast.List | ast.Set
+        ):
+            found |= {id(item) for item in node.iter.elts}
+    return found
 
 
 def naming_corpus(tree: Tree, changes: list[Change]) -> Corpus:
     index = PathIndex(tree.paths | {change.path for change in changes})
     texts: dict[str, str] = {}
+    segments: dict[str, str] = {}
     denoting: dict[str, set[str]] = {}
     for path in tree.texts:
-        texts[path], denoted = naming_text(tree, path, index)
+        texts[path], segments[path], denoted = naming_text(tree, path, index)
         for target in denoted:
             denoting.setdefault(target, set()).add(path)
-    return Corpus(texts, denoting)
+    return Corpus(texts, denoting, segments)
 
 
 @dataclass(frozen=True)

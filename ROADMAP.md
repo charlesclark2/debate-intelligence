@@ -130,7 +130,7 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 | [CI's pyright covers tests/architecture and tests/smoke](plan_specs/v1/e01-repo-foundation/t35-pyright-scope-tests.yaml) `v1-e01-t35-pyright-scope-tests` | Pending | 1 | 1.0 |
 | [A dev pre-release for a commit dev has moved past with a workflow change is reported superseded, not failed](plan_specs/v1/e01-repo-foundation/t36-prerelease-superseded-commit.yaml) `v1-e01-t36-prerelease-superseded-commit` | Succeeded | 1 | 2.0 |
 | [A CI check that every locked package's licence is one the project accepts](plan_specs/v1/e01-repo-foundation/t37-licence-check-over-the-lock.yaml) `v1-e01-t37-licence-check-over-the-lock` | Pending | 0 | 2.0 |
-| [A pull request into dev runs the tests its changes reach; a push to dev and a pull request into main run them all](plan_specs/v1/e01-repo-foundation/t38-ci-affected-tests-on-dev-pull-requests.yaml) `v1-e01-t38-ci-affected-tests-on-dev-pull-requests` | Pending | 1 | 3.0 |
+| [A pull request into dev runs the tests its changes reach; a push to dev and a pull request into main run them all](plan_specs/v1/e01-repo-foundation/t38-ci-affected-tests-on-dev-pull-requests.yaml) `v1-e01-t38-ci-affected-tests-on-dev-pull-requests` | InProgress | 1 | 3.0 |
 
 #### [E02 — Domain Core: Entities, Ports & Local Persistence](plan_specs/v1/e02-domain-core/epic.yaml)
 

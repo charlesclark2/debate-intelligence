@@ -65,7 +65,7 @@ spec:
         Manifests include model/prompt metadata and snapshot hashes for every card and contain no user
         email or name fields.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

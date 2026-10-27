@@ -57,7 +57,7 @@ spec:
         The operator's Bedrock plan updates only the inline policy, read by the PM before
         the apply, and step 7's first call answers on both dev models (operator).
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

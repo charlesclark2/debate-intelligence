@@ -44,7 +44,7 @@ spec:
         The checkout's smoke build reads the bundled profiles, shown by a test that reverts
         the 2026-10-27 pin and fails; every smoke check passes.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -17,11 +17,24 @@ A run ends in exactly one of these, and the command maps each onto its own exit 
 * **Some card UNVERIFIED.** The report lists every card, verified or not, with its reasons. A card
   whose snapshot is not on this machine is UNVERIFIED with ``SNAPSHOT_MISSING``, never skipped.
 * **The document is not a manifest** (:class:`InvalidManifest`): not JSON, or not valid against the
-  published schema (``card_manifest.v1.json``, its cards checked against ``card.schema.json``).
-  Nothing is verified, and the error names the failing JSON path.
+  published schema (``card_manifest.v1.json``, its cards checked against ``card.schema.json``), or
+  written by a newer build (:class:`NewerManifestVersion`). Nothing is verified, and the error names
+  the failing JSON path.
 * **Verification could not run** (:class:`VerificationCouldNotRun`): a store could not be reached,
   or anything else the verifier lets propagate because it is not a verdict about the card
   (`v1-e03-t04`). It is never reported as a verdict, in either direction.
+
+## Versions
+
+Every version in :data:`~debate_core.evidence.manifest.READABLE_MANIFEST_VERSIONS` is read, and the
+report says which one the document was. A version-2 manifest's ``snapshots`` are checked by the
+schema and not otherwise used: each card is verified against the stored snapshot its own
+``snapshot_id`` names, exactly as a version-1 card is.
+
+A version above :data:`~debate_core.evidence.manifest.MANIFEST_VERSION` is refused before the schema
+is consulted, as :class:`NewerManifestVersion`. Its fields are a newer build's, so the schema's
+complaint about them (an unexpected key, a missing one) would describe the wrong problem; the
+message says to install a newer build instead.
 
 ## A card that passes the schema but is not a Card
 
@@ -48,7 +61,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from functools import cache
-from typing import Any, Final, Literal, cast
+from typing import Any, Final, cast
 
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError as SchemaViolation
@@ -60,7 +73,13 @@ from debate_core.application.errors import DomainError
 from debate_core.application.evidence_verifier import EvidenceVerifier
 from debate_core.domain import Card, VerificationStatus, render_schemas
 from debate_core.domain.schema_export import JSON_SCHEMA_DIALECT
-from debate_core.evidence.manifest import CARD_SCHEMA_REFERENCE, render_card_manifest_schema
+from debate_core.evidence.manifest import (
+    CARD_SCHEMA_REFERENCE,
+    MANIFEST_VERSION,
+    READABLE_MANIFEST_VERSIONS,
+    ManifestVersion,
+    render_card_manifest_schema,
+)
 from debate_core.evidence.verification_types import (
     ReasonCode,
     VerificationCheck,
@@ -76,6 +95,7 @@ __all__ = [
     "CardVerdict",
     "InvalidManifest",
     "ManifestVerificationReport",
+    "NewerManifestVersion",
     "ReportedReason",
     "VerificationCouldNotRun",
     "VerifyManifest",
@@ -118,6 +138,24 @@ class InvalidManifest(Exception):
         """How many schema violations the document has; :attr:`json_path` is the most relevant."""
         more = f" ({violations - 1} more violation(s))" if violations > 1 else ""
         super().__init__(f"the manifest is invalid at {json_path}: {problem}{more}")
+
+
+class NewerManifestVersion(InvalidManifest):
+    """The manifest says it was written by a build newer than this one, which cannot read it.
+
+    An :class:`InvalidManifest`, so the CLI reports it the same way (exit 2, nothing verified), with
+    a problem that says what to do about it.
+    """
+
+    def __init__(self, manifest_version: int) -> None:
+        self.manifest_version = manifest_version
+        """The version the document claims."""
+        readable = ", ".join(str(version) for version in READABLE_MANIFEST_VERSIONS)
+        super().__init__(
+            "$.manifest_version",
+            f"manifest_version {manifest_version} is newer than this build reads ({readable}); "
+            "install a newer build of debate-research to verify it",
+        )
 
 
 class VerificationCouldNotRun(Exception):
@@ -240,7 +278,7 @@ class ManifestVerificationReport(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    manifest_version: Literal[1]
+    manifest_version: ManifestVersion = Field(description="The manifest's own manifest_version.")
     generated_at: AwareDatetime = Field(description="The manifest's own generated_at.")
     cards: tuple[CardVerdict, ...]
 
@@ -311,12 +349,13 @@ class VerifyManifest:
 _GENERATED_AT: Final[TypeAdapter[datetime]] = TypeAdapter(AwareDatetime)
 
 
-def read_manifest(document: bytes) -> tuple[Literal[1], datetime, list[dict[str, Any]]]:
+def read_manifest(document: bytes) -> tuple[ManifestVersion, datetime, list[dict[str, Any]]]:
     """``document``'s version, timestamp and card entries, once it is known to be a manifest.
 
-    Strict JSON (no duplicate keys, no ``NaN``), then the published schema, then the timestamp,
-    whose ``date-time`` format JSON Schema only annotates. The cards come back as plain entries:
-    each is made a ``Card`` on its own, so one invalid card cannot refuse the others.
+    Strict JSON (no duplicate keys, no ``NaN``), then a version newer than this build's refused
+    (:class:`NewerManifestVersion`), then the published schema, then the timestamp, whose
+    ``date-time`` format JSON Schema only annotates. The cards come back as plain entries: each is
+    made a ``Card`` on its own, so one invalid card cannot refuse the others.
     """
     try:
         data: Any = json.loads(
@@ -331,6 +370,10 @@ def read_manifest(document: bytes) -> tuple[Literal[1], datetime, list[dict[str,
     except ValueError as undecodable:  # bytes that are not UTF-8 (or UTF-16/32) text at all
         raise InvalidManifest("$", "not JSON: the document is not Unicode text") from undecodable
 
+    newer = _newer_version(data)
+    if newer is not None:
+        raise NewerManifestVersion(newer)
+
     worst, violations = _schema_violations(data)
     if worst is not None:
         raise InvalidManifest(worst.json_path, worst.description(), violations=violations)
@@ -339,7 +382,7 @@ def read_manifest(document: bytes) -> tuple[Literal[1], datetime, list[dict[str,
         generated_at = _GENERATED_AT.validate_python(data["generated_at"])
     except ValidationError as invalid:
         raise InvalidManifest("$.generated_at", invalid.errors(include_url=False)[0]["msg"]) from invalid
-    return 1, generated_at, data["cards"]
+    return cast("ManifestVersion", data["manifest_version"]), generated_at, data["cards"]
 
 
 @cache
@@ -379,6 +422,12 @@ class _SchemaViolation:
             return "missing required " + _names([name for name in names if name not in self.keys])
         if self.rule == "additionalProperties" and self.keys is not None:
             return "properties the schema does not allow: " + _names(sorted(self.keys - self.allowed_keys))
+        if self.rule == "not" and self.keys is not None:
+            # The one negation in the manifest schema: a key that an older version does not have.
+            keys = self.keys
+            return "properties this manifest_version does not allow: " + _names(
+                [name for name in _required_names(expected) if name in keys]
+            )
         descriptions: Mapping[str, str] = {
             "type": f"must be of type {_alternatives(expected)}",
             "const": f"must be {json.dumps(expected)}",
@@ -394,6 +443,24 @@ class _SchemaViolation:
             "oneOf": "must match exactly one of the allowed forms: " + _forms(expected),
         }
         return descriptions.get(self.rule, f"fails the schema's {self.rule!r} rule")
+
+
+def _newer_version(data: Any) -> int | None:
+    """The version ``data`` claims, when it is an integer above the one this build writes."""
+    if not isinstance(data, Mapping):
+        return None
+    version = cast("Mapping[str, object]", data).get("manifest_version")
+    if isinstance(version, int) and not isinstance(version, bool) and version > MANIFEST_VERSION:
+        return version
+    return None
+
+
+def _required_names(subschema: object) -> list[str]:
+    """The names a ``{"required": [...]}`` subschema lists; none for any other subschema."""
+    if not isinstance(subschema, Mapping):
+        return []
+    names = cast("Mapping[str, object]", subschema).get("required")
+    return [str(name) for name in cast("list[object]", names)] if isinstance(names, list) else []
 
 
 def _schema_violations(data: Any) -> tuple[_SchemaViolation | None, int]:

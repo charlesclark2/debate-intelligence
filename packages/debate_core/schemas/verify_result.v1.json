@@ -421,7 +421,11 @@
       "description": "Every card of one manifest, with its verdict, in manifest order.",
       "properties": {
         "manifest_version": {
-          "const": 1,
+          "description": "The manifest's own manifest_version.",
+          "enum": [
+            1,
+            2
+          ],
           "title": "Manifest Version",
           "type": "integer"
         },

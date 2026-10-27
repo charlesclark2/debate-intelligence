@@ -254,9 +254,41 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-26
 
 **Notes:**
+
+The cutover's false drift is fixed at its one source, with no new read of the bucket.
+1. **ac1 and the node's criterion pass.**
+   * Against moto, the cutover's drift reproduces before the fix: something missing, the camp
+     download kept as not confirmed, the record `incomplete`.
+   * After the fix the same run releases the download and records `completed`.
+   * Red first: 5 failed in the core file, and 2 failed in the CLI file before the container passed
+     the mode. The passes are guards that hold either way, each named.
+   * Local mode's outputs are unchanged, and a test counts the bucket requests.
+2. **Mutants: 13, the PM's three among them.** Mutant 6 (size not compared) survived first. That
+   comparison predates this task and nothing covered it, so the new test closes an older gap.
+3. **Decisions accepted:**
+   * the mode as a constructor argument, set once in the container, so the report stage, retention
+     and `caselist status` share one rule;
+   * the status line's wording, as proposed;
+   * `held_only_in_bucket` in `--json` only when above zero;
+   * size as part of the manifest's digest;
+   * the invented camp file, screened read-only;
+   * the first red run's test bug, honestly set aside.
+4. **Decision 4, the publish check, is accepted.** It passed before the fix, because `publish_plan`
+   reads the bucket's listing before local bytes, so it is a guard test, not a red one.
+5. **The image follow-up.** The PM chooses its timing: after Wednesday 2026-10-28's first scheduled
+   run has been checked, so that run is read on the cutover's image. The PM reads the plan before
+   the apply.
+   * Step 3's by-hand replacement of the digest line is a runbook gap. The PM adds a replace block
+     to `caselist-cloud-run.md`'s "A new image, later" in the next batch.
+6. **ac2** is read from the first run on the new image that touches such a snapshot. The PM
+   records it.
+7. **The affected set** (268 files) is left to the PR's `ci` under agreement 10. The changed
+   directories and the always-run list passed, and the static checks are clean.
+
+No re-review is needed. The PR merges `--partial`, phase `InProgress`, until ac2.

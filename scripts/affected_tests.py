@@ -2084,9 +2084,8 @@ class Walk:
             further = [] if is_test else self.runners_of(runner)
             if not further:
                 if not names_any_command(runs, top):
-                    self.reach(
-                        runner, how, node
-                    )  # nothing it passes names a command: it cannot be told apart
+                    # Nothing it passes names a command: it cannot be told apart.
+                    self.reach(runner, how, node)
                 continue
             for next_runner, next_how in further:
                 chain = f"{next_how} {self.show(runner)}, which {how}"

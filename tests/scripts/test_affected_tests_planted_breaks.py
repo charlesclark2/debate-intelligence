@@ -3,8 +3,13 @@
 For each break in `PLANTED_BREAKS`, across the four workspace packages, the module is broken in a
 clone of this repository's HEAD in a temporary directory and committed there. The script then
 describes that commit (`--diff HEAD`, read from git), and pytest runs the selected test files
-nearest the break, the ones with the shortest chain back to it, against the clone: its packages
-first on `PYTHONPATH`, so the broken copy is the one imported. At least one of them must catch it.
+nearest the break against the clone: first those that mention a name from the changed line (the
+tests that read what broke), then the ones with the shortest chain back to it, its packages first on
+`PYTHONPATH`, so the broken copy is the one imported. At least one of them must catch it. (The
+mention comes first since the PM batch of 2026-10-27 (x): by chain and path alone, `exit_codes.py`'s
+break ran ten slow bucket-mode files that never read `RETRIEVAL_FAILURE` and was not caught, so
+validate-dev's slow tier failed on `v1.1.0-dev.160`. Ordering by recorded durations is
+`v1-e01-t40`.)
 The clone is reset after each break and its bytes compared with the original, and this worktree is
 never written to.
 
@@ -31,6 +36,7 @@ The tests of :func:`how_caught` itself are fast and run on every pull request.
 
 from __future__ import annotations
 
+import builtins
 import os
 import re
 import subprocess
@@ -43,6 +49,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 NEAREST_TESTS_RUN = 10
+_BUILTINS = frozenset(dir(builtins))
 
 
 @dataclass(frozen=True)
@@ -214,6 +221,29 @@ def clone(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]:
     assert git(root, "status", "--porcelain") == ""
 
 
+def changed_names(planted: PlantedBreak) -> frozenset[str]:
+    """The names in the line a break changes that a test reading the broken code would mention.
+
+    Only names shaped like a module's own (a constant, a class, an attribute in snake case: a capital
+    or an underscore in it), never a builtin: `tuple`, `sorted` or a local such as `found` would
+    prefer any test at all.
+    """
+    words = re.findall(r"[A-Za-z_][A-Za-z0-9_]{2,}", planted.old)
+    return frozenset(
+        word
+        for word in words
+        if (any(c.isupper() for c in word) or "_" in word.strip("_")) and word not in _BUILTINS
+    )
+
+
+def names_any(test: Path, names: frozenset[str]) -> bool:
+    """Whether a selected test file mentions any of `names` as a whole word."""
+    if not names or not test.is_file():
+        return False
+    text = test.read_text(encoding="utf-8", errors="replace")
+    return any(re.search(rf"\b{re.escape(name)}\b", text) for name in names)
+
+
 def plant_and_run(clone: Path, planted: PlantedBreak) -> SelectedRun:
     """Commit `planted` in the clone, run the selected tests nearest it, and put the clone back."""
     target = clone / planted.path
@@ -234,9 +264,11 @@ def plant_and_run(clone: Path, planted: PlantedBreak) -> SelectedRun:
         reasons = dict(line.split("  <- ", 1) for line in chosen.stdout.splitlines())
         reached = {test: reason for test, reason in reasons.items() if planted.path in reason}
         assert reached, f"no selected test is traced to {planted.path}:\n{chosen.stdout}"
-        nearest = sorted(reached, key=lambda test: (reached[test].count(", which "), test))[
-            :NEAREST_TESTS_RUN
-        ]
+        names = changed_names(planted)
+        nearest = sorted(
+            reached,
+            key=lambda test: (not names_any(clone / test, names), reached[test].count(", which "), test),
+        )[:NEAREST_TESTS_RUN]
         sources = os.pathsep.join(str(path) for path in sorted(clone.glob("packages/*/src")))
         ran = subprocess.run(
             [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-n", "0", "-x", *nearest],

@@ -38,6 +38,8 @@ from typer.testing import CliRunner, Result
 from debate_cli.app import create_app
 from debate_cli.exit_codes import ExitCode
 from debate_core.application.caselist.suppression import RecordedSuppressionList
+from debate_core.application.errors import LocalStoreAccessDenied
+from debate_core.application.evidence_sync import EvidenceSyncService
 from debate_core.application.ports.suppression import PathHoldEntry, ReasonCode, disclosure_digest
 from debate_core.integrations.local.suppression_list import local_suppression_list_file
 from debate_core.integrations.s3 import SHA256_METADATA_NAME
@@ -739,6 +741,138 @@ class TestTheParsedStoreIsNotSynced:
         assert result.exit_code == ExitCode.OK, result.stdout
         assert "STALE PARSED COPY" not in result.stdout + result.stderr
         assert "PARSED STORE" not in flattened(result)
+
+
+# ------------------------------------------------------------------------------------------------
+# The stale-copy note comes before the plan, so a refused plan cannot hide it (v1-e29-t13)
+# ------------------------------------------------------------------------------------------------
+
+UNMAPPED_BLOB_REFUSAL = (
+    "the blobs keyspace holds 1 object(s) and no remote prefix was given for them; a "
+    "content-addressed key needs the prefix that says which corpus it belongs to, such as "
+    "raw/caselist/hsld26 or raw/openev/2026 (docs/architecture/evidence-store-layout.md)"
+)
+CHECK_FAILED_LINE = (
+    "STALE PARSED COPY: could not look for one ({code}); the plan below does not depend on it."
+)
+
+
+def stale_copy_lines(result: Result) -> list[str]:
+    return [line for line in result.stderr.splitlines() if line.startswith("STALE PARSED COPY")]
+
+
+def assert_the_unmapped_blob_refusal(result: Result) -> None:
+    """The refusal `store sync` gave before v1-e29-t13: the same code, message and exit."""
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.stdout
+    error = envelope_of(result)["error"]
+    assert error["code"] == "UNSYNCABLE_KEYSPACE"
+    assert error["message"] == UNMAPPED_BLOB_REFUSAL
+
+
+class TestTheStaleCopyNoteComesBeforeThePlan:
+    def test_a_dry_run_refused_for_want_of_a_blob_prefix_still_reports_the_stale_copy(
+        self, buckets: S3Client, dev_data_dir: Path
+    ) -> None:
+        """The run of 2026-10-22: blobs on this machine, no --blob-prefix, and an old parsed copy."""
+        a_stale_copy(dev_data_dir)
+        write_local_blob(dev_data_dir, b"a disclosed file")
+
+        result = invoke("store", "sync")
+
+        assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.stdout
+        stderr = result.stderr.splitlines()
+        assert stale_copy_lines(result) == [stale_copy_line(dev_data_dir, 3)]
+        refusal = next(index for index, line in enumerate(stderr) if "UNSYNCABLE_KEYSPACE" in line)
+        assert stderr.index(stale_copy_line(dev_data_dir, 3)) < refusal
+        assert "STALE PARSED COPY" not in result.stdout
+        assert (dev_data_dir / "objects" / PARSED_SOURCE).is_file()
+        assert PARSED_SOURCE_NAME not in result.stdout + result.stderr
+
+    def test_the_refusal_is_the_same_with_the_note_in_front_of_it(
+        self, buckets: S3Client, dev_data_dir: Path
+    ) -> None:
+        a_stale_copy(dev_data_dir)
+        write_local_blob(dev_data_dir, b"a disclosed file")
+
+        refused = invoke("--json", "store", "sync")
+
+        assert_the_unmapped_blob_refusal(refused)
+        assert stale_copy_lines(refused) == [stale_copy_line(dev_data_dir, 3)]
+        assert "STALE PARSED COPY" not in refused.stdout
+        assert "objects/parsed" not in refused.stdout
+
+    def test_a_refused_dry_run_with_no_stale_copy_hears_nothing_about_one(
+        self, buckets: S3Client, dev_data_dir: Path
+    ) -> None:
+        write_local_blob(dev_data_dir, b"a disclosed file")
+
+        refused = invoke("--json", "store", "sync")
+        console = invoke("store", "sync")
+
+        assert_the_unmapped_blob_refusal(refused)
+        assert console.exit_code == ExitCode.DOMAIN_FAILURE
+        for result in (refused, console):
+            assert "STALE PARSED COPY" not in result.stdout + result.stderr
+
+    @pytest.mark.parametrize("output", [(), ("--json",)])
+    def test_a_dry_run_that_plans_prints_the_note_once(
+        self, buckets: S3Client, dev_data_dir: Path, output: tuple[str, ...]
+    ) -> None:
+        a_stale_copy(dev_data_dir)
+        write_local_blob(dev_data_dir, b"a disclosed file")
+
+        result = invoke(*output, "store", "sync", "--blob-prefix", BLOB_PREFIX)
+
+        assert result.exit_code == ExitCode.OK, result.stdout
+        assert stale_copy_lines(result) == [stale_copy_line(dev_data_dir, 3)]
+        assert "STALE PARSED COPY" not in result.stdout
+        assert "objects/parsed" not in result.stdout
+
+    def test_an_apply_refused_for_want_of_a_blob_prefix_is_unchanged(
+        self, buckets: S3Client, dev_data_dir: Path
+    ) -> None:
+        a_stale_copy(dev_data_dir)
+        write_local_blob(dev_data_dir, b"a disclosed file")
+
+        refused = invoke("--json", "store", "sync", "--apply")
+
+        assert_the_unmapped_blob_refusal(refused)
+        assert "STALE PARSED COPY" not in refused.stdout + refused.stderr
+        assert remote_keys(buckets, DEV_BUCKET) == []
+        assert (dev_data_dir / "objects" / PARSED_SOURCE).is_file()
+
+    @pytest.mark.parametrize(
+        ("failure", "code"),
+        [
+            (LocalStoreAccessDenied("list", "the named-object directory"), "STORE_ACCESS_DENIED"),
+            (PermissionError(13, "Permission denied", "/Users/someone/dev/objects/parsed"), "PermissionError"),
+        ],
+    )
+    def test_a_check_that_fails_neither_hides_nor_replaces_the_refusal(
+        self,
+        buckets: S3Client,
+        dev_data_dir: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        failure: Exception,
+        code: str,
+    ) -> None:
+        """The note is advice: when the check cannot be made, the plan's own outcome is the run's."""
+
+        async def the_check_fails(self: EvidenceSyncService) -> None:
+            raise failure
+
+        monkeypatch.setattr(EvidenceSyncService, "stale_parsed_copy", the_check_fails)
+        write_local_blob(dev_data_dir, b"a disclosed file")
+
+        refused = invoke("--json", "store", "sync")
+        planned = invoke("--json", "store", "sync", "--blob-prefix", BLOB_PREFIX)
+
+        assert_the_unmapped_blob_refusal(refused)
+        assert planned.exit_code == ExitCode.OK, planned.stdout
+        for result in (refused, planned):
+            assert stale_copy_lines(result) == [CHECK_FAILED_LINE.format(code=code)]
+            assert "/Users/someone" not in result.stdout + result.stderr
+            assert "STALE PARSED COPY" not in result.stdout
 
 
 # ------------------------------------------------------------------------------------------------

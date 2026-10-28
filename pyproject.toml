@@ -570,7 +570,8 @@ addopts = [
     # No --cov here (v1-e01-t27). Coverage took a third of the suite's wall-clock (182 s against
     # 123 s on the operator's Mac, 5,812 tests) and nothing is gated on it, so a plain
     # `uv run pytest` and a pull request's `test` job both run without it. CI measures it on every
-    # push to dev and main, in ci.yml's `coverage` job; locally, ask for it:
+    # push to dev and main, in each part of ci.yml's `test` job, and its `coverage` job combines the
+    # parts into one report (v1-e01-t42); locally, ask for it:
     # `uv run pytest --cov --cov-report=term-missing`. [tool.coverage] below still says what is
     # measured, so the report is the one this file used to produce on every run.
     #

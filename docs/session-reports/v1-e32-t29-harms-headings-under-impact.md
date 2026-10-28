@@ -529,9 +529,41 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-28
 
 **Notes:**
+
+Harms is read as an advantage's impact, by one rule, as ruled on 2026-10-27 (Q1 (A), Q2 yes).
+1. **ac1 passes.** The first session's counts stand unchanged. The after-build run over the same
+   reading matches the what-if exactly: one advantage moves (Costs: 2, 2, 2 becomes 3, 2, 2, its old
+   rank 4 up to rank 1), 753 becomes 751 of 1,164, link-chain rows go from 96 to 95, and "Harms" leaves
+   report.md except for the one header line. Every DA row is byte for byte the same, and the lead-in
+   changes the ruling asked to count are none. The store's SHA-256 was the same before and after.
+2. **ac2 passes.**
+   * Red: 28 failed against the unchanged code, each on the behaviour asked for (the one
+     `StopIteration` is the row the fold adds, not yet there). Green: 1,153 passed.
+   * Nine mutants, the PM's three among them, all caught. The card-above mutant is caught by one
+     test, which is that case's own test; that is enough.
+   * The fixture covers the three cases asked for: only harms, both, and a DA untouched. t28's
+     withholding holds on the row the fold adds.
+3. **Decisions accepted:**
+   * harms is read only where the Harms role read it (a sub-heading below the placing heading, not an
+     answer, naming no other role), pinned by three tests;
+   * scenario words beside a harms label are read for an advantage only. `Dome harms impact` now names
+     `dome` where it named nothing; no shown name changes on hspolicy26;
+   * the header names `harms` once, to say why those cards are under Impact;
+   * both kinds read impact cards from roles, a DA's being t10's exactly;
+   * the guide's tournament-words sentence corrected in its own commit (`91a2129`), following t28's
+     ruling.
+4. **`ChainRole.HARMS` removed.** Nothing persists it, as the counts showed.
+5. **The affected set** (216 of 553 files, through the domain and application modules) is left to the
+   PR's `ci`. The touched suites, the always-run list and the checks pass.
+6. **Merge timing:** after Thursday 2026-10-29's tag has a green validate-dev run, with the other held
+   PRs, after `v1-e01-t42`. It is not part of Thursday's image.
+7. **The republish:** not today (Wednesday 2026-10-28, the cloud run's day; the block refuses anyway).
+   `v1-e32-t28`'s republish has not run either, and this task's block is t28's, so one republish after
+   this task merges carries both. Paste t28's pilot lines with this task's: the Costs advantage's Teams
+   column, its chain's Impact row, and the "no labelled impact" line.

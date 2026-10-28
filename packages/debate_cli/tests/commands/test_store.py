@@ -845,7 +845,10 @@ class TestTheStaleCopyNoteComesBeforeThePlan:
         ("failure", "code"),
         [
             (LocalStoreAccessDenied("list", "the named-object directory"), "STORE_ACCESS_DENIED"),
-            (PermissionError(13, "Permission denied", "/Users/someone/dev/objects/parsed"), "PermissionError"),
+            (
+                PermissionError(13, "Permission denied", "/Users/someone/dev/objects/parsed"),
+                "PermissionError",
+            ),
         ],
     )
     def test_a_check_that_fails_neither_hides_nor_replaces_the_refusal(

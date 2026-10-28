@@ -54,6 +54,7 @@ from __future__ import annotations
 
 import asyncio
 import shlex
+import traceback
 from collections.abc import Coroutine
 from pathlib import Path
 from typing import Annotated, Any
@@ -62,12 +63,13 @@ import typer
 
 from debate_cli.bucket_lock import run_holding_the_bucket_lock
 from debate_cli.context import CliContext, cli_context, command_name
-from debate_cli.exit_codes import ExitCode, exit_code_for_failure_codes
+from debate_cli.exit_codes import ExitCode, error_code_for, exit_code_for_failure_codes
 from debate_cli.options.bucket_environment import CONFIRM_PROD_FLAG, SYNCABLE_ENVIRONMENTS
 from debate_cli.output import CommandFailure, JsonValue, TableSpec
+from debate_core.application.errors import DomainError
 from debate_core.application.evidence_sync import (
+    EvidenceSyncService,
     SkipKind,
-    StaleParsedCopy,
     SyncAction,
     SyncDirection,
     SyncPlan,
@@ -125,12 +127,15 @@ def sync(
     )
 
     service = cli.services.evidence_sync(blob_prefix=blob_prefix or None)
+    if not apply_changes:
+        # Before the plan, which can refuse (no --blob-prefix for the blobs), so that a refused
+        # dry run still names the stale copy (v1-e29-t13).
+        _note_a_stale_parsed_copy(cli, service)
     cli.output.detail(f"listing {settings.storage.s3.bucket} and {settings.storage.data_dir}")
     plan = _run(service.plan(prefix=prefix, direction=direction))
 
     if not apply_changes:
         report = SyncReport(plan=plan, applied=False)
-        _note_a_stale_parsed_copy(cli, _run(service.stale_parsed_copy()))
     else:
         cli.output.detail(f"transferring {len(plan.transfers)} object(s)")
         report = (
@@ -405,13 +410,26 @@ def _left_behind_lines(plan: SyncPlan) -> list[str]:
     return lines
 
 
-def _note_a_stale_parsed_copy(cli: CliContext, stale: StaleParsedCopy | None) -> None:
+def _note_a_stale_parsed_copy(cli: CliContext, service: EvidenceSyncService) -> None:
     """On a dry run, the `objects/parsed/` copy an earlier pull left, and the command that removes it.
 
     On the console only (`v1-e29-t12`): a note on stderr, so the path and the command are one
     unbroken line whatever the terminal's width, and never in `--json`'s payload or the journal. The
     directory and a count, never a file's name. Nothing here deletes it; the operator runs the command.
+
+    The note is advice, so a check that cannot be made never ends the run (`v1-e29-t13`): it says so
+    by its error code, or the exception's class, never its message, which can quote a path; and the
+    plan that follows reports its own outcome, a refusal included, exactly as it would without it.
     """
+    try:
+        stale = _run(service.stale_parsed_copy())
+    except (DomainError, OSError) as exception:
+        cli.output.detail(traceback.format_exc())
+        code = error_code_for(exception) if isinstance(exception, DomainError) else type(exception).__name__
+        cli.output.note(
+            f"STALE PARSED COPY: could not look for one ({code}); the plan below does not depend on it."
+        )
+        return
     if stale is None:
         return
     cli.output.note(

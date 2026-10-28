@@ -443,6 +443,10 @@ def test_a_slug_this_build_does_not_know_is_refused_rather_than_guessed(
 
     assert result.exit_code == ExitCode.DOMAIN_FAILURE
     assert "--event" in result.stdout + result.stderr
+    # The table moved out of the command module in v1-e01-t32; the hint names where it is now (t39).
+    shown = " ".join((result.stdout + result.stderr).split())
+    assert "add the slug prefix to the table in debate_cli.caselist_events" in shown
+    assert "debate_cli.commands.caselist" not in shown
 
 
 def test_an_explicit_event_overrides_the_inference(zips: dict[date, Path]) -> None:

@@ -405,9 +405,54 @@ PM questions from v1-e01-t39 (container builds integrations lazily)
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-28
 
 **Notes:**
+
+t32's Decision 6 is built, and its measured gain is real.
+1. **ac1 and ac3 pass.** Over t38's 20 merges, files selected only through `app.py` fall from 531 to
+   335, and the median share of files from 41.3% to 29.6%. t27's merge goes from 215 files to 137, and
+   its two slow bucket-mode files are no longer selected. No merge selects a file the base did not,
+   except the new always-run test. The collected count loses nothing (0 lost, 16 added, all named).
+2. **ac2 passes.**
+   * The guard and the every-factory test were red at the base for the right reasons: 35 modules
+     loaded at import, and 14 wired integrations imported by no build. They are green now.
+   * The script's new cases were red, except the four that must not change.
+   * The new planted break is caught.
+3. **Ruled conditions met.** The every-factory test finds factories by reflection, covers every
+   integration the post-install check names under three settings variants, and fails a build whose
+   integration fails to import. No command's output changed except the one hint. Startup is about
+   30 ms faster on both commands measured, and `doctor` still finds the same 33 modules.
+4. **Mutants:** the PM's four and twenty more are caught. Five survived first; each called for a case
+   that was then added. Mutant 4 counts only once it was committed, which the report says plainly.
+5. **Deviation 1: accepted (question 2: (a)).** It is t32's conftest rule applied to the container,
+   and it is where the gain is (495 under the literal wording, 335 under this). It fails toward
+   more: module-level use, an unused import and any edit to `container.py` stay the whole file's.
+   An application module that fails to import still breaks the container's import, and the
+   every-factory test is always run.
+6. **Deviation 2, `read_by`: accepted as a stopgap.** The break still asserts that the script selects
+   the reading test (mutant 4 shows that assertion biting). It only skips the nearest-ten
+   ordering, which is `v1-e01-t40`'s. The PM's next batch adds to t40: once its ordering reaches
+   this five-step test, `read_by` is removed and this break is run without it.
+7. **Deviations 3 and 4: accepted.** Each rule has a case and a mutant, and the first version's
+   over-selection (`files build`, every smoke test) is the evidence for them.
+8. **Question 1: (b).** The PM's next batch adds `UnknownSyncEvent`'s module name to
+   `v1-e34-t31`, which changes the pull's messages and is the next task likely to touch
+   `caselist_sync.py`.
+9. **Decisions 1 to 8: accepted.** In particular, offline building with static credentials under
+   pytest-socket, and building through `validating_routing` as `app.py` does.
+10. **Follow-up work.** The PM's next batch files two E01 p3 tasks: a `container.py` diff read part
+    by part (152 of the 335 files left), and a `debate-research` mention inside a longer message
+    read as prose. The `doctor` note needs no task.
+11. **The affected set** (188 files, 4,888 tests) is left to the PR's `ci`. The always-run list, the
+    CLI tests and bucket mode pass in parts, and ruff, pyright, lint-imports and the docs checks
+    pass. The one pyright error in `test_affected_tests.py` is the base's, outside the include
+    (`v1-e01-t35`).
+12. **Merge timing:** after Thursday 2026-10-29's tag has a green validate-dev run, and after the four
+    PRs already held (e31-t31, e01-t41, e01-t42, e32-t29). This changes what CI selects and what the
+    slow tier plants, so it must not ride Thursday's tag. Sync it first if any of those touched
+    `affected_tests.py` or its tests. The PM checks the next pre-release's slow tier after it merges,
+    since the new break runs there for the first time.

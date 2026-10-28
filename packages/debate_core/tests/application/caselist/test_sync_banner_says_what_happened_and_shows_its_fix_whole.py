@@ -42,6 +42,7 @@ from debate_core.application.caselist_sync import LOCK_FILENAME, RunLock
 from debate_core.application.ports.notifier import Notification
 from debate_core.application.sync_runs import (
     DriftFinding,
+    ParsedStoreOwedDetails,
     StageDetails,
     StageEntry,
     SyncRunDetails,
@@ -325,11 +326,16 @@ THE_LONGEST_HINTS = (
     "grant for this; it is not an expired session, and logging in again changes nothing. "
     "docs/runbooks/evidence-store.md lists what each profile is granted. "
     "`debate-research caselist parse --caselist <slug> --failures` lists the sources that failed, with "
-    "their reasons. `debate-research caselist parse --caselist <slug> --publish` publishes a "
-    "caselist's parsed store: it parses nothing already parsed, rebuilds the aggregates and uploads "
-    "what the bucket lacks. The next pull that imports into that caselist does the same; "
+    "their reasons. `debate-research caselist parse --caselist hsld26 --publish-only` and "
+    "`debate-research caselist parse --caselist hspolicy26 --publish-only` each publish the parsed "
+    "store as this run rebuilt it from every copy of the suppression list, and rebuild nothing. "
+    "`debate-research caselist parse --caselist hspf26 --publish` and "
+    "`debate-research caselist parse --caselist openev --publish` each publish a caselist's parsed "
+    "store: each parses nothing already parsed, rebuilds the aggregates and uploads what the bucket "
+    "lacks. The next pull that imports into that caselist does the same; "
     "`caselist pull --publish-pending` does not."
 )
+"""Since `v1-e34-t31` the parse stage's fix names each caselist owed with its own command."""
 
 
 def every_kind_of_banner() -> list[Notification]:
@@ -338,7 +344,8 @@ def every_kind_of_banner() -> list[Notification]:
     login command, the backlog, a held upload and a manifest to publish again. Since `v1-e34-t26`
     also three manifests that drifted again after their republish, and a report-only login banner
     with every sentence it can carry: the check cut short, a manifest that drifted again, and the
-    parsed store."""
+    parsed store. Since `v1-e34-t31` also a parse stage that failed with four caselists owed, each
+    named by its own command, at the longest, `--publish-only`."""
     login = "aws sso login --profile debate-prod-evidence"
     failed_everywhere = a_record(
         ("select", "failed"),
@@ -407,6 +414,15 @@ def every_kind_of_banner() -> list[Notification]:
             ),
         ),
     )
+    parse_alone = a_record(("publish", "completed"), ("parse", "failed"))
+    four_owed = SyncRunDetails(
+        run_id=parse_alone.run_id,
+        stages=(StageDetails(stage="parse", error_codes=("STORE_UNAVAILABLE",), hint=THE_LONGEST_HINTS),),
+        parsed_stores_owed=tuple(
+            ParsedStoreOwedDetails(caselist=caselist, publish_only=True)
+            for caselist in ("hsld26", "hspolicy26", "hspf26", "openev")
+        ),
+    )
     backlog_and_held = a_record(growing=("hsld26", "hspolicy26", "ndtceda26"))
     held = SyncRunDetails(
         run_id=backlog_and_held.run_id, held_by_request={"RM-2026-01": 2, "RM-2026-02": 1, "RM-2026-03": 4}
@@ -418,6 +434,7 @@ def every_kind_of_banner() -> list[Notification]:
         (manifest, manifest_details, False),
         (owed_again, manifest_details, False),
         (report_alone, report_alone_found, True),
+        (parse_alone, four_owed, False),
         (backlog_and_held, held, False),
     ):
         sent.extend(
@@ -435,7 +452,7 @@ def every_kind_of_banner() -> list[Notification]:
 def test_every_kind_of_banner_shows_its_fix_whole_within_the_observed_limits() -> None:
     sent = every_kind_of_banner()
 
-    assert len(sent) == 7
+    assert len(sent) == 8
     assert {one.title for one in sent} >= {
         "caselist pull: a manifest drifted again",
         "caselist pull: publish a manifest again",

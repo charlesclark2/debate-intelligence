@@ -144,6 +144,7 @@ from debate_core.application.caselist_sync import (
     SyncStage,
     append_state_line,
     fix_for,
+    parse_command,
     remove_state_file,
     write_state_file,
 )
@@ -214,6 +215,7 @@ __all__ = [
     "details_for_summary",
     "hint_for_a_record",
     "notifications_for",
+    "parse_commands",
     "read_remote_records",
     "read_remote_runs",
     "record_for_failure",
@@ -969,8 +971,10 @@ AUTH_LOGIN_COMMAND: Final = "debate-research caselist auth login"
 PULL_COMMAND: Final = "debate-research caselist pull"
 PUBLISH_PENDING_COMMAND: Final = "debate-research caselist pull --publish-pending"
 PARSE_COMMAND: Final = "debate-research caselist parse --caselist <slug> --publish"
-"""What finishes a parse stage that failed (`v1-e34-t17`). Running the pull again does not: a pull
-that imports nothing parses nothing. The stage's reason in `caselist runs` names the caselists."""
+"""What finishes a parse stage that failed (`v1-e34-t17`), when the run's details do not name each
+caselist's own command (:func:`parse_commands`): details an earlier build wrote, or a stage that owes
+no parsed store, whose failure the hint names. Running the pull again does not: a pull that imports
+nothing parses nothing. The stage's reason in `caselist runs` names the caselists."""
 SEARCH_INDEX_PUBLISH_COMMAND: Final = (
     "DEBATE_ENV={environment} debate-research tub index publish --env {environment} --newest"
 )
@@ -1290,7 +1294,7 @@ def notifications_for(
                 message=f"{where}: {named}. {verdict}{_WHAT_WAS_CAPTURED_IS_KEPT}",
                 fix_command=PUBLISH_PENDING_COMMAND
                 if only_publish
-                else PARSE_COMMAND
+                else parse_commands(details)
                 if only_parse
                 else PULL_COMMAND,
                 hint=" ".join(hints) or None,
@@ -1374,7 +1378,7 @@ def notifications_for(
                         else ""
                     )
                     + (
-                        f" The parsed store waits too; after the login: {PARSE_COMMAND}"
+                        f" The parsed store waits too; after the login: {parse_commands(details)}"
                         if parse_waits
                         else ""
                     )
@@ -1421,6 +1425,21 @@ def notifications_for(
         )
     # Under the title, the run: short enough that a banner shows it whole (`v1-e34-t23`).
     return [replace(one, subtitle=where) for one in sent]
+
+
+def parse_commands(details: SyncRunDetails) -> str:
+    """What finishes a run's parse stage: each caselist owed, by its own command (`v1-e34-t31`).
+
+    `caselist parse --caselist <slug> --publish-only` for a caselist whose details say the publish
+    alone is owed, and `--publish` for every other, an entry that does not say included. Details
+    that name no caselist, every earlier build's among them, give :data:`PARSE_COMMAND`, which
+    rebuilds first: what cannot be told is never named `--publish-only`.
+    """
+    if not details.parsed_stores_owed:
+        return PARSE_COMMAND
+    return "; ".join(
+        parse_command(one.caselist, publish_only=one.publish_only) for one in details.parsed_stores_owed
+    )
 
 
 def _verdict(retried: bool, *, fix_first: bool) -> tuple[str, str]:

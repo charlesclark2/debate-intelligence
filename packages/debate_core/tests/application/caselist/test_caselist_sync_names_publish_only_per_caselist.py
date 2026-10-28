@@ -57,7 +57,7 @@ from debate_core.integrations.s3 import S3EvidenceObjectStore
 from debate_core.testing.fakes.suppression import empty_suppression_list
 
 from .test_inbox_retention import CASELIST, ESTUARY, ESTUARY_BODY, WEEK_1, FakeSource, Installation
-from .test_pull_stage_failure_codes import Watched, outage, pull, stage
+from .test_pull_stage_failure_codes import Watched, missing_grant, outage, pull, stage
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
     from mypy_boto3_s3.client import S3Client
@@ -271,11 +271,13 @@ async def test_a_run_with_one_of_each_names_each_caselist_its_own_command(instal
     found = stage(watched.summary, SyncStage.PARSE)
     assert found["outcome"] == "failed"
     assert owed(watched) == [(CASELIST, True), (OPENEV, False)]
-    hint = str(found["hint"])
-    assert f"`{PUBLISH_ONLY_THE_WEEKLY}`" in hint
-    assert f"`{REBUILD_OPENEV}`" in hint
-    assert f"`{REBUILD_THE_WEEKLY}`" not in hint
-    assert f"`{PUBLISH_ONLY_OPENEV}`" not in hint
+    assert found["hint"] == (
+        f"`{PUBLISH_ONLY_THE_WEEKLY}` publishes the parsed store as this run rebuilt it from every copy "
+        f"of the suppression list, and rebuilds nothing. `{REBUILD_OPENEV}` publishes a caselist's "
+        "parsed store: it parses nothing already parsed, rebuilds the aggregates and uploads what the "
+        "bucket lacks. The next pull that imports into that caselist does the same; "
+        "`caselist pull --publish-pending` does not."
+    )
     assert parse_notification(watched).fix_command == f"{PUBLISH_ONLY_THE_WEEKLY}; {REBUILD_OPENEV}"
     assert details_line(installation)["parsed_stores_owed"] == [
         {"caselist": CASELIST, "publish_only": True},
@@ -312,6 +314,23 @@ async def test_a_caselist_whose_rebuild_crashed_is_named_with_publish(installati
     assert parse.asked == [("parse", CASELIST), ("parse", OPENEV), ("publish", OPENEV)]
     assert owed(watched) == [(CASELIST, False), (OPENEV, True)]
     assert parse_notification(watched).fix_command == f"{REBUILD_THE_WEEKLY}; {PUBLISH_ONLY_OPENEV}"
+
+
+async def test_two_caselists_whose_publish_alone_is_owed_are_named_together(
+    installation: Installation,
+) -> None:
+    """The bucket refuses the first publish; a refusal is true of every caselist after it, so the
+    second is not offered. Both rebuilds read every copy of the list."""
+    watched, parse = await run(installation, with_a_camp_file=True, refused={CASELIST: missing_grant()})
+
+    assert parse.asked == [("parse", CASELIST), ("publish", CASELIST), ("parse", OPENEV)]
+    assert owed(watched) == [(CASELIST, True), (OPENEV, True)]
+    assert str(stage(watched.summary, SyncStage.PARSE)["hint"]).endswith(
+        f"`{PUBLISH_ONLY_THE_WEEKLY}` and `{PUBLISH_ONLY_OPENEV}` each publish the parsed store as this "
+        "run rebuilt it from every copy of the suppression list, and rebuild nothing. The next pull "
+        "that imports into that caselist does the same; `caselist pull --publish-pending` does not."
+    )
+    assert parse_notification(watched).fix_command == f"{PUBLISH_ONLY_THE_WEEKLY}; {PUBLISH_ONLY_OPENEV}"
 
 
 async def test_a_parse_stage_that_published_everything_owes_nothing(installation: Installation) -> None:

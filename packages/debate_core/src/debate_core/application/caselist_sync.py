@@ -4252,17 +4252,29 @@ class CaselistSyncService:
         stopped: _StageFailure | None = None
         failures: list[_StageFailure] = []
         not_published: list[str] = []
+        # What finishes each of them, decided from what the stage saw of that caselist (`v1-e34-t31`):
+        # `--publish-only` only for a rebuild that read every copy of the list, in a working copy
+        # that is still there after the run. Everything else rebuilds first.
+        owed: list[ParsedStoreOwed] = []
         parsed_caselists: list[ParsedCaselist] = []
         uploaded = 0
         before_the_stage = self._suppression_fallbacks()
+
+        def unpublished(caselist: str, *, rebuilt_from_every_copy: bool) -> None:
+            not_published.append(caselist)
+            publish_only = rebuilt_from_every_copy and self._working_copy_outlives_the_run
+            owed.append(ParsedStoreOwed(caselist=caselist, publish_only=publish_only))
+
         for caselist in caselists:
             fallbacks = self._suppression_fallbacks()
             try:
                 parsed = await self._parse.parse_new_sources(caselist)
             except Exception as failed:
                 failures.append(self._failure(failed, about=caselist))
-                not_published += [caselist] if publishing else []
+                if publishing:
+                    unpublished(caselist, rebuilt_from_every_copy=False)
                 continue
+            every_copy = self._suppression_fallbacks() == fallbacks
             parsed_caselists.append(parsed)
             if parsed.failure_rate_exceeded:
                 failures.append(
@@ -4275,27 +4287,27 @@ class CaselistSyncService:
                 )
             if not publishing:
                 continue
-            if self._suppression_fallbacks() != fallbacks:
-                # These aggregates were rebuilt from this machine's copy of the list alone. They
-                # stay on this machine until a run that read every copy rebuilds them.
+            if not every_copy:
+                # These aggregates were rebuilt from the run's own copy of the list alone. They
+                # stay in its working copy until a run that read every copy rebuilds them.
                 no_session = no_session or "the suppression list's bucket copy needed an AWS login"
             if no_session is not None or stopped is not None:
-                not_published.append(caselist)
+                unpublished(caselist, rebuilt_from_every_copy=every_copy)
                 continue
             try:
                 published = await self._parse.publish(caselist, parsed.version)
             except StoreCredentialsExpired as expired:
                 no_session = str(expired)
-                not_published.append(caselist)
+                unpublished(caselist, rebuilt_from_every_copy=every_copy)
                 continue
             except (StoreAccessDenied, StoreProfileNotConfigured, StoreUnavailable) as refused:
                 # True of every caselist still to publish, so none of them is tried.
                 stopped = self._failure(refused)
-                not_published.append(caselist)
+                unpublished(caselist, rebuilt_from_every_copy=every_copy)
                 continue
             except Exception as failed:
                 failures.append(self._failure(failed, about=caselist))
-                not_published.append(caselist)
+                unpublished(caselist, rebuilt_from_every_copy=every_copy)
                 continue
             uploaded += published.uploaded
             if published.failure_codes:
@@ -4306,7 +4318,7 @@ class CaselistSyncService:
                         tuple(dict.fromkeys(published.failure_codes)),
                     )
                 )
-                not_published.append(caselist)
+                unpublished(caselist, rebuilt_from_every_copy=every_copy)
 
         tally.parse = ParseStageCounts(
             caselists=len(parsed_caselists),
@@ -4319,6 +4331,7 @@ class CaselistSyncService:
             uploaded=uploaded,
             not_published=len(not_published),
         )
+        tally.parsed_stores_owed = tuple(owed)
         reason = _parse_stage_sentence(tally.parse, publishing=publishing)
         named = ", ".join(not_published)
         if stopped is not None:
@@ -4332,14 +4345,14 @@ class CaselistSyncService:
                 SyncStage.PARSE,
                 reason,
                 failures,
-                fix=_UNPUBLISHED_PARSED_STORE_FIX if not_published else None,
+                fix=_unpublished_parsed_store_fix(owed) if owed else None,
             )
         elif not_published:
             tally.record(
                 SyncStage.PARSE,
                 StageOutcome.PENDING,
                 f"{reason}; the parsed store of {named} is not published, for want of an AWS login "
-                f"({no_session}): {_UNPUBLISHED_PARSED_STORE_FIX}",
+                f"({no_session}): {_unpublished_parsed_store_fix(owed)}",
             )
         else:
             tally.record(SyncStage.PARSE, StageOutcome.COMPLETED, reason)
@@ -5110,12 +5123,50 @@ _FAILURE_RATE_FIX: Final = (
     "`debate-research caselist parse --caselist <slug> --failures` lists the sources that failed, "
     "with their reasons."
 )
-_UNPUBLISHED_PARSED_STORE_FIX: Final = (
-    "`debate-research caselist parse --caselist <slug> --publish` publishes a caselist's parsed "
-    "store: it parses nothing already parsed, rebuilds the aggregates and uploads what the bucket "
-    "lacks. The next pull that imports into that caselist does the same; "
-    "`caselist pull --publish-pending` does not."
-)
+
+
+def _unpublished_parsed_store_fix(owed: Sequence[ParsedStoreOwed]) -> str:
+    """The parse stage's fix for the parsed stores it did not publish: each caselist's own command.
+
+    `v1-e34-t31`. Before it, one sentence named `caselist parse --caselist <slug> --publish` for
+    every caselist, and a stage whose rebuild was done and whose publish alone failed was rebuilt
+    again by hand.
+    """
+    publish_only = [one.command for one in owed if one.publish_only]
+    rebuild = [one.command for one in owed if not one.publish_only]
+    sentences: list[str] = []
+    if len(publish_only) == 1:
+        sentences.append(
+            f"{_commands_named(publish_only)} publishes the parsed store as this run rebuilt it from "
+            "every copy of the suppression list, and rebuilds nothing."
+        )
+    elif publish_only:
+        sentences.append(
+            f"{_commands_named(publish_only)} each publish the parsed store as this run rebuilt it "
+            "from every copy of the suppression list, and rebuild nothing."
+        )
+    if len(rebuild) == 1:
+        sentences.append(
+            f"{_commands_named(rebuild)} publishes a caselist's parsed store: it parses nothing already "
+            "parsed, rebuilds the aggregates and uploads what the bucket lacks."
+        )
+    elif rebuild:
+        sentences.append(
+            f"{_commands_named(rebuild)} each publish a caselist's parsed store: each parses nothing "
+            "already parsed, rebuilds the aggregates and uploads what the bucket lacks."
+        )
+    sentences.append(
+        "The next pull that imports into that caselist does the same; "
+        "`caselist pull --publish-pending` does not."
+    )
+    return " ".join(sentences)
+
+
+def _commands_named(commands: Sequence[str]) -> str:
+    quoted = [f"`{one}`" for one in commands]
+    return quoted[0] if len(quoted) == 1 else f"{', '.join(quoted[:-1])} and {quoted[-1]}"
+
+
 _NO_LANDSCAPE: Final = "no landscape service is installed (v1-e32-t05 has not shipped)"
 _NO_SEARCH_INDEX: Final = (
     "no search index stage is wired in: an environment that names no evidence bucket has none"
@@ -5929,7 +5980,7 @@ class UnknownSyncEvent(DomainError):
         self.caselist = caselist
         super().__init__(
             f"this build does not know which event {caselist!r} debates, so `caselist pull` cannot "
-            "import its archive; add the slug prefix to the table in debate_cli.commands.caselist"
+            "import its archive; add the slug prefix to the table in debate_cli.caselist_events"
         )
 
 

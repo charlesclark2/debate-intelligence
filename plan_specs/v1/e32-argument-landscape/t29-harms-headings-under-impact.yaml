@@ -45,7 +45,7 @@ spec:
         counted under the advantage's impact with no count lost, matching hand-written
         golden files; tests shown failing first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

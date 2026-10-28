@@ -583,13 +583,18 @@ team wrote down, under the heading that places the card (`Midterms DA`), so noth
   `UQ`, `Uniqueness`; `U` only at the start of a heading, never in a tag, where it is nearly always
   `U.S.`), link (`Link`, `Links`, `L`, a tag opening `The link`; never an answer: not `Link turn`, `The
   link turns`, `No link`, `Link defense` or `Links are non-unique`), internal link (`Internal link`, `Internal`, `IL`, `I/L`), impact (the impact cards'
-  rule), and for an advantage harms, inherency and solvency. An `AT:` heading, or a heading naming two
-  roles, labels none.
+  rule, and for an advantage a `Harms` or `Harm` heading), and for an advantage inherency and solvency.
+  An `AT:` heading, or a heading naming two roles, labels none.
+* **Harms is an advantage's impact.** Policy debate no longer says "Harms": debaters call that part of an
+  advantage its impact (the coach's word, 2026-10-27). So the report has no Harms row. A harms heading
+  under an advantage labels its cards as the advantage's impact, and they are counted in its impact
+  cards, its link chain's Impact row and `impact_cards.csv`, ranked with the cards labelled `Impact`.
+  A DA's harms heading labels nothing.
 * **A scenario** is a heading under the position: `Scenario 1: Dome`, a named heading such as `Dome`, or
-  the words beside an impact or internal-link label (`Dome impact`). A name is shown only when two or
-  more teams use it under the position, and never when it holds a word of a caselist school, team code
-  or tournament. `Dome` and `Golden dome` are two names until your scenario list for the position
-  merges them ([below](#your-scenario-lists)).
+  the words beside an impact or internal-link label (`Dome impact`, or under an advantage `Dome harms`).
+  A name is shown only when two or more teams use it under the position, and never when it holds a word
+  of a caselist school or team code. `Dome` and `Golden dome` are two names until your scenario list
+  for the position merges them ([below](#your-scenario-lists)).
 * **The internal link** under an impact card is the nearest card above it, under the same position
   heading, that a heading or its tag labels an internal link. **The link** is found the same way: the
   nearest card above it labelled a link.

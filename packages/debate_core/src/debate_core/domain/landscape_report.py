@@ -124,13 +124,15 @@ PLACED_CARD_METHOD: Final = "PLACED_CARD"
 
 
 class ChainRole(StrEnum):
-    """A card's place in a DA's or an advantage's link chain, as a team labelled it (`v1-e32-t14`)."""
+    """A card's place in a DA's or an advantage's link chain, as a team labelled it (`v1-e32-t14`).
+
+    There is no harms role: an advantage's harms heading labels its impact (`v1-e32-t29`).
+    """
 
     UNIQUENESS = "uniqueness"
     LINK = "link"
     INTERNAL_LINK = "internal_link"
     IMPACT = "impact"
-    HARMS = "harms"
     INHERENCY = "inherency"
     SOLVENCY = "solvency"
 
@@ -142,7 +144,6 @@ CHAIN_ROLES: Final = {
         ChainRole.LINK,
         ChainRole.INTERNAL_LINK,
         ChainRole.IMPACT,
-        ChainRole.HARMS,
         ChainRole.INHERENCY,
         ChainRole.SOLVENCY,
     ),

@@ -52,7 +52,8 @@ snapshot that file was first disclosed in.
 ## Impact cards (`v1-e32-t10`)
 
 Per DA and advantage, the cards counted for it that a team labelled as an impact
-(:mod:`debate_core.arguments.landscape.impacts`), card by card: a cluster's teams are the teams of
+(:mod:`debate_core.arguments.landscape.impacts`, and under an advantage a harms heading, `v1-e32-t29`),
+card by card: a cluster's teams are the teams of
 the rounds holding one of its *labelled* copies, and the row shows one of those copies. Clusters rank
 as top cards do, by teams then cluster id, up to N per position. Per kind, a document is a file
 holding a card counted for a position of that kind, and the report counts those holding an impact
@@ -92,6 +93,11 @@ side never does. Per DA and advantage:
   counted and the next source names the row; a row nothing names is left out and counted.
 * **Its link chain** is its most-read cluster per role, ranked as impact cards are, by the teams of the
   copies labelled with the role; the impact role is the impact section's first row.
+* **Its impact cards** are the counted cards whose roles hold its impact: `v1-e32-t10`'s impact cards,
+  and under an advantage the cards a harms heading labels (`v1-e32-t29`, the coach's word of
+  2026-10-27: debaters call that part of an advantage its impact). The impact table, impact_cards.csv,
+  the chain's impact role, the card above a row and the documents with no labelled impact all read
+  this one set.
 * **Per kind**, the documents with no scenario heading and no role label, the rows with a scenario, an
   internal link or the card above, the rows each source names and those left out, the names and tags
   withheld, and the positions with no card for each role.
@@ -152,7 +158,6 @@ from debate_core.arguments.landscape.analytic_texts import (
     top_texts,
 )
 from debate_core.arguments.landscape.headings import NormalizedHeading
-from debate_core.arguments.landscape.impacts import is_impact_card
 from debate_core.arguments.landscape.kritikal_aff import KritikalAffInputs
 from debate_core.arguments.landscape.link_chains import (
     CardScenario,
@@ -549,10 +554,9 @@ class LandscapeReportService:
                 self._top,
             )
         ]
-        labelled = {
-            position_id: {key: read for key, read in reads.items() if _is_impact(cards_by_key.get(key))}
-            for position_id, reads in card_reads.items()
-        }
+        words = caselist_words(inputs.disclosures)
+        chains = _LinkChains(inputs, in_range, card_reads, cards_by_key, words)
+        labelled = chains.labelled
         impact_cards = [
             card
             for stats in positions
@@ -568,8 +572,6 @@ class LandscapeReportService:
             )
         ]
 
-        words = caselist_words(inputs.disclosures)
-        chains = _LinkChains(inputs, in_range, card_reads, labelled, cards_by_key, words)
         impact_cards, impact_withheld = _without_withheld_tags(
             [chains.with_lead_in(card) for card in impact_cards], words
         )
@@ -953,7 +955,6 @@ class _LinkChains:
         inputs: LandscapeReportInputs,
         in_range: _Range,
         card_reads: Mapping[str, dict[tuple[str, int], set[str]]],
-        labelled: Mapping[str, dict[tuple[str, int], set[str]]],
         cards: dict[tuple[str, int], LandscapeCard],
         words: frozenset[str],
     ) -> None:
@@ -961,7 +962,6 @@ class _LinkChains:
         self._caselist = inputs.caselist
         self._range = in_range
         self._reads = card_reads
-        self._labelled = labelled
         self._cards = cards
         self._matcher = PositionMatcher(inputs.taxonomy, inputs.overrides)
         self._no_position = frozenset(
@@ -984,6 +984,18 @@ class _LinkChains:
         self._withheld: dict[str, int] = {}
         self._unlisted: dict[str, tuple[int, int]] = {}
         self._withheld_tags: Counter[str] = Counter()
+        self._labelled: dict[str, dict[tuple[str, int], set[str]]] = {}
+        for position_id, reads in card_reads.items():
+            kind = self._taxonomy.position(position_id).kind
+            if kind in IMPACT_KINDS:
+                self._labelled[position_id] = {
+                    key: read for key, read in reads.items() if self._is_impact(cards.get(key), kind)
+                }
+
+    @property
+    def labelled(self) -> Mapping[str, dict[tuple[str, int], set[str]]]:
+        """Each DA's and advantage's counted impact cards: those whose roles hold its impact."""
+        return self._labelled
 
     # Per card -----------------------------------------------------------------------------------
 
@@ -1012,6 +1024,10 @@ class _LinkChains:
 
     def _roles(self, card: LandscapeCard, kind: PositionKind) -> frozenset[ChainRole]:
         return card_roles(self._sub_headings(card), card.headings, card.tag, kind)
+
+    def _is_impact(self, card: LandscapeCard | None, kind: PositionKind) -> bool:
+        """`v1-e32-t10`'s impact card, or under an advantage a card a harms heading labels (`v1-e32-t29`)."""
+        return card is not None and ChainRole.IMPACT in self._roles(card, kind)
 
     def _words(self, card: LandscapeCard, position: Position) -> CardScenario:
         """The card's scenario under `position`, named by `v1-e32-t14`'s words, its dropped forms skipped."""
@@ -1105,7 +1121,7 @@ class _LinkChains:
             tag = self._labelled_above(card, row.position_id, kind, ChainRole.LINK)
             if tag is not None:
                 link[tag] |= teams
-            tag = self._card_above_tag(card)
+            tag = self._card_above_tag(card, kind)
             if tag is not None:
                 above[tag] |= teams
         words = self._words_of_caselist
@@ -1156,7 +1172,7 @@ class _LinkChains:
                 return prior.tag
         return None
 
-    def _card_above_tag(self, card: LandscapeCard) -> str | None:
+    def _card_above_tag(self, card: LandscapeCard, kind: PositionKind) -> str | None:
         """The tag of the card directly above `card` in its block, unless that card is an impact card."""
         number = self._place[(card.source_sha256, card.element_index)]
         if number == 0:
@@ -1165,7 +1181,7 @@ class _LinkChains:
         same_block = prior.headings == card.headings and all(
             prior.answers(index) == card.answers(index) for index in range(len(card.headings))
         )
-        if not same_block or _is_impact(prior):
+        if not same_block or self._is_impact(prior, kind):
             return None
         return prior.tag
 
@@ -1249,11 +1265,6 @@ def _without_withheld_tags[RowT: TopCard](
             withheld += 1
         kept.append(row)
     return kept, withheld
-
-
-def _is_impact(card: LandscapeCard | None) -> bool:
-    """A card with a cluster that a heading over it or its tag labels as an impact."""
-    return card is not None and is_impact_card(card.headings, card.tag)
 
 
 def _impact_coverage(

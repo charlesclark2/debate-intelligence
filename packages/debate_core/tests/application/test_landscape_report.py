@@ -1003,7 +1003,6 @@ def test_coverage_counts_what_no_heading_or_label_gives_per_kind() -> None:
         ("link", 2),
         ("internal_link", 1),
         ("impact", 1),
-        ("harms", 2),
         ("inherency", 2),
         ("solvency", 1),
     ]

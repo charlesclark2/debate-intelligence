@@ -591,10 +591,10 @@ team wrote down, under the heading that places the card (`Midterms DA`), so noth
   cards, its link chain's Impact row and `impact_cards.csv`, ranked with the cards labelled `Impact`.
   A DA's harms heading labels nothing.
 * **A scenario** is a heading under the position: `Scenario 1: Dome`, a named heading such as `Dome`, or
-  the words beside an impact or internal-link label (`Dome impact`, or under an advantage `Dome harms`). A name is shown only when two or
-  more teams use it under the position, and never when it holds a word of a caselist school, team code
-  or tournament. `Dome` and `Golden dome` are two names until your scenario list for the position
-  merges them ([below](#your-scenario-lists)).
+  the words beside an impact or internal-link label (`Dome impact`, or under an advantage `Dome harms`).
+  A name is shown only when two or more teams use it under the position, and never when it holds a word
+  of a caselist school or team code. `Dome` and `Golden dome` are two names until your scenario list
+  for the position merges them ([below](#your-scenario-lists)).
 * **The internal link** under an impact card is the nearest card above it, under the same position
   heading, that a heading or its tag labels an internal link. **The link** is found the same way: the
   nearest card above it labelled a link.

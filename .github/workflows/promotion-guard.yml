@@ -6,11 +6,15 @@
 # `promotion-source` says the wrong thing is being promoted, which is a different fact from a red
 # build (the carve-out is recorded in v1-e01-t04's spec).
 #
-#   promotion-source  the head is `dev` or `hotfix/<slug>` from this repository, and the description
-#                     fills in the "Dev build:" line of the promotion or hotfix template. `edited`
-#                     is a trigger so that filling it in re-runs it. The validate-dev run is not
-#                     asked for: protect-main requires the `validate-dev` status on the head commit
-#                     itself (v1-e01-t10).
+#   promotion-source  the head is `dev`, `hotfix/<slug>` or `site/<slug>` from this repository, and
+#                     the description fills in the "Dev build:" line of the promotion, hotfix or site
+#                     template. `edited` is a trigger so that filling it in re-runs it. The
+#                     validate-dev run is not asked for: protect-main requires the `validate-dev`
+#                     status on the head commit itself (v1-e01-t10). For a `site/<slug>` head, the
+#                     site lane (v1-e37-t09), it also refuses a branch whose own changes since it
+#                     left main are empty, reach outside site/, or touch a dependency manifest or
+#                     lockfile there. That is a step of this job rather than a check of its own, so
+#                     protect-main's required list did not change (the PM's ruling, 2026-10-28).
 #   back-merge        main holds no non-merge commit that dev lacks, i.e. every hotfix was
 #                     back-merged. Passes for hotfix/* heads so a second fix is never blocked.
 #
@@ -53,9 +57,12 @@ jobs:
     permissions:
       contents: read
     steps:
+      # Full depth for the site-only step: it diffs from where the branch left main, and on a
+      # shallow clone git cannot find that point (the script refuses one rather than guess).
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          fetch-depth: 0
       # The script is standard library only, so the runner's own python3 runs it; no uv, no sync.
       - name: The head branch may merge into main
         env:
@@ -73,6 +80,21 @@ jobs:
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: printf '%s' "$PR_BODY" | python3 scripts/check_promotion_source.py template --body-file -
+      # main as it is now, as the back-merge job fetches it: a re-run from back-merge.yml replays the
+      # old event, and the branch's own changes are measured from where it left the current main.
+      - name: Fetch main
+        if: ${{ !cancelled() }}
+        run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+      # A head that is not site/<slug> passes this step without running git. The pull request's
+      # head commit, not the merge commit checked out above: the diff is the branch's own changes.
+      - name: A site branch changes only site content, pages and assets
+        if: ${{ !cancelled() }}
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: >-
+          python3 scripts/check_promotion_source.py site-only
+          --head "$HEAD_REF" --main-ref refs/remotes/origin/main --head-ref "$HEAD_SHA"
 
   back-merge:
     # The job name is the required status check's name on protect-main. Do not rename it.

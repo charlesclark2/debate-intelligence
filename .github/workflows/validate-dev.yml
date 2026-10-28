@@ -46,6 +46,29 @@
 #
 # In any tier a skipped test fails the tier: a check skipped for a missing fixture did not run.
 #
+# THE SITE LANE (v1-e37-t09). A site/<slug> branch carries a change to the public website's content,
+# pages or assets straight from main to main, and has no pre-release. Dispatched with
+# `site_only: true` (from dev, by the person publishing), the jobs above are skipped and three others
+# run instead:
+#
+#   site-resolve   this workflow's own copy of scripts/validate_dev.py refuses the commit, posting
+#                  nothing, unless its own changes since it left main are something, all under
+#                  site/, and no dependency manifest or lockfile (check_promotion_source.py's rule,
+#                  the one promotion-source applies to the pull request). Then it posts `pending`.
+#                  Posting nothing on a refusal keeps a mistyped SHA from turning dev's head red;
+#   site           checks out the commit and runs the site's lint, type check and source tests, then
+#                  its PROD build (SITE_ENV=prod), in which the publishing-policy and consent guards
+#                  are fatal, and the export checks against that build. ci.yml's `site` job builds
+#                  for dev, where those guards only print, so before this the first prod build of a
+#                  site change was the deploy after it merged;
+#   site-conclude  posts `success` only when the site job passed on exactly that commit.
+#
+# This does not weaken the status for anything else: with the input off (every trigger but that
+# dispatch) nothing here changes, and with it on the status goes only on a commit whose every byte
+# outside site/ is main's, which was validated when it got there. A dev head always differs from
+# main outside site/, so it cannot pass. One workflow still posts `validate-dev`, with the same
+# split: the jobs that run the validated commit's code hold no write permission.
+#
 # Triggers:
 #   * workflow_dispatch (sha, tag, live): dev-prerelease.yml dispatches this after publishing each
 #     dev pre-release, with --ref dev, or --ref hotfix/<slug> for a hotfix head, which is validated
@@ -87,6 +110,11 @@ on:
         default: ""
       live:
         description: Also run the live canary tier
+        required: false
+        type: boolean
+        default: false
+      site_only:
+        description: Validate a site/<slug> commit by the site's prod build instead of a pre-release
         required: false
         type: boolean
         default: false
@@ -145,6 +173,8 @@ env:
 jobs:
   resolve:
     name: find the pre-release and mark the commit pending
+    # Every trigger but a site-only dispatch. smoke, slow and image need this job, so they skip with it.
+    if: inputs.site_only != true
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -305,7 +335,7 @@ jobs:
   conclude:
     name: post the final validate-dev status
     needs: [resolve, smoke, slow, image]
-    if: always()
+    if: always() && inputs.site_only != true
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -377,3 +407,96 @@ jobs:
             echo "| Live canary tier | ${LIVE} |"
             echo "| Status posted by this run | ${POST_STATUS} |"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # --- The site lane (v1-e37-t09): see the header -------------------------------------------------
+
+  site-resolve:
+    name: check the commit changes only site content, and mark it pending
+    if: inputs.site_only == true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      statuses: write
+    steps:
+      # This workflow's own commit, whose driver decides; full depth, to find where the commit left main.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Fetch main and the requested commit
+        run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main "$REQUESTED_SHA"
+      - name: Refuse a commit that is not a site-only change, then post pending on it
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -- --sha "$REQUESTED_SHA" --main-ref refs/remotes/origin/main
+          if [ "$POST_STATUS" = true ]; then set -- "$@" --post-status; fi
+          python3 scripts/validate_dev.py site-resolve "$@"
+
+  site:
+    name: run the site's checks and its prod build from the commit
+    needs: site-resolve
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      tests_commit: ${{ steps.commit.outputs.tests_commit }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.REQUESTED_SHA }}
+          persist-credentials: false
+      - name: Record the commit the checks run on
+        id: commit
+        run: echo "tests_commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      # The same setup as ci.yml's site job.
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: site/package.json # pnpm version from its packageManager field
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: site/pnpm-lock.yaml
+      - name: pnpm install
+        run: pnpm --dir site install --frozen-lockfile
+      - name: Lint, type-check and the source tests
+        run: |
+          pnpm --dir site lint
+          pnpm --dir site typecheck
+          pnpm --dir site test
+      # What site_deploy.sh prod builds, and the runbook's promotion preconditions 2 and 3: a policy
+      # error ([[TBD]], an unreviewed name, an address outside the allowlist, an unfilled consent
+      # reference) stops this build, then the export checks read what it built.
+      - name: The prod build, in which the policy and consent guards are fatal, and the export checks against it
+        env:
+          SITE_ENV: prod
+          SITE_URL: https://wfbdebate.com
+        run: site/scripts/export-checks.sh
+
+  site-conclude:
+    name: post the validate-dev status for a site-only commit
+    needs: [site-resolve, site]
+    # Only after site-resolve accepted the commit: a refused commit gets no status at all.
+    if: always() && inputs.site_only == true && needs.site-resolve.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      statuses: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Post success on the site-only commit, or failure
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SITE_RESULT: ${{ needs.site.result }}
+          SITE_COMMIT: ${{ needs.site.outputs.tests_commit }}
+        run: |
+          set -- --sha "$REQUESTED_SHA" --job "site=$SITE_RESULT"
+          if [ -n "$SITE_COMMIT" ]; then set -- "$@" --site-commit "$SITE_COMMIT"; fi
+          if [ "$POST_STATUS" = true ]; then set -- "$@" --post-status; fi
+          python3 scripts/validate_dev.py site-conclude "$@"

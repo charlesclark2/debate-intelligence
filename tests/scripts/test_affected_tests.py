@@ -915,6 +915,7 @@ RUNS = {
     "caselist help": f"{CLI_TESTS}/test_caselist_help.py",
     "help and verify": f"{CLI_TESTS}/test_help_and_verify.py",
     "files build help": f"{CLI_TESTS}/test_files_build_help.py",
+    "verify, and remove through a fixture": f"{CLI_TESTS}/world/test_world_verify.py",
     "unreadable": f"{CLI_TESTS}/test_runs_what_it_reads.py",
     "remove, by a helper": f"{CLI_TESTS}/test_caselist_by_a_helper.py",
     "verify, beside prose": f"{CLI_TESTS}/test_prose_names_nothing.py",
@@ -927,6 +928,10 @@ BUILDS_THE_PARSER = f"{CLI_TESTS}/test_container_parser.py"
 WALKS_THE_CONTAINER = f"{CLI_TESTS}/test_every_factory.py"
 # Calls the function that reads the container's source; the app imports the module for another one.
 READS_THE_WIRING = f"{CLI_TESTS}/test_wiring_check.py"
+# Imports a module whose module code reads the container by reflection.
+READS_THE_INDEX = f"{CLI_TESTS}/test_factory_index.py"
+# Beside a conftest whose fixture runs the app through a helper, and uses no fixture itself.
+BESIDE_THE_WORLD = f"{CLI_TESTS}/world/test_world_plain.py"
 ALL_RUNS = set(RUNS.values())
 CANNOT_TELL = {RUNS["unreadable"], RUNS["version"], RUNS["help and verify"]}
 
@@ -998,6 +1003,22 @@ CLI_WORLD = {
         "def wired():\n    return CONTAINER_MODULE\n\n\n"
         "def describe_failure(error):\n    return str(error)\n"
     ),
+    f"{CLI}/factory_index.py": (
+        "from debate_cli.container import ServiceContainer\n\n"
+        "INDEX = []\n"
+        "for name in dir(ServiceContainer):\n    INDEX.append(name)\n"
+    ),
+    READS_THE_INDEX: "from debate_cli.factory_index import INDEX\n\n\ndef test_index():\n    assert INDEX\n",
+    # A conftest whose fixture runs `caselist remove` through the installed CLI's helper, for a test
+    # whose own arguments name only `verify`.
+    f"{CLI_TESTS}/world/conftest.py": (
+        "import pytest\nfrom tests.smoke.installed import run\n\n\n"
+        '@pytest.fixture\ndef world():\n    return lambda: run("caselist", "remove", "--execute")\n'
+    ),
+    RUNS["verify, and remove through a fixture"]: (
+        'from tests.smoke.installed import run\n\n\ndef test_verify(world):\n    world()\n    run("verify")\n'
+    ),
+    BESIDE_THE_WORLD: "def test_plain():\n    pass\n",
     READS_THE_WIRING: (
         "from debate_cli.wiring_check import wired\n\n\ndef test_wired():\n    assert wired()\n"
     ),
@@ -1010,7 +1031,7 @@ CLI_WORLD = {
     # Prose that mentions a command is not an argument.
     RUNS["verify, beside prose"]: (
         "from debate_cli.app import main\n\n\n"
-        'def test_verify():\n    assert main("verify") is None, "run caselist remove before you verify"\n'
+        'def test_verify():\n    main("verify")\n    print("run caselist remove before you verify")\n'
     ),
     RUNS["verify"]: (
         "from typer.testing import CliRunner\n\nfrom debate_cli.app import main\n\n\n"
@@ -1023,7 +1044,10 @@ CLI_WORLD = {
     ),
     RUNS["files"]: 'from debate_cli.app import main\n\n\ndef test_build():\n    main("files", "build")\n',
     # The group alone shows its help, which lists every command in it.
-    RUNS["caselist help"]: 'from debate_cli.app import main\n\n\ndef test_help():\n    main("caselist")\n',
+    RUNS["caselist help"]: (
+        "from debate_cli.app import main\n\n\n"
+        'def test_help():\n    main("caselist")\n\n\ndef test_verify():\n    main("verify")\n'
+    ),
     # The root's help lists every command, whatever else the file runs.
     RUNS["help and verify"]: (
         "from debate_cli.app import main\n\n\n"
@@ -1082,13 +1106,12 @@ def changed_in_the_world(path: str) -> dict[str, str]:
         # `removal`. The group's help lists them, and the tests that cannot be told apart run anything.
         pytest.param(
             "store_adapter",
-            {
-                RUNS["remove"],
-                RUNS["remove, installed"],
-                RUNS["remove, by a helper"],
-                RUNS["caselist help"],
+            {RUNS["remove"], RUNS["remove, installed"], RUNS["remove, by a helper"], RUNS["caselist help"]}
+            | {
+                RUNS["verify, and remove through a fixture"],
                 WALKS_THE_CONTAINER,
                 READS_THE_WIRING,
+                READS_THE_INDEX,
             }
             | CANNOT_TELL,
             id="an import inside a factory another factory calls",
@@ -1096,21 +1119,21 @@ def changed_in_the_world(path: str) -> dict[str, str]:
         # Imported inside `parser`, which `files build` asks for through a helper it hands the container.
         pytest.param(
             "parser_adapter",
-            {
-                RUNS["files"],
-                RUNS["files build help"],
-                BUILDS_THE_PARSER,
-                WALKS_THE_CONTAINER,
-                READS_THE_WIRING,
-            }
+            {RUNS["files"], RUNS["files build help"], BUILDS_THE_PARSER, WALKS_THE_CONTAINER}
+            | {READS_THE_WIRING, READS_THE_INDEX}
             | CANNOT_TELL,
             id="an import inside a factory a helper asks for",
         ),
         # Imported at the top, but only `verified` uses it.
         pytest.param(
             "verify_rules",
-            {RUNS["verify"], RUNS["verify, installed"], RUNS["verify, beside prose"], WALKS_THE_CONTAINER}
-            | {READS_THE_WIRING}
+            {RUNS["verify"], RUNS["verify, installed"], RUNS["verify, beside prose"], RUNS["caselist help"]}
+            | {
+                RUNS["verify, and remove through a fixture"],
+                WALKS_THE_CONTAINER,
+                READS_THE_WIRING,
+                READS_THE_INDEX,
+            }
             | CANNOT_TELL,
             id="a top-level import one factory uses",
         ),
@@ -1118,7 +1141,7 @@ def changed_in_the_world(path: str) -> dict[str, str]:
         # check reads the container's import statements, which did not change, so it is not reached.
         pytest.param(
             "container_limits",
-            ALL_RUNS | {BUILDS_THE_PARSER, WALKS_THE_CONTAINER},
+            ALL_RUNS | {BUILDS_THE_PARSER, WALKS_THE_CONTAINER, READS_THE_INDEX},
             id="a top-level import module code uses",
         ),
     ],
@@ -1135,6 +1158,7 @@ def test_a_command_module_reaches_the_tests_that_name_its_commands(workspace: Wo
     assert_selected(
         result,
         {RUNS["remove"], RUNS["remove, installed"], RUNS["remove, by a helper"], RUNS["caselist help"]}
+        | {RUNS["verify, and remove through a fixture"]}
         | CANNOT_TELL
         | ALWAYS
         | READS_SOURCE,
@@ -1156,7 +1180,7 @@ def test_a_registry_the_script_cannot_read_reaches_every_command(workspace: Work
     workspace.commit(changed_in_the_world(f"{CORE}/store_adapter.py"), "described")
     assert_selected(
         workspace.run("--diff", "HEAD"),
-        ALL_RUNS | {WALKS_THE_CONTAINER, READS_THE_WIRING} | ALWAYS | READS_SOURCE,
+        ALL_RUNS | {WALKS_THE_CONTAINER, READS_THE_WIRING, READS_THE_INDEX} | ALWAYS | READS_SOURCE,
     )
 
 

@@ -1728,6 +1728,9 @@ class ServiceContainer:
             state_written=self.bucket_run().state_written(),
             after_publish=self.bucket_run().after_publish if self._in_bucket_mode else None,
             backfile_caselists=caselist.backfile_caselists,
+            # A parse stage's unpublished version directory is still here for `caselist parse
+            # --publish-only` in local mode; in bucket mode it goes with the run (`v1-e34-t31`).
+            working_copy_outlives_the_run=not self._in_bucket_mode,
         )
 
     def search_index_store_check(self) -> SearchIndexStoreCheck:

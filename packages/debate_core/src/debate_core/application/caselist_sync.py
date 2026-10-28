@@ -656,6 +656,7 @@ __all__ = [
     "OpenEvSelection",
     "ParseStageCounts",
     "ParsedCaselist",
+    "ParsedStoreOwed",
     "PendingSnapshot",
     "PendingWork",
     "PendingWorkUnreadable",
@@ -683,6 +684,7 @@ __all__ = [
     "full_archive_of_inbox_name",
     "inbox_files",
     "openev_id_of_inbox_name",
+    "parse_command",
     "read_volume",
     "remove_state_file",
     "run_pull",
@@ -1600,6 +1602,39 @@ class PublishedParsedStore:
     there (:attr:`~debate_core.application.caselist.parsed_publish.ParsedPublishReport.failure_codes`)."""
 
 
+PARSE_PUBLISH_ONLY: Final = "--publish-only"
+PARSE_PUBLISH: Final = "--publish"
+
+
+def parse_command(caselist: str, *, publish_only: bool) -> str:
+    """The command that finishes one caselist's parsed store, as the run names it (`v1-e34-t31`)."""
+    flag = PARSE_PUBLISH_ONLY if publish_only else PARSE_PUBLISH
+    return f"debate-research caselist parse --caselist {caselist} {flag}"
+
+
+@dataclass(frozen=True, slots=True)
+class ParsedStoreOwed:
+    """A caselist whose parsed store the parse stage did not publish complete, and what finishes it.
+
+    `v1-e34-t31`. Caselist slugs and a flag: nothing a run record may not hold.
+    """
+
+    caselist: str
+    publish_only: bool = False
+    """`caselist parse --publish-only` finishes it: the stage rebuilt the caselist's aggregates from
+    every copy of the suppression list, and the run keeps the working copy they are in, so only the
+    publish is owed. Otherwise `--publish`, which rebuilds first: the aggregates may come from the
+    run's own copy of the list alone, which must never be what is published, or the stage did not
+    rebuild them, or the directory they are in went with the run."""
+
+    @property
+    def command(self) -> str:
+        return parse_command(self.caselist, publish_only=self.publish_only)
+
+    def as_json(self) -> dict[str, object]:
+        return {"caselist": self.caselist, "publish_only": self.publish_only}
+
+
 @dataclass(frozen=True, slots=True)
 class ParseStageCounts:
     """What the parse stage did, over every caselist it parsed. Integers and nothing else.
@@ -2424,6 +2459,10 @@ class RunSummary:
     parse: ParseStageCounts | None = None
     """The parse stage's counts, or `None` when it parsed nothing: turned off, or nothing imported."""
 
+    parsed_stores_owed: tuple[ParsedStoreOwed, ...] = ()
+    """Each caselist whose parsed store the parse stage did not publish complete, with the command
+    that finishes it, in the order the stage met them (`v1-e34-t31`). Empty when nothing is owed."""
+
     search_index: SearchIndexStageCounts | None = None
     """The index the search index stage left current, or `None` when the stage reached none."""
 
@@ -2579,6 +2618,8 @@ class RunSummary:
             "files_skipped": self.files_skipped,
             "blobs_stored": self.blobs_stored,
             "parse": self.parse.as_json() if self.parse is not None else None,
+            # Additive (`v1-e34-t31`): the version stays.
+            "parsed_stores_owed": [one.as_json() for one in self.parsed_stores_owed],
             # Additive (`v1-e39-t09`): the version stays.
             "search_index": self.search_index.as_json() if self.search_index is not None else None,
             "objects_published": self.objects_published,
@@ -2649,6 +2690,7 @@ class _RunTally:
     files_skipped: int = 0
     blobs_stored: int = 0
     parse: ParseStageCounts | None = None
+    parsed_stores_owed: tuple[ParsedStoreOwed, ...] = ()
     search_index: SearchIndexStageCounts | None = None
     objects_published: int = 0
     manifests_published: int = 0
@@ -2848,6 +2890,12 @@ class CaselistSyncService:
         backfile_caselists: `caselist.backfile_caselists`. A run asked for one of them, by
             `--caselist` or `--full-archive`, is refused with :class:`BackfileIsNotPulled` before
             anything is listed (`v1-e34-t34`).
+        working_copy_outlives_the_run: The data directory the run works in is still there after
+            it, so `caselist parse --publish-only` can publish a version directory the parse stage
+            rebuilt and did not publish (`v1-e34-t31`). True in local mode. Not in bucket mode: the
+            cloud run's working copy is on the task's ephemeral storage, and the parsed store a
+            later run restores is the bucket's. Off, the default, every parsed store owed is named
+            with `--publish`.
     """
 
     def __init__(
@@ -2880,8 +2928,10 @@ class CaselistSyncService:
         state_written: Callable[[Path], None] | None = None,
         after_publish: Callable[[], Awaitable[object]] | None = None,
         backfile_caselists: Sequence[str] = (),
+        working_copy_outlives_the_run: bool = False,
     ) -> None:
         self._source = source
+        self._working_copy_outlives_the_run = working_copy_outlives_the_run
         # A backfile (`v1-e34-t34`) is never pulled, by the weekly run or by hand: refused in `plan`.
         self._backfiles = tuple(backfile_caselists)
         # Bucket mode (`v1-e40-t04`): each state file is saved as it is written, a download's start
@@ -4851,6 +4901,7 @@ class CaselistSyncService:
             files_skipped=tally.files_skipped,
             blobs_stored=tally.blobs_stored,
             parse=tally.parse,
+            parsed_stores_owed=tally.parsed_stores_owed,
             search_index=tally.search_index,
             objects_published=tally.objects_published,
             manifests_published=tally.manifests_published,

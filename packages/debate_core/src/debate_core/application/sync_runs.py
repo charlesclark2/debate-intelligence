@@ -192,6 +192,7 @@ __all__ = [
     "MonitoredRun",
     "NoRemoteRunLog",
     "ParseCounts",
+    "ParsedStoreOwedDetails",
     "PublishedSnapshot",
     "RecordedRun",
     "RetryRule",
@@ -460,6 +461,21 @@ class ParseCounts(BaseModel):
     not_published: int = Field(ge=0)
 
 
+class ParsedStoreOwedDetails(BaseModel):
+    """A caselist whose parsed store the parse stage left unpublished, and whether `--publish-only`
+    finishes it (:class:`~debate_core.application.caselist_sync.ParsedStoreOwed`, `v1-e34-t31`).
+
+    `publish_only` defaults to false, so an entry that does not say is named with `--publish`, which
+    rebuilds first: failing toward the command that never publishes aggregates rebuilt from the
+    run's own copy of the suppression list alone.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    caselist: str
+    publish_only: bool = False
+
+
 class SearchIndexCounts(BaseModel):
     """The search index stage's index and its size: a run summary's `search_index`, and nothing else
     (:class:`~debate_core.application.caselist_sync.SearchIndexStageCounts`, `v1-e39-t09`)."""
@@ -579,6 +595,11 @@ class SyncRunDetails(BaseModel):
 
     parse: ParseCounts | None = None
     """The parse stage's counts, or `None` when the stage did not run."""
+
+    parsed_stores_owed: tuple[ParsedStoreOwedDetails, ...] = ()
+    """Each caselist whose parsed store the parse stage did not publish complete, and whether
+    `caselist parse --publish-only` finishes it (`v1-e34-t31`). A key a build from before it passes
+    over; details such a build wrote have none, and their parse stage is named with `--publish`."""
 
     search_index: SearchIndexCounts | None = None
     """The search index stage's index and size, or `None` when it reached no index (`v1-e39-t09`).
@@ -832,6 +853,10 @@ def details_for_summary(summary: RunSummary, *, secrets: Sequence[str] = ()) -> 
         ),
         failure_codes=summary.failure_codes,
         parse=ParseCounts(**summary.parse.as_json()) if summary.parse is not None else None,
+        parsed_stores_owed=tuple(
+            ParsedStoreOwedDetails(caselist=one.caselist, publish_only=one.publish_only)
+            for one in summary.parsed_stores_owed
+        ),
         search_index=SearchIndexCounts.model_validate(summary.search_index.as_json())
         if summary.search_index is not None
         else None,

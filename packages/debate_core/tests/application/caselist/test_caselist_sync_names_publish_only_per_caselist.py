@@ -241,6 +241,17 @@ async def test_a_stage_whose_aggregates_read_only_the_runs_own_list_names_publis
     assert details_line(installation)["parsed_stores_owed"] == [{"caselist": CASELIST, "publish_only": False}]
 
 
+async def test_a_publish_that_raised_something_unmodelled_after_its_rebuild_names_publish_only(
+    installation: Installation,
+) -> None:
+    """A bug in the publish is recorded by its class, and the rebuild before it stands."""
+    watched, _ = await run(installation, refused={CASELIST: RuntimeError("the publisher fell over")})
+
+    assert stage(watched.summary, SyncStage.PARSE)["error_codes"] == ["INTERNAL_ERROR"]
+    assert owed(watched) == [(CASELIST, True)]
+    assert parse_notification(watched).fix_command == PUBLISH_ONLY_THE_WEEKLY
+
+
 async def test_a_bucket_mode_run_names_publish_even_where_only_the_publish_failed(
     installation: Installation,
 ) -> None:

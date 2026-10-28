@@ -623,6 +623,7 @@ async def test_objects_the_bucket_did_not_take_are_recorded_under_the_publishers
     assert f"{CASELIST}: 2 object(s) of the parsed store not confirmed in the bucket" in str(parse["reason"])
     assert counts(summary)["uploaded"] == 4
     assert counts(summary)["not_published"] == 1
+    assert parse["hint"] == PUBLISH_ONLY_FIX, "the rebuild is done: only the publish is owed (`v1-e34-t31`)"
     assert not any(key.endswith(("index.jsonl", "occurrences.jsonl")) for key in parsed_keys())
     assert_the_import_and_the_raw_publish_stand(installation, summary)
 

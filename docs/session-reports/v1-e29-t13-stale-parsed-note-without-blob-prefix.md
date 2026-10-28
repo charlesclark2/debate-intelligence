@@ -144,9 +144,32 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-28
 
 **Notes:**
+
+The note now prints before the plan can refuse, which is what 2026-10-22 needed.
+1. **ac1 passes.** Red against the unchanged command: 4 failed. Two of them show no note on a
+   refused dry run. The other two show a failing check replacing even a successful plan's result
+   (`STORE_ACCESS_DENIED`, exit 3; `INTERNAL_ERROR`, exit 70), a defect of t12's ordering this task
+   found and fixed. The four that passed at red are the regression guards. Green: 61 passed.
+2. **The refusal is unchanged,** pinned by its code, its whole message written by hand from the
+   source, and exit 1. `--apply` is unchanged and prints no note. Nothing is deleted.
+3. **Mutants:** the PM's four, (3) and (4) each two ways, and two for the failure rule. All caught,
+   none at collection.
+4. **The failure rule (the decision to look at first): accepted.**
+   * Catch `DomainError` and `OSError` only, print the code or the class name, never the message
+     (an `OSError` quotes the path), then go on to the plan.
+   * Anything else propagates, so a bug is not hidden behind a note.
+   * That is v1-e01-t25's rule for messages, and the right weight for advice.
+5. **Decisions accepted:**
+   * an unreadable `objects/parsed/` usually fails the plan first, so the test patches the check
+     rather than using `chmod`;
+   * the note goes before the verbose listing line;
+   * no smoke check, since validate-dev's machine has no stale copy to report.
+6. **The affected set** (177 files) is left to the PR's `ci`. The always-run list, the docs tests,
+   the store tests, ruff, pyright, lint-imports, the thin-handler check and the specs pass.
+7. **Merge:** any time. The held queue is cleared, and nothing else touches `store.py`.

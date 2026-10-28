@@ -40,7 +40,7 @@ spec:
         and then the same refusal as before, by a test shown failing first; with no stale
         copy it prints nothing about one.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

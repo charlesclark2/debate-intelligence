@@ -62,7 +62,7 @@ v2.3's extension work.
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 47 | 254 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 108 | 83 | 498 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 56 | 42 | 282 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 56 | 43 | 282 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 16 | 10 | 114 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
@@ -134,7 +134,7 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 | [The container imports each integration in its own factory, and selection follows a command to its factories](plan_specs/v1/e01-repo-foundation/t39-container-builds-integrations-lazily.yaml) `v1-e01-t39-container-builds-integrations-lazily` | Pending | 1 | 4.0 |
 | [The planted-break check runs the tests nearest a break by what reads it, not by path](plan_specs/v1/e01-repo-foundation/t40-planted-break-nearest-ordering.yaml) `v1-e01-t40-planted-break-nearest-ordering` | Pending | 1 | 1.0 |
 | [The pull request's smoke tier reads the bundled profiles, as the installed build does](plan_specs/v1/e01-repo-foundation/t41-pr-smoke-reads-the-bundled-profiles.yaml) `v1-e01-t41-pr-smoke-reads-the-bundled-profiles` | Pending | 1 | 2.0 |
-| [Coverage measured in the test parts and combined, so the push run is never held by one unsplit job](plan_specs/v1/e01-repo-foundation/t42-coverage-measured-in-the-parts.yaml) `v1-e01-t42-coverage-measured-in-the-parts` | Pending | 1 | 2.0 |
+| [Coverage measured in the test parts and combined, so the push run is never held by one unsplit job](plan_specs/v1/e01-repo-foundation/t42-coverage-measured-in-the-parts.yaml) `v1-e01-t42-coverage-measured-in-the-parts` | InProgress | 1 | 2.0 |
 
 #### [E02 — Domain Core: Entities, Ports & Local Persistence](plan_specs/v1/e02-domain-core/epic.yaml)
 
@@ -250,7 +250,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [What the cautious cite rules leave, and a short cite behind a first name](plan_specs/v1/e31-debate-file-parsing/t28-cite-rules-leftovers.yaml) `v1-e31-t28-cite-rules-leftovers` | Pending | 1 | 3.0 |
 | [Card matching recovers two kinds of pair it now keeps apart](plan_specs/v1/e31-debate-file-parsing/t29-card-matching-recall.yaml) `v1-e31-t29-card-matching-recall` | Pending | 1 | 4.0 |
 | [Publish the parsed store without rebuilding it](plan_specs/v1/e31-debate-file-parsing/t30-parsed-store-publish-only.yaml) `v1-e31-t30-parsed-store-publish-only` | Succeeded | 1 | 2.0 |
-| [Where the labelled evaluation's missed cites, tags and highlights go, counted before any rule](plan_specs/v1/e31-debate-file-parsing/t31-labelled-evaluation-gaps.yaml) `v1-e31-t31-labelled-evaluation-gaps` | Pending | 1 | 5.0 |
+| [Where the labelled evaluation's missed cites, tags and highlights go, counted before any rule](plan_specs/v1/e31-debate-file-parsing/t31-labelled-evaluation-gaps.yaml) `v1-e31-t31-labelled-evaluation-gaps` | InProgress | 1 | 5.0 |
 | [A tag with a word left unbolded, above a cite, counted before any rule](plan_specs/v1/e31-debate-file-parsing/t32-bold-in-part-tags.yaml) `v1-e31-t32-bold-in-part-tags` | Pending | 1 | 3.0 |
 
 #### [E34 — Scheduled Caselist Sync](plan_specs/v1/e34-caselist-sync/epic.yaml)
@@ -351,7 +351,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [The review queue ordered by the local proxy model, which places nothing](plan_specs/v1/e32-argument-landscape/t26-review-queue-proxy-ordering.yaml) `v1-e32-t26-review-queue-proxy-ordering` | Pending | 1 | 3.0 |
 | [Branches and mechanisms in the DA sections, counted first](plan_specs/v1/e32-argument-landscape/t27-branches-and-mechanisms-counted-first.yaml) `v1-e32-t27-branches-and-mechanisms-counted-first` | Succeeded | 2 | 4.0 |
 | [Tags quoted in the impact and link-chain tables, held to the report's withholding, counted first](plan_specs/v1/e32-argument-landscape/t28-tags-in-the-tables-held-to-withholding.yaml) `v1-e32-t28-tags-in-the-tables-held-to-withholding` | Succeeded | 1 | 2.0 |
-| [Harms headings counted under Impact, the word the coach's debaters use](plan_specs/v1/e32-argument-landscape/t29-harms-headings-under-impact.yaml) `v1-e32-t29-harms-headings-under-impact` | Pending | 1 | 2.0 |
+| [Harms headings counted under Impact, the word the coach's debaters use](plan_specs/v1/e32-argument-landscape/t29-harms-headings-under-impact.yaml) `v1-e32-t29-harms-headings-under-impact` | Succeeded | 1 | 2.0 |
 
 #### [E33 — Evidence File Builder](plan_specs/v1/e33-file-builder/epic.yaml)
 
@@ -480,7 +480,7 @@ Whitefish Bay Debate has a public, mobile-friendly team website: team informatio
 | [Season results: how the team's students placed at each tournament](plan_specs/v1/e37-calendar-and-announcements/t06-season-results.yaml) `v1-e37-t06-season-results` | InProgress | 2 | 6.0 |
 | [A link to the team's Instagram account, never an embed](plan_specs/v1/e37-calendar-and-announcements/t07-instagram-link.yaml) `v1-e37-t07-instagram-link` | Succeeded | 1 | 1.0 |
 | [The site smoke check reads the home page's results band and the results page](plan_specs/v1/e37-calendar-and-announcements/t08-smoke-results-band.yaml) `v1-e37-t08-smoke-results-band` | Pending | 2 | 1.0 |
-| [Website changes reach the public site in a day, without waiting for a release](plan_specs/v1/e37-calendar-and-announcements/t09-site-changes-publish-without-a-release.yaml) `v1-e37-t09-site-changes-publish-without-a-release` | Pending | 1 | 3.0 |
+| [Website changes reach the public site in a day, without waiting for a release](plan_specs/v1/e37-calendar-and-announcements/t09-site-changes-publish-without-a-release.yaml) `v1-e37-t09-site-changes-publish-without-a-release` | InProgress | 1 | 3.0 |
 
 #### [E38 — Team Donations](plan_specs/v1/e38-donations/epic.yaml)
 

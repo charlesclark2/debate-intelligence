@@ -914,6 +914,7 @@ RUNS = {
     "files": f"{CLI_TESTS}/test_files_command.py",
     "caselist help": f"{CLI_TESTS}/test_caselist_help.py",
     "help and verify": f"{CLI_TESTS}/test_help_and_verify.py",
+    "files build help": f"{CLI_TESTS}/test_files_build_help.py",
     "unreadable": f"{CLI_TESTS}/test_runs_what_it_reads.py",
     "remove, by a helper": f"{CLI_TESTS}/test_caselist_by_a_helper.py",
     "verify, beside prose": f"{CLI_TESTS}/test_prose_names_nothing.py",
@@ -1028,6 +1029,10 @@ CLI_WORLD = {
         "from debate_cli.app import main\n\n\n"
         'def test_help():\n    main("--help")\n\n\ndef test_verify():\n    main("verify")\n'
     ),
+    # A command's own help is that command's.
+    RUNS["files build help"]: (
+        'from debate_cli.app import main\n\n\ndef test_help():\n    main("files", "build", "--help")\n'
+    ),
     # Its arguments come from a file, so no literal says which command it runs.
     RUNS["unreadable"]: (
         "import json\nfrom pathlib import Path\n\nfrom debate_cli.app import main\n\n\n"
@@ -1091,7 +1096,14 @@ def changed_in_the_world(path: str) -> dict[str, str]:
         # Imported inside `parser`, which `files build` asks for through a helper it hands the container.
         pytest.param(
             "parser_adapter",
-            {RUNS["files"], BUILDS_THE_PARSER, WALKS_THE_CONTAINER, READS_THE_WIRING} | CANNOT_TELL,
+            {
+                RUNS["files"],
+                RUNS["files build help"],
+                BUILDS_THE_PARSER,
+                WALKS_THE_CONTAINER,
+                READS_THE_WIRING,
+            }
+            | CANNOT_TELL,
             id="an import inside a factory a helper asks for",
         ),
         # Imported at the top, but only `verified` uses it.

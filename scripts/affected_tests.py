@@ -74,9 +74,9 @@ working tree's uncommitted and untracked files, and selects every test file one 
     names `caselist remove`, a helper's `("caselist", *arguments)` with its caller's
     `("remove", ...)` does too, and prose, a dictionary key or a word in another command does
     not. A group alone names all its commands (its help lists them). A test whose runs hold no
-    command's first word, or that passes `--help`, cannot be told apart and reaches every command,
-    as before. A registry it cannot read, or a container with no `ServiceContainer` class, is read
-    as a file, as before.
+    command's first word, or that asks for the root's `--help`, cannot be told apart and reaches
+    every command, as before. A registry it cannot read, or a container with no `ServiceContainer`
+    class, is read as a file, as before.
 * **Source readers.** A test that walks a directory and parses the Python it finds there
   (`ast.parse` with a glob, `rglob`, `iterdir` or `walk`) reads source as data, so any changed
   Python file selects it.
@@ -172,7 +172,7 @@ COMMAND_REGISTRY = f"{CLI_SOURCE}/command_registry.py"
 REGISTERING_FUNCTION = "register_commands"
 # A part of a file is named `<file>::<part>`: a container method, or the app for one command module.
 PART = "::"
-# What passes the root's own help: it lists every command.
+# What asks for help: before any command's word, the root's, which lists every command.
 HELP_FLAGS = frozenset({"--help", "-h"})
 # Calls that read the container by a name they compute, or as a whole.
 REFLECTION_CALLS = frozenset({"vars", "dir", "getmembers", "getsource", "attrgetter", "methodcaller"})
@@ -1256,8 +1256,16 @@ def names_any_command(runs: frozenset[Run], top: set[str]) -> bool:
     return any(top.intersection(run.words) for run in runs)
 
 
-def passes_help(runs: frozenset[Run]) -> bool:
-    return any(HELP_FLAGS.intersection(run.words) for run in runs)
+def passes_help(runs: frozenset[Run], top: set[str]) -> bool:
+    """Whether a run asks for the root's help, which lists every command: `--help` with no command before it.
+
+    `("files", "build", "--help")` is `files build`'s own help, and names that command.
+    """
+    for run in runs:
+        for position, word in enumerate(run.words):
+            if word in HELP_FLAGS and not top.intersection(run.words[:position]):
+                return True
+    return False
 
 
 def grimp_edges(tree: Tree, layout: Layout, graph: Graph) -> dict[str, set[str]] | None:
@@ -2048,7 +2056,7 @@ class Walk:
         A file runs the app through an import, a fixture, a console script or `-m`. It is reached
         when its runs of literal words (:func:`argument_runs`), with those of the conftests above it
         and the helpers between it and the app, name one of the module's commands
-        (:func:`names_command`), or pass `--help`. A helper that names none is followed to the
+        (:func:`names_command`), or ask for the root's `--help`. A helper that names none is followed to the
         files that import or name it, carrying its runs. A test whose runs hold no command's first
         word cannot be told apart, and is reached, as is a conftest, which its fixtures then narrow
         as they always do.
@@ -2065,7 +2073,7 @@ class Walk:
             if (runner, runs) in seen:
                 continue
             seen.add((runner, runs))
-            named = passes_help(runs) or any(names_command(runs, command) for command in commands)
+            named = passes_help(runs, top) or any(names_command(runs, command) for command in commands)
             if runner in self.graph.narrowed_conftests:
                 # By its import, so that its fixtures go on narrowing it: their edges carry its tests.
                 self.reach(runner, IMPORTS, node)

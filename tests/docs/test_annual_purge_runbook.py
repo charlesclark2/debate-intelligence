@@ -113,7 +113,9 @@ def test_inventory_keeps_the_window_and_the_backfiles_and_ends_ok(tmp_path: Path
     ]
 
 
-def test_inventory_reads_backfiles_from_the_setting_never_from_the_slug(tmp_path: Path, settings: Path) -> None:
+def test_inventory_reads_backfiles_from_the_setting_never_from_the_slug(
+    tmp_path: Path, settings: Path
+) -> None:
     """Two caselists of one aged-out season: the setting names one, so only that one is a backfile."""
     lines = inventory(
         tmp_path,
@@ -123,8 +125,8 @@ def test_inventory_reads_backfiles_from_the_setting_never_from_the_slug(tmp_path
     )
     assert f"bucket: {BACKFILE} KEEP backfile (1 item(s) here; dated 2026-06-30 to 2026-06-30)" in lines
     assert (
-        "bucket: othercl25 STOP aged out of the window from 2021-22 on, and not in caselist.backfile_caselists "
-        "(1 item(s) here; dated 2026-06-30 to 2026-06-30)"
+        "bucket: othercl25 STOP aged out of the window from 2021-22 on, "
+        "and not in caselist.backfile_caselists (1 item(s) here; dated 2026-06-30 to 2026-06-30)"
     ) in lines
     assert lines[-1] == "bucket: INVENTORY STOPS"
 
@@ -146,7 +148,9 @@ def test_inventory_purges_only_before_2021_22_and_judges_camp_years_by_topic_yea
         ],
     )
     assert "bucket: oldcl21 PURGE before 2021-22 (1 item(s) here; dated 2021-07-31 to 2021-07-31)" in lines
-    assert any(line.startswith("bucket: firstcl22 STOP aged out of the window from 2021-22 on") for line in lines)
+    assert any(
+        line.startswith("bucket: firstcl22 STOP aged out of the window from 2021-22 on") for line in lines
+    )
     assert "bucket: openev 2020 PURGE before 2021-22 (1 release(s))" in lines
     assert "bucket: openev 2021 KEEP aged out, kept as a backfile (1 release(s))" in lines
     assert "bucket: openev 2025 KEEP aged out, kept as a backfile (1 release(s))" in lines
@@ -204,7 +208,9 @@ def test_inventory_stops_on_what_nothing_dates_and_on_keys_it_does_not_know(
         "local",
         ["parsed/testcl26", "parsed/openev", "manifests/samplecl26/latest.jsonl"],
     )
-    assert lines[0].startswith("local: testcl26 STOP not a backfile, and no manifest, bundle or inbox archive dates it")
+    assert lines[0].startswith(
+        "local: testcl26 STOP not a backfile, and no manifest, bundle or inbox archive dates it"
+    )
     assert "local: openev STOP 1 item(s) here, and no camp release dates them" in lines
     assert "local: STOP manifests/samplecl26/latest.jsonl is not a key this runbook knows" in lines
     assert lines[-1] == "local: INVENTORY STOPS"
@@ -273,7 +279,10 @@ def test_school_views_before_the_window_go_every_version_and_circuit_wide_files_
         (f"{old}/schools.md", "m1"),
     ]
     assert (tmp_path / "views" / "local.txt").read_text().splitlines() == [str(local / "schools.csv")]
-    assert ran.stdout.splitlines()[-1] == "3 bucket version(s) and 1 local file(s) to delete, of 2 bundle(s) listed in the bucket"
+    assert (
+        ran.stdout.splitlines()[-1]
+        == "3 bucket version(s) and 1 local file(s) to delete, of 2 bundle(s) listed in the bucket"
+    )
 
 
 def test_school_views_stop_on_a_file_neither_list_names_and_write_nothing(tmp_path: Path) -> None:
@@ -295,7 +304,10 @@ def test_school_views_split_requests_at_a_thousand(tmp_path: Path) -> None:
     key = f"reports/landscape/{CURRENT}/2026-07-28/schools.csv"
     ran = school_views(tmp_path, [version(key, f"v{n}", latest=n == 0) for n in range(1001)], [])
     assert ran.returncode == 0, ran.stderr
-    sizes = [len(json.loads(one.read_text())["Objects"]) for one in sorted((tmp_path / "views").glob("delete-*.json"))]
+    sizes = [
+        len(json.loads(one.read_text())["Objects"])
+        for one in sorted((tmp_path / "views").glob("delete-*.json"))
+    ]
     assert sizes == [1000, 1]
 
 
@@ -357,7 +369,12 @@ def test_expired_is_ok_within_the_age_and_empty_when_nothing_was_listed(tmp_path
 def test_sidecars_name_every_caselist_their_cards_cite(tmp_path: Path) -> None:
     sidecar = tmp_path / "file.provenance.json"
     sidecar.write_text(
-        json.dumps({"cards": [{"caselist": CURRENT, "camp": None}, {"source": {"caselist": "openev"}}], "event": "LD"})
+        json.dumps(
+            {
+                "cards": [{"caselist": CURRENT, "camp": None}, {"source": {"caselist": "openev"}}],
+                "event": "LD",
+            }
+        )
     )
     listing = tmp_path / "sidecars.txt"
     listing.write_text(f"{sidecar}\n")
@@ -372,7 +389,11 @@ def test_sidecars_name_every_caselist_their_cards_cite(tmp_path: Path) -> None:
 def test_every_block_that_reaches_a_bucket_checks_the_day_the_lock_and_the_shell_first() -> None:
     blocks = shell_blocks(RUNBOOK)
     reaching = [block for block in blocks if re.search(r"\baws s3|debate-research --json store", block)]
-    unguarded = [block.splitlines()[0] for block in reaching if "purge_guard() {" not in block and "if purge_guard; then" not in block]
+    unguarded = [
+        block.splitlines()[0]
+        for block in reaching
+        if "purge_guard() {" not in block and "if purge_guard; then" not in block
+    ]
     assert len(reaching) >= 8
     assert unguarded == []
 
@@ -398,6 +419,7 @@ def test_the_removal_runbook_points_here_and_keeps_no_purge_code() -> None:
     assert "SEASON_START" not in text and "landscape-school-view-purge" not in text
 
 
+WORKING_COPIES: Final = "The weekly cloud run's and a backfile import's working copies"
 RETENTION_ROWS: Final = {
     "Weekly caselist snapshots": "Weekly caselist snapshots",
     "Backfiles": "Backfiles",
@@ -408,8 +430,8 @@ RETENTION_ROWS: Final = {
     "Team files built from disclosed cards": "Team files built from disclosed cards",
     "The student search pilot's index": "The student search pilot's index",
     "The student search pilot's access audit": "The pilot's access audit",
-    "The weekly cloud run's working copy": "The weekly cloud run's and a backfile import's working copies",
-    "A one-off backfile import's working copy": "The weekly cloud run's and a backfile import's working copies",
+    "The weekly cloud run's working copy": WORKING_COPIES,
+    "A one-off backfile import's working copy": WORKING_COPIES,
     "A working copy restored on the operator's machine": "A working copy restored on this Mac",
     "The weekly cloud run's run-state bundle": "The run-state bundle",
     "Removal log and suppression list": "Removal log and suppression list",
@@ -428,9 +450,13 @@ def first_cells(text: str, heading: str) -> list[str]:
 
 def test_the_runbook_covers_every_row_of_the_policys_retention_table() -> None:
     policy_rows = first_cells(POLICY.read_text(encoding="utf-8"), "## Retention\n")
-    runbook_rows = first_cells(RUNBOOK.read_text(encoding="utf-8"), "## What the purge deletes, and what it keeps\n")
+    runbook_rows = first_cells(
+        RUNBOOK.read_text(encoding="utf-8"), "## What the purge deletes, and what it keeps\n"
+    )
     unmapped = [row for row in policy_rows if not any(row.startswith(start) for start in RETENTION_ROWS)]
     assert unmapped == [], "a retention row the runbook does not cover yet"
     for start, covered_by in RETENTION_ROWS.items():
         assert any(row.startswith(start) for row in policy_rows), f"the policy has no row starting {start!r}"
-        assert any(row.startswith(covered_by) for row in runbook_rows), f"the runbook has no row for {start!r}"
+        assert any(row.startswith(covered_by) for row in runbook_rows), (
+            f"the runbook has no row for {start!r}"
+        )

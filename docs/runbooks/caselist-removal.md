@@ -867,94 +867,9 @@ the PM, since the evaluation is then recorded again (PM ruling, 2026-10-25).
 
 ## The annual purge: landscape school views
 
-The data-use policy's annual purge runs each September for the season that has just aged out
-(1 August to 31 July, kept for that season and the following one), in dev and in prod, and the
-operator's local store with them. Its other steps have no runbook yet. These are the steps for the
-landscape bundles: the school views of every bundle whose snapshot falls in the purged season are
-deleted, locally and in the bucket, every version included, under the removal profile. Circuit-wide
-files are kept indefinitely (policy, "Retention") and are never deleted here.
-
-Run it in dev first, then in prod with prod's names. The first block lists and writes the delete
-requests; nothing is deleted until the second. It reads the bucket with the removal profile, which
-since `v1-e32-t13` may list versions under `reports/landscape/`, and this machine's data directory
-from `debate-research config show`, so it first refuses a shell with a `DEBATE_` override set or a
-`caselist pull` running.
-
-**Operator command** (expected runtime seconds; reads only)
-Where: your Mac, a checkout of this repository, in a shell with no `DEBATE_` variable set
-```bash
-SEASON_START=2026-08-01
-SEASON_END=2027-07-31
-aws sso login --profile debate-dev-evidence-removal
-BUCKET=$(python3 -c 'import tomllib; print(tomllib.load(open("config/profiles/dev.toml", "rb"))["storage"]["s3"]["bucket"])')
-PURGE="${TMPDIR:-/tmp}/landscape-school-view-purge"
-rm -rf "$PURGE" && mkdir -p "$PURGE"
-if env | grep -q '^DEBATE_'; then
-  echo "STOP: a DEBATE_ variable is set in this shell; open a new one"
-elif pgrep -f 'caselist pull' >/dev/null; then
-  echo "STOP: a caselist pull is running; wait for it"
-else
-  DATA_DIR="$(DEBATE_ENV=dev debate-research --json config show | jq -r '.data.settings["storage.data_dir"]')"
-  echo "bucket: $BUCKET, data directory: $DATA_DIR"
-  aws s3api list-object-versions --profile debate-dev-evidence-removal --bucket "$BUCKET" \
-    --prefix reports/landscape/ --output json > "$PURGE/versions.json"
-  python3 - "$PURGE" "$DATA_DIR" "$SEASON_START" "$SEASON_END" <<'PY'
-import json, sys
-from datetime import date
-from pathlib import Path
-
-purge, data_dir = Path(sys.argv[1]), Path(sys.argv[2])
-start, end = date.fromisoformat(sys.argv[3]), date.fromisoformat(sys.argv[4])
-views = {"schools.csv", "schools.md"}
-circuit_wide = {"report.md", "positions.csv", "top_cards.csv", "impact_cards.csv", "trends.csv"}
-
-def purged(key):
-    parts = key.removeprefix("reports/landscape/").split("/")
-    if len(parts) != 3 or parts[2] not in views | circuit_wide:
-        sys.exit(f"STOP: {key} is neither a school view nor a circuit-wide file; nothing was written")
-    return parts[2] in views and start <= date.fromisoformat(parts[1]) <= end
-
-listing = json.loads((purge / "versions.json").read_text() or "{}")
-versions = listing.get("Versions", []) + listing.get("DeleteMarkers", [])
-doomed = [{"Key": one["Key"], "VersionId": one["VersionId"]} for one in versions if purged(one["Key"])]
-root = data_dir / "reports" / "landscape"
-local = sorted(path for path in root.glob("*/*/*") if purged(path.relative_to(data_dir).as_posix())) if root.is_dir() else []
-bundles = {one["Key"].rsplit("/", 1)[0] for one in versions}
-for key in sorted({one["Key"] for one in doomed}):
-    print(f"would delete {sum(1 for one in doomed if one['Key'] == key)} version(s) of {key}")
-for path in local:
-    print(f"would delete local {path.relative_to(data_dir).as_posix()}")
-for number, first in enumerate(range(0, len(doomed), 1000), 1):
-    (purge / f"delete-{number}.json").write_text(json.dumps({"Objects": doomed[first:first + 1000], "Quiet": True}))
-(purge / "local.txt").write_text("".join(f"{path}\n" for path in local))
-print(f"{len(doomed)} bucket version(s) and {len(local)} local file(s) to delete, of {len(bundles)} bundle(s) listed in the bucket")
-PY
-fi
-```
-Success looks like one `would delete` line per key and per local file, each a `schools.csv` or
-`schools.md` of a snapshot between `SEASON_START` and `SEASON_END`, then the counts. The number of
-bundles listed is above zero wherever a landscape report was ever published: `0 bundle(s)` with
-nothing to delete means the listing found nothing at all, so check the bucket name before going on.
-`0 bucket version(s) and 0 local file(s)` with bundles listed means there is nothing of that season
-to delete. A `STOP` line means nothing was written: do not go on, and tell the PM the key it names.
-
-**Then delete.** Same shell as the dry run.
-
-**Operator command** (expected runtime seconds; deletes, and cannot be undone)
-Where: your Mac, the same shell as the dry run
-```bash
-for REQUEST in "$PURGE"/delete-*.json(N); do
-  aws s3api delete-objects --profile debate-dev-evidence-removal --bucket "$BUCKET" \
-    --delete "file://${REQUEST}" --query 'length(Errors || `[]`)' --output text
-done
-while IFS= read -r FILE; do rm -f -- "$FILE"; done < "$PURGE/local.txt"
-echo "deleted; run the dry run again"
-```
-Success looks like a `0` for each request file (no errors), then the `deleted` line. Run the dry run
-again: it prints `0 bucket version(s) and 0 local file(s) to delete` and the same number of bundles.
-Then the purged season's newest bundle of each caselist is republished, if it is still wanted, by
-the PM, as after a removal. Record the counts with the purge's others in `docs/data/`, as the
-policy asks: counts only, no key.
+The annual purge's school-view steps, which were here, are in
+[annual-purge.md, Step 2](annual-purge.md#step-2--landscape-school-views), with the purge's other
+stores (`v1-e30-t28`).
 
 ## Step 9 — Check nothing re-imports it
 

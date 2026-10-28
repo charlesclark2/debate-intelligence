@@ -5,7 +5,7 @@ highlight colour, font size) read from the built file are compared with the same
 source. These tests re-parse the built file themselves: they do not rely on the writer's own
 read-back, which they are also a check on.
 
-The parser is the current one, `2026.10.20-docx-6`. Formatting is compared as the characters each
+The parser is the current one, `2026.10.27-docx-7`. Formatting is compared as the characters each
 emphasis covers (:func:`~debate_core.domain.file_provenance.formatting_sha256`'s reading), because the
 parser joins two touching spans only when the same rule found them, and the writer re-maps a source's
 style aliases to the profile's ids. Font-size spans are compared exactly.
@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from lxml import etree
 
 from debate_core.application.ports.evidence_file_writer import (
     BuiltEvidenceFile,
@@ -248,7 +249,7 @@ def test_the_tracked_change_and_the_comment_are_resolved_the_parsers_way(parser:
 
 
 def test_the_parser_ac1_is_measured_with_is_the_current_one(parser: DebateDocxParser) -> None:
-    assert parser.parser_version == DOCX_PARSER_VERSION == "2026.10.20-docx-6"
+    assert parser.parser_version == DOCX_PARSER_VERSION == "2026.10.27-docx-7"
 
 
 # ------------------------------------------------------------------------------------------------
@@ -479,3 +480,55 @@ def test_a_stretch_underlined_by_an_alias_beside_the_profiles_own_style_reads_ba
         if s.emphasis is RunEmphasis.UNDERLINE
     ]
     assert len(rebuilt) == 1
+
+
+WORDML = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+
+
+def runs_of_the_paragraph(docx: bytes, text: str) -> list[tuple[str, bytes]]:
+    """Each run of the one body paragraph whose text is `text`: its text and its properties as XML."""
+    body = etree.fromstring(zipfile.ZipFile(BytesIO(docx)).read("word/document.xml"))
+    found = [
+        element
+        for element in body.iter(f"{WORDML}p")
+        if "".join(t.text or "" for t in element.iter(f"{WORDML}t")) == text
+    ]
+    assert len(found) == 1, len(found)
+    runs: list[tuple[str, bytes]] = []
+    for run in found[0].iter(f"{WORDML}r"):
+        properties = run.find(f"{WORDML}rPr")
+        runs.append(
+            (
+                "".join(t.text or "" for t in run.iter(f"{WORDML}t")),
+                b"" if properties is None else etree.tostring(properties, method="c14n", exclusive=True),
+            )
+        )
+    return runs
+
+
+def test_a_white_highlighted_paragraph_is_copied_as_its_source_wrote_it(parser: DebateDocxParser) -> None:
+    """`v1-e31-t31`: the parser no longer reads white as highlight; the writer still copies it.
+
+    The writer copies a card's paragraphs from its source (`v1-e33-t02`), so the white run reaches the
+    built file with its `w:highlight` as the source wrote it, and the card reads back as its source.
+    """
+    runs = [
+        ("Supply ", SMALL),
+        ("freezes in place", {"underline": "single", "highlight": "cyan", **SMALL}),
+        (" while the grid waits", {"highlight": "white", **SMALL}),
+        (" this year.", SMALL),
+    ]
+    text = "".join(run_text for run_text, _ in runs)
+    content = build_docx(tag("Moratoria raise prices") + styled_cite("Lindqvist 26") + paragraph(runs))
+    source = _source_card(parser, content)
+    assert [
+        span.highlight_color for span in source.formatting_spans if span.emphasis is RunEmphasis.HIGHLIGHT
+    ] == ["cyan"]
+
+    cards, result = build_all(parser, content)
+
+    assert_every_card_reads_as_its_source(parser, cards, result)
+    assert isinstance(result, BuiltEvidenceFile)
+    copied = runs_of_the_paragraph(result.docx, text)
+    assert copied == runs_of_the_paragraph(content, text)
+    assert any(b'w:val="white"' in properties for _, properties in copied)

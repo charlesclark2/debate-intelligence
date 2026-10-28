@@ -581,7 +581,7 @@ def test_provenance_marks_an_overridden_tag_as_the_coachs_with_the_original_tags
 def test_provenance_names_the_versions_that_built_the_file_and_the_files_own_hash(standard: Built) -> None:
     manifest = standard.file.manifest
     assert manifest.builder_version == FILE_BUILDER_VERSION
-    assert manifest.parser_version == DOCX_PARSER_VERSION == "2026.10.20-docx-6"
+    assert manifest.parser_version == DOCX_PARSER_VERSION == "2026.10.27-docx-7"
     assert manifest.style_profile_version == "2026.09.20-verbatim-1"
     assert manifest.recipe_hash == standard.resolved.recipe_hash
     assert manifest.docx_sha256 == hashlib.sha256(standard.file.docx).hexdigest()

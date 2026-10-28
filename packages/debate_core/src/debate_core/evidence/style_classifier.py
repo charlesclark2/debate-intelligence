@@ -46,6 +46,7 @@ from debate_core.domain.style_profile import (
 )
 
 __all__ = [
+    "COLOURS_NOT_READ_AS_HIGHLIGHT",
     "MAXIMUM_CITE_LINE_CHARACTERS",
     "MAXIMUM_CUTTER_SIGNATURE_CHARACTERS",
     "MAXIMUM_HEADING_CHARACTERS",
@@ -499,6 +500,14 @@ def is_a_cite_wholly_in_brackets(paragraph: ParagraphDescription, profile: Style
 # --------------------------------------------------------------------------------------------
 
 
+#: Highlight colours a run's `w:highlight` may name that are not read as highlight. White is invisible
+#: on the page, and the profile already calls it no reading colour: read as highlight, white text
+#: counted as read aloud in search, and it was 187 of the 707 highlighted characters the labelled
+#: evaluation's labels hold unhighlighted (`v1-e31-t31`, the PM's ruling of 2026-10-27). lightGray and
+#: black are visible and are still read. A paragraph's "has a highlighted run" is unchanged.
+COLOURS_NOT_READ_AS_HIGHLIGHT = frozenset({"white"})
+
+
 def classify_run(
     run: RunDescription, profile: StyleProfile, *, slot: StructuralUnit = StructuralUnit.EVIDENCE
 ) -> tuple[RunStyleMatch, ...]:
@@ -531,7 +540,11 @@ def classify_run(
             )
         )
 
-    if run.highlight and profile.highlight_color(run.highlight) is not None:
+    if (
+        run.highlight
+        and run.highlight not in COLOURS_NOT_READ_AS_HIGHLIGHT
+        and profile.highlight_color(run.highlight) is not None
+    ):
         matches.append(
             RunStyleMatch(
                 emphasis=RunEmphasis.HIGHLIGHT,

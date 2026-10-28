@@ -8,7 +8,7 @@
   "side": "AFF",
   "recipe_hash": "6065d0d88e3a53e1e731ad79765e77942c0a098412ff86dc4c1bd3e5c3a21ba2",
   "builder_version": "2026.10.19-file-writer-2",
-  "parser_version": "2026.10.20-docx-6",
+  "parser_version": "2026.10.27-docx-7",
   "style_profile_version": "2026.09.20-verbatim-1",
   "fingerprint_version": "card-fingerprint-v4",
   "built_at": "2026-10-19T12:30:00.000000Z",

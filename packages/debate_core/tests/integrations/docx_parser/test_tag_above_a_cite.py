@@ -379,8 +379,9 @@ class TestWhatTheRuleLeaves:
 
 
 class TestTheParserVersion:
-    def test_it_is_the_version_this_task_bumped_to(self) -> None:
-        assert DOCX_PARSER_VERSION == "2026.10.20-docx-6"
+    def test_it_is_the_version_this_task_bumped_to_or_a_later_one(self) -> None:
+        """`2026.10.20-docx-6`, or one a later task bumped to (`v1-e31-t31`: `2026.10.27-docx-7`)."""
+        assert parse_version_directory(DOCX_PARSER_VERSION) >= parse_version_directory("2026.10.20-docx-6")
 
     def test_its_directory_sorts_after_the_store_it_replaces(self) -> None:
         names = sorted([DOCX_PARSER_VERSION, "2026.10.18-docx-5"], key=parse_version_directory)
@@ -388,4 +389,4 @@ class TestTheParserVersion:
 
     def test_every_card_names_it(self, parser: DebateDocxParser) -> None:
         document = card_above_then(SEVENS_LINE, parser=parser)
-        assert {card.provenance.parser_version for card in document.cards} == {"2026.10.20-docx-6"}
+        assert {card.provenance.parser_version for card in document.cards} == {DOCX_PARSER_VERSION}

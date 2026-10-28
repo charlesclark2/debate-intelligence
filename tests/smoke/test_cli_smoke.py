@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import re
 import secrets
+import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -114,10 +115,10 @@ def test_doctor_checks_the_evidence_profiles_only_when_asked_and_fails_on_one_th
     the same reason records, naming the setting and no path. boto3 refuses the session before any
     request, so the network guard, which fails this check on any attempt, stays silent.
 
-    An installed build's bundled `dev` profile also names `debate-dev-bedrock` as
-    `models.aws_profile` (`v1-e05-t08`), which this config does not define either. It is reported,
-    with its own fix, and fails nothing: the failure names the evidence profile alone. The
-    checkout's script, run outside the checkout, reads the built-in profile, which names none."""
+    The `dev` profile also names `debate-dev-bedrock` as `models.aws_profile` (`v1-e05-t08`),
+    which this config does not define either. It is reported, with its own fix, and fails nothing:
+    the failure names the evidence profile alone. An installed build reads that profile from its
+    wheel and the checkout's script from the committed file (`v1-e01-t41`), so both report it."""
     plain = data_of(installed_cli.run("--json", "doctor"))
     assert "evidence_profiles" not in plain
 
@@ -158,9 +159,7 @@ def test_doctor_checks_the_evidence_profiles_only_when_asked_and_fails_on_one_th
             ),
         }
     ]
-    assert error["details"]["evidence_profiles"] == everyday + (
-        model if installed_cli.build.installed else []
-    )
+    assert error["details"]["evidence_profiles"] == everyday + model
     about_the_profile = f"{error['message']} {error['hint']}"
     assert str(installed_cli.home) not in about_the_profile and "/.aws" not in asked.stdout
 
@@ -176,8 +175,7 @@ def test_doctor_checks_the_search_index_stores_only_when_asked_and_fails_on_one_
 
     The caselists are read from the build under test, not written here (PM fix 2026-10-25): an
     installed pre-release carries `config/profiles/dev.toml`, which names the weekly run's caselists
-    since `v1-e40-t06`, while this checkout's console script, run from the scratch directory, falls
-    back to the built-in profile, which names none. Both must pass."""
+    since `v1-e40-t06`, and this checkout's console script reads the same file (`v1-e01-t41`)."""
     plain = data_of(installed_cli.run("--json", "doctor"))
     assert "search_index" not in plain
     shown = data_of(installed_cli.run("--json", "config", "show"))
@@ -243,6 +241,24 @@ def test_config_show_uses_the_scratch_data_directory_it_was_given(installed_cli:
     assert report["sources"]["storage.data_dir"] == "env:DEBATE_STORAGE__DATA_DIR"
 
 
+def test_config_show_reads_the_api_gate_from_the_dev_profile_not_the_built_in_values(
+    installed_cli: InstalledCli,
+) -> None:
+    """`v1-e01-t41`. An installed build reads the dev profile its wheel carries, and so must the
+    checkout's script, run from a scratch directory, or a check can pass in `ci` on a premise the
+    installed build breaks: validate-dev failed three runs on the gate the dev profile turns on. The
+    value is the committed file's, which the wheel's copy is made from."""
+    report = data_of(installed_cli.run("--json", "config", "show"))
+
+    committed = tomllib.loads((REPO_ROOT / "config" / "profiles" / "dev.toml").read_text(encoding="utf-8"))
+    source = report["sources"]["caselist.api_enabled"]
+    assert report["settings"]["caselist.api_enabled"] is committed["caselist"]["api_enabled"]
+    if installed_cli.build.installed:
+        assert source.startswith("profile:") and "_bundled_config" in source, source
+    else:
+        assert source == f"profile:{REPO_ROOT / 'config' / 'profiles' / 'dev.toml'}"
+
+
 def test_an_unset_debate_env_runs_the_build_as_dev(installed_cli: InstalledCli) -> None:
     report = data_of(installed_cli.run("--json", "config", "show", env={"DEBATE_ENV": None}))
 
@@ -272,16 +288,17 @@ def test_dev_and_prod_get_their_own_data_directory_routing_file_and_budget(
     # thirty days; both hold the month to that $50 (v1-e05-t15). Bundled and built in alike.
     assert (dev["models.budget_usd_daily"], prod["models.budget_usd_daily"]) == (2.0, 1.5)
     assert (dev["models.budget_usd_monthly"], prod["models.budget_usd_monthly"]) == (50.0, 50.0)
-    if installed_cli.build.installed:
-        # The bundled profiles name each environment's Bedrock profile (v1-e05-t08); the built-in
-        # ones, which the checkout's script reads out here, name none.
-        assert (dev["models.aws_profile"], prod["models.aws_profile"]) == (
-            "debate-dev-bedrock",
-            "debate-prod-bedrock",
-        )
-        for routing in (dev["models.routing_file"], prod["models.routing_file"]):
+    # The profiles name each environment's Bedrock profile (v1-e05-t08), and both builds read them.
+    assert (dev["models.aws_profile"], prod["models.aws_profile"]) == (
+        "debate-dev-bedrock",
+        "debate-prod-bedrock",
+    )
+    for routing in (dev["models.routing_file"], prod["models.routing_file"]):
+        if installed_cli.build.installed:
             assert "_bundled_config" in routing, f"{routing} is not the configuration the build ships"
             assert not Path(routing).resolve().is_relative_to(REPO_ROOT)
+        else:
+            assert Path(routing).parent == REPO_ROOT / "config", f"{routing} is not this checkout's"
 
 
 # ------------------------------------------------------------------------------------------------

@@ -70,6 +70,16 @@ variable, takes the checkout's `.venv` off `PATH`, and sets `DEBATE_ENV=dev` and
 for one run (`None` removes it), or call `installed_cli.configure(...)` in a fixture to override it
 for every run in a check.
 
+**Both builds read the committed profiles** (`v1-e01-t41`). An installed build reads the copies of
+`config/profiles` that `scripts/stamp_build.py` put in its wheel, from any working directory. The
+checkout's script has none, and from the scratch working directory finds no checkout, so the
+harness names this checkout's `config/profiles` to it with `DEBATE_PROFILE_DIR`; without that it
+would run on the built-in values, and a check could pass in `ci` on a premise the installed build
+breaks. An installed build is given no such variable. A check that needs a profile of its own sets
+`DEBATE_PROFILE_DIR` itself, which wins for either build. `test_cli_smoke.py`'s
+`test_config_show_reads_the_api_gate_from_the_dev_profile_not_the_built_in_values` fails if the
+checkout's build falls back to the built-in values.
+
 **Offline means offline (ac4 of v1-e01-t10).** Unless a check is marked `live`:
 
 * pytest's own process has sockets blocked by the conftest itself, whatever the command line says;

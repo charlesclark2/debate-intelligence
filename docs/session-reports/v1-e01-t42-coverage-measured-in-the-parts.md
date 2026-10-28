@@ -289,9 +289,38 @@ spends pull-request runner time to buy push-run time that is not short.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-28
 
 **Notes:**
+
+Coverage moves into the parts, and the push run waits only for them.
+1. **ac1 passes.** --cov costs ×1.52 per part, from interleaved medians (matching t27's ×1.48), so a
+   push part comes to about 4.5 to 6.5 minutes against its 10-minute limit.
+2. **ac2's workflow half passes.**
+   * Red: 15 failed; green: 30.
+   * The combining step refuses any set of files that isn't exactly parts 1 to N, with a test case
+     only each check refuses.
+   * The combined table equals the unsplit term-missing table on the same tests.
+   * 13 mutants, the PM's three each two ways. The two KeyError catches were turned into assertions.
+3. **The ninth part: (A), keep 8.** The 2-minute figure is for pull-request parts, which don't
+   change. The PM revisits it with operator block 2's real push times: a push part over 8 minutes
+   means one more part. That push-run drift rule, and the working agreements' coverage sentences,
+   go into the PM's next batch.
+4. **Decisions accepted:**
+   * two steps by event;
+   * missing parts detected from the file names;
+   * data kept in runner.temp;
+   * `uv sync` in the combining job;
+   * one-day retention.
+5. **The action pins are confirmed.** Operator block 1 (2026-10-28) shows both tags,
+   `upload-artifact@v6` and `download-artifact@v7`, so the pins stand.
+6. **Merge order:** after Thursday 2026-10-29's tag has a green validate-dev run, never before. This
+   PR changes what decides a push run's result, and the tag must not wait on it.
+7. **The affected set** is the whole selection (`ci.yml`), so it is left to the PR's `ci`. The workflow
+   tests and the always-run list passed (481), and ShellCheck is clean over the changed run blocks.
+
+No re-review is needed. The PR merges `--partial`, with the Goal `InProgress`, until operator block 2
+records the first push run.

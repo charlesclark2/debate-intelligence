@@ -28,8 +28,9 @@ The PM's three mutants and ten more were all caught.
 read from the first push run after this merges, as the PM's brief says. The operator block for it
 is under Operator follow-ups.
 
-Look first at the combining step in `.github/workflows/ci.yml` (its every-part check), and at the
-two action pins, which I chose without network access (see Decisions).
+Look first at the combining step in `.github/workflows/ci.yml` (its every-part check). I chose the
+two action pins without network access; the operator has since confirmed that both tags exist
+(operator follow-up 1, 2026-10-28).
 
 ## Plan nodes
 
@@ -188,7 +189,8 @@ deselected, and every job runs on `ubuntu-24.04`.
   as every action here is pinned. I chose them from what I know (both moved to Node 24 at those
   majors) because I could not check releases without the network. The pull request's `test` job
   only uses `upload-artifact` on a push, and nothing runs `download-artifact` before the merge, so
-  operator block 1 checks both tags before the pull request.
+  operator block 1 checks both tags before the pull request. The operator ran it on 2026-10-28, at
+  the PM's request, and both tags exist (result under Operator follow-ups).
 * **`--show-missing` on `coverage report`** is redundant with `show_missing = true` in
   `pyproject.toml`, just as `term-missing` was for the unsplit job. I kept it so the step says which
   report it prints. No mutant targets it, since removing it changes nothing.
@@ -205,6 +207,17 @@ git ls-remote --tags https://github.com/actions/download-artifact refs/tags/v7
 
 Success looks like: each prints one line ending in `refs/tags/v6` or `refs/tags/v7`. If either
 prints nothing, paste that back into the session, which changes the pin to the tag that exists.
+
+**Result (2026-10-28, run by the operator at the PM's request): DONE, both tags exist.** The output
+was one line for each tag:
+
+```text
+b7c566a772e6b6bfb58ed0dc250532a479d7789f        refs/tags/v6
+37930b1c2abaa49bbe596cd826c3c89aef350131        refs/tags/v7
+```
+
+The first line is `actions/upload-artifact`, the second `actions/download-artifact`. The pins in
+`ci.yml` stay as they are.
 
 **2. After the merge into dev: read the first push run's job times and coverage total, and compare
 the total with the last unsplit run's** (about 1 minute, read-only). This is the evidence for ac2's

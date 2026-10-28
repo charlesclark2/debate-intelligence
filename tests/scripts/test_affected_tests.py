@@ -916,6 +916,8 @@ RUNS = {
     "help and verify": f"{CLI_TESTS}/test_help_and_verify.py",
     "files build help": f"{CLI_TESTS}/test_files_build_help.py",
     "verify, and remove through a fixture": f"{CLI_TESTS}/world/test_world_verify.py",
+    "tub index build": f"{CLI_TESTS}/test_tub_index_build.py",
+    "verify, and index build without tub": f"{CLI_TESTS}/test_index_build_without_tub.py",
     "unreadable": f"{CLI_TESTS}/test_runs_what_it_reads.py",
     "remove, by a helper": f"{CLI_TESTS}/test_caselist_by_a_helper.py",
     "verify, beside prose": f"{CLI_TESTS}/test_prose_names_nothing.py",
@@ -977,9 +979,22 @@ CLI_WORLD = {
         "def build(cli: CliContext):\n    return parse_with(cli.services)\n\n\n"
         "def parse_with(services):\n    return services.parser()\n"
     ),
+    # A group inside a group: `tub index build`.
+    f"{CLI}/commands/tub_index.py": (
+        "from debate_cli.context import CliContext\n\n\n"
+        "def build(cli: CliContext):\n    return cli.services.parser()\n"
+    ),
+    RUNS[
+        "tub index build"
+    ]: 'from debate_cli.app import main\n\n\ndef test_build():\n    main("tub", "index", "build")\n',
+    # `index build` is not `tub index build`; the file names `verify`, so it can be told apart.
+    RUNS["verify, and index build without tub"]: (
+        "from debate_cli.app import main\n\n\n"
+        'def test_build():\n    main("index", "build")\n\n\ndef test_verify():\n    main("verify")\n'
+    ),
     f"{CLI}/command_registry.py": (
         "import typer\n\n"
-        "from debate_cli.commands import caselist_remove, files, verify\n\n\n"
+        "from debate_cli.commands import caselist_remove, files, tub_index, verify\n\n\n"
         "def register_commands(app: typer.Typer) -> None:\n"
         '    app.command("verify")(verify.verify)\n\n'
         '    disclosed_evidence = command_group("caselist", "Caselist evidence.")\n'
@@ -988,7 +1003,12 @@ CLI_WORLD = {
         "    app.add_typer(disclosed_evidence)\n\n"
         '    evidence_files = command_group("files", "Evidence files.")\n'
         '    evidence_files.command("build")(files.build)\n'
-        "    app.add_typer(evidence_files)\n\n\n"
+        "    app.add_typer(evidence_files)\n\n"
+        '    search_pilot = command_group("tub", "The search pilot.")\n'
+        '    search_index = command_group("index", "Its index.")\n'
+        '    search_index.command("build")(tub_index.build)\n'
+        "    search_pilot.add_typer(search_index)\n"
+        "    app.add_typer(search_pilot)\n\n\n"
         "def command_group(name: str, help_text: str) -> typer.Typer:\n"
         "    return typer.Typer(name=name, help=help_text)\n"
     ),
@@ -1119,8 +1139,8 @@ def changed_in_the_world(path: str) -> dict[str, str]:
         # Imported inside `parser`, which `files build` asks for through a helper it hands the container.
         pytest.param(
             "parser_adapter",
-            {RUNS["files"], RUNS["files build help"], BUILDS_THE_PARSER, WALKS_THE_CONTAINER}
-            | {READS_THE_WIRING, READS_THE_INDEX}
+            {RUNS["files"], RUNS["files build help"], RUNS["tub index build"], BUILDS_THE_PARSER}
+            | {WALKS_THE_CONTAINER, READS_THE_WIRING, READS_THE_INDEX}
             | CANNOT_TELL,
             id="an import inside a factory a helper asks for",
         ),
@@ -1130,6 +1150,7 @@ def changed_in_the_world(path: str) -> dict[str, str]:
             {RUNS["verify"], RUNS["verify, installed"], RUNS["verify, beside prose"], RUNS["caselist help"]}
             | {
                 RUNS["verify, and remove through a fixture"],
+                RUNS["verify, and index build without tub"],
                 WALKS_THE_CONTAINER,
                 READS_THE_WIRING,
                 READS_THE_INDEX,

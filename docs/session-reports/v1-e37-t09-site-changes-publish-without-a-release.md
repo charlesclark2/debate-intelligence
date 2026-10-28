@@ -526,9 +526,58 @@ pull request numbers.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-28
 
 **Notes:**
+
+The site lane is built as ruled, and it closes a gap nobody had named: a site change reached `main`
+having been built only for dev.
+1. **ac1 passes.** The counts were committed before any code (`b45e950`), and they found three facts
+   the spec lacked: the guard must already be on `main`, the `site` job builds for dev, and the
+   ruleset export's real path.
+2. **ac2 passes, locally.**
+   * The refusal rule was red first (37 failed with a refuse-nothing skeleton). The three named
+     branches (touching `scripts/`, touching `site/package.json`, an empty diff) are refused by the
+     script and by the workflow's own step run against real branches.
+   * 10 of 10 mutants are caught, two-dot for three-dot and the slashless `site` prefix among them.
+   * The planted `[[TBD]]` passes the dev build CI runs today and fails the lane's prod build: the
+     gap, shown closed.
+   * `site-resolve` posts nothing on a refusal, so a mistyped SHA can't turn another commit red.
+   * The guide carries every command, and all 22 blocks parse under zsh and bash.
+3. **Deviation 1, five files in the install hotfix: accepted.** The lane dispatches validate-dev from
+   `dev` (`--ref dev`), so `main` never runs its own copy for a site head. A cherry-pick of
+   `validate-dev.yml` would carry other tasks' changes to `main`. The first block refuses if the five
+   files stop being byte-identical. No hand port.
+4. **Deviation 2, the phase stays InProgress: accepted,** and my ruling's "Succeeded" is withdrawn.
+   ac3 is the operator's after the merge, so this merges `--partial`, like the other operator-run
+   criteria.
+5. **Deviation 3 (scope) and 4 (red first): accepted.** The package amendments go into the PM's next
+   batch. `test_promotion_guard_workflow.py` was not seen red, but the rule it exercises was, through
+   the script's own tests, and the workflow test runs that rule against real branches.
+6. **Decisions accepted:**
+   * dependency files matched by name anywhere under `site/`, the Node version pins included;
+   * the lane works in `dev-preview` and puts it back on `origin/dev`;
+   * the install blocks find the task's commit by its subject;
+   * Wednesday is `date +%u` = 3.
+
+   The lane's ordinary steps rightly don't refuse Wednesdays: a site deploy doesn't touch the cloud
+   run.
+7. **One cost to know about:** a `site/**/*.md` change trips `ci`'s python filter, so a pull request
+   into `main` that edits a page runs the whole test selection. A `results.yaml` or
+   `tournaments.yaml` edit does not. The PM's next batch files a task joining your follow-up 1: run the
+   site job's prod build for any pull request into `main` touching `site/` (the hotfix path's gap),
+   and keep `site/` out of the python filter.
+8. **One risk for the install hotfix:** it is validated by `main`'s own slow tier, like the
+   2026-10-22 hotfix, which passed. If `main`'s slow tier fails on something this change didn't
+   touch, stop and bring the run to the PM. Don't retry it blindly.
+9. **Follow-up 2 (`site_smoke.py` outside `site/`):** noted on `v1-e37-t08`. No task.
+10. **The affected set** (80 files) ran past two minutes with no failure in its first 60%. The rest is
+    the PR's `ci`. The changed test directories, the always-run list, actionlint, ruff, lint-imports,
+    the specs and the docs checks pass.
+11. **Merge timing and order:** after Thursday 2026-10-29's tag has a green validate-dev run, and
+    second in the held order, straight after e31-t31. It changes `validate-dev.yml`, so it must not
+    ride the tag, but the coach travels from 2026-11-01, and the install hotfix (operator follow-up
+    1) should be on `main` before then. The first use (follow-up 2) waits for the coach's word.

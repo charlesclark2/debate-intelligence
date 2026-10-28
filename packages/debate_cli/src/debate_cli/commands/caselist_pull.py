@@ -53,15 +53,16 @@ the aggregates of the caselists they belong to, and publishes the parsed store w
 at all (`v1-e34-t17`). The summary's `parse` holds the stage's counts and nothing else, and the
 stage's row says the same in a sentence. A failed parse stage records the code of each failure
 (`PARSE_FAILURE_RATE_EXCEEDED`, `STORE_UNAVAILABLE`, …) and, by the rule above, leaves the exit code
-alone; `caselist parse --caselist <slug> --publish` is what finishes it.
+alone.
 
-When what failed is only the publish, the rebuild is done: the stage's reason says the parsed store
-had objects the bucket did not confirm, and the summary has no `suppression_list_local_copy_only`,
-so the aggregates were rebuilt from every copy of the list. Then
-`caselist parse --caselist <slug> --publish-only` finishes it without rebuilding (`v1-e31-t30`). A
-stage left `pending` for want of a login may have rebuilt from this machine's copy of the list
-alone, which is never published, so it takes `--publish`. `--publish-pending` is neither: it
-completes the snapshot publishes an earlier run deferred, never a parsed store's.
+The stage names what finishes each caselist it did not publish, in its hint (or, when pending, its
+reason), in the notification and in the summary's `parsed_stores_owed` (`v1-e34-t31`):
+`caselist parse --caselist <slug> --publish-only` (`v1-e31-t30`) where the rebuild is done from
+every copy of the suppression list and only the publish is owed, and `--publish`, which rebuilds
+first, where the aggregates may come from the run's own copy of the list alone, which is never
+published, or the rebuild did not finish. A bucket-mode run names `--publish` for every caselist:
+its working copy goes with it. `--publish-pending` is neither: it completes the snapshot publishes
+an earlier run deferred, never a parsed store's.
 
 When a download, an import or a publish failed, the exit code comes from **what they failed on**
 (`v1-e34-t13`). Each failed stage records the error code of every failure behind it, and

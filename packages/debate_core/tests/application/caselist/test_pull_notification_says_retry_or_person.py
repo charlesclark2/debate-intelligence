@@ -608,3 +608,6 @@ def test_the_runbook_shows_both_wordings_and_they_are_the_ones_the_notification_
         THIS_MACHINE_REFUSED_THE_MANIFESTS.replace("the manifest directory", "the blob directory") in section
     )
     assert "debate-research caselist parse --caselist <slug> --publish" in section
+    # Each caselist by its own command, and the earlier builds' word for every one (`v1-e34-t31`).
+    assert "debate-research caselist parse --caselist <slug> --publish-only" in section
+    assert "--publish` for every caselist" in section

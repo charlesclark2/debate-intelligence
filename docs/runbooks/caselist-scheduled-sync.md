@@ -904,10 +904,22 @@ this Mac refused, a grant the profile lacks, and the pending-work file when it c
 None of them names a path: a folder is named by what it is for.
 
 **A failed parse stage** gets neither wording, because the run exits `0` and the next scheduled run
-does not retry a parse. Its banner carries the stage's own hint, which names the command:
-`debate-research caselist parse --caselist <slug> --publish` for a parsed store the bucket did not
-take, and `debate-research caselist parse --caselist <slug> --failures` for a failure rate over the
-threshold. See [The parse stage](#the-parse-stage).
+does not retry a parse. Its command names each caselist whose parsed store the bucket did not take,
+each with its own (`v1-e34-t31`):
+
+* `debate-research caselist parse --caselist <slug> --publish-only` when the stage rebuilt that
+  caselist from every copy of the suppression list and only the publish is owed. It rebuilds
+  nothing.
+* `debate-research caselist parse --caselist <slug> --publish`, which rebuilds first, for every
+  other caselist: its aggregates may come from the run's own copy of the list alone, which is never
+  published, or its rebuild did not finish. A bucket-mode run, the cloud run's, names this one for
+  every caselist, because its working copy went with its task.
+
+Two caselists are two commands, separated by `;`. The banner carries the stage's own hint too,
+which says the same, and names `debate-research caselist parse --caselist <slug> --failures` for a
+failure rate over the threshold. A run that a build before `v1-e34-t31` recorded names
+`--caselist <slug> --publish` for every caselist, because its details do not say which rebuild read
+every copy. See [The parse stage](#the-parse-stage).
 
 **A login that will not be enough.** When the session expired after a snapshot had already ended
 incomplete on something no later run cures, the login banner adds a sentence:
@@ -1250,6 +1262,15 @@ DEBATE_ENV=dev debate-research caselist parse --caselist hsld26 --publish
 The last line parses nothing that is parsed, rebuilds the aggregates and uploads what the bucket
 lacks, so it takes about as long as that caselist's rebuild in the table above. In prod it needs
 `--confirm-prod`. However many weeks were missed, one run per caselist catches up.
+
+The stage's reason names the command for each caselist (`v1-e34-t31`). It is `--publish`, the last
+line above, when the stage rebuilt that caselist while the bucket's copy of the suppression list
+needed the login, which is the usual case after an expired session: those aggregates came from this
+Mac's copy of the list alone, and are rebuilt before anything is published. When the session expired
+only during the parsed store's own publish, after a rebuild that read every copy, the reason names
+`--publish-only` for that caselist instead: run it in place of the last line, with the same caselist,
+environment and `--confirm-prod` in prod. It publishes the directory as the run left it and rebuilds
+nothing. Run whichever the reason names; `--publish` is never wrong, only slower.
 
 ## The search index stage
 
@@ -1782,9 +1803,11 @@ parsed store for want of an AWS session. See
   That listing names schools and teams, so it stays in the terminal. What parsed is in the store
   and, where the run publishes, in the bucket.
 * `STORE_UNAVAILABLE`, or `STORE_ACCESS_DENIED` with a `hint`: the bucket did not take the parsed
-  store. After the fix the hint names, if there is one, publish it as above with
-  `caselist parse --caselist <slug> --publish`, or leave it to the next run that imports into that
-  caselist.
+  store. After the fix the hint names, if there is one, run the command the stage names for each
+  caselist (`v1-e34-t31`): `caselist parse --caselist <slug> --publish-only` where the rebuild read
+  every copy of the suppression list and only the publish is owed, and
+  `caselist parse --caselist <slug> --publish` where it names that, which rebuilds first. Or leave it
+  to the next run that imports into that caselist.
 * `CHECKSUM_MISMATCH`: the bucket holds a file of the parsed store with other bytes, which the
   same parser never produces twice at one fingerprint version. A Mac at another fingerprint version
   does: its per-source files carry their own stamp

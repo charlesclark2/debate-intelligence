@@ -322,9 +322,28 @@ pending-work file. Every way it can go wrong is a line in the summary:
 * *Pending*, when the only thing missing is a login for the parsed store's publish. Unlike the
   publish stage's, this is in no file: the pending-work file holds snapshots, a parsed store is a
   version directory, and what is owed is whatever the bucket lacks of the directory on this machine,
-  which the publisher works out again each time. `caselist parse --caselist <slug> --publish`
-  finishes it, as does the next pull that imports into that caselist with a session;
+  which the publisher works out again each time. The command the stage names finishes it (below),
+  as does the next pull that imports into that caselist with a session;
   `caselist pull --publish-pending` does not.
+
+**Which command finishes each caselist** (`v1-e34-t31`). Every caselist whose parsed store the
+stage did not publish complete is a :class:`ParsedStoreOwed` in the summary
+(`parsed_stores_owed`) and in the run's details, and the stage's fix, its reason when pending and
+the banners name each one's own command:
+
+* `caselist parse --caselist <slug> --publish-only` (`v1-e31-t30`) when only the publish is owed:
+  the stage rebuilt the caselist's aggregates, the list did not fall back to the run's own copy
+  while it did, and the run's working copy is still there afterwards
+  (`working_copy_outlives_the_run`, local mode).
+* `caselist parse --caselist <slug> --publish`, which rebuilds first, for every other: aggregates
+  rebuilt from the run's own copy of the list alone, which must never be what is published; a
+  rebuild that raised; and every caselist of a bucket-mode run, whose working copy is on the
+  task's ephemeral storage, so that the directory `--publish-only` would publish, wherever it is
+  run, is not the one the stage rebuilt.
+
+Each caselist is decided by what the stage saw of it, never by the machine or the environment, and
+what cannot be told is named `--publish`: details an earlier build wrote name no caselist, and their
+banner gives :data:`~debate_core.application.sync_runs.PARSE_COMMAND`.
 
 The stage is not in :data:`REQUIRED_STAGES`, so by `v1-e34-t13`'s rule none of this changes the
 command's exit status: the run captured everything.

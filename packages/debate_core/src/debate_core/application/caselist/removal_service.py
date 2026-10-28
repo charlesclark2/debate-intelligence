@@ -141,6 +141,7 @@ from debate_core.domain import SHA256_HEX_PATTERN
 
 __all__ = [
     "PREFLIGHT_PREFIX",
+    "BucketObjectsLeft",
     "BundleSaved",
     "CaselistRemovalService",
     "NotSuppressed",
@@ -637,6 +638,23 @@ class SchoolViewsLeft(DomainError):
         super().__init__(
             f"{versions} version(s) or delete marker(s) of landscape school views this removal reached "
             "are still in the bucket after it deleted them; run the same removal again"
+        )
+
+
+class BucketObjectsLeft(DomainError):
+    """After deleting, the removal credential still lists versions of `raw/` or `parsed/` keys the removal reached.
+
+    The same check as :class:`SchoolViewsLeft`, for the source and parsed files (`v1-e30-t29`): a
+    delete the store answered and did not carry out, or a key written again while the removal ran.
+    The run stops `INCOMPLETE`; running the same removal again takes them. Counts only: no key.
+    """
+
+    def __init__(self, versions: int, files: int) -> None:
+        self.versions = versions
+        self.files = files
+        super().__init__(
+            f"{versions} version(s) or delete marker(s) of {files} source or parsed file(s) this removal "
+            "reached are still in the bucket after it deleted them; run the same removal again"
         )
 
 

@@ -153,9 +153,42 @@ None. No removal was run against a real bucket.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-28
 
 **Notes:**
+
+A removal now confirms its `raw/` and `parsed/` deletes, as t13 confirmed the school views'.
+1. **ac1 passes.** Red against a skeleton that defines the error and raises nothing: 6 failed, each
+   `DID NOT RAISE`. The two that passed are the ones that must (the plan's reach, and the sibling key
+   not stopping the removal). Green: 8 passed, moto only.
+2. **The cases asked for are all there,** with counts worked out by hand from one `raw/` key and a
+   two-version `parsed/` key: a delete that does nothing, each side alone, a delete marker left
+   behind, and a sibling key that is not stopped and not touched. A re-run finishes the job, and the
+   log reads `INCOMPLETE, BUCKET_OBJECTS_LEFT` then `COMPLETED`.
+3. **Counts only, checked where it matters.** No key, digest, caselist, school or team code is in the
+   error, its message, its facts or the log line beyond `removed_sha256`, which the log holds by
+   design.
+4. **Mutants:** the PM's four, the two-sided variants of (2), uncounted delete markers, and a file
+   count taken from the plan rather than the survivors. All caught, none at collection.
+5. **Decisions accepted:**
+   * M counts files with a survivor;
+   * each distinct key is listed again once;
+   * the parsed aggregates are covered;
+   * no CLI or `_what_to_correct` change, since both errors reach the envelope through
+     `RemovalIncomplete`, and a CLI test pins that they end the command alike (exit 1,
+     `REMOVAL_INCOMPLETE`);
+   * `AnswersWithoutDeleting` widened from t13's double, so the preflight's probe delete still works;
+   * `execute()`'s order unchanged.
+6. **Exit 1 stays.** "Run it again" is advice. The run did not finish, and a takedown that did not
+   finish should not exit as if it had.
+7. **The affected set** (235 files) runs past two minutes and is left to the PR's `ci`. Its first 61%
+   showed no failure. The removal node, the always-run list, the CLI's removal tests and bucket-mode
+   removal pass, as do ruff, pyright, lint-imports, the thin-handler check, the specs and the docs
+   index.
+8. **Follow-up work:** the PM's next batch adds the runbook sentence to
+   `docs/runbooks/caselist-removal.md`, naming both `BUCKET_OBJECTS_LEFT` and `SCHOOL_VIEWS_LEFT`.
+9. **Merge timing:** after Thursday 2026-10-29's tag has a green validate-dev run, with the PRs
+   already held, last in their order. Nothing here waits on an operator.

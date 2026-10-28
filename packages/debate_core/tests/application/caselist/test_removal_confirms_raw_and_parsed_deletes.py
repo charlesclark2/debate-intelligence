@@ -1,4 +1,4 @@
-"""After deleting `raw/` and `parsed/`, a removal lists them again, and stops if a version survived (`v1-e30-t29`).
+"""After deleting `raw/` and `parsed/`, a removal lists them again and stops if one survived (`v1-e30-t29`).
 
 `v1-e32-t13` gave the landscape school views a listing after the delete; this gives the same to every
 `raw/` and `parsed/` key the plan reaches. A version or delete marker of one of those keys that the
@@ -50,7 +50,7 @@ for the rest."""
 
 
 class AnswersWithoutDeleting:
-    """The removal credential's versions, except that a delete of what `keeps` picks is answered and not done."""
+    """The removal credential's versions, except that deleting what `keeps` picks is answered and not done."""
 
     def __init__(self, access: TakedownAccess, keeps: Callable[[ObjectVersion], bool]) -> None:
         self._inner = access.versions
@@ -211,7 +211,9 @@ class TestEachSideAlone:
 
 
 class TestWhatTheCheckLeavesAlone:
-    async def test_a_sibling_key_the_raw_key_is_a_prefix_of_does_not_stop_it(self, world: RemovalWorld) -> None:
+    async def test_a_sibling_key_the_raw_key_is_a_prefix_of_does_not_stop_it(
+        self, world: RemovalWorld
+    ) -> None:
         world.client.put_object(Bucket=world.bucket_name, Key=SIBLING_KEY, Body=b"synthetic sibling\n")
         plan = await plan_of(world)
         assert SIBLING_KEY not in {planned.key for planned in plan.objects_on(Side.BUCKET)}

@@ -60,7 +60,7 @@ spec:
         The first use: dev's site/ reaches main and prod through the lane, after Charlie's
         word, with the results page live (operator).
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

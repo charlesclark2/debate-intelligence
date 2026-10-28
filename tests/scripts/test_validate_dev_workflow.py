@@ -422,3 +422,95 @@ def test_conclude_waits_for_the_image_job_and_reports_its_result() -> None:
     assert conclude["needs"] == ["resolve", "smoke", "slow", "image"]
     assert post["env"]["IMAGE_RESULT"] == "${{ needs.image.result }}"
     assert 'set -- "$@" --job "image=$IMAGE_RESULT"' in post["run"]
+
+
+# --------------------------------------------------------------------------------------------
+# the site lane (v1-e37-t09): with site_only, three jobs of their own; without it, nothing changes
+# --------------------------------------------------------------------------------------------
+
+SITE_JOBS = ("site-resolve", "site", "site-conclude")
+PRERELEASE_JOBS = ("resolve", "smoke", "slow", "image", "conclude")
+
+
+def test_site_only_is_a_dispatch_input_that_defaults_to_off() -> None:
+    flow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    triggers = flow.get("on", flow.get(True))
+
+    assert triggers["workflow_dispatch"]["inputs"]["site_only"] == {
+        "description": "Validate a site/<slug> commit by the site's prod build instead of a pre-release",
+        "required": False,
+        "type": "boolean",
+        "default": False,
+    }
+    assert "site_only" not in triggers["workflow_call"]["inputs"]
+
+
+def test_the_pre_release_path_runs_only_without_site_only_and_the_site_path_only_with_it() -> None:
+    every = jobs()
+
+    assert set(every) == {*PRERELEASE_JOBS, *SITE_JOBS}
+    assert every["resolve"]["if"] == "inputs.site_only != true"
+    for job in ("smoke", "slow", "image"):
+        assert every[job]["needs"] == "resolve", job  # skipped with it
+    assert every["conclude"]["if"] == "always() && inputs.site_only != true"
+    assert every["site-resolve"]["if"] == "inputs.site_only == true"
+    assert every["site"]["needs"] == "site-resolve"
+    assert every["site-conclude"]["needs"] == ["site-resolve", "site"]
+    assert every["site-conclude"]["if"] == (
+        "always() && inputs.site_only == true && needs.site-resolve.result == 'success'"
+    )
+
+
+def test_only_the_site_jobs_running_this_workflows_own_driver_may_post_a_status() -> None:
+    every = jobs()
+
+    assert every["site-resolve"]["permissions"] == {"contents": "read", "statuses": "write"}
+    assert every["site"]["permissions"] == {"contents": "read"}
+    assert every["site-conclude"]["permissions"] == {"contents": "read", "statuses": "write"}
+    for job in ("site-resolve", "site-conclude"):
+        [checkout] = [s for s in every[job]["steps"] if s.get("uses", "").startswith("actions/checkout@")]
+        assert "ref" not in checkout["with"], job  # this workflow's own commit, never the one validated
+
+
+def test_site_resolve_checks_the_diff_against_main_before_it_posts() -> None:
+    steps = jobs()["site-resolve"]["steps"]
+    _, fetch = step_named(jobs()["site-resolve"], "Fetch main and the requested commit")
+    _, refuse = step_named(jobs()["site-resolve"], "Refuse a commit that is not a site-only change")
+
+    assert steps[0]["with"]["fetch-depth"] == 0
+    assert (
+        fetch["run"]
+        == 'git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main "$REQUESTED_SHA"'
+    )
+    assert "python3 scripts/validate_dev.py site-resolve" in refuse["run"]
+    assert "--main-ref refs/remotes/origin/main" in refuse["run"]
+
+
+def test_the_site_job_runs_the_commits_checks_and_its_prod_build_with_no_token() -> None:
+    site = jobs()["site"]
+    [checkout] = [s for s in site["steps"] if s.get("uses", "").startswith("actions/checkout@")]
+    _, install = step_named(site, "pnpm install")
+    _, source = step_named(site, "Lint, type-check and the source tests")
+    _, prod = step_named(site, "The prod build")
+
+    assert checkout["with"]["ref"] == "${{ env.REQUESTED_SHA }}"
+    assert install["run"] == "pnpm --dir site install --frozen-lockfile"
+    assert source["run"].split("\n")[:3] == [
+        "pnpm --dir site lint",
+        "pnpm --dir site typecheck",
+        "pnpm --dir site test",
+    ]
+    assert prod["env"] == {"SITE_ENV": "prod", "SITE_URL": "https://wfbdebate.com"}
+    assert prod["run"] == "site/scripts/export-checks.sh"
+    assert "GH_TOKEN" not in yaml.safe_dump(site)
+    assert site["outputs"]["tests_commit"] == "${{ steps.commit.outputs.tests_commit }}"
+
+
+def test_site_conclude_posts_from_what_the_site_job_reported_and_opens_no_issue() -> None:
+    conclude = jobs()["site-conclude"]
+    _, post = step_named(conclude, "Post success on the site-only commit")
+
+    assert post["env"]["SITE_RESULT"] == "${{ needs.site.result }}"
+    assert post["env"]["SITE_COMMIT"] == "${{ needs.site.outputs.tests_commit }}"
+    assert "python3 scripts/validate_dev.py site-conclude" in post["run"]
+    assert not any("validate_dev.py issue" in step.get("run", "") for step in conclude["steps"])

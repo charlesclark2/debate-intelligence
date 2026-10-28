@@ -16,6 +16,7 @@ import os
 import stat
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
@@ -23,6 +24,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
+import check_promotion_source as guard  # noqa: E402
 import validate_dev as driver  # noqa: E402
 
 SHA = "1111111111111111111111111111111111111111"
@@ -1019,3 +1021,137 @@ def test_a_failing_issue_call_is_a_problem_not_a_silent_pass() -> None:
 
     with pytest.raises(driver.ValidationProblem, match="HTTP 403"):
         driver.GhCli(REPO, runner).create_issue("t", "b", "validate-dev")
+
+
+# --------------------------------------------------------------------------------------------
+# the site lane (v1-e37-t09): a site/<slug> commit is validated by the site's prod build, and
+# only a commit whose own changes since main are site content, pages or assets can be
+# --------------------------------------------------------------------------------------------
+
+
+class FakeDiff:
+    """The git calls check_promotion_source.site_changes makes, answered with one diff."""
+
+    def __init__(self, diff: str) -> None:
+        self.diff = diff
+
+    def __call__(self, args: Sequence[str]) -> str:
+        if args[:2] == ["rev-parse", "--is-shallow-repository"]:
+            return "false\n"
+        if args[:2] == ["rev-parse", "--verify"]:
+            return SHA + "\n"
+        if args[0] == "diff":
+            assert args[-1] == f"origin/main...{SHA}"
+            return self.diff
+        raise AssertionError(f"unexpected git call: {args}")
+
+
+def test_site_resolve_posts_pending_only_after_the_change_is_found_to_be_site_only() -> None:
+    github = FakeGitHub()
+
+    driver.site_resolve(
+        github, SHA, "origin/main", RUN_URL, post_status=True, git=FakeDiff("site/content/results.yaml\0")
+    )
+
+    assert github.posted == [
+        (SHA, "pending", RUN_URL, "site only: building this commit's site for prod and checking it")
+    ]
+
+
+@pytest.mark.parametrize(
+    "diff",
+    [
+        "",
+        "site/content/results.yaml\0scripts/site_deploy.sh\0",
+        "site/package.json\0",
+        "site/pnpm-lock.yaml\0",
+    ],
+    ids=["empty", "outside-site", "package-json", "lockfile"],
+)
+def test_site_resolve_refuses_anything_else_and_posts_nothing(diff: str) -> None:
+    """A mistyped SHA, dev's head say, must not turn that commit's validate-dev red: the site path
+    posts nothing at all on a commit it may not validate."""
+    github = FakeGitHub()
+
+    with pytest.raises(driver.ValidationProblem, match="not a site-only change; no status was posted"):
+        driver.site_resolve(github, SHA, "origin/main", RUN_URL, post_status=True, git=FakeDiff(diff))
+
+    assert github.posted == []
+
+
+def test_conclude_site_posts_success_on_the_commit_whose_site_was_checked() -> None:
+    conclusion = driver.conclude_site(SHA, site_commit=SHA, jobs={"site": "success"})
+
+    assert conclusion == driver.Conclusion(
+        SHA,
+        "success",
+        "site only: nothing outside site/ changed since main; prod build, policy and consent guards "
+        "and export checks green",
+    )
+    assert len(conclusion.description) <= driver.DESCRIPTION_LIMIT
+
+
+@pytest.mark.parametrize(
+    ("site_result", "site_commit", "state", "description"),
+    [
+        ("failure", SHA, "failure", "site-only validation failed: site failure"),
+        ("skipped", None, "failure", "site-only validation failed: site skipped"),
+        ("", None, "failure", "site-only validation failed: site did not run"),
+        ("cancelled", None, "error", "validation was cancelled before it finished"),
+        ("success", OTHER_SHA, "failure", f"the site checks ran on {OTHER_SHA}, not this commit"),
+        ("success", None, "failure", "the site checks ran on nothing, not this commit"),
+    ],
+)
+def test_conclude_site_posts_failure_on_the_requested_commit_for_anything_less(
+    site_result: str, site_commit: str | None, state: str, description: str
+) -> None:
+    conclusion = driver.conclude_site(SHA, site_commit=site_commit, jobs={"site": site_result})
+
+    assert conclusion == driver.Conclusion(SHA, state, description)
+
+
+def test_cli_site_conclude_posts_and_writes_the_state(tmp_path: Path) -> None:
+    github = FakeGitHub()
+    outputs = tmp_path / "outputs"
+
+    code = driver.main(
+        [
+            "site-conclude",
+            "--sha",
+            SHA,
+            "--site-commit",
+            SHA,
+            "--job",
+            "site=success",
+            "--post-status",
+            "--target-url",
+            RUN_URL,
+            "--github-output",
+            str(outputs),
+        ],
+        github=github,
+    )
+
+    assert code == 0
+    assert [(sha, state) for sha, state, _, _ in github.posted] == [(SHA, "success")]
+    assert "state=success\n" in outputs.read_text(encoding="utf-8")
+    assert driver.main(["site-conclude", "--sha", SHA, "--job", "site=failure"], github=github) == 1
+
+
+def test_cli_site_resolve_exit_codes(monkeypatch: pytest.MonkeyPatch) -> None:
+    github = FakeGitHub()
+    monkeypatch.setattr(guard, "run_git", FakeDiff("site/content/results.yaml\0"))
+    args = [
+        "site-resolve",
+        "--sha",
+        SHA,
+        "--main-ref",
+        "origin/main",
+        "--post-status",
+        "--target-url",
+        RUN_URL,
+    ]
+    assert driver.main(args, github=github) == 0
+    monkeypatch.setattr(guard, "run_git", FakeDiff("scripts/site_deploy.sh\0"))
+    assert driver.main(args, github=github) == 1
+    assert [state for _, state, _, _ in github.posted] == ["pending"]

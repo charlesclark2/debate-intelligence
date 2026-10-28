@@ -43,6 +43,21 @@ Subcommands, in the order .github/workflows/validate-dev.yml runs them:
     All of the above but ``issue`` in one process, for an operator's rehearsal or a caller with one
     job.
 
+**The site lane** (v1-e37-t09). A ``site/<slug>`` commit has no pre-release and needs none: the
+workflow's ``site_only`` input replaces the jobs above with these two around a ``site`` job, which
+runs the site's checks and its prod build from the commit.
+
+``site-resolve``
+    Refuse, posting nothing, unless the commit's own changes since it left ``main`` are site content,
+    pages or assets (``check_promotion_source.py``'s site-only rule: something, all under ``site/``,
+    no dependency manifest or lockfile). Then post ``pending`` (with ``--post-status``). Posting
+    nothing on a refusal is deliberate: a mistyped SHA, dev's head say, must not turn that commit
+    red. Every byte the CLI is built from is then ``main``'s, which was itself validated, so the
+    pre-release tiers have nothing to add.
+``site-conclude``
+    ``success`` only when the ``site`` job succeeded on exactly the requested commit; ``failure``
+    (``error`` if cancelled) otherwise. It opens no issue: a site branch is not dev's verdict.
+
 **A skipped test fails its tier.** A tier passes only when pytest exits 0, wrote its JUnit report,
 ran at least one test, and that report shows no failure, no error and no skip (an expected failure
 counts as a skip). A check skipped for a missing fixture is a check that did not run, and the task
@@ -667,6 +682,58 @@ def conclude(
     )
 
 
+SITE_PENDING = "site only: building this commit's site for prod and checking it"
+SITE_SUCCESS = (
+    "site only: nothing outside site/ changed since main; prod build, policy and consent guards "
+    "and export checks green"
+)
+
+
+def site_resolve(
+    github: GitHub,
+    sha: str,
+    main_ref: str,
+    target_url: str,
+    *,
+    post_status: bool,
+    git: Callable[[Sequence[str]], str] | None = None,
+) -> None:
+    """Refuse, posting nothing, a commit that is not a site-only change; then post pending."""
+    # Imported here, not at the top: the issue step runs this file with nothing beside it.
+    import check_promotion_source as guard  # noqa: PLC0415
+
+    require_sha(sha)
+    try:
+        changed = guard.site_changes(main_ref, sha, git)
+    except guard.GitError as problem:
+        raise ValidationProblem(
+            f"could not list what {sha} changes; no status was posted: {problem}"
+        ) from problem
+    verdict = guard.check_site_only(changed)
+    if not verdict.passed:
+        raise ValidationProblem(f"{sha} is not a site-only change; no status was posted.\n{verdict.message}")
+    print(f"validate-dev site: {verdict.message}", flush=True)
+    if post_status:
+        post(github, Conclusion(sha, "pending", SITE_PENDING), target_url)
+
+
+def conclude_site(requested_sha: str, *, site_commit: str | None, jobs: Mapping[str, str]) -> Conclusion:
+    """The final status for a site-only commit, from what the `site` job reported."""
+    require_sha(requested_sha)
+    result = jobs.get("site") or ""
+    if result == "cancelled":
+        return Conclusion(requested_sha, "error", "validation was cancelled before it finished")
+    if result != "success":
+        return Conclusion(
+            requested_sha, "failure", f"site-only validation failed: site {result or 'did not run'}"
+        )
+    if site_commit != requested_sha:
+        return Conclusion(
+            requested_sha, "failure", f"the site checks ran on {site_commit or 'nothing'}, not this commit"
+        )
+    return Conclusion(requested_sha, "success", SITE_SUCCESS)
+
+
 def post(github: GitHub, conclusion: Conclusion, target_url: str) -> None:
     description = conclusion.description[:DESCRIPTION_LIMIT]
     github.post_status(conclusion.sha, conclusion.state, target_url, description)
@@ -829,6 +896,26 @@ def build_parser() -> argparse.ArgumentParser:
     issue_parser.add_argument("--tag")
     issue_parser.add_argument("--target-url", help="the run the issue links to (default: this Actions run)")
 
+    site_resolve_parser = sub.add_parser(
+        "site-resolve", help="refuse a commit that is not a site-only change, then post pending (site lane)"
+    )
+    site_resolve_parser.add_argument("--sha", required=True)
+    site_resolve_parser.add_argument("--main-ref", default="origin/main", help="main, as fetched")
+    status_options(site_resolve_parser)
+
+    site_conclude_parser = sub.add_parser(
+        "site-conclude", help="post the final status for a site-only commit"
+    )
+    site_conclude_parser.add_argument(
+        "--sha", required=True, help="the commit that was asked to be validated"
+    )
+    site_conclude_parser.add_argument("--site-commit", help="the commit the site job checked")
+    site_conclude_parser.add_argument(
+        "--job", action="append", default=[], help="name=result, e.g. site=success"
+    )
+    site_conclude_parser.add_argument("--github-output", default=os.environ.get("GITHUB_OUTPUT"))
+    status_options(site_conclude_parser)
+
     run_parser = sub.add_parser("run", help="resolve, smoke, slow and conclude in one process")
     run_parser.add_argument("--sha", required=True)
     run_parser.add_argument("--tag")
@@ -874,15 +961,21 @@ def main(argv: list[str] | None = None, *, github: GitHub | None = None) -> int:
         if args.command == "tier-report":
             # pytest's exit status was the step's own; this judges what the report holds.
             return finish(args.name, TierResult(args.name, 0, read_junit(args.junit)).problems)
-        if args.command == "conclude":
-            conclusion = conclude(
-                args.sha,
-                tag=args.tag,
-                installed_sha=args.installed_sha,
-                smoke_commit=args.smoke_commit,
-                slow_commit=args.slow_commit,
-                jobs=parse_jobs(args.job),
-            )
+        if args.command == "site-resolve":
+            site_resolve(client, args.sha, args.main_ref, target_for(args), post_status=args.post_status)
+            return PASSED
+        if args.command in ("conclude", "site-conclude"):
+            if args.command == "conclude":
+                conclusion = conclude(
+                    args.sha,
+                    tag=args.tag,
+                    installed_sha=args.installed_sha,
+                    smoke_commit=args.smoke_commit,
+                    slow_commit=args.slow_commit,
+                    jobs=parse_jobs(args.job),
+                )
+            else:
+                conclusion = conclude_site(args.sha, site_commit=args.site_commit, jobs=parse_jobs(args.job))
             if args.post_status:
                 post(client, conclusion, target_for(args))
             write_outputs(

@@ -30,6 +30,7 @@ import check_promotion_source as guard  # noqa: E402
 TEMPLATES = REPO_ROOT / ".github" / "PULL_REQUEST_TEMPLATE"
 PROCESS_DOC = "docs/process/branching-and-environments.md"
 REPO = "charlesclark2/debate-intelligence"
+TEMPLATE_NAMES = ["promotion.md", "hotfix.md", "site.md"]
 
 
 # --------------------------------------------------------------------------------------------
@@ -50,6 +51,13 @@ def test_main_accepts_dev_and_hotfix_heads(head: str, kind: str) -> None:
     verdict = guard.check_source("main", head)
     assert verdict.passed
     assert verdict.message == f"`{head}` → `main`: {kind}."
+
+
+@pytest.mark.parametrize("head", ["site/results-2026-11-02", "site/x", "site/sync-from-dev-2026-10-30"])
+def test_main_accepts_a_site_head_and_leaves_its_diff_to_the_site_only_step(head: str) -> None:
+    verdict = guard.check_source("main", head)
+    assert verdict.passed
+    assert verdict.message == f"`{head}` → `main`: a site change; the site-only step checks what it changes."
 
 
 @pytest.mark.parametrize(
@@ -76,6 +84,13 @@ def test_main_accepts_dev_and_hotfix_heads(head: str, kind: str) -> None:
         "release/v1.1",
         "back-merge/main-to-dev",
         "dependabot/pip/httpx-0.28",
+        "site",
+        "site/",
+        "site/a/b",  # one slug, as for hotfix/<slug>
+        "site/has space",
+        "Site/results",
+        "sites/results",
+        "website/results",
     ],
 )
 def test_main_rejects_every_other_head(head: str) -> None:
@@ -110,14 +125,14 @@ def test_an_empty_head_fails(base: str) -> None:
     assert verdict.message == "No head branch was given, so the pull request cannot be checked."
 
 
-@pytest.mark.parametrize("head", ["dev", "hotfix/login-crash"])
+@pytest.mark.parametrize("head", ["dev", "hotfix/login-crash", "site/results"])
 def test_same_repository_heads_pass(head: str) -> None:
     assert guard.check_source("main", head, REPO, REPO).passed
     # GitHub owner and repository names are case-insensitive.
     assert guard.check_source("main", head, REPO.upper(), REPO).passed
 
 
-@pytest.mark.parametrize("head", ["dev", "hotfix/login-crash"])
+@pytest.mark.parametrize("head", ["dev", "hotfix/login-crash", "site/results"])
 def test_a_fork_cannot_promote_by_naming_its_branch_dev(head: str) -> None:
     verdict = guard.check_source("main", head, "someone-else/debate-intelligence", REPO)
     assert not verdict.passed
@@ -175,7 +190,7 @@ def test_the_field_values_are_read_from_their_lines() -> None:
     assert guard.template_fields(FILLED) == {"Dev build": "v1.1.0-dev.7"}
 
 
-@pytest.mark.parametrize("name", ["promotion.md", "hotfix.md"])
+@pytest.mark.parametrize("name", TEMPLATE_NAMES)
 def test_an_untouched_template_fails_with_the_dev_build_blank(name: str) -> None:
     body = (TEMPLATES / name).read_text(encoding="utf-8")
     assert guard.template_fields(body) == {"Dev build": ""}
@@ -185,14 +200,14 @@ def test_an_untouched_template_fails_with_the_dev_build_blank(name: str) -> None
     assert "validate-dev" not in verdict.message
 
 
-@pytest.mark.parametrize("name", ["promotion.md", "hotfix.md"])
+@pytest.mark.parametrize("name", TEMPLATE_NAMES)
 def test_a_template_with_the_dev_build_filled_passes_without_a_run_link(name: str) -> None:
     """The case t08 refused: the validate-dev status, not a link in the body, is the evidence."""
     body = fill((TEMPLATES / name).read_text(encoding="utf-8"), "v1.1.0-dev.7")
     assert guard.check_template(body).passed
 
 
-@pytest.mark.parametrize("name", ["promotion.md", "hotfix.md"])
+@pytest.mark.parametrize("name", TEMPLATE_NAMES)
 def test_the_templates_point_at_the_required_status_and_ask_for_no_run_link(name: str) -> None:
     text = (TEMPLATES / name).read_text(encoding="utf-8")
     assert "validate-dev run:" not in text.lower()
@@ -288,6 +303,7 @@ UNMERGED = ["1f0e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c Fix the crash on an empty 
         ("hotfix/login-crash", False),
         ("hotfix/", True),  # not a hotfix branch, so not exempt
         ("hotfix/a/b", True),
+        ("site/results", True),  # v1-e37-t09: a site change waits for the previous back-merge
     ],
 )
 def test_which_heads_the_back_merge_check_applies_to(head: str, applies: bool) -> None:
@@ -369,6 +385,134 @@ def test_unmerged_commits_refuses_a_ref_that_was_not_fetched(missing: str) -> No
 
 
 # --------------------------------------------------------------------------------------------
+# site-only: what a site/<slug> branch may change (v1-e37-t09). Content, pages and assets under
+# site/; never a path outside it, never a dependency manifest or lockfile, never nothing.
+# --------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "paths",
+    [
+        ["site/content/results.yaml"],
+        ["site/content/tournaments.yaml", "site/content/media-consent.yaml"],
+        ["site/content/pages/results.md", "site/public/logo.svg", "site/src/app/page.tsx"],
+        ["site/README.md", "site/next.config.ts", "site/tests/results.test.tsx"],
+    ],
+)
+def test_a_change_confined_to_site_content_pages_and_assets_passes(paths: list[str]) -> None:
+    verdict = guard.check_site_only(paths)
+    assert verdict.passed
+    assert (
+        verdict.message
+        == f"Every one of the {len(paths)} changed path(s) is under `site/` and none is a dependency file."
+    )
+
+
+def test_an_empty_change_is_refused() -> None:
+    verdict = guard.check_site_only([])
+    assert not verdict.passed
+    assert verdict.message.startswith("This branch changes nothing since it left `main`")
+
+
+@pytest.mark.parametrize(
+    "outside",
+    [
+        "scripts/site_deploy.sh",
+        "scripts/site_smoke.py",
+        ".github/workflows/promotion-guard.yml",
+        "packages/debate_core/src/debate_core/__init__.py",
+        "site",  # a file called site is not under site/
+        "sitemap.xml",
+        "site2/content/results.yaml",
+        "docs/guides/coach-website-editing.md",
+    ],
+)
+def test_a_path_outside_site_is_refused_and_named(outside: str) -> None:
+    verdict = guard.check_site_only(["site/content/results.yaml", outside])
+    assert not verdict.passed
+    assert verdict.message.startswith("A site branch may change only files under `site/`. Outside it:\n")
+    assert f"  {outside}\n" in verdict.message
+    assert "site/content/results.yaml" not in verdict.message
+
+
+@pytest.mark.parametrize(
+    "dependency_file",
+    [
+        "site/package.json",
+        "site/pnpm-lock.yaml",
+        "site/pnpm-workspace.yaml",
+        "site/.npmrc",
+        "site/package-lock.json",
+        "site/npm-shrinkwrap.json",
+        "site/yarn.lock",
+        "site/.nvmrc",
+        "site/scripts/visual-qa-tools/package.json",  # the QA tools' own manifest is one too
+        "site/scripts/visual-qa-tools/pnpm-lock.yaml",
+    ],
+)
+def test_a_dependency_manifest_or_lockfile_under_site_is_refused_and_named(dependency_file: str) -> None:
+    verdict = guard.check_site_only(["site/content/results.yaml", dependency_file])
+    assert not verdict.passed
+    assert "Dependency manifests and lockfiles go through a promotion of `dev`, not the site lane:\n" in (
+        verdict.message
+    )
+    assert f"  {dependency_file}\n" in verdict.message
+
+
+def test_both_kinds_of_refusal_are_reported_together() -> None:
+    verdict = guard.check_site_only(["scripts/site_smoke.py", "site/package.json"])
+    assert not verdict.passed
+    assert "  scripts/site_smoke.py\n" in verdict.message
+    assert "  site/package.json\n" in verdict.message
+
+
+class FakeDiffGit:
+    """Answers the git calls `site_changes` makes, and records them."""
+
+    def __init__(self, *, shallow: bool = False, missing: str | None = None, diff: str = "") -> None:
+        self.shallow = shallow
+        self.missing = missing
+        self.diff = diff
+        self.calls: list[list[str]] = []
+
+    def __call__(self, args: Sequence[str]) -> str:
+        self.calls.append(list(args))
+        if args[:2] == ["rev-parse", "--is-shallow-repository"]:
+            return "true\n" if self.shallow else "false\n"
+        if args[:2] == ["rev-parse", "--verify"]:
+            if self.missing and args[-1].startswith(self.missing):
+                raise guard.GitError("`git rev-parse` failed: ")
+            return "0" * 40 + "\n"
+        if args[0] == "diff":
+            return self.diff
+        raise AssertionError(f"unexpected git call: {args}")
+
+
+def test_site_changes_asks_for_the_branchs_own_changes_with_renames_split() -> None:
+    git = FakeDiffGit(diff="site/content/results.yaml\0scripts/odd name.sh\0")
+    assert guard.site_changes("origin/main", "HEAD", git) == [
+        "site/content/results.yaml",
+        "scripts/odd name.sh",
+    ]
+    # Three dots: from where the branch left main. --no-renames: a file moved from scripts/ into
+    # site/ is listed under both names, so the old one is refused.
+    assert git.calls[-1] == ["diff", "--name-only", "--no-renames", "-z", "origin/main...HEAD"]
+
+
+def test_site_changes_refuses_a_shallow_clone() -> None:
+    git = FakeDiffGit(shallow=True)
+    with pytest.raises(guard.GitError, match="shallow"):
+        guard.site_changes("origin/main", "HEAD", git)
+    assert not any(call[0] == "diff" for call in git.calls)
+
+
+@pytest.mark.parametrize("missing", ["origin/main", "HEAD"])
+def test_site_changes_refuses_a_ref_that_was_not_fetched(missing: str) -> None:
+    with pytest.raises(guard.GitError, match=f"`{missing}` is not a commit in this clone"):
+        guard.site_changes("origin/main", "HEAD", FakeDiffGit(missing=missing))
+
+
+# --------------------------------------------------------------------------------------------
 # the command line: exit codes the workflows act on
 # --------------------------------------------------------------------------------------------
 
@@ -415,6 +559,31 @@ def test_cli_back_merge_exit_codes(monkeypatch: pytest.MonkeyPatch) -> None:
     assert guard.main(["back-merge", "--head", "dev"]) == 2
     monkeypatch.setattr(guard, "run_git", FakeGit(missing="origin/main"))
     assert guard.main(["back-merge", "--head", "dev"]) == 2
+
+
+@pytest.mark.parametrize("head", ["dev", "hotfix/login-crash"])
+def test_cli_site_only_passes_a_head_that_is_not_a_site_branch_without_running_git(
+    head: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def no_git(args: Sequence[str]) -> str:
+        raise AssertionError("git must not run for a head that is not a site branch")
+
+    monkeypatch.setattr(guard, "run_git", no_git)
+    assert guard.main(["site-only", "--head", head]) == 0
+    assert capsys.readouterr().out == f"OK: `{head}` is not a site branch; nothing to check.\n"
+
+
+def test_cli_site_only_exit_codes(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(guard, "run_git", FakeDiffGit(diff="site/content/results.yaml\0"))
+    assert guard.main(["site-only", "--head", "site/results"]) == 0
+    # Without --head the diff is checked whatever the branch: validate-dev's site path knows a SHA.
+    assert guard.main(["site-only", "--head-ref", "1" * 40]) == 0
+    monkeypatch.setattr(guard, "run_git", FakeDiffGit(diff="site/package.json\0"))
+    assert guard.main(["site-only", "--head", "site/results"]) == 1
+    monkeypatch.setattr(guard, "run_git", FakeDiffGit(diff=""))
+    assert guard.main(["site-only"]) == 1
+    monkeypatch.setattr(guard, "run_git", FakeDiffGit(shallow=True))
+    assert guard.main(["site-only", "--head", "site/results"]) == 2
 
 
 # --------------------------------------------------------------------------------------------
@@ -513,3 +682,119 @@ def test_git_a_shallow_clone_is_refused_rather_than_answered(
     with pytest.raises(guard.GitError, match="shallow"):
         guard.unmerged_commits("origin/dev", "origin/main")
     assert guard.main(["back-merge", "--head", "dev"]) == 2
+
+
+# --------------------------------------------------------------------------------------------
+# real git, local only: the branch shapes the site-only step has to read correctly (v1-e37-t09)
+# --------------------------------------------------------------------------------------------
+
+
+def write(cwd: Path, path: str, text: str) -> None:
+    target = cwd / path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(text, encoding="utf-8")
+
+
+def commit_files(cwd: Path, message: str, files: dict[str, str]) -> None:
+    for path, text in files.items():
+        write(cwd, path, text)
+    git(cwd, "add", "-A")
+    git(cwd, "commit", "-q", "-m", message)
+
+
+@pytest.fixture
+def site_repo(tmp_path: Path, git_env: dict[str, str]) -> Path:
+    """main with a site and a script beside it, and dev one task ahead of it outside site/."""
+    repo = tmp_path / "site-repo"
+    repo.mkdir()
+    git(repo, "init", "-q", "-b", "main")
+    commit_files(
+        repo,
+        "Base",
+        {
+            "site/content/results.yaml": "results: []\n",
+            "site/package.json": "{}\n",
+            "scripts/site_deploy.sh": "echo deploy\n",
+        },
+    )
+    git(repo, "switch", "-q", "-c", "dev")
+    commit_files(repo, "A task on dev", {"packages/core.py": "x = 1\n"})
+    git(repo, "switch", "-q", "main")
+    return repo
+
+
+def site_only(repo: Path, branch: str, monkeypatch: pytest.MonkeyPatch) -> int:
+    monkeypatch.chdir(repo)
+    return guard.main(["site-only", "--head", branch, "--main-ref", "main", "--head-ref", branch])
+
+
+def test_git_a_results_change_passes(site_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git(site_repo, "switch", "-q", "-c", "site/results")
+    commit_files(site_repo, "Results", {"site/content/results.yaml": "results: [ronald-reagan]\n"})
+    assert site_only(site_repo, "site/results", monkeypatch) == 0
+
+
+def test_git_a_branch_touching_scripts_is_refused(site_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git(site_repo, "switch", "-q", "-c", "site/results-and-a-script")
+    commit_files(
+        site_repo,
+        "Results and a script",
+        {
+            "site/content/results.yaml": "results: [ronald-reagan]\n",
+            "scripts/site_deploy.sh": "echo changed\n",
+        },
+    )
+    assert site_only(site_repo, "site/results-and-a-script", monkeypatch) == 1
+
+
+def test_git_a_branch_touching_site_package_json_is_refused(
+    site_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    git(site_repo, "switch", "-q", "-c", "site/a-dependency")
+    commit_files(site_repo, "A dependency", {"site/package.json": '{"dependencies": {"left-pad": "1"}}\n'})
+    assert site_only(site_repo, "site/a-dependency", monkeypatch) == 1
+
+
+def test_git_a_branch_with_an_empty_diff_is_refused(site_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git(site_repo, "switch", "-q", "-c", "site/nothing")
+    assert site_only(site_repo, "site/nothing", monkeypatch) == 1
+    # A change and its revert leave nothing either.
+    commit_files(site_repo, "Results", {"site/content/results.yaml": "results: [ronald-reagan]\n"})
+    git(site_repo, "revert", "--no-edit", "HEAD")
+    assert site_only(site_repo, "site/nothing", monkeypatch) == 1
+
+
+def test_git_a_branch_that_merged_dev_is_refused(site_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git(site_repo, "switch", "-q", "-c", "site/with-dev")
+    commit_files(site_repo, "Results", {"site/content/results.yaml": "results: [ronald-reagan]\n"})
+    git(site_repo, "merge", "-q", "--no-ff", "-m", "Merge dev", "dev")
+    assert site_only(site_repo, "site/with-dev", monkeypatch) == 1
+
+
+def test_git_a_file_moved_from_scripts_into_site_is_refused(
+    site_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    git(site_repo, "switch", "-q", "-c", "site/moved")
+    git(site_repo, "mv", "scripts/site_deploy.sh", "site/content/site_deploy.sh")
+    git(site_repo, "commit", "-q", "-m", "Move a script into site/")
+    monkeypatch.chdir(site_repo)
+    assert guard.site_changes("main", "site/moved") == [
+        "scripts/site_deploy.sh",
+        "site/content/site_deploy.sh",
+    ]
+    assert site_only(site_repo, "site/moved", monkeypatch) == 1
+
+
+def test_git_a_branch_that_merged_a_moved_main_back_in_still_passes(
+    site_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """main moved (a hotfix to a script) after the branch was cut, and the branch merged it back in:
+    the branch's own change is still only the results, so the merge into main adds only them."""
+    git(site_repo, "switch", "-q", "-c", "site/results")
+    commit_files(site_repo, "Results", {"site/content/results.yaml": "results: [ronald-reagan]\n"})
+    git(site_repo, "switch", "-q", "main")
+    commit_files(site_repo, "Hotfix a script", {"scripts/site_deploy.sh": "echo fixed\n"})
+    assert site_only(site_repo, "site/results", monkeypatch) == 0
+    git(site_repo, "switch", "-q", "site/results")
+    git(site_repo, "merge", "-q", "--no-ff", "-m", "Merge main", "main")
+    assert site_only(site_repo, "site/results", monkeypatch) == 0

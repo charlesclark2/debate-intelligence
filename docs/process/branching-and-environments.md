@@ -13,6 +13,7 @@ not been deployed to and validated in dev.**
 task/<task-name> ──PR──▶ dev ──(deploy to dev, validate)──▶ promotion PR dev → main ──▶ prod
                           ▲                                                      │
 hotfix/<slug> ──PR──▶ main ─────────────── back-merge main → dev ◀───────────────┘
+site/<slug>   ──PR──▶ main ─────────────── back-merge main → dev   (website content only)
 ```
 
 ## Branches
@@ -22,6 +23,7 @@ hotfix/<slug> ──PR──▶ main ──────────────�
 | `main` | Production. Every commit on `main` is releasable and is what the team uses. | Merge of a promotion PR from `dev`, or a `hotfix/*` PR. Never a direct push. |
 | `dev` | Integration + development environment. GitHub **default branch**, so PRs target it by default. | Merges of `task/*` PRs. Never a direct push. |
 | `task/<task-name>` | One PlanSpec task (e.g. `task/v1-e04-t02-http-fetcher`). Branched from `dev`. | You / an agent session. |
+| `site/<slug>` | **The site lane** (`v1-e37-t09`): a change to the public website's content, pages or assets, branched from `main` and merged into `main` the same day, then back-merged to `dev`. `promotion-source` refuses it unless the branch's own changes are something, all under `site/`, and no dependency manifest or lockfile; `validate-dev` comes from the site's prod build ([below](#the-site-lane)). The coach's [editing guide](../guides/coach-website-editing.md#publish-a-change) has every command. | Charlie, from the Mac with the deploy worktrees. |
 | `hotfix/<slug>` | Urgent production fix. Branched from `main`, **deployed to dev and validated like any other change** (manual `workflow_dispatch` of the dev deploy/pre-release for the hotfix head), PR to `main`, then back-merged to `dev` the same day. | Rare; same gates as a promotion — no exception to "validated in dev". |
 
 Rules: squash-merge `task/*` → `dev`; **merge commit** (not squash) for `dev` → `main` so the
@@ -101,6 +103,15 @@ the dispatch is what triggers it. It also runs nightly against the head of `dev`
 SHA. The opt-in live canary tier runs only when dispatched with `live: true` or with the repository
 variable `VALIDATE_DEV_LIVE` set to `true`, and never calls OpenCaselist.
 
+**For a `site/<slug>` commit**, the person publishing dispatches it from `dev` with
+`site_only: true`. The pre-release jobs are skipped; `site-resolve` refuses the commit, posting no
+status at all, unless its own changes since it left `main` are site content (the same rule as
+`promotion-source`); the `site` job runs the site's lint, type check and tests, then its **prod**
+build, where the publishing-policy and consent guards are fatal, and the export checks against it;
+`site-conclude` posts the status. This is "validated in dev" for a change that leaves every byte
+outside `site/` as `main`'s, which was validated when it got there. With the input off, which is
+every other trigger, nothing about the status changes.
+
 **Why a promotion whose `dev` moved is blocked.** The status belongs to a commit, and a promotion
 pull request's required checks are read from its current head. When another merge lands on `dev`
 while a promotion is open, the head becomes a commit with no `validate-dev` status yet, and the
@@ -123,8 +134,32 @@ request into `main`, both required by **protect-main**. Both run
 
 | Check | Fails when |
 |---|---|
-| `promotion-source` | The head is not `dev` or `hotfix/<slug>` from this repository (a fork can name its branch `dev` too), or the description leaves the `Dev build:` line blank. Editing the description re-runs it. |
-| `back-merge` | `main` holds a non-merge commit that `dev` lacks: a hotfix that was never back-merged. A `hotfix/*` head always passes it, so a second urgent fix is never blocked by the first one's back-merge. |
+| `promotion-source` | The head is not `dev`, `hotfix/<slug>` or `site/<slug>` from this repository (a fork can name its branch `dev` too), or the description leaves the `Dev build:` line blank. For a `site/<slug>` head, also when the branch's own changes since it left `main` are empty, reach outside `site/`, or touch a dependency manifest or lockfile under `site/` ([The site lane](#the-site-lane)). Editing the description re-runs it. |
+| `back-merge` | `main` holds a non-merge commit that `dev` lacks: a hotfix or site change that was never back-merged. A `hotfix/*` head always passes it, so a second urgent fix is never blocked by the first one's back-merge. A `site/*` head does not: a site change waits for the previous one's back-merge, which keeps `dev` and `main` at most one change apart. |
+
+### The site lane
+
+The public site serves `main`, and a promotion carries all of `dev`, so before `v1-e37-t09` a
+schedule or results change waited for the next CLI release or went out as a hotfix. The site lane
+is a third way into `main`, for website content only, ruled by the PM on 2026-10-28:
+
+* **What it may carry:** a non-empty change, every path under `site/`, and no dependency manifest
+  or lockfile (`package.json`, `pnpm-lock.yaml`, `.npmrc` and the rest, anywhere under `site/`). A
+  dependency change goes through a promotion. The rule is `check_promotion_source.py site-only`,
+  measured from where the branch left `main` (`main...head`), with renames split so a file moved
+  in from outside counts as outside.
+* **What checks it:** `ci` as for any pull request into `main`; `promotion-source` with the rule
+  above as a step of the same job, so protect-main's required list is unchanged; `back-merge`,
+  not exempted; and `validate-dev` from the site's prod build ([above](#validate-dev-the-status-protect-main-requires)).
+  The policy's pre-publication checklist is the [site template](../../.github/PULL_REQUEST_TEMPLATE/site.md)'s.
+* **What it does not change:** deploys stay the operator's `scripts/site_deploy.sh` (no AWS
+  credential in any workflow until `v2-e10-t03`), the consent guard runs in every build, and the
+  back-merge into `dev` is the same day, as for a hotfix.
+* **Its guard lives on `main`.** A pull request's checks run from its merge with `main`, so the
+  lane works only once `check_promotion_source.py`, `promotion-guard.yml` and the site template are
+  there. They reached `main` by one hotfix, `hotfix/install-site-lane`
+  ([Installing the lane, once](../guides/coach-website-editing.md#installing-the-lane-once)).
+  `validate-dev.yml`'s site path is dispatched from `dev` and runs `dev`'s copy.
 
 **After a hotfix merges**, [`back-merge.yml`](../../.github/workflows/back-merge.yml) opens a
 "Back-merge main → dev" pull request, labelled `back-merge`, whose head is `main` itself. The

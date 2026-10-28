@@ -195,30 +195,270 @@ number. Fix what it names and run it again.
 
 ### Publish a change
 
-A change to the file is a commit, and it reaches the site the way every change does
-([ADR-0015](../adr/0015-website-content-editing.md#decision-as-accepted) point 4,
-[ADR-0013](../adr/0013-two-environments-and-dev-main-promotion.md)). Nothing reaches the public
-site except from `main`. Pick one of two paths:
+A change to the file is a commit, and nothing reaches the public site except from `main`
+([ADR-0013](../adr/0013-two-environments-and-dev-main-promotion.md),
+[ADR-0015](../adr/0015-website-content-editing.md#decision-as-accepted) point 4). A change to the
+website's content, pages or assets has a lane of its own, **the site lane**, which takes it to the
+public site the same day without waiting for the next release
+([`v1-e37-t09`](../../plan_specs/v1/e37-calendar-and-announcements/t09-site-changes-publish-without-a-release.yaml)).
+Use it for every schedule change, every result, every correction and every takedown.
 
-**1. The next promotion: the normal path.** For anything that can wait for the next release of
-the site, which is most changes: a new tournament, a change weeks away, a new season.
+**What the lane is.** A `site/<what-changed>` branch from `main`, a pull request from it into
+`main`, the operator's deploy, and the back-merge into `dev` the same day. GitHub refuses the pull
+request if the branch changes anything outside `site/`, changes a dependency manifest or lockfile
+(`site/package.json`, `site/pnpm-lock.yaml` and the like), or changes nothing: those go through a
+promotion of `dev`. Before it can merge, `validate-dev` builds the commit **for prod**, where the
+publishing-policy and consent guards stop the build on an unfilled consent reference, a `[[TBD]]`
+marker or a name nobody has reviewed, and runs the export checks against that build. The policy's
+[pre-publication checklist](../policies/website-publishing.md#pre-publication-checklist) is in the
+pull request's template, and item 16 is unchanged: anything that names a student needs Charlie to
+have seen it.
 
-1. Commit the change on a branch from `dev` and open a pull request into `dev`.
-2. When it merges, it goes out with the next promotion: deploy `dev`, smoke-check it, look at
-   `/schedule/` on the preview, merge the promotion pull request from `dev` into `main`, deploy
-   prod from a clean `main`. The commands are in
-   [the runbook's promotion checklist](../runbooks/team-website.md#promotion-checklist).
+**Before you start.** The lane needs **the Mac that holds the `prod-deploy` and `dev-preview`
+worktrees** (the runbook's [deploy worktrees](../runbooks/team-website.md#the-deploy-worktrees)),
+signed in to `gh` and to the AWS SSO session, with `pnpm` and `uv`. Every block below runs in one
+terminal window, because the first one sets `SITE_BRANCH` for the rest. The whole lane takes about
+an hour, most of it waiting for checks.
 
-**2. The hotfix path: a change inside the week.** For a date, place or status change to a
-tournament in the coming week, which cannot wait for a promotion. The 2026-09-30 meeting-date
-correction went this way.
+**1. Start the branch** in the `dev-preview` worktree. Name it for what changes, one word or a
+few joined with hyphens: `site/results-ronald-reagan`, `site/schedule-2026-11-07`. The block
+refuses if that worktree holds uncommitted changes, which would be someone's unfinished work.
 
-1. Branch `hotfix/<what-changed>` from `main`, make the change, and commit it.
-2. Deploy that branch to dev and smoke-check it, exactly as for a promotion. A hotfix is still
-   validated in dev ([branching and environments](../process/branching-and-environments.md)).
-3. Open a pull request into `main` with the hotfix template, merge it, and deploy prod from a clean
-   `main`.
-4. **The same day**, merge `main` back into `dev`, so the next promotion does not undo the fix.
+```bash
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/dev-preview
+SITE_BRANCH=site/results-ronald-reagan
+if [ -n "$(git status --porcelain)" ]; then echo "STOP: dev-preview has uncommitted changes:"; git status --short; else git fetch origin && git switch -c "${SITE_BRANCH}" origin/main && pnpm --dir site install --frozen-lockfile; fi
+```
+
+Success looks like `Switched to a new branch 'site/results-ronald-reagan'`, and pnpm ending
+`Done`.
+
+**2. Make the change** in `site/content/` (the schedule, the results, the consent file), as the
+sections above describe, and update `revised`.
+
+**3. Check it, and commit it.** The first line is the site's own checks; the second is the prod
+build and the export checks, which is what `validate-dev` will run; the last line asks the same
+question GitHub will, so a refusal shows here first.
+
+```bash
+pnpm --dir site lint && pnpm --dir site typecheck && pnpm --dir site test
+SITE_ENV=prod SITE_URL=https://wfbdebate.com site/scripts/export-checks.sh
+git add site
+git commit -m "Results from the Ronald Reagan tournament"
+uv run scripts/check_promotion_source.py site-only --head "${SITE_BRANCH}"
+```
+
+Success looks like the tests and the export checks passing, and the last line printing
+`OK: Every one of the N changed path(s) is under site/ and none is a dependency file.` A build that
+stops on a publishing-policy problem names the file and the field: fix the fact and run the block
+again from the top. `FAILED` on the last line names what is outside the lane; take it off the
+branch.
+
+**4. Preview it on dev** and read it on a phone, as a parent would. The deploy takes about four
+minutes, most of it the invalidation.
+
+```bash
+aws sso login --sso-session debate
+scripts/site_deploy.sh dev
+uv run scripts/site_smoke.py --env dev --url https://dev.wfbdebate.com --expect-sha "$(git rev-parse HEAD)"
+git rev-parse HEAD
+```
+
+Success looks like `Deployed <sha> to dev`, then `All N checks passed.` The last line prints the
+commit: it goes on the pull request's `Dev build:` line.
+
+**5. Push it and ask `validate-dev` to check it.** The dispatch runs from `dev`, whichever branch
+is being checked. It takes a few minutes; the second block asks for the status, and is run again
+until it says `success` or `failure`.
+
+```bash
+git push -u origin "${SITE_BRANCH}"
+gh workflow run validate-dev.yml --ref dev -f sha="$(git rev-parse HEAD)" -f site_only=true
+```
+
+```bash
+gh api "repos/charlesclark2/debate-intelligence/commits/$(git rev-parse HEAD)/status" --jq '.statuses[] | select(.context == "validate-dev") | .state + "  " + .description'
+```
+
+Success looks like `success  site only: nothing outside site/ changed since main; prod build,
+policy and consent guards and export checks green`. `pending` means it is still running. Nothing
+printed for more than a minute after the dispatch means the run refused the commit before
+posting anything: `gh run list --workflow validate-dev.yml --limit 3`, then `gh run view <id> --log-failed`
+says why. `failure` links the run that failed; fix the branch, commit, and repeat from step 3 (a
+new commit needs its own dispatch).
+
+**6. Open the pull request.** This opens GitHub in the browser with the site template filled in.
+Write what changes, paste the commit from step 4 on the `Dev build:` line, and tick the checklist:
+every item, honestly. Then create the pull request.
+
+```bash
+open "https://github.com/charlesclark2/debate-intelligence/compare/main...${SITE_BRANCH}?template=site.md&expand=1"
+```
+
+**7. Merge it** when every check is green. The first command waits for them; the second merges
+with a merge commit, the only kind `main` takes.
+
+```bash
+gh pr checks "${SITE_BRANCH}" --watch
+gh pr merge "${SITE_BRANCH}" --merge
+```
+
+Success looks like every check `pass`, then `Merged pull request`. A red `promotion-source` names
+what is outside the lane. A red `back-merge` means the previous site change, or a hotfix, has not
+been merged back into `dev`: do step 9 for it first, then
+`gh pr checks "${SITE_BRANCH}" --watch` again.
+
+**8. Deploy prod** from the `prod-deploy` worktree, exactly as the runbook's
+[Deploy prod](../runbooks/team-website.md#deploy-prod) says. About five minutes.
+
+```bash
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/prod-deploy
+git pull --ff-only
+pnpm --dir site install --frozen-lockfile
+git status --porcelain
+aws sso login --sso-session debate
+scripts/site_deploy.sh prod
+uv run scripts/site_smoke.py --env prod --url https://wfbdebate.com --expect-sha "$(git rev-parse HEAD)"
+```
+
+Success looks like `clean, on main, and equal to origin/main.`, a clean prod build, the
+invalidation completing, and `All N checks passed.` The page has changed for parents now.
+
+**9. Merge `main` back into `dev`, the same day.** The merge into `main` opened a
+"Back-merge main → dev" pull request about a minute later. The first command lists it; put its
+number in the next two. Merge it with a merge commit, never a squash.
+
+```bash
+gh pr list --base dev --head main --state open
+```
+
+```bash
+gh pr checks <number> --watch
+gh pr merge <number> --merge
+```
+
+Success looks like the pull request listed, its checks `pass`, then `Merged pull request`. If
+nothing is listed after a few minutes, GitHub lost the push: run
+`gh workflow run back-merge.yml --ref dev`, which opens it. If GitHub says the pull request
+**has conflicts**, see [When the back-merge conflicts](#when-the-back-merge-conflicts).
+
+**10. Put the preview worktree back on `dev`.**
+
+```bash
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/dev-preview
+git switch --detach origin/dev
+git branch -D "${SITE_BRANCH}"
+```
+
+**Something that is not a website change** still goes the old ways: anything outside `site/`
+waits for the next promotion of `dev`, or, if it is urgent, the hotfix path in
+[branching and environments](../process/branching-and-environments.md). A change to the site's
+dependencies (`site/package.json`, its lockfile) goes into `dev` on a task branch and reaches
+`main` at a promotion.
+
+#### When the back-merge conflicts
+
+The back-merge pull request's head is `main` itself, so a conflict cannot be fixed on it. It
+happens only when `dev` changed the same lines of `site/` after your branch was cut, which is why
+step 9 is the same day. Merge `main` into a branch of `dev` by hand, fix the files git names, and
+merge that into `dev` with a merge commit. Then the open back-merge pull request has nothing left
+to bring: close it.
+
+```bash
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/dev-preview
+git fetch origin
+git switch -c back-merge/site-by-hand origin/dev
+git merge origin/main
+```
+
+Edit each file git lists as conflicted, keeping both sides' changes, then:
+
+```bash
+git add site
+git commit --no-edit
+git push -u origin back-merge/site-by-hand
+gh pr create --base dev --head back-merge/site-by-hand --title "Back-merge main → dev, conflicts resolved by hand" --body "Merges main into dev; the automatic back-merge pull request had conflicts in site/."
+gh pr checks back-merge/site-by-hand --watch
+gh pr merge back-merge/site-by-hand --merge
+```
+
+#### Bringing dev's site to main
+
+When a site **feature** has landed on `dev` (a new page, a new section of the home page), the lane
+can carry all of `dev`'s `site/` to `main` at once, with Charlie's word. It is steps 1 to 10 with
+step 2 replaced by the line below, which makes the branch's `site/` exactly `dev`'s, deleted files
+included. The lane refuses it if `dev`'s site dependencies differ from `main`'s: then it waits for
+a promotion.
+
+```bash
+git restore --source=origin/dev --staged --worktree -- site
+```
+
+#### Installing the lane, once
+
+The lane's check has to be on `main` before GitHub will accept a `site/` pull request, because a
+pull request's checks run from its merge with `main`. The task that built it merged into `dev`;
+one hotfix carries its five guard files to `main`. Run these blocks once, in order, never on a
+Wednesday (the weekly cloud run's day; each block refuses one), and not before Thursday
+2026-10-29's image deploy has finished.
+
+The first block builds the hotfix branch in the `dev-preview` worktree from `main`, takes the five
+files from the task's commit on `dev`, and refuses if `main`'s copies were not the ones the task
+started from (then the hotfix would carry someone else's change too).
+
+```bash
+if [ "$(date +%u)" = 3 ]; then echo "STOP: it is Wednesday, the cloud run's day."; elif [ "$(date +%Y%m%d)" -lt 20261029 ]; then echo "STOP: not before Thursday 2026-10-29's image deploy."; elif [ -n "$(git -C ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/dev-preview status --porcelain)" ]; then echo "STOP: dev-preview has uncommitted changes."; else cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/dev-preview && git fetch origin && LANE_COMMIT="$(git log origin/dev -1 --format=%H --grep='^v1-e37-t09-site-changes-publish-without-a-release')" && echo "lane commit: ${LANE_COMMIT}" && LANE_FILES=(scripts/check_promotion_source.py .github/workflows/promotion-guard.yml .github/PULL_REQUEST_TEMPLATE/site.md tests/scripts/test_check_promotion_source.py tests/scripts/test_promotion_guard_workflow.py) && git diff --quiet origin/main "${LANE_COMMIT}^" -- "${LANE_FILES[@]}" && git switch -c hotfix/install-site-lane origin/main && git checkout "${LANE_COMMIT}" -- "${LANE_FILES[@]}" && git commit -m "Hotfix: install the site lane's guard on main (v1-e37-t09)"; fi
+```
+
+Success looks like `lane commit:` and a 40-character commit, then `Switched to a new branch
+'hotfix/install-site-lane'` and a commit of 5 files. A `STOP:` line, an empty `lane commit:`, or
+the block ending without a commit means stop: say what it printed.
+
+The second block checks the branch carries those five files and nothing else, against `main`.
+
+```bash
+if [ "$(date +%u)" = 3 ]; then echo "STOP: it is Wednesday, the cloud run's day."; elif [ "$(git diff --name-only origin/main...HEAD | LC_ALL=C sort | tr '\n' ' ')" = ".github/PULL_REQUEST_TEMPLATE/site.md .github/workflows/promotion-guard.yml scripts/check_promotion_source.py tests/scripts/test_check_promotion_source.py tests/scripts/test_promotion_guard_workflow.py " ]; then echo "OK: only the lane's five guard files differ from main."; else echo "STOP: the branch differs from main in:"; git diff --name-only origin/main...HEAD; fi
+```
+
+Success looks like `OK: only the lane's five guard files differ from main.` Anything else: stop.
+
+The third block pushes the branch and dispatches the hotfix pre-release, which builds it and asks
+`validate-dev` to validate it, like any hotfix.
+
+```bash
+if [ "$(date +%u)" = 3 ]; then echo "STOP: it is Wednesday, the cloud run's day."; else git push -u origin hotfix/install-site-lane && gh workflow run dev-prerelease.yml --ref hotfix/install-site-lane; fi
+```
+
+The fourth block asks for the status on the hotfix head; run it until it says `success`, then
+note the pre-release it names for the `Dev build:` line. It opens the pull request with the hotfix
+template; write "The site lane's guard is not on main" as the incident.
+
+```bash
+gh api "repos/charlesclark2/debate-intelligence/commits/$(git rev-parse HEAD)/status" --jq '.statuses[] | select(.context == "validate-dev") | .state + "  " + .description'
+```
+
+```bash
+open "https://github.com/charlesclark2/debate-intelligence/compare/main...hotfix/install-site-lane?template=hotfix.md&expand=1"
+```
+
+The fifth block merges it once every check is green and Charlie has approved it, and the sixth,
+after the back-merge pull request has opened, merges that into `dev` (its number from
+`gh pr list --base dev --head main --state open`). `dev` already holds these files, so it merges
+without conflicts.
+
+```bash
+if [ "$(date +%u)" = 3 ]; then echo "STOP: it is Wednesday, the cloud run's day."; else gh pr checks hotfix/install-site-lane --watch && gh pr merge hotfix/install-site-lane --merge; fi
+```
+
+```bash
+if [ "$(date +%u)" = 3 ]; then echo "STOP: it is Wednesday, the cloud run's day."; else gh pr list --base dev --head main --state open; fi
+```
+
+```bash
+if [ "$(date +%u)" = 3 ]; then echo "STOP: it is Wednesday, the cloud run's day."; else gh pr checks <number> --watch && gh pr merge <number> --merge && cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/dev-preview && git switch --detach origin/dev && git branch -D hotfix/install-site-lane; fi
+```
+
+Nothing is deployed: the hotfix changes no page. From then on, the lane above works.
 
 **What parents see, and when.** The page changes when the prod deploy finishes. A parent who
 subscribed sees the change whenever their calendar app next checks the file. The file asks for once
@@ -346,9 +586,9 @@ a reason.
      `site/content/media-consent.yaml` as the family asked. The team's result stays; only the name
      goes.
    - To take the **whole result** off, because the family asked for that: delete the entry.
-2. **Publish it on the hotfix path**, not at the next promotion: a branch from `main`, deployed to
-   dev and checked, merged into `main`, prod deployed, and `main` merged back into `dev` the same
-   day ([Publish a change](#publish-a-change), path 2). Then follow the runbook's
+2. **Publish it through the site lane** straight away, not at the next promotion: a `site/`
+   branch from `main`, deployed to dev and checked, merged into `main`, prod deployed, and `main`
+   merged back into `dev` the same day ([Publish a change](#publish-a-change)). Then follow the runbook's
    [Taking something down on request](../runbooks/team-website.md#taking-something-down-on-request)
    to confirm it is gone.
 3. **If it has to be gone in minutes**, the runbook's
@@ -452,7 +692,10 @@ families a 24-hour clock.
 | A change is on the website but not in a parent's calendar | Their calendar app has not checked the file yet. It will; for anything urgent, contact families directly |
 | The build fails naming a result and a field | Fix that field. The message names the policy rule; [What the build refuses](#what-the-build-refuses) says what each one means |
 | A family asks for a student's name or a result to come down | Within 24 hours: [Take a result down](#take-a-result-down) |
-| A tournament is missing from the page after a deploy | Check its entry is in `site/content/tournaments.yaml` on `main`. A hotfix that was not merged back into `dev` is undone by the next promotion |
+| A tournament is missing from the page after a deploy | Check its entry is in `site/content/tournaments.yaml` on `main`. A site change or hotfix that was not merged back into `dev` is undone by the next promotion |
+| `promotion-source` fails on a `site/` pull request | It names the files: something outside `site/`, a dependency file such as `site/package.json`, or nothing at all. Take them off the branch; a dependency change goes into `dev` on a task branch |
+| `back-merge` fails on a `site/` pull request | The previous site change or a hotfix has not been merged back into `dev`. Merge that back-merge pull request ([Publish a change](#publish-a-change), step 9), then check again |
+| `validate-dev` never appears on a `site/` commit | The run refused it before posting: `gh run list --workflow validate-dev.yml --limit 3` and `gh run view <id> --log-failed`. Usually the commit is not the branch's head, or the branch changes something outside the lane |
 | *Out of date:* your announcement is not on the website after an update | Check its **Status** is `Publish`, its **Publish date** is today or earlier, and **Expires on** has not passed |
 | Something about a student is on the site and should not be | **Phone or text Charlie straight away.** Then take it out of the file (or the sheet) and follow [Taking something down on request](../runbooks/team-website.md#taking-something-down-on-request) |
 

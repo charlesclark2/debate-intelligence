@@ -797,6 +797,12 @@ build on a test-only package. That is how the first attempt at the 2026-10-01 pr
 (see [What to record](#what-to-record)). `--frozen-lockfile` installs exactly what
 `site/pnpm-lock.yaml` names and never rewrites it, so the checkout stays clean for the prod guard.
 
+A change to the site's content, pages or assets alone does not wait for a promotion: the
+**site lane** takes it from a `site/<slug>` branch of `main` to prod the same day, with these same
+deploy blocks run from that branch and then from `prod-deploy`. Every command is in the coach's
+guide, [Publish a change](../guides/coach-website-editing.md#publish-a-change). A rollback of a
+site-only change can go the same way: the revert is a site-only change.
+
 ### The order, every time
 
 1. deploy dev;

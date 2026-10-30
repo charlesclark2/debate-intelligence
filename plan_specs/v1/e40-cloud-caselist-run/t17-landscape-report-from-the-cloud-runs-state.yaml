@@ -1,0 +1,98 @@
+# TASK v1-e40-t17-landscape-report-from-the-cloud-runs-state - A landscape report counts the weeks the cloud run pulled, from a copy restored from the bucket
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t17-landscape-report-from-the-cloud-runs-state
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "A landscape report counts the weeks the cloud run pulled, from a copy restored from the bucket"
+spec:
+  # Filed by the PM, 2026-10-30, from the coach's request of 2026-10-30 (the LD de-extinction landscape before the tournaments of the week of 2026-11-09).
+  description: >-
+    Since the cutover (2026-10-27) the weekly run is the cloud task in bucket mode, and the weeks
+    it pulls live in the dev bucket's run state. `debate-research landscape report` reads the
+    operator's dev data directory, which stopped at the Mac's last pull: the hspolicy26 report
+    published on 2026-10-27 reads "through 2026-10-20", and an LD report after the run of
+    2026-11-04 would not see that week's disclosures. The cloud run has no landscape stage
+    (its reason line still names v1-e32-t05). Make a landscape report count the newest weeks by
+    running it over a working copy restored from the bucket (`caselist restore-run-state`,
+    v1-e40-t10; v1-e31-t31's re-parse already runs commands over such a copy through
+    DEBATE_STORAGE__DATA_DIR), while the landscape's own state (the classification cache and
+    model cassettes, the review queue, plans and analytic texts, scan acceptances, the local
+    classifier) stays in the operator's dev data directory: never lost with the temporary copy,
+    and never classified twice (v1-e32-t07's rule: a card is classified once, in dev). Count
+    first: what `landscape report` and its classification read and write, by path, and which
+    of those a restored copy holds; then propose to the PM, before building, how the report
+    finds the copy's cards and the data directory's landscape state. The operator then
+    publishes hspolicy26's newest snapshot through it, which proves the path before the LD
+    de-extinction report (v1-e32-t06) uses it.
+  priority: 1
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks, docs/guides]
+    forbidden:
+      - A card classified a second time because its classification was left in a deleted copy
+      - Publishing a report from the operator's stale working copy as if it were the newest week
+      - A model call or network or AWS access in any test
+      - A restored copy left on the operator's machine after the steps that use it
+  context:
+    - kind: TaskRef
+      name: v1-e40-t10-restore-with-sources
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Counts first: what the report and its classification read and write, by path, which of
+        those a restored copy holds, and a proposal sent to the PM before building.
+    - id: ac2
+      description: >-
+        As ruled: a report over a restored copy counts the copy's newest snapshot and reads and
+        writes the landscape state in the data directory, so a second report classifies nothing
+        already classified, by tests on a synthetic store shown failing first; the dry run prints
+        the cards it would classify before any model call.
+    - id: ac3
+      description: >-
+        The runbook's blocks (restore, dry run with its classification counts, publish, the copy
+        deleted), and the operator's publish of hspolicy26's newest snapshot to dev through them,
+        recorded as counts (operator).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t17-landscape-report-from-the-cloud-runs-state-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    Count what the report reads and writes, propose, then run it over a restored copy with the
+    landscape state kept in the data directory.
+  goalRef:
+    name: v1-e40-t17-landscape-report-from-the-cloud-runs-state
+  graph:
+    nodes:
+      - id: report-from-restored-copy
+        kind: Task
+        name: Landscape report from a restored copy
+        description: >-
+          Count what the report reads and writes, propose, then run it over a restored copy
+          with the landscape state kept in the data directory.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Landscape CLI tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests, -k, landscape]
+status:
+  phase: Pending

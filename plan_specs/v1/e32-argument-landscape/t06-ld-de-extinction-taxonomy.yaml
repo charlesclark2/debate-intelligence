@@ -28,6 +28,11 @@ spec:
     range with no taxonomy, so earlier snapshots resolve. No code changes are expected beyond
     what t01 built; if t01's seeding or loader needs a change for LD, it is made here and named
     in the report.
+    (PM amendment 2026-10-30, the coach's word of 2026-10-30.) The resolution, as the coach gave
+    it: "Resolved: De-extinction is unethical". Its range for hsld26: 2026-11-01 to 2026-12-31.
+    The task starts after the weekly run of 2026-11-04 has pulled the first weekend of
+    tournaments on it, and seeds from that run's state through v1-e40-t17's restored copy
+    (the operator's data directory stopped at the cutover).
   priority: 2
   constraints:
     packages: [config/landscape, scripts, debate_core.arguments, tests/config]

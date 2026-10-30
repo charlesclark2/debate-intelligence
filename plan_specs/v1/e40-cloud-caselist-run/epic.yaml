@@ -379,5 +379,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e40-t16-prod-reparse-after-a-parser-bump
+    - id: t17
+      kind: Task
+      name: 'A landscape report counts the weeks the cloud run pulled, from a copy restored from the bucket'
+      description: >-
+        A landscape report counts the weeks the cloud run pulled, from a copy restored from the
+        bucket.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t17-landscape-report-from-the-cloud-runs-state.yaml
+        goalRef: v1-e40-t17-landscape-report-from-the-cloud-runs-state
+      dependsOn:
+      - t10
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t17-landscape-report-from-the-cloud-runs-state reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t17-landscape-report-from-the-cloud-runs-state
 status:
   phase: Pending

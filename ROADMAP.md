@@ -60,8 +60,8 @@ v2.3's extension work.
 
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
-| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 47 | 254 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 108 | 83 | 498 |
+| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 48 | 254 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 108 | 85 | 498 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 56 | 43 | 282 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 16 | 10 | 114 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
@@ -133,7 +133,7 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 | [A pull request into dev runs the tests its changes reach; a push to dev and a pull request into main run them all](plan_specs/v1/e01-repo-foundation/t38-ci-affected-tests-on-dev-pull-requests.yaml) `v1-e01-t38-ci-affected-tests-on-dev-pull-requests` | Succeeded | 1 | 3.0 |
 | [The container imports each integration in its own factory, and selection follows a command to its factories](plan_specs/v1/e01-repo-foundation/t39-container-builds-integrations-lazily.yaml) `v1-e01-t39-container-builds-integrations-lazily` | Pending | 1 | 4.0 |
 | [The planted-break check runs the tests nearest a break by what reads it, not by path](plan_specs/v1/e01-repo-foundation/t40-planted-break-nearest-ordering.yaml) `v1-e01-t40-planted-break-nearest-ordering` | Pending | 1 | 1.0 |
-| [The pull request's smoke tier reads the bundled profiles, as the installed build does](plan_specs/v1/e01-repo-foundation/t41-pr-smoke-reads-the-bundled-profiles.yaml) `v1-e01-t41-pr-smoke-reads-the-bundled-profiles` | Pending | 1 | 2.0 |
+| [The pull request's smoke tier reads the bundled profiles, as the installed build does](plan_specs/v1/e01-repo-foundation/t41-pr-smoke-reads-the-bundled-profiles.yaml) `v1-e01-t41-pr-smoke-reads-the-bundled-profiles` | Succeeded | 1 | 2.0 |
 | [Coverage measured in the test parts and combined, so the push run is never held by one unsplit job](plan_specs/v1/e01-repo-foundation/t42-coverage-measured-in-the-parts.yaml) `v1-e01-t42-coverage-measured-in-the-parts` | InProgress | 1 | 2.0 |
 
 #### [E02 — Domain Core: Entities, Ports & Local Persistence](plan_specs/v1/e02-domain-core/epic.yaml)
@@ -180,7 +180,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [The retirement rule reaches empty objects, the tagging grant names its one tag, and the module's failures print](plan_specs/v1/e29-cloud-evidence-store/t10-retention-rule-and-grant-loose-ends.yaml) `v1-e29-t10-retention-rule-and-grant-loose-ends` | Pending | 1 | 3.0 |
 | [store sync says why it skipped what it skipped](plan_specs/v1/e29-cloud-evidence-store/t11-store-sync-skip-reasons.yaml) `v1-e29-t11-store-sync-skip-reasons` | Succeeded | 1 | 2.0 |
 | [store sync stops moving the parsed store, which caselist parse --publish publishes](plan_specs/v1/e29-cloud-evidence-store/t12-store-sync-skips-parsed.yaml) `v1-e29-t12-store-sync-skips-parsed` | Succeeded | 1 | 2.0 |
-| [store sync reports a stale parsed copy without needing a blob prefix](plan_specs/v1/e29-cloud-evidence-store/t13-stale-parsed-note-without-blob-prefix.yaml) `v1-e29-t13-stale-parsed-note-without-blob-prefix` | Pending | 1 | 1.0 |
+| [store sync reports a stale parsed copy without needing a blob prefix](plan_specs/v1/e29-cloud-evidence-store/t13-stale-parsed-note-without-blob-prefix.yaml) `v1-e29-t13-stale-parsed-note-without-blob-prefix` | Succeeded | 1 | 1.0 |
 
 #### [E30 — Caselist Evidence Ingestion](plan_specs/v1/e30-caselist-ingestion/epic.yaml)
 
@@ -214,7 +214,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [A .cmir file is imported as CMIR, and every rename-into-place writer fsyncs its directory](plan_specs/v1/e30-caselist-ingestion/t26-cmir-extension-and-directory-fsync.yaml) `v1-e30-t26-cmir-extension-and-directory-fsync` | Pending | 2 | 2.0 |
 | [caselist publish, verify, parse and pull panels print a summary, not the whole record](plan_specs/v1/e30-caselist-ingestion/t27-command-panels-print-summaries.yaml) `v1-e30-t27-command-panels-print-summaries` | Pending | 1 | 2.0 |
 | [The annual purge, as one runbook](plan_specs/v1/e30-caselist-ingestion/t28-annual-purge-runbook.yaml) `v1-e30-t28-annual-purge-runbook` | Pending | 1 | 2.0 |
-| [A removal lists raw/ and parsed/ again after deleting, and stops incomplete if a version survived](plan_specs/v1/e30-caselist-ingestion/t29-removal-confirms-raw-and-parsed-deletes.yaml) `v1-e30-t29-removal-confirms-raw-and-parsed-deletes` | Pending | 1 | 1.0 |
+| [A removal lists raw/ and parsed/ again after deleting, and stops incomplete if a version survived](plan_specs/v1/e30-caselist-ingestion/t29-removal-confirms-raw-and-parsed-deletes.yaml) `v1-e30-t29-removal-confirms-raw-and-parsed-deletes` | Succeeded | 1 | 1.0 |
 
 #### [E31 — Debate File Parsing](plan_specs/v1/e31-debate-file-parsing/epic.yaml)
 

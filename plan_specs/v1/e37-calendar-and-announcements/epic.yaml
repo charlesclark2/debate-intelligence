@@ -282,5 +282,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e37-t09-site-changes-publish-without-a-release
+    - id: t10
+      kind: Task
+      name: 'A coach''s schedule or results edit passes the site''s tests without editing a test'
+      description: >-
+        A coach's schedule or results edit passes the site's tests without editing a test.
+      inputs:
+        specRef: plan_specs/v1/e37-calendar-and-announcements/t10-coach-edits-need-no-test-edit.yaml
+        goalRef: v1-e37-t10-coach-edits-need-no-test-edit
+      dependsOn:
+      - t06
+      - t02
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e37-t10-coach-edits-need-no-test-edit reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e37-t10-coach-edits-need-no-test-edit
 status:
   phase: Pending

@@ -180,9 +180,38 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-31
 
 **Notes:**
+
+One recorder now serves both deploy tests, and the tub test asserts the pipeline it never checked.
+1. **ac1 passes.**
+   * Each call is recorded alone through `tests/scripts/stub_calls.py`, and the pipeline's two calls
+     are asserted.
+   * The pipeline test passed 150 of 150 under `-n 6` at load 16 to 23, and the order test 54 of 54.
+   * The old recorder restored failed 8 of 100, then 5 of 60. Those 60 kept logs hold exactly 5
+     interleaved records, one per failure, among them v1-e40-t14's `--regiondocker` form in the tub
+     script.
+2. **The shared helper holds both tests.** The caselist test moved onto it in a commit of its own,
+   with 23 passed before and after, and its region and pipeline tests passed 100 of 100 on it under
+   load.
+3. **The helper was proven before you relied on it:**
+   * it imports under `--import-mode=importlib` (with the `pytest` script, under xdist, and from
+     another directory);
+   * `affected_tests.py` selects its importers when it changes.
+
+   That answers the question v1-e39-t20's finding raised.
+4. **Decisions accepted:**
+   * a module rather than a conftest, so a change selects only its importers;
+   * checking what `docker login` actually read, not only its flags;
+   * the substring password check, with the caselist test left as it was;
+   * `profiles.log` keeping its append, since only one stub writes it;
+   * `test_site_deploy.py` left alone, as ruled.
+5. **Follow-up:** noted against the website deploy's epic, if its script ever gains a pipeline. No task.
+6. **The affected set ran:** 48 files, 2,126 passed in 129 s, past the line at 94% under load 16 to 62,
+   and let finish rather than discarded. That's fine. ruff, pyright, lint-imports, the specs, the
+   command blocks, the docs index and the docs tests pass.
+7. **Merge:** any time.

@@ -593,7 +593,7 @@ occurrences within five minutes, a rebuilt and published index no longer holds t
 superseded index version is deleted, noncurrent versions included (data-use policy, E39 gate items 1
 and 5; `v1-e39-t07`). Do this in each environment whose pilot is deployed, after `--execute` has
 printed `DONE` there. The blocks are dev's; prod's are the same with prod's names and profiles, and
-`--confirm-prod` on the publish.
+`--confirm-prod` on the publish and on P4's delete.
 
 **What the function does by itself.** It re-reads `manifests/_suppression/suppression-list.jsonl`
 at most five minutes apart and hides every occurrence the list stops, from results, card pages,
@@ -709,88 +709,82 @@ rebuilt index doing what the build always does.
 
 ### P4 — Delete the superseded index versions, noncurrent versions included
 
-Under the takedown profile, which since `v1-e39-t07` may list versions and delete under
-`reports/tub/search/` and nowhere else under `reports/`. First a dry run that lists what it would
-delete and writes the delete requests to files; nothing is deleted until the second block. It reads
-`current.json` first, and **keeps the current index's directory and the current version of
-`current.json` out of the delete set**: the script refuses to write a request that names either, and
-refuses to go on if the listing does not hold the current index at all. Older versions of
-`current.json` are deleted; they name superseded indexes and hold no card.
+`debate-research tub index prune` does it (`v1-e39-t15`). It lists versions and deletes them under the
+takedown profile, which since `v1-e39-t07` may do both under `reports/tub/search/` and nowhere else
+under `reports/`, and reads `current.json` under the everyday profile. Both runs need
+`DEBATE_REMOVAL_PROFILE`, and the command stops unless that profile is signed in as this environment's
+takedown role.
+
+The dry run reads `current.json` and **keeps the current index's directory and the current version of
+`current.json`**. It lists every other version and delete marker under `reports/tub/search/`, older
+versions of `current.json` among them: they name superseded indexes and hold no card. It prints
+counts by index directory, each shortened to the first eight characters of its id, and a
+confirmation code, never a key. It refuses (`POINTER_NOT_IN_LISTING`) when `current.json` names an
+index the listing does not hold. `--execute --confirm <code>` lists again and deletes only if the
+listing is the one the code was printed for: exactly what the dry run listed. It refuses on a
+Wednesday in Chicago, the cloud run's day, and while the bucket's run lock is held. It holds the lock
+while it deletes and reads `current.json` again before the first delete, so a publish since the dry
+run deletes nothing.
+
+The installed build must have the command (a build from `v1-e39-t15` on); the block checks.
 
 **Operator command** (expected runtime seconds; reads only)
-Where: your Mac, a checkout of this repository (the bucket's name is read from
-`config/profiles/dev.toml`: the everyday profile may not list buckets)
+Where: your Mac, a new terminal window
 ```bash
-aws sso login --profile debate-dev-evidence
-aws sso login --profile debate-dev-evidence-removal
-BUCKET=$(python3 -c 'import tomllib; print(tomllib.load(open("config/profiles/dev.toml", "rb"))["storage"]["s3"]["bucket"])')
-echo "bucket: $BUCKET"
-PRUNE="${TMPDIR:-/tmp}/tub-index-prune"
-rm -rf "$PRUNE" && mkdir -p "$PRUNE"
-aws s3 cp "s3://${BUCKET}/reports/tub/search/current.json" "$PRUNE/current.json" --profile debate-dev-evidence
-aws s3api list-object-versions --profile debate-dev-evidence-removal --bucket "$BUCKET" \
-  --prefix reports/tub/search/ --output json > "$PRUNE/versions.json"
-python3 - "$PRUNE" <<'PY'
-import json, sys
-from pathlib import Path
-
-prune = Path(sys.argv[1])
-pointer_key = "reports/tub/search/current.json"
-current = json.loads((prune / "current.json").read_text())["index_id"]
-keep_dir = f"reports/tub/search/{current}/"
-listing = json.loads((prune / "versions.json").read_text())
-versions = listing.get("Versions", [])
-markers = listing.get("DeleteMarkers", [])
-kept = [one for one in versions if one["Key"].startswith(keep_dir) and one["IsLatest"]]
-if len(kept) < 2:
-    sys.exit(f"STOP: the listing holds {len(kept)} current object(s) under {keep_dir}; the pointer names an index that is not there")
-doomed = []
-for one in versions + markers:
-    if one["Key"].startswith(keep_dir):
-        continue
-    if one["Key"] == pointer_key and one.get("IsLatest"):
-        continue
-    doomed.append({"Key": one["Key"], "VersionId": one["VersionId"]})
-current_pointer = {(one["Key"], one["VersionId"]) for one in versions if one["Key"] == pointer_key and one["IsLatest"]}
-for one in doomed:
-    if one["Key"].startswith(keep_dir):
-        sys.exit("STOP: a delete request names the current index")
-    if (one["Key"], one["VersionId"]) in current_pointer:
-        sys.exit("STOP: a delete request names the current current.json")
-keys = sorted({one["Key"] for one in doomed})
-for key in keys:
-    print(f"would delete {sum(1 for one in doomed if one['Key'] == key)} version(s) of {key}")
-for number, start in enumerate(range(0, len(doomed), 1000), 1):
-    batch = {"Objects": doomed[start:start + 1000], "Quiet": True}
-    (prune / f"delete-{number}.json").write_text(json.dumps(batch))
-(prune / "index_id").write_text(current)
-print(f"{len(doomed)} version(s) of {len(keys)} key(s) to delete; keeps {keep_dir} ({len(kept)} objects) and the current {pointer_key}")
-PY
-```
-Success looks like one `would delete` line per key, all under superseded index directories or
-`current.json`, then the count and the `keeps` line naming the index id the publish in P3 named. A
-`STOP` line means nothing was written: do not go on. `0 version(s)` means there is nothing to delete.
-
-**Then delete.** The block reads `current.json` again and deletes only if it still names the index
-the dry run kept, so a publish between the two blocks cannot lose its index.
-
-**Operator command** (expected runtime seconds; deletes, and cannot be undone)
-Where: your Mac, the same shell as the dry run
-```bash
-NOW=$(aws s3 cp "s3://${BUCKET}/reports/tub/search/current.json" - --profile debate-dev-evidence | python3 -c 'import json, sys; print(json.load(sys.stdin)["index_id"])')
-if [[ "$NOW" == "$(cat "$PRUNE/index_id")" ]]; then
-  for REQUEST in "$PRUNE"/delete-*.json(N); do
-    aws s3api delete-objects --profile debate-dev-evidence-removal --bucket "$BUCKET" \
-      --delete "file://${REQUEST}" --query 'length(Errors || `[]`)' --output text
-  done
-  echo "pruned; kept reports/tub/search/${NOW}/ and the current reports/tub/search/current.json"
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+echo "running pull: ${PULL:-none}"
+if [[ -n "$PULL" ]] || env | grep -q '^DEBATE_'; then
+  echo "STOP: a caselist pull is running, or a DEBATE_ variable is set in this shell; open a new window"
+elif debate-research tub index prune --help > /dev/null 2>&1; then
+  aws sso login --profile debate-dev-evidence
+  aws sso login --profile debate-dev-evidence-removal
+  DEBATE_ENV=dev DEBATE_REMOVAL_PROFILE=debate-dev-evidence-removal debate-research tub index prune --env dev
 else
-  echo "STOP: current.json now names ${NOW}, not the index the dry run kept; run the dry run again"
+  echo "STOP: the installed build has no tub index prune; install a newer one with scripts/install_channel.sh"
 fi
 ```
-Success looks like a `0` for each request file (no errors) and the `pruned; kept` line naming the
-current index. Then run the dry run again: it prints `0 version(s) of 0 key(s) to delete` and the
-same `keeps` line.
+Success looks like a table titled `tub index prune on s3://<bucket>: current index <eight characters>`,
+whose eight characters begin the index id P3 published. It has one row per index directory and one
+for `current.json`. The current index's row reads `kept`, `current.json`'s reads `current kept, older
+would be deleted`, and every other row reads `would be deleted`. Below the table it
+says what it would delete and ends `To carry it out, add: --execute --confirm <code>`. Write down its
+counts for P5. `Dry run: nothing to delete` means there is nothing to delete; stop here.
+
+**Stop, and do not run the next block, if:** the current index is not the one P3 published; a row
+other than the current index's and `current.json`'s says `kept`; or the command refused. A refusal
+`POINTER_NOT_IN_LISTING` means a publish was under way or the current index is damaged: run the dry
+run again in a few minutes, and tell the PM if it persists. `NOT_THE_TAKEDOWN_ROLE` means
+`debate-dev-evidence-removal` is not signed in as the takedown role: sign in again.
+
+**Then delete.** Set `CODE` to the code the dry run printed.
+
+**Operator command** (expected runtime seconds; deletes, and cannot be undone)
+Where: your Mac, the same window as the dry run
+```bash
+CODE=put-the-code-the-dry-run-printed-here
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+if [[ -n "$PULL" ]] || env | grep -q '^DEBATE_'; then
+  echo "STOP: a caselist pull is running, or a DEBATE_ variable is set in this shell; open a new window"
+else
+  DEBATE_ENV=dev DEBATE_REMOVAL_PROFILE=debate-dev-evidence-removal debate-research tub index prune --env dev --execute --confirm "$CODE"
+fi
+```
+Success looks like the same table with `deleted` where the dry run said `would be deleted`, and a line
+below it beginning `Deleted N:`, where N is the dry run's versions and delete markers together.
+Then run the dry run again as the check: it says `Dry run: nothing to delete` under the same current
+index.
+
+**If it refuses**, it deleted nothing:
+
+| Error code | What it means | What to do |
+|---|---|---|
+| `CONFIRMATION_MISMATCH` | The listing changed since the dry run (a publish, or another prune), or `CODE` is not its code | Run the dry run again, read it again, and use its code |
+| `SEARCH_INDEX_POINTER_MOVED` | A publish moved `current.json` while the command waited for the lock | The same |
+| `PRUNE_ON_CLOUD_RUN_DAY` | It is Wednesday in Chicago | Run both blocks on another day |
+| `RUN_LOCK_HELD` | The cloud run, a publish or a removal holds the bucket's run lock | Wait for it (`debate-research caselist runs --remote --last 1`), then run the dry run again |
+
+**In prod**, the blocks are the same with `debate-prod-evidence`, `debate-prod-evidence-removal`,
+`DEBATE_ENV=prod` and `--env prod`, and `--confirm-prod` after `--confirm "$CODE"` on the delete.
 
 ### P5 — Record it
 

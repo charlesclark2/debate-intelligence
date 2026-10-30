@@ -768,31 +768,45 @@ Success looks like `replaced: caselist_image_digest = "sha256:<old>"  ->  caseli
 
 **The plan, after the cutover.** Step 6's plan and the cutover runbook's image-plan check were
 written for the first image apply, while the run's schedule was still `DISABLED`; since the cutover
-(2026-10-26) the schedule is `ENABLED` and stays so, so their "stays `DISABLED`" reading no longer
-holds (`v1-e31-t31`'s review). Use this plan instead, until a check of its own is written. It prints
-only resource addresses and counts.
+(2026-10-26) the schedule is `ENABLED` and stays so (`v1-e31-t31`'s review). This block saves the
+plan, writes it as JSON with `terraform show -json`, and checks that JSON with
+`ops/caselist_run/check_image_plan.py` (`v1-e40-t15`). The check reads the plan's resource changes,
+never its text: `terraform plan` prints a "Refreshing state..." line for every resource in state, so
+on 2026-10-29 a count of Identity Center lines read 40 on a plan that changed none of them. The block
+first removes the last plan and its JSON, so a plan that fails leaves nothing behind for the check
+or the apply to read. The plan's text stays in `/tmp/caselist-new-image-plan.txt` for the PM.
 
 **Operator command** (expected runtime ~2 min)
 Where: `$WT`, in the shell that replaced the digest line
 ```bash
 cd "$WT"
+rm -f infrastructure/envs/dev/caselist-new-image.tfplan /tmp/caselist-new-image-plan.json
 if env | grep -qE '^(TF_VAR_|TF_WORKSPACE=|TF_DATA_DIR=|TF_CLI_ARGS)'; then echo "STOP: a Terraform override is set in this shell"; else AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev init -input=false >/dev/null && AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev plan -input=false -no-color -out=caselist-new-image.tfplan | tee /tmp/caselist-new-image-plan.txt | tail -3; fi
-grep -E '^Plan:|must be replaced|will be destroyed' /tmp/caselist-new-image-plan.txt
-grep -E '^  # ' /tmp/caselist-new-image-plan.txt | grep -v 'module.caselist_run' | head
-grep -cE 'aws_ssoadmin|aws_identitystore' /tmp/caselist-new-image-plan.txt
-grep -E '^ +[~+-] state ' /tmp/caselist-new-image-plan.txt
+AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev show -json caselist-new-image.tfplan > /tmp/caselist-new-image-plan.json
+python3 -I ops/caselist_run/check_image_plan.py /tmp/caselist-new-image-plan.json infrastructure/envs/dev/owner.auto.tfvars
 ```
 
-**What to read, and what stops you.** Send the PM every line the block printed; apply only after the
-PM's word.
+**What to read, and what stops you.** The last line is the check's. Send the PM it and the plan's
+`Plan:` line above it; apply only after the PM's word.
 
-* `Plan: 2 to add, 4 to change, 2 to destroy.`, with exactly two `must be replaced` lines, the login
-  and run task definitions, and the same two as `will be destroyed`.
-* Nothing from the third command: every change is inside `module.caselist_run`.
-* `0` from the fourth: no permission set, account assignment or Identity Center change.
-* Nothing from the fifth: no schedule's `state` changes, so the run's stays `ENABLED`.
+* `PLAN OK: 2 to add, 4 to change, 2 to destroy; the login and run task definitions replaced with
+  the image sha256:<new>... and nothing else in them changed; the two schedules and their roles'
+  policies repointed at the new revisions; both schedules ENABLED throughout; nothing else changes`,
+  with the image the digest line's: the only shape that passes. Each task definition's image
+  changed to `owner.auto.tfvars`'s digest and nothing else in it; each schedule's target and each
+  scheduler role's policy pointed at the new revision and nothing else in them; neither schedule's
+  `state` changing.
+* `PLAN STOP: ...` names each change that is not that shape, with its address and actions: an
+  Identity Center change (`aws_ssoadmin_*`, `aws_identitystore_*`) anywhere, a change outside
+  `module.caselist_run`, a schedule's `state`, a task definition updated rather than replaced, an
+  expected change missing, or any other change in the module, such as 2026-10-29's update to
+  `module.caselist_run.aws_cloudwatch_event_target.task_stopped["run"]`. A `PLAN STOP` goes to the PM
+  before any apply, with the plan's text for each address it names. An Identity Center change is
+  never applied.
+* `PLAN STOP: the plan file is not JSON ...` or `... has no resource_changes ...` means the plan or
+  its `show` failed: read the lines above it, fix that and run the block again.
 
-Any other count or line stops the apply until the PM has read it.
+If the PM allows a plan the check stopped, the apply's counts are that plan's, not the ones below.
 
 **Operator command** (expected runtime ~1 min)
 Where: `$WT`, after the PM's word, on any day but Wednesday

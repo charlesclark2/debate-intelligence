@@ -39,7 +39,7 @@ spec:
         finishes under two minutes, by the harness's own run (operator if the whole set
         passes two minutes).
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

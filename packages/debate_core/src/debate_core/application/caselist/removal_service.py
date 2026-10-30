@@ -41,7 +41,10 @@ own (`v1-e29-t09`); `docs/runbooks/caselist-removal.md` says when one is still r
 2. **The bucket**: every version of every `raw/` and `parsed/` object, listed again with the
    takedown credential so nothing the dry run could not see is missed; then every version of each
    landscape school view the plan reaches (`v1-e32-t13`), listed the same way and chosen by the
-   selection the plan used (:mod:`~debate_core.application.caselist.removal_school_views`); then
+   selection the plan used (:mod:`~debate_core.application.caselist.removal_school_views`). Each
+   of the two is listed once more after its delete, and a version or delete marker still there
+   stops the run `INCOMPLETE`, counts only (:class:`BucketObjectsLeft` from `v1-e30-t29`,
+   :class:`SchoolViewsLeft`); then
    each rewritten manifest, written and every superseded version of it purged; then the sweep
    (:mod:`~debate_core.application.caselist.manifest_sweep`): every noncurrent version of any other
    manifest of the same caselists that still names what was removed, and of each manifest an
@@ -141,6 +144,7 @@ from debate_core.domain import SHA256_HEX_PATTERN
 
 __all__ = [
     "PREFLIGHT_PREFIX",
+    "BucketObjectsLeft",
     "BundleSaved",
     "CaselistRemovalService",
     "NotSuppressed",
@@ -640,6 +644,23 @@ class SchoolViewsLeft(DomainError):
         )
 
 
+class BucketObjectsLeft(DomainError):
+    """After deleting, the removal credential still lists versions of `raw/` or `parsed/` keys it reached.
+
+    The same check as :class:`SchoolViewsLeft`, for the source and parsed files (`v1-e30-t29`): a
+    delete the store answered and did not carry out, or a key written again while the removal ran.
+    The run stops `INCOMPLETE`; running the same removal again takes them. Counts only: no key.
+    """
+
+    def __init__(self, versions: int, files: int) -> None:
+        self.versions = versions
+        self.files = files
+        super().__init__(
+            f"{versions} version(s) or delete marker(s) of {files} source or parsed file(s) this removal "
+            "reached are still in the bucket after it deleted them; run the same removal again"
+        )
+
+
 class RunStateBundleNotRewritten(DomainError):
     """The removal's rewrite of the run-state bundle was not confirmed in the bucket: nothing of it purged."""
 
@@ -803,15 +824,27 @@ class CaselistRemovalService:
     async def _delete_bucket_objects(
         self, plan: RemovalPlan, access: TakedownAccess, counts: _Counts
     ) -> None:
-        """Every version of every `raw/` and `parsed/` object, as the takedown credential lists them now."""
-        for planned in plan.objects_on(Side.BUCKET):
-            versions = tuple(
-                version
-                for version in await access.versions.list_versions(planned.key)
-                if version.key == planned.key
-            )
+        """Every version of every `raw/` and `parsed/` object, as the takedown credential lists them now.
+
+        Then it lists each key again, and a version or delete marker of one still there is
+        :class:`BucketObjectsLeft` (`v1-e30-t29`), as :meth:`_delete_bucket_school_views` does for
+        the school views. A listing by key is a listing by prefix, so each is read for its own key.
+        """
+        planned = plan.objects_on(Side.BUCKET)
+        for one in planned:
+            versions = await self._bucket_versions(access, one.key)
             refuse_protected_versions(versions)
             counts.s3_versions_deleted += await access.versions.delete_versions(versions)
+        left = [await self._bucket_versions(access, key) for key in dict.fromkeys(one.key for one in planned)]
+        if any(left):
+            raise BucketObjectsLeft(
+                sum(len(versions) for versions in left), sum(1 for versions in left if versions)
+            )
+
+    @staticmethod
+    async def _bucket_versions(access: TakedownAccess, key: ObjectKey) -> tuple[ObjectVersion, ...]:
+        """Every version and delete marker of exactly `key`, as the takedown credential lists them now."""
+        return tuple(version for version in await access.versions.list_versions(key) if version.key == key)
 
     async def _delete_bucket_school_views(
         self, plan: RemovalPlan, access: TakedownAccess, counts: _Counts

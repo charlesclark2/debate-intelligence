@@ -40,7 +40,7 @@ spec:
         INCOMPLETE naming counts only, and a re-run that deletes finishes it; tests shown
         failing first, against moto.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -514,7 +514,7 @@ Debaters search the team's evidence store from a school Chromebook or at home: a
 | [Only real cards come back: entries with no cite or a few words of text, counted before any rule](plan_specs/v1/e39-evidence-search-pilot/t12-card-only-results.yaml) `v1-e39-t12-card-only-results` | Succeeded | 1 | 3.0 |
 | [Find a card that says something: passage search, word stems and prefixes](plan_specs/v1/e39-evidence-search-pilot/t13-passage-search.yaml) `v1-e39-t13-passage-search` | Succeeded | 2 | 5.0 |
 | [An index that would drop most of the cards is never published](plan_specs/v1/e39-evidence-search-pilot/t14-index-shrink-guard.yaml) `v1-e39-t14-index-shrink-guard` | Succeeded | 1 | 3.0 |
-| [tub index prune: the runbook's prune of superseded index versions as one command](plan_specs/v1/e39-evidence-search-pilot/t15-tub-index-prune.yaml) `v1-e39-t15-tub-index-prune` | Pending | 1 | 2.0 |
+| [tub index prune: the runbook's prune of superseded index versions as one command](plan_specs/v1/e39-evidence-search-pilot/t15-tub-index-prune.yaml) `v1-e39-t15-tub-index-prune` | InProgress | 1 | 2.0 |
 | [Open on OpenEv: a camp card links to its camp file](plan_specs/v1/e39-evidence-search-pilot/t16-open-on-openev.yaml) `v1-e39-t16-open-on-openev` | Pending | 1 | 3.0 |
 | [The landscape report and its school view on the pilot, for signed-in team members](plan_specs/v1/e39-evidence-search-pilot/t17-landscape-pages.yaml) `v1-e39-t17-landscape-pages` | Succeeded | 2 | 6.0 |
 | [Backfile seasons searchable on the pilot, without slowing its cold start](plan_specs/v1/e39-evidence-search-pilot/t18-backfiles-in-the-pilot-index.yaml) `v1-e39-t18-backfiles-in-the-pilot-index` | Pending | 2 | 4.0 |

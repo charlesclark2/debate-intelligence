@@ -186,6 +186,8 @@ def arguments(tmp_path: Path) -> dict[str, tuple[object, ...]]:
         "mode: ModelMode": tuple(ModelMode),
         "max_items: int": (1,),
         "cassette_dir: Path | None": (None, tmp_path / "cassettes"),
+        "parsed_dir: Path | None": (None, tmp_path / "restored-copy"),
+        "restored_copy: Path | None": (None, tmp_path / "restored-copy"),
         "blob_prefix: str | None": (None,),
         "key: ObjectKey": ("manifests/planted.json",),
         "profile: ConfiguredProfile": (ConfiguredProfile("storage.s3.aws_profile", EVERYDAY_PROFILE),),

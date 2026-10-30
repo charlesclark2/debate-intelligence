@@ -39,6 +39,11 @@ same use case. One run, for one caselist at one weekly snapshot (the newest unle
    in an earlier run (:class:`PublishRefusal`); the run's result says which, and the bundle is still
    written locally for the operator to read.
 
+Given `parser_version` (`v1-e40-t17`), the run reads its cards from a store restored from the bucket
+and first checks that the store's newest parsed directory of the caselist is of that version: one that
+is not is a :class:`ParsedVersionNotInStore`, before anything is read or written
+(:mod:`debate_core.application.landscape_restored_copy`).
+
 A **dry run** writes nothing anywhere: not the cache, not the queue, not the bundle, not the
 acceptance log, not the bucket. It reads all of them and says what a run would do, with each
 planned key and whether it would be uploaded.
@@ -81,6 +86,7 @@ from debate_core.application.landscape_report import (
     landscape_cards,
     overrides_digest,
 )
+from debate_core.application.landscape_restored_copy import LANDSCAPE_RUNBOOK
 from debate_core.application.landscape_scan import (
     ScanAcceptance,
     ScanAcceptanceLog,
@@ -125,6 +131,7 @@ __all__ = [
     "ModelStageFactory",
     "NoTopicMapping",
     "NothingToReport",
+    "ParsedVersionNotInStore",
     "PlannedUpload",
     "PositionClassifier",
     "PublishAction",
@@ -190,6 +197,10 @@ class UnknownSnapshot(LandscapeRequestRefused):
 
 class NoTopicMapping(LandscapeRequestRefused):
     """`topics.yaml` puts the snapshot on no topic, or on a topic with no taxonomy yet."""
+
+
+class ParsedVersionNotInStore(LandscapeRequestRefused):
+    """The restored copy's newest parsed directory of the caselist is not this build's parser version."""
 
 
 class NothingToReport(DomainError):
@@ -408,6 +419,7 @@ class LandscapeRunService:
         review_threshold: float = DEFAULT_REVIEW_THRESHOLD,
         max_model_items: int = DEFAULT_MAX_MODEL_ITEMS,
         backfile_caselists: Sequence[str] = (),
+        parser_version: str | None = None,
     ) -> None:
         self._taxonomies = taxonomies
         # Never classified, never a per-school view (data-use policy 1.17, `v1-e34-t34`).
@@ -430,6 +442,7 @@ class LandscapeRunService:
         self._stale_after_days = stale_after_days
         self._threshold = review_threshold
         self._max_model_items = max_model_items
+        self._parser_version = parser_version
 
     def _classifier_for(self, store: ClassificationStore, request: LandscapeRunRequest) -> PositionClassifier:
         """The classifier for `request`: stage one alone under `none`, with the model stage otherwise."""
@@ -458,6 +471,8 @@ class LandscapeRunService:
     async def run(self, request: LandscapeRunRequest) -> LandscapeRunResult:
         refuse_a_landscape(request.caselist, self._backfiles)
         snapshot = await self._snapshot(request.caselist, request.snapshot)
+        if self._parser_version is not None:
+            await self._refuse_another_parser_version(request.caselist, self._parser_version)
         resolved = self._taxonomies.resolve(request.caselist, snapshot)
         topics_file = str(self._config_dir / "topics.yaml")
         if resolved is None:
@@ -627,6 +642,24 @@ class LandscapeRunService:
                 known=shown,
             )
         return asked
+
+    async def _refuse_another_parser_version(self, caselist: str, parser_version: str) -> None:
+        """The store's newest parsed directory of `caselist` is of `parser_version`, or the run stops here.
+
+        Without it a copy restored by this build, which holds no parsed directory until `caselist parse`
+        writes one, or a copy an older build parsed, would be read at another parser's cards.
+        """
+        versions = await self._parsed.version_directories(caselist)
+        newest = parse_version_directory(versions[-1])[0] if versions else None
+        if newest == parser_version:
+            return
+        raise ParsedVersionNotInStore(
+            f"the restored copy's newest parsed directory of {caselist} is {newest or 'none'}, not this "
+            f"build's parser version {parser_version}; parse the copy first with this build (`caselist "
+            f"parse --caselist {caselist}`, the copy as its data directory, never --publish), as "
+            f"{LANDSCAPE_RUNBOOK} says",
+            known=versions,
+        )
 
     async def _snapshot_topics(self, caselist: str, through: date) -> dict[date, str]:
         """Each weekly snapshot of `caselist` through `through`, with the topic `topics.yaml` puts it on.

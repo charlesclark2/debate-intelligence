@@ -24,7 +24,9 @@ from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from tests.smoke.installed_build import InstalledCli
 
 from debate_cli.exit_codes import ExitCode
+from debate_core.integrations.docx_parser import DebateDocxParser
 from debate_core.testing.landscape_run import SyntheticRun, plant_synthetic_run
+from debate_core.testing.landscape_store import PARSER_VERSION
 
 BUNDLE = (
     ("positions.csv", "circuit_wide"),
@@ -102,3 +104,35 @@ def test_landscape_report_refuses_an_unknown_caselist_with_exit_2(
     assert result.exit_code == ExitCode.USAGE_ERROR, result.output
     assert json.loads(result.stdout)["error"]["details"]["known"] == ["synthetic26"]
     assert not (world.data_dir / "reports").exists()
+
+
+def test_landscape_report_reads_a_restored_copy_and_writes_nothing_on_a_dry_run(
+    installed_cli: InstalledCli, world: SyntheticRun, tmp_path: Path
+) -> None:
+    """`v1-e40-t17`: the data directory stops at 2026-09-08; the copy, parsed by this build, at 09-15."""
+    (world.data_dir / "objects" / "manifests" / "synthetic26" / "2026-09-15.jsonl").unlink()
+    copy = plant_synthetic_run(tmp_path / "copy-root").data_dir.resolve()
+    parsed = copy / "parsed" / "synthetic26"
+    (parsed / PARSER_VERSION).rename(parsed / DebateDocxParser().parser_version)
+
+    result = installed_cli.run(
+        "--json",
+        "landscape",
+        "report",
+        "--caselist",
+        "synthetic26",
+        "--dry-run",
+        "--restored-copy",
+        str(copy),
+        "--config-dir",
+        str(world.config_dir),
+    )
+
+    assert result.exit_code == ExitCode.OK, result.output
+    data = json.loads(result.stdout)["data"]
+    assert (data["snapshot"], data["restored_copy"], data["written"]) == ("2026-09-15", str(copy), False)
+    assert data["classification"]["model"]["would_ask"] == 0
+    assert data["counts"]["cards"] == 9
+    for directory in (world.data_dir, copy):
+        assert not (directory / "landscape").exists()
+        assert not (directory / "reports").exists()

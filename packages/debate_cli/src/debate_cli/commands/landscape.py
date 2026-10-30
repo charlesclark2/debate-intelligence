@@ -6,6 +6,7 @@
     debate-research landscape report --caselist hspolicy26 --snapshot 2026-10-20 --json
     debate-research landscape report --caselist hspolicy26 --publish --dry-run
     debate-research landscape report --caselist hspolicy26 --publish --accept-scan-hits 3f9a0c1d2e4b
+    debate-research landscape report --caselist hspolicy26 --restored-copy <copy> --publish
 
 Every decision is :class:`~debate_core.application.landscape_run.LandscapeRunService`'s
 (`v1-e32-t05-landscape-cli`); this is the guards and the rendering.
@@ -54,15 +55,34 @@ ones.
 ## `--dry-run`
 
 Writes nothing: not the classification cache, the review queue, the bundle, the acceptance log or
-the bucket. With `--publish` it asks the bucket which files would go up.
+the bucket. With `--publish` it asks the bucket which files would go up. In every model mode it says
+how many cards it would ask the model about (`--json`: `classification.model.would_ask`, `null` in a
+run that is no dry run), and asks none: under `none` that is 0, and under `replay` or `live` it is
+what a run would send, with what it would hold back over `--max-model-items` (`v1-e40-t17`).
+
+## `--restored-copy`
+
+Since the cutover the weekly run is the cloud task, and the weeks it pulls are in the dev bucket, not in
+this machine's data directory. `--restored-copy <copy>` (`v1-e40-t17`) reads the caselist's cards from a
+copy `caselist restore-run-state --with-sources` made and `caselist parse` parsed with this build: its
+manifests, parsed store, suppression list, run log and raw sources. Every piece of the landscape's own
+state stays in the data directory, where a deleted copy cannot take it: the classification cache, the
+review queue, the plan-text and analytic-text caches, the scan acceptances, the model cassettes and
+usage log, and the bundle. `--json`'s `restored_copy` names the copy, `null` without one. Refused, exit
+`2`, for the data directory, a directory inside it or holding it, one inside a checkout, one that is no
+directory, a copy holding no weekly manifest of the caselist, and a copy whose newest parsed directory of
+it is not this build's parser version. In bucket mode `--publish` without it is refused, exit `1`, with
+the runbook in the hint (`docs/runbooks/landscape-report-from-the-cloud-run.md`): the data directory's
+newest snapshot is not the newest week. A dry run, and a report kept on this machine, need no copy.
 
 ## Exit codes
 
 `0` when the report was written (and published, when asked). `2` for an unknown caselist or snapshot,
 with the known ones, or a caselist and date `topics.yaml` maps to no topic with a taxonomy, naming
-the file to edit. `1` for a publish the scan holds back, a classification stage over its model
-budget or whose model stopped answering (after writing the cache and the review queue, publishing
-nothing), a live run the data-use policy does not yet allow, or a report that cannot be built.
+the file to edit, or a `--restored-copy` refused. `1` for a publish the scan holds back, a
+classification stage over its model budget or whose model stopped answering (after writing the cache
+and the review queue, publishing nothing), a live run the data-use policy does not yet allow, a publish
+in bucket mode without `--restored-copy`, or a report that cannot be built.
 
 ## `--model-mode`
 
@@ -116,6 +136,12 @@ from debate_core.application.landscape_model_stage import (
     model_use_gate,
 )
 from debate_core.application.landscape_report import CIRCUIT_WIDE_FILES, SCHOOL_VIEW_FILES
+from debate_core.application.landscape_restored_copy import (
+    LANDSCAPE_RUNBOOK,
+    RESTORED_COPY_FLAG,
+    publish_refusal,
+    restored_copy_refusal,
+)
 from debate_core.application.landscape_run import (
     LandscapeModelMode,
     LandscapeRequestRefused,
@@ -220,6 +246,16 @@ def report(
     confirm_prod: Annotated[
         bool, typer.Option(CONFIRM_PROD_FLAG, help="Required to publish to the production evidence bucket.")
     ] = False,
+    restored_copy: Annotated[
+        Path | None,
+        typer.Option(
+            RESTORED_COPY_FLAG,
+            file_okay=False,
+            help="Read the caselist's cards from this copy restored from the bucket "
+            "(`caselist restore-run-state --with-sources`); the landscape's own state stays in the data "
+            "directory. Required to publish in bucket mode.",
+        ),
+    ] = None,
     json_output: Annotated[
         bool, typer.Option("--json", help="Write one machine-readable JSON object to stdout.")
     ] = False,
@@ -228,9 +264,10 @@ def report(
     if json_output and not cli.output.is_json:
         cli.output = CliOutput(OutputMode.JSON, verbose=cli.output.verbose)
     settings = cli.services.settings
+    copy = restored_copy.expanduser().resolve() if restored_copy is not None else None
     refusal = _environment_refusal(
         settings, publish=publish, writing=publish and not dry_run, confirmed=confirm_prod
-    )
+    ) or _copy_refusal(settings, copy, publish=publish, dry_run=dry_run)
     if refusal is None and model_mode is LandscapeModelMode.LIVE and not dry_run:
         refusal = _policy_refusal()
     if refusal is not None:
@@ -245,7 +282,9 @@ def report(
         model_mode=model_mode,
         max_model_items=max_model_items,
     )
-    service = cli.services.landscape_run(config_dir=landscape_config_dir(config_dir), with_bucket=publish)
+    service = cli.services.landscape_run(
+        config_dir=landscape_config_dir(config_dir), with_bucket=publish, restored_copy=copy
+    )
     try:
         result = (
             run_holding_the_bucket_lock(cli, "landscape report --publish", lambda: service.run(request))
@@ -254,7 +293,7 @@ def report(
         )
     except LandscapeRequestRefused as refused:
         _end(cli, ctx, _usage_failure(refused))
-    payload = run_summary(result, settings)
+    payload = run_summary(result, settings, restored_copy=copy)
     failure = _publish_failure(result, payload)
     if failure is None or not cli.output.is_json:
         cli.output.success(command_name(ctx), payload, display=_display(result, settings))
@@ -463,6 +502,36 @@ def _environment_refusal(
     return None
 
 
+def _copy_refusal(
+    settings: Settings, copy: Path | None, *, publish: bool, dry_run: bool
+) -> CommandFailure | None:
+    """A `--restored-copy` that is no copy; in bucket mode, a publish without one (`v1-e40-t17`)."""
+    environment = settings.environment.value
+    if copy is not None and (reason := restored_copy_refusal(copy, data_dir=settings.storage.data_dir)):
+        return CommandFailure(
+            code="RESTORED_COPY_REFUSED",
+            message=f"{RESTORED_COPY_FLAG} names no copy to read: {reason}",
+            exit_code=ExitCode.USAGE_ERROR,
+            details={"environment": environment},
+            hint="Name the directory `caselist restore-run-state --into` restored, beside the data dir.",
+        )
+    reason = publish_refusal(
+        run_state=settings.caselist.run_state,
+        publish=publish,
+        dry_run=dry_run,
+        restored_copy=copy is not None,
+    )
+    if reason is None:
+        return None
+    return CommandFailure(
+        code="PUBLISH_NEEDS_A_RESTORED_COPY",
+        message=f"nothing was published: {reason}",
+        exit_code=ExitCode.DOMAIN_FAILURE,
+        details={"environment": environment},
+        hint=f"Restore a copy, parse it, and publish from it: {LANDSCAPE_RUNBOOK}.",
+    )
+
+
 def _usage_failure(refused: LandscapeRequestRefused) -> CommandFailure:
     details: dict[str, JsonValue] = {"known": list(refused.known)}
     if refused.file_to_edit is not None:
@@ -505,7 +574,9 @@ def _publish_failure(result: LandscapeRunResult, payload: dict[str, JsonValue]) 
     )
 
 
-def run_summary(result: LandscapeRunResult, settings: Settings) -> dict[str, JsonValue]:
+def run_summary(
+    result: LandscapeRunResult, settings: Settings, *, restored_copy: Path | None = None
+) -> dict[str, JsonValue]:
     """The `--json` envelope's `data`: paths, counts, method totals, model calls, scan and publish."""
     counts = result.classification.counts
     header = result.report.header
@@ -524,6 +595,7 @@ def run_summary(result: LandscapeRunResult, settings: Settings) -> dict[str, Jso
         "model_mode": result.model_mode.value,
         "model_calls": result.model_calls,
         "dry_run": result.dry_run,
+        "restored_copy": str(restored_copy) if restored_copy is not None else None,
         "written": result.written,
         "paths": {"directory": str(result.directory), "files": [str(path) for path in result.files]},
         "bundle": [
@@ -566,6 +638,7 @@ def run_summary(result: LandscapeRunResult, settings: Settings) -> dict[str, Jso
             },
             "model": {
                 "prompt_version": result.classification.prompt_version,
+                "would_ask": counts.model_items if result.dry_run else None,
                 "asked": counts.model_items,
                 "calls": counts.model_calls,
                 "cached": counts.model_hits,
@@ -639,6 +712,19 @@ def _model_lines(result: LandscapeRunResult) -> list[str]:
     ]
 
 
+def _would_ask_lines(result: LandscapeRunResult) -> list[str]:
+    """A dry run's count of the cards it would ask the model about, in every mode; it asked none."""
+    if not result.dry_run:
+        return []
+    counts = result.classification.counts
+    line = f"Dry run: would ask the model about {counts.model_items} card(s)"
+    if result.model_mode is LandscapeModelMode.NONE:
+        return [f"{line}; --model-mode none asks it nothing."]
+    if counts.model_held_back:
+        return [f"{line}, and hold {counts.model_held_back} more back for a later run."]
+    return [f"{line}."]
+
+
 def _display(result: LandscapeRunResult, settings: Settings) -> str:
     counts = result.classification.counts
     header = result.report.header
@@ -657,6 +743,7 @@ def _display(result: LandscapeRunResult, settings: Settings) -> str:
         f"Affirmative rounds with no identified aff: {unclassified.aff_rounds_unidentified} of "
         f"{unclassified.aff_rounds}; aff assignments {result.aff_assignments}.",
         *_model_lines(result),
+        *_would_ask_lines(result),
         f"Review queue: {result.classification.review_queue.counts.rows} rows "
         f"({result.classification.review_queue_location}).",
         _trends_line(result.trends),

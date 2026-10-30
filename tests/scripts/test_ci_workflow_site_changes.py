@@ -338,8 +338,12 @@ def test_the_patterns_match_as_picomatch_matches_them(pattern: str, path: str, e
     assert matches(pattern, path) is expected
 
 
-@pytest.mark.parametrize("context", [PULL_REQUEST_INTO_DEV, PULL_REQUEST_INTO_MAIN], ids=["into-dev", "into-main"])
-def test_a_change_only_under_site_selects_no_python_tests_and_runs_the_site_job(context: dict[str, str]) -> None:
+@pytest.mark.parametrize(
+    "context", [PULL_REQUEST_INTO_DEV, PULL_REQUEST_INTO_MAIN], ids=["into-dev", "into-main"]
+)
+def test_a_change_only_under_site_selects_no_python_tests_and_runs_the_site_job(
+    context: dict[str, str],
+) -> None:
     assert len(SITE_FILES) > 100
     new_page = "site/content/pages/new-page.md"
     outputs = changes_outputs([*SITE_FILES, new_page], context)
@@ -353,7 +357,9 @@ def test_a_change_only_under_site_selects_no_python_tests_and_runs_the_site_job(
 def test_a_change_under_scripts_still_selects_the_python_tests(path: str) -> None:
     assert (REPO_ROOT / path).is_file()
     assert changes_outputs([path], PULL_REQUEST_INTO_MAIN)["python"] == "true"
-    assert changes_outputs([path, "site/content/pages/results.md"], PULL_REQUEST_INTO_MAIN)["python"] == "true"
+    assert (
+        changes_outputs([path, "site/content/pages/results.md"], PULL_REQUEST_INTO_MAIN)["python"] == "true"
+    )
 
 
 def test_every_markdown_file_outside_site_still_selects_the_python_tests() -> None:

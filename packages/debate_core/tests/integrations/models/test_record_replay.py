@@ -13,7 +13,7 @@ import argparse
 import asyncio
 import json
 import os
-from collections.abc import Coroutine, Iterator, Mapping, Sequence
+from collections.abc import Callable, Coroutine, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -50,6 +50,7 @@ from debate_core.application.structured_output import (
     validate_model_output,
 )
 from debate_core.domain.model_contracts import (
+    Effort,
     EmbeddingResponse,
     ModelParams,
     ModelPrompt,
@@ -1087,6 +1088,149 @@ def test_a_call_that_differs_from_its_cassette_only_outside_the_key_is_unrecorde
 
     with pytest.raises(MissingFixtureError, match="the cassette at this key recorded"):
         run(replayer(tmp_path).generate_structured(task_class, PROMPT, ContractPassage, params))
+
+
+# ---------------------------------------------------------------------------------------------
+# A cassette recorded before an optional parameter existed still replays (v1-e05-t09)
+# ---------------------------------------------------------------------------------------------
+
+
+def recorded_request_of(path: Path) -> dict[str, Any]:
+    return json.loads(path.read_text(encoding="utf-8"))["request"]
+
+
+def rewrite_recorded_request(path: Path, change: Callable[[dict[str, Any]], None]) -> None:
+    """Edit the request a cassette recorded, as an older build or a different call would have written it."""
+    document = json.loads(path.read_text(encoding="utf-8"))
+    change(document["request"])
+    path.write_text(json.dumps(document), encoding="utf-8")
+
+
+def recorded_example(root: Path) -> Path:
+    """Record one call and return its cassette."""
+    run(
+        recorder(root, planned(TaskClass.HIGH_VOLUME, PASSAGE, ContractPassage)).generate_structured(
+            TaskClass.HIGH_VOLUME, PROMPT, ContractPassage
+        )
+    )
+    return CassetteDirectory(root).structured_path(
+        ModelRequest.build(TaskClass.HIGH_VOLUME, PROMPT, ContractPassage)
+    )
+
+
+@pytest.mark.parametrize("field", sorted(ModelParams.model_fields))
+def test_a_cassette_recorded_before_an_optional_parameter_existed_replays(tmp_path: Path, field: str) -> None:
+    path = recorded_example(tmp_path)
+    rewrite_recorded_request(path, lambda request: request["params"].pop(field))
+
+    replayed = run(replayer(tmp_path).generate_structured(TaskClass.HIGH_VOLUME, PROMPT, ContractPassage))
+
+    assert replayed.output == ContractPassage.model_validate(PASSAGE)
+
+
+def test_a_cassette_recorded_before_any_parameter_existed_replays(tmp_path: Path) -> None:
+    path = recorded_example(tmp_path)
+    rewrite_recorded_request(path, lambda request: request.pop("params"))
+
+    replayed = run(replayer(tmp_path).generate_structured(TaskClass.HIGH_VOLUME, PROMPT, ContractPassage))
+
+    assert replayed.output == ContractPassage.model_validate(PASSAGE)
+
+
+def test_the_committed_example_cassette_replays_as_it_was_recorded_before_effort(tmp_path: Path) -> None:
+    """v1-e05-t02 added `effort` and had to hand-edit the committed cassettes to keep them replaying."""
+    prompt = ModelPrompt(
+        prompt_id="example.select-passage", prompt_version="1.0.0", variables={"tag": "Warming kills"}
+    )
+    committed = CassetteDirectory(COMMITTED_CASSETTES).structured_path(
+        ModelRequest.build(TaskClass.HIGH_VOLUME, prompt, ContractPassage)
+    )
+    copy = tmp_path / committed.relative_to(COMMITTED_CASSETTES)
+    copy.parent.mkdir(parents=True)
+    copy.write_bytes(committed.read_bytes())
+    rewrite_recorded_request(copy, lambda request: request["params"].pop("effort"))
+    assert "effort" not in recorded_request_of(copy)["params"]
+
+    response = run(replayer(tmp_path).generate_structured(TaskClass.HIGH_VOLUME, prompt, ContractPassage))
+
+    assert response.output == ContractPassage(paragraph_id=2, start_offset=12, end_offset=57)
+
+
+def _set(location: tuple[str, ...], value: JsonValue) -> Callable[[dict[str, Any]], None]:
+    def change(request: dict[str, Any]) -> None:
+        *parents, name = location
+        for parent in parents:
+            request = request[parent]
+        request[name] = value
+
+    return change
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        _set(("params", "max_tokens"), 64),
+        _set(("params", "temperature"), 0.0),
+        _set(("params", "timeout_seconds"), 30.0),
+        _set(("params", "effort"), "high"),
+        _set(("task_class",), "complex_reasoning"),
+        _set(("output_schema",), "debate_core.somewhere.Else"),
+        _set(("prompt", "variables"), {"tag": "Something else"}),
+        _set(("prompt", "variables", "extra"), "an added variable"),
+    ],
+    ids=[
+        "max-tokens",
+        "temperature",
+        "timeout",
+        "effort",
+        "task-class",
+        "output-schema",
+        "variables",
+        "added-variable",
+    ],
+)
+def test_a_cassette_whose_recorded_value_differs_from_the_call_does_not_replay(
+    tmp_path: Path, change: Callable[[dict[str, Any]], None]
+) -> None:
+    path = recorded_example(tmp_path)
+    rewrite_recorded_request(path, change)
+
+    with pytest.raises(MissingFixtureError, match="the cassette at this key recorded"):
+        run(replayer(tmp_path).generate_structured(TaskClass.HIGH_VOLUME, PROMPT, ContractPassage))
+
+
+def test_a_call_setting_a_parameter_the_cassette_lacks_does_not_replay(tmp_path: Path) -> None:
+    """A field the cassette lacks takes its default, and the default is not what this call sends."""
+    path = recorded_example(tmp_path)
+    rewrite_recorded_request(path, lambda request: request["params"].pop("effort"))
+
+    with pytest.raises(MissingFixtureError, match="the cassette at this key recorded"):
+        run(
+            replayer(tmp_path).generate_structured(
+                TaskClass.HIGH_VOLUME, PROMPT, ContractPassage, ModelParams(effort=Effort.HIGH)
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    ("change", "reason"),
+    [
+        (_set(("params", "seed"), 7), "seed"),
+        (_set(("params", "effort"), "extreme"), "effort"),
+        (_set(("task_class",), "embeddings"), "does not generate output"),
+    ],
+    ids=["a-parameter-this-build-does-not-know", "an-invalid-value", "a-scoring-class"],
+)
+def test_a_cassette_whose_recorded_request_is_not_a_request_is_refused(
+    tmp_path: Path, change: Callable[[dict[str, Any]], None], reason: str
+) -> None:
+    path = recorded_example(tmp_path)
+    rewrite_recorded_request(path, change)
+
+    with pytest.raises(FixtureFileError, match="recorded request is not valid") as raised:
+        run(replayer(tmp_path).generate_structured(TaskClass.HIGH_VOLUME, PROMPT, ContractPassage))
+
+    assert reason in str(raised.value)
 
 
 def test_a_cassette_filed_under_another_key_is_refused(tmp_path: Path) -> None:

@@ -14,46 +14,43 @@ import {
 } from '@/lib/tournaments'
 import type { Tournament } from '@/lib/tournaments'
 
-import { contentWith, editEntry, replaceOnce, splitGlenbrooksByEvent } from './schedule-fixture'
+import { FIXTURE_SEASON, contentWith, replaceOnce } from './content-fixture'
+import { editEntry } from './schedule-fixture'
 
 /**
- * content/tournaments.yaml and its loader (v1-e37-t02 acceptance criterion 1, and the overlap,
- * identity and build-date properties the spec's forbidden list names).
+ * The tournaments.yaml loader (v1-e37-t02 acceptance criterion 1, and the overlap, identity and
+ * build-date properties the spec's forbidden list names), on the synthetic season in
+ * tests/fixtures/season/tournaments.yaml.
  *
- * The expected values below are written by hand from docs/data/2026-27-tournament-schedule.md,
- * the schedule as Charlie gave it on 2026-09-30, as he changed it on 2026-10-22 (the tournaments
- * already held taken off, Iowa Caucus and MinneApple dropped, Ronald Reagan online at school,
- * Glenbrooks Policy only and overnight), and not taken from the loader's output: a test whose
- * expectation came from the code it checks cannot catch that code dropping a row.
+ * The expected values below are written by hand from that file, and not taken from the loader's
+ * output: a test whose expectation came from the code it checks cannot catch that code dropping a
+ * row. They are never the shipped schedule's, which the coach edits every week (v1-e37-t10);
+ * tests/shipped-content.test.ts checks what that file must always satisfy.
  */
 
-/** Every row of the schedule document: name, first day, last day. */
-const SEED: ReadonlyArray<readonly [string, string, string]> = [
-  ['Ronald Reagan High School', '2026-10-24', '2026-10-24'],
-  ['West Bend High School', '2026-10-30', '2026-10-30'],
-  ['West Bend High School', '2026-11-07', '2026-11-07'],
-  ['Badgerland', '2026-11-13', '2026-11-14'],
-  ['Brookfield East High School', '2026-11-21', '2026-11-21'],
-  ['Glenbrooks', '2026-11-21', '2026-11-23'],
-  ['Whitefish Bay home tournament', '2026-12-05', '2026-12-05'],
-  ['Marquette University High School', '2026-12-12', '2026-12-12'],
-  ['Blake', '2026-12-19', '2026-12-21'],
-  ['Madison West', '2027-01-02', '2027-01-02'],
-  ['Southern Wisconsin NSDA Qualifier', '2027-01-09', '2027-01-09'],
-  ['Last Chance Qualifier', '2027-01-09', '2027-01-09'],
-  ['Wisconsin State Debate Tournament', '2027-01-16', '2027-01-17'],
-  ['Milwaukee NCFL Qualifier', '2027-01-23', '2027-01-23'],
-  ['NCFL Nationals', '2027-05-29', '2027-05-30'],
+/** Every entry of the synthetic season: name, first day, last day. */
+const SEASON: ReadonlyArray<readonly [string, string, string]> = [
+  ['Lantern Hill Invitational', '2026-12-05', '2026-12-05'],
+  ['Harbor Point High School', '2026-10-10', '2026-10-10'],
+  ['Granite Falls Round Robin', '2026-11-13', '2026-11-15'],
   ['NSDA Nationals', '2027-06-13', '2027-06-18'],
+  ['Lakeshore Invitational', '2026-10-24', '2026-10-24'],
+  ['Copper Creek Qualifier', '2027-01-09', '2027-01-09'],
+  ['Northwoods Classic', '2026-11-06', '2026-11-07'],
+  ['Pine Hollow Open', '2026-12-11', '2026-12-12'],
+  ['Silver Lake Qualifier', '2027-01-09', '2027-01-09'],
+  ['Eastbrook NCFL Qualifier', '2027-01-23', '2027-01-23'],
+  ['Prairie Cup', '2026-11-14', '2026-11-14'],
+  ['NCFL Nationals', '2027-05-29', '2027-05-30'],
 ]
 
 /**
- * The overlapping pairs, worked out by hand from the schedule's dates: November 21, and both
- * January 9 qualifiers on one day.
+ * The overlapping pairs, worked out by hand from the fixture's dates: November 14 inside the
+ * Granite Falls weekend, and both January 9 qualifiers on one day.
  */
 const OVERLAPPING_PAIRS: ReadonlyArray<readonly [string, string]> = [
-  ['brookfield-east-2026', 'glenbrooks-2026'],
-  ['southern-wisconsin-nsda-qualifier-2027', 'last-chance-qualifier-2027'],
+  ['granite-falls-2026', 'prairie-cup-2026'],
+  ['copper-creek-qualifier-2027', 'silver-lake-qualifier-2027'],
 ]
 
 function loadError(directory: string): string {
@@ -70,16 +67,16 @@ afterEach(() => {
   vi.unstubAllEnvs()
 })
 
-describe('the seed data', () => {
-  const schedule = loadSchedule()
+describe('a season, loaded', () => {
+  const schedule = loadSchedule(contentWith())
 
-  it('holds every entry in the 2026-27 schedule document, and nothing else', () => {
+  it('holds every entry in the file, and nothing else', () => {
     const loaded = schedule.tournaments.map((entry) => [entry.name, entry.start, entry.end])
-    expect([...loaded].sort()).toEqual([...SEED].map((row) => [...row]).sort())
+    expect([...loaded].sort()).toEqual([...SEASON].map((row) => [...row]).sort())
   })
 
-  it('is for the 2026-27 season', () => {
-    expect(schedule.season).toBe('2026-27')
+  it('is for the season the file names', () => {
+    expect(schedule.season).toBe(FIXTURE_SEASON)
   })
 
   it('puts the two national tournaments in their own section and nothing else there', () => {
@@ -88,76 +85,64 @@ describe('the seed data', () => {
     ).toEqual(['NCFL Nationals', 'NSDA Nationals'])
   })
 
-  it('records how each tournament the document says is online is held', () => {
+  it('records how each tournament is held, by arrangement', () => {
     const held = (id: string) =>
       schedule.tournaments.find((entry) => entry.id === id)!.arrangements.map((group) => group.held)
-    expect(held('ronald-reagan-2026')).toEqual(['online-at-school'])
-    expect(held('west-bend-online-2026')).toEqual(['online-at-school'])
-    expect(held('west-bend-2026')).toEqual(['in-person'])
+    expect(held('harbor-point-online-2026')).toEqual(['online-at-school'])
+    expect(held('lakeshore-2026')).toEqual(['in-person'])
+    expect(held('pine-hollow-2026')).toEqual(['online-at-school', 'in-person'])
   })
 
-  it('holds Glenbrooks as Policy only, in person in Glenview and overnight', () => {
-    const glenbrooks = schedule.tournaments.find((entry) => entry.id === 'glenbrooks-2026')!
-    expect(glenbrooks.arrangements).toEqual([
-      { events: ['policy'], held: 'in-person', where: 'Glenview, Illinois', overnight: 'yes' },
+  it('holds an entry without byEvent as one arrangement', () => {
+    const graniteFalls = schedule.tournaments.find((entry) => entry.id === 'granite-falls-2026')!
+    expect(graniteFalls.arrangements).toEqual([
+      { events: ['policy'], held: 'in-person', where: 'Duluth, Minnesota', overnight: 'yes' },
     ])
   })
 
   it('splits an entry by event when byEvent is used: one arrangement per group', () => {
-    const split = loadSchedule(contentWith({ 'tournaments.yaml': splitGlenbrooksByEvent }))
-    const glenbrooks = split.tournaments.find((entry) => entry.id === 'glenbrooks-2026')!
-    expect(glenbrooks.arrangements).toEqual([
+    const pineHollow = schedule.tournaments.find((entry) => entry.id === 'pine-hollow-2026')!
+    expect(pineHollow.arrangements).toEqual([
       { events: ['public-forum', 'lincoln-douglas'], held: 'online-at-school', where: null, overnight: 'no' },
-      { events: ['policy'], held: 'in-person', where: 'Glenview, Illinois', overnight: 'yes' },
+      { events: ['policy'], held: 'in-person', where: 'Evanston, Illinois', overnight: 'yes' },
     ])
   })
 
-  it('records overnight as the document gives it', () => {
+  it('records overnight as the file gives it', () => {
     const overnight = (id: string) =>
       schedule.tournaments.find((entry) => entry.id === id)!.arrangements.map((group) => group.overnight)
-    expect(overnight('glenbrooks-2026')).toEqual(['yes'])
-    expect(overnight('badgerland-2026')).toEqual(['possibly'])
-    expect(overnight('blake-2026')).toEqual(['yes'])
-    expect(overnight('west-bend-2026')).toEqual(['no'])
+    expect(overnight('granite-falls-2026')).toEqual(['yes'])
+    expect(overnight('northwoods-2026')).toEqual(['possibly'])
+    expect(overnight('ncfl-nationals-2027')).toEqual(['yes'])
+    expect(overnight('lakeshore-2026')).toEqual(['no'])
   })
 
   it('marks the January 23 qualifier tentative and the December 5 home tournament conditional, with its condition', () => {
     const byId = new Map(schedule.tournaments.map((entry) => [entry.id, entry]))
-    expect(byId.get('milwaukee-ncfl-qualifier-2027')?.status).toBe('tentative')
-    expect(byId.get('milwaukee-ncfl-qualifier-2027')?.arrangements[0]?.where).toBe('To be announced')
-    const home = byId.get('whitefish-bay-home-2026')!
+    expect(byId.get('eastbrook-ncfl-qualifier-2027')?.status).toBe('tentative')
+    expect(byId.get('eastbrook-ncfl-qualifier-2027')?.arrangements[0]?.where).toBe('To be announced')
+    const home = byId.get('lantern-hill-home-2026')!
     expect(home.status).toBe('conditional')
     expect(home.condition).toMatch(/enough families volunteer/)
     expect(home.condition).toMatch(/state tournament/)
   })
 
   it('lists the whole season in date order, the order worked out by hand', () => {
+    // Same-day entries go by name, so Copper Creek comes before Silver Lake.
     expect(schedule.tournaments.map((entry) => entry.id)).toEqual([
-      'ronald-reagan-2026',
-      'west-bend-online-2026',
-      'west-bend-2026',
-      'badgerland-2026',
-      'brookfield-east-2026',
-      'glenbrooks-2026',
-      'whitefish-bay-home-2026',
-      'marquette-2026',
-      'blake-2026',
-      'madison-west-2027',
-      'last-chance-qualifier-2027',
-      'southern-wisconsin-nsda-qualifier-2027',
-      'wisconsin-state-2027',
-      'milwaukee-ncfl-qualifier-2027',
+      'harbor-point-online-2026',
+      'lakeshore-2026',
+      'northwoods-2026',
+      'granite-falls-2026',
+      'prairie-cup-2026',
+      'lantern-hill-home-2026',
+      'pine-hollow-2026',
+      'copper-creek-qualifier-2027',
+      'silver-lake-qualifier-2027',
+      'eastbrook-ncfl-qualifier-2027',
       'ncfl-nationals-2027',
       'nsda-nationals-2027',
     ])
-  })
-
-  it('names no student, and carries no email address or phone number', () => {
-    const text = schedule.tournaments
-      .flatMap((entry) => [entry.name, entry.notes, entry.condition, ...entry.arrangements.map((g) => g.where)])
-      .join('\n')
-    expect(text).not.toMatch(/@/)
-    expect(text).not.toMatch(/\d{3}[\s.-]\d{4}/)
   })
 })
 
@@ -168,20 +153,21 @@ describe('the page does not depend on the day it was built', () => {
    * every one of them, in the same order, in the same sections.
    */
   it('lists exactly the same tournaments whatever the date is', () => {
-    const before = loadScheduleView()
+    const directory = contentWith()
+    const before = loadScheduleView(directory)
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2027-07-01T12:00:00Z'))
-    const after = loadScheduleView()
+    const after = loadScheduleView(directory)
     expect(after.seasonTournaments.map((entry) => entry.id)).toEqual(
       before.seasonTournaments.map((entry) => entry.id),
     )
     expect(after.nationals.map((entry) => entry.id)).toEqual(before.nationals.map((entry) => entry.id))
-    expect(after.seasonTournaments).toHaveLength(14)
+    expect(after.seasonTournaments).toHaveLength(10)
   })
 })
 
 describe('overlaps', () => {
-  const schedule = loadSchedule()
+  const schedule = loadSchedule(contentWith())
   const overlaps = findOverlaps(schedule.tournaments)
 
   it('finds exactly the two pairs that share a day, worked out by hand', () => {
@@ -199,12 +185,12 @@ describe('overlaps', () => {
       expect(overlaps.get(left)?.map((entry) => entry.id), left).toContain(right)
       expect(overlaps.get(right)?.map((entry) => entry.id), right).toContain(left)
     }
-    expect(overlaps.size).toBe(SEED.length)
+    expect(overlaps.size).toBe(SEASON.length)
   })
 
   it('marks nothing on a tournament that shares no day with another', () => {
-    expect(overlaps.get('west-bend-2026')).toEqual([])
-    expect(overlaps.get('badgerland-2026')).toEqual([])
+    expect(overlaps.get('lakeshore-2026')).toEqual([])
+    expect(overlaps.get('northwoods-2026')).toEqual([])
   })
 
   const range = (start: string, end: string = start) => ({ start, end })
@@ -224,13 +210,13 @@ describe('overlaps', () => {
 
 describe('calendar identity', () => {
   const base: Tournament = {
-    id: 'glenbrooks-2026',
-    position: 10,
-    name: 'Glenbrooks',
-    start: '2026-11-21',
-    end: '2026-11-23',
+    id: 'granite-falls-2026',
+    position: 3,
+    name: 'Granite Falls Round Robin',
+    start: '2026-11-13',
+    end: '2026-11-15',
     events: ['policy'],
-    arrangements: [{ events: ['policy'], held: 'in-person', where: 'Glenview, Illinois', overnight: 'yes' }],
+    arrangements: [{ events: ['policy'], held: 'in-person', where: 'Duluth, Minnesota', overnight: 'yes' }],
     status: 'confirmed',
     condition: null,
     signUpBy: null,
@@ -239,22 +225,22 @@ describe('calendar identity', () => {
   }
 
   it('is the entry id, written as a UID with the team domain', () => {
-    expect(calendarUid(base)).toBe('tournament-glenbrooks-2026@wfbdebate.com')
+    expect(calendarUid(base)).toBe('tournament-granite-falls-2026@wfbdebate.com')
   })
 
   it.each([
     ['notes', { notes: 'Varsity only.' }],
-    ['dates', { start: '2026-11-20', end: '2026-11-22' }],
-    ['name', { name: 'The Glenbrooks' }],
+    ['dates', { start: '2026-11-12', end: '2026-11-14' }],
+    ['name', { name: 'The Granite Falls Round Robin' }],
     ['status', { status: 'tentative' as const }],
-    ['place', { arrangements: [{ ...base.arrangements[0]!, where: 'Northbrook, Illinois' }] }],
-    ['position in the file', { position: 3 }],
+    ['place', { arrangements: [{ ...base.arrangements[0]!, where: 'Superior, Wisconsin' }] }],
+    ['position in the file', { position: 9 }],
   ])('does not change when the %s change', (_field, change) => {
     expect(calendarUid({ ...base, ...change })).toBe(calendarUid(base))
   })
 
   it('differs between entries', () => {
-    const uids = loadSchedule().tournaments.map(calendarUid)
+    const uids = loadSchedule(contentWith()).tournaments.map(calendarUid)
     expect(new Set(uids).size).toBe(uids.length)
   })
 })
@@ -263,71 +249,68 @@ describe('an invalid entry fails the build, naming the entry and the field', () 
   it.each([
     [
       'a missing required field',
-      editEntry('badgerland-2026', (block) => block.replace('    held: in-person\n', '')),
-      /tournament "badgerland-2026" \(entry 4\), field held: is required/,
+      editEntry('northwoods-2026', (block) => block.replace('    held: in-person\n', '')),
+      /tournament "northwoods-2026" \(entry 7\), field held: is required/,
     ],
     [
       'a date that does not exist',
-      editEntry('west-bend-2026', (block) => block.replace('2026-11-07', '2026-02-30')),
-      /tournament "west-bend-2026" \(entry 3\), field start: must be a real date/,
+      editEntry('lakeshore-2026', (block) => block.replace('2026-10-24', '2026-02-30')),
+      /tournament "lakeshore-2026" \(entry 5\), field start: must be a real date/,
     ],
     [
       'an end before the start',
-      editEntry('blake-2026', (block) => block.replace('end: 2026-12-21', 'end: 2026-12-18')),
-      /tournament "blake-2026" \(entry 9\), field end: is before start/,
+      editEntry('granite-falls-2026', (block) => block.replace('end: 2026-11-15', 'end: 2026-11-12')),
+      /tournament "granite-falls-2026" \(entry 3\), field end: is before start/,
     ],
     [
       'a date outside the season',
-      editEntry('west-bend-2026', (block) => block.replace('2026-11-07', '2025-11-07')),
-      /tournament "west-bend-2026" \(entry 3\), field start: 2025-11-07 is outside the 2026-27 season/,
+      editEntry('lakeshore-2026', (block) => block.replace('2026-10-24', '2025-10-24')),
+      /tournament "lakeshore-2026" \(entry 5\), field start: 2025-10-24 is outside the 2026-27 season/,
     ],
     [
       'an event that does not exist',
-      editEntry('west-bend-2026', (block) => block.replace('[policy, lincoln-douglas, public-forum]', '[public-forum, congress]')),
-      /tournament "west-bend-2026" \(entry 3\), field events: "congress" is not an event/,
+      editEntry('lakeshore-2026', (block) => block.replace('[policy, lincoln-douglas, public-forum]', '[public-forum, congress]')),
+      /tournament "lakeshore-2026" \(entry 5\), field events: "congress" is not an event/,
     ],
     [
       'a misspelt field',
-      editEntry('blake-2026', (block) => block.replace('    notes:', '    note:')),
-      /tournament "blake-2026" \(entry 9\), field note: is not a field a tournament has/,
+      editEntry('granite-falls-2026', (block) => block.replace('    notes:', '    note:')),
+      /tournament "granite-falls-2026" \(entry 3\), field note: is not a field a tournament has/,
     ],
     [
       'a conditional entry with no condition',
-      editEntry('whitefish-bay-home-2026', (block) => block.replace(/    condition: >-\n(?: {6}.*\n)+/, '')),
-      /tournament "whitefish-bay-home-2026" \(entry 7\), field condition: a conditional tournament needs `condition`/,
+      editEntry('lantern-hill-home-2026', (block) => block.replace(/    condition: >-\n(?: {6}.*\n)+/, '')),
+      /tournament "lantern-hill-home-2026" \(entry 1\), field condition: a conditional tournament needs `condition`/,
     ],
     [
       'a place on a tournament debated from the high school',
-      editEntry('west-bend-online-2026', (block) => block.replace('    held: online-at-school\n', '    held: online-at-school\n    where: West Bend, Wisconsin\n')),
-      /tournament "west-bend-online-2026" \(entry 2\), field where: online-at-school is debated at Whitefish Bay High School/,
+      editEntry('harbor-point-online-2026', (block) => block.replace('    held: online-at-school\n', '    held: online-at-school\n    where: Racine, Wisconsin\n')),
+      /tournament "harbor-point-online-2026" \(entry 2\), field where: online-at-school is debated at Whitefish Bay High School/,
     ],
     [
       'an in-person tournament with no place',
-      editEntry('west-bend-2026', (block) => block.replace('    where: West Bend, Wisconsin\n', '')),
-      /tournament "west-bend-2026" \(entry 3\), field where: an in-person tournament needs `where`/,
+      editEntry('lakeshore-2026', (block) => block.replace('    where: Racine, Wisconsin\n', '')),
+      /tournament "lakeshore-2026" \(entry 5\), field where: an in-person tournament needs `where`/,
     ],
     [
       'a whole-tournament field beside byEvent',
-      (source: string) =>
-        editEntry('glenbrooks-2026', (block) => block.replace('    byEvent:\n', '    held: in-person\n    byEvent:\n'))(
-          splitGlenbrooksByEvent(source),
-        ),
-      /tournament "glenbrooks-2026" \(entry 6\), field held: goes inside each byEvent group/,
+      editEntry('pine-hollow-2026', (block) => block.replace('    byEvent:\n', '    held: in-person\n    byEvent:\n')),
+      /tournament "pine-hollow-2026" \(entry 8\), field held: goes inside each byEvent group/,
     ],
     [
       'an id without the year',
-      editEntry('blake-2026', (block) => block.replace('id: blake-2026', 'id: blake')),
-      /tournament "blake" \(entry 9\), field id: must be lower case words joined by hyphens, ending in the year/,
+      editEntry('granite-falls-2026', (block) => block.replace('id: granite-falls-2026', 'id: granite-falls')),
+      /tournament "granite-falls" \(entry 3\), field id: must be lower case words joined by hyphens, ending in the year/,
     ],
     [
       'a placeholder instead of a value',
-      editEntry('milwaukee-ncfl-qualifier-2027', (block) => block.replace('where: To be announced', "where: '[[TBD: venue]]'")),
-      /tournament "milwaukee-ncfl-qualifier-2027" \(entry 14\), field where: holds a \[\[TBD\]\] marker/,
+      editEntry('eastbrook-ncfl-qualifier-2027', (block) => block.replace('where: To be announced', "where: '[[TBD: venue]]'")),
+      /tournament "eastbrook-ncfl-qualifier-2027" \(entry 10\), field where: holds a \[\[TBD\]\] marker/,
     ],
     [
       'an em dash',
-      editEntry('blake-2026', (block) => block.replace('notes: Varsity only.', 'notes: Varsity only — bring a coat.')),
-      /tournament "blake-2026" \(entry 9\), field notes: uses an em dash/,
+      editEntry('granite-falls-2026', (block) => block.replace('notes: Varsity only.', 'notes: Varsity only — bring a coat.')),
+      /tournament "granite-falls-2026" \(entry 3\), field notes: uses an em dash/,
     ],
   ])('%s', (_name, edit, expected) => {
     expect(loadError(contentWith({ 'tournaments.yaml': edit }))).toMatch(expected)
@@ -335,10 +318,12 @@ describe('an invalid entry fails the build, naming the entry and the field', () 
 
   it('a second entry with an id already in use, naming both', () => {
     const directory = contentWith({
-      'tournaments.yaml': editEntry('blake-2026', (block) => block.replace('id: blake-2026', 'id: ronald-reagan-2026')),
+      'tournaments.yaml': editEntry('granite-falls-2026', (block) =>
+        block.replace('id: granite-falls-2026', 'id: lantern-hill-home-2026'),
+      ),
     })
     expect(loadError(directory)).toMatch(
-      /tournament "ronald-reagan-2026" \(entry 9\), field id: "ronald-reagan-2026" is already used by tournament "ronald-reagan-2026" \(entry 1\)/,
+      /tournament "lantern-hill-home-2026" \(entry 3\), field id: "lantern-hill-home-2026" is already used by tournament "lantern-hill-home-2026" \(entry 1\)/,
     )
   })
 })
@@ -346,34 +331,35 @@ describe('an invalid entry fails the build, naming the entry and the field', () 
 /**
  * The publishing-policy guard on tournament text (acceptance criterion 1, second half). Every
  * case is checked in a dev build, the default, because tournament data fails the build in every
- * environment: there is no placeholder in it for a preview to show.
+ * environment: there is no placeholder in it for a preview to show. The names planted are
+ * invented and have no consent entry, not even a fixture one.
  */
 describe('the publishing policy rejects what may never be written in tournament data', () => {
   it.each([
     [
       'an email address in the notes',
-      editEntry('blake-2026', (block) => block.replace('notes: Varsity only.', 'notes: Questions to jordan.parent@example.com.')),
-      /tournament "blake-2026" \(entry 9\), field notes: publishes the email address "jordan\.parent@example\.com"/,
+      editEntry('granite-falls-2026', (block) => block.replace('notes: Varsity only.', 'notes: Questions to jordan.parent@example.com.')),
+      /tournament "granite-falls-2026" \(entry 3\), field notes: publishes the email address "jordan\.parent@example\.com"/,
     ],
     [
       'a phone number in the place',
-      editEntry('badgerland-2026', (block) => block.replace('where: Madison, Wisconsin', 'where: Madison, Wisconsin. Call 414-555-0142')),
-      /tournament "badgerland-2026" \(entry 4\), field where: publishes what looks like a phone number \("414-555-0142"\)/,
+      editEntry('northwoods-2026', (block) => block.replace('where: Wausau, Wisconsin', 'where: Wausau, Wisconsin. Call 414-555-0142')),
+      /tournament "northwoods-2026" \(entry 7\), field where: publishes what looks like a phone number \("414-555-0142"\)/,
     ],
     [
       'a student name in the notes',
-      editEntry('blake-2026', (block) => block.replace('notes: Varsity only.', 'notes: Varsity only. Jordan Rivera drives.')),
-      /tournament "blake-2026" \(entry 9\), field notes: names "Jordan Rivera"/,
+      editEntry('granite-falls-2026', (block) => block.replace('notes: Varsity only.', 'notes: Varsity only. Taylor Brooks drives.')),
+      /tournament "granite-falls-2026" \(entry 3\), field notes: names "Taylor Brooks"/,
     ],
     [
       'a student name in a condition',
-      editEntry('whitefish-bay-home-2026', (block) => block.replace('Our team hosts this tournament.', 'Our team hosts this tournament with Avery Chen.')),
-      /tournament "whitefish-bay-home-2026" \(entry 7\), field condition: names "Avery Chen"/,
+      editEntry('lantern-hill-home-2026', (block) => block.replace('Our team hosts this tournament.', 'Our team hosts this tournament with Quinn Harlow.')),
+      /tournament "lantern-hill-home-2026" \(entry 1\), field condition: names "Quinn Harlow"/,
     ],
     [
       'a student name as the tournament name',
-      editEntry('blake-2026', (block) => block.replace('name: Blake', 'name: Blake with Sam Okafor')),
-      /tournament "blake-2026" \(entry 9\), field name: names "Sam Okafor"/,
+      editEntry('granite-falls-2026', (block) => block.replace('name: Granite Falls Round Robin', 'name: Granite Falls Round Robin with Rowan Ellis')),
+      /tournament "granite-falls-2026" \(entry 3\), field name: names "Rowan Ellis"/,
     ],
   ])('%s', (_name, edit, expected) => {
     vi.stubEnv('SITE_ENV', 'dev')
@@ -382,11 +368,11 @@ describe('the publishing policy rejects what may never be written in tournament 
 
   it('lets the allowlisted coach address through, as everywhere else on the site', () => {
     const directory = contentWith({
-      'tournaments.yaml': editEntry('blake-2026', (block) =>
+      'tournaments.yaml': editEntry('granite-falls-2026', (block) =>
         block.replace('notes: Varsity only.', 'notes: Varsity only. Questions to charles.clark@wfbschools.com.'),
       ),
     })
-    expect(loadSchedule(directory).tournaments.find((entry) => entry.id === 'blake-2026')?.notes).toMatch(
+    expect(loadSchedule(directory).tournaments.find((entry) => entry.id === 'granite-falls-2026')?.notes).toMatch(
       /charles\.clark@wfbschools\.com/,
     )
   })

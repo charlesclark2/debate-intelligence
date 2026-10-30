@@ -1,0 +1,150 @@
+# A synthetic season for the schedule tests (v1-e37-t10). Not the team's schedule: every
+# tournament here is invented except the two national tournaments, whose names are the
+# organisations' own. The tests' expected values are written by hand from this file, so it
+# changes only with them, never with site/content/tournaments.yaml.
+#
+# Deliberately not in date order, so the page's sort is tested. What each entry is for:
+#
+#   lantern-hill-home-2026    conditional, with a condition long enough to fold in the calendar
+#   harbor-point-online-2026  debated online from the high school
+#   granite-falls-2026        Policy only, overnight, three days; overlaps prairie-cup-2026
+#   nsda-nationals-2027       a national tournament, six days
+#   lakeshore-2026            in person, one day, no overlap
+#   copper-creek-...-2027     same day as silver-lake-qualifier-2027
+#   northwoods-2026           overnight possibly, two days, no overlap
+#   pine-hollow-2026          split by event: two arrangements
+#   silver-lake-...-2027      same day as copper-creek-qualifier-2027
+#   eastbrook-ncfl-...-2027   tentative, place to be announced
+#   prairie-cup-2026          one day inside granite-falls-2026
+#   ncfl-nationals-2027       a national tournament, two days
+
+season: '2026-27'
+
+revised: 2026-09-15
+
+tournaments:
+  - id: lantern-hill-home-2026
+    name: Lantern Hill Invitational
+    start: 2026-12-05
+    events: [policy, lincoln-douglas, public-forum]
+    held: in-person
+    where: Kenosha, Wisconsin
+    overnight: no
+    status: conditional
+    condition: >-
+      Our team hosts this tournament. Our students compete in it only if enough families volunteer
+      to help run it and some students still need a qualifying result for the state tournament.
+
+  - id: harbor-point-online-2026
+    name: Harbor Point High School
+    start: 2026-10-10
+    events: [public-forum, lincoln-douglas]
+    held: online-at-school
+    overnight: no
+    status: confirmed
+
+  - id: granite-falls-2026
+    name: Granite Falls Round Robin
+    start: 2026-11-13
+    end: 2026-11-15
+    events: [policy]
+    held: in-person
+    where: Duluth, Minnesota
+    overnight: yes
+    status: confirmed
+    notes: Varsity only.
+
+  - id: nsda-nationals-2027
+    name: NSDA Nationals
+    start: 2027-06-13
+    end: 2027-06-18
+    events: [policy, lincoln-douglas, public-forum]
+    held: in-person
+    where: Tulsa, Oklahoma
+    overnight: yes
+    status: confirmed
+    notes: For students who qualify.
+    nationals: true
+
+  - id: lakeshore-2026
+    name: Lakeshore Invitational
+    start: 2026-10-24
+    events: [policy, lincoln-douglas, public-forum]
+    held: in-person
+    where: Racine, Wisconsin
+    overnight: no
+    status: confirmed
+
+  - id: copper-creek-qualifier-2027
+    name: Copper Creek Qualifier
+    start: 2027-01-09
+    events: [policy, lincoln-douglas, public-forum]
+    held: in-person
+    where: Kenosha, Wisconsin
+    overnight: no
+    status: confirmed
+
+  - id: northwoods-2026
+    name: Northwoods Classic
+    start: 2026-11-06
+    end: 2026-11-07
+    events: [policy, lincoln-douglas, public-forum]
+    held: in-person
+    where: Wausau, Wisconsin
+    overnight: possibly
+    status: confirmed
+
+  - id: pine-hollow-2026
+    name: Pine Hollow Open
+    start: 2026-12-11
+    end: 2026-12-12
+    byEvent:
+      - events: [lincoln-douglas, public-forum]
+        held: online-at-school
+        overnight: no
+      - events: [policy]
+        held: in-person
+        where: Evanston, Illinois
+        overnight: yes
+    status: confirmed
+
+  - id: silver-lake-qualifier-2027
+    name: Silver Lake Qualifier
+    start: 2027-01-09
+    events: [policy, lincoln-douglas, public-forum]
+    held: in-person
+    where: Kenosha, Wisconsin
+    overnight: no
+    status: confirmed
+    notes: By coach invitation.
+
+  - id: eastbrook-ncfl-qualifier-2027
+    name: Eastbrook NCFL Qualifier
+    start: 2027-01-23
+    events: [policy, lincoln-douglas, public-forum]
+    held: in-person
+    where: To be announced
+    overnight: no
+    status: tentative
+    notes: The date is not yet confirmed.
+
+  - id: prairie-cup-2026
+    name: Prairie Cup
+    start: 2026-11-14
+    events: [lincoln-douglas, public-forum]
+    held: in-person
+    where: Appleton, Wisconsin
+    overnight: no
+    status: confirmed
+
+  - id: ncfl-nationals-2027
+    name: NCFL Nationals
+    start: 2027-05-29
+    end: 2027-05-30
+    events: [policy, lincoln-douglas, public-forum]
+    held: in-person
+    where: Omaha, Nebraska
+    overnight: yes
+    status: confirmed
+    notes: For students who qualify.
+    nationals: true

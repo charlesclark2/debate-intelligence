@@ -49,11 +49,12 @@ describe('the exported schedule', () => {
       expect(html, tournament.id).toContain(`id="${tournament.id}"`)
     }
     // One marker per entry that shares a day with another, as the sources say: the hand-counted
-    // pairs are pinned in tests/tournaments.test.ts, so the export follows the file rather than a
-    // number that goes stale at every schedule edit.
+    // pairs are pinned on the synthetic season in tests/tournaments.test.ts and
+    // tests/schedule.test.tsx, so the export follows the file rather than a number that goes stale
+    // at every schedule edit. None is a count too: once the last pair is past, the shipped
+    // schedule has no overlap at all (v1-e37-t10).
     const overlapping = [...findOverlaps(tournaments).values()].filter((others) => others.length > 0)
-    expect(overlapping.length).toBeGreaterThan(0)
-    expect(html.match(/class="schedule-entry__overlap"/g)).toHaveLength(overlapping.length)
+    expect(html.match(/class="schedule-entry__overlap"/g) ?? []).toHaveLength(overlapping.length)
   })
 })
 

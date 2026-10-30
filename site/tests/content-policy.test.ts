@@ -26,10 +26,9 @@ import {
   unreviewedNames,
 } from '@/lib/publishing-policy'
 import { resultsGuardedContent } from '@/lib/results'
-import { scheduleGuardedContent } from '@/lib/tournaments'
+import { loadSchedule, scheduleGuardedContent } from '@/lib/tournaments'
 
-import { STUDENTS, withConsent } from './results-fixture'
-import { contentWith } from './schedule-fixture'
+import { STUDENTS, contentWith, withConsent } from './content-fixture'
 
 /**
  * The content guard (v1-e36-t04 acceptance criterion 3).
@@ -585,8 +584,13 @@ describe('the content this site actually ships', () => {
         filePath,
       )
     }
-    // Every tournament is guarded field by field, so a finding names the entry and the field.
-    expect(guarded).toContain('content/tournaments.yaml, tournament "glenbrooks-2026" (entry 6), field notes')
+    // Every tournament is guarded field by field, so a finding names the entry and the field:
+    // each tournament's name at least, whichever tournaments the coach has put in the file.
+    for (const tournament of loadSchedule().tournaments) {
+      expect(guarded).toContain(
+        `content/tournaments.yaml, tournament "${tournament.id}" (entry ${tournament.position}), field name`,
+      )
+    }
   })
 
   it('has a media-consent manifest for the current season, with no photograph in it yet', () => {

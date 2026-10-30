@@ -966,5 +966,57 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e01-t42-coverage-measured-in-the-parts
+    - id: t43
+      kind: Task
+      name: 'A change to container.py reaches only the tests of the parts it changes'
+      description: >-
+        A change to container.py reaches only the tests of the parts it changes.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t43-container-diff-read-part-by-part.yaml
+        goalRef: v1-e01-t43-container-diff-read-part-by-part
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t43-container-diff-read-part-by-part reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t43-container-diff-read-part-by-part
+    - id: t44
+      kind: Task
+      name: 'A test that mentions debate-research inside a longer message is not read as running the app'
+      description: >-
+        A test that mentions debate-research inside a longer message is not read as running
+        the app.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t44-cli-mention-in-a-message-is-prose.yaml
+        goalRef: v1-e01-t44-cli-mention-in-a-message-is-prose
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t44-cli-mention-in-a-message-is-prose reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t44-cli-mention-in-a-message-is-prose
+    - id: t45
+      kind: Task
+      name: 'The docstrings say what the stamped build carries'
+      description: >-
+        The docstrings say what the stamped build carries.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t45-stamp-docstrings.yaml
+        goalRef: v1-e01-t45-stamp-docstrings
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t45-stamp-docstrings reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t45-stamp-docstrings
 status:
   phase: Pending

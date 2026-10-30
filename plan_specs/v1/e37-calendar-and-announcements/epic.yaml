@@ -302,5 +302,23 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e37-t10-coach-edits-need-no-test-edit
+    - id: t11
+      kind: Task
+      name: 'The shipped-content checks follow the publishing policy, and a season change is one edit of three files'
+      description: >-
+        The shipped-content checks follow the publishing policy, and a season change is one
+        edit of three files.
+      inputs:
+        specRef: plan_specs/v1/e37-calendar-and-announcements/t11-content-guards-follow-the-policy.yaml
+        goalRef: v1-e37-t11-content-guards-follow-the-policy
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e37-t11-content-guards-follow-the-policy reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e37-t11-content-guards-follow-the-policy
 status:
   phase: Pending

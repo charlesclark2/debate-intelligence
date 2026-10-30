@@ -735,5 +735,23 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e30-t29-removal-confirms-raw-and-parsed-deletes
+    - id: t30
+      kind: Task
+      name: 'Inbox deletions fsync the inbox directory, so a removed archive cannot come back after a power cut'
+      description: >-
+        Inbox deletions fsync the inbox directory, so a removed archive cannot come back
+        after a power cut.
+      inputs:
+        specRef: plan_specs/v1/e30-caselist-ingestion/t30-inbox-deletions-fsync-the-directory.yaml
+        goalRef: v1-e30-t30-inbox-deletions-fsync-the-directory
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e30-t30-inbox-deletions-fsync-the-directory reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e30-t30-inbox-deletions-fsync-the-directory
 status:
   phase: Pending

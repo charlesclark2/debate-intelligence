@@ -33,8 +33,9 @@ The goal is a short wait between opening a PR and being able to merge it into `d
   then `--part 2/2` are the whole default selection between them, for any N. A session does not use
   it to run the whole selection in pieces; what a session runs is [agreement 10](#10-a-session-tests-what-it-changed-a-pull-request-what-it-reaches-and-dev-and-main-everything).
 * **Coverage is not measured on a PR, or by a plain `uv run pytest`.** It took a third of the
-  suite's time and nothing is gated on it. `ci.yml`'s `coverage` job measures it over the whole
-  selection on every push to `dev` and `main`. Locally, ask for it:
+  suite's time and nothing is gated on it. On every push to `dev` and `main`, each test part measures
+  its share and `ci.yml`'s `coverage` job combines them (`v1-e01-t42`), so the push run waits only for
+  its parts. A push part that takes over 8 minutes means one part more. Locally, ask for it:
   `uv run pytest --cov --cov-report=term-missing`.
 * **What runs on every PR:** formatting and lint, type checks, fast unit and contract tests,
   import-boundary checks, spec validation. All offline: recorded fixtures and the fake/replay

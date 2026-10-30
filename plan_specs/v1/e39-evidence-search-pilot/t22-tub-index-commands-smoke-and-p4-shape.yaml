@@ -1,0 +1,66 @@
+# TASK v1-e39-t22-tub-index-commands-smoke-and-p4-shape - Smoke checks for tub index build, publish and prune, and a test of P4's shape
+# Epic: E39 — Team Evidence Search (Student Pilot) | Release: v1.7 (Team evidence search pilot) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e39-t22-tub-index-commands-smoke-and-p4-shape
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+  annotations:
+    debate/title: "Smoke checks for tub index build, publish and prune, and a test of P4's shape"
+spec:
+  # Filed by the PM, 2026-10-30, from v1-e39-t15's Deviation 2 and Follow-up work.
+  description: >-
+    No `tub index` command has a smoke check, and P4 in the removal runbook lost its script test
+    when the command replaced the script. Add the three commands' smoke checks against the moto
+    stand-in, and a tests/docs check that P4's dry run and its `--execute --confirm "$CODE"` are
+    two blocks.
+  priority: 3
+  constraints:
+    packages: [tests/smoke, tests/docs]
+    forbidden:
+      - Network or AWS access in any test
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The three smoke checks pass on the checkout's script and an installed build, each
+        shown failing against a break; the P4 shape test fails when the two blocks merge.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e39-t22-tub-index-commands-smoke-and-p4-shape-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+spec:
+  description: >-
+    Smoke checks for tub index build, publish and prune, and a test of P4's shape.
+  goalRef:
+    name: v1-e39-t22-tub-index-commands-smoke-and-p4-shape
+  graph:
+    nodes:
+      - id: tub-index-commands-smoke-and-p4-shape
+        kind: Task
+        name: Tub index smoke
+        description: >-
+          Smoke checks for tub index build, publish and prune, and a test of P4's shape.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Tub index smoke tests pass
+            command: uv
+            args: [run, pytest, tests/smoke, -k, tub]
+status:
+  phase: Pending

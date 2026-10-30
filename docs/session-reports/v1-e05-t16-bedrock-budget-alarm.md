@@ -547,3 +547,16 @@ The coach's ceiling is a tested budget, filtered on what the bill actually says.
    * 3: the PM's next batch amends v1-e05-t17 as written.
 10. **Merge `--partial`,** any time. ac3 is the operator's, after the merge and never on a Wednesday.
     The PM reads the plan and the plan check's line before the apply.
+
+## Operator records (recorded by the PM, 2026-10-30)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac3, plan, the PM's read and the apply | NOT RUN | PASS | 2026-10-30, from `model-spend-budget-apply` at `origin/dev` `9299ce8`: `Plan: 0 to add, 1 to change, 0 to destroy.`, no other change line, 0 permission set or assignment change lines; the plan check `PLAN OK … moved from aws_budgets_budget.bedrock_monthly … to 1 address(es)`; applied; `describe-budget` reads `100.0 USD MONTHLY` with notices at 50, 80 and 100 actual and 100 forecast, `ABSOLUTE_VALUE` |
+| ac3, the first month's reading | NOT RUN | NOT RUN | Read the day after the apply, against Cost Explorer under the same filter |
+| Follow-up 1, the cost allocation tags |  | Done | `aws ce list-cost-allocation-tags`: `Environment` and `Project` were `Inactive`; both set `Active` by the operator on 2026-10-30, no errors. Tagged spend reaches the environment budgets and the anomaly monitor from then on |
+| Follow-up 2, the Nova Micro spend |  | Explained | The operator's other project, which shares the account, calls `amazon.nova-micro-v1:0` in us-east-1 (read by the PM in that project's code). Not this project's |
+
+The Goal stays `InProgress` until the first reading is recorded.

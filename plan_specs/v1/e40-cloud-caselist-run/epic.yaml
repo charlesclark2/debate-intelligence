@@ -399,5 +399,74 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e40-t17-landscape-report-from-the-cloud-runs-state
+    - id: t18
+      kind: Task
+      name: 'In bucket mode a failed parse stage names the cloud cure, never a publish from the operator''s Mac'
+      description: >-
+        In bucket mode a failed parse stage names the cloud cure, never a publish from the
+        operator's Mac.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t18-cloud-parse-stage-cure.yaml
+        goalRef: v1-e40-t18-cloud-parse-stage-cure
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t18-cloud-parse-stage-cure reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t18-cloud-parse-stage-cure
+    - id: t19
+      kind: Task
+      name: 'The weekly cloud run builds the landscape reports, counted for cost first'
+      description: >-
+        The weekly cloud run builds the landscape reports, counted for cost first.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t19-landscape-stage-in-the-weekly-run.yaml
+        goalRef: v1-e40-t19-landscape-stage-in-the-weekly-run
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t19-landscape-stage-in-the-weekly-run reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t19-landscape-stage-in-the-weekly-run
+    - id: t20
+      kind: Task
+      name: 'The caselist pull table''s Detail column shortens digests as its panel does'
+      description: >-
+        The caselist pull table's Detail column shortens digests as its panel does.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t20-pull-table-shortens-digests.yaml
+        goalRef: v1-e40-t20-pull-table-shortens-digests
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t20-pull-table-shortens-digests reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t20-pull-table-shortens-digests
+    - id: t21
+      kind: Task
+      name: 'A restored working copy carries a marker, so leftover copies are found exactly'
+      description: >-
+        A restored working copy carries a marker, so leftover copies are found exactly.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t21-restored-copy-marker.yaml
+        goalRef: v1-e40-t21-restored-copy-marker
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t21-restored-copy-marker reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t21-restored-copy-marker
 status:
   phase: Pending

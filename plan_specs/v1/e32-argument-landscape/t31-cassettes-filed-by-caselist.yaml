@@ -1,0 +1,69 @@
+# TASK v1-e32-t31-cassettes-filed-by-caselist - Model cassettes name their caselist, so one season's recordings can be deleted alone
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t31-cassettes-filed-by-caselist
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "Model cassettes name their caselist, so one season's recordings can be deleted alone"
+spec:
+  # Filed by the PM, 2026-10-30, from v1-e30-t28's Follow-up 4 and question 2.
+  description: >-
+    `landscape/model-cassettes/<prompt>/<key>.json` does not say which caselist a recording came
+    from, so the annual purge cannot delete a purged season's cassettes alone, and the PM's
+    ruling of 2026-10-30 (a season that becomes a backfile loses its classifications) needs it.
+    Record the caselist with each cassette, readably by older replays, and give the purge
+    runbook the command.
+  priority: 3
+  constraints:
+    packages: [debate_core.integrations, debate_core.application, packages/debate_core/tests, docs/runbooks]
+    forbidden:
+      - A cassette that replays for a call whose recorded values differ
+      - A real model call in a test
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A cassette names its caselist, an older cassette still replays, and one caselist's
+        cassettes can be listed and deleted alone, by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t31-cassettes-filed-by-caselist-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    Model cassettes name their caselist, so one season's recordings can be deleted alone.
+  goalRef:
+    name: v1-e32-t31-cassettes-filed-by-caselist
+  graph:
+    nodes:
+      - id: cassettes-filed-by-caselist
+        kind: Task
+        name: Cassettes by caselist
+        description: >-
+          Model cassettes name their caselist, so one season's recordings can be deleted
+          alone.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Cassettes by caselist tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, cassette]
+status:
+  phase: Pending

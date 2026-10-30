@@ -325,5 +325,23 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e36-t11-visual-qa-freshness
+    - id: t12
+      kind: Task
+      name: 'A pull request into main that touches site/ is built for prod before it merges, and site/ never trips the Python tests'
+      description: >-
+        A pull request into main that touches site/ is built for prod before it merges, and
+        site/ never trips the Python tests.
+      inputs:
+        specRef: plan_specs/v1/e36-team-website/t12-prod-build-before-main.yaml
+        goalRef: v1-e36-t12-prod-build-before-main
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e36-t12-prod-build-before-main reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e36-t12-prod-build-before-main
 status:
   phase: Pending

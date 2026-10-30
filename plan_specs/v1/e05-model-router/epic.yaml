@@ -416,5 +416,23 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e05-t17-switch-back-to-the-5-5-models
+    - id: t18
+      kind: Task
+      name: 'The cost allocation tags are active by Terraform, so the budgets that filter on them never read zero again'
+      description: >-
+        The cost allocation tags are active by Terraform, so the budgets that filter on them
+        never read zero again.
+      inputs:
+        specRef: plan_specs/v1/e05-model-router/t18-cost-allocation-tags-in-terraform.yaml
+        goalRef: v1-e05-t18-cost-allocation-tags-in-terraform
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e05-t18-cost-allocation-tags-in-terraform reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e05-t18-cost-allocation-tags-in-terraform
 status:
   phase: Pending

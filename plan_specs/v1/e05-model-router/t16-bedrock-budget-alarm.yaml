@@ -30,7 +30,7 @@ spec:
     preference), $80 and $100 of actual spend, and at $100 of forecast.
   priority: 2
   constraints:
-    packages: [infrastructure, docs/runbooks, docs/data]
+    packages: [infrastructure, docs/runbooks, docs/data, tests/infrastructure, tests/docs]
     forbidden:
       - A permission set or account assignment changed
       - Network or AWS access in any test

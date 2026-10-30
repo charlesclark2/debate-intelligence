@@ -1,0 +1,68 @@
+# TASK v1-e40-t21-restored-copy-marker - A restored working copy carries a marker, so leftover copies are found exactly
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t21-restored-copy-marker
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "A restored working copy carries a marker, so leftover copies are found exactly"
+spec:
+  # Filed by the PM, 2026-10-30, from v1-e30-t28's Follow-up 6.
+  description: >-
+    The annual purge (and v1-e40-t17's runbook) finds leftover restored copies by a
+    `debate.sqlite3` three levels down, so a copy restored deeper is not seen. Make `caselist
+    restore-run-state` write a marker file naming the copy as restored (the bucket, the date,
+    never a school or path), and have the purge runbook's step 1 and the landscape runbook's
+    last step look for the marker.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks, tests/docs]
+    forbidden:
+      - A school, team code or path in the marker
+      - Network or AWS access in any test
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A restored copy holds the marker, and the runbooks' leftover checks find a copy at
+        any depth by it, by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t21-restored-copy-marker-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    A restored working copy carries a marker, so leftover copies are found exactly.
+  goalRef:
+    name: v1-e40-t21-restored-copy-marker
+  graph:
+    nodes:
+      - id: restored-copy-marker
+        kind: Task
+        name: Restored copy marker
+        description: >-
+          A restored working copy carries a marker, so leftover copies are found exactly.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Restored copy marker tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, restore]
+status:
+  phase: Pending

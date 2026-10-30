@@ -408,3 +408,13 @@ this report is ACCEPTED. A later review is appended after this one; this one is 
 next promotion, and the PM records it from the `curl` count of 2. After this merge, the operator
 runs the first session's follow-up 1 (dev preview) and follow-up 2 (the browser QA run, now on the
 final copy), and pastes the QA table to the PM.
+
+## Operator records (recorded by the PM, 2026-10-30)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac5, prod half | NOT RUN | PASS | The site lane's first use (`v1-e37-t09`), 2026-10-30: pull request #604, `site/sync-from-dev-2026-10-30` into `main`, validate-dev's site-only prod build green, deployed to prod as `2525841` with all 38 smoke checks passing, `/results/` at 200. The results the coach supplied are on wfbdebate.com, with their consent references in the manifest |
+
+Every criterion passes, so the Goal is `Succeeded`.

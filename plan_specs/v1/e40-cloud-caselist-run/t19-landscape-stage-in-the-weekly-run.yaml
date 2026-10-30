@@ -1,0 +1,79 @@
+# TASK v1-e40-t19-landscape-stage-in-the-weekly-run - The weekly cloud run builds the landscape reports, counted for cost first
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t19-landscape-stage-in-the-weekly-run
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "The weekly cloud run builds the landscape reports, counted for cost first"
+spec:
+  # Filed by the PM, 2026-10-30, from the first scheduled cloud run (2026-10-28), v1-e05-t12's and v1-e40-t17's follow-ups.
+  description: >-
+    The cloud run's landscape stage is always skipped with a stale reason ("no landscape service
+    is installed (v1-e32-t05 has not shipped)"): nothing in the run calls `landscape report`, so
+    the weekly reports come only from the operator's hand runs over a restored copy
+    (v1-e40-t17). Count first, read-only: what a weekly landscape stage would classify per
+    caselist and week (new cards against the classification cache, by v1-e32-t07's classify-once
+    rule), what that costs at the committed prices under dev's $50 monthly budget, what the
+    image lacks (`config/landscape/`, `prompts/`; v1-e05-t12's follow-up) and where the
+    landscape's state would live in bucket mode. Propose to the PM before building. Then, as
+    ruled, wire the stage, fix the stale reason line, and bundle what the image needs.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, debate_cli, scripts, ops, packages/debate_core/tests, packages/debate_cli/tests, tests/scripts, tests/smoke, docs/runbooks]
+    forbidden:
+      - A model call made in a week the budget would refuse
+      - A card classified a second time
+      - A model call or network or AWS access in any test
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Counts first: cards a weekly stage would classify per caselist, their cost at the
+        committed prices, what the image lacks and where the state would live, sent to the
+        PM before building.
+    - id: ac2
+      description: >-
+        As ruled, by tests shown failing first: the stage runs in the weekly run, classifies
+        only what the cache lacks, publishes the reports, and its skip reason, when skipped,
+        is current.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t19-landscape-stage-in-the-weekly-run-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    The weekly cloud run builds the landscape reports, counted for cost first.
+  goalRef:
+    name: v1-e40-t19-landscape-stage-in-the-weekly-run
+  graph:
+    nodes:
+      - id: landscape-stage-in-the-weekly-run
+        kind: Task
+        name: Weekly landscape stage
+        description: >-
+          The weekly cloud run builds the landscape reports, counted for cost first.
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Weekly landscape stage tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, landscape]
+status:
+  phase: Pending

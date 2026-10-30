@@ -309,3 +309,13 @@ P4's pasted script is now a guarded command, and both runbooks use it.
    * 2, smoke for the three `tub index` commands (E39 p3);
    * 3, `evidence-store-layout.md`'s `reports/` row: the PM fixes it in the next batch.
 9. **Merge `--partial`,** any time. The prune is never run on a Wednesday.
+
+## Operator records (recorded by the PM, 2026-10-30)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac2, one dev prune | NOT RUN | PASS | 2026-10-30, from `dev-preview` at `origin/dev`: the dry run listed 12 versions and 0 delete markers of 9 keys in 4 superseded index directories and `current.json`'s older versions, keeping 3 (the current index `e8f86cda` and `current.json`); the PM read it; `--execute --confirm` deleted those 12; the dry run after read `nothing to delete. Kept 3 version(s).` |
+
+Every criterion passes, so the Goal is `Succeeded`.

@@ -1,0 +1,70 @@
+# TASK v1-e05-t18-cost-allocation-tags-in-terraform - The cost allocation tags are active by Terraform, so the budgets that filter on them never read zero again
+# Epic: E05 Model Router & Structured LLM Contracts | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e05-t18-cost-allocation-tags-in-terraform
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e05-model-router
+  annotations:
+    debate/title: "The cost allocation tags are active by Terraform, so the budgets that filter on them never read zero again"
+spec:
+  # Filed by the PM, 2026-10-30, from v1-e05-t16's Follow-up 1 (the operator's check of 2026-10-30).
+  description: >-
+    The account's `Project` and `Environment` cost allocation tags were never activated, so the
+    environment budgets and the anomaly monitor read $0 until the operator set them `Active` by
+    hand on 2026-10-30. Manage their status in `infrastructure/bootstrap/organization` (the
+    provider's cost allocation tag resource), with a test, so a plan shows any drift. The PM
+    reads the plan before the apply.
+  priority: 3
+  constraints:
+    packages: [infrastructure, tests/infrastructure, docs/runbooks]
+    forbidden:
+      - A permission set or account assignment changed
+      - Network or AWS access in any test
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Terraform tests show both tags Active, shown failing first; the plan against the
+        account shows them already Active (operator, read by the PM).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e05-t18-cost-allocation-tags-in-terraform-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e05-model-router
+spec:
+  description: >-
+    The cost allocation tags are active by Terraform, so the budgets that filter on them never
+    read zero again.
+  goalRef:
+    name: v1-e05-t18-cost-allocation-tags-in-terraform
+  graph:
+    nodes:
+      - id: cost-allocation-tags-in-terraform
+        kind: Task
+        name: Cost allocation tags
+        description: >-
+          The cost allocation tags are active by Terraform, so the budgets that filter on
+          them never read zero again.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Cost allocation tags tests pass
+            command: uv
+            args: [run, bash, scripts/terraform_checks.sh]
+status:
+  phase: Pending

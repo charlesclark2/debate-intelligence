@@ -581,3 +581,14 @@ having been built only for dev.
     second in the held order, straight after e31-t31. It changes `validate-dev.yml`, so it must not
     ride the tag, but the coach travels from 2026-11-01, and the install hotfix (operator follow-up
     1) should be on `main` before then. The first use (follow-up 2) waits for the coach's word.
+
+## Operator records (recorded by the PM, 2026-10-30)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac3, the install hotfix | NOT RUN | PASS | 2026-10-29: `hotfix/install-site-lane` from `main`, the five guard files only (`6e233dc`), validate-dev green on `v1.0.1-dev.3`, merged as #594 with every check green; back-merge #596 into `dev` |
+| ac3, the first use | NOT RUN | PASS | 2026-10-30, with the coach's word: #604 (dev's `site/`, 38 files, no dependency file), validate-dev `site only … green`, prod `2525841`, 38 smoke checks, back-merge #605. A second use the same night, #616 (the coach's Ronald Reagan edit and `v1-e37-t10`'s tests, 15 files), ran only the site checks, deployed as `5e51217`, back-merge #618 |
+
+Every criterion passes, so the Goal is `Succeeded`.

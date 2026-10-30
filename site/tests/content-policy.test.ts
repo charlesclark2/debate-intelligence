@@ -6,6 +6,7 @@ import {
   loadGuardedContent,
   loadPages,
   loadSiteSettings,
+  PLACEHOLDER_PATTERN,
   parsePage,
 } from '@/lib/content'
 import type { MediaConsent } from '@/lib/media-consent'
@@ -28,7 +29,7 @@ import {
 import { resultsGuardedContent } from '@/lib/results'
 import { loadSchedule, scheduleGuardedContent } from '@/lib/tournaments'
 
-import { STUDENTS, contentWith, withConsent } from './content-fixture'
+import { STUDENTS, contentWith, shippedContentWith, withConsent } from './content-fixture'
 
 /**
  * The content guard (v1-e36-t04 acceptance criterion 3).
@@ -68,6 +69,72 @@ function messages(markdown: string, overrides: Partial<MediaConsent> = {}): stri
   return check(markdown, overrides)
     .errors.map((finding) => finding.message)
     .join('\n')
+}
+
+/**
+ * What must hold of every image entry in a content directory's consent manifest, whichever
+ * photographs it lists: a consent reference that has been filled in, and consent for the
+ * manifest's season, confirmed inside it. The manifest's loader already refuses an entry with no
+ * reference or no season (src/lib/media-consent.ts); this adds that they are this season's, as
+ * the student entries' check below does. A problem names the image by its path, never by who it
+ * shows (v1-e37-t11).
+ */
+function imageEntryProblems(directory?: string): string[] {
+  const manifest = loadMediaConsent(directory)
+  const lastDay = `${Number(manifest.season.slice(0, 4)) + 1}-07-31`
+  return manifest.images.flatMap((image) => [
+    ...(new RegExp(PLACEHOLDER_PATTERN.source).test(image.consentReference)
+      ? [`image ${image.path}: its consent reference is still to come`]
+      : []),
+    ...(image.season !== manifest.season
+      ? [`image ${image.path}: its consent is for season ${image.season}, not ${manifest.season}`]
+      : isStale(image, manifest.season) || image.dateChecked > lastDay
+        ? [`image ${image.path}: its consent was last checked ${image.dateChecked}, outside season ${manifest.season}`]
+        : []),
+  ])
+}
+
+/** An image entry for the current season, consented, with invented values. */
+function consentedImage(seasonYear: number): Record<string, string | undefined> {
+  return {
+    path: '/photos/planted-orientation.jpg',
+    consentReference: 'MC-PLANT-001',
+    depicts: '2 team members, both covered',
+    season: `'${seasonYear}-${String(seasonYear + 1).slice(2)}'`,
+    dateChecked: `${seasonYear}-09-18`,
+  }
+}
+
+/**
+ * Adds an image entry at the head of the manifest's `images:` list, whether it holds entries or
+ * is `[]`. A field set to undefined is left out.
+ */
+function withImage(fields: Record<string, string | undefined>): (source: string) => string {
+  return (source) => {
+    const entry = Object.entries(fields)
+      .filter(([, value]) => value !== undefined)
+      .map(([key, value], index) => `${index === 0 ? '  - ' : '    '}${key}: ${value}`)
+      .join('\n')
+    const opened = source.replace(/^images: \[\]$/m, 'images:')
+    if (!/^images:$/m.test(opened)) {
+      throw new Error('withImage: no `images:` list in content/media-consent.yaml')
+    }
+    return opened.replace(/^images:$/m, `images:\n${entry}`)
+  }
+}
+
+/** Every publishing-policy error in a content directory, as the build's guard reports them. */
+function guardErrors(directory: string): string[] {
+  return checkPublishingPolicy({
+    pages: [
+      ...loadGuardedContent(directory),
+      ...scheduleGuardedContent(directory),
+      ...resultsGuardedContent(directory),
+      ...consentGuardedContent(directory),
+    ],
+    settings: loadSiteSettings(directory),
+    consent: loadMediaConsent(directory),
+  }).errors.map((error) => `${error.location}: ${error.message}`)
 }
 
 beforeEach(() => {
@@ -593,9 +660,70 @@ describe('the content this site actually ships', () => {
     }
   })
 
-  it('has a media-consent manifest for the current season, with no photograph in it yet', () => {
+  it('has a media-consent manifest for the current season', () => {
     expect(consent.season).toMatch(/^\d{4}-\d{2}$/)
-    expect(consent.images).toEqual([])
+  })
+
+  /**
+   * Every image entry, checked for what must always hold of it rather than for how many there
+   * are: until v1-e37-t11 this test pinned `images: []`, which the first consented photograph
+   * would have failed, a content edit needing a test edit. Each case plants an entry in a copy
+   * of the shipped content, at the head of the list, so it runs the same whatever the manifest
+   * lists. Every image path and reference in it is invented.
+   */
+  describe('every image entry', () => {
+    const seasonYear = Number(consent.season.slice(0, 4))
+    const PLANTED_PATH = '/photos/planted-orientation.jpg'
+
+    it('in the shipped manifest has a filled-in consent reference for the current season', () => {
+      expect(imageEntryProblems()).toEqual([])
+    })
+
+    it('passes for a consented image, in the manifest and on a page', () => {
+      const copy = shippedContentWith({
+        'media-consent.yaml': withImage(consentedImage(seasonYear)),
+        'pages/about.md': (source) => `${source.trimEnd()}\n\n![Two team members at orientation](${PLANTED_PATH})\n`,
+      })
+      expect(imageEntryProblems(copy)).toEqual([])
+      expect(guardErrors(copy)).toEqual([])
+    })
+
+    it.each([
+      [
+        'consent from last season',
+        { season: `'${seasonYear - 1}-${String(seasonYear).slice(2)}'`, dateChecked: `${seasonYear - 1}-09-18` },
+        new RegExp(`image ${PLANTED_PATH}: its consent is for season ${seasonYear - 1}-`),
+      ],
+      [
+        'consent not yet checked this season',
+        { dateChecked: `${seasonYear}-07-04` },
+        new RegExp(`image ${PLANTED_PATH}: its consent was last checked ${seasonYear}-07-04, outside season`),
+      ],
+      [
+        'a consent reference still to come',
+        { consentReference: "'[[TBD: form reference from the office]]'" },
+        new RegExp(`image ${PLANTED_PATH}: its consent reference is still to come`),
+      ],
+    ])('refuses an image with %s', (_case, fields, reason) => {
+      const copy = shippedContentWith({ 'media-consent.yaml': withImage({ ...consentedImage(seasonYear), ...fields }) })
+      expect(imageEntryProblems(copy).join('\n')).toMatch(reason)
+    })
+
+    it('refuses an image entry with no consent reference at all', () => {
+      const copy = shippedContentWith({
+        'media-consent.yaml': withImage({ ...consentedImage(seasonYear), consentReference: undefined }),
+      })
+      expect(() => imageEntryProblems(copy)).toThrow(/images\.0\.consentReference/)
+    })
+
+    it('refuses an image on a page with no entry in the manifest', () => {
+      const copy = shippedContentWith({
+        'pages/about.md': (source) => `${source.trimEnd()}\n\n![Two team members at orientation](${PLANTED_PATH})\n`,
+      })
+      expect(guardErrors(copy).join('\n')).toMatch(
+        new RegExp(`references the image ${PLANTED_PATH}, which has no entry in content/media-consent\\.yaml`),
+      )
+    })
   })
 
   /**

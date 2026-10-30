@@ -21,7 +21,8 @@ are fixed here rather than at each `raise`:
     or written — it was unavailable, the session for it expired, or it refused access
     (:data:`RETRYABLE_STORE_FAILURES`, `v1-e01-t20`). The same command may well succeed later,
     which is why this is never `DOMAIN_FAILURE`: a script reading the code must be able to tell an
-    outage from a verdict.
+    outage from a verdict. A model call the provider *refused* is not on it
+    (:data:`REFUSED_MODEL_CALLS`, `v1-e05-t09`): no retry fixes it, so it is a `1`.
 
 `70` — `INTERNAL_ERROR`
     A bug: an exception the CLI does not model. 70 is `EX_SOFTWARE` from `sysexits.h`.
@@ -54,6 +55,8 @@ import typer
 from debate_core.application.caselist.removal_service import RemovalIncomplete, TakedownPreflightFailed
 from debate_core.application.errors import (
     DomainError,
+    ModelAccessDenied,
+    ModelRequestRejected,
     ProviderError,
     ProviderRateLimited,
     ProviderUnavailable,
@@ -65,6 +68,7 @@ from debate_core.application.errors import (
 )
 
 __all__ = [
+    "REFUSED_MODEL_CALLS",
     "RETRYABLE_PROVIDER_FAILURES",
     "RETRYABLE_STORE_FAILURES",
     "STOPPED_BY_A_STORE",
@@ -97,12 +101,22 @@ nobody's retry, so it ends a command with `DOMAIN_FAILURE` (1), and a run that r
 RETRYABLE_PROVIDER_FAILURES: tuple[type[ProviderError], ...] = (ProviderUnavailable, ProviderRateLimited)
 """The provider failures a run records by code and a retry may cure (`v1-e34-t13`).
 
-A provider failure that ends a command is a `RETRIEVAL_FAILURE` whatever its class
-(:func:`exit_code_for`). These two are the ones a run can record instead: a download stage of
-`caselist pull` that met a 5xx, a timeout, or a rate limit that outlasted the client's bounded
-retries. Named one by one, like the store failures, so that a code is on the list because someone
-decided it is. OpenCaselist's *daily* limiter is not here although it arrives as a rate limit: the
-sync records it under a code of its own, because it is a verdict for the day.
+A provider failure that ends a command is a `RETRIEVAL_FAILURE` unless it is one of
+:data:`REFUSED_MODEL_CALLS` (:func:`exit_code_for`). These two are the ones a run can record
+instead: a download stage of `caselist pull` that met a 5xx, a timeout, or a rate limit that
+outlasted the client's bounded retries. Named one by one, like the store failures, so that a code
+is on the list because someone decided it is. OpenCaselist's *daily* limiter is not here although
+it arrives as a rate limit: the sync records it under a code of its own, because it is a verdict
+for the day.
+"""
+
+REFUSED_MODEL_CALLS: tuple[type[ProviderError], ...] = (ModelAccessDenied, ModelRequestRejected)
+"""The provider failures no retry fixes, which end a command with `DOMAIN_FAILURE` (1), not 3 (`v1-e05-t09`).
+
+The model provider refused the caller (no usable credentials, or none granted the model) or the
+request itself (a parameter the model refuses, a model it does not know). The Bedrock adapter
+already never retries either (`v1-e05-t02`); a script that retried on the exit code would only send
+the same refused call again. A throttled call stays a `3`: it is :class:`ProviderRateLimited`.
 """
 
 STOPPED_BY_A_STORE: tuple[type[DomainError], ...] = (TakedownPreflightFailed, RemovalIncomplete)
@@ -132,7 +146,8 @@ def exit_code_for(exception: BaseException) -> ExitCode:
 
     The order of the checks is the contract: a provider failure, or a store failure on
     :data:`RETRYABLE_STORE_FAILURES`, is also a `DomainError`, and it is the more specific answer
-    (3, "try again later") that callers want.
+    (3, "try again later") that callers want. A provider failure on :data:`REFUSED_MODEL_CALLS` is
+    checked first, and is a `DOMAIN_FAILURE`: trying again later gives the same refusal.
 
     Click-family errors (`typer.TyperException` and its `UsageError` subclasses) already carry the
     code Typer's standalone runner exits with, so this reports that number rather than inventing a
@@ -142,6 +157,8 @@ def exit_code_for(exception: BaseException) -> ExitCode:
         return _known_exit_code(exception.exit_code)
     if isinstance(exception, typer.TyperException):
         return _known_exit_code(exception.exit_code)
+    if isinstance(exception, REFUSED_MODEL_CALLS):
+        return ExitCode.DOMAIN_FAILURE
     if isinstance(exception, (ProviderError, *RETRYABLE_STORE_FAILURES)):
         return ExitCode.RETRIEVAL_FAILURE
     if isinstance(exception, STOPPED_BY_A_STORE) and is_retryable_store_failure(exception.__cause__):

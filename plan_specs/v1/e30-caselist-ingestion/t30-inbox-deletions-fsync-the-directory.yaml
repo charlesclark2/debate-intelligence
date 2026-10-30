@@ -33,7 +33,7 @@ spec:
         Each inbox deletion is followed by a directory fsync, and a failed one raises, by a
         recording test shown failing first.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

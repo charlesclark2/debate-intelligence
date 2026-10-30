@@ -171,9 +171,39 @@ is the final word on ac1.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-30
 
 **Notes:**
+
+The planted-break check now runs the tests that read a change first, and `read_by` is gone.
+1. **ac1 passes, locally.** All 13 breaks are caught, each run by node id under the two-minute limit,
+   in 14 to 28 s (the exit-code break 28.3 s, t39's 18.7 s without `read_by`). The unreached break is
+   not caught (649 passed). No inner run skipped a test. The dev pre-release's validate-dev slow tier
+   after the merge is the final word, and the PM checks it.
+2. **Red first.** The `--explain` label test failed against the start commit. The ordering tests failed
+   7 of 24 against a skeleton keeping the old order, and the 17 that passed are the old behaviour
+   this keeps.
+3. **Mutants:** (1) is caught twice. The unit tests fail, and t39's break goes uncaught (266 passed), so
+   the harness test fails. That is the best possible evidence that the path tier is what catches it.
+   (4) is caught with a stand-in test, as accepted. (2) and (3) are withdrawn with durations.
+4. **Deviation 1, durations dropped:** the PM's ruling (B). The PM's next batch amends the description
+   to the ordering built: mention, then a path read, then chain length, then path, with the
+   could-not-tell routes after the path routes.
+5. **Deviation 2, the `--explain` label in `scripts/affected_tests.py`: accepted.** Labels only, the
+   same mentioners and reach order, every break's selection identical by `cmp`, and the selector's
+   tests unchanged.
+6. **Decisions accepted:**
+   * mention above path, with the suffix-list break as the reason;
+   * what "could not tell" covers, with the harness importing the selector's own constants so a
+     renamed label can't slide into the path tier;
+   * chain, then path, as the last tie-breaks.
+7. **Follow-up work:**
+   * durations: noted in the amended description;
+   * recording whether a route by paths alone reaches each test: the PM's next batch files it at E01
+     p3, to be picked up only if a break's reader lacks a mention and is first reached by a word.
+8. **The affected set ran:** 42 files, 1,988 passed in 70 s. lint-imports, the specs, the command
+   blocks and the docs index pass. pyright doesn't cover `tests/scripts` (`v1-e01-t35`'s scope).
+9. **Merge:** any time. The PM reads the next pre-release's slow tier after it lands.

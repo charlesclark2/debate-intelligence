@@ -12,6 +12,37 @@
 
 <!-- 3-6 sentences: what was built, how it fits the epic, anything the PM should look at first. -->
 
+## Counts (ac1)
+
+Read by the operator on 2026-10-29 as `debate-admin`, with the block under Operator follow-ups
+(Cost Explorer, unblended cost, monthly, 2026-09-01 to 2026-10-29). Names only; no amounts are
+recorded here.
+
+**What this project's model calls are billed under** (all in October; none in September, which is
+before `v1-e05-t08` gave any profile `bedrock:InvokeModel`):
+
+| Model (route) | Service | Usage types |
+|---|---|---|
+| Claude Haiku 4.5 (dev) | `Claude Haiku 4.5 (Amazon Bedrock Edition)` | `USE1-MP:USE1_InputTokenCount-Units`, `USE1-MP:USE1_OutputTokenCount-Units` |
+| Claude Sonnet 4.6 (dev) | `Claude Sonnet 4.6 (Amazon Bedrock Edition)` | `USE1-MP:USE1_InputTokenCount-Units`, `USE1-MP:USE1_OutputTokenCount-Units` |
+| Cohere Rerank v3.5 | `Cohere Rerank v3.5 (Amazon Bedrock Edition)` | `USE1-MP:USE1_search_units-Units` |
+| Titan Text Embeddings V2 | `Amazon Bedrock` | `USE1-TitanEmbeddingV2-Text-input-tokens` |
+
+**Model spend that is not this project's:** `Amazon Bedrock` / `USE1-NovaMicro-input-tokens` and
+`USE1-NovaMicro-output-tokens`, in September and October. No routing file and no grant names a Nova
+model, and September predates the project's Bedrock access, so a filter on the `Amazon Bedrock`
+service alone would count it.
+
+**Not yet billed, so not named:** the three 5.5 models of prod's routes (Claude Haiku, Sonnet and
+Opus 5.5). They have never been called (their quotas are held at zero, `v1-e05-t13`), so Cost
+Explorer has no service name for them yet.
+
+**The `Project` tag:** every row in both months, for every service, groups under an empty
+`Project` value. That includes S3, KMS, Secrets Manager and ECS spend that this project's Terraform
+tags. Cost Explorer shows no spend under `Project=debate-intelligence` at all.
+
+**Record types:** `Usage` and `Other` only. There are no credits, so none are netting the spend.
+
 ## Plan nodes
 
 <!-- One row per Plan graph node, in the order they were completed. -->

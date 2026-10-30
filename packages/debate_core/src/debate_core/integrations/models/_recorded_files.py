@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 from typing import Any, cast
 
+from debate_core.application.durable_files import fsync_directory
 from debate_core.domain.prompt_spec import is_prompt_id
 from debate_core.integrations.models.errors import FixtureFileError
 
@@ -53,9 +54,17 @@ def read_json_object(path: Path) -> dict[str, Any] | None:
 
 
 def write_pretty_json(path: Path, document: object) -> None:
-    """Write `document` to `path` for review, replacing any file already there in one step."""
+    """Write `document` to `path` for review, replacing any file already there in one step.
+
+    Durably, as :mod:`debate_core.application.durable_files` says (`v1-e30-t26`): the partial file
+    is fsynced, renamed into place, and then its directory is fsynced. A failed fsync raises.
+    """
     text = json.dumps(document, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False) + "\n"
     path.parent.mkdir(parents=True, exist_ok=True)
     partial = path.with_name(f".{path.name}.partial")
-    partial.write_text(text, encoding="utf-8")
+    with partial.open("w", encoding="utf-8") as stream:
+        stream.write(text)
+        stream.flush()
+        os.fsync(stream.fileno())
     os.replace(partial, path)
+    fsync_directory(path.parent)

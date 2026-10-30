@@ -157,6 +157,7 @@ from debate_core.application.caselist_sync import (
     openev_id_of_inbox_name,
     weekly_archive_of_inbox_name,
 )
+from debate_core.application.durable_files import fsync_directory
 from debate_core.application.errors import ArchiveTooLarge, DomainError, UnreadableArchive
 from debate_core.application.ports.archive import ArchiveRewriter, InventoriedEntry
 from debate_core.application.ports.suppression import SuppressionState, disclosure_digest
@@ -746,7 +747,9 @@ def purge_inbox(
 
     Raises a :class:`~debate_core.application.errors.DomainError` — :class:`InboxInUse`,
     :class:`InboxFileChanged`, :class:`InboxFileUnreadable`, :class:`InboxRewriteFailed` — or an
-    `OSError` at the first file it cannot finish, having left that file as it was.
+    `OSError` at the first file it cannot finish, having left that file as it was. The one
+    exception is a rewrite's directory fsync (`v1-e30-t26`), the step after the rename: when it
+    fails, the rewritten archive is in place but not yet durably, and re-running finishes it.
     """
     if not planned:
         return
@@ -785,7 +788,9 @@ def _rewrite(inbox: CaselistInbox, path: Path, one: InboxFilePlan, *, request_id
 
     It is staged under the same name in a dot directory beside the original — which the sync skips —
     because the reader's wrapper rule reads the archive's own name: a staged copy named otherwise
-    could read back with different paths.
+    could read back with different paths. The staged file is fsynced, renamed over the original,
+    and then the inbox directory is fsynced, so a power cut cannot bring back the entries it took
+    out (:mod:`debate_core.application.durable_files`).
     """
     staging = path.parent / f".{uuid.uuid4().hex}{_REWRITE_SUFFIX}"
     staged = staging / path.name
@@ -812,6 +817,7 @@ def _rewrite(inbox: CaselistInbox, path: Path, one: InboxFilePlan, *, request_id
         with staged.open("rb") as written:
             os.fsync(written.fileno())
         os.replace(staged, path)
+        fsync_directory(path.parent)
     except (UnreadableArchive, ArchiveTooLarge) as broken:
         raise InboxRewriteFailed(one.label, type(broken).__name__) from broken
     finally:

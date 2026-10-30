@@ -66,6 +66,7 @@ from debate_core.application.errors import (
     error_code_of,
     error_code_of_class,
 )
+from debate_core.application.landscape_model_stage import ModelStageInterrupted
 
 __all__ = [
     "REFUSED_MODEL_CALLS",
@@ -117,6 +118,10 @@ The model provider refused the caller (no usable credentials, or none granted th
 request itself (a parameter the model refuses, a model it does not know). The Bedrock adapter
 already never retries either (`v1-e05-t02`); a script that retried on the exit code would only send
 the same refused call again. A throttled call stays a `3`: it is :class:`ProviderRateLimited`.
+
+A landscape run whose model stage one of these stopped
+(:class:`~debate_core.application.landscape_model_stage.ModelStageInterrupted`) is a `1` too, and one
+that :data:`RETRYABLE_PROVIDER_FAILURES` stopped is a `3` (`v1-e32-t32`).
 """
 
 STOPPED_BY_A_STORE: tuple[type[DomainError], ...] = (TakedownPreflightFailed, RemovalIncomplete)
@@ -149,6 +154,11 @@ def exit_code_for(exception: BaseException) -> ExitCode:
     (3, "try again later") that callers want. A provider failure on :data:`REFUSED_MODEL_CALLS` is
     checked first, and is a `DOMAIN_FAILURE`: trying again later gives the same refusal.
 
+    A landscape model stage that stopped partway (:class:`ModelStageInterrupted`) exits as its cause
+    does when that cause is on :data:`RETRYABLE_PROVIDER_FAILURES`, a `3`, since the answered cards are
+    cached and the next run asks only about the rest (`v1-e32-t32`). Any other cause, a refused call
+    or one nobody classified, keeps it a `DOMAIN_FAILURE`.
+
     Click-family errors (`typer.TyperException` and its `UsageError` subclasses) already carry the
     code Typer's standalone runner exits with, so this reports that number rather than inventing a
     second one — which is what keeps the JSON envelope's `exit_code` equal to the real exit status.
@@ -162,6 +172,10 @@ def exit_code_for(exception: BaseException) -> ExitCode:
     if isinstance(exception, (ProviderError, *RETRYABLE_STORE_FAILURES)):
         return ExitCode.RETRIEVAL_FAILURE
     if isinstance(exception, STOPPED_BY_A_STORE) and is_retryable_store_failure(exception.__cause__):
+        return ExitCode.RETRIEVAL_FAILURE
+    if isinstance(exception, ModelStageInterrupted) and isinstance(
+        exception.cause, RETRYABLE_PROVIDER_FAILURES
+    ):
         return ExitCode.RETRIEVAL_FAILURE
     if isinstance(exception, DomainError):
         return ExitCode.DOMAIN_FAILURE

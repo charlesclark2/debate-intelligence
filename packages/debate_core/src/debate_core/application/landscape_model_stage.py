@@ -22,8 +22,9 @@ It returns one MODEL result per candidate it asked about, placed or placing noth
 **Planning only** (a dry run): the stage orders, caps and counts, and asks nothing.
 
 **A model that cannot be reached**, or refuses the call for rate or access, stops the stage: the results
-of the batches already answered are kept, and :attr:`ModelStageOutcome.interrupted` names the error's
-class. The service writes what it has and the run stops with :class:`ModelStageInterrupted`.
+of the batches already answered are kept, and :attr:`ModelStageOutcome.interrupted_by` is the error. The
+service writes what it has and the run stops with :class:`ModelStageInterrupted`, carrying that error as
+its cause, so the command can tell a stop a retry may cure from a refusal (`v1-e32-t32`).
 
 ## The policy gate (:func:`model_use_gate`)
 
@@ -41,7 +42,7 @@ from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Final, Protocol
 
-from debate_core.application.errors import DomainError, OutputProblem, ProviderError
+from debate_core.application.errors import DomainError, OutputProblem, ProviderError, error_code_of
 from debate_core.application.model_errors import ModelOutputError, ValidationPolicy
 from debate_core.application.ports.parsed_store import ParsedStore
 from debate_core.application.structured_output import StructuredOutputGuard
@@ -110,15 +111,24 @@ POLICY_QUESTION: Final = 4
 
 
 class ModelStageInterrupted(DomainError):
-    """The model could not be reached, or refused the call for rate or access, partway through a run."""
+    """The model could not be reached, or refused the call for rate or access, partway through a run.
 
-    def __init__(self, error: str, *, sent: int, unanswered: int) -> None:
+    `cause` is the provider error that stopped the stage. The CLI exits as that cause would
+    (`v1-e32-t32`): a throttled call or a model that did not answer is retryable, and the cards already
+    answered are cached, so the next run asks only about the rest; a refused call is a verdict.
+    `cause_code` is the cause's error code (`PROVIDER_RATE_LIMITED`), reported beside this error's own.
+    """
+
+    def __init__(self, cause: ProviderError, *, sent: int, unanswered: int) -> None:
+        error = type(cause).__name__
         super().__init__(
             f"the model stage stopped on {error} after {sent} card(s); the {unanswered} card(s) not yet "
             "answered were not cached, the cache and the review queue hold what was answered, and no "
             "report was written or published"
         )
+        self.cause = cause
         self.error = error
+        self.cause_code = error_code_of(cause)
         self.sent = sent
         self.unanswered = unanswered
 
@@ -174,10 +184,15 @@ class ModelStageOutcome:
     input_tokens: int = 0
     output_tokens: int = 0
     """Tokens of the calls whose answers were used, as the router reported them."""
-    interrupted: str | None = None
-    """The class of the router error that stopped the stage; None when it ran to the end."""
+    interrupted_by: ProviderError | None = None
+    """The router error that stopped the stage; None when it ran to the end."""
     sent_inputs: tuple[str, ...] = field(default=(), repr=False)
     """Each batch's `items` variable as sent: what a scan of the prompt inputs reads. Never logged."""
+
+    @property
+    def interrupted(self) -> str | None:
+        """The class of :attr:`interrupted_by`; None when the stage ran to the end."""
+        return type(self.interrupted_by).__name__ if self.interrupted_by is not None else None
 
 
 class ModelClassificationStage:
@@ -246,7 +261,7 @@ class ModelClassificationStage:
         results: dict[str, ClassificationResult] = {}
         refused: Counter[str] = Counter()
         calls = input_tokens = output_tokens = 0
-        interrupted: str | None = None
+        interrupted: ProviderError | None = None
         sent_inputs: list[str] = []
         for batch in batches(items, self._batch_size):
             variables = prompt_variables(taxonomy, batch)
@@ -276,10 +291,10 @@ class ModelClassificationStage:
                 refused[Refusal.BATCH_REFUSED.value] += size
                 continue
             except ProviderError as error:
-                interrupted = type(error).__name__
+                interrupted = error
                 logger.warning(
                     "landscape model stage interrupted",
-                    extra={"error": interrupted, "answered": len(results), "cards": len(items)},
+                    extra={"error": type(error).__name__, "answered": len(results), "cards": len(items)},
                 )
                 break
             calls += len(answered.attempts)
@@ -309,7 +324,7 @@ class ModelClassificationStage:
             refused=dict(sorted(refused.items())),
             input_tokens=input_tokens,
             output_tokens=output_tokens,
-            interrupted=interrupted,
+            interrupted_by=interrupted,
             sent_inputs=tuple(sent_inputs),
         )
 

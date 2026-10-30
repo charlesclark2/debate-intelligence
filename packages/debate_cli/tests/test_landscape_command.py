@@ -33,6 +33,13 @@ import debate_cli.commands.landscape as landscape_module
 import debate_cli.container as container_module
 from debate_cli.app import create_app
 from debate_cli.exit_codes import ExitCode
+from debate_core.application.errors import (
+    ModelAccessDenied,
+    ModelRequestRejected,
+    ModelUnavailableError,
+    ProviderError,
+    ProviderRateLimited,
+)
 from debate_core.application.landscape_model_evaluation import FormatEvaluation
 from debate_core.application.landscape_model_stage import ModelClassificationStage, ParsedStoreCardTexts
 from debate_core.application.landscape_report import CIRCUIT_WIDE_FILES, SCHOOL_VIEW_FILES
@@ -50,7 +57,7 @@ from debate_core.application.sync_runs import (
     SyncRunOutcome,
     SyncRunRecord,
 )
-from debate_core.arguments.landscape.model_stage import NameScan
+from debate_core.arguments.landscape.model_stage import DEFAULT_BATCH_SIZE, NameScan
 from debate_core.domain.model_contracts import ModelParams, ModelPrompt, ModelResponse, TaskClass
 from debate_core.integrations.docx_parser import DebateDocxParser
 from debate_core.integrations.landscape.classification_store import review_queue_path
@@ -322,6 +329,14 @@ class _PlacesEverything(ScriptedModelRouter):
 @pytest.fixture
 def model_router(monkeypatch: pytest.MonkeyPatch) -> _PlacesEverything:
     router = _PlacesEverything(model_id="fake-model")
+    _wire_model_stage(monkeypatch, router)
+    return router
+
+
+def _wire_model_stage(
+    monkeypatch: pytest.MonkeyPatch, router: _PlacesEverything, *, batch_size: int = DEFAULT_BATCH_SIZE
+) -> None:
+    """Build every replay model stage of the run over `router`, asking `batch_size` cards a call."""
     router.parsed_dirs = []
     registry = PromptRegistry.load(Path(__file__).resolve().parents[3] / "prompts")
 
@@ -339,10 +354,10 @@ def model_router(monkeypatch: pytest.MonkeyPatch) -> _PlacesEverything:
             StructuredOutputGuard(router, registry),
             ParsedStoreCardTexts(LocalParsedStore(parsed_dir or self.settings.storage.data_dir)),
             max_items=max_items,
+            batch_size=batch_size,
         )
 
     monkeypatch.setattr(container_module.ServiceContainer, "landscape_model_stage", stage)
-    return router
 
 
 def test_replay_runs_the_model_stage_on_the_unplaced_cards_and_counts_it(
@@ -407,6 +422,134 @@ def test_a_dry_run_in_replay_asks_nothing_and_counts_what_it_would(
     model = _data(result)["classification"]["model"]
     assert (model["asked"], model["held_back"], model["calls"]) == (1, 1, 0)
     assert model_router.calls == []
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e32-t32: a model stage stopped partway is retryable when its cause is
+#
+# The stage asks one card a call, so synthetic26's two unplaced cards are two calls: the first is
+# answered and cached, and the second meets `stop`, an error as the Bedrock adapter raises it.
+# ------------------------------------------------------------------------------------------------
+
+
+class _StopsAfterTheFirstCall(_PlacesEverything):
+    stop: ProviderError | None = None
+    """What every call after the first raises; None answers every call."""
+
+    async def generate_structured[OutputT: BaseModel](
+        self,
+        task_class: TaskClass,
+        prompt: ModelPrompt,
+        schema: type[OutputT],
+        params: ModelParams | None = None,
+    ) -> ModelResponse[OutputT]:
+        if self.stop is not None and self.calls:
+            self.enqueue(self.stop)
+            return await ScriptedModelRouter.generate_structured(self, task_class, prompt, schema, params)
+        return await super().generate_structured(task_class, prompt, schema, params)
+
+
+@pytest.fixture
+def stopping_router(monkeypatch: pytest.MonkeyPatch) -> _StopsAfterTheFirstCall:
+    router = _StopsAfterTheFirstCall(model_id="fake-model")
+    _wire_model_stage(monkeypatch, router, batch_size=1)
+    return router
+
+
+def _asked(router: ScriptedModelRouter) -> list[list[dict[str, Any]]]:
+    """Each call's cards as the model was shown them, without the label that numbers them in a call."""
+    return [
+        [
+            {key: value for key, value in item.items() if key != "item"}
+            for item in json.loads(str(call.prompt.variables["items"]))
+        ]
+        for call in router.calls
+    ]
+
+
+def _replay(world: SyntheticRun) -> Result:
+    return landscape(world, "--caselist", CASELIST, "--no-publish", "--model-mode", "replay")
+
+
+@pytest.mark.parametrize(
+    ("stop", "cause_code"),
+    [
+        (ProviderRateLimited("bedrock", "fake-model: ThrottlingException"), "PROVIDER_RATE_LIMITED"),
+        (
+            ModelUnavailableError("bedrock", "fake-model", "ServiceUnavailableException"),
+            "PROVIDER_UNAVAILABLE",
+        ),
+    ],
+    ids=["throttled", "model-unavailable"],
+)
+def test_a_landscape_model_stage_stopped_by_a_retryable_cause_exits_3_with_the_causes_code(
+    world: SyntheticRun, stopping_router: _StopsAfterTheFirstCall, stop: ProviderError, cause_code: str
+) -> None:
+    stopping_router.stop = stop
+
+    result = _replay(world)
+
+    assert result.exit_code == ExitCode.RETRIEVAL_FAILURE, result.output
+    error = _error(result)
+    assert (error["code"], error["exit_code"]) == ("MODEL_STAGE_INTERRUPTED", 3)
+    assert (error["details"]["cause_code"], error["details"]["sent"], error["details"]["unanswered"]) == (
+        cause_code,
+        1,
+        1,
+    )
+    assert review_queue_path(world.data_dir, CASELIST, SYNTHETIC_RUN_TOPIC).is_file()
+    assert not (world.data_dir / "reports").exists()
+
+
+@pytest.mark.parametrize(
+    ("stop", "cause_code"),
+    [
+        (
+            ModelAccessDenied("bedrock", "fake-model", "AccessDeniedException: not granted"),
+            "MODEL_ACCESS_DENIED",
+        ),
+        (
+            ModelRequestRejected("bedrock", "fake-model", "ValidationException", "temperature is refused"),
+            "MODEL_REQUEST_REJECTED",
+        ),
+    ],
+    ids=["access-denied", "request-rejected"],
+)
+def test_a_landscape_model_stage_stopped_by_a_refused_call_exits_1_with_the_causes_code(
+    world: SyntheticRun, stopping_router: _StopsAfterTheFirstCall, stop: ProviderError, cause_code: str
+) -> None:
+    stopping_router.stop = stop
+
+    result = _replay(world)
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    error = _error(result)
+    assert (error["code"], error["exit_code"], error["details"]["cause_code"]) == (
+        "MODEL_STAGE_INTERRUPTED",
+        1,
+        cause_code,
+    )
+
+
+def test_a_rerun_after_a_throttled_landscape_model_stage_asks_only_about_the_cards_not_cached(
+    world: SyntheticRun, stopping_router: _StopsAfterTheFirstCall
+) -> None:
+    stopping_router.stop = ProviderRateLimited("bedrock", "fake-model: ThrottlingException")
+    stopped = _replay(world)
+    assert stopped.exit_code == ExitCode.RETRIEVAL_FAILURE, stopped.output
+    answered, throttled = _asked(stopping_router)
+    assert len(answered) == len(throttled) == 1
+    assert answered != throttled
+
+    stopping_router.stop = None
+    stopping_router.calls.clear()
+    again = _replay(world)
+
+    assert again.exit_code == ExitCode.OK, again.output
+    assert _asked(stopping_router) == [throttled]
+    model = _data(again)["classification"]["model"]
+    assert (model["asked"], model["cached"], model["calls"]) == (1, 1, 1)
+    assert _data(again)["classification"]["cards_by_method"] == {"ALIAS": 7, "MODEL": 2}
 
 
 def test_live_is_refused_while_the_policy_leaves_question_four_open(

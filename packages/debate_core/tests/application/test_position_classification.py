@@ -1142,6 +1142,8 @@ async def test_model_a_batch_leaving_a_card_unanswered_is_repaired_once_then_ref
 async def test_model_an_unreachable_model_keeps_the_answered_batches_and_names_the_error(
     tmp_path: Path, prompts: PromptRegistry
 ) -> None:
+    stop = ModelUnavailableError("fake", MODEL_ID)
+
     class StopsOnTheSecondBatch(AnsweringRouter):
         async def generate_structured[OutputT: BaseModel](
             self,
@@ -1151,7 +1153,7 @@ async def test_model_an_unreachable_model_keeps_the_answered_batches_and_names_t
             params: ModelParams | None = None,
         ) -> ModelResponse[OutputT]:
             if self.batches:
-                raise ModelUnavailableError("fake", MODEL_ID)
+                raise stop
             return await super().generate_structured(task_class, prompt, schema, params)
 
     found = await model_run(
@@ -1164,6 +1166,8 @@ async def test_model_an_unreachable_model_keeps_the_answered_batches_and_names_t
     )
 
     assert found.counts.model_interrupted == "ModelUnavailableError"
+    # The error itself, so the command can tell a retryable stop from a refusal (v1-e32-t32).
+    assert found.counts.model_interrupted_by is stop
     assert found.counts.model_items == 2
     cached = [
         entry

@@ -43,6 +43,7 @@ from typing import Final
 
 from pydantic import ValidationError
 
+from debate_core.application.errors import ProviderError
 from debate_core.application.landscape_model_stage import (
     ModelClassificationStage,
     ModelStageOutcome,
@@ -137,8 +138,13 @@ class ClassificationCounts:
     model_input_tokens: int = 0
     model_output_tokens: int = 0
     """Tokens of the calls whose answers were used, as the router reported them."""
-    model_interrupted: str | None = None
+    model_interrupted_by: ProviderError | None = None
     """The router error that stopped the model stage; None when it ran to the end or never ran."""
+
+    @property
+    def model_interrupted(self) -> str | None:
+        """The class of :attr:`model_interrupted_by`; None when the stage ran to the end or never ran."""
+        return type(self.model_interrupted_by).__name__ if self.model_interrupted_by is not None else None
 
     @property
     def hit_rate(self) -> float:
@@ -289,7 +295,7 @@ class PositionClassificationService:
                 model_refused=dict(outcome.refused),
                 model_input_tokens=outcome.input_tokens,
                 model_output_tokens=outcome.output_tokens,
-                model_interrupted=outcome.interrupted,
+                model_interrupted_by=outcome.interrupted_by,
             ),
         )
 

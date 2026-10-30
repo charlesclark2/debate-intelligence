@@ -510,12 +510,12 @@ class LandscapeRunService:
                 classified, counts=dataclasses.replace(classified.counts, cache_written=False)
             )
         counts = classified.counts
-        if counts.model_interrupted is not None:
+        if counts.model_interrupted_by is not None:
             raise ModelStageInterrupted(
-                counts.model_interrupted,
+                counts.model_interrupted_by,
                 sent=counts.model_items,
                 unanswered=counts.model_candidates - counts.model_items,
-            )
+            ) from counts.model_interrupted_by
         allowed = self._allowed(request)
         if counts.model_items > allowed or (counts.model_held_back and not request.dry_run):
             raise ModelBudgetExceeded(counts.model_items, allowed, counts.model_held_back)

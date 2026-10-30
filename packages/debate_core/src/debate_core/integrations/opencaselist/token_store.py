@@ -51,6 +51,7 @@ from typing import Any, Final, Protocol, cast
 
 from pydantic import SecretStr
 
+from debate_core.application.durable_files import fsync_directory
 from debate_core.application.errors import DomainError
 from debate_core.application.settings import CaselistTokenBackend
 from debate_core.integrations.opencaselist.redaction import register_secret
@@ -347,6 +348,9 @@ class FileTokenBackend:
             with contextlib.suppress(FileNotFoundError):
                 temporary.unlink()
             raise
+        # The rename is an entry in the directory: on the disk only once the directory is too
+        # (`v1-e30-t26`). A failure here raises, with the new token already in place.
+        fsync_directory(directory)
 
     def delete(self) -> bool:
         try:

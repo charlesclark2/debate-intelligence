@@ -48,7 +48,7 @@ spec:
         (2): each of the three writers fsyncs the file, renames, then fsyncs the directory,
         and a failed directory fsync raises, by recording test.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

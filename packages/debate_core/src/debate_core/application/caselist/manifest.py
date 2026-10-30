@@ -112,6 +112,7 @@ from pathlib import Path
 from typing import Any, Final
 
 from debate_core.application.caselist.import_service import Classification, ImportedEntry, ImportReport
+from debate_core.application.durable_files import fsync_directory
 from debate_core.application.errors import (
     LOCAL_STORE_ACCESS_DENIED_HINT,
     DomainError,
@@ -359,17 +360,8 @@ def write_manifest_text(text: str, destination: Path) -> Path:
         except BaseException:
             temporary_path.unlink(missing_ok=True)
             raise
-        _fsync_directory(path.parent)
+        fsync_directory(path.parent)
     return path
-
-
-def _fsync_directory(directory: Path) -> None:
-    """Put `directory`'s own entries on the disk: the rename that just happened in it."""
-    descriptor = os.open(directory, os.O_RDONLY)
-    try:
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
 
 
 # ------------------------------------------------------------------------------------------------

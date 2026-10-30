@@ -62,7 +62,7 @@ spec:
         fixtures shown failing first where they are new; the coach's guide says a content edit
         needs no test edit.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

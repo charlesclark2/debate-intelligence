@@ -49,6 +49,7 @@ from typing import Any, Final
 import boto3  # noqa: F401
 import botocore.loaders
 import botocore.session
+import keyring
 import pytest
 from packaging.utils import canonicalize_name
 
@@ -350,6 +351,36 @@ def aws_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(botocore.session, "create_loader", lambda *arguments, **keywords: shared)
 
 
+class MemoryKeychain:
+    """A keychain `keyring` would choose: its `priority` is above zero, and it is not `fail.Keyring`."""
+
+    priority = 1
+
+    def __init__(self) -> None:
+        self.passwords: dict[tuple[str, str], str] = {}
+
+    def get_password(self, service: str, username: str) -> str | None:
+        return self.passwords.get((service, username))
+
+    def set_password(self, service: str, username: str, password: str) -> None:
+        self.passwords[(service, username)] = password
+
+    def delete_password(self, service: str, username: str) -> None:
+        del self.passwords[(service, username)]
+
+
+@pytest.fixture
+def usable_keychain(monkeypatch: pytest.MonkeyPatch) -> MemoryKeychain:
+    """A keychain on every machine, so `caselist.token_backend = keyring` builds on a Linux runner too.
+
+    A Linux runner has none, and the token store refuses `keyring` there (`KeyringUnavailable`), while
+    a Mac has one; this test builds the same on both, and never opens the operator's own keychain.
+    """
+    keychain = MemoryKeychain()
+    monkeypatch.setattr(keyring, "get_keyring", lambda: keychain)
+    return keychain
+
+
 def build_every_factory(tmp_path: Path) -> list[Build]:
     values = arguments(tmp_path)
     builds: list[Build] = []
@@ -372,7 +403,7 @@ def build_every_factory(tmp_path: Path) -> list[Build]:
 
 
 def test_every_factory_builds_and_between_them_they_import_every_wired_integration(
-    tmp_path: Path, aws_config: None
+    tmp_path: Path, aws_config: None, usable_keychain: MemoryKeychain
 ) -> None:
     builds = build_every_factory(tmp_path)
 

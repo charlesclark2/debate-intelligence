@@ -316,7 +316,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [Dev routes to Claude models this account can call while the 5.5 quotas are held at zero](plan_specs/v1/e05-model-router/t13-dev-routes-to-callable-claude-models.yaml) `v1-e05-t13-dev-routes-to-callable-claude-models` | Succeeded | 1 | 2.0 |
 | [A cheaper model for the high-volume route, chosen by the coach-labelled evaluation](plan_specs/v1/e05-model-router/t14-cheaper-model-for-high-volume-evaluated-first.yaml) `v1-e05-t14-cheaper-model-for-high-volume-evaluated-first` | Pending | 1 | 3.0 |
 | [A monthly model budget beside the daily one, at the coach's $50 ceiling](plan_specs/v1/e05-model-router/t15-monthly-model-budget.yaml) `v1-e05-t15-monthly-model-budget` | Succeeded | 1 | 2.0 |
-| [An AWS budget alarm on the account's model spend, $100 a month with a first notice at $50](plan_specs/v1/e05-model-router/t16-bedrock-budget-alarm.yaml) `v1-e05-t16-bedrock-budget-alarm` | Pending | 1 | 2.0 |
+| [An AWS budget alarm on the account's model spend, $100 a month with a first notice at $50](plan_specs/v1/e05-model-router/t16-bedrock-budget-alarm.yaml) `v1-e05-t16-bedrock-budget-alarm` | InProgress | 1 | 2.0 |
 | [Dev back on the 5.5 models, and prod's Bedrock grant applied, once the quotas are restored](plan_specs/v1/e05-model-router/t17-switch-back-to-the-5-5-models.yaml) `v1-e05-t17-switch-back-to-the-5-5-models` | Pending | 2 | 2.0 |
 
 #### [E32 — Argument Landscape Reports](plan_specs/v1/e32-argument-landscape/epic.yaml)

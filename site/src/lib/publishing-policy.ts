@@ -1,6 +1,6 @@
 import type { AnnouncementField, ContentPage, SiteSettings } from './content'
 import type { MediaConsent } from './media-consent'
-import { isStale } from './media-consent'
+import { isReferenceToCome, isStale } from './media-consent'
 import { readSiteEnvironment } from './site-settings'
 
 /**
@@ -175,7 +175,7 @@ export function checkPublishingPolicy({
   const allowedAddresses = new Set(
     settings.contactEmails.map((contact) => contact.address.toLowerCase()),
   )
-  const consentedImagePaths = new Set(consent.images.map((image) => image.path))
+  const consentedImages = new Map(consent.images.map((image) => [image.path, image]))
   const nonPersonImagePaths = new Set(consent.nonPersonImages.map((image) => image.path))
   const consentedNames = new Map(
     consent.students.map((student) => [student.publishedName.toLowerCase(), student]),
@@ -239,8 +239,27 @@ export function checkPublishingPolicy({
       })
     }
 
+    // An image of a person publishes only against a current-season form, as a name does: "current"
+    // is isStale's, the same test the name rule below applies, and a reference still to come is
+    // no form at all (v1-e37-t12). The finding names the image by its path, never who it shows.
     for (const image of referencedImages(text)) {
-      if (!consentedImagePaths.has(image) && !nonPersonImagePaths.has(image)) {
+      const entry = consentedImages.get(image)
+      if (entry && isReferenceToCome(entry.consentReference)) {
+        errors.push({
+          location,
+          message:
+            `references the image ${image}, whose consent reference is still to come. An image ` +
+            'of a person publishes only against a form the activities office has confirmed.',
+        })
+      } else if (entry && isStale(entry, consent.season)) {
+        errors.push({
+          location,
+          message:
+            `references the image ${image}, whose consent entry is for season ${entry.season}, ` +
+            `checked ${entry.dateChecked}. Consent does not carry over between seasons: confirm ` +
+            `the form for ${consent.season} and update the entry.`,
+        })
+      } else if (!entry && !nonPersonImagePaths.has(image)) {
         errors.push({
           location,
           message:

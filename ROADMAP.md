@@ -60,15 +60,15 @@ v2.3's extension work.
 
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
-| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 51 | 254 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 108 | 89 | 498 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 56 | 44 | 282 |
-| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 16 | 10 | 114 |
+| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 58 | 52 | 257 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 109 | 89 | 499 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 59 | 44 | 286 |
+| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 16 | 11 | 114 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
-| [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 24 | 14 | 160 |
-| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 20 | 13 | 80 |
-| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 1 | 17 | 8 | 44 |
+| [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 26 | 16 | 163 |
+| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 22 | 15 | 83 |
+| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 1 | 21 | 8 | 52 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -134,7 +134,10 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 | [The container imports each integration in its own factory, and selection follows a command to its factories](plan_specs/v1/e01-repo-foundation/t39-container-builds-integrations-lazily.yaml) `v1-e01-t39-container-builds-integrations-lazily` | Succeeded | 1 | 4.0 |
 | [The planted-break check runs the tests nearest a break by what reads it, not by path](plan_specs/v1/e01-repo-foundation/t40-planted-break-nearest-ordering.yaml) `v1-e01-t40-planted-break-nearest-ordering` | Succeeded | 1 | 1.0 |
 | [The pull request's smoke tier reads the bundled profiles, as the installed build does](plan_specs/v1/e01-repo-foundation/t41-pr-smoke-reads-the-bundled-profiles.yaml) `v1-e01-t41-pr-smoke-reads-the-bundled-profiles` | Succeeded | 1 | 2.0 |
-| [Coverage measured in the test parts and combined, so the push run is never held by one unsplit job](plan_specs/v1/e01-repo-foundation/t42-coverage-measured-in-the-parts.yaml) `v1-e01-t42-coverage-measured-in-the-parts` | InProgress | 1 | 2.0 |
+| [Coverage measured in the test parts and combined, so the push run is never held by one unsplit job](plan_specs/v1/e01-repo-foundation/t42-coverage-measured-in-the-parts.yaml) `v1-e01-t42-coverage-measured-in-the-parts` | Succeeded | 1 | 2.0 |
+| [A change to container.py reaches only the tests of the parts it changes](plan_specs/v1/e01-repo-foundation/t43-container-diff-read-part-by-part.yaml) `v1-e01-t43-container-diff-read-part-by-part` | Pending | 0 | 2.0 |
+| [A test that mentions debate-research inside a longer message is not read as running the app](plan_specs/v1/e01-repo-foundation/t44-cli-mention-in-a-message-is-prose.yaml) `v1-e01-t44-cli-mention-in-a-message-is-prose` | Pending | 0 | 1.0 |
+| [The docstrings say what the stamped build carries](plan_specs/v1/e01-repo-foundation/t45-stamp-docstrings.yaml) `v1-e01-t45-stamp-docstrings` | Pending | 0 | 0.5 |
 
 #### [E02 — Domain Core: Entities, Ports & Local Persistence](plan_specs/v1/e02-domain-core/epic.yaml)
 
@@ -215,6 +218,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [caselist publish, verify, parse and pull panels print a summary, not the whole record](plan_specs/v1/e30-caselist-ingestion/t27-command-panels-print-summaries.yaml) `v1-e30-t27-command-panels-print-summaries` | Succeeded | 1 | 2.0 |
 | [The annual purge, as one runbook](plan_specs/v1/e30-caselist-ingestion/t28-annual-purge-runbook.yaml) `v1-e30-t28-annual-purge-runbook` | Succeeded | 1 | 2.0 |
 | [A removal lists raw/ and parsed/ again after deleting, and stops incomplete if a version survived](plan_specs/v1/e30-caselist-ingestion/t29-removal-confirms-raw-and-parsed-deletes.yaml) `v1-e30-t29-removal-confirms-raw-and-parsed-deletes` | Succeeded | 1 | 1.0 |
+| [Inbox deletions fsync the inbox directory, so a removed archive cannot come back after a power cut](plan_specs/v1/e30-caselist-ingestion/t30-inbox-deletions-fsync-the-directory.yaml) `v1-e30-t30-inbox-deletions-fsync-the-directory` | Pending | 0 | 1.0 |
 
 #### [E31 — Debate File Parsing](plan_specs/v1/e31-debate-file-parsing/epic.yaml)
 
@@ -318,6 +322,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [A monthly model budget beside the daily one, at the coach's $50 ceiling](plan_specs/v1/e05-model-router/t15-monthly-model-budget.yaml) `v1-e05-t15-monthly-model-budget` | Succeeded | 1 | 2.0 |
 | [An AWS budget alarm on the account's model spend, $100 a month with a first notice at $50](plan_specs/v1/e05-model-router/t16-bedrock-budget-alarm.yaml) `v1-e05-t16-bedrock-budget-alarm` | InProgress | 1 | 2.0 |
 | [Dev back on the 5.5 models, and prod's Bedrock grant applied, once the quotas are restored](plan_specs/v1/e05-model-router/t17-switch-back-to-the-5-5-models.yaml) `v1-e05-t17-switch-back-to-the-5-5-models` | Pending | 2 | 2.0 |
+| [The cost allocation tags are active by Terraform, so the budgets that filter on them never read zero again](plan_specs/v1/e05-model-router/t18-cost-allocation-tags-in-terraform.yaml) `v1-e05-t18-cost-allocation-tags-in-terraform` | Pending | 0 | 1.0 |
 
 #### [E32 — Argument Landscape Reports](plan_specs/v1/e32-argument-landscape/epic.yaml)
 
@@ -352,6 +357,8 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [Branches and mechanisms in the DA sections, counted first](plan_specs/v1/e32-argument-landscape/t27-branches-and-mechanisms-counted-first.yaml) `v1-e32-t27-branches-and-mechanisms-counted-first` | Succeeded | 2 | 4.0 |
 | [Tags quoted in the impact and link-chain tables, held to the report's withholding, counted first](plan_specs/v1/e32-argument-landscape/t28-tags-in-the-tables-held-to-withholding.yaml) `v1-e32-t28-tags-in-the-tables-held-to-withholding` | Succeeded | 1 | 2.0 |
 | [Harms headings counted under Impact, the word the coach's debaters use](plan_specs/v1/e32-argument-landscape/t29-harms-headings-under-impact.yaml) `v1-e32-t29-harms-headings-under-impact` | Succeeded | 1 | 2.0 |
+| [A dry run fills the plan-text and analytic-text caches, so the first report after a parser bump reads sources once](plan_specs/v1/e32-argument-landscape/t30-dry-run-fills-the-text-caches.yaml) `v1-e32-t30-dry-run-fills-the-text-caches` | Pending | 0 | 1.0 |
+| [Model cassettes name their caselist, so one season's recordings can be deleted alone](plan_specs/v1/e32-argument-landscape/t31-cassettes-filed-by-caselist.yaml) `v1-e32-t31-cassettes-filed-by-caselist` | Pending | 0 | 2.0 |
 
 #### [E33 — Evidence File Builder](plan_specs/v1/e33-file-builder/epic.yaml)
 
@@ -394,7 +401,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [CitationService with per-field provenance](plan_specs/v1/e06-card-cutting/t01-citation-service.yaml) `v1-e06-t01-citation-service` | Succeeded | 1 | 9.0 |
 | [CardService pipeline](plan_specs/v1/e06-card-cutting/t02-card-service.yaml) `v1-e06-t02-card-service` | Succeeded | 3 | 10.0 |
 | [Card format profiles from team conventions](plan_specs/v1/e06-card-cutting/t03-format-profiles.yaml) `v1-e06-t03-format-profiles` | Succeeded | 2 | 9.5 |
-| [DOCX renderer](plan_specs/v1/e06-card-cutting/t04-docx-renderer.yaml) `v1-e06-t04-docx-renderer` | InProgress | 3 | 11.0 |
+| [DOCX renderer](plan_specs/v1/e06-card-cutting/t04-docx-renderer.yaml) `v1-e06-t04-docx-renderer` | Succeeded | 3 | 11.0 |
 | [JSON manifest export](plan_specs/v1/e06-card-cutting/t05-json-manifest-export.yaml) `v1-e06-t05-json-manifest-export` | Succeeded | 2 | 6.0 |
 | [`debate-research cut` command](plan_specs/v1/e06-card-cutting/t06-cut-command.yaml) `v1-e06-t06-cut-command` | Pending | 3 | 7.0 |
 | [Verify DOCX files](plan_specs/v1/e06-card-cutting/t07-verify-docx.yaml) `v1-e06-t07-verify-docx` | Pending | 2 | 8.0 |
@@ -467,6 +474,7 @@ Whitefish Bay Debate has a public, mobile-friendly team website: team informatio
 | [Home page: the academic case for debate](plan_specs/v1/e36-team-website/t09-home-academic-case.yaml) `v1-e36-t09-home-academic-case` | Succeeded | 1 | 5.0 |
 | [The export checks run against an export](plan_specs/v1/e36-team-website/t10-export-checks-in-ci.yaml) `v1-e36-t10-export-checks-in-ci` | Succeeded | 2 | 6.0 |
 | [Visual QA refuses a stale export](plan_specs/v1/e36-team-website/t11-visual-qa-freshness.yaml) `v1-e36-t11-visual-qa-freshness` | Pending | 2 | 2.0 |
+| [A pull request into main that touches site/ is built for prod before it merges, and site/ never trips the Python tests](plan_specs/v1/e36-team-website/t12-prod-build-before-main.yaml) `v1-e36-t12-prod-build-before-main` | Pending | 0 | 2.0 |
 
 #### [E37 — Calendar & Announcements (Coach-Editable)](plan_specs/v1/e37-calendar-and-announcements/epic.yaml)
 
@@ -477,11 +485,12 @@ Whitefish Bay Debate has a public, mobile-friendly team website: team informatio
 | [Announcements and news](plan_specs/v1/e37-calendar-and-announcements/t03-announcements.yaml) `v1-e37-t03-announcements` | Pending | 2 | 10.0 |
 | [Automatic republish on content changes](plan_specs/v1/e37-calendar-and-announcements/t04-auto-republish.yaml) `v1-e37-t04-auto-republish` | Cancelled | 3 | 11.0 |
 | [Parent email updates](plan_specs/v1/e37-calendar-and-announcements/t05-parent-email-signup.yaml) `v1-e37-t05-parent-email-signup` | InProgress | 2 | 6.0 |
-| [Season results: how the team's students placed at each tournament](plan_specs/v1/e37-calendar-and-announcements/t06-season-results.yaml) `v1-e37-t06-season-results` | InProgress | 2 | 6.0 |
+| [Season results: how the team's students placed at each tournament](plan_specs/v1/e37-calendar-and-announcements/t06-season-results.yaml) `v1-e37-t06-season-results` | Succeeded | 2 | 6.0 |
 | [A link to the team's Instagram account, never an embed](plan_specs/v1/e37-calendar-and-announcements/t07-instagram-link.yaml) `v1-e37-t07-instagram-link` | Succeeded | 1 | 1.0 |
 | [The site smoke check reads the home page's results band and the results page](plan_specs/v1/e37-calendar-and-announcements/t08-smoke-results-band.yaml) `v1-e37-t08-smoke-results-band` | Pending | 2 | 1.0 |
-| [Website changes reach the public site in a day, without waiting for a release](plan_specs/v1/e37-calendar-and-announcements/t09-site-changes-publish-without-a-release.yaml) `v1-e37-t09-site-changes-publish-without-a-release` | InProgress | 1 | 3.0 |
+| [Website changes reach the public site in a day, without waiting for a release](plan_specs/v1/e37-calendar-and-announcements/t09-site-changes-publish-without-a-release.yaml) `v1-e37-t09-site-changes-publish-without-a-release` | Succeeded | 1 | 3.0 |
 | [A coach's schedule or results edit passes the site's tests without editing a test](plan_specs/v1/e37-calendar-and-announcements/t10-coach-edits-need-no-test-edit.yaml) `v1-e37-t10-coach-edits-need-no-test-edit` | Succeeded | 2 | 3.0 |
+| [The shipped-content checks follow the publishing policy, and a season change is one edit of three files](plan_specs/v1/e37-calendar-and-announcements/t11-content-guards-follow-the-policy.yaml) `v1-e37-t11-content-guards-follow-the-policy` | Pending | 0 | 1.0 |
 
 #### [E38 — Team Donations](plan_specs/v1/e38-donations/epic.yaml)
 
@@ -514,12 +523,14 @@ Debaters search the team's evidence store from a school Chromebook or at home: a
 | [Only real cards come back: entries with no cite or a few words of text, counted before any rule](plan_specs/v1/e39-evidence-search-pilot/t12-card-only-results.yaml) `v1-e39-t12-card-only-results` | Succeeded | 1 | 3.0 |
 | [Find a card that says something: passage search, word stems and prefixes](plan_specs/v1/e39-evidence-search-pilot/t13-passage-search.yaml) `v1-e39-t13-passage-search` | Succeeded | 2 | 5.0 |
 | [An index that would drop most of the cards is never published](plan_specs/v1/e39-evidence-search-pilot/t14-index-shrink-guard.yaml) `v1-e39-t14-index-shrink-guard` | Succeeded | 1 | 3.0 |
-| [tub index prune: the runbook's prune of superseded index versions as one command](plan_specs/v1/e39-evidence-search-pilot/t15-tub-index-prune.yaml) `v1-e39-t15-tub-index-prune` | InProgress | 1 | 2.0 |
+| [tub index prune: the runbook's prune of superseded index versions as one command](plan_specs/v1/e39-evidence-search-pilot/t15-tub-index-prune.yaml) `v1-e39-t15-tub-index-prune` | Succeeded | 1 | 2.0 |
 | [Open on OpenEv: a camp card links to its camp file](plan_specs/v1/e39-evidence-search-pilot/t16-open-on-openev.yaml) `v1-e39-t16-open-on-openev` | Pending | 1 | 3.0 |
 | [The landscape report and its school view on the pilot, for signed-in team members](plan_specs/v1/e39-evidence-search-pilot/t17-landscape-pages.yaml) `v1-e39-t17-landscape-pages` | Succeeded | 2 | 6.0 |
 | [Backfile seasons searchable on the pilot, without slowing its cold start](plan_specs/v1/e39-evidence-search-pilot/t18-backfiles-in-the-pilot-index.yaml) `v1-e39-t18-backfiles-in-the-pilot-index` | Pending | 2 | 4.0 |
 | [A rebuilt index identical to the published one records the suppression list it was checked against](plan_specs/v1/e39-evidence-search-pilot/t19-identical-rebuild-records-its-suppression-list.yaml) `v1-e39-t19-identical-rebuild-records-its-suppression-list` | Pending | 1 | 2.0 |
-| [The pilot API's test world split by surface, so a change selects only the tests it reaches](plan_specs/v1/e39-evidence-search-pilot/t20-api-conftest-split-by-surface.yaml) `v1-e39-t20-api-conftest-split-by-surface` | Pending | 1 | 2.0 |
+| [The pilot API's test world split by surface, so a change selects only the tests it reaches](plan_specs/v1/e39-evidence-search-pilot/t20-api-conftest-split-by-surface.yaml) `v1-e39-t20-api-conftest-split-by-surface` | Succeeded | 1 | 2.0 |
+| [The tub deploy test records each stub call alone, as the caselist run's does](plan_specs/v1/e39-evidence-search-pilot/t21-one-call-recorder-for-deploy-tests.yaml) `v1-e39-t21-one-call-recorder-for-deploy-tests` | Pending | 0 | 1.0 |
+| [Smoke checks for tub index build, publish and prune, and a test of P4's shape](plan_specs/v1/e39-evidence-search-pilot/t22-tub-index-commands-smoke-and-p4-shape.yaml) `v1-e39-t22-tub-index-commands-smoke-and-p4-shape` | Pending | 0 | 2.0 |
 
 
 ### v1.8 — Weekly caselist run in the cloud
@@ -546,7 +557,11 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [The deploy script's region test, which failed once under load, made deterministic](plan_specs/v1/e40-cloud-caselist-run/t14-deploy-script-region-test-under-load.yaml) `v1-e40-t14-deploy-script-region-test-under-load` | Succeeded | 0 | 1.0 |
 | [A plan check for a new run image after the cutover, with the schedule left enabled](plan_specs/v1/e40-cloud-caselist-run/t15-image-plan-check-after-the-cutover.yaml) `v1-e40-t15-image-plan-check-after-the-cutover` | Succeeded | 1 | 1.0 |
 | [Prod's parsed store re-parsed after a parser bump, from a copy restored with its sources](plan_specs/v1/e40-cloud-caselist-run/t16-prod-reparse-after-a-parser-bump.yaml) `v1-e40-t16-prod-reparse-after-a-parser-bump` | Pending | 1 | 2.0 |
-| [A landscape report counts the weeks the cloud run pulled, from a copy restored from the bucket](plan_specs/v1/e40-cloud-caselist-run/t17-landscape-report-from-the-cloud-runs-state.yaml) `v1-e40-t17-landscape-report-from-the-cloud-runs-state` | Pending | 1 | 3.0 |
+| [A landscape report counts the weeks the cloud run pulled, from a copy restored from the bucket](plan_specs/v1/e40-cloud-caselist-run/t17-landscape-report-from-the-cloud-runs-state.yaml) `v1-e40-t17-landscape-report-from-the-cloud-runs-state` | InProgress | 1 | 3.0 |
+| [In bucket mode a failed parse stage names the cloud cure, never a publish from the operator's Mac](plan_specs/v1/e40-cloud-caselist-run/t18-cloud-parse-stage-cure.yaml) `v1-e40-t18-cloud-parse-stage-cure` | Pending | 0 | 2.0 |
+| [The weekly cloud run builds the landscape reports, counted for cost first](plan_specs/v1/e40-cloud-caselist-run/t19-landscape-stage-in-the-weekly-run.yaml) `v1-e40-t19-landscape-stage-in-the-weekly-run` | Pending | 0 | 4.0 |
+| [The caselist pull table's Detail column shortens digests as its panel does](plan_specs/v1/e40-cloud-caselist-run/t20-pull-table-shortens-digests.yaml) `v1-e40-t20-pull-table-shortens-digests` | Pending | 0 | 1.0 |
+| [A restored working copy carries a marker, so leftover copies are found exactly](plan_specs/v1/e40-cloud-caselist-run/t21-restored-copy-marker.yaml) `v1-e40-t21-restored-copy-marker` | Pending | 0 | 1.0 |
 
 
 ## V2

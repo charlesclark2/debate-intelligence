@@ -42,6 +42,13 @@ environment's profile, cannot decide which role a model call runs as.
 `debate-research doctor --evidence-profiles` reports the profile on a `Model profile` row, in the same
 words as the evidence profiles, and never fails on it.
 
+**After editing a routing file**, `debate-research doctor --routing-file` loads the one this
+environment's settings name and reports what it routes on a `Routing file` row. A file that does
+not load fails it with `ROUTING_CONFIG_ERROR`, naming the offending key, which is what every command
+that reads settings would stop with (`v1-e05-t09`). Plain `doctor` does not check it. A refused
+model call (`MODEL_ACCESS_DENIED`, `MODEL_REQUEST_REJECTED`) ends a command with exit 1, not the
+retryable 3: running it again sends the same refused call. A throttled one stays 3.
+
 **The order.** Dev: plan, the PM's word, apply, the profile, the account's model access, the data-use
 checks, the first call. Prod: plan and apply after the release carrying this task is promoted to
 `main` ([Prod](#prod)). In dev the apply comes after the caselist cutover's step 9

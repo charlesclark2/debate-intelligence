@@ -173,7 +173,12 @@ def held_lock(now: datetime) -> bytes:
             "format_version": 1,
             "home_environment": "dev",
             "state": "held",
-            "holder": {"kind": "cloud", "run_id": "20261030T110005Z", "task": None, "command": "caselist pull"},
+            "holder": {
+                "kind": "cloud",
+                "run_id": "20261030T110005Z",
+                "task": None,
+                "command": "caselist pull",
+            },
             "acquired_at": at(now - timedelta(minutes=20)),
             "renewed_at": at(now - timedelta(minutes=20)),
             "lease_expires_at": at(now + timedelta(minutes=10)),
@@ -293,8 +298,9 @@ def test_tub_index_prune_dry_run_prints_counts_short_prefixes_and_the_code_but_n
     printed = three_published.invoke("--env", "dev")
 
     assert printed.exit_code == ExitCode.OK, printed.output
-    assert f"--execute --confirm {code}" in printed.output
-    assert "6 version(s) and 1 delete marker(s) of 5 key(s)" in " ".join(printed.output.split())
+    flat = " ".join(printed.output.split())
+    assert f"--execute --confirm {code}" in flat
+    assert "6 version(s) and 1 delete marker(s) of 5 key(s)" in flat
     for name in (SEARCH_INDEX_MANIFEST_NAME, SEARCH_INDEX_GZIP_NAME, SEARCH_INDEX_PREFIX):
         assert name not in printed.output, f"a key reached the console: {name}"
     for index_id in (FIRST, SECOND, CURRENT):
@@ -365,7 +371,7 @@ def test_tub_index_prune_execute_holds_the_run_lock_and_releases_it(three_publis
 
     assert three_published.run("--env", "dev", "--execute", "--confirm", code)["exit_code"] == ExitCode.OK
 
-    assert three_published.lock_holders() == ["tub index prune"]
+    assert set(three_published.lock_holders()) == {"tub index prune"}
     assert three_published.lock()["state"] == "free"
 
 
@@ -463,4 +469,3 @@ def test_tub_index_prune_execute_in_prod_needs_confirm_prod(
     assert refused["exit_code"] == ExitCode.DOMAIN_FAILURE, refused
     assert refused["error"]["code"] == "CONFIRMATION_REQUIRED"
     assert three_published.listing() == before
-

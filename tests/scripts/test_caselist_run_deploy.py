@@ -33,6 +33,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
+from tests.scripts.stub_calls import clear_calls, read_calls, write_stub
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEPLOY_SCRIPT = REPO_ROOT / "scripts" / "caselist_run_deploy.sh"
@@ -128,31 +129,6 @@ class DeployRun:
         return [call for call in self.calls_to("aws") if all(word in call for word in words)]
 
 
-# Each call is recorded in a file of its own, under the next call number free in STUB_CALL_DIR.
-# The script pipes `aws ecr get-login-password` into `docker login`, so two stubs run at once, and
-# when both appended to one log, a printf at a time, their words interleaved: under load a record
-# read `aws --regiondocker us-east-1 ...` (`v1-e40-t14`). `mkdir` either creates a call number's
-# directory or fails because another call has it, so no two calls share one, and a call made after
-# another has finished always gets a higher number.
-STUB_PREAMBLE = """#!/usr/bin/env bash
-set -euo pipefail
-shopt -s nullglob
-call_number=0
-for recorded in "${STUB_CALL_DIR}"/*; do call_number=$((call_number + 1)); done
-until mkdir "${STUB_CALL_DIR}/${call_number}" 2> /dev/null; do call_number=$((call_number + 1)); done
-{
-  printf '%s' "$(basename "$0")"
-  for argument in "$@"; do printf '\\t%s' "${argument}"; done
-} > "${STUB_CALL_DIR}/${call_number}/argv"
-"""
-
-
-def _write_stub(directory: Path, name: str, body: str) -> None:
-    path = directory / name
-    path.write_text(STUB_PREAMBLE + body, encoding="utf-8")
-    path.chmod(0o755)
-
-
 @dataclass
 class World:
     root: Path
@@ -187,7 +163,7 @@ class World:
         else:
             (state / "task-definition.json").unlink(missing_ok=True)
 
-        _write_stub(
+        write_stub(
             self.stub_dir,
             "git",
             f"""
@@ -204,7 +180,7 @@ exit 0
 """,
         )
 
-        _write_stub(
+        write_stub(
             self.stub_dir,
             "gh",
             """
@@ -222,7 +198,7 @@ exit 0
         )
 
         if self.docker_installed:
-            _write_stub(
+            write_stub(
                 self.stub_dir,
                 "docker",
                 f"""
@@ -256,7 +232,7 @@ exit 0
             (self.stub_dir / "docker").unlink(missing_ok=True)
 
         pushed = self.pushed_before or "None"
-        _write_stub(
+        write_stub(
             self.stub_dir,
             "aws",
             f"""
@@ -286,8 +262,7 @@ exit 0
 
     def deploy(self, *arguments: str) -> DeployRun:
         self.write_stubs()
-        shutil.rmtree(self.call_dir, ignore_errors=True)
-        self.call_dir.mkdir()
+        clear_calls(self.call_dir)
         self.registered_file.unlink(missing_ok=True)
         environment = {
             "PATH": f"{self.stub_dir}:{self.root / '.sandbox-bin'}",
@@ -307,10 +282,7 @@ exit 0
             cwd=self.root,
             timeout=60,
         )
-        calls = [
-            (call / "argv").read_text(encoding="utf-8").split("\t")
-            for call in sorted(self.call_dir.iterdir(), key=lambda call: int(call.name))
-        ]
+        calls = read_calls(self.call_dir)
         registered = (
             json.loads(self.registered_file.read_text(encoding="utf-8"))
             if self.registered_file.exists()

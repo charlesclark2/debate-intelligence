@@ -1,8 +1,9 @@
 """Tests for `scripts/tub_deploy.sh`, the operator's deploy path for the student search pilot.
 
 As for the website's deploy script, the script runs against a throwaway checkout in `tmp_path`,
-and every tool it calls (`git`, `docker`, `uv`, `aws`, `curl`) is a stub that appends its argv to a
-log. Nothing here builds an image, reaches a registry, an AWS account or the network.
+and every tool it calls (`git`, `docker`, `uv`, `aws`, `curl`) is a stub that records its argv, one
+file per call (`tests/scripts/stub_calls.py`). Nothing here builds an image, reaches a registry,
+an AWS account or the network.
 
 `PATH` is a sandbox: the stubs, plus links to the handful of ordinary utilities the script uses.
 So a test can take Docker away and see what the operator would see, on a machine where Docker is
@@ -13,6 +14,7 @@ What is worth asserting, and why:
 * the script refuses to run without Docker, and says so, before it does anything else (PM notes);
 * the image is built for linux/arm64 with provenance attestations off, from the Python that
   `requires-python` allows and no other (ADR-0019 (a) 1, (f) 3);
+* Docker signs in with the registry password on stdin, never as an argument;
 * the function is pointed at the pushed image by digest, never by tag, then waited for, then
   checked through CloudFront at the origin the function's configuration names;
 * an environment's first deploy, before the function exists, pushes and stops with the next step;
@@ -30,6 +32,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
+from tests.scripts.stub_calls import clear_calls, read_calls, write_stub
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEPLOY_SCRIPT = REPO_ROOT / "scripts" / "tub_deploy.sh"
@@ -87,27 +90,11 @@ class DeployRun:
         return [call for call in self.calls_to(tool) if tuple(call[: len(prefix)]) == prefix]
 
 
-STUB_PREAMBLE = """#!/usr/bin/env bash
-set -euo pipefail
-{
-  printf '%s' "$(basename "$0")"
-  for argument in "$@"; do printf '\\t%s' "${argument}"; done
-  printf '\\n'
-} >> "${STUB_CALL_LOG}"
-"""
-
-
-def _write_stub(directory: Path, name: str, body: str) -> None:
-    path = directory / name
-    path.write_text(STUB_PREAMBLE + body, encoding="utf-8")
-    path.chmod(0o755)
-
-
 @dataclass
 class World:
     root: Path
     stub_dir: Path
-    call_log: Path
+    call_dir: Path
     profile_log: Path
 
     branch: str = "main"
@@ -122,7 +109,7 @@ class World:
     def write_stubs(self) -> None:
         state = self.root / ".stub-state"
 
-        _write_stub(
+        write_stub(
             self.stub_dir,
             "git",
             f"""
@@ -140,7 +127,7 @@ exit 0
         )
 
         if self.docker_installed:
-            _write_stub(
+            write_stub(
                 self.stub_dir,
                 "docker",
                 f"""
@@ -149,7 +136,7 @@ case "${{1:-}}" in
     # The real `docker login --password-stdin` reads the password the script pipes in. A stub
     # that exits without reading it races the `aws ecr get-login-password` writing it: if this
     # exits first, the writer gets SIGPIPE and `pipefail` fails the sign-in. CI hit that once.
-    cat > /dev/null
+    cat > "{state}/docker-login-stdin"
     ;;
   info)
     [ "$(cat "{state}/daemon")" = "running" ] && exit 0
@@ -167,7 +154,7 @@ exit 0
         else:
             (self.stub_dir / "docker").unlink(missing_ok=True)
 
-        _write_stub(
+        write_stub(
             self.stub_dir,
             "uv",
             """
@@ -183,7 +170,7 @@ exit 0
 """,
         )
 
-        _write_stub(
+        write_stub(
             self.stub_dir,
             "aws",
             f"""
@@ -207,7 +194,7 @@ exit 0
 """,
         )
 
-        _write_stub(self.stub_dir, "curl", f'cat "{state}/health"\n')
+        write_stub(self.stub_dir, "curl", f'cat "{state}/health"\n')
 
     def write_state(self) -> None:
         state = self.root / ".stub-state"
@@ -219,6 +206,7 @@ exit 0
         )
         (state / "function").write_text("exists" if self.function_exists else "missing", encoding="utf-8")
         (state / "health").write_text(self.health_reply, encoding="utf-8")
+        (state / "docker-login-stdin").unlink(missing_ok=True)
         if self.requires_python is not None:
             declaration = self.root / "packages" / "debate_core" / "pyproject.toml"
             declaration.write_text(
@@ -234,14 +222,14 @@ exit 0
     def deploy(self, *arguments: str) -> DeployRun:
         self.write_stubs()
         self.write_state()
-        self.call_log.write_text("", encoding="utf-8")
+        clear_calls(self.call_dir)
         self.profile_log.write_text("", encoding="utf-8")
 
         environment = {
             "PATH": f"{self.stub_dir}:{self.root / '.sandbox-bin'}",
             "HOME": str(self.root),
             "TMPDIR": str(self.root / ".tmp"),
-            "STUB_CALL_LOG": str(self.call_log),
+            "STUB_CALL_DIR": str(self.call_dir),
             **self.environment_overrides,
         }
         completed = subprocess.run(
@@ -256,16 +244,18 @@ exit 0
             cwd=self.root,
             timeout=60,
         )
-        calls = [
-            line.split("\t")
-            for line in self.call_log.read_text(encoding="utf-8").splitlines()
-            if line.strip()
-        ]
+        calls = read_calls(self.call_dir)
         return DeployRun(completed.returncode, completed.stdout, completed.stderr, calls)
 
     @property
     def profiles_used(self) -> set[str]:
         return {line for line in self.profile_log.read_text(encoding="utf-8").splitlines() if line}
+
+    @property
+    def docker_login_stdin(self) -> str | None:
+        """What `docker login` read on stdin, or None when it was not called."""
+        received = self.root / ".stub-state" / "docker-login-stdin"
+        return received.read_text(encoding="utf-8") if received.exists() else None
 
 
 @pytest.fixture
@@ -291,7 +281,7 @@ def world(tmp_path: Path) -> Iterator[World]:
     stub_dir.mkdir()
 
     yield World(
-        root=root, stub_dir=stub_dir, call_log=tmp_path / "calls.log", profile_log=tmp_path / "profiles.log"
+        root=root, stub_dir=stub_dir, call_dir=tmp_path / "calls", profile_log=tmp_path / "profiles.log"
     )
 
 
@@ -419,6 +409,21 @@ def test_dry_run_builds_and_makes_no_aws_call(world: World) -> None:
 # --------------------------------------------------------------------------------------
 # Push, update by digest, wait, and check through CloudFront.
 # --------------------------------------------------------------------------------------
+
+
+def test_docker_signs_in_with_the_registry_password_on_stdin_never_as_an_argument(world: World) -> None:
+    """The script's one pipeline, so these two calls run at the same time (`v1-e40-t14`)."""
+    run = world.deploy("dev")
+
+    assert run.returncode == 0, run.output
+    assert [call for call in run.calls_to("aws") if "get-login-password" in call] == [
+        ["--region", "us-east-1", "ecr", "get-login-password"]
+    ]
+    assert run.calls_starting("docker", "login") == [
+        ["login", "--username", "AWS", "--password-stdin", f"{ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com"]
+    ]
+    assert world.docker_login_stdin == "stub-registry-password\n"
+    assert not [call for call in run.calls if any("stub-registry-password" in word for word in call)]
 
 
 def test_a_deploy_points_the_function_at_the_pushed_digest(world: World) -> None:

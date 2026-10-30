@@ -595,8 +595,18 @@ def test_an_owner_file_without_a_digest_is_plan_stop(tmp_path: Path) -> None:
         ("Refreshing state... [id=x]\nPlan: 2 to add, 4 to change, 2 to destroy.\n", "is not JSON"),
         ("[]", "has no resource_changes"),
         ('{"format_version": "1.2", "resource_changes": [{"address": "x"}]}', "has no resource_changes"),
+        (
+            json.dumps(
+                {
+                    "resource_changes": [
+                        {"address": "aws_ssoadmin_permission_set.x", "change": {"actions": ["create"]}}
+                    ]
+                }
+            ),
+            "has no resource_changes",
+        ),
     ],
-    ids=["the plan's text", "a list", "an entry without a change"],
+    ids=["the plan's text", "a list", "an entry without a change", "an entry without its type"],
 )
 def test_a_file_that_is_not_a_plans_json_is_plan_stop(tmp_path: Path, plan: str, reason: str) -> None:
     code, said = run_check(plan, tmp_path)

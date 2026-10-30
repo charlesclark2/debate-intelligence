@@ -54,7 +54,7 @@ REPOINTED = {
 }
 EXPECTED = {address: REPLACE for address in TASK_DEFINITIONS} | {address: UPDATE for address in REPOINTED}
 SCHEDULE_STATE = "ENABLED"
-IDENTITY_CENTER = re.compile(r"(?:^|\.)(?:data\.)?aws_(?:ssoadmin|identitystore)_")
+IDENTITY_CENTER = ("aws_ssoadmin_", "aws_identitystore_")
 DIGEST = re.compile(r'^caselist_image_digest\s*=\s*"(sha256:[0-9a-f]{64})"\s*$', re.M)
 CONTAINER_KEYS = (
     "name",
@@ -97,6 +97,7 @@ def load_changes(text: str) -> list[dict[str, Any]]:
     shaped = isinstance(changes, list) and all(
         isinstance(found, dict)
         and isinstance(found.get("address"), str)
+        and isinstance(found.get("type"), str)
         and isinstance(found.get("change"), dict)
         and isinstance(found["change"].get("actions"), list)
         for found in changes
@@ -126,9 +127,7 @@ def label(found: dict[str, Any]) -> str:
 
 
 def identity_center(found: dict[str, Any]) -> bool:
-    return bool(IDENTITY_CENTER.search(found["address"])) or str(found.get("type", "")).startswith(
-        ("aws_ssoadmin_", "aws_identitystore_")
-    )
+    return found["type"].startswith(IDENTITY_CENTER)
 
 
 def unknown(value: object) -> bool:

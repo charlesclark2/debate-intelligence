@@ -61,7 +61,7 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 58 | 52 | 257 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 109 | 89 | 499 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 109 | 90 | 499 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 59 | 45 | 286 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 16 | 11 | 114 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
@@ -218,7 +218,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [caselist publish, verify, parse and pull panels print a summary, not the whole record](plan_specs/v1/e30-caselist-ingestion/t27-command-panels-print-summaries.yaml) `v1-e30-t27-command-panels-print-summaries` | Succeeded | 1 | 2.0 |
 | [The annual purge, as one runbook](plan_specs/v1/e30-caselist-ingestion/t28-annual-purge-runbook.yaml) `v1-e30-t28-annual-purge-runbook` | Succeeded | 1 | 2.0 |
 | [A removal lists raw/ and parsed/ again after deleting, and stops incomplete if a version survived](plan_specs/v1/e30-caselist-ingestion/t29-removal-confirms-raw-and-parsed-deletes.yaml) `v1-e30-t29-removal-confirms-raw-and-parsed-deletes` | Succeeded | 1 | 1.0 |
-| [Inbox deletions fsync the inbox directory, so a removed archive cannot come back after a power cut](plan_specs/v1/e30-caselist-ingestion/t30-inbox-deletions-fsync-the-directory.yaml) `v1-e30-t30-inbox-deletions-fsync-the-directory` | Pending | 0 | 1.0 |
+| [Inbox deletions fsync the inbox directory, so a removed archive cannot come back after a power cut](plan_specs/v1/e30-caselist-ingestion/t30-inbox-deletions-fsync-the-directory.yaml) `v1-e30-t30-inbox-deletions-fsync-the-directory` | Succeeded | 0 | 1.0 |
 
 #### [E31 — Debate File Parsing](plan_specs/v1/e31-debate-file-parsing/epic.yaml)
 

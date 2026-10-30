@@ -279,9 +279,42 @@ selection's 1,041, the 23 slow browser tests, and the affected set above.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-30
 
 **Notes:**
+
+The split is done well, and the report is honest about how much it buys today.
+1. **ac1 passes as written.** The collected ids are unchanged (1,041 by default and 1,064 with the
+   browser suite, none lost or added). Over t32's 41 commits the API files selected fall from 408 to
+   386: fewer in 14 and more in none. All 1,041 tests and the 23 browser tests pass.
+2. **No assertion changed.** The only removed lines are five docstrings renaming `conftest.CORPUS`.
+   Every other change adds a fixture.
+3. **The narrowing is real, and shown where `app.py`'s edge doesn't hide it.**
+   * Without that edge, the parser-only merge goes from 24 API files to 8.
+   * On the real graph, a change to the in-memory index source selects 13 files, not 22.
+   * The `selection_check.py` probes were written by hand from each file's surface, and failed against
+     the base, so they can tell.
+4. **Mutants:** both are caught. (1) the corpus at import is caught in both readings. (2) the search
+   fixture pulling in the parser is caught only without `app.py`'s edge, which the report says
+   plainly. That mutant is the shortcut that would have fixed Decision 4's red test while quietly
+   undoing the narrowing, and you didn't take it. Good.
+5. **Deviation 1 (the premise holds only partly): accepted.** **PM question: option 3 now.** The gain is
+   one merge in 41, and the API tests take about 10 s. Option 1 goes into the PM's next batch as an E39
+   p3 task, "uvicorn's factory in the composition root", to be done with the next image change, so it
+   costs no deploy of its own. Option 2 is refused: an import inside a function still fails toward more
+   tests.
+6. **Decisions 1 to 8: accepted.** In particular:
+   * each file names its world, so no conftest fixture is called `world`;
+   * the search corpus leaves out the download cards;
+   * the sign-in world's stand-ins fail loudly;
+   * `ISSUER` written out.
+
+   The landscape bundles' folder path selecting everything is noted, and needs no task while the API
+   tests take 10 s.
+7. **Follow-up 2 (`PilotServices` requires every surface): noted, no task,** for the reason you give.
+8. **The affected set ran:** 69 files, 3,127 passed in 108 s. ruff, pyright, lint-imports, the
+   thin-handler check, the specs, the command blocks and the docs tests pass.
+9. **Merge:** any time.

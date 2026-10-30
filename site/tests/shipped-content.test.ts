@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 import { loadSiteSettings } from '@/lib/content'
 import { consentGuardedContent, loadMediaConsent } from '@/lib/media-consent'
-import { checkPublishingPolicy } from '@/lib/publishing-policy'
+import { checkPublishingPolicy, contactDetails } from '@/lib/publishing-policy'
 import { loadResults, loadResultsView, resultsGuardedContent } from '@/lib/results'
 import { loadSchedule, loadScheduleView, readYaml, scheduleGuardedContent } from '@/lib/tournaments'
 
@@ -18,8 +18,9 @@ import { shippedContentWith } from './content-fixture'
  * the schedule once it has happened, its results moved to `tournament` and `date`, a result
  * added. So nothing here reads an entry, a count or an order. It checks only what must hold of
  * any content the site may publish: it parses against the schema, it passes the publishing-policy
- * and consent guards, no id is used twice, every date is inside the season, and the files are for
- * one season. Behaviour is tested on the synthetic season in tests/fixtures/season/.
+ * and consent guards, no id is used twice, every date is inside the season, the files are for
+ * one season, and the schedule carries no address but the allowlisted one and no phone number.
+ * Behaviour is tested on the synthetic season in tests/fixtures/season/.
  *
  * Each guarantee is one check, run twice: on content/ itself, and on a copy of it with a break
  * planted, which the same check must refuse. The plants are added beside whatever the shipped
@@ -29,12 +30,33 @@ import { shippedContentWith } from './content-fixture'
 
 const SHIPPED = join(process.cwd(), 'content')
 
+/** The coach's address, from the allowlist in content/site.yaml that the guard reads. */
+const ALLOWLISTED = loadSiteSettings(SHIPPED).contactEmails[0]!.address
+
 interface RawEntry {
   id?: unknown
   start?: unknown
   end?: unknown
   date?: unknown
   students?: unknown
+  name?: unknown
+  where?: unknown
+  byEvent?: unknown
+  condition?: unknown
+  notes?: unknown
+}
+
+/** A tournament's published words, field by field, as typed: name, where, condition and notes. */
+function publishedText(entry: RawEntry): Array<[field: string, text: string]> {
+  const groups = Array.isArray(entry.byEvent) ? (entry.byEvent as Array<{ where?: unknown }>) : []
+  const fields: Array<[string, unknown]> = [
+    ['name', entry.name],
+    ['where', entry.where],
+    ...groups.map((group, index): [string, unknown] => [`byEvent.${index}.where`, group?.where]),
+    ['condition', entry.condition],
+    ['notes', entry.notes],
+  ]
+  return fields.filter(([, text]) => text !== undefined && text !== null).map(([field, text]) => [field, String(text)])
 }
 
 /** A file as typed, before any loader has judged it, so a check does not lean on the loader's. */
@@ -106,6 +128,32 @@ const checks: Record<string, (directory: string) => void> = {
     if (errors.length > 0) {
       throw new Error(errors.map((finding) => `${finding.location}: ${finding.message}`).join('\n'))
     }
+  },
+
+  /**
+   * The schedule's words carry no `@` except an allowlisted address's, and nothing shaped like a
+   * phone number, even a seven-digit one the guard's pattern does not read as one. An address is
+   * read whole, by the guard's own `contactDetails`, and judged against the allowlist the guard
+   * reads, content/site.yaml's contactEmails: so the coach's address in a note passes, as it does
+   * in the build, and the same address inside a longer one does not (v1-e37-t11).
+   */
+  scheduleContactDetails: (directory) => {
+    const allowlisted = new Set(
+      loadSiteSettings(directory).contactEmails.map((contact) => contact.address.toLowerCase()),
+    )
+    raw(directory, 'tournaments.yaml').entries.forEach((entry, index) => {
+      for (const [field, text] of publishedText(entry)) {
+        const listed = contactDetails(text).filter((found) => allowlisted.has(found.toLowerCase()))
+        if (text.split('@').length - 1 > listed.length) {
+          throw new Error(
+            `content/tournaments.yaml, entry ${index + 1}, field ${field}: carries an @ that is not an allowlisted address`,
+          )
+        }
+        if (/\d{3}[\s.-]\d{4}/.test(text)) {
+          throw new Error(`content/tournaments.yaml, entry ${index + 1}, field ${field}: carries a phone number`)
+        }
+      }
+    })
   },
 
   /**
@@ -181,13 +229,24 @@ describe('the schedule and results the site ships', () => {
   it.each(Object.keys(checks))('pass the %s check', (name) => {
     expect(() => checks[name]!(SHIPPED)).not.toThrow()
   })
+})
 
-  it('carry no email address or phone number in the schedule', () => {
-    const text = loadSchedule()
-      .tournaments.flatMap((entry) => [entry.name, entry.notes, entry.condition, ...entry.arrangements.map((g) => g.where)])
-      .join('\n')
-    expect(text).not.toMatch(/@/)
-    expect(text).not.toMatch(/\d{3}[\s.-]\d{4}/)
+/**
+ * What a coach may legitimately add passes every check. The address is read from
+ * content/site.yaml, where the publishing-policy guard reads its allowlist, so this follows the
+ * allowlist as it changes (v1-e37-t11, the PM's ruling of 2026-10-30).
+ */
+describe('an edit the publishing policy allows passes every check on a copy of the shipped content', () => {
+  it.each([
+    [
+      'the allowlisted coach address in a tournament’s notes',
+      { 'tournaments.yaml': appendTo('tournaments', plantedTournament({ notes: `'Questions to ${ALLOWLISTED}.'` })) },
+    ],
+  ])('%s', (_plant, edits) => {
+    const copy = shippedContentWith(edits)
+    for (const name of Object.keys(checks)) {
+      expect(() => checks[name]!(copy), `the ${name} check`).not.toThrow()
+    }
   })
 })
 
@@ -252,6 +311,41 @@ describe('a break planted in a copy of the shipped content is refused', () => {
       'an email address in a result’s tournament',
       { 'results.yaml': appendTo('results', plantedResult({ tournament: "'Plantedtown, coach@example.org'" })) },
       /email address/,
+    ],
+    [
+      'scheduleContactDetails',
+      'an address not on the allowlist in a tournament’s notes',
+      { 'tournaments.yaml': appendTo('tournaments', plantedTournament({ notes: "'Questions to debate@wfbschools.com.'" })) },
+      /entry \d+, field notes: carries an @ that is not an allowlisted address/,
+    ],
+    [
+      'scheduleContactDetails',
+      'the allowlisted address inside a longer one',
+      { 'tournaments.yaml': appendTo('tournaments', plantedTournament({ notes: `'Questions to team.${ALLOWLISTED}.'` })) },
+      /entry \d+, field notes: carries an @ that is not an allowlisted address/,
+    ],
+    [
+      'scheduleContactDetails',
+      'an @ that is not an address, in a tournament’s place',
+      { 'tournaments.yaml': appendTo('tournaments', plantedTournament({ held: 'in-person', where: "'Meet @ the east doors'" })) },
+      /entry \d+, field where: carries an @ that is not an allowlisted address/,
+    ],
+    [
+      'scheduleContactDetails',
+      'a seven-digit phone number in a tournament’s notes',
+      { 'tournaments.yaml': appendTo('tournaments', plantedTournament({ notes: "'Call 555-0142.'" })) },
+      /entry \d+, field notes: carries a phone number/,
+    ],
+    [
+      'scheduleContactDetails',
+      'a phone number beside the allowlisted address',
+      {
+        'tournaments.yaml': appendTo(
+          'tournaments',
+          plantedTournament({ notes: `'Questions to ${ALLOWLISTED} or 414-555-0142.'` }),
+        ),
+      },
+      /entry \d+, field notes: carries a phone number/,
     ],
     [
       'consent',

@@ -62,12 +62,12 @@ v2.3's extension work.
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 58 | 52 | 257 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 109 | 90 | 499 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 59 | 45 | 286 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 60 | 46 | 288 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 16 | 11 | 114 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
-| [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 26 | 17 | 163 |
-| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 22 | 15 | 83 |
+| [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 27 | 17 | 164 |
+| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 23 | 15 | 84 |
 | [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 1 | 21 | 8 | 52 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
@@ -320,7 +320,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [Dev routes to Claude models this account can call while the 5.5 quotas are held at zero](plan_specs/v1/e05-model-router/t13-dev-routes-to-callable-claude-models.yaml) `v1-e05-t13-dev-routes-to-callable-claude-models` | Succeeded | 1 | 2.0 |
 | [A cheaper model for the high-volume route, chosen by the coach-labelled evaluation](plan_specs/v1/e05-model-router/t14-cheaper-model-for-high-volume-evaluated-first.yaml) `v1-e05-t14-cheaper-model-for-high-volume-evaluated-first` | Pending | 1 | 3.0 |
 | [A monthly model budget beside the daily one, at the coach's $50 ceiling](plan_specs/v1/e05-model-router/t15-monthly-model-budget.yaml) `v1-e05-t15-monthly-model-budget` | Succeeded | 1 | 2.0 |
-| [An AWS budget alarm on the account's model spend, $100 a month with a first notice at $50](plan_specs/v1/e05-model-router/t16-bedrock-budget-alarm.yaml) `v1-e05-t16-bedrock-budget-alarm` | InProgress | 1 | 2.0 |
+| [An AWS budget alarm on the account's model spend, $100 a month with a first notice at $50](plan_specs/v1/e05-model-router/t16-bedrock-budget-alarm.yaml) `v1-e05-t16-bedrock-budget-alarm` | Succeeded | 1 | 2.0 |
 | [Dev back on the 5.5 models, and prod's Bedrock grant applied, once the quotas are restored](plan_specs/v1/e05-model-router/t17-switch-back-to-the-5-5-models.yaml) `v1-e05-t17-switch-back-to-the-5-5-models` | Pending | 2 | 2.0 |
 | [The cost allocation tags are active by Terraform, so the budgets that filter on them never read zero again](plan_specs/v1/e05-model-router/t18-cost-allocation-tags-in-terraform.yaml) `v1-e05-t18-cost-allocation-tags-in-terraform` | Pending | 0 | 1.0 |
 
@@ -359,6 +359,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [Harms headings counted under Impact, the word the coach's debaters use](plan_specs/v1/e32-argument-landscape/t29-harms-headings-under-impact.yaml) `v1-e32-t29-harms-headings-under-impact` | Succeeded | 1 | 2.0 |
 | [A dry run fills the plan-text and analytic-text caches, so the first report after a parser bump reads sources once](plan_specs/v1/e32-argument-landscape/t30-dry-run-fills-the-text-caches.yaml) `v1-e32-t30-dry-run-fills-the-text-caches` | Pending | 0 | 1.0 |
 | [Model cassettes name their caselist, so one season's recordings can be deleted alone](plan_specs/v1/e32-argument-landscape/t31-cassettes-filed-by-caselist.yaml) `v1-e32-t31-cassettes-filed-by-caselist` | Pending | 0 | 2.0 |
+| [A landscape model stage stopped by throttling ends as retryable, not as a verdict](plan_specs/v1/e32-argument-landscape/t32-throttled-model-stage-is-retryable.yaml) `v1-e32-t32-throttled-model-stage-is-retryable` | Pending | 0 | 1.0 |
 
 #### [E33 — Evidence File Builder](plan_specs/v1/e33-file-builder/epic.yaml)
 
@@ -491,6 +492,7 @@ Whitefish Bay Debate has a public, mobile-friendly team website: team informatio
 | [Website changes reach the public site in a day, without waiting for a release](plan_specs/v1/e37-calendar-and-announcements/t09-site-changes-publish-without-a-release.yaml) `v1-e37-t09-site-changes-publish-without-a-release` | Succeeded | 1 | 3.0 |
 | [A coach's schedule or results edit passes the site's tests without editing a test](plan_specs/v1/e37-calendar-and-announcements/t10-coach-edits-need-no-test-edit.yaml) `v1-e37-t10-coach-edits-need-no-test-edit` | Succeeded | 2 | 3.0 |
 | [The shipped-content checks follow the publishing policy, and a season change is one edit of three files](plan_specs/v1/e37-calendar-and-announcements/t11-content-guards-follow-the-policy.yaml) `v1-e37-t11-content-guards-follow-the-policy` | Succeeded | 0 | 1.0 |
+| [The prod build refuses an image whose consent has lapsed, as it refuses a lapsed name](plan_specs/v1/e37-calendar-and-announcements/t12-stale-image-consent-refused.yaml) `v1-e37-t12-stale-image-consent-refused` | Pending | 0 | 1.0 |
 
 #### [E38 — Team Donations](plan_specs/v1/e38-donations/epic.yaml)
 
@@ -531,6 +533,7 @@ Debaters search the team's evidence store from a school Chromebook or at home: a
 | [The pilot API's test world split by surface, so a change selects only the tests it reaches](plan_specs/v1/e39-evidence-search-pilot/t20-api-conftest-split-by-surface.yaml) `v1-e39-t20-api-conftest-split-by-surface` | Succeeded | 1 | 2.0 |
 | [The tub deploy test records each stub call alone, as the caselist run's does](plan_specs/v1/e39-evidence-search-pilot/t21-one-call-recorder-for-deploy-tests.yaml) `v1-e39-t21-one-call-recorder-for-deploy-tests` | Pending | 0 | 1.0 |
 | [Smoke checks for tub index build, publish and prune, and a test of P4's shape](plan_specs/v1/e39-evidence-search-pilot/t22-tub-index-commands-smoke-and-p4-shape.yaml) `v1-e39-t22-tub-index-commands-smoke-and-p4-shape` | Pending | 0 | 2.0 |
+| [uvicorn's app factory lives in the composition root, so app.py stops reaching every adapter](plan_specs/v1/e39-evidence-search-pilot/t23-uvicorn-factory-in-the-composition-root.yaml) `v1-e39-t23-uvicorn-factory-in-the-composition-root` | Pending | 0 | 1.0 |
 
 
 ### v1.8 — Weekly caselist run in the cloud

@@ -49,6 +49,7 @@ regenerates it on `dev` ([`v1-e01-t16`](../plan_specs/v1/e01-repo-foundation/t16
 | [process/session-report-template.md](process/session-report-template.md) | Template for session reports |
 | [process/task-workflow.md](process/task-workflow.md) | `scripts/task`: start → session → PM review → PR → finish |
 | [process/working-agreements.md](process/working-agreements.md) | Project rules: light CI, operator hand-off for long commands, doc locations, naming |
+| [runbooks/annual-purge.md](runbooks/annual-purge.md) | The annual purge each September: what ages out under the data-use policy's retention table, store by store, in dev and prod and on this Mac; each step's listing, delete and check; and the gaps no command covers yet |
 | [runbooks/aws-account-baseline.md](runbooks/aws-account-baseline.md) | Building and verifying the AWS account baseline: identity, audit, budgets |
 | [runbooks/bedrock-access.md](runbooks/bedrock-access.md) | Calling the routed Bedrock models: the BedrockInvoker permission set's plan and apply, its SSO profile, the account's one-time model access, the data-use checks, the first real call and zero-retention mode |
 | [runbooks/caselist-backfiles.md](runbooks/caselist-backfiles.md) | Importing earlier seasons' complete archives as backfiles (`caselist backfile-import`): when imports may run, the dry run and the import, the order, what each refusal means, and the rebuild a removal adds |

@@ -114,8 +114,11 @@ download into the inbox while it changes. Each file's digest is checked against 
 anything is done to it; a file that changed is not touched and the run stops `INCOMPLETE`. A
 rewrite is written beside the original under a dot name the sync skips, read back and compared
 entry by entry with the original less the dropped entries, and then renamed over it, so a run cut
-short leaves each file either as it was or rewritten, never half written. Re-running the same
-command plans again from the list and finishes the rest.
+short leaves each file either as it was or rewritten, never half written. After each delete, and
+after each rewrite's rename and the removal of its staging directory, the inbox directory is
+fsynced (`v1-e30-t26`, `v1-e30-t30`), so a power cut cannot bring back an archive or the entries a
+removal took out; a fsync that fails stops the run. Re-running the same command plans again from
+the list and finishes the rest.
 
 ## Not checked
 
@@ -747,9 +750,10 @@ def purge_inbox(
 
     Raises a :class:`~debate_core.application.errors.DomainError` — :class:`InboxInUse`,
     :class:`InboxFileChanged`, :class:`InboxFileUnreadable`, :class:`InboxRewriteFailed` — or an
-    `OSError` at the first file it cannot finish, having left that file as it was. The one
-    exception is a rewrite's directory fsync (`v1-e30-t26`), the step after the rename: when it
-    fails, the rewritten archive is in place but not yet durably, and re-running finishes it.
+    `OSError` at the first file it cannot finish, having left that file as it was. The exception
+    is the inbox directory's fsync, the step after a rewrite's rename (`v1-e30-t26`) or a delete
+    (`v1-e30-t30`): when it fails, the file is rewritten or gone but not yet durably, is not
+    counted, and re-running finishes the rest.
     """
     if not planned:
         return
@@ -780,6 +784,7 @@ def _carry_out(inbox: CaselistInbox, one: InboxFilePlan, *, request_id: str, don
             )
         )
     path.unlink()
+    fsync_directory(path.parent)  # a delete is an entry too: until this, a power cut can undo it
     done.deleted += 1
 
 
@@ -789,8 +794,11 @@ def _rewrite(inbox: CaselistInbox, path: Path, one: InboxFilePlan, *, request_id
     It is staged under the same name in a dot directory beside the original — which the sync skips —
     because the reader's wrapper rule reads the archive's own name: a staged copy named otherwise
     could read back with different paths. The staged file is fsynced, renamed over the original,
-    and then the inbox directory is fsynced, so a power cut cannot bring back the entries it took
-    out (:mod:`debate_core.application.durable_files`).
+    the emptied staging directory removed, and then the inbox directory is fsynced, so a power cut
+    can bring back neither the entries it took out nor the staging directory
+    (:mod:`debate_core.application.durable_files`, `v1-e30-t30`). On the way out of a failed
+    rewrite, the cleanup in `finally` is not fsynced: the original is still in place, unchanged, and
+    the removal has stopped `INCOMPLETE`.
     """
     staging = path.parent / f".{uuid.uuid4().hex}{_REWRITE_SUFFIX}"
     staged = staging / path.name
@@ -817,6 +825,7 @@ def _rewrite(inbox: CaselistInbox, path: Path, one: InboxFilePlan, *, request_id
         with staged.open("rb") as written:
             os.fsync(written.fileno())
         os.replace(staged, path)
+        staging.rmdir()
         fsync_directory(path.parent)
     except (UnreadableArchive, ArchiveTooLarge) as broken:
         raise InboxRewriteFailed(one.label, type(broken).__name__) from broken

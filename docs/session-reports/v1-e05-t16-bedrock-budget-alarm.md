@@ -500,9 +500,50 @@ The PM decides whether they become spec changes or new tasks. -->
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-30
 
 **Notes:**
+
+The coach's ceiling is a tested budget, filtered on what the bill actually says.
+1. **ac1 passes.** The operator read Cost Explorer before any Terraform was written. The counts are
+   names only, and they found what a guess would have missed: Claude and Cohere bill as Marketplace
+   services, and `Amazon Bedrock` also carries spend that isn't this project's.
+2. **ac2 passes.** Red against today's budget held in the module: 3 failed, each an assertion (the
+   limit, the filter and the notices). Green: 4 passed, plus the no-grant pytest. The Terraform checks
+   pass offline, with no lock file changed.
+3. **Mutants:** the PM's five, each in several forms, plus the `Project` tag back, the usage-type key
+   dropped, percentages, an SNS notice, a rename and the empty-address validation. All 17 are caught
+   by assertions. Mutant 14 was redone when its first form errored instead of failing. Good.
+4. **The plan check is the right shape.** It reads the saved plan's JSON. It counts permission set
+   changes on change lines only, the lesson from 2026-10-29's image plan. It refuses any change but
+   the budget, and it is tested red first (23 failed against a check that refuses nothing).
+5. **Deviation 1 (two test files outside the packages): accepted.** The PM's next batch adds
+   `tests/infrastructure` and `tests/docs` to the spec's packages. **Deviation 2 (3 min 23 s): noted**;
+   it passed.
+6. **Decisions 1 to 7: accepted.**
+   * Locals, not inputs, so no tfvars line can raise the limit.
+   * The plan check lives in the runbook for v1-e05-t17's re-apply.
+   * The apply runs from an `origin/dev` worktree. The plan check refusing anything but the budget
+     is what makes an account-wide root safe to apply from `dev`'s copy.
+   * One tfvars copy, backed up before each edit.
+   * The name kept, so the update is in place.
+   * The counts block dated relative to today.
+   * Nothing under `docs/data`.
+7. **One guard to add:** the tfvars block appends `COACH_EMAIL`, whose shown value is the placeholder
+   `the-coach@example.org`, and the plan check accepts any non-empty address. The PM's next batch adds
+   a refusal of the placeholder to the tfvars block. Until then, the PM gives the operator the blocks
+   with the address to set.
+8. **The Nova Micro spend is explained.** The operator's other project, which shares this AWS account,
+   generates text through Bedrock with `amazon.nova-micro-v1:0` (in that project's own code, read by
+   the PM on 2026-10-30). It is not this project's, and the filter rightly leaves it out. No CloudTrail
+   lookup is needed.
+9. **Follow-up work:**
+   * 1, the empty `Project` tag: the PM gives the operator the read-only check now, and the result
+     decides whether a task follows;
+   * 2: closed by note 8;
+   * 3: the PM's next batch amends v1-e05-t17 as written.
+10. **Merge `--partial`,** any time. ac3 is the operator's, after the merge and never on a Wednesday.
+    The PM reads the plan and the plan check's line before the apply.

@@ -494,5 +494,23 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e39-t22-tub-index-commands-smoke-and-p4-shape
+    - id: t23
+      kind: Task
+      name: 'uvicorn''s app factory lives in the composition root, so app.py stops reaching every adapter'
+      description: >-
+        uvicorn's app factory lives in the composition root, so app.py stops reaching every
+        adapter.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t23-uvicorn-factory-in-the-composition-root.yaml
+        goalRef: v1-e39-t23-uvicorn-factory-in-the-composition-root
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t23-uvicorn-factory-in-the-composition-root reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t23-uvicorn-factory-in-the-composition-root
 status:
   phase: Pending

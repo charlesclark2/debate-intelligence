@@ -737,5 +737,22 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e32-t31-cassettes-filed-by-caselist
+    - id: t32
+      kind: Task
+      name: 'A landscape model stage stopped by throttling ends as retryable, not as a verdict'
+      description: >-
+        A landscape model stage stopped by throttling ends as retryable, not as a verdict.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t32-throttled-model-stage-is-retryable.yaml
+        goalRef: v1-e32-t32-throttled-model-stage-is-retryable
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t32-throttled-model-stage-is-retryable reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t32-throttled-model-stage-is-retryable
 status:
   phase: Pending

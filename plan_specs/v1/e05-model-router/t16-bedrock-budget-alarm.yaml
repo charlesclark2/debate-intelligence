@@ -54,7 +54,7 @@ spec:
         The PM reads the plan, the operator applies it, and the budget reads its first
         month's spend (operator).
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

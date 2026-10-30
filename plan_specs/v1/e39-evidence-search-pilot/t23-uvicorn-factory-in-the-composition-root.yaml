@@ -1,0 +1,72 @@
+# TASK v1-e39-t23-uvicorn-factory-in-the-composition-root - uvicorn's app factory lives in the composition root, so app.py stops reaching every adapter
+# Epic: E39 — Team Evidence Search (Student Pilot) | Release: v1.7 (Team evidence search pilot) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e39-t23-uvicorn-factory-in-the-composition-root
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+  annotations:
+    debate/title: "uvicorn's app factory lives in the composition root, so app.py stops reaching every adapter"
+spec:
+  # Filed by the PM, 2026-10-30, from v1-e39-t20's PM question (option 1, with the next image change).
+  description: >-
+    `debate_api/app.py`'s `create_app(services=None)` imports `debate_api.container` inside the
+    function for uvicorn's `--factory`, so to the test selector every API test that builds the
+    app reaches the parser, the writer, the index reader, Cognito, CloudWatch and S3
+    (v1-e39-t20: with that edge gone, a parser-only merge selects 8 API files instead of 24).
+    Point uvicorn at a factory in the composition root and have `create_app` require its
+    services. Do it in the same change as the next pilot image, so it costs no deploy of its
+    own.
+  priority: 3
+  constraints:
+    packages: [debate_api, packages/debate_api/tests, ops, tests/scripts, docs/runbooks]
+    forbidden:
+      - A behaviour change in the running pilot
+      - Network or AWS access in any test
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The image's entrypoint names the composition root's factory, `create_app` requires
+        its services, and t32's measurement selects fewer API files for a parser change,
+        with the collected count unchanged; the image's smoke check passes.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e39-t23-uvicorn-factory-in-the-composition-root-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+spec:
+  description: >-
+    uvicorn's app factory lives in the composition root, so app.py stops reaching every adapter.
+  goalRef:
+    name: v1-e39-t23-uvicorn-factory-in-the-composition-root
+  graph:
+    nodes:
+      - id: uvicorn-factory-in-the-composition-root
+        kind: Task
+        name: uvicorn factory
+        description: >-
+          uvicorn's app factory lives in the composition root, so app.py stops reaching
+          every adapter.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: uvicorn factory tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests]
+status:
+  phase: Pending

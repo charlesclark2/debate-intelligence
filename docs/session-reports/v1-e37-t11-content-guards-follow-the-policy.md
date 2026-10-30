@@ -199,3 +199,17 @@ The content checks follow the policy, and a whole season change now needs no tes
    pass.
 8. **Merge:** any time. It changes only `site/tests/` and the guide, so nothing on the public site
    changes. The next lane run that syncs from dev carries it to `main`.
+
+## PM record, 2026-10-31
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+* **Follow-up 2, graduates at a season change: the coach's ruling of 2026-10-30.** No checklist
+  change. Graduated students may stay on the site, and a graduate who asks to be removed is taken
+  down from prior seasons on request, within the policy's takedown time. The site shows only the
+  current season's results, so a graduate's name leaves the results page at the season change on its
+  own. "Entry 1 publishes a whole name with a plausible graduation year" will flag a graduate's
+  leftover consent entry then: that is deliberate, and if graduates' entries are ever kept (for
+  example for a past-seasons page), that test is loosened in the task that builds it.
+* **Follow-up 1, a stale image published with a warning:** filed as `v1-e37-t12`.
+

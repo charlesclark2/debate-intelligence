@@ -28,6 +28,9 @@ spec:
     contract: find and remove it.
     (PM amendment 2026-10-19, from v1-e05-t04's PM review.) (5) An import contract keeps
     `jinja2` out of the domain and application layers, as the contract for `lxml` does.
+    (PM amendment 2026-10-31, the PM's ruling (A) of 2026-10-30.) (4) and ac4 read: plain doctor
+    makes no network call and binds nothing but loopback, shown by a guard that fails on either.
+    Importing the AWS SDK makes urllib3 bind a loopback socket once, which no packet leaves.
   priority: 3
   constraints:
     packages: [debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/fixtures/model_cassettes, docs/runbooks]

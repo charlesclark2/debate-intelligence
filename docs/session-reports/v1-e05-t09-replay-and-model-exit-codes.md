@@ -136,9 +136,46 @@ The two part (4) mutants show what the guard's self-tests are for. With either m
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-30
 
 **Notes:**
+
+All five parts are done, and part (4) was answered with evidence rather than by weakening the check.
+1. **ac1 passes.** Red: 9 failed, the committed cassette with `effort` removed among them. Green: 173
+   passed. No cassette under `tests/fixtures/model_cassettes/` changed. A changed recorded value
+   still refuses, held before and after.
+2. **ac2 passes.** Red: 3 failed (exit 3 where 1 was asked). Green: refused calls exit 1 with their
+   codes, while throttling and unavailable stay 3.
+3. **ac3 passes.** Each bad key is named in the message, the details and the hint, with exit 1.
+   Plain doctor never asks for settings, shown by a container whose settings fail.
+4. **ac4, as amended by the PM's ruling (A): passes.**
+   * The strict guard fails on the start commit and the branch for one reason, urllib3's `::1` probe.
+   * The amended guard allows exactly that probe, and catches the planted lookup and the planted
+     `0.0.0.0` bind.
+   * It checks that urllib3 was imported, so green means the probe ran and was allowed.
+   * The fresh interpreter is the right call, since the probe runs once per process.
+   * The PM's next batch amends (4) and ac4.
+5. **ac5 passes.** The jinja2 contract breaks on a probe in either layer, with its architecture case.
+   Deviation 2 is the PM's allowance.
+6. **Mutants:** the PM's six and their variants, plus the guard's two, all caught. The two guard
+   mutants show the self-tests doing the work the doctor test can't. Good.
+7. **Decisions accepted:**
+   * only structured requests parse;
+   * an unparsable recorded request is a fixture error;
+   * the named refused-calls list, the expired session included;
+   * the routing check as a plain method, not a service.
+
+   **Decision 3, the PM's question:** answered and checked. Nothing assumed the old behaviour.
+8. **Follow-up 1 matters for 2026-11-06.** A throttled landscape model stage ends `ModelStageInterrupted`,
+   exit 1. The PM's next batch files E32 p2 to keep the cause's class (exit 3 for a retryable cause).
+   Until then the operator reads the stop's cause on Friday. Classifications already made are
+   cached, so a rerun later resumes where it stopped.
+   **Follow-up 2 (launchd):** no task. The weekly run is the cloud task.
+9. **The affected set** (237 files, through the root conftest) was stopped at 46% with no failure and is
+   left to the PR's `ci`. The node's command, the always-run list, the doctor and output tests, the
+   contracts, ruff, pyright in both forms, lint-imports and the docs checks pass.
+10. **Merge:** any time. The operator follow-up (`scripts/task sync` before the PR) is optional, as you
+    say.

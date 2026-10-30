@@ -432,24 +432,24 @@ STOPPED: Final[dict[str, tuple[Callable[[Plan], None], str]]] = {
     "a permission set replaced": (
         identity_center_change("aws_ssoadmin_permission_set.caselist_run_deployer", ["delete", "create"]),
         "an Identity Center change, which never passes: "
-        "['aws_ssoadmin_permission_set.caselist_run_deployer (delete/create)']",
+        "aws_ssoadmin_permission_set.caselist_run_deployer (delete/create); never apply this plan",
     ),
     "an account assignment destroyed": (
         identity_center_change('aws_ssoadmin_account_assignment.evidence_operator["coach"]', ["delete"]),
-        "'aws_ssoadmin_account_assignment.evidence_operator[\"coach\"] (delete)'",
+        'never passes: aws_ssoadmin_account_assignment.evidence_operator["coach"] (delete);',
     ),
     "an identity store user created in another module": (
         identity_center_change('module.organization.aws_identitystore_user.people["coach"]', ["create"]),
         "an Identity Center change, which never passes: "
-        "['module.organization.aws_identitystore_user.people[\"coach\"] (create)']",
+        'module.organization.aws_identitystore_user.people["coach"] (create); never apply this plan',
     ),
     "a change outside the module": (
         outside_the_module,
-        "a change outside module.caselist_run: ['module.evidence_bucket.aws_s3_bucket_policy.this (update)']",
+        "a change outside module.caselist_run: module.evidence_bucket.aws_s3_bucket_policy.this (update)",
     ),
     "a root resource created": (
         a_root_resource_created,
-        "a change outside module.caselist_run: ['aws_sns_topic.extra (create)']",
+        "a change outside module.caselist_run: aws_sns_topic.extra (create)",
     ),
     "the run schedule turned off": (
         run_schedule_turned_off,
@@ -563,7 +563,7 @@ def test_an_identity_center_change_anywhere_says_never_to_apply(tmp_path: Path) 
 
     assert said.startswith(
         "PLAN STOP: an Identity Center change, which never passes: "
-        "['module.caselist_run.aws_ssoadmin_account_assignment.run (create)']; never apply this plan"
+        "module.caselist_run.aws_ssoadmin_account_assignment.run (create); never apply this plan"
     ), said
     assert code == 1
 

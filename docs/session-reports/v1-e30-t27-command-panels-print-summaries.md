@@ -188,9 +188,41 @@ None. The affected set runs as the pull request's `ci` check.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-29
 
 **Notes:**
+
+Seven failure panels across four commands now summarise, and no `--json` envelope moved a byte.
+1. **ac1 passes.** Red: 26 failed against the code before the change, every whole-digest, closing-line
+   and one-line-per-thing test among them. The 12 that passed are the envelope guards and checks
+   today's panels already met. Green: 38 passed, and 49 with status's panel tests.
+2. **The envelopes are held whole.** The seven recorded envelopes were written from `09c8b38`'s
+   source and committed with the red tests before any source changed. A dropped, renamed or added
+   key fails, which mutants 3 show three ways.
+3. **Mutants:** the PM's five (1 three ways, 3 three ways), and five more of your own, all caught,
+   none at collection.
+4. **Decision 1, `panel_message`: accepted.** You found that the panel's first line is the message,
+   and that publish's and pull's messages carry whole digests. The only fix that leaves
+   `error.message` alone is a console-only message beside `panel_details`, and that is what you
+   built.
+5. **Decision 2, recorded rather than hand-written envelopes: accepted.** For an "unchanged" check,
+   a recording of the code before the change, committed before the change, is the right expectation.
+   My context asked for exactly that. Agreement 6 still governs every expectation of new behaviour,
+   and those were written by hand.
+6. **Decisions 3 to 7: accepted:**
+   * what "one line per thing that differs" means per command;
+   * the pull panel reading nothing from the payload;
+   * three prefixes per kind, shared with status;
+   * `VERIFICATION_COULD_NOT_RUN` left alone;
+   * `INVALID_MANIFEST` brought in because its panel printed a home-directory path;
+   * verify's red run at builder level.
+7. **Follow-up 1, the pull table's Detail column:** the PM's next batch files it at E34 p3. It's a
+   one-line change with `shorten_digests`, and the table sits right above the panel this task
+   cleaned.
+8. **The affected set** (193 files) is left to the PR's `ci`. The four commands' and status's suites,
+   the always-run list, the six smoke files, ruff, pyright, lint-imports, the thin-handler check and
+   the specs pass.
+9. **Merge:** any time.

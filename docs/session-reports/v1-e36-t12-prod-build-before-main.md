@@ -65,7 +65,7 @@ and the file was restored. Afterwards `git status --porcelain` was empty.
 | `uv run --frozen lint-imports` / `uv run --frozen python scripts/check_thin_handlers.py` | `Contracts: 19 kept, 0 broken.` / `OK: 68 CLI command and API route handlers within 25 statements` |
 | `uv run --frozen python scripts/check_links.py` | `OK: 2982 relative links and anchors in 457 Markdown files` (this report adds two), 1.2 s |
 | `uv run scripts/validate_specs.py` | `OK: 509 files, 40 epics, 447 tasks, 22 releases` |
-| `uv run --frozen python scripts/check_command_blocks.py --base origin/dev` / `uv run --frozen python scripts/docs_index.py --check-descriptions` | CHECK_COMMAND_BLOCKS / `All 59 indexed documents under docs/ have a description` |
+| `uv run --frozen python scripts/check_command_blocks.py --base origin/dev` / `uv run --frozen python scripts/docs_index.py --check-descriptions` | ``OK: no `#` comments in 587 shell code blocks in 199 Markdown files (1 session reports changed since origin/dev)`` / `All 59 indexed documents under docs/ have a description` |
 
 ## Files changed
 

@@ -68,7 +68,7 @@ v2.3's extension work.
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 24 | 14 | 160 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 20 | 13 | 80 |
-| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 1 | 17 | 7 | 44 |
+| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 1 | 17 | 8 | 44 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -543,7 +543,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [The dev lock held for good when the weekly run's home moves to prod](plan_specs/v1/e40-cloud-caselist-run/t11-run-home-moved-holder.yaml) `v1-e40-t11-run-home-moved-holder` | Pending | 1 | 2.0 |
 | [A held upload a cloud task records reaches the bucket, not only its working copy](plan_specs/v1/e40-cloud-caselist-run/t12-held-upload-records-reach-the-bucket.yaml) `v1-e40-t12-held-upload-records-reach-the-bucket` | Succeeded | 1 | 3.0 |
 | [In bucket mode, the report stage counts a source the bucket holds at its manifest digest as present](plan_specs/v1/e40-cloud-caselist-run/t13-bucket-mode-report-counts-held-sources.yaml) `v1-e40-t13-bucket-mode-report-counts-held-sources` | InProgress | 1 | 3.0 |
-| [The deploy script's region test, which failed once under load, made deterministic](plan_specs/v1/e40-cloud-caselist-run/t14-deploy-script-region-test-under-load.yaml) `v1-e40-t14-deploy-script-region-test-under-load` | Pending | 0 | 1.0 |
+| [The deploy script's region test, which failed once under load, made deterministic](plan_specs/v1/e40-cloud-caselist-run/t14-deploy-script-region-test-under-load.yaml) `v1-e40-t14-deploy-script-region-test-under-load` | Succeeded | 0 | 1.0 |
 | [A plan check for a new run image after the cutover, with the schedule left enabled](plan_specs/v1/e40-cloud-caselist-run/t15-image-plan-check-after-the-cutover.yaml) `v1-e40-t15-image-plan-check-after-the-cutover` | Succeeded | 1 | 1.0 |
 | [Prod's parsed store re-parsed after a parser bump, from a copy restored with its sources](plan_specs/v1/e40-cloud-caselist-run/t16-prod-reparse-after-a-parser-bump.yaml) `v1-e40-t16-prod-reparse-after-a-parser-bump` | Pending | 1 | 2.0 |
 | [A landscape report counts the weeks the cloud run pulled, from a copy restored from the bucket](plan_specs/v1/e40-cloud-caselist-run/t17-landscape-report-from-the-cloud-runs-state.yaml) `v1-e40-t17-landscape-report-from-the-cloud-runs-state` | Pending | 1 | 3.0 |

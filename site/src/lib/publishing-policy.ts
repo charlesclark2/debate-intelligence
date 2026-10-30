@@ -62,6 +62,15 @@ function collect(text: string, pattern: RegExp): string[] {
 }
 
 /**
+ * Every email address and phone number in a piece of text, whatever the allowlist says.
+ * content/results.yaml uses it: a result is about a student, so no address belongs in one, not
+ * even a coach's (docs/policies/website-publishing.md, Students 6).
+ */
+export function contactDetails(text: string): string[] {
+  return [...collect(text, EMAIL_PATTERN), ...collect(text, PHONE_PATTERN)].map((found) => found.trim())
+}
+
+/**
  * A built page carries Next's React payload inside <script> tags: the same copy again, escaped
  * as JSON. Scanning it would report every address and name twice, with the escaping mangled into
  * nonsense like `u003echarles.clark@`. The text rules therefore read the page without its
@@ -173,12 +182,14 @@ export function checkPublishingPolicy({
   )
 
   // Every consent entry is for the current season and has been checked since the season began.
+  // A student's entry is named by its consent reference, never by the name: warnings are printed
+  // in every build, and a build log carries no student name (Students 10).
   for (const student of consent.students) {
     if (isStale(student, consent.season)) {
       warnings.push({
         location: 'content/media-consent.yaml',
         message:
-          `consent for "${student.publishedName}" was last checked ${student.dateChecked} for ` +
+          `consent ${student.consentReference} was last checked ${student.dateChecked} for ` +
           `season ${student.season}; the start-of-season check for ${consent.season} has not ` +
           'been recorded. Confirm it with the activities office and update dateChecked.',
       })

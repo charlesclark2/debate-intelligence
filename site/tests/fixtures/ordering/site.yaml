@@ -15,4 +15,9 @@ contactEmails:
   - address: fixture.coach@example.invalid
     name: Fixture Coach
     role: Head Coach
+instagram:
+  address: https://www.instagram.com/fixture.team/
+  label: "@fixture.team on Instagram"
+  externalLinkNote: opens Instagram's site
+  contactHeading: Follow the team
 debaterLoginLabel: Debater login

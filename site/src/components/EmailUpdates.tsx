@@ -33,9 +33,10 @@ export function EmailUpdates({ content }: { content: EmailUpdatesContent }) {
         ))}
       </ul>
       {content.signupUrl ? (
+        // One run of text: a .button is inline-flex, so a separate span for the note would be a
+        // flex item of its own and lose its leading space ("updates(opens"), v1-e37-t06 review.
         <a className="button button--primary" href={content.signupUrl} rel="noopener noreferrer">
-          {content.action.label}
-          <span> ({content.action.externalLinkNote})</span>
+          {`${content.action.label} (${content.action.externalLinkNote})`}
         </a>
       ) : (
         <p>

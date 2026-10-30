@@ -19,6 +19,12 @@ const strings = {
   footerNavigationLabel: 'About this site',
   logoAlternativeText: 'Whitefish Bay Blue Dukes',
   footerNote: 'Whitefish Bay High School, Whitefish Bay, Wisconsin.',
+  instagram: {
+    address: 'https://www.instagram.com/fixture.team/',
+    label: '@fixture.team on Instagram',
+    externalLinkNote: "opens Instagram's site",
+    contactHeading: 'Follow the team',
+  },
 }
 
 const items = [

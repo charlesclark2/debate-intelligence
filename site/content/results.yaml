@@ -1,0 +1,91 @@
+# THE SEASON'S RESULTS
+# --------------------
+# One entry per placing. The /results/ page and the three newest results on the home page are
+# built from this file and nothing else. Validated at build time by src/lib/results.ts: a mistake
+# fails the build, in the dev preview as well as in prod, naming the entry, the field and the
+# rule. How to add, correct and take down a result: docs/guides/coach-website-editing.md,
+# "Results: the season's results file".
+#
+# Everything here is public, and the people in it are minors. The rules are
+# docs/policies/website-publishing.md, "Results and awards", and they are not optional:
+#
+#   - Results are facts Charlie supplies, from the tournament's own published results. Never
+#     invent, estimate or reconstruct one (rule 7).
+#   - A placing is a single placing at one tournament: first place, top speaker, quarterfinalist.
+#     Never a record, a win-loss line, a points total, a ranking or anything across tournaments
+#     (rule 3), and never a loss (rule 4).
+#   - No opponent student is ever named (rule 5). Opponent schools may be.
+#   - A student is named only with a current-season entry in content/media-consent.yaml. Lincoln-
+#     Douglas names one student; Policy and Public Forum name both partners or neither (rule 1).
+#   - Leave `students` out and the result is published in team-level form ("a Whitefish Bay
+#     debater", "a Whitefish Bay team"), which is always allowed (rule 2). The build also uses the
+#     team-level form by itself whenever a named student's consent entry is not current for the
+#     season or asks for less than the full name, so a lapsed form never needs an edit here.
+#
+# Each entry:
+#
+#   scheduleId  The tournament's id in content/tournaments.yaml, while it is still there.
+#   tournament  Or, for a tournament that has come off the schedule, its name ...
+#   date        ... and its first day, as 2026-10-17.
+#   end         With `tournament`, the last day of a tournament of more than one day.
+#   event       policy, lincoln-douglas or public-forum (the ids in content/events.yaml).
+#   division    varsity, junior-varsity or novice.
+#   placing     first place (to tenth place), top speaker, second speaker (to tenth speaker),
+#               champion, finalist, semifinalist, quarterfinalist, octofinalist,
+#               double-octofinalist, triple-octofinalist, or state qualifying leg (a leg toward
+#               the Wisconsin State Debate Tournament earned there; never numbered or counted,
+#               policy version 1.2).
+#   students    Optional. The student's name exactly as content/media-consent.yaml publishes it,
+#               or both partners' names. The page adds the graduation year.
+#
+# Two awards at one tournament are two entries: the page shows them together under the
+# tournament. The order of entries does not matter: the page puts the newest tournament first.
+
+season: '2026-27'
+
+# The day this file was last changed. Update it with every edit: the page shows it.
+revised: 2026-10-27
+
+# The words around the results. House style: no em dashes, and no acronym left unexplained.
+labels:
+  seasonTitle: Results from the {season} season
+  revised: Results last updated
+  empty: No results have been posted for this season yet.
+  # Who a team-level result names: nobody. Written as the page prints it, after the placing.
+  individual: a Whitefish Bay debater
+  partners: a Whitefish Bay team
+  # Between two partners' names: "Jordan Rivera (2028) and Sam Lee (2027)".
+  partnersJoinedBy: and
+  divisions:
+    varsity: Varsity
+    junior-varsity: Junior Varsity
+    novice: Novice
+
+results:
+  # Fort Atkinson, from Charlie on 2026-10-22. Off the schedule since that day.
+  - tournament: Fort Atkinson
+    date: 2026-10-17
+    event: lincoln-douglas
+    division: varsity
+    placing: first place
+    students: [Anya Prakash]
+
+  - tournament: Fort Atkinson
+    date: 2026-10-17
+    event: lincoln-douglas
+    division: varsity
+    placing: top speaker
+    students: [Anya Prakash]
+
+  # Ronald Reagan, from Charlie on 2026-10-27.
+  - scheduleId: ronald-reagan-2026
+    event: lincoln-douglas
+    division: novice
+    placing: third speaker
+    students: [Daksh Chauhan]
+
+  - scheduleId: ronald-reagan-2026
+    event: lincoln-douglas
+    division: novice
+    placing: state qualifying leg
+    students: [Marianna Troicki]

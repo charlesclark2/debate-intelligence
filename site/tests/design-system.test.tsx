@@ -232,6 +232,12 @@ describe('the footer carries the white knockout mark', () => {
   it('renders the knockout artwork on navy, decoratively', async () => {
     const { container } = render(
       <SiteFooter
+        instagram={{
+          address: 'https://www.instagram.com/fixture.team/',
+          label: '@fixture.team on Instagram',
+          externalLinkNote: "opens Instagram's site",
+          contactHeading: 'Follow the team',
+        }}
         navigationLabel="About this site"
         note="A site run by the team's coaches."
         utilityLinks={[]}

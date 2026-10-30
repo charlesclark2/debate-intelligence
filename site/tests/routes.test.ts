@@ -8,15 +8,26 @@ import sitemap from '@/app/sitemap'
 import { COMPOSED_SLUGS, HOME_SLUG, loadPages, loadRoutedPages } from '@/lib/content'
 
 /**
- * The core pages parents need (v1-e36-t04 acceptance criterion 1, and the tournament schedule
- * from v1-e37-t02): every one of them exists, carries its own title and description, has a route in
- * the static export, appears in the navigation, and is listed in sitemap.xml.
+ * The core pages parents need (v1-e36-t04 acceptance criterion 1, the tournament schedule from
+ * v1-e37-t02 and the season's results from v1-e37-t06): every one of them exists, carries its
+ * own title and description, has a route in the static export, appears in the navigation, and is
+ * listed in sitemap.xml.
  *
  * The files the build writes are checked in tests/export/routes.export-test.ts, which runs after
  * every build: `pnpm --dir site test` reads only sources, so it stays fast straight after an edit.
  */
 
-const CORE_PAGES = ['home', 'about', 'events', 'schedule', 'join', 'coaches', 'faq', 'contact'] as const
+const CORE_PAGES = [
+  'home',
+  'about',
+  'events',
+  'schedule',
+  'results',
+  'join',
+  'coaches',
+  'faq',
+  'contact',
+] as const
 
 describe('the core pages exist as content', () => {
   const pages = loadPages()
@@ -36,7 +47,7 @@ describe('the core pages exist as content', () => {
     }
   })
 
-  it('orders the navigation for a parent: about, events, the schedule, join, coaches, then the questions', () => {
+  it('orders the navigation for a parent: about, events, the schedule, the results, join, coaches, then the questions', () => {
     const order = pages.map((page) => page.slug)
     expect(order.slice(0, CORE_PAGES.length)).toEqual([...CORE_PAGES])
   })

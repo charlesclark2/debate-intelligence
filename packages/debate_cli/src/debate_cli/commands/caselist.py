@@ -190,10 +190,10 @@ without the removed rounds, is not counted. JSON gives them as `school_views` an
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Coroutine, Iterable, Sequence
+from collections.abc import Coroutine, Iterable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, Any, Final
+from typing import Annotated, Any
 
 import typer
 
@@ -205,6 +205,13 @@ from debate_cli.exit_codes import ExitCode, exit_code_for_failure_codes
 from debate_cli.options.bucket_environment import CONFIRM_PROD_FLAG
 from debate_cli.options.snapshot_date import parse_snapshot_date
 from debate_cli.output import CommandFailure, JsonValue, TableSpec
+from debate_cli.panel_summaries import (
+    by_count,
+    digest_of_key,
+    digest_prefix,
+    every_value_in_full,
+    some_prefixes,
+)
 from debate_core.application.caselist.camp_metadata import load_camp_aliases
 from debate_core.application.caselist.import_service import Classification, ImportReport
 from debate_core.application.caselist.later_manifests import LaterManifestsRemeasured
@@ -217,9 +224,9 @@ from debate_core.application.caselist.manifest import (
 from debate_core.application.caselist.openev_import_service import OpenEvImportReport
 from debate_core.application.caselist.openev_manifest import openev_manifest_key
 from debate_core.application.caselist.openev_metadata_reimport import OpenEvMetadataReimport
-from debate_core.application.caselist.publish_plan import SourceAction, validate_publish_target
-from debate_core.application.caselist.publish_service import PublishReport, SourceResult
-from debate_core.application.caselist.removal_residue import RESIDUE_DIGEST_PREFIX_LENGTH, CaselistResidue
+from debate_core.application.caselist.publish_plan import SnapshotPlan, SourceAction, validate_publish_target
+from debate_core.application.caselist.publish_service import PublishReport, SnapshotOutcome, SourceResult
+from debate_core.application.caselist.removal_residue import CaselistResidue
 from debate_core.application.caselist.status_service import (
     CASELIST_DRIFT,
     REMOVAL_RESIDUE,
@@ -227,6 +234,7 @@ from debate_core.application.caselist.status_service import (
     SnapshotStatus,
 )
 from debate_core.application.caselist_sync import full_archive_of_inbox_name
+from debate_core.application.errors import UNMODELLED_ERROR_CODE
 from debate_core.application.settings import ConfigurationError, Settings
 from debate_core.domain.caselist import Event
 
@@ -572,10 +580,6 @@ def _status_failure(report: CaselistStatusReport, payload: dict[str, JsonValue])
     )
 
 
-_PREFIXES_SHOWN: Final = 3
-"""How many digests a line of the failure panel names by prefix before it counts the rest."""
-
-
 def _status_panel(report: CaselistStatusReport, payload: dict[str, JsonValue]) -> dict[str, JsonValue]:
     """What a failing status's panel prints in place of its details, the whole report (`v1-e30-t24`).
 
@@ -590,8 +594,7 @@ def _status_panel(report: CaselistStatusReport, payload: dict[str, JsonValue]) -
     }
     for entry in report.drifted:
         panel[f"{entry.caselist} {entry.snapshot}"] = _what_differs(entry)
-    panel["every digest"] = "in full under error.details of --json"
-    return panel
+    return every_value_in_full(panel, every="every digest")
 
 
 def _what_differs(entry: SnapshotStatus) -> str:
@@ -606,19 +609,12 @@ def _what_differs(entry: SnapshotStatus) -> str:
     for counted, digests in (
         ("source(s) not in the bucket", entry.missing_sources),
         ("source(s) not on this machine", entry.missing_local),
-        ("source mismatch(es)", tuple(_digest_of_key(key) for key in entry.source_mismatches)),
+        ("source mismatch(es)", tuple(digest_of_key(key) for key in entry.source_mismatches)),
         ("suppressed row(s)", entry.suppressed_rows),
     ):
         if digests:
-            what.append(f"{len(digests)} {counted} {_some_prefixes(digests)}")
+            what.append(f"{len(digests)} {counted} {some_prefixes(digests)}")
     return ", ".join(what)
-
-
-def _some_prefixes(digests: Sequence[str]) -> str:
-    """`(sha256 <prefix>, <prefix>, <prefix> and N more)`: the first few, and how many are not named."""
-    named = ", ".join(_digest_prefix(digest) for digest in digests[:_PREFIXES_SHOWN])
-    more = len(digests) - _PREFIXES_SHOWN
-    return f"(sha256 {named} and {more} more)" if more > 0 else f"(sha256 {named})"
 
 
 def _residue_held(report: CaselistStatusReport) -> str:
@@ -833,7 +829,7 @@ def status_summary(report: CaselistStatusReport, settings: Settings) -> dict[str
             {
                 "caselist": caselist,
                 "objects": len(found := report.suppressed_objects_of(caselist)),
-                "sha256_prefixes": [_digest_prefix(_digest_of_key(key)) for key in found],
+                "sha256_prefixes": [digest_prefix(digest_of_key(key)) for key in found],
             }
             for caselist in report.caselists
         ],
@@ -843,7 +839,7 @@ def status_summary(report: CaselistStatusReport, settings: Settings) -> dict[str
             {
                 "caselist": caselist,
                 "uploads": len(found := report.held_in_inbox_of(caselist)),
-                "sha256_prefixes": [_digest_prefix(upload.sha256) for upload in found],
+                "sha256_prefixes": [digest_prefix(upload.sha256) for upload in found],
                 "requests": sorted({upload.request_id for upload in found}),
             }
             for caselist in report.caselists
@@ -852,7 +848,7 @@ def status_summary(report: CaselistStatusReport, settings: Settings) -> dict[str
             {
                 "caselist": caselist,
                 "uploads": len(found := report.refused_at_import_of(caselist)),
-                "sha256_prefixes": [_digest_prefix(upload.sha256) for upload in found],
+                "sha256_prefixes": [digest_prefix(upload.sha256) for upload in found],
                 "requests": sorted({upload.request_id for upload in found}),
             }
             for caselist in report.caselists
@@ -861,7 +857,7 @@ def status_summary(report: CaselistStatusReport, settings: Settings) -> dict[str
             {
                 "caselist": caselist,
                 "objects": len(found := report.held_parsed_objects_of(caselist)),
-                "sha256_prefixes": [_digest_prefix(one.sha256) for one in found],
+                "sha256_prefixes": [digest_prefix(one.sha256) for one in found],
                 "requests": sorted({one.request_id for one in found}),
             }
             for caselist in report.caselists
@@ -1043,9 +1039,9 @@ def _status_entry(entry: SnapshotStatus) -> dict[str, JsonValue]:
             {"key": key, "kind": entry.mismatch_kind(key).value} for key in entry.checksum_mismatches
         ],
         "suppressed_rows": len(entry.suppressed_rows),
-        "suppressed_row_prefixes": [_digest_prefix(digest) for digest in entry.suppressed_rows],
+        "suppressed_row_prefixes": [digest_prefix(digest) for digest in entry.suppressed_rows],
         "held_rows": len(entry.held_rows),
-        "held_row_prefixes": [_digest_prefix(row.sha256) for row in entry.held_rows],
+        "held_row_prefixes": [digest_prefix(row.sha256) for row in entry.held_rows],
         "held_row_requests": sorted({row.request_id for row in entry.held_rows}),
         "held_skipped_rows": len(entry.held_skipped_rows),
         "held_skipped_row_requests": sorted(set(entry.held_skipped_rows)),
@@ -1054,23 +1050,13 @@ def _status_entry(entry: SnapshotStatus) -> dict[str, JsonValue]:
     }
 
 
-def _digest_prefix(digest: str) -> str:
-    """A removed file's name in this report: the first twelve characters of its digest."""
-    return digest[:RESIDUE_DIGEST_PREFIX_LENGTH]
-
-
-def _digest_of_key(key: str) -> str:
-    """The digest a source key ends in: `…/sha256/ab/cd/<digest>`."""
-    return key.rsplit("/", 1)[-1]
-
-
 def _suppressed_object_lines(report: CaselistStatusReport) -> list[str]:
     """Under the status table, per caselist: the current objects of suppressed sources, by count."""
     lines: list[str] = []
     for caselist in report.caselists:
         found = report.suppressed_objects_of(caselist)
         if found:
-            named = ", ".join(f"sha256 {_digest_prefix(_digest_of_key(key))}" for key in found)
+            named = ", ".join(f"sha256 {digest_prefix(digest_of_key(key))}" for key in found)
             lines.append(
                 f"SUPPRESSED SOURCE OBJECTS in {caselist}: {len(found)} current object(s) ({named})."
             )
@@ -1126,7 +1112,7 @@ def _held_lines(report: CaselistStatusReport) -> list[str]:
 
 def _held_named(held: Iterable[tuple[str, str]]) -> str:
     """`sha256 <prefix>, <request id>` for each held file, comma-separated."""
-    return ", ".join(f"sha256 {_digest_prefix(digest)}, {request_id}" for digest, request_id in held)
+    return ", ".join(f"sha256 {digest_prefix(digest)}, {request_id}" for digest, request_id in held)
 
 
 def _publish_table(report: PublishReport, settings: Settings) -> TableSpec:
@@ -1241,32 +1227,98 @@ def _publish_failure(report: PublishReport, payload: dict[str, JsonValue]) -> Co
     (:attr:`~debate_core.application.caselist.publish_service.PublishReport.failure_codes`): each
     failed source's, and a failed manifest's from its structured `manifest_error_code`, never from
     the text of its message (`v1-e34-t13`).
+
+    The details are the whole report and the message names every failed digest, for `--json`; the
+    panel prints a message that counts them and :func:`_publish_panel` in their place (`v1-e30-t27`).
     """
     failed = report.failed_sha256
     if not report.applied:
+        cannot = (
+            f"{len(failed)} source(s) cannot be published as planned (a checksum mismatch in the "
+            "bucket, or missing from this machine)"
+        )
         return CommandFailure(
             code="PUBLISH_BLOCKED",
-            message=(
-                f"{len(failed)} source(s) cannot be published as planned (a checksum mismatch in the "
-                f"bucket, or missing from this machine): {', '.join(failed)}"
-            ),
+            message=f"{cannot}: {', '.join(failed)}",
             exit_code=ExitCode.DOMAIN_FAILURE,
             details=payload,
             hint=(
                 "Nothing was uploaded. A mismatch in the bucket needs a person; a missing file needs "
                 "a re-import."
             ),
+            panel_message=cannot,
+            panel_details=_publish_panel(report, payload),
         )
     incomplete = [outcome for outcome in report.snapshots if not outcome.complete]
     withheld = ", ".join(f"{outcome.snapshot} ({outcome.manifest.value})" for outcome in incomplete)
     named = f"; failed sha256: {', '.join(failed)}" if failed else ""
+    not_complete = f"{len(incomplete)} snapshot(s) not complete in the bucket"
     return CommandFailure(
         code="PUBLISH_INCOMPLETE",
-        message=f"{len(incomplete)} snapshot(s) not complete in the bucket, manifest {withheld}{named}",
+        message=f"{not_complete}, manifest {withheld}{named}",
         exit_code=exit_code_for_failure_codes(report.failure_codes),
         details=payload,
         hint="Re-run the same command: every confirmed source is skipped and the manifests follow.",
+        panel_message=f"{not_complete}; {len(failed)} source(s) failed" if failed else not_complete,
+        panel_details=_publish_panel(report, payload),
     )
+
+
+def _publish_panel(report: PublishReport, payload: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    """What a failed publish's panel prints in place of its details, the whole report (`v1-e30-t27`).
+
+    The environment and the bucket, how many snapshots there were and how many did not go, and one
+    line per snapshot that did not, as `caselist status`'s panel has one per snapshot that differs.
+    """
+    panel: dict[str, JsonValue] = {"environment": payload["environment"], "bucket": payload["bucket"]}
+    if not report.applied:
+        stopped = [plan for plan in report.plan.snapshots if plan.blocked or plan.withholding_rows]
+        panel["snapshots"] = f"{len(report.plan.snapshots)} planned, {len(stopped)} blocked"
+        for plan in stopped:
+            panel[f"{plan.caselist} {plan.snapshot}"] = _what_blocks(plan)
+        return every_value_in_full(panel)
+    incomplete = [outcome for outcome in report.snapshots if not outcome.complete]
+    panel["snapshots"] = f"{len(report.snapshots)} published, {len(incomplete)} not complete"
+    panel["sources"] = ", ".join(f"{report.count(result)} {result.value}" for result in SourceResult)
+    for outcome in incomplete:
+        panel[f"{outcome.caselist} {outcome.snapshot}"] = _what_did_not_complete(outcome)
+    return every_value_in_full(panel)
+
+
+def _what_blocks(plan: SnapshotPlan) -> str:
+    """What stops one planned snapshot: its blocking sources, then the rows that withhold its manifest."""
+    what = [
+        f"{len(sources)} {counted} {some_prefixes(sorted(source.sha256 for source in sources))}"
+        for counted, sources in (
+            ("source(s) missing from this machine", plan.of(SourceAction.MISSING_LOCALLY)),
+            ("source(s) mismatched in the bucket", plan.of(SourceAction.MISMATCHED)),
+        )
+        if sources
+    ]
+    rows: list[str] = []
+    if plan.suppressed_rows:
+        rows.append(f"{len(plan.suppressed_rows)} suppressed row(s) {some_prefixes(plan.suppressed_rows)}")
+    if plan.held_rows:
+        held = tuple(row.sha256 for row in plan.held_rows)
+        rows.append(f"{len(held)} row(s) at a held path {some_prefixes(held)}")
+    if plan.held_skipped_rows:
+        requests = ", ".join(sorted(set(plan.held_skipped_rows)))
+        rows.append(f"{len(plan.held_skipped_rows)} skipped member row(s) at a held path ({requests})")
+    if rows:
+        what.append(f"manifest withheld for {', '.join(rows)}")
+    return ", ".join(what)
+
+
+def _what_did_not_complete(outcome: SnapshotOutcome) -> str:
+    """One incomplete snapshot: its manifest, and its failed sources by count, prefix and code."""
+    what = f"manifest {outcome.manifest.value}"
+    if outcome.manifest_error_code is not None:
+        what += f" ({outcome.manifest_error_code})"
+    if outcome.failed:
+        failed = sorted(source.sha256 for source in outcome.failed)
+        codes = by_count(source.error_code or UNMODELLED_ERROR_CODE for source in outcome.failed)
+        what += f", {len(failed)} source(s) failed {some_prefixes(failed)}: {codes}"
+    return what
 
 
 class CompleteArchiveNotImportedByHand(ConfigurationError):

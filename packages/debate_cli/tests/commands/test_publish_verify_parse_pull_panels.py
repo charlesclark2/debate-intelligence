@@ -1,4 +1,6 @@
-"""What the failure panels of `caselist publish`, `verify`, `caselist parse` and `caselist pull` print (`v1-e30-t27`).
+"""What the failure panels of `caselist publish`, `verify`, `caselist parse` and `caselist pull` print.
+
+`v1-e30-t27`.
 
 `v1-e30-t24` made `caselist status`'s panels print counts and digest prefixes instead of the whole
 `--json` record (`test_caselist_status_panels.py`). These four commands still printed theirs whole:
@@ -168,7 +170,9 @@ def blocked_publish() -> PublishReport:
 
 def source_outcome(digest: str, result: SourceResult, code: str | None = None) -> SourceOutcome:
     message = None if code is None else f"{code}: the store did not confirm it"
-    return SourceOutcome(sha256=digest, key=source_key(digest), result=result, error_code=code, error_message=message)
+    return SourceOutcome(
+        sha256=digest, key=source_key(digest), result=result, error_code=code, error_message=message
+    )
 
 
 def incomplete_publish() -> PublishReport:
@@ -273,7 +277,9 @@ def parse_run() -> ParseRunReport:
         cards=1800,
         unsupported={"PDF": 10},
         failed={"UNREADABLE_DOCX": 40, "PARSE_TIMEOUT": 10},
-        store=StoreTotals(sources=418, parsed=358, unsupported=10, failed=50, cards=2700, occurrences=2900, clusters=2100),
+        store=StoreTotals(
+            sources=418, parsed=358, unsupported=10, failed=50, cards=2700, occurrences=2900, clusters=2100
+        ),
         elapsed_seconds=12.5,
     )
 
@@ -310,7 +316,10 @@ def incomplete_pull() -> RunSummary:
                 StageOutcome.FAILED,
                 f"parsed 40 source(s); the parsed store of {CASELIST} is not published",
                 error_codes=("STORE_UNAVAILABLE",),
-                hint=f"Run `debate-research caselist parse --caselist {CASELIST} --publish-only` to publish it.",
+                hint=(
+                    f"Run `debate-research caselist parse --caselist {CASELIST} --publish-only` "
+                    "to publish it."
+                ),
             ),
             StageRecord(
                 SyncStage.REPORT,
@@ -332,7 +341,9 @@ def incomplete_pull() -> RunSummary:
 SNAPSHOTS: Final = ("01JB7Q0000000000000000SNAP", "01JB7Q0000000000000000SNBQ")
 
 
-def verdict(position: int, status: VerificationStatus, snapshot: str | None, *codes: ReasonCode) -> CardVerdict:
+def verdict(
+    position: int, status: VerificationStatus, snapshot: str | None, *codes: ReasonCode
+) -> CardVerdict:
     return CardVerdict(
         position=position,
         card_id=f"0CARD00000000000000000000{position}",
@@ -430,6 +441,16 @@ def envelope_of(failure: CommandFailure, command: str) -> str:
     return stdout.getvalue()
 
 
+FIXED_LINES: Final = 4
+"""The lines every panel here has: the message, the closing line, the blank line and the hint. A test
+adds its command's own lines of counts and one per thing that differs."""
+
+
+def first_prefixes(found: tuple[str, ...] | list[str]) -> str:
+    """What a panel names of `found`, sorted: the first three digests, by their first twelve characters."""
+    return ", ".join(one[:12] for one in sorted(found)[:3])
+
+
 def lines_starting(failure: CommandFailure, start: str) -> list[str]:
     return [line for line in panel_lines(failure) if line.startswith(start)]
 
@@ -478,16 +499,16 @@ class TestThePublishPanels:
         assert lines_starting(failure, f"{CASELIST} {AGREEING}") == []
         assert lines_starting(failure, f"{CASELIST} {WEEKS[0]}:") == [
             f"{CASELIST} {WEEKS[0]}: {MANY} source(s) missing from this machine "
-            f"(sha256 {', '.join(one[:12] for one in digests('missing', MANY)[:3])} and {MANY - 3} more), "
-            f"2 source(s) mismatched in the bucket (sha256 {', '.join(one[:12] for one in digests('mismatched', 2))})"
+            f"(sha256 {first_prefixes(digests('missing', MANY))} and {MANY - 3} more), "
+            f"2 source(s) mismatched in the bucket (sha256 {first_prefixes(digests('mismatched', 2))})"
         ]
         assert lines_starting(failure, f"{CASELIST} {WEEKS[1]}:") == [
             f"{CASELIST} {WEEKS[1]}: manifest withheld for 5 suppressed row(s) "
-            f"(sha256 {', '.join(one[:12] for one in digests('suppressed', 5)[:3])} and 2 more), "
-            f"2 row(s) at a held path (sha256 {', '.join(one[:12] for one in digests('held', 2))}), "
+            f"(sha256 {first_prefixes(digests('suppressed', 5))} and 2 more), "
+            f"2 row(s) at a held path (sha256 {first_prefixes(digests('held', 2))}), "
             "1 skipped member row(s) at a held path (RM-2026-09)"
         ]
-        assert len(lines) <= len(WEEKS) + 7, lines
+        assert len(lines) == FIXED_LINES + len(("environment", "bucket", "snapshots")) + len(WEEKS), lines
 
     def test_a_blocked_plans_message_names_no_digest_and_the_json_keeps_them_all(self) -> None:
         failure = publish_blocked()
@@ -506,14 +527,16 @@ class TestThePublishPanels:
         assert lines_starting(failure, f"{CASELIST} {AGREEING}") == []
         assert lines_starting(failure, f"{CASELIST} {WEEKS[0]}:") == [
             f"{CASELIST} {WEEKS[0]}: manifest withheld, {MANY + 1} source(s) failed "
-            f"(sha256 {', '.join(one[:12] for one in sorted((*digests('failed', MANY), *digests('checksum', 1)))[:3])} "
+            f"(sha256 {first_prefixes((*digests('failed', MANY), *digests('checksum', 1)))} "
             f"and {MANY - 2} more): CHECKSUM_MISMATCH 1, STORE_UNAVAILABLE {MANY}"
         ]
         assert lines_starting(failure, f"{CASELIST} {WEEKS[1]}:") == [
             f"{CASELIST} {WEEKS[1]}: manifest failed (STORE_UNAVAILABLE)"
         ]
         assert lines[0] == f"2 snapshot(s) not complete in the bucket; {MANY + 1} source(s) failed"
-        assert len(lines) <= len(WEEKS) + 7, lines
+        assert len(lines) == FIXED_LINES + len(("environment", "bucket", "snapshots", "sources")) + len(
+            WEEKS
+        ), lines
 
 
 class TestTheParsePanels:
@@ -522,10 +545,14 @@ class TestTheParsePanels:
 
         lines = panel_lines(failure)
 
-        assert f"failed: PARSE_TIMEOUT 10, UNREADABLE_DOCX 40" in lines
-        assert "failure rate: 17.2% of the 290 source(s) tried, over the 5.0% threshold" in lines
-        assert len(lines_starting(failure, "publish:")) == 1
-        assert len(lines) <= 9, lines
+        assert "sources: 300 attempted, 240 parsed, 10 unsupported, 50 failed" in lines
+        assert "failed: PARSE_TIMEOUT 10, UNREADABLE_DOCX 40" in lines
+        assert lines_starting(failure, "publish:") == [
+            "publish: 6 uploaded, 0 skipped, 0 suppressed, 31 failed"
+        ]
+        assert len(lines) == FIXED_LINES + len(("environment", "caselist", "sources", "failed", "publish")), (
+            lines
+        )
 
     def test_an_incomplete_publish_names_a_few_objects_by_prefix_and_counts_the_rest(self) -> None:
         failure = parse_publish_incomplete()
@@ -534,11 +561,12 @@ class TestTheParsePanels:
 
         assert line == (
             "not confirmed: 30 source file(s) "
-            f"(sha256 {', '.join(one[:12] for one in digests('unconfirmed', 30)[:3])} and 27 more), "
+            f"(sha256 {first_prefixes(digests('unconfirmed', 30))} and 27 more), "
             "1 aggregate(s) (occurrences.jsonl): CHECKSUM_MISMATCH 1, STORE_UNAVAILABLE 30"
         )
         assert "aggregates: withheld" in panel_lines(failure)
-        assert len(panel_lines(failure)) <= 8, panel_lines(failure)
+        counts = ("environment", "caselist", "objects", "aggregates", "not confirmed")
+        assert len(panel_lines(failure)) == FIXED_LINES + len(counts), panel_lines(failure)
 
 
 class TestThePullPanel:
@@ -551,15 +579,15 @@ class TestThePullPanel:
         for stage in ("publish", "parse", "report"):
             assert len(lines_starting(failure, f"{stage}:")) == 1, lines
         assert lines_starting(failure, "download:") == lines_starting(failure, "import:") == []
-        assert len(lines) <= 3 + 8, lines
+        assert len(lines) == FIXED_LINES + len(("stages",)) + 3, lines
 
     def test_the_publish_stages_digests_are_a_few_prefixes_and_a_count(self) -> None:
         (line,) = lines_starting(pull_incomplete(), "publish:")
 
         assert line == (
             f"publish: 12 object(s) published; incomplete: {CASELIST} {WEEKS[0]}: "
-            f"(sha256 {', '.join(one[:12] for one in digests('failed', MANY)[:3])} and {MANY - 3} more); "
-            f"{CASELIST} {WEEKS[1]}: (sha256 {', '.join(one[:12] for one in digests('later', 2))})"
+            f"(sha256 {first_prefixes(digests('failed', MANY))} and {MANY - 3} more); "
+            f"{CASELIST} {WEEKS[1]}: (sha256 {first_prefixes(digests('later', 2))})"
         )
 
     def test_the_parse_fix_command_stays_readable_in_the_hint(self) -> None:
@@ -586,7 +614,7 @@ class TestTheVerifyPanels:
         assert lines_starting(failure, "no snapshot named:") == [
             "no snapshot named: 1 card(s) unverified (CARD_INVALID)"
         ]
-        assert len(lines) <= 3 + 6, lines
+        assert len(lines) == FIXED_LINES + len(("cards", "reasons")) + 3, lines
 
     def test_an_invalid_manifest_names_where_it_is_invalid_and_not_the_file(self) -> None:
         lines = panel_lines(verify_invalid_manifest())

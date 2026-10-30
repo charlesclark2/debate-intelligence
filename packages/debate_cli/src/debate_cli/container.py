@@ -103,16 +103,32 @@ which permission set is it signed in as. `debate-research doctor --evidence-prof
 (`v1-e34-t22`), so that a setting naming a profile this machine does not have is found by a
 person, before the weekly pull finds it.
 
-## Why the AWS adapters are imported inside the factory
+## Why every integration is imported inside its factory
 
-`debate_core.integrations.s3` is imported where it is used rather than at the top of this module,
-and the reason is not style: boto3 is an *optional* dependency of `debate-core`, under the `aws`
-extra, and `debate-research --help` should not depend on it. `debate-cli` itself requires the
-extras its wiring needs (`aws`, `docx`, `opencaselist`, v1-e01-t17), so an installed build has
-them. If one is missing anyway, the missing dependency arrives only when a command reaches the
-factory, and the root error handler reports it with the fix for that kind of installation:
-reinstall at a fixed tag for an installed build, `uv sync` for a checkout
-(:func:`debate_cli.installation.incomplete_installation_failure`).
+Every `debate_core.integrations` module is imported inside the method that builds with it, never at
+the top of this module, so importing this module, or `debate_cli.app`, loads none of them
+(`v1-e01-t39`; `packages/debate_cli/tests/test_container_factories.py` holds it). Add an adapter
+the same way. There are three reasons, and none is style:
+
+* **Optional dependencies.** boto3 (the `aws` extra), lxml (`docx`), httpx (`http`) and the
+  extraction libraries are optional dependencies of `debate-core`, and `debate-research --help`
+  should not depend on them. `debate-cli` itself requires the extras its wiring needs (`aws`,
+  `docx`, `opencaselist`, v1-e01-t17), so an installed build has them. If one is missing anyway,
+  the missing dependency arrives only when a command reaches the factory, and the root error
+  handler reports it with the fix for that kind of installation: reinstall at a fixed tag for an
+  installed build, `uv sync` for a checkout
+  (:func:`debate_cli.installation.incomplete_installation_failure`).
+* **Startup.** `--help` and `--version` pay for no adapter, and a command for only its own.
+* **Test selection.** Every command module reaches this module through `debate_cli.context`, so
+  an integration imported at the top would reach every command, and through `debate_cli.app`
+  every test that runs one. `scripts/affected_tests.py` reads an import inside a method as that
+  method's, and a command's `cli.services.<name>` as reaching method `<name>`, so a change to an
+  adapter selects the tests of the commands whose factories build with it.
+
+An integration that fails to import therefore fails only the commands that build with it. A test
+builds every factory under several settings and checks that between them they import every
+integration the post-install check below finds, so such a failure still fails `ci` (the PM's
+condition of 2026-10-27).
 
 ## The post-install check reads this module
 
@@ -240,36 +256,6 @@ from debate_core.application.verify_manifest import VerifyManifest
 from debate_core.domain import new_id
 from debate_core.domain.caselist import Event
 from debate_core.domain.model_contracts import ModelProvider
-from debate_core.integrations.landscape.analytic_text_store import LocalAnalyticTextStore
-from debate_core.integrations.landscape.classification_store import (
-    LANDSCAPE_DIRECTORY,
-    LocalClassificationStore,
-)
-from debate_core.integrations.landscape.plan_text_store import LocalPlanTextStore
-from debate_core.integrations.landscape.yaml_taxonomy_repository import YamlTaxonomyRepository
-from debate_core.integrations.local import (
-    BLOB_DIRECTORY,
-    FsEvidenceObjectStore,
-    FsSnapshotStore,
-    SqliteArticleRepository,
-    SqliteDatabase,
-    archive_reader,
-)
-from debate_core.integrations.local.fs_version_store import FsEvidenceVersionStore
-from debate_core.integrations.local.parsed_store import LocalParsedStore
-from debate_core.integrations.local.run_state_files import LocalRunStateFiles
-from debate_core.integrations.local.search_index import SqliteSearchIndexWriter
-from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
-from debate_core.integrations.local.suppression_list import (
-    local_removal_log_file,
-    local_suppression_list_file,
-)
-from debate_core.integrations.local.version_directories import LocalVersionDirectories
-from debate_core.integrations.models.factory import build_model_router
-from debate_core.integrations.models.model_mode import ModelMode
-from debate_core.integrations.models.prompt_registry import DEFAULT_PROMPT_DIRECTORY, PromptRegistry
-from debate_core.integrations.models.routing_policy import RoutingPolicy
-from debate_core.integrations.models.usage import UsageLog
 from debate_core.retrieval.extraction import ContentTypeDispatcher
 
 if TYPE_CHECKING:  # pragma: no cover - imported for the type checker only; see the factories
@@ -279,6 +265,9 @@ if TYPE_CHECKING:  # pragma: no cover - imported for the type checker only; see 
     from debate_core.application.caselist.backfile_survey import BackfileSurvey
     from debate_core.application.caselist_login import ScheduledLogin, SecretText, TabroomPasswordSecret
     from debate_core.integrations.docx_parser import DebateDocxParser
+    from debate_core.integrations.local import SqliteDatabase
+    from debate_core.integrations.models.model_mode import ModelMode
+    from debate_core.integrations.models.usage import UsageLog
     from debate_core.integrations.opencaselist import CaselistTokenStore, OpenCaselistClient
 
 __all__ = [
@@ -356,6 +345,8 @@ def validating_routing(settings_loader: Callable[[], Settings]) -> Callable[[], 
     """
 
     def load() -> Settings:
+        from debate_core.integrations.models.routing_policy import RoutingPolicy
+
         settings = settings_loader()
         RoutingPolicy.from_settings(settings)
         return settings
@@ -494,6 +485,8 @@ class ServiceContainer:
         repository shares one connection — that is what makes the pragmas, the migration run and
         the transaction boundary singular (see `debate_core.integrations.local.sqlite_db`).
         """
+        from debate_core.integrations.local import SqliteDatabase
+
         return self.singleton("database", lambda: SqliteDatabase.open(self.settings.storage.data_dir))
 
     def read_archive(self, source: Path) -> Iterator[ArchiveEntry]:
@@ -503,6 +496,8 @@ class ServiceContainer:
         `caselist.max_unpacked_bytes`: what `caselist import`, `caselist import-openev` and the
         weekly pull all read an archive with.
         """
+        from debate_core.integrations.local import archive_reader
+
         caselist = self.settings.caselist
         return archive_reader.read_archive(
             source,
@@ -516,6 +511,8 @@ class ServiceContainer:
         `caselist.max_full_archive_bytes` and `caselist.max_full_archive_unpacked_bytes`; a weekly
         is still read by :meth:`read_archive`, under the weekly ceilings.
         """
+        from debate_core.integrations.local import archive_reader
+
         caselist = self.settings.caselist
         return archive_reader.read_archive(
             source,
@@ -529,6 +526,8 @@ class ServiceContainer:
         The same directory the pull is built with, so the removal cannot purge one inbox while the
         pull reads another; zips are listed and rewritten under the reader's own ceilings.
         """
+        from debate_core.integrations.local import archive_reader
+
         settings = self.settings
         caselist = settings.caselist
         return CaselistInbox(
@@ -550,6 +549,8 @@ class ServiceContainer:
 
     def archive_digest(self, source: Path) -> str:
         """The SHA-256 an import records for the archive itself, by the same reader's rules."""
+        from debate_core.integrations.local import archive_reader
+
         return archive_reader.archive_digest(source)
 
     def openev_upstream_paths(self) -> dict[int, str]:
@@ -562,6 +563,8 @@ class ServiceContainer:
 
     def evidence_object_path(self, key: ObjectKey) -> Path:
         """The file this machine's evidence store keeps the named object `key` at: a manifest."""
+        from debate_core.integrations.local import FsEvidenceObjectStore
+
         return FsEvidenceObjectStore(self.settings.storage.data_dir).path_for(key)
 
     def caselist_card_stats(self) -> CaselistCardStatsService:
@@ -570,6 +573,8 @@ class ServiceContainer:
         Reads only: the local caselist repository for disclosures, and the fingerprint thresholds
         from `settings.fingerprints`.
         """
+        from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
+
         return self.singleton(
             "caselist_card_stats",
             lambda: CaselistCardStatsService(
@@ -596,8 +601,17 @@ class ServiceContainer:
         every on-topic source's paragraphs through the same worker pool, caching derived fields under the
         data directory, and reads again only the texts the report quotes.
         """
-        # Imported here, not at module scope: lxml is loaded only by a command that needs the parser.
         from debate_core.integrations.docx_parser import DebateDocxParser
+        from debate_core.integrations.landscape.analytic_text_store import LocalAnalyticTextStore
+        from debate_core.integrations.landscape.classification_store import (
+            LANDSCAPE_DIRECTORY,
+            LocalClassificationStore,
+        )
+        from debate_core.integrations.landscape.plan_text_store import LocalPlanTextStore
+        from debate_core.integrations.landscape.yaml_taxonomy_repository import YamlTaxonomyRepository
+        from debate_core.integrations.local import FsEvidenceObjectStore
+        from debate_core.integrations.local.parsed_store import LocalParsedStore
+        from debate_core.integrations.models.model_mode import ModelMode
 
         settings = self.settings
         data_dir = settings.storage.data_dir
@@ -650,6 +664,12 @@ class ServiceContainer:
         It replays, or with `record` records, the same cassettes a landscape run replays, under the data
         directory, and scans every cassette of the prompt there after it has run.
         """
+        from debate_core.integrations.landscape.classification_store import LANDSCAPE_DIRECTORY
+        from debate_core.integrations.landscape.yaml_taxonomy_repository import YamlTaxonomyRepository
+        from debate_core.integrations.local import FsEvidenceObjectStore
+        from debate_core.integrations.local.parsed_store import LocalParsedStore
+        from debate_core.integrations.models.model_mode import ModelMode
+
         mode = ModelMode.RECORD if record else ModelMode.REPLAY
         data_dir = self.settings.storage.data_dir
         cassettes = data_dir / LANDSCAPE_DIRECTORY / MODEL_CASSETTES_DIRECTORY
@@ -675,6 +695,12 @@ class ServiceContainer:
         what this machine recorded. Record and live wrap the Bedrock router, imported only then. The
         prompts are read from this checkout's `prompts/`; an installed build has none, and is refused.
         """
+        from debate_core.integrations.landscape.classification_store import LANDSCAPE_DIRECTORY
+        from debate_core.integrations.local.parsed_store import LocalParsedStore
+        from debate_core.integrations.models.factory import build_model_router
+        from debate_core.integrations.models.model_mode import ModelMode
+        from debate_core.integrations.models.prompt_registry import DEFAULT_PROMPT_DIRECTORY, PromptRegistry
+
         settings = self.settings
         root = find_repository_root()
         if root is None or not (root / DEFAULT_PROMPT_DIRECTORY).is_dir():
@@ -709,6 +735,8 @@ class ServiceContainer:
     def usage_log(self) -> UsageLog:
         """This machine's model usage log, `<data dir>/usage/` (`v1-e05-t07`): what `usage` reads, and
         what every real model call a command makes is recorded in and budgeted against."""
+        from debate_core.integrations.models.usage import UsageLog
+
         return UsageLog.for_data_dir(self.settings.storage.data_dir)
 
     @property
@@ -726,6 +754,8 @@ class ServiceContainer:
         return self.singleton("file_quality", self._build_file_quality)
 
     def _build_file_quality(self) -> FileQualityService:
+        from debate_core.integrations.local import FsSnapshotStore
+
         return FileQualityService(
             parser=self._docx_parser(),
             snapshots=FsSnapshotStore(self.settings.storage.data_dir),
@@ -742,8 +772,10 @@ class ServiceContainer:
         return self.singleton("file_build", self._build_file_build)
 
     def _build_file_build(self) -> FileBuildService:
-        # Imported here, not at module scope: lxml is loaded only by a command that builds a file.
         from debate_core.integrations.docx_file_writer.writer import DocxEvidenceFileWriter
+        from debate_core.integrations.local import FsSnapshotStore
+        from debate_core.integrations.local.parsed_store import LocalParsedStore
+        from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
 
         data_dir = self.settings.storage.data_dir
         parser = self._docx_parser()
@@ -786,6 +818,9 @@ class ServiceContainer:
         return self.singleton("file_suggest", lambda: self._build_file_suggest(config_dir))
 
     def _build_file_suggest(self, config_dir: Path) -> FileSuggestService:
+        from debate_core.integrations.local.parsed_store import LocalParsedStore
+        from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
+
         data_dir = self.settings.storage.data_dir
         return FileSuggestService(
             landscape=self.landscape_run(config_dir=config_dir, with_bucket=False),
@@ -798,7 +833,6 @@ class ServiceContainer:
 
     def _docx_parser(self) -> DebateDocxParser:
         """One E31 parser for the file builder's services: the writer and the check read alike."""
-        # Imported here, not at module scope: lxml is loaded only by a command that needs the parser.
         from debate_core.integrations.docx_parser import DebateDocxParser
 
         return self.singleton("docx_parser", DebateDocxParser)
@@ -820,8 +854,8 @@ class ServiceContainer:
         )
 
     def _build_caselist_parse(self, suppression: SuppressionList) -> CaselistParseService:
-        # Imported here, not at module scope: lxml is loaded only by a command that parses.
         from debate_core.integrations.docx_parser import DebateDocxParser
+        from debate_core.integrations.local.parsed_store import LocalParsedStore
 
         settings = self.settings
         parse = settings.parse
@@ -849,6 +883,8 @@ class ServiceContainer:
         return self.singleton("parsed_publisher", self._build_parsed_publisher)
 
     def _build_parsed_publisher(self) -> ParsedStorePublisher:
+        from debate_core.integrations.local import FsEvidenceObjectStore
+
         local = FsEvidenceObjectStore(self.settings.storage.data_dir, subdirectory=PARSED_DIRECTORY)
         return ParsedStorePublisher(
             local=local,
@@ -874,8 +910,10 @@ class ServiceContainer:
     def _build_search_index_build(
         self, event_for_caselist: Callable[[str], Event | None]
     ) -> SearchIndexBuildService:
-        # Imported here, not at module scope: lxml is loaded only by a command that needs the parser.
         from debate_core.integrations.docx_parser import DebateDocxParser
+        from debate_core.integrations.local.parsed_store import LocalParsedStore
+        from debate_core.integrations.local.search_index import SqliteSearchIndexWriter
+        from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
 
         return SearchIndexBuildService(
             parsed_store=LocalParsedStore(self.settings.storage.data_dir),
@@ -897,7 +935,6 @@ class ServiceContainer:
         return self.singleton("search_index_publish", self._build_search_index_publish)
 
     def _build_search_index_publish(self) -> SearchIndexPublishService:
-        # Imported here, not at module scope: lxml is loaded only by a command that needs the parser.
         from debate_core.integrations.docx_parser import DebateDocxParser
 
         return SearchIndexPublishService(
@@ -918,15 +955,14 @@ class ServiceContainer:
         return self.singleton(name, lambda: self._build_version_retention(bucket=bucket))
 
     def _build_version_retention(self, *, bucket: bool) -> VersionDirectoryRetention:
-        # Imported here, not at module scope: lxml is loaded only by a command that needs the parser.
         from debate_core.integrations.docx_parser import DebateDocxParser
+        from debate_core.integrations.local.version_directories import LocalVersionDirectories
 
         parser_version = DebateDocxParser().parser_version
         if not bucket:
             return VersionDirectoryRetention(
                 LocalVersionDirectories(self.settings.storage.data_dir), parser_version=parser_version
             )
-        # Imported here, not at module scope: boto3 is an optional dependency. See the docstring.
         from debate_core.integrations.s3.version_directories import S3VersionDirectories
 
         settings = self.settings
@@ -952,6 +988,8 @@ class ServiceContainer:
         return self.singleton("verify_manifest", self._build_verify_manifest)
 
     def _build_verify_manifest(self) -> VerifyManifest:
+        from debate_core.integrations.local import FsSnapshotStore, SqliteArticleRepository
+
         clock = _PortClock(self.clock())
         snapshots = SnapshotService(
             blobs=FsSnapshotStore(self.settings.storage.data_dir),
@@ -978,11 +1016,10 @@ class ServiceContainer:
         return self.singleton("article_fetch", self._build_article_fetch)
 
     def _build_article_fetch(self) -> ArticleFetch:
-        # Imported here: httpx (`http`) and the extraction libraries (`extraction`) are optional
-        # dependencies of debate-core, and `--help` should not pay for them. See the module docstring.
         from debate_cli import package_version
         from debate_core.integrations.html_extractor import TrafilaturaExtractor
         from debate_core.integrations.http_fetcher import HttpArticleFetcher
+        from debate_core.integrations.local import FsSnapshotStore, SqliteArticleRepository
         from debate_core.integrations.pdf_extractor import PdfExtractor
 
         settings = self.settings
@@ -1031,6 +1068,9 @@ class ServiceContainer:
         return self.singleton("caselist_import", self._build_caselist_import)
 
     def _build_caselist_import(self) -> CaselistImportService:
+        from debate_core.integrations.local import FsSnapshotStore
+        from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
+
         return CaselistImportService(
             caselists=SqliteCaselistRepository(self.database),
             blobs=FsSnapshotStore(self.settings.storage.data_dir),
@@ -1045,6 +1085,8 @@ class ServiceContainer:
         calls it after writing the weekly's manifest, and a weekly imported late leaves no later
         manifest measured without it.
         """
+        from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
+
         return LaterManifests(
             caselists=SqliteCaselistRepository(self.database),
             local=self._local_evidence(),
@@ -1061,6 +1103,8 @@ class ServiceContainer:
         What the offline importers read. Reading it creates nothing: an environment that has never
         had a removal has no `suppression/` directory, and an import does not give it one.
         """
+        from debate_core.integrations.local.suppression_list import local_suppression_list_file
+
         return self.singleton(
             "local_suppression_list",
             lambda: RecordedSuppressionList(local_suppression_list_file(self.settings.storage.data_dir)),
@@ -1079,6 +1123,8 @@ class ServiceContainer:
 
     def _suppression_list_in(self, data_dir: Path) -> RecordedSuppressionList:
         """:meth:`suppression_list` over `data_dir`'s copy: this environment's, or a restored one."""
+        from debate_core.integrations.local.suppression_list import local_suppression_list_file
+
         bucket = self._evidence_bucket()
         return RecordedSuppressionList(
             local_suppression_list_file(data_dir),
@@ -1098,6 +1144,9 @@ class ServiceContainer:
         return self.singleton("openev_import", self._build_openev_import)
 
     def _build_openev_import(self) -> OpenEvImportService:
+        from debate_core.integrations.local import FsSnapshotStore
+        from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
+
         return OpenEvImportService(
             caselists=SqliteCaselistRepository(self.database),
             blobs=FsSnapshotStore(self.settings.storage.data_dir),
@@ -1121,8 +1170,8 @@ class ServiceContainer:
         )
 
     def _build_evidence_sync(self, blob_prefix: str | None) -> EvidenceSyncService:
-        # Imported here, not at module scope: boto3 is an optional dependency and `--help` must
-        # work without it. See this module's docstring.
+        from debate_core.integrations.local import BLOB_DIRECTORY, FsEvidenceObjectStore
+        from debate_core.integrations.local.suppression_list import local_suppression_list_file
         from debate_core.integrations.s3 import S3EvidenceObjectStore
 
         settings = self.settings
@@ -1211,7 +1260,8 @@ class ServiceContainer:
         return self.singleton("caselist_status", self._build_caselist_status)
 
     def _build_caselist_status(self) -> CaselistStatusService:
-        # Imported here, not at module scope: boto3 is an optional dependency. See the docstring.
+        from debate_core.integrations.local.fs_version_store import FsEvidenceVersionStore
+        from debate_core.integrations.local.suppression_list import local_removal_log_file
         from debate_core.integrations.s3 import S3EvidenceVersionStore
 
         storage = self.settings.storage
@@ -1253,7 +1303,13 @@ class ServiceContainer:
         return self.singleton("caselist_removal", self._build_caselist_removal)
 
     def _build_caselist_removal(self) -> CaselistRemovalService:
-        # Imported here, not at module scope: boto3 is an optional dependency. See the docstring.
+        from debate_core.integrations.local import BLOB_DIRECTORY
+        from debate_core.integrations.local.fs_version_store import FsEvidenceVersionStore
+        from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
+        from debate_core.integrations.local.suppression_list import (
+            local_removal_log_file,
+            local_suppression_list_file,
+        )
         from debate_core.integrations.s3 import S3EvidenceVersionStore
 
         settings = self.settings
@@ -1420,7 +1476,6 @@ class ServiceContainer:
         itself, so no variable or AWS config entry can send its evidence store elsewhere
         (`v1-e01-t21`).
         """
-        # Imported here, not at module scope: boto3 is an optional dependency. See the docstring.
         from debate_core.integrations.s3 import build_s3_client
 
         s3 = self.settings.storage.s3
@@ -1452,7 +1507,6 @@ class ServiceContainer:
         return self.singleton("bucket_run_lock", self._build_bucket_run_lock)
 
     def _build_bucket_run_lock(self) -> BucketRunLock:
-        # Imported here, not at module scope: boto3 is an optional dependency. See the docstring.
         from debate_core.integrations.s3 import build_s3_client
         from debate_core.integrations.s3.run_lock_object import S3LockObject
 
@@ -1496,6 +1550,8 @@ class ServiceContainer:
 
     def _run_state_in(self, data_dir: Path, suppression: SuppressionList) -> RunState:
         """:meth:`run_state` over `data_dir`: this environment's, or a copy's (`v1-e40-t06`)."""
+        from debate_core.integrations.local.run_state_files import LocalRunStateFiles
+
         return RunState(
             bucket=self._evidence_bucket(),
             files=LocalRunStateFiles(data_dir),
@@ -1528,7 +1584,6 @@ class ServiceContainer:
         return self.singleton("run_state_restore", self._build_run_state_restore)
 
     def _build_run_state_restore(self) -> RunStateRestore:
-        # Imported here, not at module scope: lxml is loaded only by a command that needs the parser.
         from debate_core.integrations.docx_parser import DebateDocxParser
 
         def state_in(data_dir: Path) -> RunState:
@@ -1552,7 +1607,6 @@ class ServiceContainer:
         return self.singleton("bucket_run", self._build_bucket_run)
 
     def _build_bucket_run(self) -> BucketRun:
-        # Imported here, not at module scope: lxml is loaded only by a command that needs the parser.
         from debate_core.integrations.docx_parser import DebateDocxParser
 
         bucket = bool(self.settings.storage.s3.bucket)
@@ -1590,6 +1644,8 @@ class ServiceContainer:
 
     def _local_evidence(self, data_dir: Path | None = None) -> LocalEvidence:
         """This machine's evidence store, or (`v1-e40-t04`) the same view of a scratch directory."""
+        from debate_core.integrations.local import BLOB_DIRECTORY, FsEvidenceObjectStore
+
         data_dir = self.settings.storage.data_dir if data_dir is None else data_dir
         objects = FsEvidenceObjectStore(data_dir)
         blobs = FsEvidenceObjectStore(data_dir, subdirectory=BLOB_DIRECTORY.parent)
@@ -1605,7 +1661,6 @@ class ServiceContainer:
         return self.singleton("evidence_bucket", self._build_evidence_bucket)
 
     def _build_evidence_bucket(self) -> EvidenceObjectStore:
-        # Imported here, not at module scope: boto3 is an optional dependency. See the docstring.
         from debate_core.integrations.s3 import S3EvidenceObjectStore
 
         settings = self.settings
@@ -1648,6 +1703,9 @@ class ServiceContainer:
         return self.singleton("caselist_sync", lambda: self._build_caselist_sync(event_for_caselist))
 
     def _build_caselist_sync(self, event_for_caselist: Callable[[str], Event | None]) -> CaselistSyncService:
+        from debate_core.integrations.local import FsSnapshotStore
+        from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
+
         settings = self.settings
         caselist = settings.caselist
         # The bucket first (`v1-e34-t24`). A profile the AWS config does not define stops it being
@@ -1744,8 +1802,8 @@ class ServiceContainer:
         return self.singleton("search_index_store_check", self._build_search_index_store_check)
 
     def _build_search_index_store_check(self) -> SearchIndexStoreCheck:
-        # Imported here, not at module scope: lxml is loaded only by a command that needs the parser.
         from debate_core.integrations.docx_parser import DebateDocxParser
+        from debate_core.integrations.local.parsed_store import LocalParsedStore
 
         settings = self.settings
         return SearchIndexStoreCheck(
@@ -1757,7 +1815,6 @@ class ServiceContainer:
         )
 
     def _pull_search_index(self, event_for_caselist: Callable[[str], Event | None]) -> SearchIndexRefresh:
-        # Imported here, not at module scope: lxml is loaded only by a command that needs the parser.
         from debate_core.integrations.docx_parser import DebateDocxParser
 
         settings = self.settings
@@ -1867,7 +1924,6 @@ class ServiceContainer:
     def _build_tub_account_administration(
         self, environment: str, user_pool_id: str, profile: str | None
     ) -> AccountAdministration:
-        # Imported here, not at module scope: boto3 is an optional dependency. See the docstring.
         from debate_core.integrations.cloudwatch_audit import (
             ACCOUNT_CHANGES_STREAM,
             CloudWatchAuditSink,
@@ -2002,9 +2058,10 @@ class ServiceContainer:
     def _build_backfile_import(
         self, event_for_caselist: Callable[[str], Event | None]
     ) -> BackfileImportService:
-        # Imported here, not at module scope: lxml is loaded only by a command that needs the parser.
         from debate_core.application.caselist.backfile_import import BackfileImportService
         from debate_core.integrations.docx_parser import DebateDocxParser
+        from debate_core.integrations.local import FsSnapshotStore
+        from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
 
         settings = self.settings
         # The E34 gate first: an installation that has not turned the API on refuses before any
@@ -2050,7 +2107,6 @@ class ServiceContainer:
         return self.singleton("opencaselist_client", self._build_opencaselist_client)
 
     def _build_opencaselist_client(self) -> OpenCaselistClient:
-        # Imported here for the same reason the S3 adapters are: `--help` should not pay for httpx.
         from debate_cli import package_version
         from debate_core.integrations.opencaselist import OpenCaselistClient
 

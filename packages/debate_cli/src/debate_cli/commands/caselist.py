@@ -1299,7 +1299,7 @@ class UnknownCaselistEvent(ConfigurationError):
         super().__init__(
             f"this build does not know which event {caselist!r} debates, so it cannot tell a legal "
             f"side from an illegal one; pass --event, or add the slug prefix to the table in "
-            f"debate_cli.commands.caselist (known prefixes: {known})",
+            f"debate_cli.caselist_events (known prefixes: {known})",
             field="--event",
             source="cli",
         )

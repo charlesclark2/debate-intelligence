@@ -9,7 +9,9 @@ tests that read what broke), then the ones with the shortest chain back to it, i
 mention comes first since the PM batch of 2026-10-27 (x): by chain and path alone, `exit_codes.py`'s
 break ran ten slow bucket-mode files that never read `RETRIEVAL_FAILURE` and was not caught, so
 validate-dev's slow tier failed on `v1.1.0-dev.160`. Ordering by recorded durations is
-`v1-e01-t40`.)
+`v1-e01-t40`.) A break whose changed line holds no such name may name the test that reads what it
+changed (`read_by`, v1-e01-t39), when that test is further from it than the nearest ten: it must be
+selected, and it runs first.
 The clone is reset after each break and its bytes compared with the original, and this worktree is
 never written to.
 
@@ -58,6 +60,9 @@ class PlantedBreak:
     path: str
     old: str
     new: str
+    # The test that reads what the break changed, when it is further from the break than the nearest
+    # ten: it must be selected, and it runs first (v1-e01-t39).
+    read_by: str | None = None
 
 
 CORE = "packages/debate_core/src/debate_core"
@@ -132,6 +137,18 @@ PLANTED_BREAKS = [
         "tests/fixtures/extraction/news-article.html",
         '<meta property="og:title" content="Scientists say mammoth revival is years away">',
         '<meta property="og:title" content="Scientists say a planted revival is years away">',
+    ),
+    # v1-e01-t39: an integration the container imports inside one factory. Only `caselist retire`'s
+    # test reads what it changed, through `cli.services.version_retention`, so the break is caught
+    # only if the selection follows the command to the factory and the test to the command. That
+    # test is five steps from the break, behind every test that runs the app with arguments the
+    # script cannot read, so it is named.
+    PlantedBreak(
+        "debate_core: a lazily imported integration names the wrong place, read through a command's factory",
+        f"{CORE}/integrations/local/version_directories.py",
+        '        return "this machine"\n',
+        '        return "this planted machine"\n',
+        read_by="packages/debate_cli/tests/test_caselist_retire.py",
     ),
     PlantedBreak(
         "pyproject.toml: an import-linter contract is renamed, and nothing else changes",
@@ -269,6 +286,9 @@ def plant_and_run(clone: Path, planted: PlantedBreak) -> SelectedRun:
             reached,
             key=lambda test: (not names_any(clone / test, names), reached[test].count(", which "), test),
         )[:NEAREST_TESTS_RUN]
+        if planted.read_by is not None:
+            assert planted.read_by in reached, f"{planted.read_by} is not selected:\n{chosen.stdout}"
+            nearest = [planted.read_by, *(test for test in nearest if test != planted.read_by)]
         sources = os.pathsep.join(str(path) for path in sorted(clone.glob("packages/*/src")))
         ran = subprocess.run(
             [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-n", "0", "-x", *nearest],

@@ -1,7 +1,7 @@
 """Tests for `scripts/caselist_run_deploy.sh` and `ops/caselist_run/check_image.sh` (`v1-e40-t03`).
 
 As for the pilot's deploy script, the script runs against a throwaway checkout in `tmp_path`, and
-every tool it calls (`git`, `gh`, `docker`, `aws`) is a stub that appends its argv to a log.
+every tool it calls (`git`, `gh`, `docker`, `aws`) is a stub that records its argv, one file per call.
 Nothing here builds an image, reaches a registry, GitHub, an AWS account or the network. `python3`
 is the real one: the script edits the task definition's JSON with it.
 
@@ -128,13 +128,22 @@ class DeployRun:
         return [call for call in self.calls_to("aws") if all(word in call for word in words)]
 
 
+# Each call is recorded in a file of its own, under the next call number free in STUB_CALL_DIR.
+# The script pipes `aws ecr get-login-password` into `docker login`, so two stubs run at once, and
+# when both appended to one log, a printf at a time, their words interleaved: under load a record
+# read `aws --regiondocker us-east-1 ...` (`v1-e40-t14`). `mkdir` either creates a call number's
+# directory or fails because another call has it, so no two calls share one, and a call made after
+# another has finished always gets a higher number.
 STUB_PREAMBLE = """#!/usr/bin/env bash
 set -euo pipefail
+shopt -s nullglob
+call_number=0
+for recorded in "${STUB_CALL_DIR}"/*; do call_number=$((call_number + 1)); done
+until mkdir "${STUB_CALL_DIR}/${call_number}" 2> /dev/null; do call_number=$((call_number + 1)); done
 {
   printf '%s' "$(basename "$0")"
   for argument in "$@"; do printf '\\t%s' "${argument}"; done
-  printf '\\n'
-} >> "${STUB_CALL_LOG}"
+} > "${STUB_CALL_DIR}/${call_number}/argv"
 """
 
 
@@ -148,7 +157,7 @@ def _write_stub(directory: Path, name: str, body: str) -> None:
 class World:
     root: Path
     stub_dir: Path
-    call_log: Path
+    call_dir: Path
     registered_file: Path
 
     branch: str = "main"
@@ -277,13 +286,14 @@ exit 0
 
     def deploy(self, *arguments: str) -> DeployRun:
         self.write_stubs()
-        self.call_log.write_text("", encoding="utf-8")
+        shutil.rmtree(self.call_dir, ignore_errors=True)
+        self.call_dir.mkdir()
         self.registered_file.unlink(missing_ok=True)
         environment = {
             "PATH": f"{self.stub_dir}:{self.root / '.sandbox-bin'}",
             "HOME": str(self.root),
             "TMPDIR": str(self.root / ".tmp"),
-            "STUB_CALL_LOG": str(self.call_log),
+            "STUB_CALL_DIR": str(self.call_dir),
         }
         completed = subprocess.run(
             [
@@ -298,9 +308,8 @@ exit 0
             timeout=60,
         )
         calls = [
-            line.split("\t")
-            for line in self.call_log.read_text(encoding="utf-8").splitlines()
-            if line.strip()
+            (call / "argv").read_text(encoding="utf-8").split("\t")
+            for call in sorted(self.call_dir.iterdir(), key=lambda call: int(call.name))
         ]
         registered = (
             json.loads(self.registered_file.read_text(encoding="utf-8"))
@@ -337,7 +346,7 @@ def world(tmp_path: Path) -> Iterator[World]:
     yield World(
         root=root,
         stub_dir=stub_dir,
-        call_log=tmp_path / "calls.log",
+        call_dir=tmp_path / "calls",
         registered_file=tmp_path / "registered.json",
     )
 
@@ -502,6 +511,18 @@ def test_every_aws_call_is_made_as_the_deployer_profile_in_us_east_1(world: Worl
 
     assert run.returncode == 0, run.output
     assert all(call[:2] == ["--region", "us-east-1"] for call in run.calls_to("aws"))
+
+
+def test_docker_signs_in_with_the_registry_password_on_stdin_never_as_an_argument(world: World) -> None:
+    """The script's one pipeline, so these two calls run at the same time (`v1-e40-t14`)."""
+    run = world.deploy("dev", DEV_TAG)
+
+    assert run.returncode == 0, run.output
+    assert run.aws_calls("get-login-password") == [["--region", "us-east-1", "ecr", "get-login-password"]]
+    assert run.calls_starting("docker", "login") == [
+        ["login", "--username", "AWS", "--password-stdin", f"{ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com"]
+    ]
+    assert not [call for call in run.calls if "stub-registry-password" in call]
 
 
 def test_before_apply_b_the_script_stops_after_the_push_and_says_which_apply_is_next(world: World) -> None:

@@ -74,7 +74,8 @@ from debate_cli.context import CliContext, cli_context, command_name
 from debate_cli.exit_codes import ExitCode, exit_code_for_failure_codes
 from debate_cli.options.bucket_environment import CONFIRM_PROD_FLAG
 from debate_cli.output import CliOutput, CommandFailure, JsonValue, OutputMode, TableSpec
-from debate_core.application.caselist.parsed_publish import ParsedPublishReport
+from debate_cli.panel_summaries import by_count, digest_of_key, every_value_in_full, some_prefixes
+from debate_core.application.caselist.parsed_publish import ParsedObjectOutcome, ParsedPublishReport
 from debate_core.application.caselist.publish_plan import validate_publish_target
 from debate_core.application.caselist.publish_service import SourceResult
 from debate_core.application.caselist_parse import (
@@ -82,6 +83,7 @@ from debate_core.application.caselist_parse import (
     FailureListing,
     ParseRunReport,
 )
+from debate_core.application.errors import UNMODELLED_ERROR_CODE
 from debate_core.application.settings import Settings
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
 
@@ -343,7 +345,22 @@ def failures_summary(listing: FailureListing) -> dict[str, JsonValue]:
 def _failure(
     report: ParseRunReport, published: ParsedPublishReport | None, payload: dict[str, JsonValue]
 ) -> CommandFailure | None:
+    """`PARSE_FAILURE_RATE_EXCEEDED`, or else the publish's failure, if it had one.
+
+    The details are the whole `--json` record; the panel prints counts in their place (`v1-e30-t27`).
+    """
     if report.exceeds_threshold:
+        panel: dict[str, JsonValue] = {
+            "environment": payload["environment"],
+            "caselist": f"{report.plan.caselist}, version {report.plan.version}",
+            "sources": (
+                f"{report.attempted} attempted, {report.parsed} parsed, "
+                f"{sum(report.unsupported.values())} unsupported, {sum(report.failed.values())} failed"
+            ),
+            "failed": ", ".join(f"{reason} {count}" for reason, count in sorted(report.failed.items())),
+        }
+        if published is not None:
+            panel["publish"] = _published_counts(published)
         return CommandFailure(
             code=PARSE_FAILURE_RATE_EXCEEDED,
             message=(
@@ -354,6 +371,7 @@ def _failure(
             exit_code=ExitCode.DOMAIN_FAILURE,
             details=payload,
             hint="`caselist parse --failures` lists them; parse.failure_rate_threshold sets the threshold.",
+            panel_details=every_value_in_full(panel),
         )
     return None if published is None else _publish_failure(published, payload)
 
@@ -362,10 +380,20 @@ def _publish_failure(published: ParsedPublishReport, payload: dict[str, JsonValu
     """`PARSED_PUBLISH_INCOMPLETE`, whichever of `--publish` and `--publish-only` published.
 
     Either way the directory is whole by now, so the hint is the publish alone: `--publish` again
-    would rebuild it for nothing.
+    would rebuild it for nothing. The panel names the objects not confirmed by count, digest prefix
+    and code, and `--json`'s details every key (`v1-e30-t27`).
     """
     if published.succeeded:
         return None
+    panel: dict[str, JsonValue] = {
+        "environment": payload["environment"],
+        "caselist": f"{published.caselist}, version {published.version}",
+        "objects": _published_counts(published),
+        "aggregates": "withheld" if published.aggregates_withheld else "published",
+    }
+    failed = [outcome for outcome in published.objects if outcome.result is SourceResult.FAILED]
+    if failed:
+        panel["not confirmed"] = _not_confirmed(failed)
     return CommandFailure(
         code="PARSED_PUBLISH_INCOMPLETE",
         message=(
@@ -378,7 +406,26 @@ def _publish_failure(published: ParsedPublishReport, payload: dict[str, JsonValu
             f"`debate-research caselist parse --caselist {published.caselist} --publish-only` retries "
             "the publish without rebuilding; a checksum mismatch needs a person."
         ),
+        panel_details=every_value_in_full(panel),
     )
+
+
+def _published_counts(published: ParsedPublishReport) -> str:
+    """`6 uploaded, 0 skipped, 0 suppressed, 31 failed`: every object of the version directory."""
+    return ", ".join(f"{published.count(result)} {result.value}" for result in SourceResult)
+
+
+def _not_confirmed(failed: list[ParsedObjectOutcome]) -> str:
+    """The objects not confirmed: source files by digest prefix, aggregates by name, then their codes."""
+    sources = sorted(
+        digest_of_key(outcome.key).removesuffix(".jsonl") for outcome in failed if not outcome.aggregate
+    )
+    aggregates = [outcome.key.rsplit("/", 1)[-1] for outcome in failed if outcome.aggregate]
+    what = [f"{len(sources)} source file(s) {some_prefixes(sources)}"] if sources else []
+    if aggregates:
+        what.append(f"{len(aggregates)} aggregate(s) ({', '.join(sorted(aggregates))})")
+    codes = by_count(outcome.error_code or UNMODELLED_ERROR_CODE for outcome in failed)
+    return f"{', '.join(what)}: {codes}"
 
 
 def _parse_table(

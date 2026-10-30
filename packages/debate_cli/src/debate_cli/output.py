@@ -117,7 +117,9 @@ class CommandFailure:
     The panel prints each of `details` as a line, and the JSON envelope carries them whole. Where
     `details` are a whole report, as `caselist status`'s are, `panel_details` is what the panel
     prints instead: counts and digest prefixes a person reads, while the envelope's `details` keep
-    every field (`v1-e30-t24`).
+    every field (`v1-e30-t24`). Where the message itself names every failed digest, as `caselist
+    publish`'s and `caselist pull`'s do, `panel_message` is the panel's first line in its place,
+    and the envelope's `message` is unchanged (`v1-e30-t27`).
     """
 
     code: str
@@ -127,6 +129,8 @@ class CommandFailure:
     hint: str | None = None
     panel_details: Mapping[str, JsonValue] | None = None
     """What the panel prints in place of :attr:`details`, or `None` to print them. Never in the JSON."""
+    panel_message: str | None = None
+    """What the panel prints in place of :attr:`message`, or `None` to print it. Never in the JSON."""
 
     @classmethod
     def from_exception(cls, exception: BaseException, *, hint: str | None = None) -> CommandFailure:
@@ -322,7 +326,7 @@ def _render_table(spec: TableSpec) -> Table:
 
 
 def _render_failure(failure: CommandFailure) -> Panel:
-    body = Text(failure.message)
+    body = Text(failure.message if failure.panel_message is None else failure.panel_message)
     shown = failure.details if failure.panel_details is None else failure.panel_details
     for key, value in shown.items():
         body.append(f"\n{key}: {value}", style="dim")

@@ -42,15 +42,18 @@ import typer
 
 from debate_cli.context import CliContext, cli_context, command_name
 from debate_cli.exit_codes import ExitCode
-from debate_cli.output import CommandFailure, TableSpec
+from debate_cli.output import CommandFailure, JsonValue, TableSpec
+from debate_cli.panel_summaries import by_count, every_value_in_full
 from debate_core.application.verify_manifest import (
     INVALID_MANIFEST_CODE,
     UNVERIFIED_CODE,
     VERIFICATION_COULD_NOT_RUN_CODE,
+    CardVerdict,
     InvalidManifest,
     ManifestVerificationReport,
     VerificationCouldNotRun,
 )
+from debate_core.domain import VerificationStatus
 
 __all__ = ["verify"]
 
@@ -93,7 +96,6 @@ def verify(
     # counts: the report is already on the screen.
     if not cli.output.is_json:
         cli.output.success(command_name(ctx), payload, display=_table(report))
-        payload = {"total": report.total, "verified": report.verified, "unverified": report.unverified}
     _end(cli, ctx, _unverified(report, payload))
 
 
@@ -104,13 +106,34 @@ def _end(cli: CliContext, ctx: typer.Context, failure: CommandFailure) -> NoRetu
 
 
 def _unverified(report: ManifestVerificationReport, payload: dict[str, Any]) -> CommandFailure:
+    """`UNVERIFIED`, with the whole report in the details and its counts in the panel (`v1-e30-t27`)."""
     return CommandFailure(
         code=UNVERIFIED_CODE,
         message=f"{report.unverified} of {report.total} card(s) could not be verified against their snapshot",
         exit_code=ExitCode.DOMAIN_FAILURE,
         details=payload,
         hint="Re-run with --verbose for each reason's detail. An UNVERIFIED card is never finished evidence.",
+        panel_details=_unverified_panel(report),
     )
+
+
+def _unverified_panel(report: ManifestVerificationReport) -> dict[str, JsonValue]:
+    """The cards by count, the reasons by code, and one line per snapshot an unverified card names."""
+    unverified = [verdict for verdict in report.cards if verdict.status is not VerificationStatus.VERIFIED]
+    panel: dict[str, JsonValue] = {
+        "cards": (
+            f"{report.total} in the manifest, {report.verified} verified, {report.unverified} unverified"
+        ),
+        "reasons": by_count(code.value for verdict in unverified for code in verdict.reason_codes),
+    }
+    by_snapshot: dict[str | None, list[CardVerdict]] = {}
+    for verdict in unverified:
+        by_snapshot.setdefault(verdict.snapshot_id, []).append(verdict)
+    for snapshot, cards in by_snapshot.items():
+        codes = ", ".join(dict.fromkeys(code.value for verdict in cards for code in verdict.reason_codes))
+        named = "no snapshot named" if snapshot is None else f"snapshot {snapshot}"
+        panel[named] = f"{len(cards)} card(s) unverified ({codes})"
+    return every_value_in_full(panel)
 
 
 def _invalid_manifest(invalid: InvalidManifest, source: str) -> CommandFailure:
@@ -125,6 +148,11 @@ def _invalid_manifest(invalid: InvalidManifest, source: str) -> CommandFailure:
             "manifest": source,
         },
         hint="Nothing was verified. The schema is packages/debate_core/schemas/card_manifest.v1.json.",
+        # The file's path is the one the command was given, which can be under a home directory: the
+        # envelope keeps it, the panel does not (`v1-e30-t27`).
+        panel_details=every_value_in_full(
+            {"json_path": invalid.json_path, "problem": invalid.problem, "violations": invalid.violations}
+        ),
     )
 
 

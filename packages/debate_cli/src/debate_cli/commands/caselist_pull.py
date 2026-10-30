@@ -131,6 +131,7 @@ from debate_cli.caselist_events import event_for_caselist
 from debate_cli.context import cli_context, command_name
 from debate_cli.exit_codes import ExitCode, exit_code_for_failure_codes
 from debate_cli.output import CommandFailure, JsonValue, TableSpec
+from debate_cli.panel_summaries import every_value_in_full, shorten_digests
 from debate_core.application.caselist_sync import (
     RUN_SUMMARY_DIRECTORY,
     RunSummary,
@@ -413,16 +414,28 @@ def _pull_failure(summary: RunSummary, payload: dict[str, JsonValue]) -> Command
     Its exit code is `3` when every failure behind a stage that had to finish is one a retry may
     cure, and `1` as soon as one is not (:attr:`RunSummary.failure_codes`,
     :func:`~debate_cli.exit_codes.exit_code_for_failure_codes`, `v1-e34-t13`).
+
+    The details are the whole summary and the message every failed stage's reason, which names a
+    publish's failed digests whole, for `--json`. The panel prints the failed stages by name, and
+    one line per stage with its reason and its digests as a few prefixes (`v1-e30-t27`). The hint,
+    with each parsed store's own command (`v1-e34-t31`), is the same in both.
     """
     failed = [record for record in summary.stages if record.outcome is StageOutcome.FAILED]
     named = "; ".join(f"{record.stage}: {record.reason}" for record in failed)
     exit_code = exit_code_for_failure_codes(summary.failure_codes)
+    did_not_complete = f"{len(failed)} stage(s) of the caselist pull did not complete"
+    # No environment or bucket line: the table above the panel names the run and its environment.
+    panel: dict[str, JsonValue] = {"stages": f"{len(summary.stages)} recorded, {len(failed)} failed"}
+    for record in failed:
+        panel[str(record.stage)] = shorten_digests(record.reason or "no reason recorded")
     return CommandFailure(
         code="CASELIST_PULL_INCOMPLETE",
-        message=f"{len(failed)} stage(s) of the caselist pull did not complete — {named}",
+        message=f"{did_not_complete} — {named}",
         exit_code=exit_code,
         details=payload,
         hint=_hint_for(failed, retryable=exit_code is ExitCode.RETRIEVAL_FAILURE),
+        panel_message=f"{did_not_complete}: {', '.join(str(record.stage) for record in failed)}",
+        panel_details=every_value_in_full(panel),
     )
 
 

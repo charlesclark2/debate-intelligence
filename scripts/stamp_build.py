@@ -18,14 +18,16 @@ What `stamp` does, and why:
 * **Build info.** Writes `debate_cli/_build_info.py` (version, channel, commit, build time, workflow
   run, tag), which `debate_cli.build_info` and `debate-research --version` read, and the same
   values to `<dist>/build-info.json`, a release asset.
-* **Configuration.** Copies the committed `config/profiles/*.toml` and `config/model_routing.*.yaml`
-  into `debate_cli/_bundled_config/config/`, so an installed build reads the profiles it was built
-  and validated with (including the `[caselist] api_enabled` gate) from any working directory.
+* **Configuration.** Copies the committed `config/profiles/*.toml`, `config/model_routing.*.yaml`
+  and `config/model_pricing.yaml` into `debate_cli/_bundled_config/config/`, so an installed build
+  reads the profiles it was built and validated with (including the `[caselist] api_enabled` gate)
+  from any working directory, and prices its model calls from the pricing file beside its routing
+  files: without it, a call under a budget limit is refused as unpriced (v1-e05-t12).
 
 `check-wheels` refuses a build that is not exactly the two expected wheels at the stamped version,
-whose debate_cli does not pin debate_core, that lacks the build info or bundled profiles, or that
-contains anything that looks like a secret or local data: `.env` files, a `secrets/` directory, a
-`caselist_token`, SQLite files, a `.debate-research` data directory.
+whose debate_cli does not pin debate_core, that lacks the build info, the bundled profiles, routing
+files or pricing file, or that contains anything that looks like a secret or local data: `.env`
+files, a `secrets/` directory, a `caselist_token`, SQLite files, a `.debate-research` data directory.
 
 Standard library only.
 """
@@ -68,6 +70,7 @@ REQUIRED_CLI_MEMBERS = (
     "debate_cli/_bundled_config/config/profiles/prod.toml",
     "debate_cli/_bundled_config/config/model_routing.dev.yaml",
     "debate_cli/_bundled_config/config/model_routing.prod.yaml",
+    "debate_cli/_bundled_config/config/model_pricing.yaml",
 )
 
 FORBIDDEN_DIRECTORY_NAMES = frozenset({"secrets", ".debate-research", ".data", ".venv"})
@@ -132,14 +135,18 @@ def render_build_info_module(info: Mapping[str, str]) -> str:
 
 
 def bundle_configuration(repository: Path) -> list[Path]:
-    """Copy the committed profiles and routing files into the CLI package; return what was copied."""
+    """Copy the committed profiles, routing files and pricing file into the CLI package; return them."""
     source = repository / "config"
     destination = repository / BUNDLED_CONFIG / "config"
     if destination.parent.exists():
         shutil.rmtree(destination.parent)
     (destination / "profiles").mkdir(parents=True)
     copied: list[Path] = []
-    for pattern, subdirectory in (("profiles/*.toml", "profiles"), ("model_routing.*.yaml", "")):
+    for pattern, subdirectory in (
+        ("profiles/*.toml", "profiles"),
+        ("model_routing.*.yaml", ""),
+        ("model_pricing.yaml", ""),
+    ):
         for file in sorted(source.glob(pattern)):
             target = destination / subdirectory / file.name
             shutil.copyfile(file, target)

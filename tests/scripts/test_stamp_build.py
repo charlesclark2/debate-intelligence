@@ -3,17 +3,42 @@
 Wheels here are small zip files written by hand with the members and METADATA a real `uv build`
 produces, so the checks are exercised without building anything. The stamp itself runs against a
 copy of the files it edits, never the checkout the tests run in.
+
+A stamped build carries `config/model_pricing.yaml` beside its routing files (v1-e05-t12), and the
+router an installed build makes prices its calls from that copy. Those tests load the stamped
+configuration as `debate_cli.build_info` hands it to `load_settings`, and put a stand-in where
+Bedrock would be: no model is called. Their prices are a synthetic file's, written into the copied
+checkout before the stamp, and every expected cost is worked out by hand beside it.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
+import os
 import shutil
 import sys
 import zipfile
+from collections.abc import Iterator, Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from pydantic import BaseModel
+
+from debate_core.application.budget import UnpricedModelError
+from debate_core.application.ports.model_router import ModelRouter
+from debate_core.application.settings import Settings, load_settings
+from debate_core.domain.model_contracts import (
+    EmbeddingResponse,
+    ModelParams,
+    ModelPrompt,
+    ModelResponse,
+    ModelUsage,
+    RerankResponse,
+    TaskClass,
+)
+from debate_core.integrations.models import RoutingPolicy, build_model_router
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
@@ -111,6 +136,7 @@ def test_stamp_bundles_the_committed_profiles_and_routing_files(checkout: Path, 
 
     bundled = checkout / sb.BUNDLED_CONFIG / "config"
     assert sorted(path.relative_to(bundled).as_posix() for path in bundled.rglob("*") if path.is_file()) == [
+        "model_pricing.yaml",
         "model_routing.dev.yaml",
         "model_routing.example.yaml",
         "model_routing.prod.yaml",
@@ -198,6 +224,17 @@ def test_a_wheel_without_bundled_profiles_is_refused(tmp_path: Path) -> None:
     ]
 
 
+def test_a_wheel_without_the_bundled_pricing_file_is_refused(tmp_path: Path) -> None:
+    dist = good_dist(tmp_path / "dist")
+    members = cli_members()
+    members.pop("debate_cli/_bundled_config/config/model_pricing.yaml", None)
+    write_wheel(dist, "debate_cli", VERSION, members, [f"debate-core=={VERSION}"])
+
+    assert sb.check_wheels(dist, VERSION) == [
+        f"debate_cli-{VERSION}-py3-none-any.whl: missing debate_cli/_bundled_config/config/model_pricing.yaml"
+    ]
+
+
 def test_a_version_mismatch_is_refused(tmp_path: Path) -> None:
     problems = sb.check_wheels(good_dist(tmp_path / "dist"), "0.1.0.dev4")
 
@@ -227,3 +264,153 @@ def test_secrets_and_local_data_are_refused(member: str, tmp_path: Path) -> None
 def test_ordinary_members_are_allowed() -> None:
     assert sb.forbidden_member("debate_cli/commands/config.py") is None
     assert sb.forbidden_member("debate_cli/_bundled_config/config/profiles/dev.toml") is None
+
+
+# --------------------------------------------------------------------------------------------
+# The pricing file a stamped build carries, and the router that prices from it (v1-e05-t12)
+# --------------------------------------------------------------------------------------------
+
+SYNTHETIC_PRICES = """\
+version: 1
+models:
+  {model_id}:
+    input_usd_per_1k_tokens: 0.003
+    output_usd_per_1k_tokens: 0.007
+    as_of: 2026-10-30
+    source: https://pricing.example.test/bedrock
+"""
+"""Prices for dev's high_volume model that no committed file holds, so a cost names its file."""
+
+INPUT_TOKENS, OUTPUT_TOKENS = 1000, 2000
+SYNTHETIC_COST_USD = 0.017
+"""1000 input tokens at $0.003 per 1K is $0.003; 2000 output tokens at $0.007 per 1K is $0.014."""
+
+
+class Answer(BaseModel):
+    ok: bool
+
+
+class AnsweringRouter:
+    """Stands where Bedrock would: answers every structured call, reporting the tokens it is told to."""
+
+    def __init__(self, policy: RoutingPolicy) -> None:
+        self.policy = policy
+        self.calls = 0
+
+    async def generate_structured[OutputT: BaseModel](
+        self,
+        task_class: TaskClass,
+        prompt: ModelPrompt,
+        schema: type[OutputT],
+        params: ModelParams | None = None,
+    ) -> ModelResponse[OutputT]:
+        self.calls += 1
+        return ModelResponse[schema](
+            output=schema.model_validate({"ok": True}),
+            route=self.policy.resolve(task_class, params),
+            usage=ModelUsage(input_tokens=INPUT_TOKENS, output_tokens=OUTPUT_TOKENS, latency_ms=5.0),
+            prompt_id=prompt.prompt_id,
+            prompt_version=prompt.prompt_version,
+            invoked_at=datetime.now(UTC),
+        )
+
+    async def embed(self, texts: Sequence[str]) -> EmbeddingResponse:
+        raise NotImplementedError("these tests make structured calls only")
+
+    async def rerank(self, query: str, documents: Sequence[str]) -> RerankResponse:
+        raise NotImplementedError("these tests make structured calls only")
+
+
+@pytest.fixture
+def no_inherited_settings(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """No `DEBATE_*` variable from the shell, and the working directory a checkout: the real one."""
+    for name in list(os.environ):
+        if name.startswith("DEBATE_"):
+            monkeypatch.delenv(name, raising=False)
+    monkeypatch.chdir(REPO_ROOT)
+    yield
+
+
+def stamped_with_synthetic_prices(checkout: Path, tmp_path: Path) -> Path:
+    """Stamp `checkout` with synthetic prices for dev's high_volume model; return its bundled root."""
+    route = RoutingPolicy.load(checkout / "config" / "model_routing.dev.yaml").resolve(TaskClass.HIGH_VOLUME)
+    (checkout / "config" / "model_pricing.yaml").write_text(
+        SYNTHETIC_PRICES.format(model_id=route.model_id), encoding="utf-8"
+    )
+    sb.stamp(checkout, info(), tmp_path / "dist")
+    return checkout / sb.BUNDLED_CONFIG
+
+
+def installed_dev_settings(bundled_root: Path, tmp_path: Path) -> Settings:
+    """What an installed dev build loads (`debate_cli.build_info.settings_loader`), budgets and all."""
+    return load_settings(
+        overrides={"storage": {"data_dir": str(tmp_path / "data")}},
+        env_file=tmp_path / "no.env",
+        build_channel="dev",
+        bundled_config_root=bundled_root,
+    )
+
+
+def live_router(settings: Settings, tmp_path: Path) -> tuple[ModelRouter, list[AnsweringRouter]]:
+    """The router `settings` build in live mode, and the stand-in it was given for Bedrock."""
+    stand_ins: list[AnsweringRouter] = []
+
+    def real_router(policy: RoutingPolicy, *, aws_profile: str | None) -> ModelRouter:
+        stand_ins.append(AnsweringRouter(policy))
+        return stand_ins[-1]
+
+    router = build_model_router(
+        settings, mode="live", environ={}, real_router=real_router, cassette_dir=tmp_path / "cassettes"
+    )
+    return router, stand_ins
+
+
+def one_high_volume_call(router: ModelRouter) -> None:
+    prompt = ModelPrompt(prompt_id="stamp.priced-call", prompt_version="1.0.0", variables={})
+    asyncio.run(router.generate_structured(TaskClass.HIGH_VOLUME, prompt, Answer))
+
+
+def usage_records(settings: Settings) -> list[dict[str, object]]:
+    return [
+        json.loads(line)
+        for day in sorted((settings.storage.data_dir / "usage").glob("*.jsonl"))
+        for line in day.read_text(encoding="utf-8").splitlines()
+    ]
+
+
+@pytest.mark.usefixtures("no_inherited_settings")
+def test_a_stamped_build_s_router_prices_a_call_from_the_pricing_file_it_carries(
+    checkout: Path, tmp_path: Path
+) -> None:
+    bundled_root = stamped_with_synthetic_prices(checkout, tmp_path)
+    settings = installed_dev_settings(bundled_root, tmp_path)
+    # The dev profile sets a daily and a monthly limit, so the call is priced before it is made too.
+    assert settings.models.budget_usd_daily is not None and settings.models.budget_usd_monthly is not None
+    assert settings.models.routing_file == bundled_root / "config" / "model_routing.dev.yaml"
+    router, stand_ins = live_router(settings, tmp_path)
+
+    one_high_volume_call(router)
+
+    assert [stand_in.calls for stand_in in stand_ins] == [1]
+    [record] = usage_records(settings)
+    assert (record["input_tokens"], record["output_tokens"]) == (INPUT_TOKENS, OUTPUT_TOKENS)
+    assert record["estimated_cost_usd"] == pytest.approx(SYNTHETIC_COST_USD)
+
+
+@pytest.mark.usefixtures("no_inherited_settings")
+def test_a_stamped_build_without_its_pricing_file_refuses_a_call_under_its_budget(
+    checkout: Path, tmp_path: Path
+) -> None:
+    """Fail closed: a build whose pricing file is missing does not treat its calls as free."""
+    bundled_root = stamped_with_synthetic_prices(checkout, tmp_path)
+    missing = bundled_root / "config" / "model_pricing.yaml"
+    missing.unlink(missing_ok=True)
+    settings = installed_dev_settings(bundled_root, tmp_path)
+    router, stand_ins = live_router(settings, tmp_path)
+
+    with pytest.raises(UnpricedModelError, match="cannot be priced") as refused:
+        one_high_volume_call(router)
+
+    assert f"{missing} (not found)" in str(refused.value)
+    assert [stand_in.calls for stand_in in stand_ins] == [0]
+    assert usage_records(settings) == []

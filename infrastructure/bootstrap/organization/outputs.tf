@@ -35,7 +35,7 @@ output "budget_names" {
   description = "Budget names, for confirming a test alert arrived from the right budget."
   value = concat(
     [for budget in aws_budgets_budget.environment_monthly : budget.name],
-    [aws_budgets_budget.bedrock_monthly.name],
+    [module.model_spend_budget.budget_name],
   )
 }
 

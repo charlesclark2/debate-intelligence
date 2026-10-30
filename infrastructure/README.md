@@ -24,6 +24,7 @@ that keeps binding.
 | [`modules/evidence_search/`](modules/evidence_search/) | One environment's student evidence search pilot: the function behind CloudFront, the Cognito user pool, the audit log, the TubDeployer and TubAccounts permission sets | `v1-e39-t04-pilot-infrastructure` |
 | [`modules/caselist_run/`](modules/caselist_run/) | One environment's weekly caselist run in the cloud: the credentials key, the Tabroom password and caselist token secrets, the login and run roles, the CaselistSecretWriter permission set, and the scheduled login; the run's VPC, cluster, image repository, task definition and schedule, and the CaselistRunDeployer permission set | `v1-e40-t02-secrets-token-store-and-login`, `v1-e40-t03-run-image-and-schedule` (E40) |
 | [`modules/bedrock_access/`](modules/bedrock_access/) | One environment's BedrockInvoker permission set: `bedrock:InvokeModel` on the inference profiles and models the routing files name, and its assignment | `v1-e05-t08-bedrock-invoke-access` |
+| [`modules/model_spend_budget/`](modules/model_spend_budget/) | The account's model spend budget, `debate-shared-bedrock-monthly`: $100 a month on the services and usage types model calls are billed under, notices at $50, $80 and $100 actual and $100 forecast. Called from `bootstrap/organization` | `v1-e05-t16-bedrock-budget-alarm` |
 | [`envs/dev/`](envs/dev/), [`envs/prod/`](envs/prod/) | The two environment roots | `v1-e29-t02-terraform-bootstrap` |
 
 There is no `envs/stage`, and adding one means changing ADR-0013 first.

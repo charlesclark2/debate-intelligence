@@ -258,9 +258,51 @@ that email too.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-31
 
 **Notes:**
+
+In bucket mode, a failed parse stage now names the cloud cure and no command, everywhere it speaks.
+1. **ac1 passes.**
+   * Red was 7 failed, 7 passed, and every failure was the `--publish` sentence where the cloud's was
+     expected. Green is 14 passed.
+   * The hint, the banner, the login banner's sentence, the record's reason and the details' hint
+     are each pinned whole. None of them holds `--publish` or `caselist parse`.
+   * The real command, against a seeded bucket, says the same in its envelope, its details and its
+     banner.
+   * Local mode is unchanged: v1-e34-t31's 244 pass untouched, and mutants 2a to 2c catch any leak of
+     the cloud wording into it.
+2. **ac2 passes, by schema and by each build's own reader.**
+   * dev.155, dev.164 and 650a655 read all five scenarios with `refused or skipped: 0`.
+   * Mutant 3a makes dev.164's own reader refuse 15, so the check can fail.
+   * dev.164's stored schema is a good addition: the cloud image is now a reader the tests hold to.
+3. **Decisions accepted:**
+   * a `bucket_mode` keyword of its own, both keywords off by default;
+   * the banners deciding from the recorded `bucket_run`, which also gives dev.164's details the
+     cloud cure;
+   * the fix line as a sentence, and one wording shared from `caselist_sync`.
+4. **Deviation 1: (a), amend v1-e40-t08.** I checked it: its entry clears "when that snapshot's
+   parse completes", and a parse that completes but fails to publish would clear it, which is the
+   gap you found. The PM's next batch amends it so that the entry clears only when the snapshot's
+   parsed store is published complete. The next cloud run then parses and publishes what is owed,
+   whether or not it imports, and the hint's "that imports into" goes in that task. Until then
+   your wording is the true one, and it stays.
+5. **Deviation 2 accepted.** The context named a section that does not exist. Pointing at "A failed
+   parse stage", which links to Step 8, is right, and no heading is needed for now.
+6. **Follow-ups 2 and 3:** one p3 task in the next batch, so that bucket mode's other parse and login
+   hints point at the cloud run rather than the Mac:
+   * the login banner's `--publish-pending`;
+   * `_FAILURE_RATE_FIX`;
+   * `NewerFingerprintTable.fix`;
+   * the pending reason's `").;` join, which it can tidy.
+7. **Closing checks:** under agreement 10, the affected set (281 files) is left to the PR's `ci`.
+   * Each cut-off run had no failure before its cut, and the renamed file passed whole on its own.
+   * The always-run list (626), the node criterion (244) and the wording and record files (468)
+     pass, as do ruff, pyright, lint-imports, the thin handlers, the docs index, the command blocks
+     and the specs.
+   * Its Goal is Succeeded and nothing is left to the operator, so the PR is a plain `scripts/task pr`.
+8. **Merge:** once the PR's `ci` is green. The new wording reaches the email only with the next
+   image, as the report says.

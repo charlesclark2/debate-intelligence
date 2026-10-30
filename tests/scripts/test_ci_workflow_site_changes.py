@@ -25,6 +25,7 @@ evaluated from them. Nothing here reaches GitHub or the network.
 
 from __future__ import annotations
 
+import functools
 import os
 import re
 import shutil
@@ -53,6 +54,7 @@ PLANTED_PAGE = "---\ntitle: Results\n---\n\nThe [[TBD]] results summary.\n"
 CLEAN_PAGE = "---\ntitle: Results\n---\n\nThe results summary.\n"
 
 
+@functools.cache
 def ci_jobs() -> dict[str, Any]:
     return yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))["jobs"]
 
@@ -234,6 +236,7 @@ SEGMENT = r"(?:\*\*|[\w.-]*\*?[\w.-]*)"
 SUPPORTED_PATTERN = re.compile(rf"!?(?:{SEGMENT}/)*{SEGMENT}")
 
 
+@functools.cache
 def pattern_regex(pattern: str) -> re.Pattern[str]:
     """A picomatch pattern, with dorny's `dot: true`, as a regular expression over a whole path."""
     out = ""
@@ -268,6 +271,12 @@ def flatten(patterns: Iterable[Any]) -> list[str]:
     return out
 
 
+@functools.cache
+def filters(text: str) -> dict[str, list[str]]:
+    """A paths-filter step's `filters:` block, each filter's patterns flattened."""
+    return {name: flatten(patterns) for name, patterns in yaml.safe_load(text).items()}
+
+
 def filter_steps() -> list[dict[str, Any]]:
     return [
         step
@@ -284,8 +293,8 @@ def changes_outputs(changed: Iterable[str], context: Mapping[str, str]) -> dict[
         ran = holds(step["if"], context) if "if" in step else True
         quantifier = step["with"].get("predicate-quantifier", "some")
         combine = all if quantifier == "every" else any
-        for name, patterns in yaml.safe_load(step["with"]["filters"]).items():
-            found = any(combine(matches(p, path) for p in flatten(patterns)) for path in files)
+        for name, patterns in filters(step["with"]["filters"]).items():
+            found = any(combine(matches(p, path) for p in patterns) for path in files)
             # A skipped step's outputs read as the empty string.
             values[f"steps.{step['id']}.outputs.{name}"] = ("true" if found else "false") if ran else ""
     return {
@@ -305,8 +314,8 @@ def test_every_pattern_in_the_filters_is_one_this_test_reads_as_dorny_does() -> 
     for step in steps:
         assert set(step["with"]) <= {"filters", "predicate-quantifier"}
         assert step["with"].get("predicate-quantifier", "some") in {"some", "every"}
-        for patterns in yaml.safe_load(step["with"]["filters"]).values():
-            for pattern in flatten(patterns):
+        for patterns in filters(step["with"]["filters"]).values():
+            for pattern in patterns:
                 assert SUPPORTED_PATTERN.fullmatch(pattern), pattern
 
 

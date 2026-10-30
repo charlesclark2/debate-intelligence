@@ -84,12 +84,12 @@ and `git checkout HEAD --`, then compared byte for byte with a saved copy):
 
 | Check | Result |
 |---|---|
-| `uv run scripts/affected_tests.py --run` | AFFECTED_RESULT |
+| `uv run scripts/affected_tests.py --run` | `Affected set: 42 test files, pytest exited 0 after 71 s.`; `1988 passed in 70.03s` (load ~12) |
 | `uv run ruff format --check` and `uv run ruff check` on the changed files | clean (format had rewrapped two lines in the tests; committed) |
 | `uv run pyright` on the changed packages | No package changed. pyright's project scope is `packages/` (`include = ["packages"]`). Run on the changed files directly, it reports one unresolved `sys.path` import per test file: `affected_tests` (new) and `task_helper` (already on dev). CI does not type-check `tests/scripts`. |
 | `uv run lint-imports` | `Contracts: 18 kept, 0 broken.` |
-| `uv run scripts/validate_specs.py` | VALIDATE_RESULT |
-| `uv run scripts/check_command_blocks.py` | COMMAND_BLOCKS_RESULT |
+| `uv run scripts/validate_specs.py` | `OK: 492 files, 40 epics, 430 tasks, 22 releases` |
+| `uv run scripts/check_command_blocks.py` | with `--base origin/dev`: OK, no comment in 566 shell code blocks in 197 Markdown files, this report included; `scripts/docs_index.py --check`: up to date |
 
 ## Files changed
 

@@ -70,6 +70,7 @@ from debate_cli.commands import (
     landscape,
     store,
     tub_index,
+    tub_index_prune,
     tub_users,
     usage,
     verify,
@@ -144,6 +145,7 @@ def register_commands(app: typer.Typer) -> None:
     search_index = command_group("index", "Build the search pilot's index and publish it to a bucket.")
     search_index.command("build")(tub_index.build)
     search_index.command("publish")(tub_index.publish)
+    search_index.command("prune")(tub_index_prune.prune)
     search_pilot.add_typer(search_index)
     pilot_accounts = command_group(
         "users", "The coach's accounts for the pilot: add, list, reset, disable, remove."

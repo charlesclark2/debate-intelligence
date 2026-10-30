@@ -231,6 +231,7 @@ from debate_core.application.ports.evidence_store import EvidenceObjectStore, Ob
 from debate_core.application.ports.notifier import Notifier, NullNotifier
 from debate_core.application.ports.suppression import SuppressionList
 from debate_core.application.search_index_build import SearchIndexBuildService
+from debate_core.application.search_index_prune import SearchIndexPrune
 from debate_core.application.search_index_publish import SearchIndexPublishService
 from debate_core.application.search_index_refresh import SEARCH_INDEX_DIRECTORY, SearchIndexRefresh
 from debate_core.application.search_index_store_check import SearchIndexStoreCheck
@@ -941,6 +942,25 @@ class ServiceContainer:
             bucket=self._evidence_bucket(),
             parser_version=DebateDocxParser().parser_version,
             minimum_share_percent=self.settings.caselist.search_index_minimum_share_percent,
+        )
+
+    def search_index_prune(self) -> SearchIndexPrune:
+        """Build the prune of superseded search index versions in this environment's bucket (`v1-e39-t15`).
+
+        Two credentials, as a removal has: the everyday profile reads `current.json`, which the
+        takedown role may not read, and the takedown profile (`DEBATE_REMOVAL_PROFILE`, built only when
+        the prune first lists) lists and deletes versions under `reports/tub/search/`, which the
+        everyday role may not. Raises :class:`EvidenceStoreNotConfigured` when this environment names
+        no bucket.
+        """
+        return self.singleton(
+            "search_index_prune",
+            lambda: SearchIndexPrune(
+                pointer=self._evidence_bucket(),
+                takedown=self.takedown_access,
+                environment=self.settings.environment.value,
+                clock=self.clock(),
+            ),
         )
 
     def version_retention(self, *, bucket: bool) -> VersionDirectoryRetention:

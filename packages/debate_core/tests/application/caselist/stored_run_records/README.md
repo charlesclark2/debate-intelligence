@@ -15,6 +15,7 @@ are ones an installed build reads, and the reverse.
 | `written_by_the_start_commit/<scenario>.bucket.json` | The source at `0a9c1e6` | Every object that build put under `reports/sync-runs/`, key to body |
 | `run_log_written_by_a_schema_3_build.jsonl`, `run_summary_schema_3.json` | A build before `v1-e34-t13` | Kept by that task; see `test_pull_stage_failure_codes.py` |
 | `details_schema_before_parsed_stores_owed.json` | `v1.1.0-dev.155` (`76b53e7`), the Mac's installed build at the cutover, and `b0cf40f`, the commit on `dev` that `v1-e34-t31` started from | `SyncRunDetails.model_json_schema()`, byte for byte the same from both: what those builds read a run's details with. It allows a key it does not define and refuses one of its own keys with another type. `test_caselist_sync_names_publish_only_per_caselist.py` holds the details this build writes to it |
+| `record_schema_of_the_cloud_image.json` | `v1.1.0-dev.164` (`03b23e2`), the cloud run's image deployed on 2026-10-29 (`v1-e40-t18`) | `SyncRunRecord.model_json_schema()` by that build. It differs from `record_schema_of_the_start_commit.json` only in two descriptions, and is byte for byte what `v1.1.0-dev.155` and `650a655`, the commit `v1-e40-t18` started from, print. Its `SyncRunDetails.model_json_schema()` is byte for byte `details_schema_before_parsed_stores_owed.json`, so that file stands for it too. `test_caselist_sync_names_the_cloud_cure_in_bucket_mode.py` holds the bucket-mode records and details this build writes to both |
 
 The scenarios are the functions of `run_record_scenarios.py`, which gives each build the same
 run to record, so the same file runs against either source. Two things keep that true after
@@ -97,6 +98,15 @@ git archive v1.1.0-dev.155 packages/debate_core/src | tar -x -C "${DEV155}"
 git archive b0cf40f packages/debate_core/src | tar -x -C "${START31}"
 PYTHONPATH="${DEV155}/packages/debate_core/src" "${CHECKOUT}/.venv/bin/python" -c 'import json,sys; from debate_core.application.sync_runs import SyncRunDetails; sys.stdout.write(json.dumps(SyncRunDetails.model_json_schema(), indent=2, sort_keys=True) + "\n")'
 PYTHONPATH="${START31}/packages/debate_core/src" "${CHECKOUT}/.venv/bin/python" -c 'import json,sys; from debate_core.application.sync_runs import SyncRunDetails; sys.stdout.write(json.dumps(SyncRunDetails.model_json_schema(), indent=2, sort_keys=True) + "\n")'
+```
+
+The cloud image's schemas (`v1-e40-t18`), the same way. `DEV164` is its exported source; the second
+line printed the details schema that was compared with `details_schema_before_parsed_stores_owed.json`:
+
+```bash
+git archive v1.1.0-dev.164 packages/debate_core/src | tar -x -C "${DEV164}"
+PYTHONPATH="${DEV164}/packages/debate_core/src" "${CHECKOUT}/.venv/bin/python" -c 'import json,sys; from debate_core.application.sync_runs import SyncRunRecord; sys.stdout.write(json.dumps(SyncRunRecord.model_json_schema(), indent=2, sort_keys=True) + "\n")'
+PYTHONPATH="${DEV164}/packages/debate_core/src" "${CHECKOUT}/.venv/bin/python" -c 'import json,sys; from debate_core.application.sync_runs import SyncRunDetails; sys.stdout.write(json.dumps(SyncRunDetails.model_json_schema(), indent=2, sort_keys=True) + "\n")'
 ```
 
 ## When these may change

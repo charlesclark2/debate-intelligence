@@ -143,6 +143,7 @@ from debate_core.application.caselist_sync import (
     SyncRunInProgress,
     SyncStage,
     append_state_line,
+    cloud_parse_cure,
     fix_for,
     parse_command,
     remove_state_file,
@@ -601,7 +602,8 @@ class SyncRunDetails(BaseModel):
     parsed_stores_owed: tuple[ParsedStoreOwedDetails, ...] = ()
     """Each caselist whose parsed store the parse stage did not publish complete, and whether
     `caselist parse --publish-only` finishes it (`v1-e34-t31`). A key a build from before it passes
-    over; details such a build wrote have none, and their parse stage is named with `--publish`."""
+    over; details such a build wrote have none, and their parse stage is named with `--publish`, or
+    with the cloud cure in bucket mode (`v1-e40-t18`)."""
 
     search_index: SearchIndexCounts | None = None
     """The search index stage's index and size, or `None` when it reached no index (`v1-e39-t09`).
@@ -971,10 +973,11 @@ AUTH_LOGIN_COMMAND: Final = "debate-research caselist auth login"
 PULL_COMMAND: Final = "debate-research caselist pull"
 PUBLISH_PENDING_COMMAND: Final = "debate-research caselist pull --publish-pending"
 PARSE_COMMAND: Final = "debate-research caselist parse --caselist <slug> --publish"
-"""What finishes a parse stage that failed (`v1-e34-t17`), when the run's details do not name each
-caselist's own command (:func:`parse_commands`): details an earlier build wrote, or a stage that owes
-no parsed store, whose failure the hint names. Running the pull again does not: a pull that imports
-nothing parses nothing. The stage's reason in `caselist runs` names the caselists."""
+"""What finishes a local-mode parse stage that failed (`v1-e34-t17`), when the run's details do not
+name each caselist's own command (:func:`parse_commands`): details an earlier build wrote, or a stage
+that owes no parsed store, whose failure the hint names. Running the pull again does not: a pull that
+imports nothing parses nothing. The stage's reason in `caselist runs` names the caselists. Never a
+bucket-mode run's (`v1-e40-t18`)."""
 SEARCH_INDEX_PUBLISH_COMMAND: Final = (
     "DEBATE_ENV={environment} debate-research tub index publish --env {environment} --newest"
 )
@@ -1377,11 +1380,7 @@ def notifications_for(
                         if drifted_again
                         else ""
                     )
-                    + (
-                        f" The parsed store waits too; after the login: {parse_commands(details)}"
-                        if parse_waits
-                        else ""
-                    )
+                    + (_the_parsed_store_waits_too(details) if parse_waits else "")
                     + (
                         f" The search index {index_waits.index_id} waits too; the next run with a session "
                         "publishes it, or after the login: "
@@ -1434,12 +1433,31 @@ def parse_commands(details: SyncRunDetails) -> str:
     alone is owed, and `--publish` for every other, an entry that does not say included. Details
     that name no caselist, every earlier build's among them, give :data:`PARSE_COMMAND`, which
     rebuilds first: what cannot be told is never named `--publish-only`.
+
+    **A bucket-mode run names no command** (`v1-e40-t18`), as its details' `bucket_run` says it was:
+    the cloud run owns the parsed store, and a command run on the operator's Mac would publish the
+    Mac's own working copy over it. Its cure is the next cloud run that imports into each caselist
+    owed (:func:`~debate_core.application.caselist_sync.cloud_parse_cure`), whether or not the
+    details name them.
     """
+    if details.bucket_run is not None:
+        return cloud_parse_cure([one.caselist for one in details.parsed_stores_owed])
     if not details.parsed_stores_owed:
         return PARSE_COMMAND
     return "; ".join(
         parse_command(one.caselist, publish_only=one.publish_only) for one in details.parsed_stores_owed
     )
+
+
+def _the_parsed_store_waits_too(details: SyncRunDetails) -> str:
+    """The login banner's sentence for a parse stage pending on the same login (`v1-e34-t17`).
+
+    In local mode, the commands to run after the login. In bucket mode, the cloud cure, which no
+    login on the operator's Mac brings about (`v1-e40-t18`).
+    """
+    if details.bucket_run is not None:
+        return f" The parsed store waits too: {parse_commands(details)}."
+    return f" The parsed store waits too; after the login: {parse_commands(details)}"
 
 
 def _verdict(retried: bool, *, fix_first: bool) -> tuple[str, str]:

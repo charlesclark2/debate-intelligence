@@ -821,12 +821,37 @@ review; the PM reads every plan before its apply.)
 
 ## A failed parse stage
 
-In bucket mode the weekly run names `caselist parse --caselist <slug> --publish` for a caselist whose
-parsed store it did not publish complete (`v1-e34-t31`). Never run it on the operator's Mac: there it
-rebuilds the Mac's own, older working copy and publishes that over the parsed store the cloud run
-owns. Until the run names a cloud cure itself (`v1-e40-t18`), the cure is the next weekly run, which
-re-parses that caselist and publishes it; if that cannot wait, ask the PM for a run started by hand.
-(Added by the PM, 2026-10-30, from `v1-e34-t31`'s review.)
+When the cloud run's parse stage does not publish a caselist's parsed store, the run names no
+command (`v1-e40-t18`). The stage's hint, in the run's details and in the alert email, reads:
+
+> The cloud run publishes the parsed store of `<slug>`, never the operator's Mac, whose working copy is not the one the cloud run owns: the next weekly run that imports into a caselist rebuilds its parsed store and publishes it, and so does a run started by hand that imports into it (caselist-cloud-run.md, "A failed parse stage").
+
+The email's fix line reads:
+
+> Fix: the next cloud run that imports into `<slug>` publishes that caselist's parsed store: the weekly run, or one started by hand (caselist-cloud-run.md, "A failed parse stage"); never a publish from the operator's Mac
+
+Two caselists are named together (`hspolicy26 and openev` in the hint, `hspolicy26 or openev` in the
+fix line). A parse stage that waited for a login says the same in its reason, and the login email
+ends `The parsed store waits too:` and the fix line's words.
+
+**What to do: usually nothing.** The raw evidence of the week is published; only its parsed store is
+late, and the search index stays at the week before (the index stage is skipped after a failed
+parse). The next Wednesday run that imports into the caselist restores the bucket's parsed store,
+parses every source it lacks, the failed week's among them, rebuilds the aggregates and publishes it.
+
+**The run parses only the caselists it imports into.** A caselist with nothing new on Wednesday
+waits for the next week that has something: for `openev`, the next camp file. A run started by hand
+cures a caselist under the same condition, so one started straight after the failed run finds nothing
+new and parses nothing. If the caselist cannot wait for its next import, ask the PM; a run by hand is
+[Step 8's "One run by hand"](#step-8--the-seed-bucket-mode-and-one-run-by-hand-at-the-cutover-after-v1-e40-t04)
+(the network, then the start, then the watch).
+
+**Never run `caselist parse --caselist <slug> --publish` on the operator's Mac**, nor `--publish-only`.
+There it rebuilds the Mac's own, older working copy and publishes that over the parsed store the
+cloud run owns. A run on an image built before `v1-e40-t18` (today's is `v1.1.0-dev.164`) still names
+`caselist parse --caselist <slug> --publish` in its email; the rule holds for that email too, and the
+cure is the one above. (The rule is the PM's, 2026-10-30, from `v1-e34-t31`'s review; `v1-e40-t18`
+made the run say it.)
 
 ## The deadline, and stopping a run
 

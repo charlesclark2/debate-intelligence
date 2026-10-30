@@ -912,14 +912,17 @@ each with its own (`v1-e34-t31`):
   nothing.
 * `debate-research caselist parse --caselist <slug> --publish`, which rebuilds first, for every
   other caselist: its aggregates may come from the run's own copy of the list alone, which is never
-  published, or its rebuild did not finish. A bucket-mode run, the cloud run's, names this one for
-  every caselist, because its working copy went with its task.
+  published, or its rebuild did not finish.
 
 Two caselists are two commands, separated by `;`. The banner carries the stage's own hint too,
 which says the same, and names `debate-research caselist parse --caselist <slug> --failures` for a
 failure rate over the threshold. A run that a build before `v1-e34-t31` recorded names
 `--caselist <slug> --publish` for every caselist, because its details do not say which rebuild read
 every copy. See [The parse stage](#the-parse-stage).
+
+A bucket-mode run, the cloud run's, names neither (`v1-e40-t18`): its parsed store is the cloud
+run's, and the next cloud run that imports into the caselist publishes it. Never run either command
+on this Mac for it; see [caselist-cloud-run.md, "A failed parse stage"](caselist-cloud-run.md#a-failed-parse-stage).
 
 **A login that will not be enough.** When the session expired after a snapshot had already ended
 incomplete on something no later run cures, the login banner adds a sentence:

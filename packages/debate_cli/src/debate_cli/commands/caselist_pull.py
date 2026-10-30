@@ -60,9 +60,11 @@ reason), in the notification and in the summary's `parsed_stores_owed` (`v1-e34-
 `caselist parse --caselist <slug> --publish-only` (`v1-e31-t30`) where the rebuild is done from
 every copy of the suppression list and only the publish is owed, and `--publish`, which rebuilds
 first, where the aggregates may come from the run's own copy of the list alone, which is never
-published, or the rebuild did not finish. A bucket-mode run names `--publish` for every caselist:
-its working copy goes with it. `--publish-pending` is neither: it completes the snapshot publishes
-an earlier run deferred, never a parsed store's.
+published, or the rebuild did not finish. `--publish-pending` is neither: it completes the snapshot
+publishes an earlier run deferred, never a parsed store's. A bucket-mode run, the cloud run's, names
+no command (`v1-e40-t18`): the next cloud run that imports into the caselist publishes it, and
+nothing is published from the operator's Mac (`docs/runbooks/caselist-cloud-run.md`, "A failed
+parse stage").
 
 When a download, an import or a publish failed, the exit code comes from **what they failed on**
 (`v1-e34-t13`). Each failed stage records the error code of every failure behind it, and

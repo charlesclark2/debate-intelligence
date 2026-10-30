@@ -242,9 +242,41 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-30
 
 **Notes:**
+
+The cause is named, reproduced and fixed where it lives. This is the kind of flaky-test report the
+spec asked for.
+1. **The cause.** The deploy script's one pipeline runs the `aws` and `docker` stubs at once, and each
+   appended its argv to one shared log a word at a time. Under load their words interleaved, so an
+   `aws` record lost `--region` as its first two words.
+2. **The evidence.**
+   * Every other candidate (an environment leak, a shared recording, a sometimes-call, a timeout) was
+     ruled out from the code.
+   * Reproduced outside pytest (3 of 60) and inside it under `-n 6` (2 of 100).
+   * The failing run's own logs show the interleaving.
+   * The finding that most interleavings silently dropped the `aws` call instead of failing is what
+     made the new pipeline test necessary.
+3. **ac1 passes, with the right statistics.** 50 passes alone would be weak at a 2-in-100 rate, so you
+   ran 300 under `-n 6` at load 21 to 35, plus the pipeline test 100 times. The mutant (the shared
+   append log restored) failed 15 of 200 under the same load.
+4. **Decisions accepted:**
+   * the fix in the test, since the pipeline is the safe way to hand Docker the password;
+   * `mkdir` to claim a call number, not a lock or a single write;
+   * call order kept;
+   * the new test of the pipeline's two calls.
+
+   No retry was added and no assertion loosened.
+5. **The extra load** from six self-stopping CPU-bound processes on the operator's Mac was the honest
+   way to reproduce above the original 11.8, and they were stopped after. Fine.
+6. **Follow-up work:** `test_tub_deploy.py` has the same recorder and `tub_deploy.sh` the same
+   pipeline. The PM's next batch files it at E39 p3, with your suggestion of one shared recorder for
+   `tests/scripts`. `test_site_deploy.py` can't race today, so it needs no task.
+7. **The affected set** (51 files) was stopped at 52% with no failure, at load 28 to 31, and is left to
+   the PR's `ci`. The always-run list, all of `tests/scripts` (1,823 passed), ruff, pyright,
+   lint-imports, the specs, the command blocks and the docs index pass.
+8. **Merge:** any time.

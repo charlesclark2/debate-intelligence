@@ -185,6 +185,14 @@ EXPECTED_CONTENT: Final[dict[str, object]] = {
 }
 
 
+def closing(writer: str, path: Path) -> list[Event]:
+    """What a writer does after the rename's directory fsync: since `v1-e30-t30` every inbox purge ends
+    with one more fsync of the inbox, so that a re-run puts down a delete whose fsync failed."""
+    if writer != "inbox_purge rewrite":
+        return []
+    return [("open", str(path.parent)), ("fsync directory", str(path.parent))]
+
+
 @pytest.mark.parametrize("writer", list(WRITERS))
 def test_the_file_is_fsynced_then_renamed_then_its_directory_is_fsynced(
     writer: str, recorded: list[Event], tmp_path: Path
@@ -196,6 +204,7 @@ def test_the_file_is_fsynced_then_renamed_then_its_directory_is_fsynced(
         ("replace", str(path)),
         ("open", str(path.parent)),
         ("fsync directory", str(path.parent)),
+        *closing(writer, path),
     ]
     assert what_it_holds(writer, path) == EXPECTED_CONTENT[writer]
 
@@ -214,11 +223,13 @@ def test_a_rewrite_over_an_earlier_file_fsyncs_its_directory_too(
 
     path = WRITERS[writer](tmp_path)
 
-    assert recorded[-3:] == [
+    ending = [
         ("replace", str(path)),
         ("open", str(path.parent)),
         ("fsync directory", str(path.parent)),
+        *closing(writer, path),
     ]
+    assert recorded[-len(ending) :] == ending
 
 
 @pytest.mark.parametrize("writer", list(WRITERS))

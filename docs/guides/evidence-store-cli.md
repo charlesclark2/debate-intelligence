@@ -191,6 +191,16 @@ from the bucket. Nothing reads them, and store sync no longer moves them. Remove
 Nothing deletes it for you. Run the command it prints once; the line is not in `--json`'s payload
 or the journal.
 
+The dry run looks for that copy before it plans anything, so the line comes first, ahead of the
+table or of a refusal. A bare `store sync` on a machine with blobs still prints it, and then
+refuses with `UNSYNCABLE_KEYSPACE` until you give `--blob-prefix`, exactly as it did before. If the
+check itself cannot be made, for example because the directory cannot be read, the line says so
+with the error code, and the run goes on to the plan, whose result it reports as usual:
+
+```
+STALE PARSED COPY: could not look for one (STORE_ACCESS_DENIED); the plan below does not depend on it.
+```
+
 ```bash
 debate-research --json store sync | jq '.data.skipped_reasons'
 ```

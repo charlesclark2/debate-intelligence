@@ -1853,6 +1853,9 @@ class ServiceContainer:
             # A parse stage's unpublished version directory is still here for `caselist parse
             # --publish-only` in local mode; in bucket mode it goes with the run (`v1-e34-t31`).
             working_copy_outlives_the_run=not self._in_bucket_mode,
+            # And in bucket mode the parsed store is the cloud run's: a parse stage that did not
+            # publish it names the cloud cure, never a command run on the operator's Mac (`v1-e40-t18`).
+            bucket_mode=self._in_bucket_mode,
         )
 
     def search_index_store_check(self) -> SearchIndexStoreCheck:

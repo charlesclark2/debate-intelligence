@@ -43,7 +43,7 @@ spec:
         The earlier builds read every record this build writes, by test;
         caselist-cloud-run.md's "A failed parse stage" names what the run now says.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

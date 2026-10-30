@@ -287,6 +287,7 @@ class Installation:
         measure_first_seen: bool = False,
         status: CaselistStatusService | None = None,
         working_copy_outlives_the_run: bool = True,
+        bucket_mode: bool = False,
     ) -> CaselistSyncService:
         """The pull.
 
@@ -307,6 +308,8 @@ class Installation:
                 over :attr:`bucket` or `compare_with` (`v1-e34-t23`).
             working_copy_outlives_the_run: As the composition root sets it in local mode, which this
                 installation is; false for a bucket-mode run's working copy (`v1-e34-t31`).
+            bucket_mode: As the composition root sets it for the cloud run's bucket mode
+                (`v1-e40-t18`); off, as here, is local mode.
         """
         listed = self.suppression or empty_suppression_list()
         repository = SqliteCaselistRepository(SqliteDatabase.open(self.data_dir))
@@ -353,6 +356,7 @@ class Installation:
                 DEFAULT_BULK_DOWNLOADS_PER_DAY if bulk_downloads_per_day is None else bulk_downloads_per_day
             ),
             working_copy_outlives_the_run=working_copy_outlives_the_run,
+            bucket_mode=bucket_mode,
         )
 
     async def publish(self, caselist: str = CASELIST) -> None:

@@ -20,7 +20,9 @@ build has them.
 For files that carry the key `v1-e34-t31` added to the details (`parsed_stores_owed`), and only for
 those, it also prints the key as written and as the build's model kept it, the parse stage's reason
 in the record, and the notifications the build's own `notifications_for` makes of the record and the
-details it kept: each title and command, and the parsed store's sentence of a login banner.
+details it kept: each title and command, and the parsed store's sentence of a login banner. Since
+`v1-e40-t18` it also prints, for the same files, whether the build kept the details' `bucket_run` and
+the parse stage's hint as it kept it, which is the cloud cure in a bucket-mode run.
 
     python read_sync_run_files.py <directory written> <label of the reader>
 """
@@ -186,6 +188,11 @@ def _print_what_t31_added(
         if not isinstance(owed, str):
             owed = [(one.caselist, one.publish_only) for one in owed]
         print(f"    kept by this build: parsed_stores_owed {owed}")
+        if kept is not None:
+            bucket_run = "kept" if getattr(kept, "bucket_run", None) is not None else "none"
+            parse = kept.stage("parse")
+            hint = parse.hint if parse is not None else None
+            print(f"    kept by this build: bucket_run {bucket_run}; parse hint {hint!r}")
     for record in records:
         for one in record.stages:
             if one.stage == "parse":
@@ -201,9 +208,9 @@ def _print_what_t31_added(
         )
         for notification in sent:
             print(f"  banner {notification.title!r}: fix {notification.fix_command!r}")
-            waits = notification.message.partition(" The parsed store waits too; ")[2]
+            waits = notification.message.partition(" The parsed store waits too")[2]
             if waits:
-                print(f"    the parsed store waits too; {waits}")
+                print(f"    the parsed store waits too{waits}")
 
 
 if __name__ == "__main__":

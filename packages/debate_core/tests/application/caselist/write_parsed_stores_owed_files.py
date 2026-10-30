@@ -17,6 +17,13 @@ put under `reports/` in the bucket (`bucket.json`, key to body):
 * `one_of_each_pending`: the other way round, with no failure. A pending stage, and a login banner.
 * `bucket_mode_publish_refused`: the weekly's publish refused after a rebuild from every copy, in a
   run whose working copy does not outlive it (`--publish`).
+
+Since `v1-e40-t18`, two runs in bucket mode as the composition root builds it, with the bracket of
+`test_caselist_sync_names_the_cloud_cure_in_bucket_mode.py`, whose details record `bucket_run`:
+
+* `cloud_one_of_each_failed`: `one_of_each_failed` in bucket mode. The cloud cure for both.
+* `cloud_pending`: the weekly's rebuild read the run's own copy of the list alone. A pending stage,
+  and a login banner whose parsed-store sentence is the cloud cure.
 """
 
 from __future__ import annotations
@@ -33,6 +40,7 @@ from tests.fixtures.caselist.build_synthetic_archives import build_snapshot_zips
 from debate_core.application.sync_runs import SYNC_RUN_DETAILS_FILENAME, SYNC_RUN_LOG_FILENAME
 from debate_core.integrations.s3 import S3EvidenceObjectStore
 
+from . import test_caselist_sync_names_the_cloud_cure_in_bucket_mode as cloud
 from .test_caselist_sync_names_publish_only_per_caselist import OPENEV, run
 from .test_inbox_retention import CASELIST, Installation
 from .test_pull_stage_failure_codes import outage
@@ -105,3 +113,23 @@ async def test_bucket_mode_publish_refused(
     out()
     await run(installation, refused={CASELIST: outage()}, working_copy_outlives_the_run=False)
     keep(installation, s3_client, evidence_bucket, "bucket_mode_publish_refused")
+
+
+async def test_cloud_one_of_each_failed(
+    installation: Installation, s3_client: S3Client, evidence_bucket: str
+) -> None:
+    out()
+    await cloud.run(
+        installation,
+        bucket_mode=True,
+        with_a_camp_file=True,
+        refused={CASELIST: outage()},
+        local_list_only=[OPENEV],
+    )
+    keep(installation, s3_client, evidence_bucket, "cloud_one_of_each_failed")
+
+
+async def test_cloud_pending(installation: Installation, s3_client: S3Client, evidence_bucket: str) -> None:
+    out()
+    await cloud.run(installation, bucket_mode=True, local_list_only=[CASELIST])
+    keep(installation, s3_client, evidence_bucket, "cloud_pending")

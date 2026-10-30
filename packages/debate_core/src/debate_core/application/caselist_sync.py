@@ -337,13 +337,21 @@ the banners name each one's own command:
   (`working_copy_outlives_the_run`, local mode).
 * `caselist parse --caselist <slug> --publish`, which rebuilds first, for every other: aggregates
   rebuilt from the run's own copy of the list alone, which must never be what is published; a
-  rebuild that raised; and every caselist of a bucket-mode run, whose working copy is on the
-  task's ephemeral storage, so that the directory `--publish-only` would publish, wherever it is
-  run, is not the one the stage rebuilt.
+  rebuild that raised; and every caselist of a run whose working copy goes with it, so that the
+  directory `--publish-only` would publish, wherever it is run, is not the one the stage rebuilt.
 
 Each caselist is decided by what the stage saw of it, never by the machine or the environment, and
 what cannot be told is named `--publish`: details an earlier build wrote name no caselist, and their
 banner gives :data:`~debate_core.application.sync_runs.PARSE_COMMAND`.
+
+**A bucket-mode run names no command** (`v1-e40-t18`). Its working copy is on the cloud task's
+ephemeral storage and the parsed store is the cloud run's, so either command, run on the operator's
+Mac, would rebuild the Mac's own working copy and publish it over the cloud run's. The stage's fix,
+its reason when pending and the banners name the cloud cure instead
+(:func:`cloud_parse_cure`): the next cloud run that imports into the caselist, weekly or started by
+hand, restores the bucket's parsed store, parses what it lacks and publishes it
+(`caselist-cloud-run.md`, "A failed parse stage"). The pull is told it is in bucket mode by the
+composition root (`bucket_mode`); the banners read it from the run's details (`bucket_run`).
 
 The stage is not in :data:`REQUIRED_STAGES`, so by `v1-e34-t13`'s rule none of this changes the
 command's exit status: the run captured everything.
@@ -641,6 +649,7 @@ if TYPE_CHECKING:  # pragma: no cover - sync_runs imports this module, so its ty
 __all__ = [
     "archive_entries",
     "BULK_DOWNLOAD_WINDOW",
+    "CLOUD_PARSE_STAGE_RUNBOOK",
     "DEFAULT_BULK_DOWNLOADS_PER_DAY",
     "DEFAULT_FULL_ARCHIVE_INTERVAL_DAYS",
     "INBOX_PARTIAL_DIRECTORY",
@@ -698,6 +707,7 @@ __all__ = [
     "append_state_line",
     "camp_path_of_manifest_row",
     "caselists_to_parse",
+    "cloud_parse_cure",
     "decide_full_archives",
     "fix_for",
     "full_archive_of_inbox_name",
@@ -1629,6 +1639,31 @@ def parse_command(caselist: str, *, publish_only: bool) -> str:
     """The command that finishes one caselist's parsed store, as the run names it (`v1-e34-t31`)."""
     flag = PARSE_PUBLISH_ONLY if publish_only else PARSE_PUBLISH
     return f"debate-research caselist parse --caselist {caselist} {flag}"
+
+
+CLOUD_PARSE_STAGE_RUNBOOK: Final = 'caselist-cloud-run.md, "A failed parse stage"'
+"""The runbook section a bucket-mode run's parse stage points to (`v1-e40-t18`): what the cloud cure
+is, how to start a run by hand, and why nothing is published from the operator's Mac."""
+
+
+def cloud_parse_cure(caselists: Sequence[str]) -> str:
+    """What finishes a bucket-mode run's unpublished parsed stores, as its banner names it (`v1-e40-t18`).
+
+    No command: the cloud run owns the parsed store, and a command run on the operator's Mac would
+    rebuild the Mac's own working copy and publish it over the cloud run's. The run parses only the
+    caselists it imports into (:func:`caselists_to_parse`), so the cure is the next cloud run that
+    imports into the caselist, weekly or started by hand. `caselists` empty, as in details a build
+    before `v1-e34-t31` wrote, names the caselist by the stage.
+    """
+    named = _or_listed(caselists) if caselists else "a caselist the parse stage names"
+    return (
+        f"the next cloud run that imports into {named} publishes that caselist's parsed store: the weekly "
+        f"run, or one started by hand ({CLOUD_PARSE_STAGE_RUNBOOK}); never a publish from the operator's Mac"
+    )
+
+
+def _or_listed(names: Sequence[str]) -> str:
+    return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} or {names[-1]}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -2915,6 +2950,10 @@ class CaselistSyncService:
             cloud run's working copy is on the task's ephemeral storage, and the parsed store a
             later run restores is the bucket's. Off, the default, every parsed store owed is named
             with `--publish`.
+        bucket_mode: The run is a bucket-mode run, the cloud run's (`v1-e40-t18`): the parsed store
+            is the cloud run's, so a parsed store the stage did not publish is named with the cloud
+            cure (:func:`cloud_parse_cure`), never a command that publishes from the operator's
+            working copy. The composition root's `_in_bucket_mode`. Off, the default, is local mode.
     """
 
     def __init__(
@@ -2948,9 +2987,11 @@ class CaselistSyncService:
         after_publish: Callable[[], Awaitable[object]] | None = None,
         backfile_caselists: Sequence[str] = (),
         working_copy_outlives_the_run: bool = False,
+        bucket_mode: bool = False,
     ) -> None:
         self._source = source
         self._working_copy_outlives_the_run = working_copy_outlives_the_run
+        self._bucket_mode = bucket_mode
         # A backfile (`v1-e34-t34`) is never pulled, by the weekly run or by hand: refused in `plan`.
         self._backfiles = tuple(backfile_caselists)
         # Bucket mode (`v1-e40-t04`): each state file is saved as it is written, a download's start
@@ -4364,14 +4405,14 @@ class CaselistSyncService:
                 SyncStage.PARSE,
                 reason,
                 failures,
-                fix=_unpublished_parsed_store_fix(owed) if owed else None,
+                fix=_unpublished_parsed_store_fix(owed, bucket_mode=self._bucket_mode) if owed else None,
             )
         elif not_published:
             tally.record(
                 SyncStage.PARSE,
                 StageOutcome.PENDING,
                 f"{reason}; the parsed store of {named} is not published, for want of an AWS login "
-                f"({no_session}): {_unpublished_parsed_store_fix(owed)}",
+                f"({no_session}): {_unpublished_parsed_store_fix(owed, bucket_mode=self._bucket_mode)}",
             )
         else:
             tally.record(SyncStage.PARSE, StageOutcome.COMPLETED, reason)
@@ -5144,13 +5185,21 @@ _FAILURE_RATE_FIX: Final = (
 )
 
 
-def _unpublished_parsed_store_fix(owed: Sequence[ParsedStoreOwed]) -> str:
+def _unpublished_parsed_store_fix(owed: Sequence[ParsedStoreOwed], *, bucket_mode: bool) -> str:
     """The parse stage's fix for the parsed stores it did not publish: each caselist's own command.
 
     `v1-e34-t31`. Before it, one sentence named `caselist parse --caselist <slug> --publish` for
     every caselist, and a stage whose rebuild was done and whose publish alone failed was rebuilt
-    again by hand.
+    again by hand. In bucket mode, no command (`v1-e40-t18`): the cloud run publishes the parsed
+    store it owns, and a command run on the operator's Mac would publish the Mac's working copy over it.
     """
+    if bucket_mode:
+        return (
+            f"The cloud run publishes the parsed store of {_and_listed([one.caselist for one in owed])}, "
+            "never the operator's Mac, whose working copy is not the one the cloud run owns: the next "
+            "weekly run that imports into a caselist rebuilds its parsed store and publishes it, and so "
+            f"does a run started by hand that imports into it ({CLOUD_PARSE_STAGE_RUNBOOK})."
+        )
     publish_only = [one.command for one in owed if one.publish_only]
     rebuild = [one.command for one in owed if not one.publish_only]
     sentences: list[str] = []
@@ -5182,8 +5231,11 @@ def _unpublished_parsed_store_fix(owed: Sequence[ParsedStoreOwed]) -> str:
 
 
 def _commands_named(commands: Sequence[str]) -> str:
-    quoted = [f"`{one}`" for one in commands]
-    return quoted[0] if len(quoted) == 1 else f"{', '.join(quoted[:-1])} and {quoted[-1]}"
+    return _and_listed([f"`{one}`" for one in commands])
+
+
+def _and_listed(names: Sequence[str]) -> str:
+    return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
 
 
 _NO_LANDSCAPE: Final = "no landscape service is installed (v1-e32-t05 has not shipped)"

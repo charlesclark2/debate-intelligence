@@ -972,7 +972,7 @@ RUNBOOK = "docs/runbooks/landscape-report-from-the-cloud-run.md"
 
 
 def _restored_copy(root: Path, *, planted_tags: dict[tuple[str, int], str] | None = None) -> Path:
-    """`synthetic26` through 2026-09-15 under `root/data`, parsed by this build: a copy ready to report from."""
+    """`synthetic26` through 2026-09-15 under `root/data`, parsed by this build: a copy to report from."""
     copy = plant_synthetic_run(root, planted_tags=planted_tags).data_dir
     parsed = copy / "parsed" / CASELIST
     (parsed / PARSER_VERSION).rename(parsed / THIS_BUILD)
@@ -1139,7 +1139,9 @@ def test_a_copy_that_is_not_one_is_refused_with_exit_2_and_nothing_is_written(
     assert _nothing_written(stale_world.data_dir)
 
 
-def test_a_copy_without_the_caselist_is_refused_with_exit_2(stale_world: SyntheticRun, tmp_path: Path) -> None:
+def test_a_copy_without_the_caselist_is_refused_with_exit_2(
+    stale_world: SyntheticRun, tmp_path: Path
+) -> None:
     empty = tmp_path / "empty-copy"
     empty.mkdir()
 

@@ -593,6 +593,13 @@ class ServiceContainer:
         acceptances are kept beside the classification cache. `with_bucket` is whether this run
         publishes: only then is this environment's bucket built, signed with the everyday profile.
 
+        **A restored copy** (`v1-e40-t17`). With `restored_copy`, the caselist's cards are the copy's:
+        its manifests, parsed store (the model stage's card texts too), suppression list, run log and raw
+        sources, and the run refuses a copy whose newest parsed directory is not this build's parser
+        version. Every piece of the landscape's own state stays in the data directory: the
+        classification cache and the review queue, the plan-text and analytic-text caches, the scan
+        acceptances, the model cassettes and usage log, and the bundle under `reports/landscape/`.
+
         **The aff seam.** Each affirmative round's aff comes from `v1-e32-t09`'s
         :class:`~debate_core.application.aff_assignment.AffAssignmentService`, which reads the
         affirmative files' plan texts from their cache under the data directory, parsing only what it
@@ -614,22 +621,29 @@ class ServiceContainer:
         from debate_core.integrations.landscape.yaml_taxonomy_repository import YamlTaxonomyRepository
         from debate_core.integrations.local import FsEvidenceObjectStore
         from debate_core.integrations.local.parsed_store import LocalParsedStore
+        from debate_core.integrations.local.suppression_list import local_suppression_list_file
         from debate_core.integrations.models.model_mode import ModelMode
 
         settings = self.settings
         data_dir = settings.storage.data_dir
-        objects = FsEvidenceObjectStore(data_dir)
+        cards_dir = data_dir if restored_copy is None else restored_copy
+        objects = FsEvidenceObjectStore(cards_dir)
         taxonomies = YamlTaxonomyRepository.load(config_dir)
-        local = self._local_evidence()
+        local = self._local_evidence(cards_dir)
+        suppression = (
+            self.local_suppression_list()
+            if restored_copy is None
+            else RecordedSuppressionList(local_suppression_list_file(restored_copy))
+        )
         classifications = LocalClassificationStore(data_dir)
         parse = settings.parse
         runner = ProcessPoolParseRunner(
             workers=parse.worker_count(os.cpu_count()), timeout_seconds=parse.per_file_timeout_seconds
         )
         affs = AffAssignmentService(
-            store=LocalParsedStore(data_dir),
+            store=LocalParsedStore(cards_dir),
             local=local,
-            suppression=self.local_suppression_list(),
+            suppression=suppression,
             taxonomies=taxonomies,
             classifications=classifications,
             plan_texts=PlanTextService(
@@ -642,12 +656,12 @@ class ServiceContainer:
         return LandscapeRunService(
             taxonomies=taxonomies,
             config_dir=config_dir,
-            parsed_store=LocalParsedStore(data_dir),
+            parsed_store=LocalParsedStore(cards_dir),
             local=local,
-            suppression=self.local_suppression_list(),
+            suppression=suppression,
             classifications=classifications,
             objects=objects,
-            run_log=SyncRunLog(data_dir / SYNC_RUN_LOG_FILENAME),
+            run_log=SyncRunLog(cards_dir / SYNC_RUN_LOG_FILENAME),
             reports_dir=data_dir / LANDSCAPE_REPORTS_DIRECTORY,
             acceptances=ScanAcceptanceLog(data_dir / LANDSCAPE_DIRECTORY / SCAN_ACCEPTANCES_DIRECTORY),
             today=lambda: self.clock()().date(),
@@ -655,10 +669,13 @@ class ServiceContainer:
             aff_assignments=affs,
             analytic_texts=texts,
             model_stage=lambda mode, max_items: self.landscape_model_stage(
-                ModelMode.REPLAY if mode is LandscapeModelMode.REPLAY else ModelMode.LIVE, max_items
+                ModelMode.REPLAY if mode is LandscapeModelMode.REPLAY else ModelMode.LIVE,
+                max_items,
+                parsed_dir=cards_dir,
             ),
             stale_after_days=settings.caselist.stale_after_days,
             backfile_caselists=settings.caselist.backfile_caselists,
+            parser_version=None if restored_copy is None else DebateDocxParser().parser_version,
         )
 
     def landscape_evaluation(self, *, config_dir: Path, record: bool) -> LandscapeModelEvaluationService:
@@ -698,7 +715,9 @@ class ServiceContainer:
 
         The router is :func:`~debate_core.integrations.models.factory.build_model_router`'s: the fixture
         fake when `models.provider` is `fake`, and otherwise the record-and-replay router, over cassettes
-        kept under `<data dir>/landscape/model-cassettes/` unless `cassette_dir` names others. Real cards'
+        kept under `<data dir>/landscape/model-cassettes/` unless `cassette_dir` names others, with card
+        texts from the parsed store under the data directory unless `parsed_dir` names a restored copy's
+        (`v1-e40-t17`). Real cards'
         prompts are never committed (the data-use policy's model condition 6), so a replay of them reads
         what this machine recorded. Record and live wrap the Bedrock router, imported only then. The
         prompts are read from this checkout's `prompts/`; an installed build has none, and is refused.
@@ -736,7 +755,7 @@ class ServiceContainer:
         )
         return ModelClassificationStage(
             StructuredOutputGuard(router, registry),
-            ParsedStoreCardTexts(LocalParsedStore(settings.storage.data_dir)),
+            ParsedStoreCardTexts(LocalParsedStore(parsed_dir or settings.storage.data_dir)),
             max_items=max_items,
         )
 

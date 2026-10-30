@@ -1,4 +1,6 @@
-"""A landscape report over a copy restored from the bucket: the refusals (`v1-e40-t17`, the PM's ruling of 2026-10-30).
+"""A landscape report over a copy restored from the bucket: the refusals (`v1-e40-t17`).
+
+The PM's ruling of 2026-10-30.
 
 :func:`restored_copy_refusal` and :func:`publish_refusal` are the command's guards, and
 :class:`LandscapeRunService`'s `parser_version` is the guard against a copy no build of this version has
@@ -166,6 +168,7 @@ def test_everything_else_goes_ahead(
 # LandscapeRunService(parser_version=...): a copy this build has parsed, or a refusal
 # ------------------------------------------------------------------------------------------------
 
+
 def _service(copy: SyntheticRun, state: Path, *, parser_version: str | None) -> LandscapeRunService:
     """The cards from `copy`, the landscape's state under `state`: as the container wires a copy."""
     cards = copy.data_dir
@@ -223,7 +226,9 @@ async def test_a_copy_parsed_only_by_an_older_build_is_refused_before_anything_i
 
 
 @pytest.mark.anyio
-async def test_a_copy_with_no_parsed_store_of_the_caselist_is_refused(copy: SyntheticRun, tmp_path: Path) -> None:
+async def test_a_copy_with_no_parsed_store_of_the_caselist_is_refused(
+    copy: SyntheticRun, tmp_path: Path
+) -> None:
     shutil.rmtree(copy.data_dir / "parsed")
 
     with pytest.raises(ParsedVersionNotInStore) as refused:
@@ -235,7 +240,9 @@ async def test_a_copy_with_no_parsed_store_of_the_caselist_is_refused(copy: Synt
 
 
 @pytest.mark.anyio
-async def test_a_copy_whose_newest_directory_is_a_later_builds_is_refused(copy: SyntheticRun, tmp_path: Path) -> None:
+async def test_a_copy_whose_newest_directory_is_a_later_builds_is_refused(
+    copy: SyntheticRun, tmp_path: Path
+) -> None:
     _versions(copy, THIS_BUILD, LATER_BUILD)
 
     with pytest.raises(ParsedVersionNotInStore) as refused:

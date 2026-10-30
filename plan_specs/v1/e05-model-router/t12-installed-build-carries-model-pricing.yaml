@@ -38,7 +38,7 @@ spec:
         A stamped build holds the pricing file, and an installed build's router prices a
         call from it, by tests shown failing first; the smoke check covers it.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

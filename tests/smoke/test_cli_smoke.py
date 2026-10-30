@@ -15,12 +15,15 @@ second fixture manifest exists for this tier.
 
 from __future__ import annotations
 
+import json
 import re
 import secrets
 import tomllib
 from pathlib import Path
 from typing import Any
 
+import pytest
+import yaml
 from tests.fixtures.verify.manifest_world import ALL_VERIFIED, TAMPERED, build_fixture_data_dir
 from tests.smoke.installed_build import REPO_ROOT, CliRun, InstalledCli
 
@@ -299,6 +302,100 @@ def test_dev_and_prod_get_their_own_data_directory_routing_file_and_budget(
             assert not Path(routing).resolve().is_relative_to(REPO_ROOT)
         else:
             assert Path(routing).parent == REPO_ROOT / "config", f"{routing} is not this checkout's"
+
+
+# ------------------------------------------------------------------------------------------------
+# A model call is priced from the pricing file the build carries (v1-e05-t12)
+# ------------------------------------------------------------------------------------------------
+
+PRICED_CALL = """
+import asyncio
+import json
+import sys
+from datetime import UTC, datetime
+from pathlib import Path
+
+from pydantic import BaseModel
+
+from debate_cli.build_info import settings_loader
+from debate_core.domain.model_contracts import ModelPrompt, ModelResponse, ModelUsage, TaskClass
+from debate_core.integrations.models import build_model_router
+
+
+class Answer(BaseModel):
+    ok: bool
+
+
+class AnsweringRouter:
+    def __init__(self, policy):
+        self.policy = policy
+
+    async def generate_structured(self, task_class, prompt, schema, params=None):
+        return ModelResponse[schema](
+            output=schema(ok=True),
+            route=self.policy.resolve(task_class, params),
+            usage=ModelUsage(input_tokens=1000, output_tokens=2000, latency_ms=5.0),
+            prompt_id=prompt.prompt_id,
+            prompt_version=prompt.prompt_version,
+            invoked_at=datetime.now(UTC),
+        )
+
+
+settings = settings_loader()()
+router = build_model_router(
+    settings,
+    mode="live",
+    environ={},
+    real_router=lambda policy, *, aws_profile: AnsweringRouter(policy),
+    cassette_dir=Path(sys.argv[1]),
+)
+prompt = ModelPrompt(prompt_id="smoke.priced-call", prompt_version="1.0.0", variables={})
+asyncio.run(router.generate_structured(TaskClass.HIGH_VOLUME, prompt, Answer))
+records = [
+    json.loads(line)
+    for day in sorted((settings.storage.data_dir / "usage").glob("*.jsonl"))
+    for line in day.read_text(encoding="utf-8").splitlines()
+]
+print(json.dumps({"routing_file": str(settings.models.routing_file), "records": records}))
+"""
+"""One live-mode call through the router the build makes, with a stand-in where Bedrock would be."""
+
+
+def test_a_model_call_is_priced_from_the_pricing_file_the_build_carries(installed_cli: InstalledCli) -> None:
+    """`v1-e05-t12`. The build's own interpreter loads its settings as the CLI does and makes one
+    high_volume call in live mode, under the dev profile's daily and monthly limits, through the
+    router `build_model_router` wraps in the usage recorder and the budget guard. A stand-in answers
+    in Bedrock's place with 1000 input and 2000 output tokens, so nothing leaves the machine.
+
+    Without a pricing file beside the routing file the guard refuses the call as unpriced, which is
+    what every installed build did before the stamp bundled one. An installed build reads the copy in
+    its wheel, and the checkout's script the committed file; the copy is made from the committed
+    file, so the expected cost is worked out from that file's price for dev's high_volume model."""
+    build = installed_cli.build
+
+    run = installed_cli.run_program([str(build.interpreter), "-c", PRICED_CALL, str(installed_cli.workdir)])
+
+    assert run.exit_code == 0, run.output
+    report = json.loads(run.stdout)
+    routing = yaml.safe_load((REPO_ROOT / "config" / "model_routing.dev.yaml").read_text(encoding="utf-8"))
+    model_id = routing["routes"]["high_volume"]["model_id"]
+    pricing = yaml.safe_load((REPO_ROOT / "config" / "model_pricing.yaml").read_text(encoding="utf-8"))
+    price = pricing["models"][model_id]
+    [record] = report["records"]
+    assert record["model_id"] == model_id
+    assert (record["input_tokens"], record["output_tokens"]) == (1000, 2000)
+    assert record["estimated_cost_usd"] == pytest.approx(
+        (1000 * price["input_usd_per_1k_tokens"] + 2000 * price["output_usd_per_1k_tokens"]) / 1000
+    )
+    routing_file = Path(report["routing_file"])
+    assert (routing_file.parent / "model_pricing.yaml").is_file()
+    if build.installed:
+        assert "_bundled_config" in routing_file.parts, (
+            f"{routing_file} is not the configuration the build ships"
+        )
+        assert not routing_file.resolve().is_relative_to(REPO_ROOT)
+    else:
+        assert routing_file == REPO_ROOT / "config" / "model_routing.dev.yaml"
 
 
 # ------------------------------------------------------------------------------------------------

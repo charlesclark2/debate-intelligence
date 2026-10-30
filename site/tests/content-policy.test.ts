@@ -45,6 +45,13 @@ import { STUDENTS, contentWith, shippedContentWith, withConsent } from './conten
 const PROD: NodeJS.ProcessEnv = { ...process.env, SITE_ENV: 'prod' }
 const DEV: NodeJS.ProcessEnv = { ...process.env, SITE_ENV: 'dev' }
 
+/**
+ * The season the guard's own cases are written for, set on the manifest they check, so they hold
+ * whatever season the shipped manifest is in: at a season change only the content files change
+ * (v1-e37-t11).
+ */
+const CASE_SEASON = '2026-27'
+
 const settings = loadSiteSettings()
 const consent = loadMediaConsent()
 
@@ -195,11 +202,11 @@ describe('images and media consent', () => {
         path: '/photos/orientation.jpg',
         consentReference: 'MC-2026-014',
         depicts: '2 team members, both covered',
-        season: consent.season,
+        season: CASE_SEASON,
         dateChecked: '2026-09-18',
       },
     ]
-    expect(check('![Two debaters](/photos/orientation.jpg)', { images }).errors).toEqual([])
+    expect(check('![Two debaters](/photos/orientation.jpg)', { season: CASE_SEASON, images }).errors).toEqual([])
   })
 
   it('finds an image referenced from HTML as well as from Markdown', () => {
@@ -273,11 +280,11 @@ describe('named students', () => {
         publishedForm: 'full-name-and-class-year' as const,
         graduationYear: 2028,
         consentReference: 'MC-2026-014',
-        season: consent.season,
+        season: CASE_SEASON,
         dateChecked: '2026-09-18',
       },
     ]
-    expect(check('Jordan Rivera reached quarterfinals.', { students }).errors).toEqual([])
+    expect(check('Jordan Rivera reached quarterfinals.', { season: CASE_SEASON, students }).errors).toEqual([])
   })
 
   it('fails when the only consent entry is from a previous season', () => {
@@ -378,11 +385,11 @@ describe('the start-of-season check', () => {
         path: '/photos/orientation.jpg',
         consentReference: 'MC-2026-014',
         depicts: '2 team members, both covered',
-        season: consent.season,
+        season: CASE_SEASON,
         dateChecked: '2026-07-04',
       },
     ]
-    const report = check('![Two debaters](/photos/orientation.jpg)', { images })
+    const report = check('![Two debaters](/photos/orientation.jpg)', { season: CASE_SEASON, images })
     expect(report.errors).toEqual([])
     expect(report.warnings.map((warning) => warning.message).join('\n')).toMatch(
       /the start-of-season check for 2026-27 has not been recorded/,

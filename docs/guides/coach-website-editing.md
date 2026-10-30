@@ -186,7 +186,7 @@ so changing one of them alone fails. In the same edit:
   runs the policy's
   [start-of-season check](../policies/website-publishing.md#consent-renewal-and-the-start-of-season-check)
   and brings each entry up to date before the change is published; until then the site's tests
-  fail on every entry still dated last season.
+  fail on every entry not yet brought up to date.
 
 The build refuses a date outside the season, which is what catches a typed year left over from
 last season.

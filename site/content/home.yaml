@@ -41,6 +41,19 @@ seasonSchedule:
     label: See the tournament schedule
     href: /schedule/
 
+# The season's three newest results, below the email-updates band, linking to the results page.
+# Only these words live here: the results themselves are content/results.yaml, and the page shows
+# whichever three are newest whenever the site was built. The band is left out while the season
+# has no result yet, so it never says "nothing yet" to a parent on the front page.
+recentResults:
+  eyebrow: Season results
+  title: The newest results
+  intro: >-
+    The placings Whitefish Bay debaters won at the season's most recent tournaments.
+  action:
+    label: See every result this season
+    href: /results/
+
 entryPoints:
   eyebrow: Start here
   title: Four things worth knowing first

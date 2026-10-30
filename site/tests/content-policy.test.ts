@@ -9,7 +9,14 @@ import {
   parsePage,
 } from '@/lib/content'
 import type { MediaConsent } from '@/lib/media-consent'
-import { isStale, loadMediaConsent, seasonStart } from '@/lib/media-consent'
+import {
+  consentGuardedContent,
+  consentPlaceholders,
+  consentedStudentSchema,
+  isStale,
+  loadMediaConsent,
+  seasonStart,
+} from '@/lib/media-consent'
 import {
   PublishingPolicyError,
   checkPublishingPolicy,
@@ -18,7 +25,11 @@ import {
   resetPolicyReporting,
   unreviewedNames,
 } from '@/lib/publishing-policy'
+import { resultsGuardedContent } from '@/lib/results'
 import { scheduleGuardedContent } from '@/lib/tournaments'
+
+import { STUDENTS, withConsent } from './results-fixture'
+import { contentWith } from './schedule-fixture'
 
 /**
  * The content guard (v1-e36-t04 acceptance criterion 3).
@@ -311,6 +322,87 @@ describe('the start-of-season check', () => {
       /the start-of-season check for 2026-27 has not been recorded/,
     )
   })
+
+  /**
+   * Warnings print in every build, so a lapsed student entry is named by its opaque consent
+   * reference: a build log carries no student name (Students 10). Until v1-e37-t06 the warning
+   * printed the name, which nothing noticed while the manifest held no student.
+   */
+  it('names a lapsed student entry by its consent reference, never by the name', () => {
+    const students = [
+      {
+        publishedName: 'Jordan Rivera',
+        publishedForm: 'full-name-and-class-year' as const,
+        graduationYear: 2028,
+        consentReference: 'MC-2025-003',
+        season: '2025-26',
+        dateChecked: '2025-09-12',
+      },
+    ]
+    const warnings = check('Nobody is named here.', { students })
+      .warnings.map((warning) => warning.message)
+      .join('\n')
+    expect(warnings).toMatch(/consent MC-2025-003 was last checked 2025-09-12 for season 2025-26/)
+    expect(warnings).not.toMatch(/Jordan|Rivera/)
+  })
+})
+
+/**
+ * The manifest's own example writes `dateChecked: 2026-09-18` unquoted. The YAML parser reads
+ * that as a Date, which the schema refused, so the first entry written as documented would have
+ * failed the build; and it moves an impossible date such as 2026-09-31 to October 1 without a
+ * word. Bare dates are now quoted before parsing, as content/tournaments.yaml's are (v1-e37-t06).
+ */
+describe('dates in the media-consent manifest', () => {
+  it('reads an unquoted dateChecked as the date that was typed', () => {
+    const directory = contentWith({ 'media-consent.yaml': withConsent([STUDENTS.jordan]) })
+    const entry = loadMediaConsent(directory).students.find(
+      (student) => student.consentReference === STUDENTS.jordan.consentReference,
+    )
+    expect(entry?.dateChecked).toBe('2026-09-18')
+  })
+
+  it('refuses a full-name entry with no graduation year to print', () => {
+    const withoutYear = {
+      publishedName: STUDENTS.jordan.publishedName,
+      consentReference: STUDENTS.jordan.consentReference,
+    }
+    const directory = contentWith({ 'media-consent.yaml': withConsent([withoutYear]) })
+    expect(() => loadMediaConsent(directory)).toThrow(
+      /graduationYear: is required when publishedForm is full-name-and-class-year/,
+    )
+  })
+})
+
+/**
+ * A consent reference the activities office has not supplied yet is written as a [[TBD]] marker,
+ * like any other fact still owed (v1-e37-t06). A dev build prints it so the preview can be
+ * reviewed with the name on it; a prod build fails until the reference is filled in. The finding
+ * names the entry by position, never the student, because it prints in every build log.
+ */
+describe('a consent reference still to come', () => {
+  const owed = { ...STUDENTS.jordan, consentReference: "'[[TBD: form reference from the office]]'" }
+
+  it('is reported by its position and the note beside it, with no name', () => {
+    const directory = contentWith({ 'media-consent.yaml': withConsent([owed]) })
+    const notes = consentPlaceholders(loadMediaConsent(directory))
+    expect(notes).toEqual(['form reference from the office (consentReference of student entry 1)'])
+    expect(notes.join('\n')).not.toMatch(/Jordan|Rivera/)
+  })
+
+  it('fails a prod build and lets a dev preview come up', () => {
+    const directory = contentWith({ 'media-consent.yaml': withConsent([owed]) })
+    const input = { pages: consentGuardedContent(directory), settings, consent: loadMediaConsent(directory) }
+    expect(() => enforcePublishingPolicy(input, PROD)).toThrow(
+      /content\/media-consent\.yaml: still has an unfilled placeholder: form reference from the office \(consentReference of student entry 1\)/,
+    )
+    expect(enforcePublishingPolicy(input, DEV).errors).toHaveLength(1)
+  })
+
+  it('is quiet once the reference is filled in', () => {
+    const directory = contentWith({ 'media-consent.yaml': withConsent([STUDENTS.jordan]) })
+    expect(consentPlaceholders(loadMediaConsent(directory))).toEqual([])
+  })
 })
 
 describe('placeholder markers', () => {
@@ -434,8 +526,23 @@ describe('the content this site actually ships', () => {
   // through the guard with the Markdown pages. src/app/layout.tsx passes exactly this list at
   // build time, which is what loadGuardedContent() is for: one definition of "everything with
   // copy in it", so a new YAML content file cannot be added and quietly left unguarded. The
-  // schedule's files join it through scheduleGuardedContent(), which the layout passes too.
-  const pages = [...loadGuardedContent(), ...scheduleGuardedContent()]
+  // schedule's files join it through scheduleGuardedContent(), and the results through
+  // resultsGuardedContent(), which the layout passes too.
+  const pages = [
+    ...loadGuardedContent(),
+    ...scheduleGuardedContent(),
+    ...resultsGuardedContent(),
+    ...consentGuardedContent(),
+  ]
+
+  /**
+   * The facts still waiting on Charlie, written out so that each one is a decision to change this
+   * test rather than a gap that goes quiet. None: the one there was, the first named student's
+   * consent reference, was assigned by Charlie on 2026-10-23 (the PM's ruling for v1-e37-t06: the
+   * reference is opaque and its mapping is his). A [[TBD]] in the manifest fails every prod build,
+   * so the PM ruled that one never reaches dev.
+   */
+  const STILL_WAITING_ON_CHARLIE: string[] = []
 
   it('breaks no rule except the facts still waiting on Charlie', () => {
     const { errors } = checkPublishingPolicy({
@@ -444,7 +551,9 @@ describe('the content this site actually ships', () => {
       consent,
       announcements: announcementFields(),
     })
-    expect(errors).toEqual([])
+    expect(errors.map((error) => `${error.location}: ${error.message}`)).toEqual(
+      STILL_WAITING_ON_CHARLIE,
+    )
   })
 
   /**
@@ -470,6 +579,7 @@ describe('the content this site actually ships', () => {
       'content/faq.yaml',
       'content/events.yaml',
       'content/schedule.yaml',
+      'content/results.yaml, labels',
     ]) {
       expect(guarded, `${filePath} is not checked by the publishing-policy guard`).toContain(
         filePath,
@@ -479,17 +589,66 @@ describe('the content this site actually ships', () => {
     expect(guarded).toContain('content/tournaments.yaml, tournament "glenbrooks-2026" (entry 6), field notes')
   })
 
-  it('has a media-consent manifest for the current season', () => {
+  it('has a media-consent manifest for the current season, with no photograph in it yet', () => {
     expect(consent.season).toMatch(/^\d{4}-\d{2}$/)
-    expect(consent.students).toEqual([])
     expect(consent.images).toEqual([])
   })
 
-  it('names no student, so no consent entry is needed yet', () => {
+  /**
+   * Every student entry, checked for its shape and its season and never by who it is: the
+   * names live in content/ and nowhere else, so no test names a real student (the PM's ruling
+   * for v1-e37-t06, and docs/policies/website-publishing.md, Students 10 and 11). Each entry is
+   * identified below by its position, never by its name, so a failure prints no name either.
+   */
+  describe('every student entry', () => {
+    const firstDay = seasonStart(consent.season)
+    const lastDay = new Date(Date.UTC(firstDay.getUTCFullYear() + 1, 6, 31))
+
+    it.each(consent.students.map((student, index) => [index + 1, student] as const))(
+      'entry %i has the manifest shape, for the current season, checked inside it',
+      (_position, student) => {
+        expect(consentedStudentSchema.safeParse(student).success).toBe(true)
+        expect(student.season).toBe(consent.season)
+        expect(isStale(student, consent.season)).toBe(false)
+        expect(new Date(student.dateChecked) <= lastDay).toBe(true)
+      },
+    )
+
+    it.each(consent.students.map((student, index) => [index + 1, student] as const))(
+      'entry %i publishes a whole name with a plausible graduation year, and an opaque reference',
+      (_position, student) => {
+        expect(student.publishedName.trim().split(/\s+/).length).toBeGreaterThanOrEqual(
+          student.publishedForm === 'full-name-and-class-year' ? 2 : 1,
+        )
+        if (student.graduationYear !== undefined) {
+          const seasonEndYear = firstDay.getUTCFullYear() + 1
+          expect(student.graduationYear).toBeGreaterThanOrEqual(seasonEndYear)
+          expect(student.graduationYear).toBeLessThanOrEqual(seasonEndYear + 4)
+        }
+        // The reference points at a form; it must not carry any part of the name it stands for.
+        for (const word of student.publishedName.toLowerCase().split(/\s+/)) {
+          expect(student.consentReference.toLowerCase().includes(word)).toBe(false)
+        }
+      },
+    )
+
+    it('uses each consent reference once', () => {
+      const references = consent.students.map((student) => student.consentReference)
+      expect(new Set(references).size).toBe(references.length)
+    })
+  })
+
+  it('names nobody but students with a current-season consent entry', () => {
+    const consented = new Map(
+      consent.students.map((student) => [student.publishedName.toLowerCase(), student]),
+    )
     for (const page of pages) {
-      expect(unreviewedNames(page.guardedHtml, consent.permittedNamePhrases), page.filePath).toEqual(
-        [],
-      )
+      for (const name of unreviewedNames(page.guardedHtml, consent.permittedNamePhrases)) {
+        const entry = consented.get(name.toLowerCase())
+        // The message names the file, not the name, so a failure prints no student's name.
+        expect(entry, `${page.filePath} prints a name with no consent entry`).toBeDefined()
+        expect(isStale(entry!, consent.season), `${page.filePath} prints a lapsed name`).toBe(false)
+      }
     }
   })
 })

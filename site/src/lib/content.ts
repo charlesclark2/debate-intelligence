@@ -31,6 +31,9 @@ export const EVENTS_SLUG = 'events'
 /** The tournament schedule, composed from content/tournaments.yaml by src/app/schedule/page.tsx. */
 export const SCHEDULE_SLUG = 'schedule'
 
+/** The season's results, composed from content/results.yaml by src/app/results/page.tsx. */
+export const RESULTS_SLUG = 'results'
+
 /**
  * Pages that are composed by a route module of their own rather than rendered as one run of
  * Markdown by src/app/[slug]/page.tsx.
@@ -43,7 +46,13 @@ export const SCHEDULE_SLUG = 'schedule'
  * The generic [slug] route must not also generate these slugs: a static segment and a dynamic one
  * claiming the same path is a build error, not a silent preference.
  */
-export const COMPOSED_SLUGS: readonly string[] = [HOME_SLUG, FAQ_SLUG, EVENTS_SLUG, SCHEDULE_SLUG]
+export const COMPOSED_SLUGS: readonly string[] = [
+  HOME_SLUG,
+  FAQ_SLUG,
+  EVENTS_SLUG,
+  SCHEDULE_SLUG,
+  RESULTS_SLUG,
+]
 
 /**
  * Acronyms a parent or a new student cannot be expected to know. If a page uses one, the page
@@ -121,6 +130,30 @@ export const contactEmailSchema = z.object({
   role: z.string().min(1),
 })
 
+/**
+ * The team's Instagram account, linked from the footer of every page and from the contact page
+ * (v1-e37-t07). Only an account address on www.instagram.com is accepted: the link is a plain way
+ * out to the team's profile, never a post, an embed or another site's copy of it. The note is
+ * shown beside the label and has to name Instagram, so the link says where it goes.
+ */
+export const instagramLinkSchema = z.object({
+  address: z
+    .string()
+    .regex(
+      /^https:\/\/www\.instagram\.com\/[A-Za-z0-9._]{1,30}\/$/,
+      'must be an Instagram account address, https://www.instagram.com/<handle>/',
+    ),
+  label: z.string().min(1),
+  externalLinkNote: z
+    .string()
+    .min(1)
+    .refine((value) => /instagram/i.test(value), 'must say that the link opens Instagram'),
+  /** The heading over the link on the contact page. */
+  contactHeading: z.string().min(1),
+})
+
+export type InstagramLinkSettings = z.infer<typeof instagramLinkSchema>
+
 export const siteSettingsSchema = z.object({
   name: z.string().min(1),
   shortName: z.string().min(1),
@@ -136,6 +169,7 @@ export const siteSettingsSchema = z.object({
     .min(1, 'the site needs at least one page in its navigation'),
   skipLinkLabel: z.string().min(1),
   contactEmails: z.array(contactEmailSchema).min(1),
+  instagram: instagramLinkSchema,
   debaterLoginLabel: z.string().min(1),
 })
 
@@ -238,6 +272,17 @@ export const homeContentSchema = z.object({
    * October 1 parent information session.)
    */
   seasonSchedule: z.object({
+    eyebrow: z.string().min(1),
+    title: z.string().min(1),
+    intro: z.string().min(1),
+    action: homeActionSchema,
+  }),
+  /**
+   * The season's three newest results, under the email-updates band, linking to /results/
+   * (v1-e37-t06). The results themselves come from content/results.yaml; this is only the words
+   * around them. The panel is left out of the page while the season has no result yet.
+   */
+  recentResults: z.object({
     eyebrow: z.string().min(1),
     title: z.string().min(1),
     intro: z.string().min(1),
@@ -386,6 +431,16 @@ export function defaultContentDirectory(): string {
 
 function pagesDirectory(contentDirectory: string): string {
   return join(contentDirectory, 'pages')
+}
+
+/**
+ * The YAML parser turns an unquoted 2026-02-30 into March 2 without a word. Every bare date in
+ * the file is therefore quoted before parsing, so a date reaches the schema exactly as it was
+ * typed and an impossible one fails the build instead of moving. content/tournaments.yaml,
+ * content/results.yaml and content/media-consent.yaml are all read through it.
+ */
+export function quoteBareDates(source: string): string {
+  return source.replace(/^(\s*(?:-\s+)?[A-Za-z]+:\s*)(\d{4}-\d{2}-\d{2})(\s*(?:#.*)?)$/gm, "$1'$2'$3")
 }
 
 export function formatIssues(error: z.ZodError): string {
@@ -669,7 +724,7 @@ export function loadNotFoundPage(
 
 /** Every string in the home content, in reading order, for the checks that scan copy. */
 function homeContentStrings(content: HomeContent): string[] {
-  const { hero, seasonSchedule, entryPoints, prose, whatDebateBuilds } = content
+  const { hero, seasonSchedule, recentResults, entryPoints, prose, whatDebateBuilds } = content
   return [
     hero.lead,
     hero.action.label,
@@ -677,6 +732,10 @@ function homeContentStrings(content: HomeContent): string[] {
     seasonSchedule.title,
     seasonSchedule.intro,
     seasonSchedule.action.label,
+    recentResults.eyebrow,
+    recentResults.title,
+    recentResults.intro,
+    recentResults.action.label,
     entryPoints.eyebrow,
     entryPoints.title,
     entryPoints.intro,

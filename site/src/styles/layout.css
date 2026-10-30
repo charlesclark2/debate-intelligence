@@ -123,9 +123,11 @@
   }
 
   /*
-   * Seven items since v1-e37-t02 added Schedule. Between 48rem and 64rem the bar is only just wide
-   * enough for them beside the lockup, so the gap is the link's own padding plus a hairline; with
-   * the full gap "Parent FAQ" broke over two lines at 768px. The links keep their 44px targets.
+   * Seven items since v1-e37-t02 added Schedule, eight since v1-e37-t06 added Results. Between
+   * 48rem and 64rem the bar is only just wide enough for them beside the lockup, so the gap is the
+   * link's own padding plus a hairline, and with eight the links' side padding narrows too: with
+   * either at full size "Parent FAQ" broke over two lines at 768px. The links keep their 44px
+   * height, and every one stays wider than 24px.
    */
   .site-nav__list,
   .site-nav__list--open {
@@ -135,12 +137,22 @@
     border-bottom: none;
     padding: 0;
   }
+
+  .site-nav__link {
+    padding-right: var(--space-1);
+    padding-left: var(--space-1);
+  }
 }
 
 @media (min-width: 64rem) {
   .site-nav__list,
   .site-nav__list--open {
     gap: var(--space-4);
+  }
+
+  .site-nav__link {
+    padding-right: var(--space-2);
+    padding-left: var(--space-2);
   }
 }
 
@@ -200,6 +212,12 @@
 .site-footer__note {
   margin: 0;
   color: var(--color-text-inverse);
+}
+
+/* The link to the team's Instagram account (v1-e37-t07): a plain text link out, styled like the
+ * utility links so it keeps their 44px touch target. */
+.site-footer__social {
+  margin: var(--space-3) 0 0;
 }
 
 /*

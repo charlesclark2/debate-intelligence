@@ -6,13 +6,19 @@ import { Card } from '@/components/Card'
 import { CardGrid } from '@/components/CardGrid'
 import { EmailUpdates } from '@/components/EmailUpdates'
 import { Prose } from '@/components/Prose'
+import { ResultLine } from '@/components/ResultLine'
 import { Section } from '@/components/Section'
 import { SourceLine } from '@/components/SourceLine'
 import { HOME_SLUG, loadEmailUpdatesContent, loadHomeContent, loadPage } from '@/lib/content'
 import { buildPageMetadata } from '@/lib/page-metadata'
+import { loadResults, newestResults } from '@/lib/results'
+import { formatDateRange } from '@/lib/tournaments'
 
 /** Names the season-schedule panel for a screen reader moving by region. */
 const SEASON_SCHEDULE_ID = 'season-schedule'
+
+/** Names the newest-results band, and is where its link from elsewhere would point. */
+const RECENT_RESULTS_ID = 'recent-results'
 
 export function generateMetadata(): Metadata {
   return buildPageMetadata(loadPage(HOME_SLUG))
@@ -21,24 +27,26 @@ export function generateMetadata(): Metadata {
 /**
  * The home page.
  *
- * Seven bands, in the order a parent needs them: the hero, the pointer to the season's
- * tournament schedule, the signup for parent email updates (v1-e37-t05), four entry points into
- * the site, what debate actually is, what a season of it builds, and what the research says about
- * it academically. The schedule panel is the only band on navy, which is what makes it the most
+ * Eight bands, in the order a parent needs them: the hero, the pointer to the season's
+ * tournament schedule, the signup for parent email updates (v1-e37-t05), the season's three
+ * newest results (v1-e37-t06, left out until the season has one), four entry points into the
+ * site, what debate actually is, what a season of it builds, and what the research says about it
+ * academically. The schedule panel is the only band on navy, which is what makes it the most
  * prominent thing on the page after the hero without giving it a bigger heading than its
  * neighbours. It names no date of its own (v1-e37-t02): the site is deployed by hand, so a dated
  * announcement here goes stale the day after it happens, as the October 1 panel it replaced did.
  *
  * Not one string below is written here. The title and the prose come from content/pages/home.md
  * and everything else from content/home.yaml (the email-updates band from
- * content/email-updates.json), all read through src/lib/content.ts and validated
+ * content/email-updates.json, the results from content/results.yaml), all validated
  * at build time; tests/home.test.tsx fails if a word of that copy appears in this file.
  */
 export default function HomePage() {
   const page = loadPage(HOME_SLUG)
-  const { hero, seasonSchedule, entryPoints, prose, whatDebateBuilds, academicCase } =
+  const { hero, seasonSchedule, recentResults, entryPoints, prose, whatDebateBuilds, academicCase } =
     loadHomeContent()
   const emailUpdates = loadEmailUpdatesContent()
+  const newest = newestResults(loadResults())
 
   return (
     <>
@@ -68,6 +76,31 @@ export default function HomePage() {
       </Section>
 
       <EmailUpdates content={emailUpdates} />
+
+      {newest.length > 0 ? (
+        <Section
+          eyebrow={recentResults.eyebrow}
+          id={RECENT_RESULTS_ID}
+          intro={recentResults.intro}
+          title={recentResults.title}
+        >
+          <ul className="recent-results">
+            {newest.map((result) => (
+              <li className="recent-results__item" key={result.position}>
+                <span className="recent-results__line">
+                  <ResultLine result={result} />
+                </span>
+                <span className="recent-results__where">
+                  {result.tournament.name}, {formatDateRange(result.tournament)}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <Button href={recentResults.action.href} variant="secondary">
+            {recentResults.action.label}
+          </Button>
+        </Section>
+      ) : null}
 
       <Section
         contentWidth="wide"

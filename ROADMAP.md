@@ -62,13 +62,13 @@ v2.3's extension work.
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 50 | 254 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 108 | 89 | 498 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 56 | 43 | 282 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 56 | 44 | 282 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 16 | 10 | 114 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
-| [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 24 | 13 | 160 |
+| [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 24 | 14 | 160 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 20 | 13 | 80 |
-| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 1 | 16 | 7 | 41 |
+| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 1 | 17 | 7 | 44 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -312,7 +312,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [Replay tolerates a new optional parameter, a refused model call is not retryable, and doctor can check the routing file](plan_specs/v1/e05-model-router/t09-replay-and-model-exit-codes.yaml) `v1-e05-t09-replay-and-model-exit-codes` | Pending | 2 | 3.0 |
 | [Record mode keeps an invalid answer, so a repaired call can be recorded live](plan_specs/v1/e05-model-router/t10-record-mode-keeps-invalid-answers.yaml) `v1-e05-t10-record-mode-keeps-invalid-answers` | Succeeded | 2 | 2.0 |
 | [A prompt may set its own effort, so a classifier need not think at the route's default](plan_specs/v1/e05-model-router/t11-per-prompt-effort.yaml) `v1-e05-t11-per-prompt-effort` | Pending | 1 | 2.0 |
-| [An installed build carries config/model_pricing.yaml beside the routing files](plan_specs/v1/e05-model-router/t12-installed-build-carries-model-pricing.yaml) `v1-e05-t12-installed-build-carries-model-pricing` | Pending | 1 | 1.0 |
+| [An installed build carries config/model_pricing.yaml beside the routing files](plan_specs/v1/e05-model-router/t12-installed-build-carries-model-pricing.yaml) `v1-e05-t12-installed-build-carries-model-pricing` | Succeeded | 1 | 1.0 |
 | [Dev routes to Claude models this account can call while the 5.5 quotas are held at zero](plan_specs/v1/e05-model-router/t13-dev-routes-to-callable-claude-models.yaml) `v1-e05-t13-dev-routes-to-callable-claude-models` | Succeeded | 1 | 2.0 |
 | [A cheaper model for the high-volume route, chosen by the coach-labelled evaluation](plan_specs/v1/e05-model-router/t14-cheaper-model-for-high-volume-evaluated-first.yaml) `v1-e05-t14-cheaper-model-for-high-volume-evaluated-first` | Pending | 1 | 3.0 |
 | [A monthly model budget beside the daily one, at the coach's $50 ceiling](plan_specs/v1/e05-model-router/t15-monthly-model-budget.yaml) `v1-e05-t15-monthly-model-budget` | Succeeded | 1 | 2.0 |
@@ -481,7 +481,7 @@ Whitefish Bay Debate has a public, mobile-friendly team website: team informatio
 | [A link to the team's Instagram account, never an embed](plan_specs/v1/e37-calendar-and-announcements/t07-instagram-link.yaml) `v1-e37-t07-instagram-link` | Succeeded | 1 | 1.0 |
 | [The site smoke check reads the home page's results band and the results page](plan_specs/v1/e37-calendar-and-announcements/t08-smoke-results-band.yaml) `v1-e37-t08-smoke-results-band` | Pending | 2 | 1.0 |
 | [Website changes reach the public site in a day, without waiting for a release](plan_specs/v1/e37-calendar-and-announcements/t09-site-changes-publish-without-a-release.yaml) `v1-e37-t09-site-changes-publish-without-a-release` | InProgress | 1 | 3.0 |
-| [A coach's schedule or results edit passes the site's tests without editing a test](plan_specs/v1/e37-calendar-and-announcements/t10-coach-edits-need-no-test-edit.yaml) `v1-e37-t10-coach-edits-need-no-test-edit` | Pending | 2 | 3.0 |
+| [A coach's schedule or results edit passes the site's tests without editing a test](plan_specs/v1/e37-calendar-and-announcements/t10-coach-edits-need-no-test-edit.yaml) `v1-e37-t10-coach-edits-need-no-test-edit` | Succeeded | 2 | 3.0 |
 
 #### [E38 — Team Donations](plan_specs/v1/e38-donations/epic.yaml)
 
@@ -546,6 +546,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [The deploy script's region test, which failed once under load, made deterministic](plan_specs/v1/e40-cloud-caselist-run/t14-deploy-script-region-test-under-load.yaml) `v1-e40-t14-deploy-script-region-test-under-load` | Pending | 0 | 1.0 |
 | [A plan check for a new run image after the cutover, with the schedule left enabled](plan_specs/v1/e40-cloud-caselist-run/t15-image-plan-check-after-the-cutover.yaml) `v1-e40-t15-image-plan-check-after-the-cutover` | Succeeded | 1 | 1.0 |
 | [Prod's parsed store re-parsed after a parser bump, from a copy restored with its sources](plan_specs/v1/e40-cloud-caselist-run/t16-prod-reparse-after-a-parser-bump.yaml) `v1-e40-t16-prod-reparse-after-a-parser-bump` | Pending | 1 | 2.0 |
+| [A landscape report counts the weeks the cloud run pulled, from a copy restored from the bucket](plan_specs/v1/e40-cloud-caselist-run/t17-landscape-report-from-the-cloud-runs-state.yaml) `v1-e40-t17-landscape-report-from-the-cloud-runs-state` | Pending | 1 | 3.0 |
 
 
 ## V2

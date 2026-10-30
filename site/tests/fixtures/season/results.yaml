@@ -1,0 +1,57 @@
+# Synthetic results for the results tests (v1-e37-t10), against the synthetic schedule beside this
+# file. Not the team's results: every tournament off the schedule and every student is invented
+# (docs/policies/website-publishing.md, Students 11). The students' consent entries are
+# tests/content-fixture.ts's STUDENTS. The expected page is written out by hand from this file in
+# tests/results.test.tsx.
+#
+# Five placings at four tournaments, two still on the schedule and two off it, with every form of
+# who placed: one named student, two awards to the same student, a named partnership, and two
+# team-level results. Not in date order, so the page's sort is tested.
+
+season: '2026-27'
+
+revised: 2026-10-25
+
+labels:
+  seasonTitle: Results from the {season} season
+  revised: Results last updated
+  empty: No results have been posted for this season yet.
+  individual: a Whitefish Bay debater
+  partners: a Whitefish Bay team
+  partnersJoinedBy: and
+  divisions:
+    varsity: Varsity
+    junior-varsity: Junior Varsity
+    novice: Novice
+
+results:
+  - tournament: Birchwood Invitational
+    date: 2026-10-17
+    event: lincoln-douglas
+    division: varsity
+    placing: first place
+    students: [Jordan Rivera]
+
+  - tournament: Birchwood Invitational
+    date: 2026-10-17
+    event: lincoln-douglas
+    division: varsity
+    placing: top speaker
+    students: [Jordan Rivera]
+
+  - scheduleId: lakeshore-2026
+    event: public-forum
+    division: novice
+    placing: quarterfinalist
+    students: [Sam Okafor, Avery Chen]
+
+  - tournament: Ashford
+    date: 2026-10-03
+    event: policy
+    division: varsity
+    placing: semifinalist
+
+  - scheduleId: northwoods-2026
+    event: lincoln-douglas
+    division: junior-varsity
+    placing: second speaker

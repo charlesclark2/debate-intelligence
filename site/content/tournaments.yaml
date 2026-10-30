@@ -42,17 +42,9 @@ season: '2026-27'
 
 # The day this file was last changed. Update it with every edit: the page shows it, and calendar
 # apps are given it as the time each entry was issued.
-revised: 2026-10-22
+revised: 2026-10-30
 
 tournaments:
-  - id: ronald-reagan-2026
-    name: Ronald Reagan High School
-    start: 2026-10-24
-    events: [policy, lincoln-douglas, public-forum]
-    held: online-at-school
-    overnight: no
-    status: confirmed
-
   - id: west-bend-online-2026
     name: West Bend High School
     start: 2026-10-30

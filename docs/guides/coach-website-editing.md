@@ -193,6 +193,21 @@ a date that does not exist, an `id` used twice, a conditional entry with no cond
 a tournament debated from the high school, a name nobody has reviewed, an email address or a phone
 number. Fix what it names and run it again.
 
+**A content edit never needs a test edit.** The site's tests check `site/content/tournaments.yaml`
+and `site/content/results.yaml` only for what has to be true of them whatever they hold: they
+load without a mistake, they pass the publishing-policy and consent checks, no `id` is used twice,
+every date is inside the season, and the schedule, the results and the consent file are for the
+same season. Everything else (the page's order, the calendar file, the results page) is tested on
+made-up tournaments and results of the tests' own. So adding, changing or removing a tournament
+or a result, and moving a result to `tournament` and `date` once its tournament is off the
+schedule, passes `pnpm --dir site test` without touching anything under `site/tests/`.
+
+If a test fails after an edit that changed only files in `site/content/`, read the message
+first: a mistake in the edit is named the same way the build names it, by file, entry and field,
+and fixing it is the whole job. If the message names no mistake in what you changed, **that is a
+bug in the tests, not a test to change.** Report it to Charlie with the name of the failing test,
+and don't edit the test or publish the change until Charlie answers.
+
 ### Publish a change
 
 A change to the file is a commit, and nothing reaches the public site except from `main`
@@ -692,6 +707,7 @@ families a 24-hour clock.
 | A change is on the website but not in a parent's calendar | Their calendar app has not checked the file yet. It will; for anything urgent, contact families directly |
 | The build fails naming a result and a field | Fix that field. The message names the policy rule; [What the build refuses](#what-the-build-refuses) says what each one means |
 | A family asks for a student's name or a result to come down | Within 24 hours: [Take a result down](#take-a-result-down) |
+| `pnpm --dir site test` fails after an edit to `site/content/` only, and the message names no mistake in the edit | A bug in the tests: report it to Charlie with the failing test's name. Never change a test to make a content edit pass ([Check a change](#check-a-change)) |
 | A tournament is missing from the page after a deploy | Check its entry is in `site/content/tournaments.yaml` on `main`. A site change or hotfix that was not merged back into `dev` is undone by the next promotion |
 | `promotion-source` fails on a `site/` pull request | It names the files: something outside `site/`, a dependency file such as `site/package.json`, or nothing at all. Take them off the branch; a dependency change goes into `dev` on a task branch |
 | `back-merge` fails on a `site/` pull request | The previous site change or a hotfix has not been merged back into `dev`. Merge that back-merge pull request ([Publish a change](#publish-a-change), step 9), then check again |

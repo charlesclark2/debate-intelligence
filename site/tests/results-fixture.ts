@@ -1,71 +1,18 @@
-import { contentWith, siteRootWith } from './schedule-fixture'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
+import { FIXTURE_SEASON_DIRECTORY, STUDENTS, contentWith, siteRootWith, withConsent } from './content-fixture'
+import type { FixtureStudent } from './content-fixture'
 
 /**
- * Fixture content for the results tests: a copy of site/content/ with content/results.yaml's
- * list replaced and invented students added to the consent manifest.
+ * Fixture content for the results tests: tests/content-fixture.ts's synthetic season with
+ * content/results.yaml's list replaced and the consent manifest's students chosen.
  *
  * Every name here is invented, as docs/policies/website-publishing.md (Students 11) requires of
- * a test: the real names live in site/content/ and nowhere else. The edits work whatever the
- * shipped files hold, so the tests do not change when a real result or consent entry is added.
+ * a test: the real names live in site/content/ and nowhere else. Nothing here reads the shipped
+ * schedule or results, so the tests do not change when the coach adds, moves or takes down a real
+ * tournament, result or consent entry (v1-e37-t10).
  */
-
-export interface FixtureStudent {
-  publishedName: string
-  graduationYear?: number
-  consentReference: string
-  publishedForm?: 'full-name-and-class-year' | 'first-name-only'
-  season?: string
-  dateChecked?: string
-}
-
-/** Four students with current-season consent, and two whose entries do not allow a full name. */
-export const STUDENTS = {
-  jordan: { publishedName: 'Jordan Rivera', graduationYear: 2028, consentReference: 'MC-2026-014' },
-  sam: { publishedName: 'Sam Okafor', graduationYear: 2027, consentReference: 'MC-2026-021' },
-  avery: { publishedName: 'Avery Chen', graduationYear: 2029, consentReference: 'MC-2026-033' },
-  morgan: { publishedName: 'Morgan Blake', graduationYear: 2028, consentReference: 'MC-2026-040' },
-  /** Consent from last season, never renewed: the start-of-season check found the gap. */
-  lapsed: {
-    publishedName: 'Riley Moss',
-    graduationYear: 2027,
-    consentReference: 'MC-2025-003',
-    season: '2025-26',
-    dateChecked: '2025-09-12',
-  },
-  /** A family that asked for the first name only. */
-  reduced: {
-    publishedName: 'Casey Park',
-    consentReference: 'MC-2026-052',
-    publishedForm: 'first-name-only',
-  },
-} as const satisfies Record<string, FixtureStudent>
-
-function consentEntry(student: FixtureStudent): string {
-  return [
-    `  - publishedName: ${student.publishedName}`,
-    `    publishedForm: ${student.publishedForm ?? 'full-name-and-class-year'}`,
-    ...(student.graduationYear === undefined ? [] : [`    graduationYear: ${student.graduationYear}`]),
-    `    consentReference: ${student.consentReference}`,
-    `    season: '${student.season ?? '2026-27'}'`,
-    `    dateChecked: ${student.dateChecked ?? '2026-09-18'}`,
-    '',
-  ].join('\n')
-}
-
-/**
- * Replaces the manifest's student list with these students, whatever it held, so a fixture never
- * depends on (or prints) a real entry.
- */
-export function withConsent(students: readonly FixtureStudent[]): (source: string) => string {
-  return (source) => {
-    const list = /^students:(?: \[\])?\n(?:(?: {2}.*)?\n)*/m
-    if (!list.test(source)) {
-      throw new Error('withConsent: no `students:` list in content/media-consent.yaml')
-    }
-    const entries = students.length === 0 ? 'students: []\n' : `students:\n${students.map(consentEntry).join('')}`
-    return source.replace(list, `${entries}# Fixture students from tests/results-fixture.ts.\n`)
-  }
-}
 
 /** Replaces the `results:` list, which is the last thing in content/results.yaml. */
 export function withResults(yaml: string): (source: string) => string {
@@ -106,47 +53,21 @@ export function resultsSiteRoot(
 }
 
 /**
- * Five placings at four tournaments, two still on the schedule and two off it, with every form
- * of who placed: one named student, two awards to the same student, a named partnership, and two
- * team-level results. The expected page is written out by hand in tests/results.test.tsx.
+ * The `results:` list of tests/fixtures/season/results.yaml: five placings at four tournaments,
+ * two still on the synthetic schedule and two off it, with every form of who placed. The expected
+ * page is written out by hand from that file in tests/results.test.tsx.
  */
-export const SEASON_FIXTURE = `
-  - tournament: Fort Atkinson
-    date: 2026-10-17
-    event: lincoln-douglas
-    division: varsity
-    placing: first place
-    students: [Jordan Rivera]
+export const SEASON_FIXTURE = readFileSync(join(FIXTURE_SEASON_DIRECTORY, 'results.yaml'), 'utf8').split(
+  /^results:\n/m,
+)[1]!
 
-  - tournament: Fort Atkinson
-    date: 2026-10-17
-    event: lincoln-douglas
-    division: varsity
-    placing: top speaker
-    students: [Jordan Rivera]
-
-  - scheduleId: west-bend-2026
-    event: public-forum
-    division: novice
-    placing: quarterfinalist
-    students: [Sam Okafor, Avery Chen]
-
-  - tournament: Neenah
-    date: 2026-10-03
-    event: policy
-    division: varsity
-    placing: semifinalist
-
-  - scheduleId: badgerland-2026
-    event: lincoln-douglas
-    division: junior-varsity
-    placing: second speaker
-`
-
-/** One result at Fort Atkinson, with the fields given in `fields` replacing or adding to it. */
+/**
+ * One result at the Birchwood Invitational, a tournament off the synthetic schedule, with the
+ * fields given in `fields` replacing or adding to it.
+ */
 export function oneResult(fields: Record<string, string>): string {
   const base: Record<string, string> = {
-    tournament: 'Fort Atkinson',
+    tournament: 'Birchwood Invitational',
     date: '2026-10-17',
     event: 'lincoln-douglas',
     division: 'varsity',

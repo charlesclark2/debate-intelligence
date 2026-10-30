@@ -29,23 +29,19 @@ import type { Results } from '@/lib/results'
 import { loadSchedule } from '@/lib/tournaments'
 
 import { describeViolations, findAccessibilityViolations } from './axe'
-import { replaceOnce } from './schedule-fixture'
-import {
-  SEASON_FIXTURE,
-  STUDENTS,
-  oneResult,
-  resultsContent,
-  resultsSiteRoot,
-} from './results-fixture'
+import { STUDENTS, contentWith, replaceOnce } from './content-fixture'
+import { SEASON_FIXTURE, oneResult, resultsContent, resultsSiteRoot } from './results-fixture'
 
 /**
  * The season's results (v1-e37-t06): content/results.yaml, the /results/ page and the three
  * newest on the home page, held to docs/policies/website-publishing.md, Results and awards.
  *
  * Every name below is invented (Students 11). The expected page is written out by hand from
- * SEASON_FIXTURE in tests/results-fixture.ts, not taken from the loader's output, so a loader
- * that dropped a placing, put the tournaments in the wrong order or printed a name it should not
- * have cannot agree with it by construction (working agreement 6).
+ * tests/fixtures/season/results.yaml (SEASON_FIXTURE) and the synthetic schedule beside it, not
+ * taken from the loader's output, so a loader that dropped a placing, put the tournaments in the
+ * wrong order or printed a name it should not have cannot agree with it by construction (working
+ * agreement 6). No test here reads the shipped results or schedule, which the coach edits every
+ * week (v1-e37-t10); tests/shipped-content.test.ts checks what those must always satisfy.
  */
 
 afterEach(() => {
@@ -67,29 +63,30 @@ function lines(results: Results): Array<[string, string[]]> {
 }
 
 /*
- * What the page shows for SEASON_FIXTURE, worked out by hand. Badgerland ends on November 14,
- * West Bend is November 7, Fort Atkinson October 17 and Neenah October 3, so that is the order.
+ * What the page shows for SEASON_FIXTURE, worked out by hand. The Northwoods Classic ends on
+ * November 7, the Lakeshore Invitational is October 24, the Birchwood Invitational October 17 and
+ * Ashford October 3, so that is the order.
  */
 const EXPECTED_GROUPS: Array<[string, string, string[]]> = [
   [
-    'Badgerland',
-    'Friday, November 13 to Saturday, November 14, 2026',
+    'Northwoods Classic',
+    'Friday, November 6 to Saturday, November 7, 2026',
     ['Second speaker, Junior Varsity Lincoln-Douglas: a Whitefish Bay debater'],
   ],
   [
-    'West Bend High School',
-    'Saturday, November 7, 2026',
+    'Lakeshore Invitational',
+    'Saturday, October 24, 2026',
     ['Quarterfinalist, Novice Public Forum: Sam Okafor (2027) and Avery Chen (2029)'],
   ],
   [
-    'Fort Atkinson',
+    'Birchwood Invitational',
     'Saturday, October 17, 2026',
     [
       'First place, Varsity Lincoln-Douglas: Jordan Rivera (2028)',
       'Top speaker, Varsity Lincoln-Douglas: Jordan Rivera (2028)',
     ],
   ],
-  ['Neenah', 'Saturday, October 3, 2026', ['Semifinalist, Varsity Policy debate: a Whitefish Bay team']],
+  ['Ashford', 'Saturday, October 3, 2026', ['Semifinalist, Varsity Policy debate: a Whitefish Bay team']],
 ]
 
 describe('content/results.yaml, loaded', () => {
@@ -100,18 +97,18 @@ describe('content/results.yaml, loaded', () => {
   })
 
   it('takes a scheduled tournament’s name and dates from content/tournaments.yaml', () => {
-    const westBend = results.groups.find((group) => group.tournament.scheduleId === 'west-bend-2026')
-    expect(westBend?.tournament).toMatchObject({
-      name: 'West Bend High School',
-      start: '2026-11-07',
-      end: '2026-11-07',
+    const lakeshore = results.groups.find((group) => group.tournament.scheduleId === 'lakeshore-2026')
+    expect(lakeshore?.tournament).toMatchObject({
+      name: 'Lakeshore Invitational',
+      start: '2026-10-24',
+      end: '2026-10-24',
     })
   })
 
   it('keeps two awards to one student at one tournament as two placings under that tournament', () => {
-    const fort = results.groups.filter((group) => group.tournament.name === 'Fort Atkinson')
-    expect(fort).toHaveLength(1)
-    expect(fort[0]!.results.map((result) => result.placing)).toEqual(['first place', 'top speaker'])
+    const birchwood = results.groups.filter((group) => group.tournament.name === 'Birchwood Invitational')
+    expect(birchwood).toHaveLength(1)
+    expect(birchwood[0]!.results.map((result) => result.placing)).toEqual(['first place', 'top speaker'])
   })
 
   it('gives the home page the three newest placings', () => {
@@ -196,7 +193,7 @@ describe('what the build refuses', () => {
   it('a named student with no consent entry at all', () => {
     const message = loadError(resultsContent(oneResult({ students: '[Taylor Brooks]' })))
     expect(message).toMatch(
-      /content\/results\.yaml: result 1 \(Fort Atkinson, 2026-10-17\), field students\.0: names a student with no entry in content\/media-consent\.yaml/,
+      /content\/results\.yaml: result 1 \(Birchwood Invitational, 2026-10-17\), field students\.0: names a student with no entry in content\/media-consent\.yaml/,
     )
     expect(message).toMatch(/Students 2; Results and awards 1, 2 and 5/)
     expect(message).not.toContain('Taylor')
@@ -206,7 +203,7 @@ describe('what the build refuses', () => {
     const message = loadError(
       resultsContent(oneResult({ event: 'public-forum', students: '[Sam Okafor]' })),
     )
-    expect(message).toMatch(/result 1 \(Fort Atkinson, 2026-10-17\), field students: names one partner of a partnership/)
+    expect(message).toMatch(/result 1 \(Birchwood Invitational, 2026-10-17\), field students: names one partner of a partnership/)
     expect(message).toMatch(/Results and awards 1 and 2/)
     expect(message).not.toContain('Okafor')
   })
@@ -224,7 +221,7 @@ describe('what the build refuses', () => {
     ['did not break'],
   ])('a placing that is a loss: "%s"', (placing) => {
     expect(loadError(resultsContent(oneResult({ placing: `'${placing}'` })))).toMatch(
-      /result 1 \(Fort Atkinson, 2026-10-17\), field placing: .* describes a loss.*Results and awards 4/,
+      /result 1 \(Birchwood Invitational, 2026-10-17\), field placing: .* describes a loss.*Results and awards 4/,
     )
   })
 
@@ -249,7 +246,7 @@ describe('what the build refuses', () => {
 
   it('an opponent student named in the tournament or the placing', () => {
     expect(
-      loadError(resultsContent(oneResult({ tournament: "'Fort Atkinson, over Taylor Brooks'" }))),
+      loadError(resultsContent(oneResult({ tournament: "'Birchwood Invitational, over Taylor Brooks'" }))),
     ).toMatch(/field tournament: holds a name the site has not been told about\. No opponent student is ever named.*Results and awards 5/)
     expect(loadError(resultsContent(oneResult({ placing: "'first place over Taylor Brooks'" })))).toMatch(
       /field placing: holds a name the site has not been told about.*Results and awards 5/,
@@ -270,10 +267,10 @@ describe('what the build refuses', () => {
       /field students\.0: is an email address or a phone number.*Students 6/,
     )
     expect(
-      loadError(resultsContent(oneResult({ tournament: "'Fort Atkinson, call 414-555-0142'" }))),
+      loadError(resultsContent(oneResult({ tournament: "'Birchwood Invitational, call 414-555-0142'" }))),
     ).toMatch(/field tournament: holds an email address or a phone number.*Students 6/)
     expect(
-      loadError(resultsContent(oneResult({ tournament: "'Fort Atkinson, coach@example.org'" }))),
+      loadError(resultsContent(oneResult({ tournament: "'Birchwood Invitational, coach@example.org'" }))),
     ).toMatch(/field tournament: holds an email address or a phone number/)
   })
 
@@ -289,26 +286,26 @@ describe('what the build refuses', () => {
 /* acceptance criterion 3: tournaments on and off the schedule. */
 describe('the tournament a result was won at', () => {
   it('shows the name and date of a tournament that has come off the schedule', () => {
-    expect(loadSchedule().tournaments.map((tournament) => tournament.name)).not.toContain('Neenah')
-    const [group] = loadResults(resultsContent(oneResult({ tournament: 'Neenah', date: '2026-10-03' }))).groups
-    expect(group!.tournament).toMatchObject({ name: 'Neenah', start: '2026-10-03', scheduleId: null })
+    expect(loadSchedule(contentWith()).tournaments.map((tournament) => tournament.name)).not.toContain('Ashford')
+    const [group] = loadResults(resultsContent(oneResult({ tournament: 'Ashford', date: '2026-10-03' }))).groups
+    expect(group!.tournament).toMatchObject({ name: 'Ashford', start: '2026-10-03', scheduleId: null })
   })
 
   it('takes an end date for an off-schedule tournament of more than one day', () => {
-    const yaml = oneResult({ tournament: 'Neenah', date: '2026-10-02', end: '2026-10-03' })
+    const yaml = oneResult({ tournament: 'Ashford', date: '2026-10-02', end: '2026-10-03' })
     const [group] = loadResults(resultsContent(yaml)).groups
     expect(group!.tournament).toMatchObject({ start: '2026-10-02', end: '2026-10-03' })
   })
 
   it('fails the build on a schedule id that does not exist', () => {
-    const yaml = oneResult({ tournament: '', date: '', scheduleId: 'fort-atkinson-2026' })
+    const yaml = oneResult({ tournament: '', date: '', scheduleId: 'birchwood-invitational-2026' })
     expect(loadError(resultsContent(yaml))).toMatch(
-      /result 1 \(fort-atkinson-2026\), field scheduleId: "fort-atkinson-2026" is not a tournament in content\/tournaments\.yaml\. A tournament that has come off the schedule is written with `tournament` and `date` instead/,
+      /result 1 \(birchwood-invitational-2026\), field scheduleId: "birchwood-invitational-2026" is not a tournament in content\/tournaments\.yaml\. A tournament that has come off the schedule is written with `tournament` and `date` instead/,
     )
   })
 
   it('refuses a schedule id together with a name or a date', () => {
-    expect(loadError(resultsContent(oneResult({ scheduleId: 'west-bend-2026' })))).toMatch(
+    expect(loadError(resultsContent(oneResult({ scheduleId: 'lakeshore-2026' })))).toMatch(
       /field tournament: goes with a tournament that is off the schedule/,
     )
   })
@@ -335,7 +332,7 @@ describe('the tournament a result was won at', () => {
 describe('the shape of an entry', () => {
   it('refuses a field a result does not have, naming it', () => {
     expect(loadError(resultsContent(oneResult({ record: "'5-1'" })))).toMatch(
-      /result 1 \(Fort Atkinson, 2026-10-17\), field record: is not a field a result has/,
+      /result 1 \(Birchwood Invitational, 2026-10-17\), field record: is not a field a result has/,
     )
   })
 
@@ -427,20 +424,22 @@ describe('the /results/ page', () => {
   it('opens the season band straight into the results, with no intro paragraph under its title', () => {
     renderResults()
     const band = document.getElementById('season-results') as HTMLElement
-    expect(band.querySelector('.section__title')?.textContent).toBe(loadResultsView().seasonTitle)
+    expect(band.querySelector('.section__title')?.textContent).toBe('Results from the 2026-27 season')
     expect(band.querySelector('.section__intro')).toBeNull()
   })
 
   it('anchors each tournament, by schedule id or by name and date', () => {
     renderResults()
-    expect(document.getElementById('west-bend-2026')).not.toBeNull()
-    expect(document.getElementById('fort-atkinson-2026-10-17')).not.toBeNull()
+    expect(document.getElementById('lakeshore-2026')).not.toBeNull()
+    expect(document.getElementById('birchwood-invitational-2026-10-17')).not.toBeNull()
   })
 
   it('says so, rather than showing an empty list, before the season has a result', () => {
     renderResults('')
     expect(document.querySelector('.results-list')).toBeNull()
-    expect(document.querySelector('.results-empty')?.textContent).toBe(loadResults().labels.empty)
+    expect(document.querySelector('.results-empty')?.textContent).toBe(
+      'No results have been posted for this season yet.',
+    )
   })
 
   it('is in the primary navigation, straight after the schedule', () => {
@@ -492,13 +491,16 @@ describe('the newest results on the home page', () => {
     expect(items).toEqual([
       [
         'Second speaker, Junior Varsity Lincoln-Douglas: a Whitefish Bay debater',
-        'Badgerland, Friday, November 13 to Saturday, November 14, 2026',
+        'Northwoods Classic, Friday, November 6 to Saturday, November 7, 2026',
       ],
       [
         'Quarterfinalist, Novice Public Forum: Sam Okafor (2027) and Avery Chen (2029)',
-        'West Bend High School, Saturday, November 7, 2026',
+        'Lakeshore Invitational, Saturday, October 24, 2026',
       ],
-      ['First place, Varsity Lincoln-Douglas: Jordan Rivera (2028)', 'Fort Atkinson, Saturday, October 17, 2026'],
+      [
+        'First place, Varsity Lincoln-Douglas: Jordan Rivera (2028)',
+        'Birchwood Invitational, Saturday, October 17, 2026',
+      ],
     ])
   })
 
@@ -565,55 +567,5 @@ describe('the results page holds no copy of its own', () => {
     for (const [path, source] of sources) {
       expect(source.includes(text), `${path} contains results copy`).toBe(false)
     }
-  })
-})
-
-/**
- * The results the site actually ships, written out by hand from the coach's facts:
- * - Fort Atkinson, Saturday, October 17, 2026, Varsity Lincoln-Douglas, first place and top speaker;
- * - Ronald Reagan High School, Saturday, October 24, 2026, Novice Lincoln-Douglas, third speaker and
- *   a state qualifying leg (policy version 1.2), each a different student.
- * Checked for shape and never for who: the names are in site/content/ and nowhere else.
- */
-describe('the results this site ships', () => {
-  const shipped = loadResults()
-  const fullNameAndYear = /^\p{L}[\p{L}.'’ -]* \p{L}[\p{L}.'’ -]* \(20\d\d\)$/u
-
-  it('is the current season', () => {
-    expect(shipped.season).toBe(loadSchedule().season)
-    expect(shipped.season).toBe(loadMediaConsent().season)
-  })
-
-  it('is the coach’s results so far: Ronald Reagan, then Fort Atkinson, newest first', () => {
-    expect(shipped.groups.map((group) => [group.tournament.name, group.tournament.start, group.tournament.scheduleId])).toEqual([
-      ['Ronald Reagan High School', '2026-10-24', 'ronald-reagan-2026'],
-      ['Fort Atkinson', '2026-10-17', null],
-    ])
-  })
-
-  it('has Fort Atkinson’s two placings, one student, in individual form', () => {
-    const results = shipped.groups[1]!.results
-    expect(results.map((result) => [result.placing, result.division, result.event])).toEqual([
-      ['first place', 'varsity', 'lincoln-douglas'],
-      ['top speaker', 'varsity', 'lincoln-douglas'],
-    ])
-    for (const result of results) {
-      expect(result.named).toBe(true)
-      expect(result.who).toMatch(fullNameAndYear)
-    }
-    expect(new Set(results.map((result) => result.who)).size).toBe(1)
-  })
-
-  it('has Ronald Reagan’s speaker award and state qualifying leg, two students, in individual form', () => {
-    const results = shipped.groups[0]!.results
-    expect(results.map((result) => [result.placing, result.division, result.event]).sort()).toEqual([
-      ['state qualifying leg', 'novice', 'lincoln-douglas'],
-      ['third speaker', 'novice', 'lincoln-douglas'],
-    ])
-    for (const result of results) {
-      expect(result.named).toBe(true)
-      expect(result.who).toMatch(fullNameAndYear)
-    }
-    expect(new Set(results.map((result) => result.who)).size).toBe(2)
   })
 })

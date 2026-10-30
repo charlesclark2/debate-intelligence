@@ -11,7 +11,8 @@ import {
 } from '@/lib/icalendar'
 import { loadScheduleView } from '@/lib/tournaments'
 
-import { contentWith, editEntry, splitGlenbrooksByEvent } from './schedule-fixture'
+import { contentWith } from './content-fixture'
+import { editEntry } from './schedule-fixture'
 
 /**
  * The calendar file (v1-e37-t02 acceptance criterion 3).
@@ -20,8 +21,10 @@ import { contentWith, editEntry, splitGlenbrooksByEvent } from './schedule-fixtu
  * src/lib/icalendar.ts. A parser written beside the generator would share its misreadings of RFC
  * 5545, and a round trip through the two would agree on exactly the mistakes it exists to catch.
  *
- * The expected dates are written by hand from docs/data/2026-27-tournament-schedule.md, with the
- * end date worked out as the day after the last day, because an iCalendar DTEND is exclusive.
+ * The calendar is built from the synthetic season in tests/fixtures/season/tournaments.yaml, never
+ * from the shipped schedule the coach edits every week (v1-e37-t10). The expected dates are written
+ * by hand from that file, with the end date worked out as the day after the last day, because an
+ * iCalendar DTEND is exclusive.
  */
 
 const SITE = 'https://wfbdebate.example.invalid'
@@ -57,12 +60,12 @@ function parse(ics: string): { calendar: ICAL.Component; events: ParsedEvent[] }
   return { calendar, events }
 }
 
-function calendarFrom(directory?: string): string {
+function calendarFrom(directory: string): string {
   return buildScheduleCalendar(loadScheduleView(directory), SITE)
 }
 
-const shipped = calendarFrom()
-const { calendar, events } = parse(shipped)
+const built = calendarFrom(contentWith())
+const { calendar, events } = parse(built)
 const byUid = new Map(events.map((event) => [event.uid, event]))
 const event = (id: string) => {
   const found = byUid.get(`tournament-${id}@wfbdebate.com`)
@@ -73,8 +76,8 @@ const event = (id: string) => {
 describe('the calendar parses with an independent parser', () => {
   it('is one VCALENDAR with one event per tournament, nationals included', () => {
     expect(calendar.name).toBe('vcalendar')
-    expect(events).toHaveLength(16)
-    expect(new Set(events.map((entry) => entry.uid)).size).toBe(16)
+    expect(events).toHaveLength(12)
+    expect(new Set(events.map((entry) => entry.uid)).size).toBe(12)
   })
 
   it('names itself for the app that subscribes to it', () => {
@@ -90,17 +93,17 @@ describe('all-day and multi-day dates', () => {
       expect(entry.startIsDate, entry.summary).toBe(true)
       expect(entry.endIsDate, entry.summary).toBe(true)
     }
-    expect(shipped).toMatch(/^DTSTART;VALUE=DATE:\d{8}\r$/m)
-    expect(shipped).not.toMatch(/^DTSTART:/m)
+    expect(built).toMatch(/^DTSTART;VALUE=DATE:\d{8}\r$/m)
+    expect(built).not.toMatch(/^DTSTART:/m)
   })
 
   it.each([
     // [id, first day, exclusive end: the day after the last day]
-    ['west-bend-2026', '2026-11-07', '2026-11-08'],
-    ['badgerland-2026', '2026-11-13', '2026-11-15'],
-    ['glenbrooks-2026', '2026-11-21', '2026-11-24'],
-    ['blake-2026', '2026-12-19', '2026-12-22'],
-    ['wisconsin-state-2027', '2027-01-16', '2027-01-18'],
+    ['lakeshore-2026', '2026-10-24', '2026-10-25'],
+    ['northwoods-2026', '2026-11-06', '2026-11-08'],
+    ['granite-falls-2026', '2026-11-13', '2026-11-16'],
+    ['pine-hollow-2026', '2026-12-11', '2026-12-13'],
+    ['copper-creek-qualifier-2027', '2027-01-09', '2027-01-10'],
     ['ncfl-nationals-2027', '2027-05-29', '2027-05-31'],
     ['nsda-nationals-2027', '2027-06-13', '2027-06-19'],
   ])('%s runs from %s with an exclusive end of %s', (id, start, end) => {
@@ -110,11 +113,11 @@ describe('all-day and multi-day dates', () => {
 
   it('carries an exclusive end across a month boundary', () => {
     const directory = contentWith({
-      'tournaments.yaml': editEntry('blake-2026', (block) =>
-        block.replace('start: 2026-12-19', 'start: 2026-12-30').replace('end: 2026-12-21', 'end: 2026-12-31'),
+      'tournaments.yaml': editEntry('granite-falls-2026', (block) =>
+        block.replace('start: 2026-11-13', 'start: 2026-12-30').replace('end: 2026-11-15', 'end: 2026-12-31'),
       ),
     })
-    const moved = parse(calendarFrom(directory)).events.find((entry) => entry.summary === 'Blake')!
+    const moved = parse(calendarFrom(directory)).events.find((entry) => entry.summary === 'Granite Falls Round Robin')!
     expect([moved.start, moved.end]).toEqual(['2026-12-30', '2027-01-01'])
   })
 })
@@ -124,10 +127,10 @@ describe('identity: a UID survives an edit to everything else', () => {
     calendarFrom(
       contentWith({
         'tournaments.yaml': (source) =>
-          editEntry('glenbrooks-2026', (block) =>
+          editEntry('granite-falls-2026', (block) =>
             block.replace('notes: Varsity only.', 'notes: Varsity only. Bring a coat; it is cold.'),
           )(
-            editEntry('west-bend-2026', (block) =>
+            editEntry('lakeshore-2026', (block) =>
               block.replace('    status: confirmed\n', '    status: confirmed\n    notes: Bus at 6:30 AM.\n'),
             )(source),
           ),
@@ -140,47 +143,46 @@ describe('identity: a UID survives an edit to everything else', () => {
   })
 
   it('changes the edited events, so the UIDs above are the same events with new notes', () => {
-    const glenbrooks = edited.find((entry) => entry.uid === event('glenbrooks-2026').uid)!
-    expect(glenbrooks.description).toContain('Bring a coat; it is cold.')
-    expect(event('glenbrooks-2026').description).not.toContain('Bring a coat')
-    const westBend = edited.find((entry) => entry.uid === event('west-bend-2026').uid)!
-    expect(westBend.description).toContain('Bus at 6:30 AM.')
+    const graniteFalls = edited.find((entry) => entry.uid === event('granite-falls-2026').uid)!
+    expect(graniteFalls.description).toContain('Bring a coat; it is cold.')
+    expect(event('granite-falls-2026').description).not.toContain('Bring a coat')
+    const lakeshore = edited.find((entry) => entry.uid === event('lakeshore-2026').uid)!
+    expect(lakeshore.description).toContain('Bus at 6:30 AM.')
   })
 
   it('keeps the UID when the dates are corrected', () => {
     const moved = parse(
       calendarFrom(
         contentWith({
-          'tournaments.yaml': editEntry('badgerland-2026', (block) =>
-            block.replace('start: 2026-11-13', 'start: 2026-11-12'),
+          'tournaments.yaml': editEntry('northwoods-2026', (block) =>
+            block.replace('start: 2026-11-06', 'start: 2026-11-05'),
           ),
         }),
       ),
     ).events
-    const badgerland = moved.find((entry) => entry.summary === 'Badgerland')!
-    expect(badgerland.uid).toBe(event('badgerland-2026').uid)
-    expect(badgerland.start).toBe('2026-11-12')
+    const northwoods = moved.find((entry) => entry.summary === 'Northwoods Classic')!
+    expect(northwoods.uid).toBe(event('northwoods-2026').uid)
+    expect(northwoods.start).toBe('2026-11-05')
   })
 })
 
 describe('escaping, folding and line endings', () => {
   it('ends every line in CRLF, and has no bare LF or CR', () => {
-    expect(shipped.endsWith('\r\n')).toBe(true)
-    expect(shipped.replace(/\r\n/g, '')).not.toMatch(/[\r\n]/)
+    expect(built.endsWith('\r\n')).toBe(true)
+    expect(built.replace(/\r\n/g, '')).not.toMatch(/[\r\n]/)
   })
 
   it(`keeps every line to ${MAX_LINE_OCTETS} octets of UTF-8`, () => {
-    for (const line of shipped.split('\r\n')) {
+    for (const line of built.split('\r\n')) {
       expect(new TextEncoder().encode(line).length, line).toBeLessThanOrEqual(MAX_LINE_OCTETS)
     }
   })
 
   it('folds long lines, and the parser unfolds them back to the exact text', () => {
-    expect(shipped).toMatch(/\r\n [^\r]/)
-    expect(event('whitefish-bay-home-2026').description).toContain(
+    expect(built).toMatch(/\r\n [^\r]/)
+    expect(event('lantern-hill-home-2026').description).toContain(
       'Our team hosts this tournament. Our students compete in it only if enough families volunteer ' +
-        'to help run it and some students still need qualifying results, called legs, for the state ' +
-        'tournament.',
+        'to help run it and some students still need a qualifying result for the state tournament.',
     )
   })
 
@@ -192,7 +194,7 @@ describe('escaping, folding and line endings', () => {
     const awkward =
       'Café; crêpes, and a C:\\Teams\\Debate path. ' + 'é'.repeat(40) + ' 日本語の大会 ' + '🎉'.repeat(20)
     const directory = contentWith({
-      'tournaments.yaml': editEntry('blake-2026', (block) =>
+      'tournaments.yaml': editEntry('granite-falls-2026', (block) =>
         block.replace('notes: Varsity only.', `notes: ${JSON.stringify(awkward)}`),
       ),
     })
@@ -200,10 +202,10 @@ describe('escaping, folding and line endings', () => {
     for (const line of ics.split('\r\n')) {
       expect(new TextEncoder().encode(line).length).toBeLessThanOrEqual(MAX_LINE_OCTETS)
     }
-    const blake = parse(ics).events.find((entry) => entry.summary === 'Blake')!
-    expect(blake.description).toContain(`Notes: ${awkward}`)
+    const graniteFalls = parse(ics).events.find((entry) => entry.summary === 'Granite Falls Round Robin')!
+    expect(graniteFalls.description).toContain(`Notes: ${awkward}`)
     // And the description's own line breaks survive as line breaks.
-    expect(blake.description.split('\n')[0]).toBe('Where: Minneapolis, Minnesota')
+    expect(graniteFalls.description.split('\n')[0]).toBe('Where: Duluth, Minnesota')
   })
 
   it.each([
@@ -228,59 +230,58 @@ describe('escaping, folding and line endings', () => {
 
 describe('what a parent sees in their calendar app', () => {
   it('says in the title when a tournament may not happen', () => {
-    expect(event('milwaukee-ncfl-qualifier-2027').summary).toBe('Tentative: Milwaukee NCFL Qualifier')
-    expect(event('milwaukee-ncfl-qualifier-2027').status).toBe('TENTATIVE')
-    expect(event('whitefish-bay-home-2026').summary).toBe('Conditional: Whitefish Bay home tournament')
-    expect(event('whitefish-bay-home-2026').status).toBe('TENTATIVE')
-    expect(event('west-bend-2026').summary).toBe('West Bend High School')
-    expect(event('west-bend-2026').status).toBe('CONFIRMED')
+    expect(event('eastbrook-ncfl-qualifier-2027').summary).toBe('Tentative: Eastbrook NCFL Qualifier')
+    expect(event('eastbrook-ncfl-qualifier-2027').status).toBe('TENTATIVE')
+    expect(event('lantern-hill-home-2026').summary).toBe('Conditional: Lantern Hill Invitational')
+    expect(event('lantern-hill-home-2026').status).toBe('TENTATIVE')
+    expect(event('lakeshore-2026').summary).toBe('Lakeshore Invitational')
+    expect(event('lakeshore-2026').status).toBe('CONFIRMED')
   })
 
   it('gives a tournament debated from the high school the high school as its place', () => {
-    expect(event('ronald-reagan-2026').location).toBe('Whitefish Bay High School')
-    expect(event('ronald-reagan-2026').description).toContain(
+    expect(event('harbor-point-online-2026').location).toBe('Whitefish Bay High School')
+    expect(event('harbor-point-online-2026').description).toContain(
       'How it is held: Online, debated at Whitefish Bay High School',
     )
   })
 
-  it('gives Glenbrooks, Policy only since 2026-10-22, its one place', () => {
-    expect(event('glenbrooks-2026').location).toBe('Glenview, Illinois')
+  it('gives a tournament held one way its one place', () => {
+    expect(event('granite-falls-2026').location).toBe('Duluth, Minnesota')
   })
 
   it('gives a tournament split by event both places, and says which event is held where', () => {
-    const split = parse(calendarFrom(contentWith({ 'tournaments.yaml': splitGlenbrooksByEvent }))).events
-    const glenbrooks = split.find((entry) => entry.uid === event('glenbrooks-2026').uid)!
-    expect(glenbrooks.location).toBe('Whitefish Bay High School; Glenview, Illinois')
-    expect(glenbrooks.description).toContain(
+    const pineHollow = event('pine-hollow-2026')
+    expect(pineHollow.location).toBe('Whitefish Bay High School; Evanston, Illinois')
+    expect(pineHollow.description).toContain(
       'Public Forum, Lincoln-Douglas: Online, debated at Whitefish Bay High School. Overnight: No.',
     )
-    expect(glenbrooks.description).toContain('Policy debate: In person, Glenview, Illinois. Overnight: Yes.')
+    expect(pineHollow.description).toContain('Policy debate: In person, Evanston, Illinois. Overnight: Yes.')
   })
 
   it('tells both entries of an overlap about the other', () => {
-    expect(event('brookfield-east-2026').description).toContain(
-      'Same dates as: Glenbrooks (Saturday, November 21 to Monday, November 23, 2026)',
+    expect(event('prairie-cup-2026').description).toContain(
+      'Same dates as: Granite Falls Round Robin (Friday, November 13 to Sunday, November 15, 2026)',
     )
-    expect(event('glenbrooks-2026').description).toContain(
-      'Same dates as: Brookfield East High School (Saturday, November 21, 2026)',
+    expect(event('granite-falls-2026').description).toContain(
+      'Same dates as: Prairie Cup (Saturday, November 14, 2026)',
     )
   })
 
   it('links each event back to its entry on the schedule page', () => {
-    expect(event('blake-2026').description).toContain(`${SITE}/schedule/#blake-2026`)
-    expect(shipped).toContain(`URL:${SITE}/schedule/#blake-2026\r\n`)
+    expect(event('lakeshore-2026').description).toContain(`${SITE}/schedule/#lakeshore-2026`)
+    expect(built).toContain(`URL:${SITE}/schedule/#lakeshore-2026\r\n`)
   })
 })
 
 describe('a rebuild of the same schedule is the same file', () => {
   it('stamps every event with the revised date, not the build time', () => {
-    const stamps = [...shipped.matchAll(/^DTSTAMP:(.*)\r$/gm)].map((match) => match[1])
-    expect(stamps).toHaveLength(16)
-    expect(new Set(stamps)).toEqual(new Set(['20261022T000000Z']))
+    const stamps = [...built.matchAll(/^DTSTAMP:(.*)\r$/gm)].map((match) => match[1])
+    expect(stamps).toHaveLength(12)
+    expect(new Set(stamps)).toEqual(new Set(['20260915T000000Z']))
   })
 
   it('is byte for byte identical when built twice', () => {
-    expect(calendarFrom()).toBe(shipped)
+    expect(calendarFrom(contentWith())).toBe(built)
   })
 })
 

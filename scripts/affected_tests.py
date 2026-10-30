@@ -504,6 +504,7 @@ IMPORTS = "imports"
 CONFTEST = "is beneath"
 RUNS = "runs"
 NAMES = "names"
+HAS_A_PATH_TO = "has a path to"
 READS_SOURCE = "reads the Python source of"
 # v1-e01-t39: between the container's parts, the files that ask for them, and the app's commands.
 CALLS = "calls"
@@ -2036,13 +2037,14 @@ class Walk:
         parts = {part for keys in batch.values() for part in keys.path_parts}
         mentions = self.corpus.find(names, parts)
         for path, keys in batch.items():
-            mentioners = set(keys.neighbours) | self.corpus.denoters(path, keys)
+            denoters = self.corpus.denoters(path, keys)
+            mentioners = set(keys.neighbours) | denoters
             for key in (*keys.file_names, *keys.path_parts):
                 mentioners |= mentions.get(key, set())
             mentioners.discard(path)
             mentioners = {mentioner for mentioner in mentioners if self.can_read(mentioner, path)}
             for mentioner in sorted(mentioners):
-                self.reach(mentioner, NAMES, path)
+                self.reach(mentioner, HAS_A_PATH_TO if mentioner in denoters else NAMES, path)
             if path in self.data_files and not mentioners:
                 tests, reason = fallback_for(path, self.layout)
                 if tests is None:
@@ -2113,12 +2115,15 @@ class Walk:
             if runs_by_path(helper, self.layout):
                 keys = keys_for(helper, self.layout, deleted=False)
                 mentions = self.corpus.find(keys.file_names, keys.path_parts)
-                mentioners = set(keys.neighbours) | self.corpus.denoters(helper, keys)
+                denoters = self.corpus.denoters(helper, keys)
+                mentioners = set(keys.neighbours) | denoters
                 for key in (*keys.file_names, *keys.path_parts):
                     mentioners |= mentions.get(key, set())
                 mentioners.discard(helper)
                 found += [
-                    (mentioner, NAMES) for mentioner in sorted(mentioners) if self.can_read(mentioner, helper)
+                    (mentioner, HAS_A_PATH_TO if mentioner in denoters else NAMES)
+                    for mentioner in sorted(mentioners)
+                    if self.can_read(mentioner, helper)
                 ]
             self.runners[helper] = found
         return self.runners[helper]

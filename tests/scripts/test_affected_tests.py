@@ -676,6 +676,31 @@ def test_a_route_names_no_fixture_folder_but_a_path_to_it_does(workspace: Worksp
     )
 
 
+def test_explain_tells_a_path_to_a_file_from_a_word_that_names_it(workspace: Workspace) -> None:
+    """The planted-break check runs the tests with a path to a change first (v1-e01-t40)."""
+    case = "tests/fixtures/verify/case.json"
+    workspace.commit(VERIFY_FIXTURES, "setup")
+    workspace.commit({case: '{"changed": 1}\n'}, "described")
+    lines = workspace.run("--diff", "HEAD", "--explain").stdout.splitlines()
+    reasons = dict(line.split("  <- ", 1) for line in lines)
+    by_path = {
+        "tests/api/test_reads_from_the_root.py",
+        "tests/test_reads_beside_itself.py",
+        "tests/api/test_joins_its_path.py",
+        "tests/api/test_formats_its_path.py",
+        "tests/api/test_globs_the_folder.py",
+    }
+    by_word = {
+        "tests/api/test_joins_an_unknown_base.py",
+        "tests/api/test_walks_its_folders.py",
+        "tests/api/test_runs_a_command.py",
+    }
+    assert {test: reasons[test] for test in by_path} == dict.fromkeys(
+        by_path, f"has a path to {case}, which changed"
+    )
+    assert {test: reasons[test] for test in by_word} == dict.fromkeys(by_word, f"names {case}, which changed")
+
+
 def test_a_folder_joined_to_the_files_own_folder_is_not_another_folder_of_that_name(
     workspace: Workspace,
 ) -> None:

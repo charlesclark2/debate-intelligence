@@ -2,16 +2,22 @@
 
 For each break in `PLANTED_BREAKS`, across the four workspace packages, the module is broken in a
 clone of this repository's HEAD in a temporary directory and committed there. The script then
-describes that commit (`--diff HEAD`, read from git), and pytest runs the selected test files
-nearest the break against the clone: first those that mention a name from the changed line (the
-tests that read what broke), then the ones with the shortest chain back to it, its packages first on
-`PYTHONPATH`, so the broken copy is the one imported. At least one of them must catch it. (The
-mention comes first since the PM batch of 2026-10-27 (x): by chain and path alone, `exit_codes.py`'s
-break ran ten slow bucket-mode files that never read `RETRIEVAL_FAILURE` and was not caught, so
-validate-dev's slow tier failed on `v1.1.0-dev.160`. Ordering by recorded durations is
-`v1-e01-t40`.) A break whose changed line holds no such name may name the test that reads what it
-changed (`read_by`, v1-e01-t39), when that test is further from it than the nearest ten: it must be
-selected, and it runs first.
+describes that commit (`--diff HEAD`, read from git), and pytest runs the ten selected test files
+nearest the break against the clone, its packages first on `PYTHONPATH`, so the broken copy is the
+one imported. At least one of them must catch it. :func:`nearest_tests` says which ten, by what
+`--explain` says of each:
+
+* first the tests that mention a name from the changed line (the PM batch of 2026-10-27 (x): by
+  chain and path alone, `exit_codes.py`'s break ran ten slow bucket-mode files that never read
+  `RETRIEVAL_FAILURE` and was not caught, so validate-dev's slow tier failed on `v1.1.0-dev.160`);
+* then those whose route to the change reads every file on it by a path (v1-e01-t40): an import, a
+  run, a conftest, a path literal (`has a path to`). A route that names a file only by a word, reads
+  every part of the container by reflection, walks the source, or is a data file's fallback is one
+  the script took because it could not tell, and runs after. Seven `bucket_mode/` files that named
+  t32's first fixture break by a word kept the test that read it out of the ten, and routes that
+  read the container whole kept `caselist retire`'s test out of t39's, which until v1-e01-t40
+  named it by hand (`read_by`);
+* then the shortest chain, then the path.
 The clone is reset after each break and its bytes compared with the original, and this worktree is
 never written to.
 
@@ -43,15 +49,23 @@ import os
 import re
 import subprocess
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+
+from affected_tests import NAMES, READS_EVERY_PART, READS_SOURCE  # noqa: E402
+
 NEAREST_TESTS_RUN = 10
 _BUILTINS = frozenset(dir(builtins))
+#: How `--explain` starts a step the script took because it could not tell whether the file reads
+#: the next one: a word that matches its name, every part of the container, the source as data, or a
+#: data file nothing names.
+_COULD_NOT_TELL = (f"{NAMES} ", READS_EVERY_PART, READS_SOURCE, f"nothing {NAMES} ")
 
 
 @dataclass(frozen=True)
@@ -60,9 +74,6 @@ class PlantedBreak:
     path: str
     old: str
     new: str
-    # The test that reads what the break changed, when it is further from the break than the nearest
-    # ten: it must be selected, and it runs first (v1-e01-t39).
-    read_by: str | None = None
 
 
 CORE = "packages/debate_core/src/debate_core"
@@ -141,14 +152,13 @@ PLANTED_BREAKS = [
     # v1-e01-t39: an integration the container imports inside one factory. Only `caselist retire`'s
     # test reads what it changed, through `cli.services.version_retention`, so the break is caught
     # only if the selection follows the command to the factory and the test to the command. That
-    # test is five steps from the break, behind every test that runs the app with arguments the
-    # script cannot read, so it is named.
+    # test is five steps from the break, but every step reads by a path, so it runs before the
+    # nearer tests that reach the factory only by reading the container whole (v1-e01-t40).
     PlantedBreak(
         "debate_core: a lazily imported integration names the wrong place, read through a command's factory",
         f"{CORE}/integrations/local/version_directories.py",
         '        return "this machine"\n',
         '        return "this planted machine"\n',
-        read_by="packages/debate_cli/tests/test_caselist_retire.py",
     ),
     PlantedBreak(
         "pyproject.toml: an import-linter contract is renamed, and nothing else changes",
@@ -261,6 +271,29 @@ def names_any(test: Path, names: frozenset[str]) -> bool:
     return any(re.search(rf"\b{re.escape(name)}\b", text) for name in names)
 
 
+def reads_by_a_path(reason: str) -> bool:
+    """Whether a test's route to a change, as `--explain` gives it, reads every file on it by a path.
+
+    `imports a, which has a path to b, which changed` does; `names b, which changed` and `reads the
+    container whole, ..., which imports b, which changed` do not.
+    """
+    return not any(step.startswith(_COULD_NOT_TELL) for step in reason.split(", which "))
+
+
+def nearest_tests(reached: Mapping[str, str], mentions: Callable[[str], bool]) -> list[str]:
+    """The selected tests a break runs, most likely to catch it first: see the module docstring.
+
+    `reached` maps each test traced to the break to its `--explain` route, and `mentions` says
+    whether a test mentions a name from the changed line.
+    """
+
+    def rank(test: str) -> tuple[bool, bool, int, str]:
+        route = reached[test]
+        return (not mentions(test), not reads_by_a_path(route), route.count(", which "), test)
+
+    return sorted(reached, key=rank)[:NEAREST_TESTS_RUN]
+
+
 def plant_and_run(clone: Path, planted: PlantedBreak) -> SelectedRun:
     """Commit `planted` in the clone, run the selected tests nearest it, and put the clone back."""
     target = clone / planted.path
@@ -282,13 +315,7 @@ def plant_and_run(clone: Path, planted: PlantedBreak) -> SelectedRun:
         reached = {test: reason for test, reason in reasons.items() if planted.path in reason}
         assert reached, f"no selected test is traced to {planted.path}:\n{chosen.stdout}"
         names = changed_names(planted)
-        nearest = sorted(
-            reached,
-            key=lambda test: (not names_any(clone / test, names), reached[test].count(", which "), test),
-        )[:NEAREST_TESTS_RUN]
-        if planted.read_by is not None:
-            assert planted.read_by in reached, f"{planted.read_by} is not selected:\n{chosen.stdout}"
-            nearest = [planted.read_by, *(test for test in nearest if test != planted.read_by)]
+        nearest = nearest_tests(reached, lambda test: names_any(clone / test, names))
         sources = os.pathsep.join(str(path) for path in sorted(clone.glob("packages/*/src")))
         ran = subprocess.run(
             [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-n", "0", "-x", *nearest],
@@ -325,6 +352,113 @@ def test_a_break_no_selected_test_reaches_is_not_counted_as_caught(clone: Path) 
 
     assert run.returncode == 0 and re.search(r"\b\d+ passed\b", run.summary), run.stdout[-3000:]
     assert how_caught(run) is None
+
+
+# --------------------------------------------------------------------------------------------
+# Which selected tests a break runs, on routes shaped like `--explain`'s (written by hand)
+# --------------------------------------------------------------------------------------------
+
+DATA = "tests/fixtures/landscape/released.yaml"
+
+
+def mentioning(*tests: str) -> Callable[[str], bool]:
+    return lambda test: test in tests
+
+
+def test_a_test_with_a_path_to_the_change_runs_before_one_that_names_it_by_a_word() -> None:
+    reached = {
+        # Nearer and first by path, but it only names the file's folder by a word.
+        "packages/debate_cli/tests/bucket_mode/test_a_slow_world.py": f"names {DATA}, which changed",
+        "tests/config/test_released_ids.py": (
+            f"imports tests/config/released.py, which has a path to {DATA}, which changed"
+        ),
+    }
+
+    assert nearest_tests(reached, mentioning()) == [
+        "tests/config/test_released_ids.py",
+        "packages/debate_cli/tests/bucket_mode/test_a_slow_world.py",
+    ]
+
+
+def test_a_route_through_the_container_read_whole_runs_after_a_longer_route_of_paths() -> None:
+    integration = f"debate_core.integrations.local.places ({CORE}/integrations/local/places.py)"
+    reached = {
+        "packages/debate_cli/tests/commands/test_doctor.py": (
+            f"{READS_EVERY_PART} debate_cli.container's _build_places (container.py), "
+            f"which imports {integration}, which changed"
+        ),
+        "packages/debate_cli/tests/test_caselist_retire.py": (
+            "imports debate_cli.app (app.py) for `caselist retire`, which registers caselist_retire.py, "
+            "which asks for debate_cli.container's places (container.py), which calls "
+            f"debate_cli.container's _build_places (container.py), which imports {integration}, which changed"
+        ),
+    }
+
+    assert nearest_tests(reached, mentioning())[0] == "packages/debate_cli/tests/test_caselist_retire.py"
+
+
+@pytest.mark.parametrize(
+    "route",
+    [
+        pytest.param(f"names {DATA}, which changed", id="a word"),
+        pytest.param(f"imports tests/helper.py, which names {DATA}, which changed", id="a word further on"),
+        pytest.param(f"{READS_EVERY_PART} the container's _build_x, which changed", id="the container whole"),
+        pytest.param(f"{READS_SOURCE} the files it walks, and Python changed", id="the source"),
+        pytest.param(
+            f"nothing names {DATA}, so every test of packages/debate_core is selected", id="a fallback"
+        ),
+    ],
+)
+def test_a_route_the_script_could_not_tell_does_not_read_by_a_path(route: str) -> None:
+    assert not reads_by_a_path(route)
+
+
+@pytest.mark.parametrize(
+    "route",
+    [
+        pytest.param(f"imports debate_core.x ({CORE}/x.py), which changed", id="an import"),
+        pytest.param(f"has a path to {DATA}, which changed", id="a path literal"),
+        pytest.param(
+            f"is beneath tests/conftest.py, which runs debate_cli.app (app.py) for `doctor`, "
+            f"which registers doctor.py, which imports {CORE}/x.py, which changed",
+            id="a conftest, a run and a command",
+        ),
+        pytest.param(
+            "uses the world fixture of tests/conftest.py, which needs tests/world.py, which changed",
+            id="a fixture",
+        ),
+    ],
+)
+def test_a_route_of_imports_runs_fixtures_and_path_literals_reads_by_a_path(route: str) -> None:
+    assert reads_by_a_path(route)
+
+
+def test_a_test_that_mentions_a_changed_name_runs_first_even_named_by_a_word() -> None:
+    """The bundled suffix list's reader is reached first by a word, and is the one test that mentions it."""
+    reached = {
+        "packages/debate_core/tests/retrieval/test_public_suffix.py": f"names {DATA}, which changed",
+        **{
+            f"packages/debate_core/tests/retrieval/test_importer_{n:02}.py": (
+                f"imports debate_core.retrieval.public_suffix, which has a path to {DATA}, which changed"
+            )
+            for n in range(NEAREST_TESTS_RUN)
+        },
+    }
+
+    nearest = nearest_tests(reached, mentioning("packages/debate_core/tests/retrieval/test_public_suffix.py"))
+
+    assert nearest[0] == "packages/debate_core/tests/retrieval/test_public_suffix.py"
+    assert len(nearest) == NEAREST_TESTS_RUN
+
+
+def test_within_a_tier_the_shorter_chain_then_the_path_runs_first() -> None:
+    reached = {
+        "tests/b.py": f"imports tests/h.py, which has a path to {DATA}, which changed",
+        "tests/c.py": f"has a path to {DATA}, which changed",
+        "tests/a.py": f"imports tests/h.py, which has a path to {DATA}, which changed",
+    }
+
+    assert nearest_tests(reached, mentioning()) == ["tests/c.py", "tests/a.py", "tests/b.py"]
 
 
 # --------------------------------------------------------------------------------------------

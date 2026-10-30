@@ -287,9 +287,51 @@ None. The affected set (268 files) is left to the pull request's `ci`, per agree
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-29
 
 **Notes:**
+
+Each caselist now gets the command that finishes it, and the earlier builds still read every line.
+1. **ac1 passes, both halves.**
+   * Red: 9 failed against a skeleton whose fields exist and are never filled.
+   * Green: a publish that alone failed names `--publish-only` for that caselist, in the hint, the
+     banner and the details. A stage whose aggregates read only the local list names `--publish`,
+     with no `--publish-only` anywhere.
+   * One of each, both ways round, is pinned whole by hand. So is the record that does not say.
+2. **The earlier builds read everything, shown two ways.** By schema: the record's is unchanged, and
+   the details' is printed by dev.155 and the start commit, byte for byte the same. By each build's
+   own reader: exit 0, `refused or skipped: 0`. With mutant 4a applied, dev.155 refuses nine files, so
+   the check can fail.
+3. **Mutants:** the PM's four, each two ways, and eleven more, all caught. Three of them (6, 12, 13)
+   are caught only because you found unasserted branches and asserted them first. That is the point
+   of the exercise.
+4. **Deviation 1: (a), keep it as built.** My context said to decide from what the stage records, not
+   from the environment. You found the fact that overrides it: in bucket mode, the directory a later
+   `--publish-only` would publish dies with the task, so the record can't vouch for it. That is
+   exactly the "can't tell, say `--publish`" case. A cloud run names `--publish` for every caselist.
+5. **Follow-up 1 matters more than its place in the report suggests.** In bucket mode the banner names
+   `caselist parse --caselist <slug> --publish`. Run on the Mac, that rebuilds the Mac's own working
+   copy and publishes it to the bucket the cloud run owns. Nobody should do that. The PM's next batch
+   files an E40 p2 task: in bucket mode, the fix text and `caselist-cloud-run.md` name the cloud cure
+   (the next weekly run, or a hand-started cloud run), and never a Mac-side publish. Until it ships,
+   the cure for a failed cloud parse stage is the next weekly run, and the PM records that rule for
+   the operator.
+6. **Deviations 2 and 3: accepted.** The `UnknownSyncEvent` hint is the PM's ruling. "The agent's build"
+   is read as ruled, with the right models found.
+7. **Decisions accepted:**
+   * the decision is recorded, not the facts, and a boolean that defaults to false can't gain a third
+     meaning;
+   * "read every copy" is judged per caselist from the fallback count;
+   * commands are joined with `; ` for zsh, within the banner limits;
+   * the details key is top-level, so `tests/smoke`'s pinned stage JSON doesn't change;
+   * the runbook's expired-session block is unchanged.
+8. **Follow-up 2:** no task. The singular sentence is quoted by tests and the runbook, and it is
+   harmless.
+9. **The affected set** (268 files) is left to the PR's `ci`. The always-run list, the caselist
+   application tests, the CLI command files, the two pull smoke tests and the static checks pass.
+   Bucket mode was cut off at load 22 to 50 with 121 passed and none failed. That set is CI's.
+10. **Merge:** any time. The image deployed on 2026-10-29 is `dev.164`'s; this reaches the cloud run
+    with the next image.

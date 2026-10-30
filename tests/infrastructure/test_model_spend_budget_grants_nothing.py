@@ -37,4 +37,3 @@ def test_the_module_calls_no_module_and_reads_no_data_source() -> None:
     others = [(name, kind, label) for name, kind, label in _declarations() if kind != "resource"]
 
     assert others == []
-

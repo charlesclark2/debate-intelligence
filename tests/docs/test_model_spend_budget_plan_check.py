@@ -125,7 +125,11 @@ def first_apply_plan() -> Plan:
                 'aws_ssoadmin_account_assignment.maintainer["mock-maintainer"]',
                 "aws_ssoadmin_account_assignment",
             ),
-            {"address": "data.aws_caller_identity.current", "type": "aws_caller_identity", "change": {"actions": ["read"]}},
+            {
+                "address": "data.aws_caller_identity.current",
+                "type": "aws_caller_identity",
+                "change": {"actions": ["read"]},
+            },
         ]
     }
 
@@ -201,7 +205,11 @@ def created_and_old_destroyed(plan: Plan) -> None:
     del change["previous_address"]
     change["change"]["actions"] = ["create"]
     plan["resource_changes"].append(
-        {"address": "aws_budgets_budget.bedrock_monthly", "type": "aws_budgets_budget", "change": {"actions": ["delete"]}}
+        {
+            "address": "aws_budgets_budget.bedrock_monthly",
+            "type": "aws_budgets_budget",
+            "change": {"actions": ["delete"]},
+        }
     )
 
 
@@ -269,16 +277,25 @@ REFUSED: Final[dict[str, tuple[Callable[[Plan], None], str]]] = {
             "aws_ssoadmin_account_assignment",
             ["create"],
         ),
-        "other changes: aws_ssoadmin_account_assignment.maintainer[\"someone\"] create",
+        'other changes: aws_ssoadmin_account_assignment.maintainer["someone"] create',
     ),
     "another budget changed": (
         add_change('aws_budgets_budget.environment_monthly["prod"]', "aws_budgets_budget", ["update"]),
         "other changes: ",
     ),
-    "the budget replaced": (set_actions(["delete", "create"]), "the budget is delete/create, not updated in place"),
-    "the moved block missing": (created_and_old_destroyed, "other changes: aws_budgets_budget.bedrock_monthly delete"),
+    "the budget replaced": (
+        set_actions(["delete", "create"]),
+        "the budget is delete/create, not updated in place",
+    ),
+    "the moved block missing": (
+        created_and_old_destroyed,
+        "other changes: aws_budgets_budget.bedrock_monthly delete",
+    ),
     "the budget moved from another budget": (moved_from_elsewhere, "the budget moves from "),
-    "the budget renamed": (edit_after(set_key("name", "debate-shared-model-monthly")), "the budget is named "),
+    "the budget renamed": (
+        edit_after(set_key("name", "debate-shared-model-monthly")),
+        "the budget is named ",
+    ),
     "a daily budget": (edit_after(set_key("time_unit", "DAILY")), "not a monthly cost budget"),
     "the old $40 limit": (edit_after(set_key("limit_amount", "40")), "the limit is 40, not 100"),
     "the forecast notice dropped": (edit_after(drop_forecast), "the notices are "),

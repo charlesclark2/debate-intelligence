@@ -383,8 +383,8 @@ jobs:
         run: uv run --frozen python scripts/docs_index.py --check-descriptions
       # Every trigger: every tracked Markdown file's relative links and anchors, the check
       # tests/docs/test_check_links.py runs over the repository. A change only under site/ selects no
-      # Python tests (v1-e36-t12), and site/README.md links into docs/ by anchor, so this is where a
-      # site-only pull request has its links checked. It takes about a second.
+      # Python tests (v1-e36-t12), and site/README.md links into docs/ and to its own headings, so
+      # this is where a site-only pull request has its links checked. It takes about a second.
       - name: check_links.py
         run: uv run --frozen python scripts/check_links.py
       # Every trigger: no `#` comment in a shell code block someone pastes into zsh (working

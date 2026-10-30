@@ -376,9 +376,9 @@ def test_a_push_or_a_dispatch_still_runs_everything(context: dict[str, str]) -> 
 
 
 def test_site_markdown_still_has_its_links_checked_on_every_pull_request() -> None:
-    """site/README.md links into docs/ by anchor. With site/ out of the python filter, the pytest
-    that checks every tracked Markdown file's links no longer runs for a site-only change, so the
-    same script runs in spec-validate, which has no path filter."""
+    """site/README.md links into docs/ and to its own headings. With site/ out of the python filter,
+    the pytest that checks every tracked Markdown file's links no longer runs for a site-only
+    change, so the same script runs in spec-validate, which has no path filter."""
     spec_validate = ci_jobs()["spec-validate"]
     assert "if" not in spec_validate
     assert "spec-validate" in ci_jobs()["ci"]["needs"]

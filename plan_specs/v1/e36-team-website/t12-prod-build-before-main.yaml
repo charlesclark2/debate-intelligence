@@ -38,7 +38,7 @@ spec:
         A change only under site/ selects no Python tests, and a change under scripts/ still
         does, by test.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

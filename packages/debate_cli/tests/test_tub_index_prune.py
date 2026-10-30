@@ -438,6 +438,7 @@ def test_tub_index_prune_execute_refuses_on_a_wednesday_in_chicago(three_publish
     assert refused["exit_code"] == ExitCode.DOMAIN_FAILURE, refused
     assert refused["error"]["code"] == "PRUNE_ON_CLOUD_RUN_DAY"
     assert three_published.listing() == before
+    assert three_published.lock_holders() == [], "refused before it takes the lock"
 
 
 def test_tub_index_prune_dry_run_still_runs_on_a_wednesday(three_published: World) -> None:

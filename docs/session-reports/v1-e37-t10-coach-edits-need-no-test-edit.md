@@ -265,9 +265,45 @@ The PM decides whether they become spec changes or new tasks. -->
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-30
 
 **Notes:**
+
+A coach's weekly edit no longer needs a test edit, shown three ways.
+1. **ac1 passes.** 95 tests in seven files pinned the shipped content, found by reading and
+   cross-checked by three probe edits. The coach's-edit probe reproduces the PM's trial exactly (35 of
+   921, the same six files), and the export checks were run too. The end-of-season probe found the
+   worst of it: 50 failures and two files that wouldn't load.
+2. **ac2 passes.** `0b09eb3` changes only the two content files, and after it eslint, tsc, vitest
+   (935/935) and the prod export checks (109/109) pass. The scratch add-a-tournament-and-result edit
+   and the end-of-season shape pass too, on unchanged tests.
+3. **ac3 passes.** Each shipped-content check was red first (9 failed as no-ops), and each refuses its
+   own planted break in a copy of the shipped files.
+4. **Mutants:** the PM's four, each two ways where it mattered, plus each other shipped-content check
+   emptied. All are caught. Failing to load is rightly not counted.
+5. **Deviations accepted:**
+   * started on the PM's `--force`. t06's open criterion closed tonight with the lane's prod deploy;
+   * the comment added in the coach's commit;
+   * the two stricter guards kept unchanged, since no guard may be weakened;
+   * the one sync.
+6. **Decisions accepted:**
+   * a fixture overlay rather than a whole fixture site;
+   * invented names except the two national tournaments;
+   * one check per guarantee, each standing alone;
+   * plants appended beside whatever the files hold, so ac3 runs the same in June.
+7. **Follow-up work, the PM's rulings:**
+   * **(a) the no-`@` check:** it is stricter than the publishing policy, which allowlists the coach's
+     address, and it would fail a legitimate note. It is ruled to follow the policy's allowlist,
+     still refusing any other address and every phone number. Filed with (b) and (c) as one E37 p2
+     task in the PM's next batch.
+   * **(b) the one-season check stays.** The guide's start-of-season steps gain "change the season in
+     the schedule, the results and the consent file together".
+   * **(c) the `images: []` pin:** handled the same way before the first consented photograph. Same
+     task.
+8. **The affected set** ran in 167 s, past the line but already finished, with 1,856 passed. The site's
+   pnpm checks, ruff, pyright, lint-imports, the command blocks, links, docs index and specs pass.
+9. **Merge:** any time. The coach's Ronald Reagan edit then reaches the public site through the lane,
+   as a sync from dev, with the coach's word.

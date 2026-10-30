@@ -19,6 +19,12 @@ from debate_api.cookies import ENROLMENT_COOKIE, SESSION_COOKIE
 EMAIL = "debater.two@example.test"
 
 
+@pytest.fixture
+def world(auth_world: Any) -> Any:
+    """This file's world: sign-in alone: no index, no sources and no landscape bundles (`v1-e39-t20`)."""
+    return auth_world
+
+
 def without_an_authenticator(world: Any, *groups: str, **settings: Any) -> Any:
     world.login.add_account("debater.two", *(groups or ("student",)), has_authenticator=False, **settings)
     return world

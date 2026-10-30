@@ -9,7 +9,7 @@ The data-use policy's E39 gate item 4 and ADR-0019 (e) 3, as the PM ruled them o
   terms and an unavailable index write nothing; a failed write logs one warning naming the action
   and the search still answers.
 
-Every expected value is written by hand from `conftest.CORPUS`: 25 cards hold `zephyr`, so its first
+Every expected value is written by hand from `conftest.search_corpus`: 25 cards hold `zephyr`, so its first
 page holds 20; the featured card is doc 1 in `hsld26`. The school, team code and words searched for
 are the corpus's own synthetic ones.
 """
@@ -32,6 +32,12 @@ FEATURED_TAG: Final = "Zephyr winds raise granite costs"
 
 CARD_FIELDS: Final = {"format_version", "time", "action", "actor_role", "actor_subject", "cards"}
 SEARCH_FIELDS: Final = {"format_version", "time", "action", "actor_role", "actor_subject", "count"}
+
+
+@pytest.fixture
+def world(search_world: Any) -> Any:
+    """This file's world: sign-in and the search pages (`v1-e39-t20`)."""
+    return search_world
 
 
 @pytest.fixture

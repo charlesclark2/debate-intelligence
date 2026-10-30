@@ -172,6 +172,12 @@ LOOK_OF_REGION: Final = """
 """What each character of a region looks like: bold, underlined, its highlight, colour and size."""
 
 
+@pytest.fixture
+def world(every_surface_world: Any) -> Any:
+    """This file's world: every surface at once (`v1-e39-t20`)."""
+    return every_surface_world
+
+
 def edge_content_security_policy(login_origin: str) -> str:
     """The CSP CloudFront's response headers policy sends, as `distribution.tf` writes it."""
     source = DISTRIBUTION.read_text()

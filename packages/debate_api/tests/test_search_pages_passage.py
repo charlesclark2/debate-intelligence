@@ -1,6 +1,6 @@
 """Search by passage, prefixes and a format 1 index on the search pages, through the real app (`v1-e39-t13`).
 
-Over `conftest.CORPUS`. Every expected value is written by hand from that corpus (working agreement 6):
+Over `conftest.search_corpus`. Every expected value is written by hand from that corpus (working agreement 6):
 25 cards hold `zephyr` (20 on the first page, 5 on the second); the featured card alone holds
 `granite`, `costs`, `winds`, `raise`, `basalt` and `holds`; none holds `tumble` or `obsidian`.
 
@@ -39,6 +39,12 @@ ENVIRONMENT: Final = {
     "TUB_AUDIT_LOG_GROUP": "debate-dev-tub-audit",
     "TUB_EVIDENCE_BUCKET": "debate-dev-evidence-synthetic",
 }
+
+
+@pytest.fixture
+def world(search_world: Any) -> Any:
+    """This file's world: sign-in and the search pages (`v1-e39-t20`)."""
+    return search_world
 
 
 @pytest.fixture

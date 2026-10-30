@@ -17,6 +17,12 @@ import pytest
 from debate_api.cookies import ENROLMENT_COOKIE, SESSION_COOKIE, SIGN_IN_COOKIE, transaction_payload
 
 
+@pytest.fixture
+def world(auth_world: Any) -> Any:
+    """This file's world: sign-in alone: no index, no sources and no landscape bundles (`v1-e39-t20`)."""
+    return auth_world
+
+
 def query_of(url: str) -> dict[str, str]:
     return {name: values[0] for name, values in parse_qs(urlsplit(url).query).items()}
 

@@ -1,6 +1,6 @@
 """The search pages over the synthetic index, through the real app (`v1-e39-t06`).
 
-The index is `conftest.CORPUS`, fetched by the real holder. Every expected value is written by hand
+The index is `conftest.search_corpus`, fetched by the real holder. Every expected value is written by hand
 from that corpus (working agreement 6): 25 cards hold `zephyr` (the five named cards and twenty
 fillers), so a search for it runs to a page of 20 and a page of 5; the featured card was disclosed
 by two teams in three files; the public forum card is the only PF card; the camp card is the only
@@ -33,6 +33,12 @@ WORLD_LINKED_PATH = f"/cards/hsld26/{26:064x}"
 FEATURED_LINE = "[Disclosed: hsld26 2026-09-15 — Maple Grove QX, Neg vs. Invented Invitational Round 4]"
 OTHER_LINE = "[Disclosed: hsld26 2026-09-15 — Riverbend ZT, Aff vs. Invented Invitational Round 4]"
 CAMP_LINE = "[OpenEv: Cascade Institute 2026 — Policy, Invented Adv CP]"
+
+
+@pytest.fixture
+def world(search_world: Any) -> Any:
+    """This file's world: sign-in and the search pages (`v1-e39-t20`)."""
+    return search_world
 
 
 @pytest.fixture

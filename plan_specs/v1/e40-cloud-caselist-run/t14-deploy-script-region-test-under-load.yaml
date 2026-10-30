@@ -37,7 +37,7 @@ spec:
         The cause is named with its evidence, and the fix holds it. The test passes 50 times
         under `-n 6` with the machine loaded, and the report gives the command and result.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -583,7 +583,9 @@ class ServiceContainer:
             ),
         )
 
-    def landscape_run(self, *, config_dir: Path, with_bucket: bool) -> LandscapeRunService:
+    def landscape_run(
+        self, *, config_dir: Path, with_bucket: bool, restored_copy: Path | None = None
+    ) -> LandscapeRunService:
         """Build one caselist's landscape report over this machine's stores (`v1-e32-t05`).
 
         `config_dir` holds `topics.yaml`, `taxonomies/` and `overrides/`, read and checked once here.
@@ -685,7 +687,12 @@ class ServiceContainer:
         )
 
     def landscape_model_stage(
-        self, mode: ModelMode, max_items: int, *, cassette_dir: Path | None = None
+        self,
+        mode: ModelMode,
+        max_items: int,
+        *,
+        cassette_dir: Path | None = None,
+        parsed_dir: Path | None = None,
     ) -> ModelClassificationStage:
         """The landscape's model stage (`v1-e32-t07`): the prompt registry, a router for `mode`, the guard.
 

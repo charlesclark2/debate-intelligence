@@ -39,6 +39,11 @@ same use case. One run, for one caselist at one weekly snapshot (the newest unle
    in an earlier run (:class:`PublishRefusal`); the run's result says which, and the bundle is still
    written locally for the operator to read.
 
+Given `parser_version` (`v1-e40-t17`), the run reads its cards from a store restored from the bucket
+and first checks that the store's newest parsed directory of the caselist is of that version: one that
+is not is a :class:`ParsedVersionNotInStore`, before anything is read or written
+(:mod:`debate_core.application.landscape_restored_copy`).
+
 A **dry run** writes nothing anywhere: not the cache, not the queue, not the bundle, not the
 acceptance log, not the bucket. It reads all of them and says what a run would do, with each
 planned key and whether it would be uploaded.
@@ -125,6 +130,7 @@ __all__ = [
     "ModelStageFactory",
     "NoTopicMapping",
     "NothingToReport",
+    "ParsedVersionNotInStore",
     "PlannedUpload",
     "PositionClassifier",
     "PublishAction",
@@ -190,6 +196,10 @@ class UnknownSnapshot(LandscapeRequestRefused):
 
 class NoTopicMapping(LandscapeRequestRefused):
     """`topics.yaml` puts the snapshot on no topic, or on a topic with no taxonomy yet."""
+
+
+class ParsedVersionNotInStore(LandscapeRequestRefused):
+    """The restored copy's newest parsed directory of the caselist is not this build's parser version."""
 
 
 class NothingToReport(DomainError):
@@ -408,6 +418,7 @@ class LandscapeRunService:
         review_threshold: float = DEFAULT_REVIEW_THRESHOLD,
         max_model_items: int = DEFAULT_MAX_MODEL_ITEMS,
         backfile_caselists: Sequence[str] = (),
+        parser_version: str | None = None,
     ) -> None:
         self._taxonomies = taxonomies
         # Never classified, never a per-school view (data-use policy 1.17, `v1-e34-t34`).

@@ -10,10 +10,12 @@ Nothing here reaches AWS: moto answers botocore in-process and sockets are disab
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import functools
 import json
 import os
+import shutil
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
@@ -48,6 +50,7 @@ from debate_core.application.sync_runs import (
 )
 from debate_core.arguments.landscape.model_stage import NameScan
 from debate_core.domain.model_contracts import ModelParams, ModelPrompt, ModelResponse, TaskClass
+from debate_core.integrations.docx_parser import DebateDocxParser
 from debate_core.integrations.landscape.classification_store import review_queue_path
 from debate_core.integrations.landscape.yaml_taxonomy_repository import YamlTaxonomyRepository
 from debate_core.integrations.local.parsed_store import LocalParsedStore
@@ -61,6 +64,7 @@ from debate_core.testing.landscape_run import (
     SyntheticRun,
     plant_synthetic_run,
 )
+from debate_core.testing.landscape_store import PARSER_VERSION
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
     from mypy_boto3_s3.client import S3Client
@@ -285,6 +289,9 @@ def test_a_model_mode_the_command_does_not_offer_is_a_usage_error(world: Synthet
 
 
 class _PlacesEverything(ScriptedModelRouter):
+    parsed_dirs: list[Path | None]
+    """The parsed store each stage this router was built into reads card texts from (`v1-e40-t17`)."""
+
     async def generate_structured[OutputT: BaseModel](
         self,
         task_class: TaskClass,
@@ -312,15 +319,22 @@ class _PlacesEverything(ScriptedModelRouter):
 @pytest.fixture
 def model_router(monkeypatch: pytest.MonkeyPatch) -> _PlacesEverything:
     router = _PlacesEverything(model_id="fake-model")
+    router.parsed_dirs = []
     registry = PromptRegistry.load(Path(__file__).resolve().parents[3] / "prompts")
 
     def stage(
-        self: container_module.ServiceContainer, mode: ModelMode, max_items: int, **_: object
+        self: container_module.ServiceContainer,
+        mode: ModelMode,
+        max_items: int,
+        *,
+        parsed_dir: Path | None = None,
+        **_: object,
     ) -> ModelClassificationStage:
         assert mode is ModelMode.REPLAY
+        router.parsed_dirs.append(parsed_dir)
         return ModelClassificationStage(
             StructuredOutputGuard(router, registry),
-            ParsedStoreCardTexts(LocalParsedStore(self.settings.storage.data_dir)),
+            ParsedStoreCardTexts(LocalParsedStore(parsed_dir or self.settings.storage.data_dir)),
             max_items=max_items,
         )
 
@@ -905,12 +919,13 @@ def _lock_commands(client: S3Client) -> list[str]:
 
 
 def test_publish_in_bucket_mode_takes_the_run_lock_and_releases_it(
-    world: SyntheticRun, buckets: S3Client, monkeypatch: pytest.MonkeyPatch
+    world: SyntheticRun, buckets: S3Client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setenv("DEBATE_CASELIST__RUN_STATE", "bucket")
     _place_the_lock(buckets, held_until=None)
+    copy = _restored_copy(tmp_path / "copy-root")
 
-    result = landscape(world, "--caselist", CASELIST, "--publish")
+    result = landscape(world, "--caselist", CASELIST, "--publish", "--restored-copy", str(copy))
 
     assert result.exit_code == ExitCode.OK, result.stdout
     assert set(KEYS) <= set(_keys(buckets, DEV_BUCKET))
@@ -919,17 +934,293 @@ def test_publish_in_bucket_mode_takes_the_run_lock_and_releases_it(
 
 
 def test_publish_in_bucket_mode_is_refused_while_another_runner_holds_the_lock(
-    world: SyntheticRun, buckets: S3Client, monkeypatch: pytest.MonkeyPatch
+    world: SyntheticRun, buckets: S3Client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setenv("DEBATE_CASELIST__RUN_STATE", "bucket")
     today = SYNTHETIC_RUN_TODAY
     _place_the_lock(buckets, held_until=datetime(today.year, today.month, today.day, 9, 20, tzinfo=UTC))
+    copy = _restored_copy(tmp_path / "copy-root")
 
-    result = landscape(world, "--caselist", CASELIST, "--publish")
+    result = landscape(world, "--caselist", CASELIST, "--publish", "--restored-copy", str(copy))
 
     assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.stdout
     assert _error(result)["code"] == "RUN_LOCK_HELD"
     assert _keys(buckets, DEV_BUCKET) == [RUN_LOCK], "nothing published"
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e40-t17: a report over a copy restored from the bucket (the PM's ruling of 2026-10-30)
+#
+# The data directory is `synthetic26` as the Mac's last pull left it: through 2026-09-08 only, and its
+# raw sources gone, since the PM ruled the bytes are read from the copy alone. The copy is the whole
+# caselist through 2026-09-15, its parsed directory this build's, as `caselist restore-run-state
+# --with-sources` and then `caselist parse` into it leave one. So, by hand from the fixture table: a
+# report over the copy counts 2026-09-15, four sources and nine cards, seven placed by an alias, and
+# identifies `aff-two` by its plan text, whose bytes only the copy holds. Every piece of the
+# landscape's own state is written in the data directory, and none in the copy.
+# ------------------------------------------------------------------------------------------------
+
+THIS_BUILD = DebateDocxParser().parser_version
+LANDSCAPE_STATE = (
+    Path("landscape") / "classifications" / f"{CASELIST}.jsonl",
+    Path("landscape") / "review" / CASELIST / f"{SYNTHETIC_RUN_TOPIC}-review-queue.csv",
+    Path("landscape") / "plan_texts" / f"{CASELIST}.jsonl",
+    Path("landscape") / "analytic_texts" / f"{CASELIST}.jsonl",
+    Path("reports") / "landscape" / CASELIST / "2026-09-15" / "report.md",
+)
+RUNBOOK = "docs/runbooks/landscape-report-from-the-cloud-run.md"
+
+
+def _restored_copy(root: Path, *, planted_tags: dict[tuple[str, int], str] | None = None) -> Path:
+    """`synthetic26` through 2026-09-15 under `root/data`, parsed by this build: a copy ready to report from."""
+    copy = plant_synthetic_run(root, planted_tags=planted_tags).data_dir
+    parsed = copy / "parsed" / CASELIST
+    (parsed / PARSER_VERSION).rename(parsed / THIS_BUILD)
+    return copy.resolve()
+
+
+@pytest.fixture
+def stale_world(world: SyntheticRun) -> SyntheticRun:
+    """The data directory through 2026-09-08 only, with no raw source: the Mac's, after the cutover."""
+    (world.data_dir / "objects" / "manifests" / CASELIST / "2026-09-15.jsonl").unlink()
+    shutil.rmtree(world.data_dir / "blobs")
+    return world
+
+
+def _nothing_written(data_dir: Path) -> bool:
+    return not (data_dir / "landscape").exists() and not (data_dir / "reports").exists()
+
+
+def test_a_report_over_a_restored_copy_counts_its_newest_snapshot_and_keeps_the_state_here(
+    stale_world: SyntheticRun, tmp_path: Path
+) -> None:
+    alone = landscape(stale_world, "--caselist", CASELIST, "--dry-run")
+    assert alone.exit_code == ExitCode.OK, alone.output
+    assert _data(alone)["snapshot"] == "2026-09-08"
+    copy = _restored_copy(tmp_path / "copy-root")
+
+    result = landscape(stale_world, "--caselist", CASELIST, "--no-publish", "--restored-copy", str(copy))
+
+    assert result.exit_code == ExitCode.OK, result.output
+    data = _data(result)
+    assert (data["snapshot"], data["parsed_version"], data["restored_copy"]) == (
+        "2026-09-15",
+        THIS_BUILD,
+        str(copy),
+    )
+    assert data["classification"]["cards_by_method"] == {"ALIAS": 7, "UNPLACED": 2}
+    assert (data["counts"]["sources"], data["counts"]["cards"]) == (4, 9)
+    assert data["aff_identification"] == {"PLACED_CARD": 1, "PLAN_TEXT": 1}
+    assert [str(path) for path in LANDSCAPE_STATE if not (stale_world.data_dir / path).is_file()] == []
+    assert not (copy / "landscape").exists()
+    assert not (copy / "reports").exists()
+
+
+def test_a_report_from_the_data_directory_says_it_read_no_copy(world: SyntheticRun) -> None:
+    result = landscape(world, "--caselist", CASELIST, "--dry-run")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert _data(result)["restored_copy"] is None
+
+
+def test_a_second_report_over_a_fresh_copy_classifies_nothing_already_classified(
+    stale_world: SyntheticRun, tmp_path: Path, model_router: _PlacesEverything
+) -> None:
+    first_copy = _restored_copy(tmp_path / "first-copy")
+    first = landscape(
+        stale_world, "--caselist", CASELIST, "--no-publish", "--model-mode", "replay",
+        "--restored-copy", str(first_copy),
+    )  # fmt: skip
+    assert first.exit_code == ExitCode.OK, first.output
+    asked = _data(first)["classification"]["model"]
+    assert (asked["asked"], asked["calls"]) == (2, 1)
+    shutil.rmtree(first_copy.parent)
+
+    second_copy = _restored_copy(tmp_path / "second-copy")
+    second = landscape(
+        stale_world, "--caselist", CASELIST, "--no-publish", "--model-mode", "replay",
+        "--restored-copy", str(second_copy),
+    )  # fmt: skip
+
+    assert second.exit_code == ExitCode.OK, second.output
+    data = _data(second)
+    model = data["classification"]["model"]
+    assert (model["asked"], model["cached"], model["calls"]) == (0, 2, 0)
+    cache = data["classification"]["cache"]
+    assert (cache["misses"], cache["hits"] == cache["lookups"] > 0) == (0, True)
+    assert data["classification"]["cards_by_method"] == {"ALIAS": 7, "MODEL": 2}
+    assert len(model_router.calls) == 1
+    assert model_router.parsed_dirs == [first_copy, second_copy]
+
+
+def test_the_container_reads_the_model_stages_card_texts_from_the_directory_it_is_given(
+    world: SyntheticRun, tmp_path: Path
+) -> None:
+    copy = _restored_copy(tmp_path / "copy-root")
+    source = next((copy / "parsed" / CASELIST / THIS_BUILD).glob("sha256/*/*/*.jsonl"))
+    lines = source.read_text(encoding="utf-8").splitlines()
+    record = json.loads(lines[1])
+    record["document"]["cards"][0]["evidence_text"] = "An invented card body, only in the copy."
+    source.write_text("\n".join([lines[0], json.dumps(record)]) + "\n", encoding="utf-8")
+    sha = record["source_sha256"]
+    container = container_module.ServiceContainer(settings_loader=lambda: load_settings(environment="test"))
+
+    built = container.landscape_model_stage(ModelMode.REPLAY, 7, parsed_dir=copy)
+    texts = asyncio.run(built._texts.evidence_texts(CASELIST, THIS_BUILD, {sha: {0}}))  # pyright: ignore[reportPrivateUsage]
+
+    assert texts == {(sha, 0): "An invented card body, only in the copy."}
+
+
+def test_every_dry_run_says_how_many_cards_it_would_ask_the_model_about(world: SyntheticRun) -> None:
+    result = landscape(world, "--caselist", CASELIST, "--dry-run")
+    shown = landscape(world, "--caselist", CASELIST, "--dry-run", json_output=False)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert _data(result)["classification"]["model"]["would_ask"] == 0
+    assert "Dry run: would ask the model about 0 card(s); --model-mode none asks it nothing." in _flat(
+        shown.stdout
+    )
+
+
+def test_a_replay_dry_run_says_what_it_would_ask_and_hold_back_and_asks_nothing(
+    world: SyntheticRun, model_router: _PlacesEverything
+) -> None:
+    arguments = ("--caselist", CASELIST, "--dry-run", "--model-mode", "replay", "--max-model-items", "1")
+    result = landscape(world, *arguments)
+    shown = landscape(world, *arguments, json_output=False)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    model = _data(result)["classification"]["model"]
+    assert (model["would_ask"], model["held_back"], model["calls"]) == (1, 1, 0)
+    assert "Dry run: would ask the model about 1 card(s), and hold 1 more back for a later run." in _flat(
+        shown.stdout
+    )
+    assert model_router.calls == []
+
+
+def test_a_run_that_writes_has_no_would_ask_count(world: SyntheticRun) -> None:
+    result = landscape(world, "--caselist", CASELIST, "--no-publish")
+    shown = landscape(world, "--caselist", CASELIST, "--no-publish", json_output=False)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert _data(result)["classification"]["model"]["would_ask"] is None
+    assert "would ask the model" not in _flat(shown.stdout)
+
+
+def _not_a_copy(where: str, data_dir: Path, tmp_path: Path) -> Path:
+    """A directory `--restored-copy` must refuse, by what it is."""
+    if where == "the data directory":
+        return data_dir
+    if where == "inside it":
+        (data_dir / "copy").mkdir()
+        return data_dir / "copy"
+    if where == "holding it":
+        return data_dir.parent
+    if where == "inside a checkout":
+        checkout = tmp_path / "checkout"
+        (checkout / "config" / "profiles").mkdir(parents=True)
+        (checkout / "copy").mkdir()
+        return checkout / "copy"
+    return tmp_path / "never-restored"
+
+
+@pytest.mark.parametrize(
+    "where", ["the data directory", "inside it", "holding it", "inside a checkout", "no directory at all"]
+)
+def test_a_copy_that_is_not_one_is_refused_with_exit_2_and_nothing_is_written(
+    stale_world: SyntheticRun, tmp_path: Path, where: str
+) -> None:
+    copy = _not_a_copy(where, stale_world.data_dir, tmp_path)
+
+    result = landscape(stale_world, "--caselist", CASELIST, "--restored-copy", str(copy))
+
+    assert result.exit_code == ExitCode.USAGE_ERROR, result.output
+    assert _error(result)["code"] == "RESTORED_COPY_REFUSED"
+    assert _nothing_written(stale_world.data_dir)
+
+
+def test_a_copy_without_the_caselist_is_refused_with_exit_2(stale_world: SyntheticRun, tmp_path: Path) -> None:
+    empty = tmp_path / "empty-copy"
+    empty.mkdir()
+
+    result = landscape(stale_world, "--caselist", CASELIST, "--restored-copy", str(empty))
+
+    assert result.exit_code == ExitCode.USAGE_ERROR, result.output
+    assert _error(result)["code"] == "UNKNOWN_CASELIST"
+    assert _nothing_written(stale_world.data_dir)
+
+
+def test_a_copy_no_build_of_this_version_parsed_is_refused_naming_caselist_parse(
+    stale_world: SyntheticRun, tmp_path: Path
+) -> None:
+    copy = plant_synthetic_run(tmp_path / "copy-root").data_dir
+
+    result = landscape(stale_world, "--caselist", CASELIST, "--restored-copy", str(copy))
+
+    assert result.exit_code == ExitCode.USAGE_ERROR, result.output
+    error = _error(result)
+    assert (error["code"], error["details"]["known"]) == ("PARSED_VERSION_NOT_IN_STORE", [PARSER_VERSION])
+    assert THIS_BUILD in error["message"]
+    assert "caselist parse" in error["message"]
+    assert _nothing_written(stale_world.data_dir)
+
+
+def test_a_publish_in_bucket_mode_without_a_copy_is_refused_naming_the_runbook(
+    world: SyntheticRun, buckets: S3Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DEBATE_CASELIST__RUN_STATE", "bucket")
+    _place_the_lock(buckets, held_until=None)
+
+    result = landscape(world, "--caselist", CASELIST, "--publish")
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    error = _error(result)
+    assert error["code"] == "PUBLISH_NEEDS_A_RESTORED_COPY"
+    assert RUNBOOK in error["hint"]
+    assert _keys(buckets, DEV_BUCKET) == [RUN_LOCK], "nothing published"
+    assert _lock_commands(buckets) == [], "the lock was never taken"
+    assert _nothing_written(world.data_dir)
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [pytest.param(("--publish", "--dry-run"), id="a publish's dry run"), pytest.param((), id="no publish")],
+)
+def test_in_bucket_mode_a_dry_run_or_a_report_kept_here_needs_no_copy(
+    world: SyntheticRun, buckets: S3Client, monkeypatch: pytest.MonkeyPatch, arguments: tuple[str, ...]
+) -> None:
+    monkeypatch.setenv("DEBATE_CASELIST__RUN_STATE", "bucket")
+    _place_the_lock(buckets, held_until=None)
+
+    result = landscape(world, "--caselist", CASELIST, *arguments)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert _keys(buckets, DEV_BUCKET) == [RUN_LOCK]
+
+
+def test_scan_acceptances_from_a_copys_publish_are_kept_in_the_data_directory(
+    stale_world: SyntheticRun, buckets: S3Client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("DEBATE_CASELIST__RUN_STATE", "bucket")
+    _place_the_lock(buckets, held_until=None)
+    copy = _restored_copy(tmp_path / "copy-root", planted_tags=PLANTED_TOURNAMENT)
+    publish = ("--caselist", CASELIST, "--publish", "--restored-copy", str(copy))
+
+    refused = landscape(stale_world, *publish)
+    assert refused.exit_code == ExitCode.DOMAIN_FAILURE, refused.output
+    digest = _data_of_failure(refused)["scan"]["digest"]
+    accepted = landscape(stale_world, *publish, "--accept-scan-hits", digest)
+
+    assert accepted.exit_code == ExitCode.OK, accepted.output
+    log = Path(_data(accepted)["scan"]["acceptance_log"])
+    assert log.is_relative_to(stale_world.data_dir / "landscape" / "scan-acceptances")
+    assert log.is_file()
+    assert not (copy / "landscape").exists()
+    assert set(KEYS) <= set(_keys(buckets, DEV_BUCKET))
+
+
+def _data_of_failure(result: Result) -> dict[str, Any]:
+    return _error(result)["details"]
 
 
 # ------------------------------------------------------------------------------------------------

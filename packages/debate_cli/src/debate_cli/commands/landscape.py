@@ -116,6 +116,7 @@ from debate_core.application.landscape_model_stage import (
     model_use_gate,
 )
 from debate_core.application.landscape_report import CIRCUIT_WIDE_FILES, SCHOOL_VIEW_FILES
+from debate_core.application.landscape_restored_copy import RESTORED_COPY_FLAG
 from debate_core.application.landscape_run import (
     LandscapeModelMode,
     LandscapeRequestRefused,
@@ -220,6 +221,16 @@ def report(
     confirm_prod: Annotated[
         bool, typer.Option(CONFIRM_PROD_FLAG, help="Required to publish to the production evidence bucket.")
     ] = False,
+    restored_copy: Annotated[
+        Path | None,
+        typer.Option(
+            RESTORED_COPY_FLAG,
+            file_okay=False,
+            help="Read the caselist's cards from this copy restored from the bucket "
+            "(`caselist restore-run-state --with-sources`); the landscape's own state stays in the data "
+            "directory. Required to publish in bucket mode.",
+        ),
+    ] = None,
     json_output: Annotated[
         bool, typer.Option("--json", help="Write one machine-readable JSON object to stdout.")
     ] = False,

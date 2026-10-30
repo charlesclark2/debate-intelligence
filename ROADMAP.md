@@ -60,7 +60,7 @@ v2.3's extension work.
 
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
-| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 50 | 254 |
+| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 51 | 254 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 108 | 89 | 498 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 56 | 44 | 282 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 16 | 10 | 114 |
@@ -127,7 +127,7 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 | [Test selection, round three: command registration, quoted words, the root pyproject and the contract suites](plan_specs/v1/e01-repo-foundation/t32-test-selection-reach-round-three.yaml) `v1-e01-t32-test-selection-reach-round-three` | Succeeded | 1 | 3.0 |
 | [When a newer build wrote the database or added a setting, the error says so](plan_specs/v1/e01-repo-foundation/t33-newer-build-messages.yaml) `v1-e01-t33-newer-build-messages` | Pending | 0 | 2.0 |
 | [validate-dev is green again, and a red one is seen](plan_specs/v1/e01-repo-foundation/t34-validate-dev-green-again.yaml) `v1-e01-t34-validate-dev-green-again` | InProgress | 1 | 3.0 |
-| [CI's pyright covers tests/architecture and tests/smoke](plan_specs/v1/e01-repo-foundation/t35-pyright-scope-tests.yaml) `v1-e01-t35-pyright-scope-tests` | Pending | 1 | 1.0 |
+| [CI's pyright covers tests/architecture and tests/smoke](plan_specs/v1/e01-repo-foundation/t35-pyright-scope-tests.yaml) `v1-e01-t35-pyright-scope-tests` | Succeeded | 1 | 1.0 |
 | [A dev pre-release for a commit dev has moved past with a workflow change is reported superseded, not failed](plan_specs/v1/e01-repo-foundation/t36-prerelease-superseded-commit.yaml) `v1-e01-t36-prerelease-superseded-commit` | Succeeded | 1 | 2.0 |
 | [A CI check that every locked package's licence is one the project accepts](plan_specs/v1/e01-repo-foundation/t37-licence-check-over-the-lock.yaml) `v1-e01-t37-licence-check-over-the-lock` | Pending | 0 | 2.0 |
 | [A pull request into dev runs the tests its changes reach; a push to dev and a pull request into main run them all](plan_specs/v1/e01-repo-foundation/t38-ci-affected-tests-on-dev-pull-requests.yaml) `v1-e01-t38-ci-affected-tests-on-dev-pull-requests` | Succeeded | 1 | 3.0 |

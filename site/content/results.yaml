@@ -44,7 +44,7 @@
 season: '2026-27'
 
 # The day this file was last changed. Update it with every edit: the page shows it.
-revised: 2026-10-27
+revised: 2026-10-30
 
 # The words around the results. House style: no em dashes, and no acronym left unexplained.
 labels:
@@ -77,14 +77,16 @@ results:
     placing: top speaker
     students: [Anya Prakash]
 
-  # Ronald Reagan, from Charlie on 2026-10-27.
-  - scheduleId: ronald-reagan-2026
+  # Ronald Reagan, from Charlie on 2026-10-27. Off the schedule since 2026-10-30.
+  - tournament: Ronald Reagan High School
+    date: 2026-10-24
     event: lincoln-douglas
     division: novice
     placing: third speaker
     students: [Daksh Chauhan]
 
-  - scheduleId: ronald-reagan-2026
+  - tournament: Ronald Reagan High School
+    date: 2026-10-24
     event: lincoln-douglas
     division: novice
     placing: state qualifying leg

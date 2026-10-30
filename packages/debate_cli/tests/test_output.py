@@ -43,6 +43,9 @@ from debate_core.application.errors import (
     ArchiveTooLarge,
     BlobIntegrityError,
     DomainError,
+    ModelAccessDenied,
+    ModelRequestRejected,
+    ModelUnavailableError,
     NotFound,
     ProviderRateLimited,
     ProviderUnavailable,
@@ -356,6 +359,56 @@ def test_a_usage_error_keeps_clicks_own_exit_code() -> None:
 )
 def test_exit_code_for(exception: BaseException, expected: ExitCode) -> None:
     assert exit_code_for(exception) is expected
+
+
+#: What the Bedrock adapter raises for a call no retry fixes (v1-e05-t02): the caller is not allowed
+#: to make it, or the provider refuses the request itself. The identifiers are invented.
+REFUSED_MODEL_CALLS = [
+    (
+        ModelAccessDenied("bedrock", "example-model", "no usable AWS credentials", hint="aws sso login"),
+        "MODEL_ACCESS_DENIED",
+    ),
+    (
+        ModelAccessDenied("bedrock", "example-model", "AccessDeniedException: not granted", hint="ask"),
+        "MODEL_ACCESS_DENIED",
+    ),
+    (
+        ModelRequestRejected("bedrock", "example-model", "ValidationException", "temperature is refused"),
+        "MODEL_REQUEST_REJECTED",
+    ),
+]
+
+#: What it raises for a call that may succeed later: throttled, or the model did not answer.
+MODEL_CALLS_A_RETRY_MAY_CURE = [
+    (ProviderRateLimited("bedrock", "example-model: ThrottlingException"), "PROVIDER_RATE_LIMITED"),
+    (
+        ModelUnavailableError("bedrock", "example-model", "ServiceUnavailableException"),
+        "PROVIDER_UNAVAILABLE",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("exception", "code"), REFUSED_MODEL_CALLS, ids=["no-credentials", "not-granted", "rejected-parameter"]
+)
+def test_a_refused_model_call_exits_as_a_domain_failure(exception: Exception, code: str) -> None:
+    """No retry fixes it, so a script reading the exit code must not retry it (v1-e05-t09)."""
+    failure = CommandFailure.from_exception(exception)
+
+    assert exit_code_for(exception) is ExitCode.DOMAIN_FAILURE
+    assert (failure.code, failure.exit_code) == (code, ExitCode.DOMAIN_FAILURE)
+
+
+@pytest.mark.parametrize(
+    ("exception", "code"), MODEL_CALLS_A_RETRY_MAY_CURE, ids=["throttled", "unavailable"]
+)
+def test_a_model_call_a_retry_may_cure_still_exits_as_a_retrieval_failure(
+    exception: Exception, code: str
+) -> None:
+    failure = CommandFailure.from_exception(exception)
+
+    assert exit_code_for(exception) is ExitCode.RETRIEVAL_FAILURE
+    assert (failure.code, failure.exit_code) == (code, ExitCode.RETRIEVAL_FAILURE)
 
 
 #: The three store failures a retry may cure (v1-e01-t20): a store that did not answer, a session

@@ -364,6 +364,16 @@ allow_indirect_imports = true
 source_modules = ["debate_api"]
 forbidden_modules = ["lxml", "docx"]
 
+# v1-e05-t09 (PM amendment 2026-10-19, from v1-e05-t04's review). The prompt registry renders its
+# templates with jinja2's sandbox in debate_core.integrations.models (v1-e05-t04), and the API's pages
+# use it as the delivery package they are. Prompt text and its rendering are an adapter's business, as
+# a document library is: the domain holds the prompt's id, version and variables, never a template.
+[[tool.importlinter.contracts]]
+name = "The template engine never reaches the domain or the application layer"
+type = "forbidden"
+source_modules = ["debate_core.domain", "debate_core.application"]
+forbidden_modules = ["jinja2"]
+
 # v1-e04-t04-content-extraction. trafilatura, readability-lxml and pypdf are debate-core's
 # `extraction` extra. Only the two extractors may import them: html_extractor (trafilatura and
 # readability) and pdf_extractor (pypdf). The rules that decide a PDF's text live in

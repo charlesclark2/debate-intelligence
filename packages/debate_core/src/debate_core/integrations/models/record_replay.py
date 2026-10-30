@@ -29,6 +29,14 @@ A cassette holds the call, its key, the whole request and the whole response. Th
 cover a structured call's task class or parameters, so replay compares the recorded request with
 the call's in full, and a call that differs in either is an unrecorded call, not a near miss.
 
+A structured call's recorded request is compared as a parsed
+:class:`~debate_core.domain.model_contracts.ModelRequest`, not as JSON (v1-e05-t09). A field the
+cassette lacks takes its default, so a cassette recorded before an optional parameter was added to
+`ModelParams` still replays a call that leaves it unset, and needs no hand edit; a call that sets it,
+or a recorded value that differs from the call's, is still an unrecorded call. A recorded request
+that does not parse, a parameter this build does not know among them, is a
+:class:`~debate_core.integrations.models.errors.FixtureFileError`: record it again.
+
 A replayed response is the recorded one with its route marked as provider `fake` and no region or
 inference profile, because no model was reached. The recorded model id is kept: it says which
 model's answer is being replayed. Its output is validated strictly, as every router's is
@@ -55,7 +63,7 @@ or an invalid answer the router did not hand over, since record mode has no answ
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final
@@ -174,12 +182,16 @@ class CassetteDirectory:
     # Reading ----------------------------------------------------------------------------------
 
     def read_structured(self, request: ModelRequest) -> RecordedCall:
-        """The recorded response to `request`; :class:`MissingFixtureError` when nobody recorded it."""
+        """The recorded response to `request`; :class:`MissingFixtureError` when nobody recorded it.
+
+        The recorded request is compared parsed, so a field the cassette lacks takes its default.
+        """
         return self._read(
             "generate_structured",
             self.structured_path(request),
             request.model_dump(mode="json"),
             prompt=request.prompt,
+            as_recorded=_parsed_request,
         )
 
     def read_embedding(self, texts: Sequence[str]) -> RecordedCall:
@@ -211,6 +223,7 @@ class CassetteDirectory:
         request: Mapping[str, JsonValue],
         *,
         prompt: ModelPrompt | None = None,
+        as_recorded: Callable[[Path, object], object] = lambda _path, value: value,
     ) -> RecordedCall:
         document = read_json_object(path)
         if document is None:
@@ -220,7 +233,7 @@ class CassetteDirectory:
         if document.get("call") != call or document.get("key") != path.stem:
             raise FixtureFileError(path, f"it is not the {call} cassette filed under this key")
         recorded_request = document.get("request")
-        if recorded_request != dict(request):
+        if as_recorded(path, recorded_request) != as_recorded(path, dict(request)):
             raise self._missing(
                 call,
                 path,
@@ -426,6 +439,14 @@ def _replayed_refusal(recorded: RecordedCall, prompt: ModelPrompt) -> InvalidMod
         problems=problems,
         usage=_validated(recorded, ModelUsage, usage) if usage is not None else None,
     )
+
+
+def _parsed_request(path: Path, value: object) -> ModelRequest:
+    """A structured call's request as the value it means, every field it lacks at its default."""
+    try:
+        return ModelRequest.model_validate(value)
+    except ValidationError as error:
+        raise FixtureFileError(path, f"its recorded request is not valid: {error}") from error
 
 
 def _replayed_route(recorded: RecordedCall, route: object) -> ResolvedRoute:

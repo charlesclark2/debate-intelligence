@@ -84,3 +84,10 @@ it changes files a pull request will carry.
 In replay mode a call with no cassette fails with `MissingFixtureError`. So does a call whose task
 class or parameters differ from what the cassette recorded, because the key does not cover them and
 replay compares the whole request. Replay never holds the real router, so it cannot fall back to it.
+
+Replay compares the recorded request as the request it means, not as text (`v1-e05-t09`): a field
+the cassette lacks takes its default. So adding an optional parameter to `ModelParams` leaves every
+cassette here replaying, with no hand edit, for the calls that leave the parameter unset; a call
+that sets it is an unrecorded call, and so is any recorded value that differs from the call's. A
+cassette whose request does not parse, holding a parameter this build does not know for instance,
+is refused with `FixtureFileError`; record it again.

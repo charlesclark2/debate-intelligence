@@ -34,7 +34,7 @@ spec:
         and it passes 50 times under -n 6 with the machine loaded; the old recorder restored
         fails under load.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

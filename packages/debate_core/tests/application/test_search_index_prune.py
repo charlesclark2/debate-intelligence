@@ -347,6 +347,7 @@ def test_execute_refuses_a_plan_that_would_delete_the_current_index(three_publis
     service = prune_service(three_published)
     plan = asyncio.run(service.plan())
     before = three_published.listing()
+    assert written(plan.kept) == current(three_published)
 
     for kept in plan.kept:
         tampered = dataclasses.replace(plan, doomed=(*plan.doomed, kept))

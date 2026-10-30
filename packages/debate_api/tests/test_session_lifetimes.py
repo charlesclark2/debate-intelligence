@@ -24,6 +24,12 @@ from debate_api.configuration import CookieKeys, CookieKeysNotSet, parse_cookie_
 from debate_api.cookies import SESSION_COOKIE, CookieSealer, session_payload
 
 
+@pytest.fixture
+def world(auth_world: Any) -> Any:
+    """This file's world: sign-in alone: no index, no sources and no landscape bundles (`v1-e39-t20`)."""
+    return auth_world
+
+
 def signed_in(world: Any, username: str = "debater.one", *groups: str) -> Any:
     world.login.add_account(username, *(groups or ("student",)))
     response = world.sign_in(username)

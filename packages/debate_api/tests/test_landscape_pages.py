@@ -48,6 +48,17 @@ LANDSCAPE_PAGES: Final = (
 )
 
 
+@pytest.fixture
+def world(landscape_world: Any) -> Any:
+    """This file's world: sign-in and the landscape pages (`v1-e39-t20`)."""
+    return landscape_world
+
+
+@pytest.fixture
+def make_world(make_landscape_world: Any) -> Any:
+    return make_landscape_world
+
+
 @pytest.fixture(params=["student", "coach"])
 def member(request: pytest.FixtureRequest, world: Any) -> Any:
     world.login.add_account(f"{request.param}.one", request.param)

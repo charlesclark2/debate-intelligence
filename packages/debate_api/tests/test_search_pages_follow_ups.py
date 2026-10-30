@@ -1,7 +1,7 @@
 """The coach's follow-ups on the search pages, through the real app (`v1-e39-t11`).
 
 The result count above the results, "Back to results" on a card page, the link out to openCaselist,
-over `conftest.CORPUS`. Every expected value is written by hand from that corpus (working agreement
+over `conftest.search_corpus`. Every expected value is written by hand from that corpus (working agreement
 6): 25 cards hold `zephyr` (20 on the first page, 5 on the second), and of them one, the public forum
 card, is PF and one is a camp card; one card holds `granite costs`; none holds `obsidian`. The linked
 card, which holds `tundra`, is the only one whose school and team code are in the form an openCaselist
@@ -26,6 +26,17 @@ from debate_core.integrations.local.search_index import SqliteSearchIndexWriter
 from debate_core.testing.search_index import published_index
 
 LINKED_URL: Final = "https://opencaselist.com/hsld26/Cedarbrook/LM"
+
+
+@pytest.fixture
+def world(search_world: Any) -> Any:
+    """This file's world: sign-in and the search pages (`v1-e39-t20`)."""
+    return search_world
+
+
+@pytest.fixture
+def make_world(make_search_world: Any) -> Any:
+    return make_search_world
 
 
 @pytest.fixture

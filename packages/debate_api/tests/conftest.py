@@ -11,21 +11,32 @@ Only two things are stand-ins, and both answer as Cognito would:
   checks every one of them, and a test can change any claim or sign with another key.
 * :class:`FakeSelfService` is the token-authorized API over the same accounts.
 
-The search pages (v1-e39-t06) run over a real index: :data:`CORPUS`, built once by `v1-e39-t02`'s
-writer, published in memory by :mod:`debate_core.testing.search_index`, and fetched by the real
-:class:`~debate_core.application.search_index_holder.SearchIndexHolder` into the world's own
-directory, so a page test goes through the same download, digest checks and read-only open the
-function does.
+The world is split by surface (v1-e39-t20), so that a change selects only the tests it reaches
+(`scripts/affected_tests.py` reads this file fixture by fixture). :class:`PilotWorld` is sign-in
+alone: no index is published, no source is stored and no landscape bundle is listed. Each surface
+adds its own pieces, and a test file names the one it needs in its own `world` fixture:
 
-The download (v1-e39-t08) runs over real sources: :data:`DOWNLOAD_SOURCES`, synthetic Verbatim
-files built in memory, parsed by the real parser, and put in :class:`RecordingSourceStore` stand-ins
-for the bucket's `raw/caselist/hsld26` and `raw/openev/2026`. Their cards are documents of
-:data:`CORPUS` like any other, so the real E33 writer builds a downloaded file from them, and the
-index is published under the running parser's version.
+* `search_world` (:class:`SearchWorld`). The search pages (v1-e39-t06) run over a real index: the
+  `search_corpus` fixture, built once by `v1-e39-t02`'s writer, published in memory by
+  :mod:`debate_core.testing.search_index`, and fetched by the real
+  :class:`~debate_core.application.search_index_holder.SearchIndexHolder` into the world's own
+  directory, so a page test goes through the same download, digest checks and read-only open the
+  function does.
+* `download_world` (:class:`DownloadWorld`). The download (v1-e39-t08) runs over real sources: the
+  `download_sources` fixture, synthetic Verbatim files built in memory, parsed by the real parser,
+  and put in :class:`RecordingSourceStore` stand-ins for the bucket's `raw/caselist/hsld26` and
+  `raw/openev/2026`. Their cards are documents of the `download_corpus` fixture like any other, so
+  the real E33 writer builds a downloaded file from them, and that index is published under the
+  running parser's version.
+* `landscape_world` (:class:`LandscapeWorld`). The landscape pages (v1-e39-t17) read
+  :class:`InMemoryLandscapeObjects`, which lists and reads the hand-written bundles under
+  `fixtures/landscape/` as the bucket's `reports/landscape/` would; their own tests also put them in
+  a moto bucket and read them through the real `S3EvidenceObjectStore`.
+* `auth_world` is :class:`PilotWorld` itself, and `every_surface_world`
+  (:class:`EverySurfaceWorld`) all of them at once, for the tests that walk every route.
 
-The landscape pages (v1-e39-t17) read :class:`InMemoryLandscapeObjects`, which lists and reads the
-hand-written bundles under `fixtures/landscape/` as the bucket's `reports/landscape/` would; their own
-tests also put them in a moto bucket and read them through the real `S3EvidenceObjectStore`.
+Nothing is built at import: the corpora, the parser and the sources are session-scoped fixtures,
+built the first time a test asks for them.
 
 Every name, address, code, secret, tag, cite and card here is synthetic. No test reaches a network:
 the app runs in-process through Starlette's test client.
@@ -58,7 +69,7 @@ from starlette.testclient import TestClient
 from debate_api.app import create_app
 from debate_api.configuration import CookieKeys, PilotConfiguration
 from debate_api.cookies import SESSION_COOKIE, CookieSealer, session_payload
-from debate_api.landscape_markdown import render_bundle
+from debate_api.landscape_markdown import RenderedBundle, render_bundle
 from debate_api.state import PilotServices
 from debate_core.application.card_download import (
     DEFAULT_DOWNLOAD_CARD_CAP,
@@ -69,13 +80,15 @@ from debate_core.application.card_download import (
 )
 from debate_core.application.errors import BlobIntegrityError, NotFound, StoreUnavailable
 from debate_core.application.evidence_search import EvidenceSearchService
+from debate_core.application.ports.evidence_file_writer import EvidenceFileWriter
 from debate_core.application.ports.evidence_store import ObjectInfo, ObjectKey
 from debate_core.application.ports.persistence import BlobKey, SnapshotStore
 from debate_core.application.ports.search_index import IndexedOccurrence, SearchDocument
+from debate_core.application.ports.search_index_source import PointerRead
 from debate_core.application.ports.suppression import disclosure_digest
 from debate_core.application.ports.tub import AccountSelfService, AccountStanding, CodeRefused, TokenRefused
 from debate_core.application.search_index_build import cite_without_cutter_mark
-from debate_core.application.search_index_holder import SearchIndexHolder
+from debate_core.application.search_index_holder import ClosableSearchIndexReader, SearchIndexHolder
 from debate_core.application.tub.access_audit import AccessAuditService
 from debate_core.application.tub.account_page import AccountPageService
 from debate_core.application.tub.audit import AuditRecord
@@ -85,7 +98,7 @@ from debate_core.application.tub.sessions import Session
 from debate_core.application.tub.sign_in import SignInService
 from debate_core.domain.caselist import SourceDocument, SourceFormat, SourceOrigin
 from debate_core.domain.debate_files import FontSizeSpan, FormattingSpan, ParsedCard, ParsedDocument
-from debate_core.domain.search_index import read_aloud_text
+from debate_core.domain.search_index import SEARCH_INDEX_POINTER_KEY, read_aloud_text
 from debate_core.domain.style_profile import RunEmphasis, StyleMatchSource
 from debate_core.integrations.cognito import (
     CognitoIdTokenVerifier,
@@ -93,7 +106,6 @@ from debate_core.integrations.cognito import (
     HttpResponse,
     HttpTransport,
     PublishedKeySet,
-    issuer_for,
 )
 from debate_core.integrations.docx_file_writer.writer import DocxEvidenceFileWriter
 from debate_core.integrations.docx_parser.package import declared_document_bytes
@@ -109,7 +121,8 @@ CLIENT_ID = "synthetic-client-id"
 CLIENT_SECRET = "synthetic-client-secret"
 PUBLIC_ORIGIN = "https://tub.example.test"
 LOGIN_ORIGIN = "https://auth.tub.example.test"
-ISSUER = issuer_for(REGION, POOL_ID)
+ISSUER = f"https://cognito-idp.{REGION}.amazonaws.com/{POOL_ID}"
+"""What `issuer_for` builds, written out: a constant that called it would make every test here need it."""
 AUTHORIZE_URL = f"{LOGIN_ORIGIN}/oauth2/authorize"
 START = datetime(2026, 11, 2, 15, 0, tzinfo=UTC)
 
@@ -623,23 +636,26 @@ def _long_text() -> str:
     return f"{LONG_READ_ALOUD}. Zephyr {rest}."
 
 
-FEATURED_SPANS: Final = (
-    _span(FEATURED_TEXT, RunEmphasis.UNDERLINE, "Zephyr winds raise granite costs"),
-    _span(FEATURED_TEXT, RunEmphasis.HIGHLIGHT, "winds raise", "cyan"),
-    _span(FEATURED_TEXT, RunEmphasis.EMPHASIS, "granite"),
-    _span(FEATURED_TEXT, RunEmphasis.HIGHLIGHT, "costs.\nThe", "yellow"),
-    _span(FEATURED_TEXT, RunEmphasis.SHRUNK, "second paragraph says"),
-    _span(FEATURED_TEXT, RunEmphasis.BOLD, "basalt holds"),
-    _span(FEATURED_TEXT, RunEmphasis.UNDERTAG, "says basalt"),
-    _span(FEATURED_TEXT, RunEmphasis.ANALYTIC, "holds"),
-    _span(FEATURED_TEXT, RunEmphasis.CITE, "Zephyr"),
-    _span(FEATURED_TEXT, RunEmphasis.HEADING, "The"),
-)
-FEATURED_SIZES: Final = (
-    _size(FEATURED_TEXT, "Zephyr winds raise granite costs.", 22),
-    _size(FEATURED_TEXT, "second paragraph says", 16),
-    _size(FEATURED_TEXT, "basalt holds.", 21),
-)
+def _featured_formatting() -> tuple[tuple[FormattingSpan, ...], tuple[FontSizeSpan, ...]]:
+    spans = (
+        _span(FEATURED_TEXT, RunEmphasis.UNDERLINE, "Zephyr winds raise granite costs"),
+        _span(FEATURED_TEXT, RunEmphasis.HIGHLIGHT, "winds raise", "cyan"),
+        _span(FEATURED_TEXT, RunEmphasis.EMPHASIS, "granite"),
+        _span(FEATURED_TEXT, RunEmphasis.HIGHLIGHT, "costs.\nThe", "yellow"),
+        _span(FEATURED_TEXT, RunEmphasis.SHRUNK, "second paragraph says"),
+        _span(FEATURED_TEXT, RunEmphasis.BOLD, "basalt holds"),
+        _span(FEATURED_TEXT, RunEmphasis.UNDERTAG, "says basalt"),
+        _span(FEATURED_TEXT, RunEmphasis.ANALYTIC, "holds"),
+        _span(FEATURED_TEXT, RunEmphasis.CITE, "Zephyr"),
+        _span(FEATURED_TEXT, RunEmphasis.HEADING, "The"),
+    )
+    sizes = (
+        _size(FEATURED_TEXT, "Zephyr winds raise granite costs.", 22),
+        _size(FEATURED_TEXT, "second paragraph says", 16),
+        _size(FEATURED_TEXT, "basalt holds.", 21),
+    )
+    return spans, sizes
+
 
 HOSTILE_TAG: Final = "<script>alert('tag')</script> zephyr hostile"
 HOSTILE_CITE: Final = 'Hostile 26, "onerror=alert(1)" <b>Quarterly</b>'
@@ -662,12 +678,6 @@ DRAWING: Final = (
     "</pic:blipFill></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing>"
 )
 """A picture inside a card, which the E33 writer refuses as UNSUPPORTED_CONTENT."""
-
-
-@cache
-def download_parser() -> DebateDocxParser:
-    """The running parser, as the function's composition root builds it: one for the process."""
-    return DebateDocxParser()
 
 
 def _tag(text: str) -> str:
@@ -723,7 +733,12 @@ def understated(content: bytes, declared: int) -> bytes:
 
 
 def _source(
-    content: bytes, *, caselist: str = "hsld26", stored: bool = True, declared: int | None = None
+    parser: DebateDocxParser,
+    content: bytes,
+    *,
+    caselist: str = "hsld26",
+    stored: bool = True,
+    declared: int | None = None,
 ) -> DownloadSource:
     camp = caselist == "openev"
     sha = hashlib.sha256(content).hexdigest()
@@ -736,7 +751,7 @@ def _source(
         first_seen_snapshot=date(2026, 9, 15),
         last_seen_snapshot=date(2026, 10, 13),
     )
-    parsed = download_parser().parse(content, document, source_path="synthetic-source.docx")
+    parsed = parser.parse(content, document, source_path="synthetic-source.docx")
     assert isinstance(parsed, ParsedDocument), parsed
     return DownloadSource(
         store=CAMP_STORE if camp else CASELIST_STORE,
@@ -747,12 +762,12 @@ def _source(
     )
 
 
-@cache
-def download_sources() -> Mapping[str, DownloadSource]:
+def build_download_sources(parser: DebateDocxParser) -> Mapping[str, DownloadSource]:
     """Six synthetic sources: two cards in one, one each in the rest. `understated`'s zip directory
     claims 1,000 bytes for a `word/document.xml` that holds far more."""
     return {
         "disclosed": _source(
+            parser,
             build_docx(
                 _tag("Gabbro ridges slow upland erosion")
                 + _cite("Thorvaldsen 26", ", Fellow, Synthetic Geology Review, 2026")
@@ -760,16 +775,18 @@ def download_sources() -> Mapping[str, DownloadSource]:
                 + _tag("Pumice terraces drain quickly")
                 + _cite("Aaltonen 25", ", Hydrologist, Synthetic Water Quarterly, 2025")
                 + _body("Rain ", "passes through pumice terraces", " within hours.")
-            )
+            ),
         ),
         "other": _source(
+            parser,
             build_docx(
                 _tag("Scoria fields warm faster")
                 + _cite("Vasquez 24", ", Climatologist, Synthetic Heat Review, 2024")
                 + _body("Dark ground ", "absorbs more sunlight", " than pale ground.")
-            )
+            ),
         ),
         "camp": _source(
+            parser,
             build_docx(
                 _tag("Tuff walls shelter seedlings")
                 + _cite("Okafor 26", ", Ecologist, Synthetic Seedling Review, 2026")
@@ -778,13 +795,15 @@ def download_sources() -> Mapping[str, DownloadSource]:
             caselist="openev",
         ),
         "picture": _source(
+            parser,
             build_docx(
                 _tag("Andesite slopes hold snow")
                 + _cite("Haugen 26", ", Glaciologist, Synthetic Snow Review, 2026")
                 + _body("Snow ", "stays on andesite slopes", " into spring.", inside=DRAWING)
-            )
+            ),
         ),
         "understated": _source(
+            parser,
             build_docx(
                 _tag("Tephra plumes travel far downwind")
                 + _cite("Sigurdsson 26", ", Volcanologist, Synthetic Ash Review, 2026")
@@ -796,6 +815,7 @@ def download_sources() -> Mapping[str, DownloadSource]:
             declared=1000,
         ),
         "lost": _source(
+            parser,
             build_docx(
                 _tag("Rhyolite domes vent slowly")
                 + _cite("Lindgren 23", ", Volcanologist, Synthetic Vent Review, 2023")
@@ -815,13 +835,14 @@ DOWNLOAD_CARDS: Final = {
     "lost source": (32, "lost", 0),
     "understated": (33, "understated", 0),
 }
-"""The downloadable cards: each one's doc id, its source in :func:`download_sources`, and which card of it."""
+"""The downloadable cards: each one's doc id, its source in the `download_sources` fixture, and which
+card of it."""
 
 
-def download_card(name: str) -> ParsedCard:
+def download_card(sources: Mapping[str, DownloadSource], name: str) -> ParsedCard:
     """The parsed card a download's card is copied from."""
     _, source, number = DOWNLOAD_CARDS[name]
-    return download_sources()[source].parsed.cards[number]
+    return sources[source].parsed.cards[number]
 
 
 def _download_document(doc_id: int, source: DownloadSource, card: ParsedCard) -> SearchDocument:
@@ -872,10 +893,9 @@ def _download_document(doc_id: int, source: DownloadSource, card: ParsedCard) ->
     )
 
 
-def _download_documents() -> tuple[SearchDocument, ...]:
-    sources = download_sources()
+def download_documents(sources: Mapping[str, DownloadSource]) -> tuple[SearchDocument, ...]:
     return tuple(
-        _download_document(doc_id, sources[source], download_card(name))
+        _download_document(doc_id, sources[source], download_card(sources, name))
         for name, (doc_id, source, _) in DOWNLOAD_CARDS.items()
     )
 
@@ -908,15 +928,22 @@ class RecordingSourceStore(SnapshotStore):
         return key in self.blobs
 
 
-def _corpus() -> tuple[SearchDocument, ...]:
+# --------------------------------------------------------------------------------------------
+# The corpora: the search pages' cards, and the same with the download's
+# --------------------------------------------------------------------------------------------
+
+
+def corpus_documents(downloadable: Sequence[SearchDocument] = ()) -> tuple[SearchDocument, ...]:
+    """The search pages' cards, with `downloadable` (the download's) before the linked card, which is last."""
     long_text = _long_text()
+    featured_spans, featured_sizes = _featured_formatting()
     return (
         _document(
             1,
             text=FEATURED_TEXT,
             tag="Zephyr winds raise granite costs",
-            spans=FEATURED_SPANS,
-            sizes=FEATURED_SIZES,
+            spans=featured_spans,
+            sizes=featured_sizes,
             occurrences=(
                 _occurrence(0, 1),
                 _occurrence(1, 1, school=OTHER_SCHOOL, team=OTHER_TEAM, side="AFF"),
@@ -962,7 +989,7 @@ def _corpus() -> tuple[SearchDocument, ...]:
             _document(doc_id, text=f"Filler card {doc_id} about zephyr.", tag=f"Zephyr filler {doc_id}")
             for doc_id in range(6, 6 + FILLER_CARDS)
         ),
-        *_download_documents(),
+        *downloadable,
         _document(
             LINKED_CARD,
             text="Tundra lichens slow invented erosion.",
@@ -975,34 +1002,37 @@ def _corpus() -> tuple[SearchDocument, ...]:
 LINKED_CARD: Final = 6 + FILLER_CARDS
 """Card 26, which holds no `zephyr`: the one card whose school and team code make an openCaselist link."""
 
-CORPUS: Final = _corpus()
-CARDS: Final = {
+SEARCH_CARDS: Final = {
     "featured": 1,
     "public forum": 2,
     "camp": 3,
     "long": 4,
     "hostile": 5,
     "linked": LINKED_CARD,
-    **{name: doc_id for name, (doc_id, _, _) in DOWNLOAD_CARDS.items()},
 }
-"""The named cards of :data:`CORPUS` by doc id; the rest are fillers. The download's are the only ones
-whose sources exist."""
+"""The named cards of the `search_corpus` fixture by doc id; the rest are fillers."""
+CARDS: Final = {**SEARCH_CARDS, **{name: doc_id for name, (doc_id, _, _) in DOWNLOAD_CARDS.items()}}
+"""The named cards of the `download_corpus` fixture: the search pages' and the download's, the only
+ones whose sources exist."""
 
 
-@cache
-def corpus_index() -> PublishedIndex:
-    """:data:`CORPUS` built once per process and published in memory."""
+def published_corpus(
+    corpus: Sequence[SearchDocument], *, parser_version: str | None = None
+) -> PublishedIndex:
+    """`corpus` built by `v1-e39-t02`'s writer and published in memory, under `parser_version` if given."""
     with tempfile.TemporaryDirectory() as scratch:
         path = Path(scratch) / "search-index.sqlite"
         sink = SqliteSearchIndexWriter().create(path)
-        for document in CORPUS:
+        for document in corpus:
             sink.add(document)
         sink.finish()
         sqlite = path.read_bytes()
     stores: dict[str, int] = {}
-    for document in CORPUS:
+    for document in corpus:
         stores[document.caselist] = stores.get(document.caselist, 0) + 1
-    return published_index(sqlite, documents_by_store=stores, parser_version=download_parser().parser_version)
+    if parser_version is None:
+        return published_index(sqlite, documents_by_store=stores)
+    return published_index(sqlite, documents_by_store=stores, parser_version=parser_version)
 
 
 def configuration() -> PilotConfiguration:
@@ -1038,8 +1068,49 @@ class _RecordingWriter:
         return result
 
 
+# --------------------------------------------------------------------------------------------
+# What a world without a surface has in its place
+# --------------------------------------------------------------------------------------------
+
+NO_SURFACE: Final = "this world has no such surface: the test file's `world` fixture names the one it needs"
+
+
+class NothingPublished:
+    """The search index's prefix of a bucket nothing was ever published to: a search finds no index."""
+
+    def read_pointer(self, *, if_none_match: str | None) -> PointerRead:
+        raise NotFound("search index object", SEARCH_INDEX_POINTER_KEY)
+
+    def read_object(self, key: str, *, max_bytes: int) -> bytes:
+        raise NotFound("search index object", key)
+
+    def stream_object(self, key: str) -> Iterator[bytes]:
+        raise NotFound("search index object", key)
+
+
+def _no_index_to_open(path: Path, index_id: str) -> ClosableSearchIndexReader:
+    raise AssertionError(NO_SURFACE)
+
+
+def _no_download_writer(sources: SnapshotStore) -> EvidenceFileWriter:
+    raise AssertionError(NO_SURFACE)
+
+
+def _no_document_size(content: bytes) -> int | None:
+    raise AssertionError(NO_SURFACE)
+
+
+# --------------------------------------------------------------------------------------------
+# The worlds, one per surface
+# --------------------------------------------------------------------------------------------
+
+
 class PilotWorld:
-    """The app over the fakes, a browser for it, and helpers to sign in or plant a session."""
+    """The app over the fakes, a browser for it, and helpers to sign in or plant a session.
+
+    Sign-in alone: nothing is published to search, no source is stored to download and no landscape
+    bundle is listed. Each surface's world overrides the method that builds its service.
+    """
 
     public_origin = PUBLIC_ORIGIN
     login_origin = LOGIN_ORIGIN
@@ -1050,47 +1121,8 @@ class PilotWorld:
     good_email_code = GOOD_EMAIL_CODE
     authenticator_secret = AUTHENTICATOR_SECRET
 
-    cards = CARDS
-    corpus = CORPUS
-    caselist_store = CASELIST_STORE
-    camp_store = CAMP_STORE
-
-    @staticmethod
-    def sources() -> Mapping[str, DownloadSource]:
-        """The download's synthetic sources, by name (`v1-e39-t08`)."""
-        return download_sources()
-
-    @staticmethod
-    def parser() -> DebateDocxParser:
-        return download_parser()
-
-    @staticmethod
-    def document_bytes(source: str) -> int:
-        """What a source's zip directory declares for its `word/document.xml`, as a download reads it."""
-        declared = declared_document_bytes(download_sources()[source].content)
-        assert declared is not None
-        return declared
-
-    @staticmethod
-    def source_card(name: str) -> ParsedCard:
-        """The parsed card one of the download's cards is copied from."""
-        return download_card(name)
-
-    def __init__(
-        self,
-        *,
-        count_cap: int | None = None,
-        download_card_cap: int = DEFAULT_DOWNLOAD_CARD_CAP,
-        download_source_xml_bytes: int = DEFAULT_DOWNLOAD_SOURCE_XML_BYTES,
-        download_fetch_bytes: int = DOWNLOAD_FETCH_MAX_BYTES,
-        download_writer: WriterFactory | None = None,
-        landscape_objects: LandscapeObjects | None = None,
-    ) -> None:
+    def __init__(self) -> None:
         self.clock = MutableClock()
-        self.landscape_objects = landscape_objects or InMemoryLandscapeObjects()
-        self.index = corpus_index()
-        self.index_source = InMemorySearchIndexSource()
-        self.index_source.publish(self.index)
         self._index_directory = tempfile.TemporaryDirectory(prefix="tub-index-")
         self.index_directory = Path(self._index_directory.name)
         self.login = FakeManagedLogin(self.clock)
@@ -1098,12 +1130,6 @@ class PilotWorld:
         self.audit = FakeAuditSink()
         self.cookie_keys = new_cookie_keys()
         self.sealer = CookieSealer(self.cookie_keys)
-        self.source_stores = {prefix: RecordingSourceStore(prefix) for prefix in (CASELIST_STORE, CAMP_STORE)}
-        for source in download_sources().values():
-            if source.stored:
-                self.source_stores[source.store].add(source.content)
-        self.built: list[bytes] = []
-        """The bytes of every file a download built, sent or not."""
         identity_provider = CognitoOAuthClient(
             login_origin=LOGIN_ORIGIN,
             public_origin=PUBLIC_ORIGIN,
@@ -1117,20 +1143,8 @@ class PilotWorld:
             ),
             transport=self.login,
         )
-        search_index = SearchIndexHolder(
-            self.index_source,
-            directory=self.index_directory,
-            open_reader=lambda path, index_id: SqliteSearchIndexReader(path, index_id=index_id),
-            clock=self.clock,
-            build_service=(
-                EvidenceSearchService
-                if count_cap is None
-                else partial(EvidenceSearchService, count_cap=count_cap)
-            ),
-            suppression_list=self.index_source,
-        )
+        search_index = self._search_index()
         access_audit = AccessAuditService(audit=self.audit, clock=self.clock)
-        parser = download_parser()
         self.services = PilotServices(
             configuration=configuration(),
             cookie_keys=self.cookie_keys,
@@ -1149,55 +1163,50 @@ class PilotWorld:
             ),
             search_index=search_index,
             access_audit=access_audit,
-            card_download=CardDownloadService(
-                search_index=search_index,
-                writer=download_writer
-                or (
-                    lambda sources: _RecordingWriter(
-                        DocxEvidenceFileWriter(snapshots=sources, parser=parser), self.built
-                    )
-                ),
-                source_stores=lambda prefix: self.source_stores.get(prefix) or RecordingSourceStore(prefix),
-                access_audit=access_audit,
-                parser_version=parser.parser_version,
-                profile_version=parser.profile_version,
-                clock=self.clock,
-                card_cap=download_card_cap,
-                document_size=declared_document_bytes,
-                source_xml_bytes=download_source_xml_bytes,
-                fetch_bytes=download_fetch_bytes,
-            ),
-            landscape=LandscapeShelf(self.landscape_objects, prepare=render_bundle, clock=self.clock),
+            card_download=self._card_download(search_index, access_audit),
+            landscape=self._landscape(),
             clock=self.clock,
         )
         self.app = create_app(self.services)
         self.browser = self.new_browser()
 
-    def card_reference(self, name: str) -> str:
-        """`<caselist>/<cluster id>` of one of :data:`CARDS`, as the cart names it."""
-        return self.card_path(name).removeprefix("/cards/")
+    # Each surface's service, absent here ------------------------------------------------------
 
-    def download(
-        self,
-        *names: str,
-        cards: str | None = None,
-        browser: TestClient | None = None,
-        csrf_token: str | None = None,
-    ) -> Any:
-        """POST `/download` as `app.js` sends it, for the named cards (or a `cards` field as given)."""
-        field = cards if cards is not None else ",".join(self.card_reference(name) for name in names)
-        token = csrf_token
-        if token is None:
-            session = self.session_cookie(browser)
-            assert session is not None, "sign a student in first"
-            token = session.csrf_token
-        return self.post("/download", {"cards": field}, csrf_token=token, browser=browser)
+    def _search_index(self) -> SearchIndexHolder:
+        return SearchIndexHolder(
+            NothingPublished(),
+            directory=self.index_directory,
+            open_reader=_no_index_to_open,
+            clock=self.clock,
+        )
 
-    def card_path(self, name: str) -> str:
-        """The page of one of :data:`CARDS`."""
-        doc_id = CARDS[name]
-        caselist = next(document.caselist for document in CORPUS if document.doc_id == doc_id)
-        return f"/cards/{caselist}/{cluster_of(doc_id)}"
+    def _card_download(
+        self, search_index: SearchIndexHolder, access_audit: AccessAuditService
+    ) -> CardDownloadService:
+        return self._no_download(search_index, access_audit, parser_version=NO_SURFACE)
+
+    def _no_download(
+        self, search_index: SearchIndexHolder, access_audit: AccessAuditService, *, parser_version: str
+    ) -> CardDownloadService:
+        """No source stored and no writer wired: a download is a test's mistake.
+
+        Download is on when `parser_version` is the one the index was built by, as on the search pages.
+        """
+        return CardDownloadService(
+            search_index=search_index,
+            writer=_no_download_writer,
+            source_stores=RecordingSourceStore,
+            access_audit=access_audit,
+            parser_version=parser_version,
+            profile_version=NO_SURFACE,
+            clock=self.clock,
+            document_size=_no_document_size,
+        )
+
+    def _landscape(self) -> LandscapeShelf[RenderedBundle]:
+        return LandscapeShelf(InMemoryLandscapeObjects({}), prepare=render_bundle, clock=self.clock)
+
+    # Browsers and accounts -------------------------------------------------------------------
 
     def signed_in_student(self, username: str = "debater.one") -> Session:
         """A student account and its session, planted in the browser."""
@@ -1285,6 +1294,164 @@ class PilotWorld:
         return (browser or self.browser).post(path, content=body, headers=headers)
 
 
+class SearchWorld(PilotWorld):
+    """Sign-in and the search pages, over `corpus` published as `index` and fetched by the real holder."""
+
+    def __init__(
+        self,
+        *,
+        index: PublishedIndex,
+        corpus: tuple[SearchDocument, ...],
+        cards: Mapping[str, int],
+        count_cap: int | None = None,
+        **rest: Any,
+    ) -> None:
+        self.index = index
+        self.corpus = corpus
+        self.cards = cards
+        """The named cards of :attr:`corpus` by doc id; the rest are fillers."""
+        self.index_source = InMemorySearchIndexSource()
+        self.index_source.publish(index)
+        self._count_cap = count_cap
+        super().__init__(**rest)
+
+    def _search_index(self) -> SearchIndexHolder:
+        count_cap = self._count_cap
+        return SearchIndexHolder(
+            self.index_source,
+            directory=self.index_directory,
+            open_reader=lambda path, index_id: SqliteSearchIndexReader(path, index_id=index_id),
+            clock=self.clock,
+            build_service=(
+                EvidenceSearchService
+                if count_cap is None
+                else partial(EvidenceSearchService, count_cap=count_cap)
+            ),
+            suppression_list=self.index_source,
+        )
+
+    def _card_download(
+        self, search_index: SearchIndexHolder, access_audit: AccessAuditService
+    ) -> CardDownloadService:
+        """Download is on, as for an index this function's parser built; nothing can be downloaded."""
+        return self._no_download(
+            search_index, access_audit, parser_version=self.index.manifest.parser_version
+        )
+
+    def card_reference(self, name: str) -> str:
+        """`<caselist>/<cluster id>` of one of :attr:`cards`, as the cart names it."""
+        return self.card_path(name).removeprefix("/cards/")
+
+    def card_path(self, name: str) -> str:
+        """The page of one of :attr:`cards`."""
+        doc_id = self.cards[name]
+        caselist = next(document.caselist for document in self.corpus if document.doc_id == doc_id)
+        return f"/cards/{caselist}/{cluster_of(doc_id)}"
+
+
+class DownloadWorld(SearchWorld):
+    """The search world over the download's corpus, its sources stored and the real E33 writer wired."""
+
+    caselist_store = CASELIST_STORE
+    camp_store = CAMP_STORE
+
+    def __init__(
+        self,
+        *,
+        sources: Mapping[str, DownloadSource],
+        parser: DebateDocxParser,
+        download_card_cap: int = DEFAULT_DOWNLOAD_CARD_CAP,
+        download_source_xml_bytes: int = DEFAULT_DOWNLOAD_SOURCE_XML_BYTES,
+        download_fetch_bytes: int = DOWNLOAD_FETCH_MAX_BYTES,
+        download_writer: WriterFactory | None = None,
+        **rest: Any,
+    ) -> None:
+        self._sources = sources
+        self._parser = parser
+        self._download_card_cap = download_card_cap
+        self._download_source_xml_bytes = download_source_xml_bytes
+        self._download_fetch_bytes = download_fetch_bytes
+        self._download_writer = download_writer
+        self.source_stores = {prefix: RecordingSourceStore(prefix) for prefix in (CASELIST_STORE, CAMP_STORE)}
+        for source in sources.values():
+            if source.stored:
+                self.source_stores[source.store].add(source.content)
+        self.built: list[bytes] = []
+        """The bytes of every file a download built, sent or not."""
+        super().__init__(**rest)
+
+    def sources(self) -> Mapping[str, DownloadSource]:
+        """The download's synthetic sources, by name (`v1-e39-t08`)."""
+        return self._sources
+
+    def parser(self) -> DebateDocxParser:
+        return self._parser
+
+    def document_bytes(self, source: str) -> int:
+        """What a source's zip directory declares for its `word/document.xml`, as a download reads it."""
+        declared = declared_document_bytes(self._sources[source].content)
+        assert declared is not None
+        return declared
+
+    def source_card(self, name: str) -> ParsedCard:
+        """The parsed card one of the download's cards is copied from."""
+        return download_card(self._sources, name)
+
+    def _card_download(
+        self, search_index: SearchIndexHolder, access_audit: AccessAuditService
+    ) -> CardDownloadService:
+        parser = self._parser
+        return CardDownloadService(
+            search_index=search_index,
+            writer=self._download_writer
+            or (
+                lambda sources: _RecordingWriter(
+                    DocxEvidenceFileWriter(snapshots=sources, parser=parser), self.built
+                )
+            ),
+            source_stores=lambda prefix: self.source_stores.get(prefix) or RecordingSourceStore(prefix),
+            access_audit=access_audit,
+            parser_version=parser.parser_version,
+            profile_version=parser.profile_version,
+            clock=self.clock,
+            card_cap=self._download_card_cap,
+            document_size=declared_document_bytes,
+            source_xml_bytes=self._download_source_xml_bytes,
+            fetch_bytes=self._download_fetch_bytes,
+        )
+
+    def download(
+        self,
+        *names: str,
+        cards: str | None = None,
+        browser: TestClient | None = None,
+        csrf_token: str | None = None,
+    ) -> Any:
+        """POST `/download` as `app.js` sends it, for the named cards (or a `cards` field as given)."""
+        field = cards if cards is not None else ",".join(self.card_reference(name) for name in names)
+        token = csrf_token
+        if token is None:
+            session = self.session_cookie(browser)
+            assert session is not None, "sign a student in first"
+            token = session.csrf_token
+        return self.post("/download", {"cards": field}, csrf_token=token, browser=browser)
+
+
+class LandscapeWorld(PilotWorld):
+    """Sign-in and the landscape pages, over the bundles under `fixtures/landscape/` unless given others."""
+
+    def __init__(self, *, landscape_objects: LandscapeObjects | None = None, **rest: Any) -> None:
+        self.landscape_objects = landscape_objects or InMemoryLandscapeObjects()
+        super().__init__(**rest)
+
+    def _landscape(self) -> LandscapeShelf[RenderedBundle]:
+        return LandscapeShelf(self.landscape_objects, prepare=render_bundle, clock=self.clock)
+
+
+class EverySurfaceWorld(DownloadWorld, LandscapeWorld):
+    """Every surface at once, for the tests that walk every route: the download's and the landscape's."""
+
+
 # --------------------------------------------------------------------------------------------
 # Reading Copy card's spans back (v1-e39-t06 ac2)
 # --------------------------------------------------------------------------------------------
@@ -1356,16 +1523,125 @@ def read_back() -> Callable[[Sequence[Sequence[str]]], tuple[list[FormattingSpan
     return copied_spans
 
 
+# --------------------------------------------------------------------------------------------
+# What more than one world shares, built once per session
+# --------------------------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session")
+def search_corpus() -> tuple[SearchDocument, ...]:
+    """The search pages' cards: the five named, twenty fillers and the linked card, last."""
+    return corpus_documents()
+
+
+@pytest.fixture(scope="session")
+def search_corpus_index(search_corpus: tuple[SearchDocument, ...]) -> PublishedIndex:
+    return published_corpus(search_corpus)
+
+
+@pytest.fixture(scope="session")
+def download_parser() -> DebateDocxParser:
+    """The running parser, as the function's composition root builds it: one for the process."""
+    return DebateDocxParser()
+
+
+@pytest.fixture(scope="session")
+def download_sources(download_parser: DebateDocxParser) -> Mapping[str, DownloadSource]:
+    return build_download_sources(download_parser)
+
+
+@pytest.fixture(scope="session")
+def download_corpus(download_sources: Mapping[str, DownloadSource]) -> tuple[SearchDocument, ...]:
+    """The search pages' cards with the download's seven, which are the only ones whose sources exist."""
+    return corpus_documents(download_documents(download_sources))
+
+
+@pytest.fixture(scope="session")
+def download_corpus_index(
+    download_corpus: tuple[SearchDocument, ...], download_parser: DebateDocxParser
+) -> PublishedIndex:
+    """The download's corpus, published under the running parser's version as a download requires."""
+    return published_corpus(download_corpus, parser_version=download_parser.parser_version)
+
+
+# --------------------------------------------------------------------------------------------
+# The worlds: a test file's own `world` fixture names the one it needs
+# --------------------------------------------------------------------------------------------
+
+
 @pytest.fixture
-def world() -> Iterator[PilotWorld]:
+def auth_world() -> Iterator[PilotWorld]:
     made = PilotWorld()
     yield made
     made.services.search_index.close()
 
 
 @pytest.fixture
-def make_world() -> Callable[..., PilotWorld]:
-    return PilotWorld
+def make_search_world(
+    search_corpus: tuple[SearchDocument, ...], search_corpus_index: PublishedIndex
+) -> Callable[..., SearchWorld]:
+    return partial(SearchWorld, index=search_corpus_index, corpus=search_corpus, cards=SEARCH_CARDS)
+
+
+@pytest.fixture
+def search_world(make_search_world: Callable[..., SearchWorld]) -> Iterator[SearchWorld]:
+    made = make_search_world()
+    yield made
+    made.services.search_index.close()
+
+
+@pytest.fixture
+def make_download_world(
+    download_corpus: tuple[SearchDocument, ...],
+    download_corpus_index: PublishedIndex,
+    download_sources: Mapping[str, DownloadSource],
+    download_parser: DebateDocxParser,
+) -> Callable[..., DownloadWorld]:
+    return partial(
+        DownloadWorld,
+        index=download_corpus_index,
+        corpus=download_corpus,
+        cards=CARDS,
+        sources=download_sources,
+        parser=download_parser,
+    )
+
+
+@pytest.fixture
+def download_world(make_download_world: Callable[..., DownloadWorld]) -> Iterator[DownloadWorld]:
+    made = make_download_world()
+    yield made
+    made.services.search_index.close()
+
+
+@pytest.fixture
+def make_landscape_world() -> Callable[..., LandscapeWorld]:
+    return LandscapeWorld
+
+
+@pytest.fixture
+def landscape_world(make_landscape_world: Callable[..., LandscapeWorld]) -> Iterator[LandscapeWorld]:
+    made = make_landscape_world()
+    yield made
+    made.services.search_index.close()
+
+
+@pytest.fixture
+def every_surface_world(
+    download_corpus: tuple[SearchDocument, ...],
+    download_corpus_index: PublishedIndex,
+    download_sources: Mapping[str, DownloadSource],
+    download_parser: DebateDocxParser,
+) -> Iterator[EverySurfaceWorld]:
+    made = EverySurfaceWorld(
+        index=download_corpus_index,
+        corpus=download_corpus,
+        cards=CARDS,
+        sources=download_sources,
+        parser=download_parser,
+    )
+    yield made
+    made.services.search_index.close()
 
 
 @pytest.fixture

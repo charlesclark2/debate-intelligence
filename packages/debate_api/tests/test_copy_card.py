@@ -42,6 +42,12 @@ NAMED_CARDS = ("featured", "public forum", "camp", "long", "hostile", "linked")
 
 
 @pytest.fixture
+def world(search_world: Any) -> Any:
+    """This file's world: sign-in and the search pages (`v1-e39-t20`)."""
+    return search_world
+
+
+@pytest.fixture
 def student(world: Any) -> Any:
     world.signed_in_student()
     return world

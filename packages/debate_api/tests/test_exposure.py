@@ -85,6 +85,12 @@ PLAN_CHECKS: Final = {
 """The Terraform runs the session report's gate table (ac5) cites, for gate item 3 and the removal grant."""
 
 
+@pytest.fixture
+def world(every_surface_world: Any) -> Any:
+    """This file's world: every surface at once (`v1-e39-t20`)."""
+    return every_surface_world
+
+
 def test_exposure_every_route_has_a_path_here() -> None:
     assert set(CONCRETE_PATHS) == set(ROUTE_ACCESS)
 

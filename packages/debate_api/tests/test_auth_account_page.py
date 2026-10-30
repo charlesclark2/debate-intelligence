@@ -14,6 +14,12 @@ EMAIL = "debater.one@example.test"
 
 
 @pytest.fixture
+def world(auth_world: Any) -> Any:
+    """This file's world: sign-in alone: no index, no sources and no landscape bundles (`v1-e39-t20`)."""
+    return auth_world
+
+
+@pytest.fixture
 def student(world: Any) -> tuple[Any, Any]:
     world.login.add_account("debater.one", "student")
     session = world.use_session(world.session_for("debater.one"))

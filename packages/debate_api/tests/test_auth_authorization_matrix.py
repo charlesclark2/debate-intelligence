@@ -28,6 +28,12 @@ from debate_api.cookies import SESSION_COOKIE, SIGN_IN_COOKIE, CookieSealer
 from debate_api.routes import ROUTE_ACCESS
 
 
+@pytest.fixture
+def world(every_surface_world: Any) -> Any:
+    """This file's world: every surface at once (`v1-e39-t20`)."""
+    return every_surface_world
+
+
 @dataclass(frozen=True)
 class RouteRequest:
     method: str

@@ -24,6 +24,12 @@ SCRIPT = files("debate_api").joinpath("static", "app.js").read_text()
 
 
 @pytest.fixture
+def world(auth_world: Any) -> Any:
+    """This file's world: sign-in alone: no index, no sources and no landscape bundles (`v1-e39-t20`)."""
+    return auth_world
+
+
+@pytest.fixture
 def pages(world: Any) -> dict[str, str]:
     """Every page the app renders, for a coach (who sees every link) and a pending enrolment."""
     world.login.add_account("coach.one", "coach")

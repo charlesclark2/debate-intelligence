@@ -84,6 +84,17 @@ UNAVAILABLE: Final = "The download could not be made right now. Try again in a m
 
 
 @pytest.fixture
+def world(download_world: Any) -> Any:
+    """This file's world: sign-in, the search pages and the download (`v1-e39-t20`)."""
+    return download_world
+
+
+@pytest.fixture
+def make_world(make_download_world: Any) -> Any:
+    return make_download_world
+
+
+@pytest.fixture
 def student(world: Any) -> Any:
     world.signed_in_student()
     return world

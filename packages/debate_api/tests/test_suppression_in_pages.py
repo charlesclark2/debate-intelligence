@@ -5,7 +5,7 @@ Copy card's copy all go through the index holder's lease, which applies the supp
 holder last read, and the holder re-reads it at most five minutes apart. The clock is the world's
 own, so "four minutes fifty-nine" and "five minutes" are each a line.
 
-Expected values are written by hand from `conftest.CORPUS`. The featured card (doc 1) has three
+Expected values are written by hand from `conftest.search_corpus`. The featured card (doc 1) has three
 occurrences: 0 (Maple Grove QX, its representative), 1 (Riverbend ZT) and 2 (no provenance kept).
 An occurrence's source digest is `f"{doc:032x}{ordinal:032x}"` and its disclosure digest
 `f"{ordinal:032x}{doc:032x}"`. 25 cards hold `zephyr`, 20 to a page.
@@ -24,6 +24,12 @@ from debate_core.application.ports.suppression import ReasonCode, SuppressionAct
 FEATURED: Final = 1
 JUST_UNDER: Final = timedelta(minutes=5) - timedelta(seconds=1)
 OTHER_LINE: Final = "Riverbend ZT"
+
+
+@pytest.fixture
+def world(search_world: Any) -> Any:
+    """This file's world: sign-in and the search pages (`v1-e39-t20`)."""
+    return search_world
 
 
 def source_of(doc_id: int, ordinal: int) -> str:

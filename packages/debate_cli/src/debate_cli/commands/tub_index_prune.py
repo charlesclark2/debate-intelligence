@@ -238,7 +238,7 @@ def _caption(plan: PrunePlan, result: PruneResult | None) -> str:
         "and current.json's older versions"
     )
     if result is not None:
-        return f"Deleted {result.deleted} of {listed}. Kept {counts['kept']} version(s)."
+        return f"Deleted {result.deleted}: {listed}. Kept {counts['kept']} version(s)."
     if not plan.doomed:
         return f"Dry run: nothing to delete. Kept {counts['kept']} version(s)."
     return (

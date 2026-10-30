@@ -8,8 +8,8 @@
 | When | Each September, for the season that aged out on 31 August. Never on a Wednesday, and never while a run holds the bucket's run lock |
 | Where | Your Mac, in a checkout of this repository, with the installed `debate-research` build; one terminal window per environment |
 | How long | About an hour of attention for each of dev and prod, most of it reading listings |
-| Destructive? | **Yes**, in [Step 2](#step-2--landscape-school-views) and [Step 4](#step-4--a-caselist-the-inventory-marks-purge): school views, and a purged caselist's local classifier files and cassettes, every version included. Everything else here lists or checks |
-| Tooling | `debate-research config show`, `store ls`, `tub index build` and `publish`, the AWS CLI under the everyday and takedown profiles, and the removal runbook's [P4](caselist-removal.md#p4--delete-the-superseded-index-versions-noncurrent-versions-included) |
+| Destructive? | **Yes**, in [Step 2](#step-2--landscape-school-views), [Step 4](#step-4--a-caselist-the-inventory-marks-purge) and [Step 5](#step-5--the-student-search-pilots-index): school views, a purged caselist's local classifier files and cassettes, and the search pilot's superseded index versions, every version included. Everything else here lists or checks |
+| Tooling | `debate-research config show`, `store ls`, `tub index build`, `publish` and `prune` (the removal runbook's [P4](caselist-removal.md#p4--delete-the-superseded-index-versions-noncurrent-versions-included)), and the AWS CLI under the everyday and takedown profiles |
 | Spec | [`v1-e30-t28-annual-purge-runbook`](../../plan_specs/v1/e30-caselist-ingestion/t28-annual-purge-runbook.yaml) |
 
 A season runs 1 August to 31 July. The policy keeps a season's data for that season and the following
@@ -40,7 +40,7 @@ One row per row of the policy's retention table, plus the stores the spec names 
 | Circuit-wide landscape reports | Nothing | Kept. Never listed for deletion | [2](#step-2--landscape-school-views) |
 | The local classifier's files and the model cassettes (on this Mac only) | With a purged season | **Deleted** for a caselist the inventory marks `PURGE` | [4](#step-4--a-caselist-the-inventory-marks-purge) |
 | Team files built from disclosed cards | Nothing. Kept indefinitely (team work product) | Counts them, and checks no card in them is from a purged season | [7](#step-7--built-files) |
-| The student search pilot's index | Superseded versions, within 30 days | Checks the current index holds no purged caselist; deletes superseded versions with the removal runbook's P4 | [5](#step-5--the-student-search-pilots-index) |
+| The student search pilot's index | Superseded versions, within 30 days | Checks the current index holds no purged caselist; deletes superseded versions with `tub index prune`, the removal runbook's P4 | [5](#step-5--the-student-search-pilots-index) |
 | The pilot's access audit | After 400 days | Nothing: log retention deletes it | — |
 | The weekly cloud run's and a backfile import's working copies | When the task stops | Nothing: Fargate deletes them. The container keeps nothing between runs | — |
 | A working copy restored on this Mac (`caselist restore-run-state`) | At the end of the step that restored it | Checks none is left, at the start and at the end | [1](#step-1--no-working-copy-left-on-this-mac), [9](#step-9--the-end-of-the-environment) |
@@ -557,12 +557,45 @@ purged caselist. Rebuild and publish it without that store with the removal runb
 [P3](caselist-removal.md#p3--rebuild-and-publish-the-index), its `STORES` less that caselist, then run
 this block again: the line is gone. **A `STOP` line** goes to the PM.
 
-**Then the superseded index versions**, noncurrent versions included, with the removal runbook's
-[P4](caselist-removal.md#p4--delete-the-superseded-index-versions-noncurrent-versions-included): its
-dry run, then its delete, then its dry run again as the check. Run P4 **in a window of its own**: its
-blocks set `BUCKET` and `PRUNE` for themselves, and in prod with prod's names, as P4 says. Run it on
-the same day, after `purge_guard` in this window has printed the lock free, and not on a Wednesday.
-Note P4's counts for step 10.
+**Then the superseded index versions**, noncurrent versions included, with `debate-research tub index
+prune`, the command the removal runbook's
+[P4](caselist-removal.md#p4--delete-the-superseded-index-versions-noncurrent-versions-included) runs
+(`v1-e39-t15`): its dry run, then its delete, then its dry run again as the check, in this window after
+`purge_guard`. The command keeps the current index's directory and the current `current.json`, lists
+and deletes under the takedown profile this window signed in to, and refuses on its own on a Wednesday
+and while the run lock is held; `purge_guard` checks the same first. P4 says what its table shows and
+what each refusal means.
+
+**Operator command** (expected runtime seconds; reads only)
+Where: your Mac, in the purge window, after the block above
+```bash
+if purge_guard; then
+  DEBATE_ENV="$PURGE_ENV" DEBATE_REMOVAL_PROFILE="debate-${PURGE_ENV}-evidence-removal" debate-research tub index prune --env "$PURGE_ENV"
+fi
+```
+Success looks like P4's dry run: a title naming the current index by the first eight characters of
+its id, that index's row `kept` and `current.json`'s `current kept, older would be deleted`, and a
+line ending `To carry it out, add: --execute --confirm <code>`. Note its counts for step 10. `Dry run: nothing to delete` means
+there is nothing to delete: skip the next block. **Stop** on a refusal, or on a row other than the
+current index's and `current.json`'s that says `kept`, and tell the PM.
+
+**Then delete.** Set `CODE` to the code the dry run printed. In prod the block adds `--confirm-prod`.
+
+**Operator command** (expected runtime seconds; deletes, and cannot be undone)
+Where: your Mac, in the purge window
+```bash
+CODE=put-the-code-the-dry-run-printed-here
+if purge_guard; then
+  if [ "$PURGE_ENV" = "prod" ]; then
+    DEBATE_ENV=prod DEBATE_REMOVAL_PROFILE=debate-prod-evidence-removal debate-research tub index prune --env prod --execute --confirm "$CODE" --confirm-prod
+  else
+    DEBATE_ENV="$PURGE_ENV" DEBATE_REMOVAL_PROFILE="debate-${PURGE_ENV}-evidence-removal" debate-research tub index prune --env "$PURGE_ENV" --execute --confirm "$CODE"
+  fi
+fi
+```
+Success looks like a line beginning `Deleted N:`, N the dry run's versions and delete markers
+together. **The check:** the dry run block again says `Dry run: nothing to delete`, under the same
+current index. A refusal deleted nothing; P4's table says what to do.
 
 **This Mac's own index builds.** Each build here writes `tub-index/<index id>/` in the data directory,
 and only the next build here prunes them, keeping the newest two. Since the cutover the builds are the
@@ -752,7 +785,7 @@ comment), counts only: no key, no path, no school, team code or name.
 | dev, prod | School-view bucket versions and local files deleted, and bundles listed | Step 2's dry run before and after |
 | dev, prod | The inventory's count line for `bucket`, `bundle` and `local` | Step 3 |
 | dev, prod | Each `PURGE` and `STOP` line, as printed (a slug, dates and counts), and what the PM ruled | Steps 3 and 4 |
-| dev, prod | The index's count line; P4's version and key counts; this Mac's index builds | Step 5 |
+| dev, prod | The index's count line; the prune's version, delete marker and key counts; this Mac's index builds | Step 5 |
 | dev, prod | Keys, noncurrent versions and how many are past the lifecycle | Step 6 |
 | dev, prod | Built files in the bucket and on this Mac; the `built:` count line | Step 7 |
 | dev, prod | Each backfile's manifests, sources and parsed objects, with bytes | Step 8 |

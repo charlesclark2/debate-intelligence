@@ -320,5 +320,23 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e37-t11-content-guards-follow-the-policy
+    - id: t12
+      kind: Task
+      name: 'The prod build refuses an image whose consent has lapsed, as it refuses a lapsed name'
+      description: >-
+        The prod build refuses an image whose consent has lapsed, as it refuses a lapsed
+        name.
+      inputs:
+        specRef: plan_specs/v1/e37-calendar-and-announcements/t12-stale-image-consent-refused.yaml
+        goalRef: v1-e37-t12-stale-image-consent-refused
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e37-t12-stale-image-consent-refused reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e37-t12-stale-image-consent-refused
 status:
   phase: Pending

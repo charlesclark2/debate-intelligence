@@ -1,0 +1,72 @@
+# TASK v1-e32-t32-throttled-model-stage-is-retryable - A landscape model stage stopped by throttling ends as retryable, not as a verdict
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t32-throttled-model-stage-is-retryable
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "A landscape model stage stopped by throttling ends as retryable, not as a verdict"
+spec:
+  # Filed by the PM, 2026-10-30, from v1-e05-t09's Follow-up 1 (the PM's review, 2026-10-30).
+  description: >-
+    v1-e05-t09 makes a refused model call (access denied, a rejected request) exit 1 and keeps
+    throttling and an unavailable model at the retryable exit 3. But the landscape model stage
+    catches every `ProviderError` and ends `ModelStageInterrupted`, a plain `DomainError`, so a
+    classification run stopped by throttling exits 1 and reads as a verdict. Keep the cause:
+    when the stage stops on a cause in the retryable provider failures, the command exits 3 with
+    the cause's code, and the classifications already made stay cached, so a later run resumes.
+    A refused call still exits 1.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests]
+    forbidden:
+      - A model call in a test
+      - A refused model call made retryable
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A model stage stopped by throttling exits 3 with the cause's code, one stopped by an
+        access denial exits 1, and a rerun asks the model only about cards not yet cached,
+        by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t32-throttled-model-stage-is-retryable-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    A landscape model stage stopped by throttling ends as retryable, not as a verdict.
+  goalRef:
+    name: v1-e32-t32-throttled-model-stage-is-retryable
+  graph:
+    nodes:
+      - id: throttled-model-stage-is-retryable
+        kind: Task
+        name: Retryable model stage stop
+        description: >-
+          A landscape model stage stopped by throttling ends as retryable, not as a
+          verdict.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Retryable model stage stop tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests, -k, landscape]
+status:
+  phase: Pending

@@ -1,0 +1,73 @@
+# TASK v1-e37-t12-stale-image-consent-refused - The prod build refuses an image whose consent has lapsed, as it refuses a lapsed name
+# Epic: E37 — Calendar & Announcements (Coach-Editable) | Release: v1.6 (Public team website) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e37-t12-stale-image-consent-refused
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e37-calendar-and-announcements
+  annotations:
+    debate/title: "The prod build refuses an image whose consent has lapsed, as it refuses a lapsed name"
+spec:
+  # Filed by the PM, 2026-10-30, from v1-e37-t11's Follow-up 1 (the PM's ruling, 2026-10-30).
+  description: >-
+    In `checkPublishingPolicy` a referenced image needs only a manifest entry, and a stale image
+    entry is a warning, while a named student with stale consent is an error. The publishing
+    policy says a photograph publishes only against a current-season form. Make a stale image
+    entry (consent for another season, not checked this season, or a reference still to come) an
+    error in a prod build, as a stale name is, and a warning in a dev build, as the guard's
+    other problems are. v1-e37-t11's test of the shipped manifest already refuses one; the build
+    now agrees with it.
+  priority: 2
+  constraints:
+    packages: [site, docs/guides]
+    forbidden:
+      - A guard weakened
+      - A real student's name in a test fixture
+      - A dependency manifest or lockfile under site/ changed
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A prod build refuses an image whose consent is for another season, unchecked this
+        season or still to come, a dev build warns, and a consented image builds, by tests
+        shown failing first; the guide says so.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e37-t12-stale-image-consent-refused-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e37-calendar-and-announcements
+spec:
+  description: >-
+    The prod build refuses an image whose consent has lapsed, as it refuses a lapsed name.
+  goalRef:
+    name: v1-e37-t12-stale-image-consent-refused
+  graph:
+    nodes:
+      - id: stale-image-consent-refused
+        kind: Task
+        name: Lapsed image consent
+        description: >-
+          The prod build refuses an image whose consent has lapsed, as it refuses a lapsed
+          name.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Lapsed image consent tests pass
+            command: pnpm
+            args: [--dir, site, test]
+status:
+  phase: Pending

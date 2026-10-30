@@ -560,3 +560,14 @@ Added by the PM. Nothing above is changed, and this section is not a review.
 | Follow-up 2, the Nova Micro spend |  | Explained | The operator's other project, which shares the account, calls `amazon.nova-micro-v1:0` in us-east-1 (read by the PM in that project's code). Not this project's |
 
 The Goal stays `InProgress` until the first reading is recorded.
+
+## Operator records (recorded by the PM, 2026-10-31)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac3, the first month's reading | NOT RUN | PASS | `describe-budget`, the day after the apply: limit `100.0`, actual spend `0.05`, forecast `None` (too early in the month). Cost Explorer under the same four services and four usage types, the month to yesterday: `0.02457124`. The budget reads spend above zero, so AWS Budgets matches the Marketplace service names as Cost Explorer does; the difference is the budget's rounding to cents and its counting part of today |
+
+Every criterion passes, so the Goal is `Succeeded`.
+

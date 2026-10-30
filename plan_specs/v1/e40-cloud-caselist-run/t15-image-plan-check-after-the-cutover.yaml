@@ -39,7 +39,7 @@ spec:
         `PLAN OK` for the expected shape and `PLAN STOP` for each wrong one, on synthetic
         plans, shown failing first; the runbook's block uses it.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -41,7 +41,7 @@ spec:
         line per differing caselist or snapshot, by tests shown failing first; each `--json`
         envelope keeps every field, by test.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -264,9 +264,48 @@ Paste blocks 1 to 3's output and the search's count back; the session records th
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-30
 
 **Notes:**
+
+P4's pasted script is now a guarded command, and both runbooks use it.
+1. **ac1 passes.** Red: 37 failed, 5 passed against a refuse-nothing skeleton, after you made the one
+   test that passed by doing nothing assert `kept` first. Green: 42 passed, through the real S3
+   adapters on moto's versioned bucket and the real composition root.
+2. **Mutants:** the PM's six (the current directory and pointer each two ways), and two Wednesday
+   checks. All 10 are caught. You found that the two Wednesday checks hid each other and gave each a
+   case only it answers. Good.
+3. **The guards are the right ones, in the right order:**
+   * `--env` against `DEBATE_ENV`;
+   * the takedown profile, verified by STS;
+   * `--confirm-prod`;
+   * Wednesday before the lock;
+   * inside the lock: the code, the day, the pointer re-read and the last check against what it keeps.
+
+   Listing before reading the pointer, so a publish in between is refused rather than pruned, is the
+   right call.
+4. **Deviation 1, the deleted `debate_api` test: accepted.** It ran the script this task removes, and
+   its cases are each covered by a new test, except the 1,000-key batching, which the one-version
+   adapter has no use for. The PM's next batch adds `packages/debate_api/tests` to the spec's
+   packages.
+5. **Deviation 2, no smoke check: accepted for now.** Follow-up 2 is filed at E39 p3 for `tub index
+   build`, `publish` and `prune` together. **Deviation 3:** the affected set is left to the PR's `ci`.
+6. **Decisions accepted:**
+   * two credentials, as P4 had;
+   * what counts as the listing holding the pointer;
+   * noncurrent versions inside the current directory kept;
+   * `caselist retire`'s confirmation code;
+   * all of Wednesday in Chicago, on any clock;
+   * counts by eight-character index ids on the console, keys only in `--json`.
+7. **ac2's dev prune: the PM gives the operator the blocks from the `dev-preview` worktree at
+   `origin/dev`, not from this task's worktree,** which `scripts/task finish` removes. The blocks are
+   otherwise as written: the dry run, the PM's read of its counts, the delete with the code, then the
+   check that the current index still serves.
+8. **Follow-up work:**
+   * 1, a `tests/docs` shape test for P4 (E39 p3);
+   * 2, smoke for the three `tub index` commands (E39 p3);
+   * 3, `evidence-store-layout.md`'s `reports/` row: the PM fixes it in the next batch.
+9. **Merge `--partial`,** any time. The prune is never run on a Wednesday.

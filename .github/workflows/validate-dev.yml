@@ -60,7 +60,8 @@
 #                  its PROD build (SITE_ENV=prod), in which the publishing-policy and consent guards
 #                  are fatal, and the export checks against that build. ci.yml's `site` job builds
 #                  for dev, where those guards only print, so before this the first prod build of a
-#                  site change was the deploy after it merged;
+#                  site change was the deploy after it merged. Since v1-e36-t12 that job also runs
+#                  this prod build on every pull request into main, a hotfix/* one among them;
 #   site-conclude  posts `success` only when the site job passed on exactly that commit.
 #
 # This does not weaken the status for anything else: with the input off (every trigger but that

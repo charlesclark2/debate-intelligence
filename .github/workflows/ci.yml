@@ -86,7 +86,7 @@ jobs:
       # dorny/paths-filter lists a pull request's files through the REST API.
       pull-requests: read
     outputs:
-      python: ${{ github.event_name != 'pull_request' || steps.filter.outputs.python == 'true' }}
+      python: ${{ github.event_name != 'pull_request' || steps.filter.outputs.python == 'true' || steps.markdown.outputs.outside_site == 'true' }}
       infrastructure: ${{ github.event_name != 'pull_request' || steps.filter.outputs.infrastructure == 'true' }}
       site: ${{ github.event_name != 'pull_request' || steps.filter.outputs.site == 'true' }}
       web: ${{ github.event_name != 'pull_request' || steps.filter.outputs.web == 'true' }}
@@ -106,7 +106,8 @@ jobs:
             # (tests/specs), the scripts and ops/ wrappers they drive, config/, the Terraform
             # variables the settings tests compare against, and what .gitignore covers. A test that
             # starts reading another repository path adds it here, or a PR touching only that path
-            # skips the suite and breaks the next PR instead.
+            # skips the suite and breaks the next PR instead. The Markdown is the `markdown` step's
+            # below, outside site/. The `changes` output `python` is either step's.
             python:
               - *workflow
               - 'packages/**'
@@ -119,7 +120,6 @@ jobs:
               - 'ops/**'
               - 'config/**'
               - 'plan_specs/**'
-              - '**/*.md'
               - 'infrastructure/envs/**'
               - '.gitignore'
               # tests/scripts read the workflows themselves: their permissions, triggers and
@@ -145,6 +145,21 @@ jobs:
             workflows:
               - '.github/workflows/**'
               - 'scripts/actionlint.sh'
+      # Every Markdown file outside site/, for the python output (v1-e36-t12). Until then the python
+      # filter held '**/*.md', so a page edit under site/ ran the whole Python selection on a pull
+      # request into main. A filter excludes a path only when every pattern must match, so this is a
+      # step of its own. Under site/ no Python test reads anything but the Markdown links, which
+      # spec-validate checks on every pull request, and the single-interpreter scan in
+      # tests/architecture, which already ran for no other site/ file; the site job checks the rest.
+      - uses: dorny/paths-filter@v4
+        id: markdown
+        if: github.event_name == 'pull_request'
+        with:
+          predicate-quantifier: every
+          filters: |
+            outside_site:
+              - '**/*.md'
+              - '!site/**'
 
   # Runs on every trigger, whatever changed. It checks the whole tree rather than the changed files:
   # `ruff format --check` failed on dev from #53 until #70 because pre-commit only formats staged
@@ -366,6 +381,12 @@ jobs:
       # compares with the committed docs/README.md, so it cannot ask a task to regenerate it.
       - name: docs_index.py --check-descriptions
         run: uv run --frozen python scripts/docs_index.py --check-descriptions
+      # Every trigger: every tracked Markdown file's relative links and anchors, the check
+      # tests/docs/test_check_links.py runs over the repository. A change only under site/ selects no
+      # Python tests (v1-e36-t12), and site/README.md links into docs/ by anchor, so this is where a
+      # site-only pull request has its links checked. It takes about a second.
+      - name: check_links.py
+        run: uv run --frozen python scripts/check_links.py
       # Every trigger: no `#` comment in a shell code block someone pastes into zsh (working
       # agreement 9, v1-e01-t19). On a pull request it also reads the session reports the pull
       # request adds or changes; historical reports are records and are never scanned. A push or
@@ -423,7 +444,8 @@ jobs:
   # Handed over by v1-e36-t03-site-scaffold: lint, typecheck, test and a dev build of the public team
   # site, all offline, through the same script as the site-checks pre-commit hook. Since v1-e36-t10
   # the script ends by running the export checks against that build (site/scripts/export-checks.sh),
-  # and they fail rather than skip if there is no export of this tree to read.
+  # and they fail rather than skip if there is no export of this tree to read. Since v1-e36-t12 a pull
+  # request into main also gets the prod build and its export checks, after the dev one.
   site:
     needs: changes
     if: needs.changes.outputs.site == 'true'
@@ -443,6 +465,19 @@ jobs:
         run: pnpm --dir site install --frozen-lockfile
       - name: site/scripts/pre-commit-checks.sh
         run: site/scripts/pre-commit-checks.sh
+      # Any pull request into main, a promotion, a hotfix/* or a site/<slug> head (v1-e36-t12). The
+      # build above is a dev build, in which the publishing-policy and consent guards only print, so
+      # until then a hotfix/* change to site/ met its first prod build in site_deploy.sh after the
+      # merge. This is the prod build validate-dev's site lane runs, and what site_deploy.sh builds:
+      # a [[TBD]], an unreviewed name, an address outside the allowlist or an unfilled consent
+      # reference stops it, then the export checks read what it built. `site` is one of the `ci`
+      # check's needs, so protect-main's required list is unchanged.
+      - name: The prod build, in which the policy and consent guards are fatal, and the export checks against it (pull requests into main)
+        if: github.base_ref == 'main'
+        env:
+          SITE_ENV: prod
+          SITE_URL: https://wfbdebate.com
+        run: site/scripts/export-checks.sh
 
   # actionlint over every workflow, pinned to one version and checksum-verified, with ShellCheck over
   # the run: blocks (v1-e01-t15-promotion-guard-sweep ac7). The promotion guards' permission shape is

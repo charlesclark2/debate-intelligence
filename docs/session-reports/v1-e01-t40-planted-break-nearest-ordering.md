@@ -6,11 +6,17 @@
 | Spec | [`plan_specs/v1/e01-repo-foundation/t40-planted-break-nearest-ordering.yaml`](../../plan_specs/v1/e01-repo-foundation/t40-planted-break-nearest-ordering.yaml) |
 | Epic / release | `v1-e01-repo-foundation` / `v1.0` |
 | Branch | `task/v1-e01-t40-planted-break-nearest-ordering` |
-| Session status | IN PROGRESS <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | PARTIAL: waiting on the PM's ruling on durations <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
-<!-- 3-6 sentences: what was built, how it fits the epic, anything the PM should look at first. -->
+Interim, 2026-10-30. The planted-break check now orders a break's traced tests by a mention of a
+changed name, then by whether the route `--explain` gives reads every file on it by a path, then by
+chain and path. `scripts/affected_tests.py --explain` says `has a path to` for a path literal (the
+selector already told it from a word; selection is unchanged). Every planted break is caught and
+the unreached one is not, each in 14 to 28 s, and t39's break is caught without `read_by`, which is
+removed. **Ordering by durations is not done:** no test durations are recorded anywhere a session
+can read offline, so per the PM's instruction the session stopped and asked (below, Deviations).
 
 ## Plan nodes
 
@@ -34,7 +40,18 @@
 
 ## Deviations from the spec
 
-None.
+* **No recorded durations to order by (open, asked of the PM).** The spec says "then the fastest by
+  the last recorded durations". Nothing records them where the harness can read them offline:
+  validate-dev's tiers write JUnit XML into a temporary work directory on the runner and upload
+  nothing (`scripts/validate_dev.py` `run_tier`); ci.yml uploads only coverage data, kept one day,
+  and its `--durations=25` is in the job log; the pytest cache holds `lastfailed` and `nodeids`;
+  no durations plugin is locked (`uv.lock`: pytest, pytest-cov, pytest-socket, pytest-xdist); and
+  `tests/pytest_plugins/run_in_parts.py` declined a recorded-durations file as one "that would go
+  stale". The session stopped and asked, as the PM's context said to.
+* **`scripts/affected_tests.py` changed, its labels only.** `--explain` lumped a path literal that
+  denotes a file (`denoters`) with a word that matches its name into `names`. A path literal now
+  reads `has a path to`. Same mentioners, same reach order, neither label a fixture edge: the
+  selected sets of all 14 breaks are byte-identical before and after (`cmp` of each selection).
 
 ## Decisions and assumptions
 

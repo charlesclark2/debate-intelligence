@@ -245,3 +245,20 @@ The inbox's deletions are now durable, in the order the spec asked.
    imports `inbox_purge` passed (475), as did ruff, pyright, lint-imports, the thin-handler check and
    the specs.
 6. **Merge:** after the condition.
+
+### The condition, closed (PM, 2026-10-30)
+
+The condition is met, so the review's ACCEPTED stands and the pull request may open.
+* Every purge in an inbox that exists, an empty one included, now takes the run lock and ends with
+  one fsync of the inbox. A re-run after the `EIO` records exactly `open, fsync directory` and
+  counts nothing.
+* Red: 6 failed against the early return. Green: 15, and 16 with t09's no-inbox test.
+* Four mutants are caught, the PM's among them.
+* **The no-inbox exception: accepted.** With no inbox directory there is no earlier delete to put
+  down, and `v1-e30-t09` pins that a takedown in prod's data directory makes no lock file. Your
+  importer run caught that break before it shipped.
+* **The behaviour change: accepted.** An empty purge stops `INCOMPLETE` while a pull holds the lock,
+  as a purge with files already did. Since the cutover no pull runs on the operator's Mac, so it
+  should not arise. The 26 removal test files pass with it.
+
+**Merge:** any time.

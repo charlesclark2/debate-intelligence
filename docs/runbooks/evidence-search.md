@@ -1593,6 +1593,10 @@ published index is format 2; take it to the PM.
   [Publishing a pending index by hand](caselist-scheduled-sync.md#publishing-a-pending-index-by-hand)
   says. Both refuse an index that would drop a store's cards, and `--allow-shrink` is the
   operator's alone ([the shrink guard](caselist-scheduled-sync.md#the-shrink-guard), `v1-e39-t14`).
+- **Delete superseded index versions.** That is `tub index prune` (`v1-e39-t15`), under the takedown
+  profile, as the removal runbook's
+  [P4](caselist-removal.md#p4--delete-the-superseded-index-versions-noncurrent-versions-included) runs
+  it after a removal and the annual purge's step 5 each September.
 - **Turn on access logging, a WAF or a second origin.** The pilot keeps no per-request record of a
   student's address, and CloudFront reaches nothing but the function (ADR-0019 (a) 4).
 - **Change the evidence bucket.** Its Block Public Access settings and policy are untouched; the

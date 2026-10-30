@@ -41,6 +41,7 @@ DELIVERY_AWS_SDK = "The CLI and the API reach the AWS SDK only through debate_co
 DOCUMENT_LIBRARIES = "Document libraries stay inside debate_core.integrations.docx_parser"
 CLI_DOCUMENT_LIBRARIES = "The CLI reaches lxml only through debate_core.integrations.docx_parser"
 API_DOCUMENT_LIBRARIES = "The API reaches lxml only through debate_core.integrations"
+TEMPLATE_ENGINE = "The template engine never reaches the domain or the application layer"
 SAFE_XML_PARSER = "The safe XML parser stays inside debate_core.integrations.discovery"
 CLI_SAFE_XML_PARSER = "The CLI reaches defusedxml only through debate_core.integrations.discovery"
 EXTRACTION_LIBRARIES = "The extraction libraries stay inside the HTML and PDF extractors"
@@ -90,6 +91,13 @@ VIOLATIONS = [
     Violation("debate_api.routes_probe", "from docx import Document", API_DOCUMENT_LIBRARIES),
     # The feed providers parse with defusedxml, and only they do (PM ruling 2026-10-22, v1-e07-t05).
     Violation("debate_core.integrations.discovery.boundary_probe", "import lxml", DOCUMENT_LIBRARIES),
+    # Prompt templates render in debate_core.integrations.models only (v1-e05-t09).
+    Violation("debate_core.application.boundary_probe", "import jinja2", TEMPLATE_ENGINE),
+    Violation(
+        "debate_core.domain.boundary_probe",
+        "from jinja2.sandbox import SandboxedEnvironment",
+        TEMPLATE_ENGINE,
+    ),
     Violation("debate_core.application.boundary_probe", "import defusedxml", SAFE_XML_PARSER),
     Violation(
         "debate_core.integrations.opencaselist.boundary_probe",

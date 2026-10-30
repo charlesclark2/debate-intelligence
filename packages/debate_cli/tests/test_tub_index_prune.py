@@ -75,8 +75,8 @@ class World:
     client: S3Client
     clock: Clock
     monkeypatch: pytest.MonkeyPatch
-    files: dict[str, set[Written]] = field(default_factory=dict)
-    pointers: dict[str, Written] = field(default_factory=dict)
+    files: dict[str, set[Written]] = field(default_factory=dict[str, set[Written]])
+    pointers: dict[str, Written] = field(default_factory=dict[str, Written])
 
     def put(self, key: str, body: bytes = b"index bytes") -> Written:
         return key, self.client.put_object(Bucket=BUCKET, Key=key, Body=body)["VersionId"]

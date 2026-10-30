@@ -64,9 +64,9 @@ class Bucket:
 
     client: S3Client
     name: str
-    files: dict[str, set[Written]] = field(default_factory=dict)
+    files: dict[str, set[Written]] = field(default_factory=dict[str, set[Written]])
     """Every version of each index's two files, by index id, delete markers included."""
-    pointers: dict[str, Written] = field(default_factory=dict)
+    pointers: dict[str, Written] = field(default_factory=dict[str, Written])
     """The `current.json` version that named each index."""
 
     def put(self, key: str, body: bytes = b"index bytes") -> Written:

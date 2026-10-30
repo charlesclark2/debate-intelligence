@@ -282,8 +282,8 @@ class SearchIndexPrune:
                 location,
                 pointer,
                 "POINTER_NOT_IN_LISTING",
-                f"current.json names index {pointer.index_id}, which the listing does not hold: a publish may "
-                "be under way. Nothing is deleted; run the dry run again later",
+                f"current.json names index {pointer.index_id}, which the listing does not hold: a publish "
+                "may be under way. Nothing is deleted; run the dry run again later",
             )
         keep = _directory_of(pointer.index_id)
         kept = tuple(one for one in listed if one.key.startswith(keep) or _is_current_pointer(one))

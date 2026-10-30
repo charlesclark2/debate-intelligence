@@ -3,9 +3,9 @@
 ADR-0020 (4), "Who takes it", and the PM's rulings on the plan (2026-10-24): `caselist publish`,
 `caselist parse --publish` and `--publish-only`, `caselist remove --execute`, `caselist
 unsuppress --execute`, `caselist retire --bucket --execute` (and `--restore`), `landscape report
---publish`, `tub index publish` and `store sync --push --apply`. `caselist pull` and `caselist
-seed-run-state` take it inside their own services, because what they do around it is theirs. A dry
-run takes nothing.
+--publish`, `tub index publish`, `tub index prune --execute` (`v1-e39-t15`) and `store sync --push
+--apply`. `caselist pull` and `caselist seed-run-state` take it inside their own services, because
+what they do around it is theirs. A dry run takes nothing.
 
 What the lock is, and what local mode does instead, is
 :class:`~debate_core.application.caselist.run_lock.BucketWriteGuard`'s. What is here is the part

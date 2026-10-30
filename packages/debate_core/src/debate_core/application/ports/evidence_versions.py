@@ -6,8 +6,10 @@ Evidence is removed in exactly one situation — a removal request under
 `docs/policies/caselist-data-use.md` — and when it is, *everything* goes: the object and every
 noncurrent version the bucket kept of it, because "removed" with a restorable version still in the
 bucket is not removed (`v1-e30-t07`, spec forbidden list). This port is that operation and nothing
-else, and the only service that deletes through one is
-:class:`~debate_core.application.caselist.removal_service.CaselistRemovalService`.
+else, and the services that delete through one are
+:class:`~debate_core.application.caselist.removal_service.CaselistRemovalService` and, for the
+student search pilot's superseded index versions, which a removal has to reach too,
+:class:`~debate_core.application.search_index_prune.SearchIndexPrune` (`v1-e39-t15`).
 
 In the bucket, deleting is reached through the `EvidenceRemoval` permission set
 (`DEBATE_REMOVAL_PROFILE`), the only credential in the account that can delete evidence. The

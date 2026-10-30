@@ -201,6 +201,7 @@ BUCKET_WRITING: Final = {
     "caselist restore-run-state",
     "landscape report",
     "tub index publish",
+    "tub index prune",
     "store sync",
     "files publish",
 }

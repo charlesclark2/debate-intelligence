@@ -2,9 +2,9 @@
 
 ::
 
-    DEBATE_ENV=dev DEBATE_REMOVAL_PROFILE=debate-dev-evidence-removal debate-research tub index prune --env dev
-    DEBATE_ENV=dev DEBATE_REMOVAL_PROFILE=debate-dev-evidence-removal \\
-        debate-research tub index prune --env dev --execute --confirm <code>
+    export DEBATE_REMOVAL_PROFILE=debate-dev-evidence-removal
+    DEBATE_ENV=dev debate-research tub index prune --env dev
+    DEBATE_ENV=dev debate-research tub index prune --env dev --execute --confirm <code>
 
 The removal runbook's P4 (`docs/runbooks/caselist-removal.md`) as one command. Every decision is
 :class:`~debate_core.application.search_index_prune.SearchIndexPrune`'s; this is the guards, the lock
@@ -47,6 +47,7 @@ from debate_cli.options.bucket_environment import CONFIRM_PROD_FLAG, SYNCABLE_EN
 from debate_cli.output import CliOutput, CommandFailure, JsonValue, OutputMode, TableSpec
 from debate_core.application.search_index_prune import (
     PRUNE_COMMAND,
+    PruneGroup,
     PrunePlan,
     PruneRefusal,
     PruneResult,
@@ -209,16 +210,24 @@ def _table(plan: PrunePlan, result: PruneResult | None) -> TableSpec:
             str(one.delete),
             str(one.delete_markers),
             str(one.keep),
-            "kept" if one.keep else ("deleted" if result is not None else "would be deleted"),
+            _mark(one, applied=result is not None),
         ]
         for one in plan.groups
     ]
     return TableSpec(
-        columns=("Under the index prefix", "Versions", "Delete markers", "Kept", ""),
+        columns=("Under the index prefix", "Versions to delete", "Delete markers", "Kept", ""),
         rows=rows,
-        title=f"tub index prune on {plan.location}: current index {(plan.index_id or 'none')[:SHORT_INDEX_ID]}",
+        title=f"{PRUNE_COMMAND} on {plan.location}: current index {(plan.index_id or '')[:SHORT_INDEX_ID]}",
         caption=_caption(plan, result),
     )
+
+
+def _mark(group: PruneGroup, *, applied: bool) -> str:
+    deleting = group.delete + group.delete_markers
+    verb = "deleted" if applied else "would be deleted"
+    if group.keep and deleting:
+        return f"current kept, older {verb}"
+    return "kept" if group.keep else verb
 
 
 def _caption(plan: PrunePlan, result: PruneResult | None) -> str:

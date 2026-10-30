@@ -21,7 +21,7 @@ A caselist named in `caselist.backfile_caselists` in the committed profile (`con
 |---|---|
 | `caselist pull`, by hand or as the weekly run | Refuses it, `BACKFILE_IS_NOT_PULLED`, before anything is listed. A profile naming a slug in both `sync_caselists` and `backfile_caselists` is refused at startup |
 | `landscape report` | Refuses it, `BACKFILE_HAS_NO_LANDSCAPE`: no report and no per-school view |
-| The annual purge (`v1-e30-t28`) | Keeps it, by the same setting (`CaselistSettings.is_backfile`) |
+| [The annual purge](annual-purge.md) (`v1-e30-t28`) | Keeps it, by the same setting (`CaselistSettings.is_backfile`), and lists it for the September review |
 | `caselist remove`, the suppression list, path holds | Reach it as they reach any caselist |
 | The student search pilot's index | Leaves it out until `v1-e39-t18` decides: the weekly run indexes its own caselists only |
 

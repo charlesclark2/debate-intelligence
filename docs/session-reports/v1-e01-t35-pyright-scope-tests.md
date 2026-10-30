@@ -84,9 +84,27 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-30
 
 **Notes:**
+
+CI's bare pyright now covers tests/architecture and tests/smoke, exactly as specified.
+1. **ac1 passes, all three parts.**
+   * The bare run reports 0 errors over 977 files, with the scripts extraPath in use.
+   * A planted error in each directory turns it red, and it is green again after.
+   * Both scoped ignores are gone.
+2. **Mutants:** both behave as named. The old include lets the planted errors pass, which shows the
+   widened include is what catches them. Dropping extraPaths fails the two scripts imports.
+3. **No new errors in either directory.** v1-e01-t31's clean state held through this week's smoke
+   additions, so nothing outside the packages was touched.
+4. **Decisions accepted:**
+   * planted errors in existing files;
+   * no operator whole-selection run, since `[tool.pyright]` is never read by pytest and the PR's
+     `ci` runs the whole selection anyway;
+   * no sync needed.
+5. **Checks:** the 44 files of the two test edits passed (2,027) before pyproject.toml changed. ruff,
+   lint-imports and the specs pass, and `test_site.py` still collects without the ignore.
+6. **Merge:** any time.

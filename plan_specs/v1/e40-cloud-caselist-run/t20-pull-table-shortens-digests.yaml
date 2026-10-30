@@ -1,0 +1,68 @@
+# TASK v1-e40-t20-pull-table-shortens-digests - The caselist pull table's Detail column shortens digests as its panel does
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t20-pull-table-shortens-digests
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "The caselist pull table's Detail column shortens digests as its panel does"
+spec:
+  # Filed by the PM, 2026-10-30, from v1-e30-t27's Follow-up 1.
+  description: >-
+    v1-e30-t27 made `caselist pull`'s failure panel print digests as twelve-character prefixes.
+    The stage table printed above it still shows the publish stage's reason with every failed
+    sha256 whole. Apply `panel_summaries.shorten_digests` to the table's Detail column. `--json`
+    is unchanged.
+  priority: 3
+  constraints:
+    packages: [debate_cli, packages/debate_cli/tests]
+    forbidden:
+      - Changing a --json payload
+      - A whole sha256 in the console table
+      - Network or AWS access in any test
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The pull table's Detail column prints no whole sha256, and --json keeps every field
+        byte for byte, by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t20-pull-table-shortens-digests-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    The caselist pull table's Detail column shortens digests as its panel does.
+  goalRef:
+    name: v1-e40-t20-pull-table-shortens-digests
+  graph:
+    nodes:
+      - id: pull-table-shortens-digests
+        kind: Task
+        name: Pull table digests
+        description: >-
+          The caselist pull table's Detail column shortens digests as its panel does.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Pull table digests tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests, -k, pull]
+status:
+  phase: Pending

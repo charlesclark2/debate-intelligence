@@ -1,0 +1,68 @@
+# TASK v1-e39-t21-one-call-recorder-for-deploy-tests - The tub deploy test records each stub call alone, as the caselist run's does
+# Epic: E39 — Team Evidence Search (Student Pilot) | Release: v1.7 (Team evidence search pilot) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e39-t21-one-call-recorder-for-deploy-tests
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+  annotations:
+    debate/title: "The tub deploy test records each stub call alone, as the caselist run's does"
+spec:
+  # Filed by the PM, 2026-10-30, from v1-e40-t14's Follow-up work.
+  description: >-
+    v1-e40-t14 found that two stubs in one pipeline interleaved their records in one shared log,
+    and fixed the caselist run deploy test. `test_tub_deploy.py` has the same recorder and
+    `tub_deploy.sh` the same `aws ... | docker login` pipeline; no assertion reads those calls
+    yet, but the first that does will be flaky under load. Give it the one-file-per-call
+    recorder, ideally one shared helper for tests/scripts.
+  priority: 3
+  constraints:
+    packages: [tests/scripts]
+    forbidden:
+      - A retry marker or a loosened assertion
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The tub deploy test records each call alone, the pipeline's two calls are asserted,
+        and it passes 50 times under -n 6 with the machine loaded; the old recorder restored
+        fails under load.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e39-t21-one-call-recorder-for-deploy-tests-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+spec:
+  description: >-
+    The tub deploy test records each stub call alone, as the caselist run's does.
+  goalRef:
+    name: v1-e39-t21-one-call-recorder-for-deploy-tests
+  graph:
+    nodes:
+      - id: one-call-recorder-for-deploy-tests
+        kind: Task
+        name: Tub deploy recorder
+        description: >-
+          The tub deploy test records each stub call alone, as the caselist run's does.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Tub deploy recorder tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, -k, tub_deploy]
+status:
+  phase: Pending

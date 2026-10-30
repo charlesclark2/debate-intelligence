@@ -296,7 +296,10 @@ It then appends the suppression entries and the path entries first, deletes from
 from this machine — the store, then the download inbox (step 8) — and writes one removal-log entry. The `DONE` output says
 how many files the request named and how many later uploads the run covered; the removal log lists
 every sha256 it removed or withdrew, later uploads included. If it stops part-way it
-says so, logs `INCOMPLETE`, and the fix is to run the same command again, with the same flags. The inbox is changed only
+says so, logs `INCOMPLETE`, and the fix is to run the same command again, with the same flags. After
+deleting, `--execute` lists the `raw/` and `parsed/` keys and the landscape school views it reached
+again: a version still there stops it `INCOMPLETE` with `BUCKET_OBJECTS_LEFT` or `SCHOOL_VIEWS_LEFT`,
+counts only, and running it again finishes it (`v1-e30-t29`, `v1-e32-t13`). The inbox is changed only
 while no `caselist pull` is running: if one holds the sync's lock, the removal stops `INCOMPLETE`
 with *a caselist pull is running*, and you re-run it once the pull has finished.
 

@@ -32,9 +32,12 @@ spec:
     name, and the consent guard still runs. The first use of the lane brings `dev`'s `site/` to
     `main` once (the results page among it), with Charlie's word. Deploy-on-merge stays with
     v2-e10-t03's keyless deploy roles; this task needs no AWS credential in CI.
+    (PM amendment 2026-10-30, from the counts checkpoint's ruling of 2026-10-28.) The lane's guard reaches
+    `main` by one install hotfix before its first use (ac3 includes it), and the ruleset export is
+    `docs/process/rulesets`, not `.github/rulesets`.
   priority: 1
   constraints:
-    packages: [.github/workflows, .github/rulesets, scripts, tests/scripts, site, docs/runbooks, docs/guides, docs/process, docs/adr]
+    packages: [.github/workflows, .github/PULL_REQUEST_TEMPLATE, docs/process/rulesets, scripts, tests/scripts, site, docs/runbooks, docs/guides, docs/process, docs/adr]
     forbidden:
       - A change outside site/ reaching main through the lane
       - Any AWS credential in a workflow
@@ -60,7 +63,7 @@ spec:
         The first use: dev's site/ reaches main and prod through the lane, after Charlie's
         word, with the results page live (operator).
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

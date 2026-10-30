@@ -292,3 +292,13 @@ The cutover's false drift is fixed at its one source, with no new read of the bu
    directories and the always-run list passed, and the static checks are clean.
 
 No re-review is needed. The PR merges `--partial`, phase `InProgress`, until ac2.
+
+## Operator records (recorded by the PM, 2026-10-30)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac2, the first dev cloud run on a new image | NOT RUN | NOT RUN (image deployed) | The image carrying this task, `v1.1.0-dev.164`, was deployed to dev on 2026-10-29 (`caselist-new-image.tfplan`, read by the PM: 2 added, 5 changed, 2 destroyed, the fifth `task_stopped["run"]`'s message from `v1-e40-t09`; run task definition revision 8, digest `sha256:81656bbf…0317`, the schedule `ENABLED`). The first scheduled run on it is Wednesday 2026-11-04, after which ac2 is read |
+
+The Goal stays `InProgress` until that run is read.

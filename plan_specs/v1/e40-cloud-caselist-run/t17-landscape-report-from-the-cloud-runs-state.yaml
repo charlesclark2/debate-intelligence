@@ -35,7 +35,7 @@ spec:
     de-extinction report (v1-e32-t06) uses it.
   priority: 1
   constraints:
-    packages: [debate_core.application, debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks, docs/guides]
+    packages: [debate_core.application, debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke, docs/runbooks, docs/guides]
     forbidden:
       - A card classified a second time because its classification was left in a deleted copy
       - Publishing a report from the operator's stale working copy as if it were the newest week

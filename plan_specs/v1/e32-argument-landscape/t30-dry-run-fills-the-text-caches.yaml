@@ -1,0 +1,70 @@
+# TASK v1-e32-t30-dry-run-fills-the-text-caches - A dry run fills the plan-text and analytic-text caches, so the first report after a parser bump reads sources once
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t30-dry-run-fills-the-text-caches
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "A dry run fills the plan-text and analytic-text caches, so the first report after a parser bump reads sources once"
+spec:
+  # Filed by the PM, 2026-10-30, from v1-e40-t17's Follow-up work.
+  description: >-
+    The plan-text and analytic-text caches key on the parser version, so the first report after
+    a bump re-reads every on-topic source, and a dry run keeps none of it, so the publish reads
+    them again. The caches hold derived fields and no evidence text. Decide with the PM whether
+    a dry run may write them (v1-e32-t05's rule says a dry run writes nothing), then build what
+    is ruled.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests]
+    forbidden:
+      - Evidence text written to a cache
+      - A model call in a dry run
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        As ruled: the publish after a dry run on a new parser version reads no source the
+        dry run read, by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t30-dry-run-fills-the-text-caches-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    A dry run fills the plan-text and analytic-text caches, so the first report after a parser
+    bump reads sources once.
+  goalRef:
+    name: v1-e32-t30-dry-run-fills-the-text-caches
+  graph:
+    nodes:
+      - id: dry-run-fills-the-text-caches
+        kind: Task
+        name: Text caches in a dry run
+        description: >-
+          A dry run fills the plan-text and analytic-text caches, so the first report
+          after a parser bump reads sources once.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Text caches in a dry run tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, landscape]
+status:
+  phase: Pending

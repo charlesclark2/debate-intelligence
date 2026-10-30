@@ -23,6 +23,8 @@ spec:
     it is enough, and `--publish` where the aggregates may come from this Mac's copy of the list
     alone, which must never be what is published. The record stays readable by the agent's build
     at the time.
+    (PM amendment 2026-10-30, the PM's ruling on v1-e01-t39's question 1.) `UnknownSyncEvent`'s hint names
+    `debate_cli.caselist_events`, where the slug table lives.
   priority: 3
   constraints:
     packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]

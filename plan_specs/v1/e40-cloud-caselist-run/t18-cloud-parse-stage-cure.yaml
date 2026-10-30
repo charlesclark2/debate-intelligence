@@ -1,0 +1,79 @@
+# TASK v1-e40-t18-cloud-parse-stage-cure - In bucket mode a failed parse stage names the cloud cure, never a publish from the operator's Mac
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t18-cloud-parse-stage-cure
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "In bucket mode a failed parse stage names the cloud cure, never a publish from the operator's Mac"
+spec:
+  # Filed by the PM, 2026-10-30, from v1-e34-t31's Deviation 1 and Follow-up 1 (the PM's review, 2026-10-30).
+  description: >-
+    v1-e34-t31 makes a bucket-mode run name `caselist parse --caselist <slug> --publish` for
+    every caselist whose parsed store it did not publish complete, because the cloud task's
+    version directory dies with the task. Run on the operator's Mac, that command rebuilds the
+    Mac's own, older working copy and publishes it over the parsed store the cloud run owns,
+    which nobody should do. In bucket mode, make the stage's fix text, the failed-stage banner
+    and the run record name the cloud cure instead: the next weekly run re-parses and publishes
+    the caselist, or a run started by hand (caselist-cloud-run.md). Local mode is unchanged. The
+    earlier builds read every record this build writes, as v1-e34-t31 showed.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
+    forbidden:
+      - A bucket-mode fix text naming a command that publishes from the operator's working copy
+      - A record shape an earlier build refuses to read
+      - Network or AWS access in any test
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A bucket-mode run whose parse stage failed names the cloud cure and no Mac-side
+        publish, in the fix text, the banner and the record; a local-mode run is unchanged;
+        by tests shown failing first.
+    - id: ac2
+      description: >-
+        The earlier builds read every record this build writes, by test;
+        caselist-cloud-run.md's "A failed parse stage" names what the run now says.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t18-cloud-parse-stage-cure-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    In bucket mode a failed parse stage names the cloud cure, never a publish from the
+    operator's Mac.
+  goalRef:
+    name: v1-e40-t18-cloud-parse-stage-cure
+  graph:
+    nodes:
+      - id: cloud-parse-stage-cure
+        kind: Task
+        name: Bucket-mode parse cure
+        description: >-
+          In bucket mode a failed parse stage names the cloud cure, never a publish from
+          the operator's Mac.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Bucket-mode parse cure tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, caselist_sync]
+status:
+  phase: Pending

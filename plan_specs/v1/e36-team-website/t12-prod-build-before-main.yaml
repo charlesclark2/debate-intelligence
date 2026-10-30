@@ -1,0 +1,74 @@
+# TASK v1-e36-t12-prod-build-before-main - A pull request into main that touches site/ is built for prod before it merges, and site/ never trips the Python tests
+# Epic: E36 Public Team Website | Release: v1.6 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e36-t12-prod-build-before-main
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e36-team-website
+  annotations:
+    debate/title: "A pull request into main that touches site/ is built for prod before it merges, and site/ never trips the Python tests"
+spec:
+  # Filed by the PM, 2026-10-30, from v1-e37-t09's Follow-up work and review.
+  description: >-
+    The site lane builds a site/ change for prod before it reaches `main` (validate-dev's site
+    path), but a `hotfix/*` change to site/ is still checked only by a dev build until its
+    deploy. Run the site job's prod build and export checks for any pull request into `main`
+    that touches site/. Separately, a `site/**/*.md` change trips ci's python filter, so a page
+    edit into `main` runs the whole Python selection: keep site/ out of that filter.
+  priority: 2
+  constraints:
+    packages: [.github/workflows, scripts, tests/scripts]
+    forbidden:
+      - Any AWS credential in a workflow
+      - A Python test skipped for a change that reaches Python code
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A pull request into main touching site/ runs the prod build and export checks, shown
+        failing on a planted [[TBD]], by workflow tests shown failing first.
+    - id: ac2
+      description: >-
+        A change only under site/ selects no Python tests, and a change under scripts/ still
+        does, by test.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e36-t12-prod-build-before-main-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e36-team-website
+spec:
+  description: >-
+    A pull request into main that touches site/ is built for prod before it merges, and site/
+    never trips the Python tests.
+  goalRef:
+    name: v1-e36-t12-prod-build-before-main
+  graph:
+    nodes:
+      - id: prod-build-before-main
+        kind: Task
+        name: Prod build before main
+        description: >-
+          A pull request into main that touches site/ is built for prod before it merges,
+          and site/ never trips the Python tests.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Prod build before main tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, -k, workflow]
+status:
+  phase: Pending

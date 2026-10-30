@@ -1,0 +1,69 @@
+# TASK v1-e30-t30-inbox-deletions-fsync-the-directory - Inbox deletions fsync the inbox directory, so a removed archive cannot come back after a power cut
+# Epic: E30 Caselist Evidence Ingestion | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e30-t30-inbox-deletions-fsync-the-directory
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+  annotations:
+    debate/title: "Inbox deletions fsync the inbox directory, so a removed archive cannot come back after a power cut"
+spec:
+  # Filed by the PM, 2026-10-30, from v1-e30-t26's Follow-up 1.
+  description: >-
+    v1-e30-t26 gave the inbox rewrite the directory fsync, but `inbox_purge._carry_out` deletes
+    a planned inbox file with `path.unlink()`, and the rewrite removes its staging directory,
+    and neither fsyncs the inbox directory after. After a power cut a deleted archive that held
+    removed bytes can come back: a takedown that did not hold. fsync the directory after each
+    delete, with `durable_files.fsync_directory`, and raise a failed fsync.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, packages/debate_core/tests]
+    forbidden:
+      - Network or AWS access in any test
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Each inbox deletion is followed by a directory fsync, and a failed one raises, by a
+        recording test shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e30-t30-inbox-deletions-fsync-the-directory-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+spec:
+  description: >-
+    Inbox deletions fsync the inbox directory, so a removed archive cannot come back after a
+    power cut.
+  goalRef:
+    name: v1-e30-t30-inbox-deletions-fsync-the-directory
+  graph:
+    nodes:
+      - id: inbox-deletions-fsync-the-directory
+        kind: Task
+        name: Inbox deletion fsync
+        description: >-
+          Inbox deletions fsync the inbox directory, so a removed archive cannot come back
+          after a power cut.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Inbox deletion fsync tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, inbox_purge]
+status:
+  phase: Pending

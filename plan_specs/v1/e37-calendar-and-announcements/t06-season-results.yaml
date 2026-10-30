@@ -86,7 +86,7 @@ spec:
         first result is published through dev and then prod with his consent reference in
         the manifest, and the report records it without the student's name.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

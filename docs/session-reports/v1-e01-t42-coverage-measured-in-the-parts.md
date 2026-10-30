@@ -324,3 +324,13 @@ Coverage moves into the parts, and the push run waits only for them.
 
 No re-review is needed. The PR merges `--partial`, with the Goal `InProgress`, until operator block 2
 records the first push run.
+
+## Operator records (recorded by the PM, 2026-10-30)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac2, the push run's slowest job is a part | NOT RUN | PASS | dev's push run `40647822681` (2026-10-28, the first with this task's setup that was not superseded): `test (1)` to `test (8)` 236 to 447 s, `coverage` 22 s, `ci` success. The combined `TOTAL` 52,322 statements, 1,122 missed, 97%, against the last unsplit run's (`40642608458`) 52,265, 1,118, 97%. `test (4)` at 447 s is under the 8-minute drift line |
+
+Every criterion passes, so the Goal is `Succeeded`.

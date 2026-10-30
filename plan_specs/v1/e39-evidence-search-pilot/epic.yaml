@@ -460,5 +460,39 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e39-t20-api-conftest-split-by-surface
+    - id: t21
+      kind: Task
+      name: 'The tub deploy test records each stub call alone, as the caselist run''s does'
+      description: >-
+        The tub deploy test records each stub call alone, as the caselist run's does.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t21-one-call-recorder-for-deploy-tests.yaml
+        goalRef: v1-e39-t21-one-call-recorder-for-deploy-tests
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t21-one-call-recorder-for-deploy-tests reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t21-one-call-recorder-for-deploy-tests
+    - id: t22
+      kind: Task
+      name: 'Smoke checks for tub index build, publish and prune, and a test of P4''s shape'
+      description: >-
+        Smoke checks for tub index build, publish and prune, and a test of P4's shape.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t22-tub-index-commands-smoke-and-p4-shape.yaml
+        goalRef: v1-e39-t22-tub-index-commands-smoke-and-p4-shape
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t22-tub-index-commands-smoke-and-p4-shape reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t22-tub-index-commands-smoke-and-p4-shape
 status:
   phase: Pending

@@ -412,3 +412,13 @@ Added by the PM. Nothing above is changed, and this section is not a review.
 * The PM batch of 2026-10-27 (u) pins the gate in that test, and `v1-e01-t41` makes the pull
   request's smoke tier read the bundled profiles. ac5's LibreOffice half closes on the first green
   validate-dev run of a pre-release carrying this task. The Goal stays `InProgress` until then.
+
+## Operator records (recorded by the PM, 2026-10-30)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac5, LibreOffice | NOT RUN | PASS | validate-dev's slow tier on `v1.1.0-dev.164` (`03b23e2`, run `40644901906`, 2026-10-28): LibreOffice 24.2.7.2 installed for the rendered-DOCX open check, no `SKIPPED` line, `slow tier: passed`, `SLOW_RESULT: success` |
+
+Every criterion passes, so the Goal is `Succeeded`.

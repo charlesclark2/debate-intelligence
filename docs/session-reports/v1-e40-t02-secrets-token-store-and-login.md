@@ -793,3 +793,13 @@ Added by the PM. Nothing above is changed, and this section is not a review.
 * **Still open, so the Goal stays `InProgress`:** the first scheduled login writing a token
   (Wednesday 2026-10-28, checked by the token secret's `LastChangedDate` and the login log), and
   prod at the pilot's promotion.
+
+## Operator records (recorded by the PM, 2026-10-30)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac2, one scheduled login stores a token | NOT RUN | PASS | The first scheduled login, Wednesday 2026-10-28: the token secret's `LastChangedDate` 2026-10-28T03:00:40-05:00, 2 versions, and the login log's `"stored": true, "location": "Secrets Manager secret debate-dev-caselist-token"`. The run that followed (`20261028T110536Z`) completed in 56 minutes, landscape skipped as no landscape stage is installed |
+
+ac2's prod half follows the pilot's promotion, so the Goal stays `InProgress`.

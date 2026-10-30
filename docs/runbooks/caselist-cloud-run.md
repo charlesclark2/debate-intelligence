@@ -819,6 +819,15 @@ Success looks like `Apply complete! Resources: 2 added, 4 changed, 2 destroyed.`
 One `-login-task-changed` email is expected. (Added by the PM, 2026-10-27, from `v1-e31-t31`'s
 review; the PM reads every plan before its apply.)
 
+## A failed parse stage
+
+In bucket mode the weekly run names `caselist parse --caselist <slug> --publish` for a caselist whose
+parsed store it did not publish complete (`v1-e34-t31`). Never run it on the operator's Mac: there it
+rebuilds the Mac's own, older working copy and publishes that over the parsed store the cloud run
+owns. Until the run names a cloud cure itself (`v1-e40-t18`), the cure is the next weekly run, which
+re-parses that caselist and publishes it; if that cannot wait, ask the PM for a run started by hand.
+(Added by the PM, 2026-10-30, from `v1-e34-t31`'s review.)
+
 ## The deadline, and stopping a run
 
 The run's command is `timeout --signal=TERM --kill-after=120s 6h debate-research --json caselist

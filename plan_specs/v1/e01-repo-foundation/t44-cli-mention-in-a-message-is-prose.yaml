@@ -1,0 +1,67 @@
+# TASK v1-e01-t44-cli-mention-in-a-message-is-prose - A test that mentions debate-research inside a longer message is not read as running the app
+# Epic: E01 Repository & Delivery Foundation | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t44-cli-mention-in-a-message-is-prose
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: "A test that mentions debate-research inside a longer message is not read as running the app"
+spec:
+  # Filed by the PM, 2026-10-30, from v1-e01-t39's Follow-up work.
+  description: >-
+    affected_tests.py reads a test that mentions `debate-research` in a string as running the
+    app, so about 30 tests per landscape merge, most of them asserting an expected message,
+    reach every command. Read a mention inside a longer message as prose, keeping a string that
+    starts like a command line as a run.
+  priority: 3
+  constraints:
+    packages: [scripts, tests/scripts]
+    forbidden:
+      - A test that runs the app left unselected
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Over t38's landscape merges, fewer files reach every command, a real run is still
+        read as one, and the collected count is unchanged; tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t44-cli-mention-in-a-message-is-prose-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    A test that mentions debate-research inside a longer message is not read as running the app.
+  goalRef:
+    name: v1-e01-t44-cli-mention-in-a-message-is-prose
+  graph:
+    nodes:
+      - id: cli-mention-in-a-message-is-prose
+        kind: Task
+        name: Mentions as prose
+        description: >-
+          A test that mentions debate-research inside a longer message is not read as
+          running the app.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Mentions as prose tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, -k, affected]
+status:
+  phase: Pending

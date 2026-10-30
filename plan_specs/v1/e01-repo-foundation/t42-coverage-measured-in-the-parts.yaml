@@ -49,7 +49,7 @@ spec:
         unsplit job printed; the push run's slowest job is a part; workflow tests pin it,
         shown failing first.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

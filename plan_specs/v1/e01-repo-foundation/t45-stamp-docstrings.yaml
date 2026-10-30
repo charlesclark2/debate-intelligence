@@ -1,0 +1,66 @@
+# TASK v1-e01-t45-stamp-docstrings - The docstrings say what the stamped build carries
+# Epic: E01 Repository & Delivery Foundation | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t45-stamp-docstrings
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: "The docstrings say what the stamped build carries"
+spec:
+  # Filed by the PM, 2026-10-30, from v1-e05-t12's Follow-up work.
+  description: >-
+    Three docstrings say the stamp copies config/ whole or carries only profiles and routing
+    files: `debate_core/application/federated_ranking.py` (`FEDERATED_RANKING_CONFIG_PATH`),
+    `debate_core/evidence/format_profile.py` and `debate_cli/build_info.py`. Make each say what
+    `scripts/stamp_build.py` bundles (profiles, routing files, the pricing file) and where the
+    rest is read from.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.evidence, debate_cli]
+    forbidden:
+      - A behaviour change
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The three docstrings match stamp_build.py's bundle; no test changes.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t45-stamp-docstrings-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    The docstrings say what the stamped build carries.
+  goalRef:
+    name: v1-e01-t45-stamp-docstrings
+  graph:
+    nodes:
+      - id: stamp-docstrings
+        kind: Task
+        name: Stamp docstrings
+        description: >-
+          The docstrings say what the stamped build carries.
+        estimatedEffort: 0.5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Stamp docstrings tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, -k, stamp]
+status:
+  phase: Pending

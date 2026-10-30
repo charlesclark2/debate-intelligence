@@ -28,9 +28,13 @@ spec:
     classified in dev at a prompt version and model is not sent to the model again by prod
     (v1-e32-t07's amendment), and a test shows prod's model stage making no call for an item
     dev's results hold.
+    (PM amendment 2026-10-30, from v1-e05-t16's ruling 2.) After the first billed call to a 5.5 model, re-run
+    the model spend budget's counts block (aws-account-baseline.md), add the new service names and usage
+    types to `model_spend_budget`'s lists, its tests and the plan check, and plan and apply it, as that
+    runbook says.
   priority: 3
   constraints:
-    packages: [config, infrastructure/modules/bedrock_access, infrastructure/envs, packages/debate_core/tests, docs/runbooks, docs/data]
+    packages: [config, infrastructure/modules/bedrock_access, infrastructure/modules/model_spend_budget, infrastructure/envs, infrastructure/bootstrap/organization, packages/debate_core/tests, tests/docs, docs/runbooks, docs/data]
     forbidden:
       - Starting before the quotas read non-zero
       - A price written from memory

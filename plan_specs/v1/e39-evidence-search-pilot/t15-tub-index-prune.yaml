@@ -26,7 +26,7 @@ spec:
     pointer, and re-reads the pointer before deleting. The runbook's P4 calls the command.
   priority: 3
   constraints:
-    packages: [debate_core.application, debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
+    packages: [debate_core.application, debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, packages/debate_api/tests, docs/runbooks]
     forbidden:
       - Deleting the current index directory or the current pointer
       - Deleting without a dry run's confirmation code
@@ -45,7 +45,7 @@ spec:
       description: >-
         The runbook's P4 uses the command, and one dev prune is recorded (operator).
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

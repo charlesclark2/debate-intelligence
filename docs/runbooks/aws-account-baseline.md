@@ -496,6 +496,8 @@ cd "$WT"
 TFVARS="$MAIN/infrastructure/bootstrap/organization/terraform.tfvars"
 if ! test -f "$TFVARS"; then
   echo "STOP: no terraform.tfvars in the main checkout's organization root: $TFVARS"
+elif [ -z "$COACH_EMAIL" ] || [ "$COACH_EMAIL" = 'the-coach@example.org' ]; then
+  echo "STOP: set COACH_EMAIL to the address the budget's notices go to"
 else
   mkdir -p ~/aws-backups/debate-terraform-state
   cp "$TFVARS" ~/aws-backups/debate-terraform-state/organization-tfvars-$(date +%Y%m%d-%H%M%S)

@@ -1,0 +1,77 @@
+# TASK v1-e37-t11-content-guards-follow-the-policy - The shipped-content checks follow the publishing policy, and a season change is one edit of three files
+# Epic: E37 — Calendar & Announcements (Coach-Editable) | Release: v1.6 (Public team website) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e37-t11-content-guards-follow-the-policy
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e37-calendar-and-announcements
+  annotations:
+    debate/title: "The shipped-content checks follow the publishing policy, and a season change is one edit of three files"
+spec:
+  # Filed by the PM, 2026-10-30, from v1-e37-t10's Follow-up work (the PM's review, 2026-10-30).
+  description: >-
+    Three loose ends from v1-e37-t10. (a) The schedule's no-`@` check refuses the coach's
+    allowlisted address in a tournament's notes, which the publishing policy and the build
+    allow: make it follow the policy's allowlist, still refusing any other address and every
+    phone number. (b) The one-season check stays, and the coach's guide's start-of-season steps
+    say to change `season` in the schedule, the results and the consent file in one edit. (c)
+    `content-policy.test.ts` pins the consent manifest's `images: []`, which the first consented
+    photograph would break: check what must always hold of images instead.
+  priority: 2
+  constraints:
+    packages: [site, docs/guides]
+    forbidden:
+      - A guard weakened beyond following the policy's own allowlist
+      - A real student's name in a test fixture
+      - A dependency manifest or lockfile under site/ changed
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The allowlisted address in a tournament's notes passes, any other address and a
+        phone number still fail; a consented image passes the content checks; tests shown
+        failing first.
+    - id: ac2
+      description: >-
+        The guide's start-of-season steps name the three files together.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e37-t11-content-guards-follow-the-policy-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e37-calendar-and-announcements
+spec:
+  description: >-
+    The shipped-content checks follow the publishing policy, and a season change is one edit of
+    three files.
+  goalRef:
+    name: v1-e37-t11-content-guards-follow-the-policy
+  graph:
+    nodes:
+      - id: content-guards-follow-the-policy
+        kind: Task
+        name: Content guards and the policy
+        description: >-
+          The shipped-content checks follow the publishing policy, and a season change is
+          one edit of three files.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Content guards and the policy tests pass
+            command: pnpm
+            args: [--dir, site, test]
+status:
+  phase: Pending

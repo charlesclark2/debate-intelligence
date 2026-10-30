@@ -23,6 +23,10 @@ spec:
     by a path over those that name it by a word, then the fastest by the last recorded
     durations, so each break runs the tests most likely to catch it, quickly. Every current
     break is still caught, and the exit-code break finishes under two minutes.
+    (PM amendment 2026-10-30, the PM's ruling (B).) No recorded durations exist offline, so the order is: a
+    mention of a name from the changed line, then a route that reads every file by a path, then chain
+    length, then path, with the could-not-tell routes after the path routes. Durations come back only
+    if a future break runs slow.
   priority: 3
   constraints:
     packages: [tests/scripts, scripts]

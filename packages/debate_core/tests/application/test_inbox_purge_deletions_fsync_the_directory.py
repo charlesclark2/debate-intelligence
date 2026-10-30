@@ -10,7 +10,9 @@ that did not hold. `v1-e30-t26` gave the inbox rewrite the directory fsync after
   the one fsync puts both down.
 
 A directory fsync that fails raises the operating system's own `OSError`, and the removal stops
-`INCOMPLETE` at that file.
+`INCOMPLETE` at that file. That file is gone, but not durably, and a re-run plans nothing for it, so
+every purge ends with one more fsync of the inbox, under the sync's run lock, even with nothing
+planned: the re-run is what puts the earlier delete down (the PM's condition on `v1-e30-t30`).
 
 No power is cut here. `os.unlink`, `os.rmdir`, `os.replace`, `os.open` and `os.fsync` are wrapped
 to record what each did, in order, as `test_rename_into_place_writers_fsync_their_directory.py`
@@ -34,11 +36,12 @@ from debate_core.application.caselist.inbox_purge import (
     InboxAction,
     InboxFileKind,
     InboxFilePlan,
+    InboxInUse,
     InboxPurge,
     InboxReason,
     purge_inbox,
 )
-from debate_core.application.caselist_sync import OPENEV_DELIVERIES_FILENAME
+from debate_core.application.caselist_sync import LOCK_FILENAME, OPENEV_DELIVERIES_FILENAME, RunLock
 from debate_core.integrations.local.archive_reader import ZipArchiveRewriter
 
 type Event = tuple[str, str]
@@ -139,9 +142,9 @@ class RefusingDisk:
         self.refusals = refusals
 
 
-@pytest.fixture
-def directory_fsync_fails_once(monkeypatch: pytest.MonkeyPatch) -> RefusingDisk:
-    disk = RefusingDisk(refusals=1)
+def refuse_directory_fsyncs(monkeypatch: pytest.MonkeyPatch, refusals: int) -> RefusingDisk:
+    """Wraps whatever `os.fsync` is by now, so a recorder installed first sees only what succeeds."""
+    disk = RefusingDisk(refusals=refusals)
     real_fsync = os.fsync
 
     def fsync(descriptor: int) -> None:
@@ -152,6 +155,11 @@ def directory_fsync_fails_once(monkeypatch: pytest.MonkeyPatch) -> RefusingDisk:
 
     monkeypatch.setattr(os, "fsync", fsync)
     return disk
+
+
+@pytest.fixture
+def directory_fsync_fails_once(monkeypatch: pytest.MonkeyPatch) -> RefusingDisk:
+    return refuse_directory_fsyncs(monkeypatch, refusals=1)
 
 
 def an_imported_week(inbox: CaselistInbox, name: str) -> InboxFilePlan:
@@ -232,6 +240,8 @@ def test_each_deleted_file_is_followed_by_a_fsync_of_the_inbox(
         ("unlink", str(inbox.directory / CAMP_DOWNLOAD)),
         ("open", directory),
         ("fsync directory", directory),
+        ("open", directory),
+        ("fsync directory", directory),
     ]
     assert sorted(os.listdir(inbox.directory)) == []
     assert (done.deleted, done.deliveries_recorded) == (3, 1)
@@ -241,7 +251,8 @@ def test_each_deleted_file_is_followed_by_a_fsync_of_the_inbox(
 def test_the_rewrite_removes_its_staging_directory_before_the_inbox_is_fsynced(
     inbox: CaselistInbox, recorded: list[Event]
 ) -> None:
-    """The rename and the staging directory's removal are both entries in the inbox: one fsync after both."""
+    """The rename and the staging directory's removal are both entries in the inbox: one fsync after
+    both, then the purge's own closing fsync."""
     planned = [a_waiting_week(inbox)]
     path = inbox.directory / SECOND_WEEK
 
@@ -250,6 +261,8 @@ def test_the_rewrite_removes_its_staging_directory_before_the_inbox_is_fsynced(
     assert recorded == [
         ("replace", str(path)),
         ("rmdir", STAGING),
+        ("open", str(path.parent)),
+        ("fsync directory", str(path.parent)),
         ("open", str(path.parent)),
         ("fsync directory", str(path.parent)),
     ]
@@ -281,3 +294,46 @@ def test_a_failed_fsync_after_a_delete_stops_the_purge_and_running_it_again_fini
 
     assert sorted(os.listdir(inbox.directory)) == []
     assert again.deleted == 1
+
+
+def test_a_rerun_with_nothing_planned_puts_the_earlier_delete_down(
+    inbox: CaselistInbox, recorded: list[Event], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """After the `EIO` stop the file is gone, so the re-run plans nothing, and still fsyncs the inbox."""
+    first = an_imported_week(inbox, FIRST_WEEK)
+    directory = str(inbox.directory)
+    refuse_directory_fsyncs(monkeypatch, refusals=1)
+
+    with pytest.raises(OSError, match="Input/output error"):
+        purge(inbox, [first])
+
+    assert recorded == [("unlink", str(inbox.directory / FIRST_WEEK)), ("open", directory)]
+    assert sorted(os.listdir(inbox.directory)) == []
+    recorded.clear()
+
+    again = purge(inbox, [])
+
+    assert recorded == [("open", directory), ("fsync directory", directory)]
+    assert again == InboxPurge()
+
+
+def test_nothing_planned_is_still_done_under_the_run_lock(
+    inbox: CaselistInbox, recorded: list[Event]
+) -> None:
+    """A pull holding the lock stops even an empty purge, before its fsync."""
+    with RunLock(inbox.state_dir / LOCK_FILENAME), pytest.raises(InboxInUse):
+        purge(inbox, [])
+
+    assert recorded == []
+
+
+def test_nothing_planned_and_no_inbox_yet_does_nothing(tmp_path: Path) -> None:
+    """An environment that has never pulled has no inbox: there is nothing to fsync, and none is made."""
+    never_pulled = CaselistInbox(
+        directory=tmp_path / "inbox",
+        state_dir=tmp_path,
+        archives=ZipArchiveRewriter(max_archive_bytes=_LIMIT, max_unpacked_bytes=_LIMIT),
+    )
+
+    assert purge(never_pulled, []) == InboxPurge()
+    assert not never_pulled.directory.exists()

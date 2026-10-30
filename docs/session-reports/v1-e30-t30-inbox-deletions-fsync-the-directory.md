@@ -141,9 +141,36 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED, with one condition to close in-session before the pull request
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-30
 
 **Notes:**
+
+The inbox's deletions are now durable, in the order the spec asked.
+1. **ac1 passes.** Red against dev's `inbox_purge.py`: 3 failed (no fsync after an unlink, the staging
+   `rmdir` after the fsync, and `DID NOT RAISE OSError`). Green: 12 passed with t26's cases.
+2. **Mutants:** the PM's three and three more, all caught. "The delete counted before the fsync" and
+   "the staging directory removed after the fsync" are the two that make the counting and the order
+   real. The recorder's descriptor-reuse bug, found and fixed by inode, is noted.
+3. **Decisions accepted:**
+   * one fsync for the rename and the staging directory's removal;
+   * the error-path cleanup not fsynced, for the reason you give: the original is intact, the run has
+     stopped, and an `EIO` would hide the real error;
+   * a delete counted after its fsync;
+   * `durable_files`' docstring left alone.
+4. **The condition, your Follow-up 1, closed in this task rather than filed.** After an `EIO` from a
+   directory fsync, the file is gone but not durably, and a re-run has nothing planned for it, so it
+   never fsyncs the inbox again. That is a takedown that may not hold, the very thing this task
+   exists to prevent. Make `purge_inbox` fsync the inbox directory once, under the run lock, at the end
+   of every purge, including one with nothing planned. Then a re-run after the `EIO` makes the earlier
+   deletion durable.
+   * A test: after the `EIO` stop, a re-run with an empty plan fsyncs the inbox, recorded.
+   * A mutant: skip that fsync when nothing is planned, which must be caught.
+   * Record it in this report under a "### The condition" note in Plan nodes or Acceptance criteria,
+     and the PM adds a short note below once it's in.
+5. **The affected set** (246 files) is left to the PR's `ci`. The always-run list and every file that
+   imports `inbox_purge` passed (475), as did ruff, pyright, lint-imports, the thin-handler check and
+   the specs.
+6. **Merge:** after the condition.

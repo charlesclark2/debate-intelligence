@@ -118,7 +118,8 @@ short leaves each file either as it was or rewritten, never half written. After 
 after each rewrite's rename and the removal of its staging directory, the inbox directory is
 fsynced (`v1-e30-t26`, `v1-e30-t30`), so a power cut cannot bring back an archive or the entries a
 removal took out; a fsync that fails stops the run. Re-running the same command plans again from
-the list and finishes the rest.
+the list and finishes the rest, and every run, one with nothing left to plan included, ends with a
+fsync of the inbox, so a re-run also puts down the change whose fsync failed.
 
 ## Not checked
 
@@ -752,15 +753,17 @@ def purge_inbox(
     :class:`InboxFileChanged`, :class:`InboxFileUnreadable`, :class:`InboxRewriteFailed` — or an
     `OSError` at the first file it cannot finish, having left that file as it was. The exception
     is the inbox directory's fsync, the step after a rewrite's rename (`v1-e30-t26`) or a delete
-    (`v1-e30-t30`): when it fails, the file is rewritten or gone but not yet durably, is not
-    counted, and re-running finishes the rest.
+    (`v1-e30-t30`): when it fails, the file is rewritten or gone but not yet durably, and is not
+    counted. A re-run plans nothing for that file, so every purge ends with one more fsync of the
+    inbox, under the lock, even with nothing planned: that is what makes the earlier change durable.
+    An inbox that does not exist yet has nothing to put down.
     """
-    if not planned:
-        return
     try:
         with RunLock(inbox.state_dir / LOCK_FILENAME):
             for one in planned:
                 _carry_out(inbox, one, request_id=request_id, done=done)
+            if inbox.directory.is_dir():
+                fsync_directory(inbox.directory)
     except SyncRunInProgress as busy:
         raise InboxInUse(busy.lock_path) from None
 

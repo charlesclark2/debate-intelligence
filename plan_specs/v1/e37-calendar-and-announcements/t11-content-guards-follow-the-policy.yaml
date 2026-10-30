@@ -41,7 +41,7 @@ spec:
       description: >-
         The guide's start-of-season steps name the three files together.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

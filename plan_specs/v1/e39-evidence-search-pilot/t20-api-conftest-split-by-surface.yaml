@@ -37,7 +37,7 @@ spec:
         The collected ids are unchanged, and t32's measurement over the same merges selects
         fewer API files, recorded in the report.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

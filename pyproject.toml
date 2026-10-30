@@ -132,8 +132,12 @@ known-first-party = ["debate_core", "debate_cli", "debate_api", "debate_workers"
 # ---------------------------------------------------------------------------------------------
 # pyright: strict for the domain core, standard for the delivery packages
 # ---------------------------------------------------------------------------------------------
+# CI runs a bare `uv run --frozen pyright`, so `include` is its whole scope. tests/architecture and
+# tests/smoke are in it (v1-e01-t35); the rest of tests/ is not yet clean. They import helpers
+# from scripts/ through a sys.path insert, which `extraPaths` lets pyright resolve.
 [tool.pyright]
-include = ["packages"]
+include = ["packages", "tests/architecture", "tests/smoke"]
+extraPaths = ["scripts"]
 exclude = ["**/__pycache__", "**/.*"]
 venvPath = "."
 venv = ".venv"

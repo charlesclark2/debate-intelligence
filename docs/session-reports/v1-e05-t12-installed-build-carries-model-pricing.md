@@ -140,9 +140,41 @@ a publish.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-30
 
 **Notes:**
+
+An installed build now carries its prices, and the first model call from one no longer fails closed.
+1. **ac1 passes, at all three levels.**
+   * Unit: red 3 failed, among them the stamped build's router refusing with `UnpricedModelError`
+     against the start code. Green: 25 passed.
+   * Smoke on a real stamped build of the start commit: red, with the same refusal. On this branch:
+     17 passed.
+   * Smoke on the checkout's script: passed.
+   * `check-wheels` now refuses the start commit's real wheel by name.
+2. **The finding matters.** Every installed build, the cloud image included, would have refused its
+   first model call under a budget. Nothing hits it today, but the cloud landscape work would have hit
+   it first.
+3. **Mutants:** the PM's three, the third in two forms. All are caught by assertions, with 25 collected
+   in every run. Mutant 2, the checkout's file read instead of the bundled one, holds the resolution
+   in place that you found already correct.
+4. **No deviation, rightly.** The resolution already anchors the pricing file beside the bundled routing
+   file. Only the stamp was missing it.
+5. **Decisions accepted:**
+   * the smoke red on locally stamped builds, installed outside the checkout with the editable finders
+     shown inactive (validate-dev checks the real pre-release after the merge);
+   * no stamp-time refusal, since `check-wheels` stops a publish by name;
+   * mutant 3 in two forms.
+6. **Follow-up work:**
+   * the landscape config, `federated_ranking.yaml`, `format_profiles/` and `feeds/` are not in a
+     wheel. That goes into the cloud-run landscape stage task when the PM files it.
+     `v1-e40-t17` runs the report from a checkout, so it doesn't need them;
+   * the three docstrings that say the stamp copies `config/` whole: filed as an E01 p3 docs fix in
+     the PM's next batch.
+7. **The affected set ran:** 45 files, 2,065 passed in 84 s. ruff, pyright, lint-imports, the command
+   blocks and the specs pass.
+8. **Merge:** any time. The PM reads the next pre-release's validate-dev, whose smoke tier runs the new
+   check against the real build.

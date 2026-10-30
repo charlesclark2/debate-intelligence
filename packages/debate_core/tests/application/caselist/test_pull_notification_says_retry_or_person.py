@@ -129,11 +129,12 @@ THE_PENDING_WORK_FILE_NEEDS_A_PERSON = (
     "it cannot be repaired. It is not the AWS session."
 )
 PUBLISH_THE_PARSED_STORE = (
-    "`debate-research caselist parse --caselist <slug> --publish` publishes a caselist's parsed "
-    "store: it parses nothing already parsed, rebuilds the aggregates and uploads what the bucket "
-    "lacks. The next pull that imports into that caselist does the same; "
-    "`caselist pull --publish-pending` does not."
+    f"`debate-research caselist parse --caselist {CASELIST} --publish-only` publishes the parsed store "
+    "as this run rebuilt it from every copy of the suppression list, and rebuilds nothing. The next "
+    "pull that imports into that caselist does the same; `caselist pull --publish-pending` does not."
 )
+"""The parse stage's hint when its rebuild read every copy of the list and its publish failed
+(`v1-e34-t31`): the caselist by name, and `--publish-only`, since only the publish is owed."""
 LIST_WHAT_FAILED_TO_PARSE = (
     "`debate-research caselist parse --caselist <slug> --failures` lists the sources that failed, "
     "with their reasons."
@@ -404,7 +405,7 @@ async def test_a_failed_parse_stage_carries_its_own_fix_and_neither_wording(worl
     assert notification.title == "caselist pull finished with a failed stage"
     assert notification.message == f"{WHERE}: the parse stage failed on STORE_UNAVAILABLE. {KEPT}"
     assert notification.hint == PUBLISH_THE_PARSED_STORE
-    assert notification.fix_command == "debate-research caselist parse --caselist <slug> --publish"
+    assert notification.fix_command == f"debate-research caselist parse --caselist {CASELIST} --publish-only"
     assert_names_no_path(world, notification)
 
 
@@ -607,3 +608,6 @@ def test_the_runbook_shows_both_wordings_and_they_are_the_ones_the_notification_
         THIS_MACHINE_REFUSED_THE_MANIFESTS.replace("the manifest directory", "the blob directory") in section
     )
     assert "debate-research caselist parse --caselist <slug> --publish" in section
+    # Each caselist by its own command, and the earlier builds' word for every one (`v1-e34-t31`).
+    assert "debate-research caselist parse --caselist <slug> --publish-only" in section
+    assert "--publish` for every caselist" in section

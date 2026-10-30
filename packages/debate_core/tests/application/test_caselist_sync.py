@@ -1868,6 +1868,9 @@ async def test_a_caselist_whose_event_this_build_does_not_know_is_not_imported_u
     stage = summary.stage(SyncStage.IMPORT)
     assert stage is not None and stage.outcome is StageOutcome.FAILED
     assert "does not know which event" in (stage.reason or "")
+    # Where the table is: `debate_cli.caselist_events` since `v1-e01-t39` (the PM's ruling of
+    # 2026-10-28, carried out in `v1-e34-t31`).
+    assert "add the slug prefix to the table in debate_cli.caselist_events" in (stage.reason or "")
     assert not any(one.startswith(SYNTHETIC_CASELIST) for one in summary.snapshots_imported)
     assert not summary.succeeded
     assert summary.archives_downloaded == 2, "the bytes are in the inbox either way"

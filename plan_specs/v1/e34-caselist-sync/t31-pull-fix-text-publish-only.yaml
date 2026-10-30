@@ -44,7 +44,7 @@ spec:
         whose aggregates read only this machine's list names --publish, by tests shown
         failing first; the agent's build reads every record this build writes, by test.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

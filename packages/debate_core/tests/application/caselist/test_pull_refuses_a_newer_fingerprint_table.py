@@ -28,7 +28,7 @@ import pytest
 from debate_core.application import caselist_parse as caselist_parse_module
 from debate_core.application.caselist import occurrence_table_guard
 from debate_core.application.caselist_sync import StageOutcome, SyncStage
-from debate_core.application.sync_runs import PARSE_COMMAND, SyncRunOutcome
+from debate_core.application.sync_runs import SyncRunOutcome
 from debate_core.integrations.docx_parser import DOCX_PARSER_VERSION
 
 from .test_inbox_retention import CASELIST, WEEK_1, WEEK_2, WEEK_3, FakeSource, Installation, outcome
@@ -149,7 +149,8 @@ async def test_a_pull_over_a_table_a_newer_build_stamped_fails_the_parse_stage_a
     assert notification.title == "caselist pull finished with a failed stage"
     assert "the parse stage failed on NEWER_FINGERPRINT_TABLE" in notification.message
     assert notification.hint is not None and notification.hint.startswith(fix_for(HERE))
-    assert notification.fix_command == PARSE_COMMAND
+    # The rebuild was refused, so the caselist is named with the command that rebuilds (`v1-e34-t31`).
+    assert notification.fix_command == f"debate-research caselist parse --caselist {CASELIST} --publish"
 
 
 @pytest.mark.parametrize("stamped", [BUILD, OLDER])

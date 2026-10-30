@@ -107,6 +107,8 @@ NO_DETAILS_TO_SPEAK_OF: dict[str, Any] = {
     "search_index": None,
     "held_by_request": {},
     "manifests_published": 0,
+    # Added by `v1-e34-t31`: no scenario here owes a parsed store.
+    "parsed_stores_owed": [],
 }
 
 WEEK_ONE_PUBLISHED: dict[str, Any] = {**NO_DETAILS_TO_SPEAK_OF, "manifests_published": 1}
@@ -133,6 +135,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
             "search_index": None,
             "held_by_request": {},
             "manifests_published": 0,
+            "parsed_stores_owed": [],
         }
     ],
     "a_publish_the_bucket_refused": [
@@ -154,6 +157,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
             "search_index": None,
             "held_by_request": {},
             "manifests_published": 0,
+            "parsed_stores_owed": [],
         }
     ],
     "a_week_that_cannot_be_read": [
@@ -175,6 +179,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
             "search_index": None,
             "held_by_request": {},
             "manifests_published": 0,
+            "parsed_stores_owed": [],
         }
     ],
     "a_publish_left_for_a_login_and_then_drained": [
@@ -200,6 +205,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
             "search_index": None,
             "held_by_request": {},
             "manifests_published": 0,
+            "parsed_stores_owed": [],
         }
     ],
     "a_run_stopped_by_an_expired_token": [
@@ -212,6 +218,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
             "search_index": None,
             "held_by_request": {},
             "manifests_published": 0,
+            "parsed_stores_owed": [],
         }
     ],
     "a_run_stopped_by_an_error_nobody_modelled": [
@@ -224,6 +231,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
             "search_index": None,
             "held_by_request": {},
             "manifests_published": 0,
+            "parsed_stores_owed": [],
         }
     ],
     "two_weeks_imported_and_parsed": [
@@ -248,6 +256,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
             "held_by_request": {},
             # Both weeks' manifests (`v1-e34-t28`).
             "manifests_published": 2,
+            "parsed_stores_owed": [],
         }
     ],
     # `v1-e34-t22`: the run the want of a bucket refused, then the run that published its record.
@@ -261,6 +270,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
             "search_index": None,
             "held_by_request": {},
             "manifests_published": 0,
+            "parsed_stores_owed": [],
         },
         {"run_id": SECOND_RUN_ID, **WEEK_ONE_PUBLISHED},
     ],

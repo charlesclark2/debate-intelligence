@@ -243,6 +243,8 @@ async def test_its_details_carry_the_code_and_the_fix_which_names_the_setting(wo
             "search_index": None,
             "held_by_request": {},
             "manifests_published": 0,
+            # A run refused before any stage owes no parsed store (`v1-e34-t31`).
+            "parsed_stores_owed": [],
             # A run refused before any stage has no stage to time and read no volume (`v1-e40-t03`).
             "stage_times": [],
             "data_volume": None,

@@ -276,9 +276,52 @@ Three facts the proposal rests on:
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-30
 
 **Notes:**
+
+A landscape report can now count the weeks the cloud run pulled, with nothing of the landscape's state
+put at risk.
+1. **ac1 passes.** The table traces every path the report reads and writes, which a copy holds and
+   which only the data directory does, with sizes. Its three facts decided the design: the text caches
+   key on parser version, raw bytes are read every run, and a data-directory override would strand the
+   usage log and the classifications.
+2. **ac2 passes.** Red: 27 failed against a refuse-nothing skeleton. Green: 80 passed.
+   * The report over a copy counts the copy's week (09-15), not the stale directory's (09-08).
+   * A second report over a fresh copy asks the model about 0 cards, with 2 cached. That is
+     classify-once, shown.
+   * Every dry run says how many cards it would ask about.
+3. **Mutants:** 20, all caught: every refusal, each wiring line (the suppression list, run log and card
+   texts each read from the copy), and the `would_ask` rule. The two tests you added after tracing
+   showed nothing caught the suppression-list and run-log lines. That is agreement 8 working.
+4. **Q5 is answered, in code:** the image deployed on 2026-10-29 (`03b23e2`) parses with
+   `2026.10.20-docx-6`, so the copy is parsed with this build before the report. The version refusal is
+   the guard.
+5. **Deviation 1, `DEBATE_STORAGE__DATA_DIR` for the parse step alone: accepted.** Q1 meant the report,
+   and the parse has no directory option and writes the copy's own database and parsed store. It is
+   set inline on that one command, after refusing any override already in the shell, as v1-e31-t31's
+   and the cutover's blocks do. The report, its dry run and its publish set none.
+   **Deviations 2 (the smoke check) and 3 (a new runbook): accepted.** The PM's next batch adds
+   `tests/smoke` to the packages.
+6. **Decisions accepted:**
+   * the copy's suppression list alone;
+   * the newest parsed directory compared with this build's version;
+   * refusals that name no path;
+   * `would_ask` null in a run that writes;
+   * the copy's fixed path form, and step 5 deleting only that form and counting 0;
+   * `--publish --dry-run` as the read before the publish.
+7. **Follow-up work:**
+   * the data-use policy sentence (a landscape report as a third purpose for a restored copy): in
+     policy 1.19's draft, for the coach's approval;
+   * docx-7 in the cloud: the PM schedules v1-e31-t31's re-parse and a docx-7 image after the coach's
+     trip, which drops step 2's full parse;
+   * a dry run that writes the text caches: E32 p3, in the PM's next batch.
+8. **The affected set** (206 files) is left to the PR's `ci`. The always-run list, every landscape test
+   file, bucket mode and the smoke file pass (880, plus the container factories after `266f9c6`), as do
+   ruff, pyright, lint-imports, the thin-handler check, the docs and the specs.
+9. **Merge `--partial`.** The hspolicy26 proof is the operator's after the merge, on any day but
+   Wednesday, about 35 to 55 minutes. It is v1-e32-t29's republish, with no model spend. It should run
+   before Wednesday 2026-11-04, so Friday's LD run follows a path already proven.

@@ -68,7 +68,7 @@ v2.3's extension work.
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 27 | 17 | 164 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 23 | 16 | 84 |
-| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 1 | 21 | 8 | 52 |
+| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 1 | 21 | 9 | 52 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -561,7 +561,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [A plan check for a new run image after the cutover, with the schedule left enabled](plan_specs/v1/e40-cloud-caselist-run/t15-image-plan-check-after-the-cutover.yaml) `v1-e40-t15-image-plan-check-after-the-cutover` | Succeeded | 1 | 1.0 |
 | [Prod's parsed store re-parsed after a parser bump, from a copy restored with its sources](plan_specs/v1/e40-cloud-caselist-run/t16-prod-reparse-after-a-parser-bump.yaml) `v1-e40-t16-prod-reparse-after-a-parser-bump` | Pending | 1 | 2.0 |
 | [A landscape report counts the weeks the cloud run pulled, from a copy restored from the bucket](plan_specs/v1/e40-cloud-caselist-run/t17-landscape-report-from-the-cloud-runs-state.yaml) `v1-e40-t17-landscape-report-from-the-cloud-runs-state` | InProgress | 1 | 3.0 |
-| [In bucket mode a failed parse stage names the cloud cure, never a publish from the operator's Mac](plan_specs/v1/e40-cloud-caselist-run/t18-cloud-parse-stage-cure.yaml) `v1-e40-t18-cloud-parse-stage-cure` | Pending | 0 | 2.0 |
+| [In bucket mode a failed parse stage names the cloud cure, never a publish from the operator's Mac](plan_specs/v1/e40-cloud-caselist-run/t18-cloud-parse-stage-cure.yaml) `v1-e40-t18-cloud-parse-stage-cure` | Succeeded | 0 | 2.0 |
 | [The weekly cloud run builds the landscape reports, counted for cost first](plan_specs/v1/e40-cloud-caselist-run/t19-landscape-stage-in-the-weekly-run.yaml) `v1-e40-t19-landscape-stage-in-the-weekly-run` | Pending | 0 | 4.0 |
 | [The caselist pull table's Detail column shortens digests as its panel does](plan_specs/v1/e40-cloud-caselist-run/t20-pull-table-shortens-digests.yaml) `v1-e40-t20-pull-table-shortens-digests` | Pending | 0 | 1.0 |
 | [A restored working copy carries a marker, so leftover copies are found exactly](plan_specs/v1/e40-cloud-caselist-run/t21-restored-copy-marker.yaml) `v1-e40-t21-restored-copy-marker` | Pending | 0 | 1.0 |

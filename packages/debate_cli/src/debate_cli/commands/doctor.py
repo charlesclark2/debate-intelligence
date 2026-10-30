@@ -29,6 +29,15 @@ every build. With the option it loads settings, reads the AWS config, and makes 
 each profile that is defined (`GetCallerIdentity`, which needs no grant and changes nothing).
 `ops/launchd/install.sh --check-launchd` runs it under launchd, as the agent will run.
 
+**What "reaches no network" means** (`v1-e05-t09`, the PM's ruling). Plain `doctor` makes no network
+call and binds nothing but loopback. It does open one socket: importing the AWS SDK, which the
+integration check below does for every adapter built on it, imports urllib3, and urllib3 binds a
+loopback socket to `::1` once to learn whether the machine has IPv6. Nothing is sent, no name is
+looked up, and urllib3 swallows the failure where IPv6 is off, so no network is touched. The check
+keeps its real imports for that: it is what catches an adapter installed but broken on import.
+`tests/commands/test_plain_doctor_reaches_no_network.py` runs plain `doctor` in a fresh interpreter
+with every connect, send and lookup refused, and every bind but a loopback one.
+
 **The model profile** (`v1-e05-t08`), `models.aws_profile`, the profile every Bedrock call is
 signed with, is checked beside them and reported in the same words, on a `Model profile` row. It
 never fails the check, even when it is not defined: no command calls a model yet, and this check is

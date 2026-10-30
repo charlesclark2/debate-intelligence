@@ -18,7 +18,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-import check_thin_handlers as thin  # noqa: E402  # pyright: ignore[reportMissingImports]
+import check_thin_handlers as thin  # noqa: E402
 
 CLI = "packages/debate_cli/src/debate_cli"
 API = "packages/debate_api/src/debate_api"

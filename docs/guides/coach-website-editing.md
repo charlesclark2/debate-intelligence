@@ -173,9 +173,23 @@ If the team has simply decided not to go, consider whether families would rather
 have the tournament vanish: a note such as `The team is not attending this tournament.` keeps it
 visible until the next deploy after the date.
 
-**At the start of a new season**, replace the entries with the new season's, set `season` (for
-example `'2027-28'`) and `revised`, and use new `id`s with the new year. The build refuses a date
-outside the season, which is what catches a typed year left over from last season.
+**At the start of a new season**, change `season` (for example to `'2027-28'`) in three files, in
+one edit: `site/content/tournaments.yaml`, `site/content/results.yaml` and
+`site/content/media-consent.yaml`. The site's tests check that the three are for the same season,
+so changing one of them alone fails. In the same edit:
+
+- in the schedule, replace the entries with the new season's, update `revised`, and use new `id`s
+  with the new year;
+- in the results, take out last season's results (leave `results: []` until the new season's
+  first) and update `revised`;
+- in the consent file, change only `season`. Every consent entry lapses with the season, so Charlie
+  runs the policy's
+  [start-of-season check](../policies/website-publishing.md#consent-renewal-and-the-start-of-season-check)
+  and brings each entry up to date before the change is published; until then the site's tests
+  fail on every entry still dated last season.
+
+The build refuses a date outside the season, which is what catches a typed year left over from
+last season.
 
 ### Check a change
 

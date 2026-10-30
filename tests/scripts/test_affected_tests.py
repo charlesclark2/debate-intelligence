@@ -695,7 +695,9 @@ def test_explain_tells_a_path_to_a_file_from_a_word_that_names_it(workspace: Wor
         "tests/api/test_walks_its_folders.py",
         "tests/api/test_runs_a_command.py",
     }
-    assert {test: reasons[test] for test in by_path} == dict.fromkeys(by_path, f"has a path to {case}, which changed")
+    assert {test: reasons[test] for test in by_path} == dict.fromkeys(
+        by_path, f"has a path to {case}, which changed"
+    )
     assert {test: reasons[test] for test in by_word} == dict.fromkeys(by_word, f"names {case}, which changed")
 
 

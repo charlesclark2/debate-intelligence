@@ -404,7 +404,9 @@ def test_a_route_through_the_container_read_whole_runs_after_a_longer_route_of_p
         pytest.param(f"imports tests/helper.py, which names {DATA}, which changed", id="a word further on"),
         pytest.param(f"{READS_EVERY_PART} the container's _build_x, which changed", id="the container whole"),
         pytest.param(f"{READS_SOURCE} the files it walks, and Python changed", id="the source"),
-        pytest.param(f"nothing names {DATA}, so every test of packages/debate_core is selected", id="a fallback"),
+        pytest.param(
+            f"nothing names {DATA}, so every test of packages/debate_core is selected", id="a fallback"
+        ),
     ],
 )
 def test_a_route_the_script_could_not_tell_does_not_read_by_a_path(route: str) -> None:

@@ -756,14 +756,16 @@ def purge_inbox(
     (`v1-e30-t30`): when it fails, the file is rewritten or gone but not yet durably, and is not
     counted. A re-run plans nothing for that file, so every purge ends with one more fsync of the
     inbox, under the lock, even with nothing planned: that is what makes the earlier change durable.
-    An inbox that does not exist yet has nothing to put down.
+    With nothing planned and no inbox (prod does not pull) there is nothing to put down, and the
+    step does nothing at all, not even make the lock file (`v1-e30-t09`).
     """
+    if not planned and not inbox.directory.is_dir():
+        return
     try:
         with RunLock(inbox.state_dir / LOCK_FILENAME):
             for one in planned:
                 _carry_out(inbox, one, request_id=request_id, done=done)
-            if inbox.directory.is_dir():
-                fsync_directory(inbox.directory)
+            fsync_directory(inbox.directory)
     except SyncRunInProgress as busy:
         raise InboxInUse(busy.lock_path) from None
 

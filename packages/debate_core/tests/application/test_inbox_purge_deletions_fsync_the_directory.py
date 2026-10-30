@@ -328,7 +328,8 @@ def test_nothing_planned_is_still_done_under_the_run_lock(
 
 
 def test_nothing_planned_and_no_inbox_yet_does_nothing(tmp_path: Path) -> None:
-    """An environment that has never pulled has no inbox: there is nothing to fsync, and none is made."""
+    """An environment that does not pull has no inbox: nothing to fsync, and neither an inbox nor the
+    lock file is made (`v1-e30-t09` pins the same for a whole removal on prod)."""
     never_pulled = CaselistInbox(
         directory=tmp_path / "inbox",
         state_dir=tmp_path,
@@ -337,3 +338,4 @@ def test_nothing_planned_and_no_inbox_yet_does_nothing(tmp_path: Path) -> None:
 
     assert purge(never_pulled, []) == InboxPurge()
     assert not never_pulled.directory.exists()
+    assert not (tmp_path / LOCK_FILENAME).exists()

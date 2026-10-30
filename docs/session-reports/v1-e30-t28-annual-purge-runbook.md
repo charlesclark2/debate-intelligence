@@ -162,9 +162,55 @@ The runbook's "What has no command yet", for the PM to file:
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-29
 
 **Notes:**
+
+The annual purge is one runbook, written for the cloud setup, with every listing tested on
+synthetic stores.
+1. **ac1 passes.**
+   * Every row of the policy's retention table maps to a runbook row, and a new policy row fails the
+     test.
+   * Each deleting step has its dry run, its delete and its check. Where no command exists, the step
+     lists counts and names the gap, as the spec allows.
+   * The removal runbook's section moved and points here, and the e30-t29 sentence was rightly left
+     out.
+   * check_command_blocks and check_links pass.
+2. **Tested runbook code is the strongest part.** The four heredoc scripts run in `tests/docs`, and
+   nine mutants are each caught: slug-year judging, the window off by a day, a bucket block without
+   `purge_guard`, and the guard without its Wednesday check among them. Only the school-view block
+   fails `bash -n`, because of zsh's `(N)`, as the section it moved from and P4 do.
+3. **Decisions accepted:**
+   * one `WINDOW_START`, so a season a past purge missed is caught too;
+   * season by date and backfile by setting, with an unnamed aged-out caselist stopping the inventory;
+   * the bundle read with `tar -t` and never restored;
+   * expired versions checked, not deleted, since a survivor means the lifecycle rule is broken;
+   * P4 in its own window;
+   * September, after the 31 August ageing out.
+4. **Question 1, OpenEv camp years: confirmed as written.** Topic years from 2021 on are kept as
+   backfiles once they age out, and earlier years are purged. The sentence goes into data-use policy
+   1.19, which the coach approves with the zero-retention sentence.
+5. **Question 2, the leaving season's classifications: yes, they go, with the coach's approval in
+   policy 1.19.** A backfile is "never classified into positions", and the per-school views it loses
+   are rebuilt from exactly these caches. Its classification cache, review queue, plan and analytic
+   texts, scan acceptances, local classifier files and cassette entries are deleted with its school
+   views. That needs follow-up 1's command, so follow-up 1 is filed at p2. The first purge is
+   September 2027, so there is time.
+6. **Question 3: the operator moves both files out of the data directory now.** `report.html` does not
+   join `CIRCUIT_WIDE_FILES`: the list names what the build writes, not what a person leaves. The
+   PM gives the operator the move.
+7. **Follow-up work, filed in the PM's next batch:**
+   * 1, a retention purge of one caselist (E30, p2 by question 2);
+   * 2, the same for a camp release (E30, p3);
+   * 3, pruning this Mac's index builds (E39, p3, beside `v1-e39-t15`);
+   * 4, cassettes filed by caselist (E32, p3; question 2 needs it);
+   * 5, listing versions under the rest of `reports/`, `uploads/` and `exports/` (E29, p3);
+   * 6, a marker in a restored working copy (E40, p3).
+8. **The affected set** (80 files) ran past two minutes at load 40 to 175 from other sessions, with no
+   failure before the stop. The rest is the PR's `ci`. The docs tests, the purge tests, the
+   index-prune runbook test, the docs index, ruff, pyright and the specs pass.
+9. **Merge:** any time, docs and tests only. The PM adds the e30-t29 sentence to the removal runbook
+   in a batch after this merges.

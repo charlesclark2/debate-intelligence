@@ -173,9 +173,54 @@ it will, if it touches `site/`.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-31
 
 **Notes:**
+
+A pull request into main that touches site/ now meets the prod guards before it merges, and a
+site-only change no longer runs the Python suite.
+1. **ac1 passes.**
+   * Red: on the old ci.yml, a planted `[[TBD]]` passed the site job on a pull request into main,
+     with a dev build only. Green: 26 passed.
+   * The real build was planted too. The dev build printed the problem and exited 0; the new prod
+     command exited 1 with `PublishingPolicyError`. The tree was restored clean afterwards.
+   * The prod step's `run` and `env` are held equal to validate-dev's site-lane step, so the two
+     cannot drift.
+2. **ac2 passes.**
+   * Each of the 152 tracked site files, alone and together, selects no Python tests and runs the
+     site job.
+   * The three site scripts under `scripts/` still select the suite, and so does every Markdown
+     file outside site/.
+   * The filter emulation fails on any pattern outside the subset it models, and actionlint showed
+     it reads the new `predicate-quantifier` input. Good.
+3. **The deviation is accepted:** `check_links.py` in spec-validate. Without it, a site-only pull
+   request could break site/README.md's links into `docs/` and leave the break for the next PR,
+   the failure the ci.yml comment warns about. It costs about a second.
+4. **Decisions accepted:**
+   * the prod build in addition to the dev build, which keeps the dev robots.txt check;
+   * gating on `base_ref == 'main'`, so promotions get it too. A promotion that carries a
+     `[[TBD]]` now fails `ci`, which enforces the runbook's precondition 2 before the merge rather
+     than after it;
+   * a separate `every` step rather than an unverified extglob;
+   * the stub `node` standing in for the guard, with the real guard shown separately;
+   * no ruleset change, since `site` is already in `ci`'s needs.
+5. **When it takes effect:** as stated, `hotfix/*` and `site/<slug>` pull requests get the step only
+   once this ci.yml reaches main with the next promotion. Until then the site lane keeps its
+   validate-dev prod build before main. A `hotfix/*` touching site/ meets the guards only in
+   `site_deploy.sh`, as it does today.
+6. **Follow-ups:**
+   * **The single-interpreter scan:** one p3 task in the next PM batch, so that the scan leaves
+     site/ out as the Node ecosystem it is. It already treats `site/pnpm-lock.yaml` that way, and
+     nothing under site/ runs the repository's Python.
+   * **site/README.md's CI section:** your proposed sentence goes in with the next PM batch. It
+     reaches main with the next promotion.
+7. **Closing checks:** ci.yml is shared test ground, so the whole selection runs on the PR's `ci`
+   (agreement 10).
+   * The node criterion ran in parts after the one-shot run hit the hard limit: 181 of 181.
+   * The always-run list (515), actionlint (shown to catch a misspelled input), ruff, pyright,
+     lint-imports, the links, the specs, the command blocks and the docs index all pass.
+8. **Merge:** once the PR's `ci` is green. It is a plain `scripts/task pr`, since nothing is left to
+   the operator.

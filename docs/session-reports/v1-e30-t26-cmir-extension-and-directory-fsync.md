@@ -224,9 +224,40 @@ on the pull request covers the selection I did not run.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-29
 
 **Notes:**
+
+Both parts are built as specified, and the precondition was proved rather than assumed.
+1. **ac1 passes.** Red: 5 failed (`OTHER` for three spellings of `.cmir`, the manifest row and the
+   parse count). Green: a `.cmir` is recorded `CMIR` and counted unsupported, with `.cmir.txt` and
+   `.cmirx` pinned as `OTHER`.
+2. **The precondition holds, by each build's own code.** `v1.1.0-dev.155` (the Mac's installed build)
+   and `v1.1.0-dev.164` (the cloud image deployed tonight) each read the CMIR row, parse it as
+   unsupported, publish it and report in sync. With `CMIR` removed from a copy of dev.155, the
+   check fails with `UnreadableManifest`, so it can tell.
+3. **ac2 passes.** A recording test per writer shows file fsync, rename, then directory fsync, and an
+   `EIO` from the directory fsync raises. Red: 9 failed, each on the missing step. t23's manifest
+   test still passes after its helper moved.
+4. **Mutants:** the PM's five, (2) to (4) for each writer, and two in the shared helper. All 13 are
+   caught. Mutant 3b was redone as a true move before it was recorded. Good.
+5. **Decisions accepted:**
+   * the helper moved to `durable_files.py` rather than copied, since the token store and recordings
+     writer should not import a caselist module;
+   * `caselist_sync.py`'s duplicate left alone;
+   * each writer calls the helper visibly after its rename;
+   * where a failed directory fsync is raised in each writer and what it leaves;
+   * case-insensitive `.cmir`;
+   * a `.docx` renamed `.cmir` is counted `CMIR` by name, as the spec asks;
+   * the parser untouched, so the version stays `docx-7`.
+6. **Follow-up work, filed in the PM's next batch:**
+   * 1, inbox deletions fsync the directory (E30, p2: a removed archive that comes back after a
+     power cut is a takedown that didn't hold);
+   * 2, `caselist_sync.py` imports the shared helper, noted for the next task that edits it.
+7. **The affected set** (365 files, through `fake_router` and the root conftest) is left to the PR's
+   `ci`. The always-run list, the integrations' tests, the caselist application tests, the parse
+   tests, ruff, pyright, lint-imports, the thin-handler check and the specs pass.
+8. **Merge:** any time. Nothing running touches these files.

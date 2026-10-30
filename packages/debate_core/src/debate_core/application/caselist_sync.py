@@ -641,6 +641,7 @@ if TYPE_CHECKING:  # pragma: no cover - sync_runs imports this module, so its ty
 __all__ = [
     "archive_entries",
     "BULK_DOWNLOAD_WINDOW",
+    "CLOUD_PARSE_STAGE_RUNBOOK",
     "DEFAULT_BULK_DOWNLOADS_PER_DAY",
     "DEFAULT_FULL_ARCHIVE_INTERVAL_DAYS",
     "INBOX_PARTIAL_DIRECTORY",
@@ -698,6 +699,7 @@ __all__ = [
     "append_state_line",
     "camp_path_of_manifest_row",
     "caselists_to_parse",
+    "cloud_parse_cure",
     "decide_full_archives",
     "fix_for",
     "full_archive_of_inbox_name",
@@ -1629,6 +1631,31 @@ def parse_command(caselist: str, *, publish_only: bool) -> str:
     """The command that finishes one caselist's parsed store, as the run names it (`v1-e34-t31`)."""
     flag = PARSE_PUBLISH_ONLY if publish_only else PARSE_PUBLISH
     return f"debate-research caselist parse --caselist {caselist} {flag}"
+
+
+CLOUD_PARSE_STAGE_RUNBOOK: Final = 'caselist-cloud-run.md, "A failed parse stage"'
+"""The runbook section a bucket-mode run's parse stage points to (`v1-e40-t18`): what the cloud cure
+is, how to start a run by hand, and why nothing is published from the operator's Mac."""
+
+
+def cloud_parse_cure(caselists: Sequence[str]) -> str:
+    """What finishes a bucket-mode run's unpublished parsed stores, as its banner names it (`v1-e40-t18`).
+
+    No command: the cloud run owns the parsed store, and a command run on the operator's Mac would
+    rebuild the Mac's own working copy and publish it over the cloud run's. The run parses only the
+    caselists it imports into (:func:`caselists_to_parse`), so the cure is the next cloud run that
+    imports into the caselist, weekly or started by hand. `caselists` empty, as in details a build
+    before `v1-e34-t31` wrote, names the caselist by the stage.
+    """
+    named = _or_listed(caselists) if caselists else "a caselist the parse stage names"
+    return (
+        f"the next cloud run that imports into {named} publishes that caselist's parsed store: the weekly "
+        f"run, or one started by hand ({CLOUD_PARSE_STAGE_RUNBOOK}); never a publish from the operator's Mac"
+    )
+
+
+def _or_listed(names: Sequence[str]) -> str:
+    return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} or {names[-1]}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -2915,6 +2942,10 @@ class CaselistSyncService:
             cloud run's working copy is on the task's ephemeral storage, and the parsed store a
             later run restores is the bucket's. Off, the default, every parsed store owed is named
             with `--publish`.
+        bucket_mode: The run is a bucket-mode run, the cloud run's (`v1-e40-t18`): the parsed store
+            is the cloud run's, so a parsed store the stage did not publish is named with the cloud
+            cure (:func:`cloud_parse_cure`), never a command that publishes from the operator's
+            working copy. The composition root's `_in_bucket_mode`. Off, the default, is local mode.
     """
 
     def __init__(
@@ -2948,9 +2979,11 @@ class CaselistSyncService:
         after_publish: Callable[[], Awaitable[object]] | None = None,
         backfile_caselists: Sequence[str] = (),
         working_copy_outlives_the_run: bool = False,
+        bucket_mode: bool = False,
     ) -> None:
         self._source = source
         self._working_copy_outlives_the_run = working_copy_outlives_the_run
+        self._bucket_mode = bucket_mode
         # A backfile (`v1-e34-t34`) is never pulled, by the weekly run or by hand: refused in `plan`.
         self._backfiles = tuple(backfile_caselists)
         # Bucket mode (`v1-e40-t04`): each state file is saved as it is written, a download's start

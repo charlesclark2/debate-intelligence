@@ -157,9 +157,45 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-30
 
 **Notes:**
+
+The content checks follow the policy, and a whole season change now needs no test edit, shown.
+1. **ac1 passes.**
+   * (a): red twice, the moved-unchanged check and a refuse-nothing skeleton. The coach's address in a
+     note passes every check. Any other address fails, and so do the coach's address inside a longer
+     one, a bare `@`, a seven-digit number and a phone next to the coach's address.
+   * (c): red twice. A consented image passes the check and the guard, and six unconsented shapes fail.
+2. **ac2 passes, probed.** The schedule alone fails `oneSeason`. All three files with the results
+   emptied fail only the consent entries. A simulated start-of-season check passes 947/947 with no
+   test edit.
+3. **Mutants:** the PM's four, with (4) four ways. All are caught. The after-the-season-ends date had
+   no case until the first round showed it, and now it does. Good.
+4. **Deviation 1, the three guard cases' own season: accepted, and right.** The probe found that a
+   season change still needed a test edit, the one thing this task's title rules out. Each case now
+   states its season, and asserts what it did before. **Deviation 2** (the affected set run directly,
+   with the time limit on the interpreter): accepted.
+5. **Decisions accepted:**
+   * a whole address judged by the guard's own `contactDetails` and allowlist, so an embedded
+     address still fails;
+   * everything else as strict as before;
+   * the raw file read, so the loader's guard doesn't mask mutant (2);
+   * the image check as strict as the student check;
+   * the guide's results and consent sentences;
+   * plants with no person's name.
+6. **Follow-up work, the PM's rulings:**
+   * **A stale image published with only a warning:** the publishing policy says a photograph needs a
+     current-season form, so the prod build should refuse a stale image as it refuses a stale name.
+     The PM's next batch files it at E37 p2, a change in `site/src/`. No image is published today.
+   * **Graduates at a season change:** the PM proposes to the coach adding "remove the entries of
+     students who have graduated" to the publishing policy's start-of-season checklist, in its next
+     version.
+7. **The affected set ran:** 28 files, 1,663 passed in 92 s. The site's checks (949 and the 109 export
+   checks), ruff, pyright, lint-imports, the links, the command blocks, the docs index and the specs
+   pass.
+8. **Merge:** any time. It changes only `site/tests/` and the guide, so nothing on the public site
+   changes. The next lane run that syncs from dev carries it to `main`.

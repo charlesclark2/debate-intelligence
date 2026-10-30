@@ -48,6 +48,7 @@ the provider, inference profile, region, timeout and resolution; `v1-e05-t02-bed
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Self
 
@@ -73,7 +74,9 @@ __all__ = [
     "MAX_ATTEMPTS_CEILING",
     "ROUTING_SCHEMA_VERSION",
     "ModelRoute",
+    "RoutingFileFinding",
     "RoutingPolicy",
+    "check_routing_file",
 ]
 
 ROUTING_SCHEMA_VERSION = 1
@@ -299,6 +302,56 @@ class RoutingPolicy(BaseModel):
             ),
             effort=overrides.effort if overrides.effort is not None else route.effort,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class RoutingFileFinding:
+    """Whether the routing file the settings name loads: what `doctor --routing-file` reports (v1-e05-t09).
+
+    One that loads lists the task classes it routes. One that does not carries the
+    :class:`RoutingConfigError` every command that reads settings would stop with: its message,
+    which names the file, and the offending key, when the failure is about one entry.
+    """
+
+    routing_file: str
+    """The file, as the settings name it (`models.routing_file`)."""
+    loads: bool
+    routes: tuple[str, ...] = ()
+    """The task classes the file routes, sorted; none when it does not load."""
+    field: str | None = None
+    """The offending key, dotted as it appears in the file, when the failure is about one entry."""
+    problem: str | None = None
+    """Why it does not load, in the words of the refusal; `None` when it loads."""
+
+    @classmethod
+    def refused(cls, error: RoutingConfigError) -> Self:
+        """The finding for a routing file that `error` refused."""
+        return cls(
+            routing_file=error.source or "(unknown)", loads=False, field=error.field, problem=str(error)
+        )
+
+    def as_json(self) -> dict[str, object]:
+        """The finding as `doctor --json` reports it."""
+        return {
+            "routing_file": self.routing_file,
+            "loads": self.loads,
+            "routes": list(self.routes),
+            "field": self.field,
+            "problem": self.problem,
+        }
+
+
+def check_routing_file(path: Path) -> RoutingFileFinding:
+    """Load the routing file at `path` and say whether it loads, never raising for a bad file."""
+    try:
+        policy = RoutingPolicy.load(path)
+    except RoutingConfigError as error:
+        return RoutingFileFinding.refused(error)
+    return RoutingFileFinding(
+        routing_file=str(path),
+        loads=True,
+        routes=tuple(sorted(task_class.value for task_class in policy.routed_task_classes)),
+    )
 
 
 def _describe(error: ValidationError, path: Path) -> str:

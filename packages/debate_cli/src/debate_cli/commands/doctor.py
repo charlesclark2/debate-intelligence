@@ -59,9 +59,20 @@ agent's caselists as `caselist.sync_caselists`, so the check runs as the agent w
 It names a store, which is a caselist slug or `openev`, and the parser version. Never a path, a
 school, a team code or a file name.
 
+## The routing file, when asked (`v1-e05-t09`)
+
+`doctor --routing-file` adds a check of the model-routing file this environment's settings name,
+`models.routing_file`: whether it loads, and the task classes it routes. A file that is missing, is
+not YAML or does not match the schema fails it, with the refusal every command that reads settings
+would stop with (`v1-e05-t03` ac6), naming the file and the offending key. The check is
+:func:`~debate_core.integrations.models.routing_policy.check_routing_file`; this module only renders it.
+
+Like the options above it is an option because it loads settings, and plain `doctor` must not: a
+bad routing file does not stop plain `doctor`, on purpose. It reads one file and reaches no network.
+
 ## Exit codes
 
-`doctor` fails on two checks only, the ones it can state precisely, and on two more when asked:
+`doctor` fails on two checks only, the ones it can state precisely, and on three more when asked:
 
 * **The Unicode database** (`v1-e01-t14`). Under any database but the one the current evidence
   normalizer is pinned to, `normalize` refuses to run (`UnicodeDatabaseMismatchError`), so every
@@ -78,12 +89,15 @@ school, a team code or a file name.
   every store it would index must have been parsed by this build's parser. One that has not is
   named, with the command that parses it. It is a precise prediction that the next weekly run ends
   without a current index.
+* **The routing file**, with `--routing-file` only: the file `models.routing_file` names must load.
+  One that does not is named, with the offending key when there is one.
 
 * `0`: the report was produced, and every check that was made passed.
 * `1` (`DOMAIN_FAILURE`): a check failed. One failure has its own code, `UNICODE_DATABASE_MISMATCH`,
   `INTEGRATIONS_DO_NOT_IMPORT`, `STORE_PROFILE_NOT_CONFIGURED` (the code a command stopped by the
-  same setting reports) or `SEARCH_INDEX_STORE_NOT_READY` (the code the search index stage fails
-  with); more than one are `INSTALLATION_CHECKS_FAILED`, with every message.
+  same setting reports), `SEARCH_INDEX_STORE_NOT_READY` (the code the search index stage fails
+  with) or `ROUTING_CONFIG_ERROR` (the code a command stopped by the same file reports); more than
+  one are `INSTALLATION_CHECKS_FAILED`, with every message.
   `--json` carries the whole report in `error.details`. `scripts/install_channel.sh` runs `doctor`
   before it replaces an install, so a build that fails either check is refused there.
 * `70` (`INTERNAL_ERROR`): `doctor` could not establish a check at all: the normalizer's pinned
@@ -136,6 +150,7 @@ from debate_cli.exit_codes import ExitCode
 from debate_cli.output import CommandFailure, JsonValue, TableSpec
 from debate_core.application.errors import StoreProfileNotConfigured, error_code_of_class
 from debate_core.application.evidence_profiles import MODEL_PROFILE_SETTING
+from debate_core.application.ports.model_router import RoutingConfigError
 from debate_core.application.search_index_build import SearchIndexStoreNotReady
 from debate_core.evidence.normalization import NORMALIZER_VERSION, pinned_unicode_version
 
@@ -154,6 +169,10 @@ SEARCH_INDEX = "search_index"
 """The report's key for the search index store check's findings. Absent unless `--search-index` was given."""
 STORE_NOT_PARSED_CODE = error_code_of_class(SearchIndexStoreNotReady)
 """`SEARCH_INDEX_STORE_NOT_READY`: the code the search index stage fails with on a store never parsed."""
+ROUTING_FILE = "routing_file"
+"""The report's key for the routing file check's finding. Absent unless `--routing-file` was given."""
+ROUTING_FILE_DOES_NOT_LOAD_CODE = error_code_of_class(RoutingConfigError)
+"""`ROUTING_CONFIG_ERROR`: the code of the error a command stopped by the same routing file reports."""
 
 
 def doctor(
@@ -186,6 +205,19 @@ def doctor(
             ),
         ),
     ] = False,
+    routing_file: Annotated[
+        bool,
+        typer.Option(
+            "--routing-file",
+            help=(
+                "Also check the model-routing file this environment's settings name "
+                "(models.routing_file): whether it loads, and which task classes it routes. Fails "
+                "on a file that is missing, is not YAML or does not match the schema, naming the "
+                "offending key. Loads settings and reads that file; without this option doctor "
+                "does neither."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Report the versions, interpreter and wiring this installation is running with.
 
@@ -199,7 +231,8 @@ def doctor(
         config (the error names the profile and the setting that holds its name), or, with
         --search-index, a store the weekly run's search index stage would index has not been
         parsed by this build's parser (the error names each, and the hint the command that
-        parses it)
+        parses it), or, with --routing-file, the model-routing file the settings name does not
+        load (the error names the file and the offending key)
     70  a check could not be made at all (the pinned version is unknown, or the CLI wires an
         integration in a way that cannot be followed), which is a bug in the build
     Every other fact is reported for information and never fails the command, including a
@@ -208,6 +241,9 @@ def doctor(
     cli = cli_context(ctx)
     cli.output.detail("collecting environment facts")
     report = environment_report(cli.services)
+    if routing_file:
+        cli.output.detail("loading the model-routing file the settings name")
+        report[ROUTING_FILE] = cast("JsonValue", cli.services.routing_file_finding().as_json())
     if evidence_profiles:
         cli.output.detail("asking AWS which permission set each configured evidence profile is signed in as")
         report[EVIDENCE_PROFILES] = evidence_profile_findings(cli.services)
@@ -310,6 +346,7 @@ def doctor_failure(report: Mapping[str, JsonValue]) -> CommandFailure | None:
             integration_failure(report),
             evidence_profile_failure(report),
             search_index_failure(report),
+            routing_file_failure(report),
         )
         if failure is not None
     ]
@@ -427,6 +464,34 @@ def search_index_failure(report: Mapping[str, JsonValue]) -> CommandFailure | No
     )
 
 
+def routing_file_failure(report: Mapping[str, JsonValue]) -> CommandFailure | None:
+    """The routing file the settings name, when it does not load, or None.
+
+    None too when the file was not checked.
+    """
+    found = _routing_file(report)
+    if found.get("loads") is not False:
+        return None
+    field = found.get("field")
+    return CommandFailure(
+        code=ROUTING_FILE_DOES_NOT_LOAD_CODE,
+        message=(
+            f"The model-routing file does not load, so every command that reads settings will refuse "
+            f"to start: {found['problem']}"
+        ),
+        exit_code=ExitCode.DOMAIN_FAILURE,
+        details=dict(report),
+        hint=(f"Fix `{field}` in {found['routing_file']}" if field else f"Fix {found['routing_file']}")
+        + ", or point models.routing_file at a file that loads.",
+    )
+
+
+def _routing_file(report: Mapping[str, JsonValue]) -> Mapping[str, JsonValue]:
+    """The routing file check's finding in `report`: empty when the check was not asked for."""
+    found = report.get(ROUTING_FILE)
+    return found if isinstance(found, Mapping) else {}
+
+
 def _search_index(report: Mapping[str, JsonValue]) -> Mapping[str, JsonValue]:
     """The search index store check's findings in `report`: empty when the check was not asked for."""
     found = report.get(SEARCH_INDEX)
@@ -502,9 +567,9 @@ def _rows(report: dict[str, JsonValue]) -> list[list[str]]:
     rows = [
         [labels.get(key, key), _as_text(value)]
         for key, value in report.items()
-        if key not in (EVIDENCE_PROFILES, SEARCH_INDEX)
+        if key not in (EVIDENCE_PROFILES, SEARCH_INDEX, ROUTING_FILE)
     ]
-    return rows + _profile_rows(report) + _search_index_rows(report)
+    return rows + _profile_rows(report) + _search_index_rows(report) + _routing_file_rows(report)
 
 
 def _profile_rows(report: Mapping[str, JsonValue]) -> list[list[str]]:
@@ -561,6 +626,20 @@ def _search_index_rows(report: Mapping[str, JsonValue]) -> list[list[str]]:
         ]
         for one in _search_index_stores(found)
     ]
+
+
+def _routing_file_rows(report: Mapping[str, JsonValue]) -> list[list[str]]:
+    """One row for the routing file, when it was checked: what it routes, or the key that stops it.
+
+    Why it does not load is not repeated here: it is the failure's own message, in the panel under the table.
+    """
+    if ROUTING_FILE not in report:
+        return []
+    found = _routing_file(report)
+    if found.get("loads") is True:
+        return [["Routing file", f"{found['routing_file']}: loads; routes {_as_text(found['routes'])}"]]
+    where = f" at {found['field']}" if found.get("field") else ""
+    return [["Routing file", f"{found['routing_file']}: does not load{where}"]]
 
 
 def _as_text(value: JsonValue) -> str:

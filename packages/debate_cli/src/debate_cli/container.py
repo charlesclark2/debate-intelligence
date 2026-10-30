@@ -228,6 +228,7 @@ from debate_core.application.plan_texts import PlanTextService
 from debate_core.application.ports.archive import ArchiveEntry
 from debate_core.application.ports.caller_identity import CallerIdentity
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey
+from debate_core.application.ports.model_router import RoutingConfigError
 from debate_core.application.ports.notifier import Notifier, NullNotifier
 from debate_core.application.ports.suppression import SuppressionList
 from debate_core.application.search_index_build import SearchIndexBuildService
@@ -268,6 +269,7 @@ if TYPE_CHECKING:  # pragma: no cover - imported for the type checker only; see 
     from debate_core.integrations.docx_parser import DebateDocxParser
     from debate_core.integrations.local import SqliteDatabase
     from debate_core.integrations.models.model_mode import ModelMode
+    from debate_core.integrations.models.routing_policy import RoutingFileFinding
     from debate_core.integrations.models.usage import UsageLog
     from debate_core.integrations.opencaselist import CaselistTokenStore, OpenCaselistClient
 
@@ -1480,6 +1482,22 @@ class ServiceContainer:
             endpoint_url=s3.endpoint_url,
             ignore_configured_endpoints=self._ignores_configured_endpoints,
         )
+
+    def routing_file_finding(self) -> RoutingFileFinding:
+        """Whether the routing file this run's settings name loads (`v1-e05-t09`).
+
+        Asked of `doctor --routing-file`. The settings this container loads have their routing
+        file validated already (:func:`validating_routing`), so a bad file is caught where loading
+        them refuses it, and reported as found rather than raised. Not a service: nothing is built
+        or kept.
+        """
+        from debate_core.integrations.models.routing_policy import RoutingFileFinding, check_routing_file
+
+        try:
+            settings = self.settings
+        except RoutingConfigError as refused:
+            return RoutingFileFinding.refused(refused)
+        return check_routing_file(settings.models.routing_file)
 
     def evidence_profile_check(self) -> EvidenceProfileCheck:
         """Build the check of every evidence profile this environment is configured with (`v1-e34-t22`).

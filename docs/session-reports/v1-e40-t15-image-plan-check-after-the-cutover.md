@@ -175,9 +175,40 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-30
 
 **Notes:**
+
+The image plan is now checked from its JSON, and both of 2026-10-29's weaknesses are tested cases.
+1. **ac1 passes.** Red: 40 of 40 failed against a skeleton that always says `PLAN OK`. Green: 41 passed.
+   The refreshed-Identity-Center plan (the false 40) gives `PLAN OK`. The real plan's shape with
+   `task_stopped["run"]` gives `PLAN STOP` naming that address. The runbook block runs the check on
+   the saved plan's JSON and counts nothing in its text, and a test pins that.
+2. **Four buckets, each rule the only one that can catch its case:** Identity Center anywhere, outside
+   the module, the expected six, or an unexpected in-module change. That is the right structure.
+3. **Mutants:** 15, all caught.
+   * **1b and 2b (the thing to look at first): accepted as caught.** Each still prints `PLAN STOP`,
+     so no apply would follow, and the tests pin the reason, so a rule that stopped doing its job is
+     still visible.
+   * The survivor of the first run led you to drop the address-pattern half of `identity_center()`.
+     You made a missing `type` fail closed (exit 2) rather than leave the pattern in. Good use of
+     agreement 8.
+4. **Decisions accepted:**
+   * an `ops/` script tested from `tests/scripts`;
+   * IMAGEPLAN's per-resource rules kept, so the check also reads `owner.auto.tfvars`, which catches
+     an image apply that changes the run's environment or command;
+   * both schedules `ENABLED` throughout, so a paused login comes to the PM;
+   * replace in either order;
+   * a deposed object as its own change;
+   * exit codes 0, 1, 2, with the old plan removed first so a failed plan can never leave a stale
+     `PLAN OK`;
+   * the plan text still saved, for reading a stop.
+5. **Follow-up work:** the first real run is the next image apply, and the PM reads its line. The
+   cutover runbook's IMAGEPLAN will not run again: no task.
+6. **The affected set** (74 files) was stopped by the alarm and is left to the PR's `ci`. The 25
+   always-run, changed and runbook-naming files, the backfile plan-check tests, ruff, pyright,
+   lint-imports, the command-block and link checks, and the specs pass.
+7. **Merge:** any time.

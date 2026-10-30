@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import functools
+import hashlib
 import json
 import os
 import shutil
@@ -38,6 +39,7 @@ from debate_core.application.landscape_report import CIRCUIT_WIDE_FILES, SCHOOL_
 from debate_core.application.landscape_run import BUNDLE_FILES, LandscapeRunService, PositionClassifier
 from debate_core.application.landscape_seeding import SeedReading
 from debate_core.application.ports.classification_store import ClassificationStore
+from debate_core.application.ports.suppression import ReasonCode, SuppressionAction, SuppressionEntry
 from debate_core.application.position_classification import ClassificationRun, PositionClassificationService
 from debate_core.application.settings import load_settings
 from debate_core.application.structured_output import StructuredOutputGuard
@@ -54,6 +56,7 @@ from debate_core.integrations.docx_parser import DebateDocxParser
 from debate_core.integrations.landscape.classification_store import review_queue_path
 from debate_core.integrations.landscape.yaml_taxonomy_repository import YamlTaxonomyRepository
 from debate_core.integrations.local.parsed_store import LocalParsedStore
+from debate_core.integrations.local.suppression_list import local_suppression_list_file
 from debate_core.integrations.models.model_mode import ModelMode
 from debate_core.integrations.models.prompt_registry import PromptRegistry
 from debate_core.testing.fakes.model_router import ScriptedModelRouter
@@ -1014,6 +1017,48 @@ def test_a_report_over_a_restored_copy_counts_its_newest_snapshot_and_keeps_the_
     assert [str(path) for path in LANDSCAPE_STATE if not (stale_world.data_dir / path).is_file()] == []
     assert not (copy / "landscape").exists()
     assert not (copy / "reports").exists()
+
+
+def test_a_source_the_copys_suppression_list_holds_is_not_counted(
+    stale_world: SyntheticRun, tmp_path: Path
+) -> None:
+    """`neg-two` (Spending DA, Framing) suppressed in the copy alone: 3 sources, 7 cards, 6 by alias."""
+    copy = _restored_copy(tmp_path / "copy-root")
+    withdrawn = SuppressionEntry(
+        action=SuppressionAction.SUPPRESS,
+        sha256=hashlib.sha256(b"neg-two").hexdigest(),
+        recorded_at=datetime(2026, 9, 16, tzinfo=UTC),
+        reason=ReasonCode.REQUESTED_BY_TEAM,
+        request_id="RM-2026-01",
+    )
+    asyncio.run(local_suppression_list_file(copy).append_lines([withdrawn.model_dump_json()]))
+
+    result = landscape(stale_world, "--caselist", CASELIST, "--dry-run", "--restored-copy", str(copy))
+
+    assert result.exit_code == ExitCode.OK, result.output
+    data = _data(result)
+    assert (data["counts"]["sources"], data["counts"]["cards"]) == (3, 7)
+    assert data["classification"]["cards_by_method"] == {"ALIAS": 6, "UNPLACED": 1}
+
+
+def test_the_status_line_reads_the_copys_run_log(stale_world: SyntheticRun, tmp_path: Path) -> None:
+    """The cloud run's log came with the copy; the data directory's says nothing of it."""
+    copy = _restored_copy(tmp_path / "copy-root")
+    SyncRunLog(copy / SYNC_RUN_LOG_FILENAME).append(
+        _failed_run(
+            deferred_by_caselist={CASELIST: 0},
+            stages=(
+                StageEntry(stage="download", outcome="failed", reason=LEAKY),
+                StageEntry(stage="import", outcome="skipped"),
+            ),
+        )
+    )
+
+    result = landscape(stale_world, "--caselist", CASELIST, "--dry-run", "--restored-copy", str(copy))
+
+    assert result.exit_code == ExitCode.OK, result.output
+    staleness = _data(result)["staleness"]
+    assert (staleness["stale"], staleness["failed_run"]["run_id"]) == (True, FAILED_RUN_ID)
 
 
 def test_a_report_from_the_data_directory_says_it_read_no_copy(world: SyntheticRun) -> None:

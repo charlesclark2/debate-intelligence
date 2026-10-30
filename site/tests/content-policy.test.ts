@@ -700,6 +700,11 @@ describe('the content this site actually ships', () => {
         new RegExp(`image ${PLANTED_PATH}: its consent was last checked ${seasonYear}-07-04, outside season`),
       ],
       [
+        'consent checked after the season ended',
+        { dateChecked: `${seasonYear + 1}-08-02` },
+        new RegExp(`image ${PLANTED_PATH}: its consent was last checked ${seasonYear + 1}-08-02, outside season`),
+      ],
+      [
         'a consent reference still to come',
         { consentReference: "'[[TBD: form reference from the office]]'" },
         new RegExp(`image ${PLANTED_PATH}: its consent reference is still to come`),

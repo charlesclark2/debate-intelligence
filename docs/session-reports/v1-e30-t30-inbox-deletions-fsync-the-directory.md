@@ -17,8 +17,10 @@ rename and before the directory fsync t26 added, so one fsync of the inbox puts 
 disk. A fsync that fails raises the operating system's `OSError`, which stops the removal
 `INCOMPLETE`; re-running it finishes the rest. A new recording test was run red against dev's
 `inbox_purge.py` (3 failed), and six mutants, the PM's three among them, were each caught. Look
-first at the error-path cleanup, which is still not fsynced (Decisions), and at Follow-up 1: a
-re-run does not repeat the fsync for a file it already deleted.
+first at the error-path cleanup, which is still not fsynced (Decisions). After the PM's review,
+the review's condition closed Follow-up 1 in-session (see "The condition"): every purge now ends
+with one fsync of the inbox under the run lock, an empty purge included, so a re-run after an `EIO`
+makes the earlier delete durable.
 
 ## Plan nodes
 
@@ -86,6 +88,61 @@ two-minute line. Under agreement 10 (the PM's ruling of 2026-10-19) it is left t
 request's `ci` check, which runs the same selection, and the always-run list and the tests that
 import the changed module were run instead (above).
 
+### The condition
+
+The PM's review (2026-10-30) accepted the task on one condition: close Follow-up 1 in-session.
+
+**What changed.** `purge_inbox` no longer returns early for an empty plan. It takes the sync's run
+lock, carries out the plan, and then calls `fsync_directory(inbox.directory)` once more, at the end
+of every purge, an empty one included (fb1051d). One case still returns before the lock:
+nothing planned and no inbox directory (fa9ab6e). That is a prod takedown, where
+`TestAnEnvironmentWithNoInbox` (`v1-e30-t09`) pins that the inbox step does nothing at all, not
+even make `caselist-sync.lock`. fb1051d broke that test, and the importer run below caught it;
+see Decisions. A failed closing fsync raises, like any other.
+
+**Tests** (in the recording test file):
+
+* `test_a_rerun_with_nothing_planned_puts_the_earlier_delete_down`: a delete whose fsync gets
+  `EIO` stops the purge (recorded: `unlink`, `open`, with the refused fsync not recorded). A re-run
+  with an empty plan then records exactly `open, fsync directory` of the inbox and counts nothing.
+* `test_nothing_planned_is_still_done_under_the_run_lock`: with a pull holding the lock, an empty
+  purge raises `InboxInUse` and records no fsync.
+* `test_nothing_planned_and_no_inbox_yet_does_nothing`: no inbox and nothing planned, so no error
+  and neither the inbox nor the lock file is created.
+* The pinned event lists gained the closing `open, fsync directory`: two in this file, and t26's two
+  `inbox_purge rewrite` cases in `test_rename_into_place_writers_fsync_their_directory.py`, through
+  a `closing(writer, path)` helper that is empty for the other two writers.
+
+**Red** against 4a8d38c (the early return), `.venv/bin/python -m pytest
+<the two recording test files> -n 0 -p no:randomly`: `6 failed, 9 passed`. The re-run test
+failed only at the re-run (`assert [] == [('open', …), ('fsync directory', …)]`), the lock test
+with `DID NOT RAISE InboxInUse`, and the four pinned lists for the missing closing fsync. The
+no-inbox test passed there, as a guard should. Its lock-file assertion was then shown red against
+fb1051d (`1 failed, 5 passed`, `assert not True` at the lock file) before fa9ab6e fixed it.
+**Green** at fa9ab6e: `15 passed`, and with `TestAnEnvironmentWithNoInbox`, `16 passed`.
+
+**Mutants** (agreement 8; a new empty `HYPOTHESIS_STORAGE_DIRECTORY` for each, `-n 0 -p
+no:randomly`, run over the two recording files and `TestAnEnvironmentWithNoInbox`, each restored
+with `git checkout HEAD --` and `git status` clean afterwards):
+
+| Mutant | Caught by | Result |
+|---|---|---|
+| The closing fsync skipped when nothing is planned (`if planned:`), the PM's | re-run test | 1 failed |
+| The old early return for an empty plan restored | re-run test; lock test | 2 failed |
+| The closing fsync made before the lock is taken | both pinned-list tests in each file, the failed-fsync test, the re-run test, the lock test | 7 failed |
+| The no-inbox early return dropped | no-inbox test (`FileNotFoundError`); t09's `TestAnEnvironmentWithNoInbox` (lock file made) | 2 failed |
+
+**Re-runs after the condition:**
+
+| Command | Result |
+|---|---|
+| `.venv/bin/python -m pytest -n auto -m "not slow and not live"` over the always-run list and every test file that imports `inbox_purge` (the same eight as above), under `perl -e 'alarm 115'` | first at fb1051d: `1 failed, 477 passed` (t09's no-inbox test, fixed in fa9ab6e); at fa9ab6e: `478 passed in 21.97s` |
+| The same, over the 26 `debate_cli/tests/commands/test_caselist_remove*.py` and `debate_core/tests/application/caselist/test_removal*.py` files not in that list: an empty purge now takes the lock, and these exercise removals, one under a pull's lock | `320 passed in 30.05s` |
+| `uv run pytest packages/debate_core/tests -k inbox_purge` | `9 passed in 10.34s` |
+| `ruff format --check .`, `ruff check .`, `pyright packages/debate_core`, `lint-imports`, `check_thin_handlers.py`, `validate_specs.py` | formatted; all checks passed; 0 errors; 18 contracts kept; 68 handlers within 25 statements; `OK: 509 files, 40 epics, 447 tasks, 22 releases` |
+
+The affected set is still left to the pull request's `ci` check, for the reason given above.
+
 ## Files changed
 
 * `packages/debate_core/src/debate_core/application/caselist/inbox_purge.py`: the directory fsync
@@ -94,6 +151,8 @@ import the changed module were run instead (above).
 * `packages/debate_core/tests/application/test_inbox_purge_deletions_fsync_the_directory.py`
   (new): the recording test. It sits beside t26's, not under `caselist/`, whose conftest builds the
   moto bucket world the test does not need.
+* `packages/debate_core/tests/application/test_rename_into_place_writers_fsync_their_directory.py`:
+  t26's two `inbox_purge rewrite` event lists end with the closing fsync (the condition).
 * `plan_specs/.../t30-inbox-deletions-fsync-the-directory.yaml`: Goal phase `Succeeded`.
 * This report.
 
@@ -117,6 +176,17 @@ None.
   replace the error that explains the stop (an `InboxRewriteFailed`) with an `EIO`.
 * **A delete is counted after its fsync**, as t26 counts a rewrite only after its fsync. A file
   whose fsync failed is gone, but not durably, and is not in `deleted`.
+* **An empty purge takes the run lock now (the condition), which changes one behaviour.** Before,
+  a removal with nothing in the inbox to change never looked at the lock, so it completed while a
+  `caselist pull` ran. Now the inbox step raises `InboxInUse` and the removal stops `INCOMPLETE`
+  until the pull ends, as a removal with inbox files already did. This follows the PM's "under the
+  run lock", and the 26 removal test files above pass with it.
+* **No inbox, nothing planned: still nothing at all.** The condition says "including a purge with
+  nothing planned". Read literally, that would also make `caselist-sync.lock` in prod's data
+  directory on every takedown, which `v1-e30-t09` pins against. With no inbox directory there is no
+  earlier delete to put down, so that case returns before the lock. Every purge in an inbox that
+  exists, empty or not, takes the lock and ends with the fsync, and the `EIO` re-run is always one
+  of those.
 * **The `durable_files` docstring was left alone.** It lists the rename-into-place writers, which
   are unchanged. The new caller is described in `inbox_purge`'s own docstrings. `durable_files` is
   imported by four writers, and an optional docstring edit there would widen the affected set.
@@ -127,7 +197,8 @@ None.
 
 ## Follow-up work
 
-1. **A re-run does not repeat a failed directory fsync** (`v1-e30`, next to this task). After an
+1. **Closed in-session by the PM's condition** (see "The condition"); left here as filed.
+   **A re-run does not repeat a failed directory fsync** (`v1-e30`, next to this task). After an
    `EIO` from the fsync that follows a delete (or a t26 rewrite), the file is gone (or rewritten)
    but not durably. A re-run plans from what the inbox holds, so it has nothing to do to that file
    and never fsyncs the inbox again. "Re-running finishes it" holds for the rest of the removal,

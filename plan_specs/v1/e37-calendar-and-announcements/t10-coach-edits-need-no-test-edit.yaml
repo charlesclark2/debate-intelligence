@@ -1,0 +1,97 @@
+# TASK v1-e37-t10-coach-edits-need-no-test-edit - A coach's schedule or results edit passes the site's tests without editing a test
+# Epic: E37 — Calendar & Announcements (Coach-Editable) | Release: v1.6 (Public team website) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e37-t10-coach-edits-need-no-test-edit
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e37-calendar-and-announcements
+  annotations:
+    debate/title: "A coach's schedule or results edit passes the site's tests without editing a test"
+spec:
+  # Filed by the PM, 2026-10-30, from the site lane's first use (v1-e37-t09): the coach's first weekly edit could not pass the site's tests.
+  description: >-
+    The site lane (v1-e37-t09) lets the coach publish a schedule or results change the same day,
+    but the site's tests pin the shipped content itself. On 2026-10-30 the PM took a tournament
+    that has happened (Ronald Reagan, 2026-10-24) off `site/content/tournaments.yaml`, as the
+    coach's guide says to, and moved its two results to the `tournament` and `date` form: 35 tests
+    failed (the season's order and ids, the seed data against the 2026-27 document, the invalid-entry
+    and publishing-policy cases built on the real file, the calendar's event count and places, the
+    layout guard's fields, and "the results this site ships"). Every weekly edit would fail the same
+    way. Make the site's tests test behaviour on fixtures of their own, and test the shipped content
+    only for what must always hold of it (it parses against the schema, passes the publishing-policy
+    and consent guards, has no id used twice and no date outside the season), never for its exact
+    entries, count or order. Then make the coach's edit of 2026-10-30 (the Ronald Reagan entry off
+    the schedule; its two results named by `tournament: Ronald Reagan High School` and
+    `date: 2026-10-24`; `revised: 2026-10-30` in both files) in a commit of its own that changes no
+    test, as the proof. It reaches the public site through the lane after this task merges, with the
+    coach's word.
+  priority: 1
+  constraints:
+    packages: [site, docs/guides]
+    forbidden:
+      - A guard weakened on the shipped content (schema, publishing policy, consent, duplicate ids, the season's dates)
+      - A real student's name in a test fixture
+      - A dependency manifest or lockfile under site/ changed (the lane refuses them)
+  context:
+    - kind: TaskRef
+      name: v1-e37-t06-season-results
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e37-t02-events-calendar
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Counts first, in the report: every site test that reads the shipped tournaments.yaml or
+        results.yaml for its exact entries, count or order, by file, before any test changes.
+    - id: ac2
+      description: >-
+        The coach's edit of 2026-10-30 is one commit that changes no test file, and after it
+        eslint, tsc, vitest and the prod build's export checks pass; a second scratch edit adding
+        a tournament and a result also passes unchanged tests (shown, not committed).
+    - id: ac3
+      description: >-
+        Every guard still refuses on the shipped files: an invalid entry, a policy breach and an
+        unconsented name planted in a copy of the shipped content each fail, by tests on
+        fixtures shown failing first where they are new; the coach's guide says a content edit
+        needs no test edit.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e37-t10-coach-edits-need-no-test-edit-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e37-calendar-and-announcements
+spec:
+  description: >-
+    Tests on fixtures of their own; the shipped content checked only for what must always hold.
+  goalRef:
+    name: v1-e37-t10-coach-edits-need-no-test-edit
+  graph:
+    nodes:
+      - id: content-independent-tests
+        kind: Task
+        name: Content-independent site tests
+        description: >-
+          Tests on fixtures of their own; the shipped content checked only for what must always
+          hold; the coach's 2026-10-30 edit as the proof.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Site tests pass
+            command: pnpm
+            args: [--dir, site, test]
+status:
+  phase: Pending

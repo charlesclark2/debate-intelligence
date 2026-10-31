@@ -245,9 +245,70 @@ deploy of a build with it.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-01
 
 **Notes:**
+
+validate-dev now watches the pilot in dev with no account, and the holder's numbers finally reach the
+app log. The critical-path table is the most useful thing in this report; it becomes the promotion
+plan.
+1. **What passes:**
+   * The node criterion passes.
+   * The wiring halves of ac1 and ac4 pass. The workflow's own tests show three things:
+     * the `cloud` job holds no secret, token or AWS credential, and the file has no `secrets.`;
+     * PR CI and every other tier select none of the cloud checks;
+     * `conclude` fails on a red or skipped `cloud`.
+   * The log half of ac5 passes. `configure_app_logging` opens `INFO` one logger at a time, which is
+     the right default for a log a student's search passes through.
+   * The red runs are real. Two of them found real faults before passing:
+     * the cookie jar carrying the sign-in transaction cookie;
+     * the search-time line's mode word.
+2. **Deviations accepted:** all seven.
+   * 1: see Q1.
+   * 2: the search-time line names no query, card, filter, mode or user, and a test pins that.
+   * 3 and 4: the seed goes in through the normal path, and its index comes from a restored copy,
+     checked against dev's manifest before any publish.
+   * 5: J7 gated on its dry run.
+   * 6: the cloud checks run from the validated commit's source.
+   * 7: the download checked for its tag, not re-parsed.
+
+   One consequence of 6: validate-dev's green now also means the dev pilot is up. If a release is red
+   only on `cloud`, the PM rules on whether it can still be deployed as an image. It is not deployed
+   by default.
+3. **Q1: (a).** The spec's `constraints.packages` gains `debate_core.application` and
+   `packages/debate_core/tests`, with `# PM ruling 2026-11-01: the holder's log lines (ac5)`. The
+   change goes in the next PM batch, since no report or spec is edited here after review.
+4. **Q2: (a), then (b) if the dry run does not list the seed's file.**
+   * J7 runs only if the dry run's WILL BE REMOVED lists the seed's file with its raw/ and parsed/
+     keys.
+   * Otherwise tear down with J9 and J10, record "J7 not possible on dev after the cutover", and run
+     `tub_dev_journey.py removed` in prod with promotion item 8.
+   * (c) is not filed.
+5. **Q3: (a).** The next PM batch amends promotion items 6 and 7:
+   * prod's stores are published from a restored copy, as in the cutover runbook;
+   * prod's first index is built from that copy and checked against dev's current manifest, as J5
+     checks it.
+6. **Promotion order.** Both v1-e39-t24 (download header and pocket) and v1-e39-t23 (uvicorn
+   factory) land before step 1.
+   * v1-e39-t24 starts now.
+   * v1-e39-t23 starts after this task merges. It must call `configure_app_logging()` in the new
+     factory, and the failing `test_app_logging` test is its reminder, as Follow-up 1 says.
+7. **Item 12 does not wait for the promotion.** The gzip object passes 400,000,000 bytes around
+   mid-November, and dev's function loads the same object. The operator sends the bandwidth-quota
+   request this week, for dev's account and then prod's.
+8. **Follow-ups:**
+   * 1: carried into v1-e39-t23's context.
+   * 2: a docs line in the next PM batch, after J7's outcome is known.
+   * 3: yes. The seed's three school names and tournament are screened against the real caselists'
+     words before J1, and the next PM batch adds that check to the runbook.
+9. **Closing checks:** the affected set stopped at 77% at its limit, with nothing failing, and is
+   left to the PR's `ci`. The changed areas and the always-run list pass. The whole-repo checks are
+   clean.
+10. **Merge:** `--partial` once `ci` is green. The Goal stays InProgress for the operator's and the
+    coach's criteria:
+    * ac1's run against dev;
+    * the journey;
+    * ac2, ac3, ac5's numbers, ac6 and ac7.

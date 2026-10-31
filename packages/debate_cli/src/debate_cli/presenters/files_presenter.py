@@ -133,7 +133,11 @@ def check_rendered(result: FileCheckResult) -> Rendered:
 
 
 def suggest_rendered(result: SuggestResult) -> Rendered:
-    """`files suggest`: where the draft went, and its cards by rank with what each pin names."""
+    """`files suggest`: where the draft went, and its cards by rank with what each pin names.
+
+    A counterplan's draft also says how many blocks and cards it left out as another position's
+    (`v1-e33-t11`): `other_positions_left_out`, null for any other position's draft.
+    """
     payload: dict[str, JsonValue] = {
         "path": str(result.path),
         "caselist": result.caselist,
@@ -157,6 +161,11 @@ def suggest_rendered(result: SuggestResult) -> Rendered:
             {"rank": one.rank, "fingerprint": one.fingerprint, "reason": one.reason}
             for one in result.left_out
         ],
+        "other_positions_left_out": (
+            None
+            if result.other_positions is None
+            else {"blocks": result.other_positions.blocks, "cards": result.other_positions.cards}
+        ),
     }
     rows = [
         [
@@ -169,6 +178,12 @@ def suggest_rendered(result: SuggestResult) -> Rendered:
         for one in result.cards
     ]
     left = f" {len(result.left_out)} most-read card(s) left out, see --json." if result.left_out else ""
+    other = result.other_positions
+    if other is not None:
+        left += (
+            f" A counterplan's draft: {other.blocks} block(s) holding {other.cards} card(s) left out, "
+            "their heading another position's."
+        )
     display = TableSpec(
         columns=["Rank", "Teams", "Fingerprint", "Block", "Pin also names"],
         rows=rows,

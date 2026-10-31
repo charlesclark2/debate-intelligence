@@ -666,7 +666,7 @@ def test_a_block_another_positions_heading_places_is_left_out_with_its_cards(cp_
 def test_a_block_whose_heading_places_nothing_stays_in_a_counterplans_draft(cp_world: World) -> None:
     text = cp_world.suggest(position="states-cp").path.read_text(encoding="utf-8")
     assert ("solvency", [fingerprint_of("solvency")]) in [
-        (block, [item["fingerprint"] for item in items]) for block, items in items_of(text)
+        (block, [item.get("fingerprint") for item in items]) for block, items in items_of(text)
     ]
 
 

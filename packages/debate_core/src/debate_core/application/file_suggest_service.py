@@ -27,6 +27,23 @@ and that card's exact fingerprint is the one the draft names.
 * **No tag and no text of a card.** No tag override is written: a tag is the coach's to write. The
   comments hold counts; the headings are the ones the landscape reads.
 
+## A counterplan's draft (`v1-e33-t11`)
+
+A position the taxonomy marks as a counterplan (:attr:`~debate_core.domain.landscape.PositionKind.CP`)
+gets three things more, and every other position's draft is as it was:
+
+* **A slot for the counterplan's text.** Its first block opens with the analytic :data:`CP_TEXT_SLOT`,
+  a placeholder for the coach to replace with the text the team reads. It is never a text from a team's
+  file or the landscape's quoted CP texts. `files build` writes it as it stands, like any analytic.
+* **No other position's block.** A block whose heading the position matcher places under another
+  position, read as it reads a heading directly over a card, is left out with its cards, which go
+  nowhere else in the draft. A heading that places nothing stays. The result counts what was left out
+  (:class:`OtherPositionsLeftOut`).
+* **Blocks that depend on the plan, marked.** A block whose heading names a plank or mechanism of the
+  plan gets the comment :data:`CHECK_AGAINST_THE_PLAN` above it, and stays. A heading names one when it
+  holds, as whole words, an alias or tag keyword of one of the taxonomy's affirmatives (each is one plan,
+  named by its mechanism), or opens with a plank label as `v1-e32-t16` reads one (`plank 2 ...`).
+
 ## How each card is pinned
 
 To the occurrence the recipe resolver's own AUTO rule takes (`v1-e33-t01`, with `v1-e33-t03`'s
@@ -69,9 +86,11 @@ from debate_core.application.landscape_run import LandscapeRunRequest, Landscape
 from debate_core.application.ports.caselist import CaselistRepository
 from debate_core.application.ports.parsed_store import OPENEV_STORE, ParsedStore
 from debate_core.application.ports.suppression import SuppressionList
+from debate_core.arguments.landscape.analytic_texts import plank_words
+from debate_core.arguments.landscape.matcher import PositionMatcher, tag_words
 from debate_core.domain.caselist import Event, Side, sides_for_event
 from debate_core.domain.file_recipe import HEADING_MAX_LENGTH, FileRecipe, RecipeStatus
-from debate_core.domain.landscape import Position, PositionSide
+from debate_core.domain.landscape import Position, PositionKind, PositionSide, Taxonomy
 from debate_core.domain.landscape_report import LandscapeCard, TopCard
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
 
@@ -95,7 +114,7 @@ CP_TEXT_SLOT: Final = "[the counterplan text: write it here]"
 """The analytic a counterplan's draft opens with, for the coach to replace: never a team's text."""
 
 CHECK_AGAINST_THE_PLAN: Final = (
-    "# Check this block against the affirmative's plan: its heading names a plank or mechanism of it."
+    "# Check this block against the affirmative's plan: its heading names a plank or mechanism of a plan."
 )
 """The comment above a counterplan draft's block whose heading names a plank or mechanism of the plan."""
 
@@ -228,6 +247,16 @@ class FileSuggestService:
                 f"{run.snapshot.isoformat()}, so there is nothing to suggest",
                 hint="Name a position a team read: `landscape report` lists them in positions.csv.",
             )
+        counterplan = position.kind is PositionKind.CP
+        other_positions: OtherPositionsLeftOut | None = None
+        if counterplan:
+            ranked, other_positions = _without_other_positions(run, position, ranked)
+            if not ranked:
+                raise SuggestRefused(
+                    f"each of the most-read card(s) of {position.id} sits in a block whose heading places "
+                    "another position, so there is nothing to suggest",
+                    hint="Ask for more with --top, or start the file from the counterplan's own blocks.",
+                )
         path = self._draft_path(request, run.topic_id, position.id, side)
         draft = _recipe(run, position, event, side, [{"fingerprint": one.fingerprint} for one in ranked])
         resolved = await self._resolver.resolve(draft)
@@ -259,7 +288,16 @@ class FileSuggestService:
                 hint="Each was stopped by the removal suppression list or a hold, or its pin did not "
                 "resolve.",
             )
-        text = _render(run, position, event, side, kept, pins)
+        text = _render(
+            run,
+            position,
+            event,
+            side,
+            kept,
+            pins,
+            counterplan=counterplan,
+            marked=_naming_the_plan(run, kept) if counterplan else frozenset(),
+        )
         loaded = load_recipe(text)
         if loaded.recipe is None:
             raise AssertionError(f"files suggest wrote a recipe that does not load: {loaded.errors}")
@@ -285,6 +323,7 @@ class FileSuggestService:
                 for one in _in_file_order(kept)
             ),
             left_out=tuple(sorted(left_out, key=lambda one: one.rank)),
+            other_positions=other_positions,
             text=text,
         )
 
@@ -390,6 +429,43 @@ def _commonest_heading(copies: Sequence[LandscapeCard], position: Position) -> s
     return heading[:HEADING_MAX_LENGTH]
 
 
+def _without_other_positions(
+    run: LandscapeRunResult, position: Position, ranked: Sequence[_Ranked]
+) -> tuple[list[_Ranked], OtherPositionsLeftOut]:
+    """`ranked` without the blocks whose heading the position matcher places under another position."""
+    if run.taxonomy is None or run.overrides is None:
+        raise AssertionError("a landscape run reports the taxonomy and overrides it placed under")
+    matcher = PositionMatcher(run.taxonomy, run.overrides)
+    elsewhere = {
+        one.block for one in ranked if matcher.heading_position(one.block) not in (None, position.id)
+    }
+    kept = [one for one in ranked if one.block not in elsewhere]
+    return kept, OtherPositionsLeftOut(blocks=len(elsewhere), cards=len(ranked) - len(kept))
+
+
+def _naming_the_plan(run: LandscapeRunResult, kept: Sequence[_Ranked]) -> frozenset[str]:
+    """The block headings of `kept` that name a plank or mechanism of the plan."""
+    if run.taxonomy is None:
+        raise AssertionError("a landscape run reports the taxonomy it counted under")
+    words = _plan_words(run.taxonomy)
+    return frozenset(
+        one.block
+        for one in kept
+        if plank_words(one.block) != one.block or any(f" {phrase} " in f" {one.block} " for phrase in words)
+    )
+
+
+def _plan_words(taxonomy: Taxonomy) -> frozenset[str]:
+    """Every active affirmative's aliases and tag keywords, as words: the mechanisms a plan is named by."""
+    return frozenset(
+        words
+        for one in taxonomy.active_positions
+        if one.kind is PositionKind.AFF
+        for words in (*one.aliases, *map(tag_words, one.tag_keywords))
+        if words
+    )
+
+
 def _in_file_order(ranked: Sequence[_Ranked]) -> list[_Ranked]:
     """Blocks in the order of their most-read card, and cards in a block by rank."""
     first_rank: dict[str, int] = {}
@@ -468,8 +544,15 @@ def _render(
     side: Side,
     kept: Sequence[_Ranked],
     pins: Mapping[str, Mapping[str, Any]],
+    *,
+    counterplan: bool,
+    marked: frozenset[str],
 ) -> str:
-    """The draft's YAML, written by hand so each card carries its read count as a comment."""
+    """The draft's YAML, written by hand so each card carries its read count as a comment.
+
+    A counterplan's first block opens with :data:`CP_TEXT_SLOT`, and each block in `marked` has
+    :data:`CHECK_AGAINST_THE_PLAN` above it.
+    """
     through = run.snapshot.isoformat()
     lines = [
         f"# Draft recipe from the {run.caselist} landscape through {through}: the {len(kept)} most-read",
@@ -492,8 +575,16 @@ def _render(
     block: str | None = None
     for one in _in_file_order(kept):
         if one.block != block:
+            first = block is None
             block = one.block
+            if block in marked:
+                lines.append(f"      {CHECK_AGAINST_THE_PLAN}")
             lines += [f"      - block: {_quoted(block)}", "        items:"]
+            if counterplan and first:
+                lines += [
+                    "          # The counterplan's text: replace the placeholder with the text you read.",
+                    f"          - analytic: {_quoted(CP_TEXT_SLOT)}",
+                ]
         teams = one.row.teams_reading
         read_by = f"{teams} team{'' if teams == 1 else 's'}"
         lines += [

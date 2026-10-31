@@ -5574,10 +5574,8 @@ def _unpublished_parsed_store_fix(owed: Sequence[ParsedStoreOwed], *, bucket_mod
             f"{_commands_named(rebuild)} each publish a caselist's parsed store: each parses nothing "
             "already parsed, rebuilds the aggregates and uploads what the bucket lacks."
         )
-    sentences.append(
-        "The next pull that imports into that caselist does the same; "
-        "`caselist pull --publish-pending` does not."
-    )
+    # Whatever the next pull imports: since `v1-e40-t08` it parses what is owed (`v1-e40-t25`).
+    sentences.append("The next pull does the same; `caselist pull --publish-pending` does not.")
     return " ".join(sentences)
 
 

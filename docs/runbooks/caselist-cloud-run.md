@@ -822,9 +822,10 @@ review; the PM reads every plan before its apply.)
 **A parse stage refused a newer occurrence table.** When the bucket's occurrence table of a caselist
 is stamped by a build with a newer fingerprint version than the run's image, the parse stage leaves
 it as it is and fails on `NEWER_FINGERPRINT_TABLE` (`v1-e34-t29`). Since `v1-e40-t22` its hint names
-both versions and says the next cloud run that imports into the caselist, on an image whose
-fingerprint version is the table's or later, rebuilds and publishes it: a new image, as this section
-says, after the PM's word. An image built before `v1-e40-t22` says instead "install that build for
+both versions and says the next cloud run on an image whose fingerprint version is the table's or
+later rebuilds and publishes it, whatever it imports (`v1-e40-t08`): a new image, as this section
+says, after the PM's word. An image built before `v1-e40-t25` adds that the run must import into the
+caselist; since `v1-e40-t08` it need not. An image built before `v1-e40-t22` says instead "install that build for
 the weekly agent", which meant the Mac's agent; the cure is still a new image here. Never rebuild or
 publish the parsed store on the operator's Mac ([A failed parse stage](#a-failed-parse-stage)).
 
@@ -906,7 +907,10 @@ login email (`caselist publish waiting for an AWS login`) has this fix line sinc
 
 Its message says what waits, with no command: the snapshots and the run record, the parsed store
 (with the cure of [A failed parse stage](#a-failed-parse-stage)), the report stage's check that was
-cut short, and the search index.
+cut short, and the search index. Since `v1-e40-t25` it starts `Run <id> (dev) was left without an
+AWS session, and its working copy ends with its task;`, where a Mac's run says it "kept everything it
+fetched", and a manifest owed again is said without "the publish after the login uploads this
+machine's copy" ([A manifest published again](#a-manifest-published-again)).
 
 **What it means.** A cloud run's AWS session is its task role's (`debate-dev-caselist-run`), which
 ECS renews for as long as the task runs. The Mac's SSO session ran out after hours; the role's
@@ -966,6 +970,69 @@ aws s3 cp "s3://${BUCKET}/parsed/${SLUG}/${VERSION}/failures.jsonl" - --profile 
 Success looks like one line per reason with its count, the counts adding up to about the number
 the stage's reason gives as failed. Nothing printed means the file is not there: the publish did not
 finish either, and the email's parse stage says so.
+
+## A failed publish stage
+
+When a cloud run's publish stage fails and no other stage does, the alert email (`caselist pull
+failed: …`) ends `What the bucket confirmed is kept; the cloud run's working copy ends with its
+task.`, and since `v1-e40-t25` its fix line reads:
+
+> Fix: the next cloud run takes up what this run did not publish, from the run state saved in the bucket: the weekly run, or one started by hand (caselist-cloud-run.md, "A failed publish stage"); never a publish from the operator's Mac
+
+The run's own output, in its log, ends with the same words after `In bucket mode`.
+
+**What happens next.** A run saves its run-state bundle only when every snapshot the bundle records
+is confirmed in the bucket (ADR-0020 (3)), so a run whose publish failed usually leaves the bundle it
+restored, and its details say so: `bucket_run.bundle` is `not saved: …`. The next run, the Wednesday
+one or one started by hand, restores that bundle and the state files. A snapshot the pending-work
+file owes and the bundle holds, it publishes. A week after the bundle it fetches, imports and
+publishes again, within the day's downloads; the download ledger is a state file, so a run started
+by hand on the same day may leave that week for the next. A week redone is late, never lost.
+
+**What to do: usually nothing.** An email titled `will be retried` failed on something the next run
+may not meet, the bucket not answering for one, and the next run retries it. One titled `needs a
+person` or `retried once fixed` goes to the PM with the run's id. To send the PM whether the run saved
+its bundle, read its details from the bucket. Read-only. Put the run's id from the email in `RUN_ID`.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`, a worktree of `dev`
+```bash
+cd "$WT"
+aws sso login --profile debate-dev-evidence
+RUN_ID='the-run-id-the-email-names'
+BUCKET=$(AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output -raw evidence_bucket_name)
+aws s3 cp "s3://${BUCKET}/reports/sync-run-details/${RUN_ID:0:4}/${RUN_ID}.json" - --profile debate-dev-evidence | grep -oE '"bundle": "[^"]*"'
+```
+Success looks like one `"bundle":` line, `saved, …` or `not saved: …`. An error that the key does not
+exist means the run's details did not reach the bucket either: tell the PM.
+
+**Never run `caselist pull --publish-pending` on the operator's Mac** for a cloud run. It publishes
+from the working copy of the machine it runs on, and the cloud run's working copy ended with its task.
+A run on an image built before `v1-e40-t25` (today's is `v1.1.0-dev.164`) still names that command as
+its fix; the rule holds for that email too.
+
+## A manifest published again
+
+When a cloud run's report stage finds that the bucket's copy of a manifest differs from the run's and
+nothing else does, the run owes the snapshot again (`v1-e34-t26`), and since `v1-e40-t25` the email
+`caselist pull: publish a manifest again` reads:
+
+> Run `<id>` (dev): the report stage found the bucket's manifest of `<slug>` `<date>` differs from this machine's. The next cloud run takes it up from the run state saved in the bucket. Nothing here needs a person.
+
+"This machine" is the cloud run's task. Its fix line:
+
+> Fix: the next cloud run takes up what is owed again, from the run state saved in the bucket: the weekly run, or one started by hand (caselist-cloud-run.md, "A manifest published again"); never a publish from the operator's Mac
+
+**What happens next.** While a manifest differs from the bucket's, the run does not save its bundle,
+so the next run restores the one before it, with the pending-work file that owes the snapshot. A
+snapshot that bundle holds is published again from it; one it does not hold is a week redone, as in
+[A failed publish stage](#a-failed-publish-stage). If the manifest differs again after a run published
+it again and the bucket confirmed it, the email `caselist pull: a manifest drifted again` asks for a
+person: send the PM its run's id.
+
+**Never run `caselist pull --publish-pending` on the operator's Mac** for it. It would upload the
+Mac's own copy of the manifest, which is not the cloud run's. A run on an image built before
+`v1-e40-t25` still names that command as its fix; the rule holds for that email too.
 
 ## The deadline, and stopping a run
 

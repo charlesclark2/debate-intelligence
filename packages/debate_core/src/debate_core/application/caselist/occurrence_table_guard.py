@@ -132,15 +132,16 @@ class NewerFingerprintTable(DomainError):
     def cloud_fix(self) -> str:
         """:attr:`fix` for a bucket-mode run: the weekly run is the cloud task's image, not an agent.
 
-        The cure is a new image, through the runbook, and the next cloud run that imports into the
-        caselist on it, as for any parse stage the cloud run did not publish (`v1-e40-t18`). Never a
-        rebuild or a publish on the operator's Mac, which would publish the Mac's working copy.
+        The cure is a new image, through the runbook, and the next cloud run on it, as for any parse
+        stage the cloud run did not publish (`v1-e40-t18`): since `v1-e40-t08` it parses what is owed
+        whatever it imports (`v1-e40-t25`). Never a rebuild or a publish on the operator's Mac, which
+        would publish the Mac's working copy.
         """
         return (
             f"The occurrence table of {self.caselist} {self.version} in {self.store} is stamped "
             f"{self.stamped}, and the cloud run's image's fingerprint version is {self.build}. The next "
-            f"cloud run that imports into {self.caselist} on an image whose fingerprint version is "
-            f"{self.stamped} or later rebuilds and publishes it: a new image is built and applied as "
+            f"cloud run on an image whose fingerprint version is {self.stamped} or later rebuilds and "
+            "publishes it: a new image is built and applied as "
             f"{CLOUD_NEW_IMAGE_RUNBOOK} says, after the PM's word; never a rebuild or a publish from the "
             "operator's Mac."
         )

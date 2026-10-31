@@ -166,8 +166,12 @@ __all__ = [
     "ANOTHER_RUN_HELD_THE_LOCK",
     "ANOTHER_RUN_HELD_THE_LOCK_TITLE",
     "BACKLOG_GROWTH_RUNS",
+    "CLOUD_FAILED_PUBLISH_RUNBOOK",
     "CLOUD_NO_SESSION_CURE",
     "CLOUD_NO_SESSION_RUNBOOK",
+    "CLOUD_PUBLISHED_AGAIN_CURE",
+    "CLOUD_PUBLISHED_AGAIN_RUNBOOK",
+    "CLOUD_PUBLISH_CURE",
     "RUN_LOCK_LOST",
     "RUN_LOCK_LOST_TITLE",
     "TOOK_OVER_THE_LOCK",
@@ -1102,8 +1106,15 @@ MANIFEST_PUBLISHED_AGAIN_TITLE: Final = "caselist pull: publish a manifest again
 run owed again (`v1-e34-t23`, `v1-e34-t26`)."""
 
 
-def _published_again(count: int) -> str:
+def _published_again(count: int, *, bucket: bool = False) -> str:
+    """What a manifest owed again says. In bucket mode (`v1-e40-t25`) the next cloud run takes it up
+    from the run state in the bucket: the cloud run's working copy, which rewrote it, ends with its task."""
     them, were = ("them", "manifests after they were") if count > 1 else ("it", "manifest after it was")
+    if bucket:
+        return (
+            f"The next cloud run takes {them} up from the run state saved in the bucket. Nothing here "
+            "needs a person."
+        )
     return (
         f"The next scheduled run publishes {them} again: this machine rewrote the {were} published, "
         "and the publish uploads this machine's copy. Nothing here needs a person."
@@ -1137,6 +1148,43 @@ _THE_CLOUD_CHECK_WAS_CUT_SHORT: Final = (
 )
 """:data:`THE_CHECK_WAS_CUT_SHORT` in bucket mode (`v1-e40-t22`), which names no command: the login
 and the publish it names are the operator's Mac's, and the cloud run's are its task role's."""
+
+CLOUD_FAILED_PUBLISH_RUNBOOK: Final = 'caselist-cloud-run.md, "A failed publish stage"'
+"""The runbook section a bucket-mode failed publish points to (`v1-e40-t25`)."""
+
+CLOUD_PUBLISH_CURE: Final = (
+    "the next cloud run takes up what this run did not publish, from the run state saved in the "
+    f"bucket: the weekly run, or one started by hand ({CLOUD_FAILED_PUBLISH_RUNBOOK}); never a publish "
+    "from the operator's Mac"
+)
+"""A failed publish stage's fix in bucket mode (`v1-e40-t25`), as its details' `bucket_run` says it was.
+
+`caselist pull --publish-pending`, local mode's fix, publishes from the working copy of the machine it
+is run on, and the cloud run's ended with its task. The next cloud run restores the bucket's run state:
+the snapshots that state owes it publishes, and the weeks after the last bundle saved, which a run whose
+publish failed did not save, it fetches and imports again within the day's downloads (ADR-0020 (3)).
+That is why this says "takes up" and not "publishes": a week redone may wait for the download limit."""
+
+CLOUD_PUBLISHED_AGAIN_RUNBOOK: Final = 'caselist-cloud-run.md, "A manifest published again"'
+"""The runbook section a bucket-mode manifest owed again points to (`v1-e40-t25`)."""
+
+CLOUD_PUBLISHED_AGAIN_CURE: Final = (
+    "the next cloud run takes up what is owed again, from the run state saved in the bucket: the "
+    f"weekly run, or one started by hand ({CLOUD_PUBLISHED_AGAIN_RUNBOOK}); never a publish from the "
+    "operator's Mac"
+)
+""":data:`MANIFEST_PUBLISHED_AGAIN_TITLE`'s fix in bucket mode (`v1-e40-t25`), for the same reason as
+:data:`CLOUD_PUBLISH_CURE`."""
+
+_WHAT_THE_BUCKET_CONFIRMED_IS_KEPT: Final = (
+    "What the bucket confirmed is kept; the cloud run's working copy ends with its task."
+)
+""":data:`_WHAT_WAS_CAPTURED_IS_KEPT` on a bucket-mode failed publish (`v1-e40-t25`): what the run
+captured and did not publish was in its working copy."""
+
+_LEFT_WITHOUT_A_SESSION: Final = "was left without an AWS session, and its working copy ends with its task"
+"""How a bucket-mode login banner starts (`v1-e40-t25`), where a local one says the run "kept
+everything it fetched": a cloud run keeps nothing past its task."""
 
 CLOUD_NO_SESSION_RUNBOOK: Final = 'caselist-cloud-run.md, "A run that found no AWS session"'
 """The runbook section a bucket-mode login banner points to (`v1-e40-t22`)."""
@@ -1216,7 +1264,9 @@ def notifications_for(
     check the next pull or `--publish-pending` makes again (:data:`THE_CHECK_WAS_CUT_SHORT`, `v1-e34-t28`).
     **In bucket mode it names no command** (`v1-e40-t22`), as the details' `bucket_run` says it was:
     its fix is the cloud run's task role, the PM's (:data:`CLOUD_NO_SESSION_CURE`), and what waits is
-    said without the login and the publishes the operator's Mac would make.
+    said without the login and the publishes the operator's Mac would make. Nor does it say the run
+    kept what it fetched, or that the publish after the login uploads this machine's copy
+    (`v1-e40-t25`): a cloud run's working copy ends with its task.
 
     **A manifest owed again, and one that drifted again** (`v1-e34-t26`). A report stage's manifest
     mismatch alone is announced as published again by the next run when the record lists it as
@@ -1224,6 +1274,11 @@ def notifications_for(
     been owed again already, published and confirmed, and drifted again: that run asks for a
     person (:data:`DRIFTED_AGAIN_TITLE`). Whether `caselist runs` shows words of a banner's own
     beside its verdict is :func:`banner_words`, which this function's titles agree with.
+
+    **A bucket-mode publish names the next cloud run** (`v1-e40-t25`), as the details' `bucket_run`
+    says it was: a failed publish stage alone (:data:`CLOUD_PUBLISH_CURE`) and a manifest owed again
+    (:data:`CLOUD_PUBLISHED_AGAIN_CURE`), never `--publish-pending`, which publishes the working copy
+    of the machine it runs on. The titles are unchanged, so :func:`banner_words` is too.
     """
     where = f"Run {record.run_id} ({record.environment})"
     sent: list[Notification] = []
@@ -1295,14 +1350,16 @@ def notifications_for(
                 message=(
                     f"{where}: the report stage found the bucket's {_manifests_of(owed_again)} "
                     f"{'differ' if len(owed_again) > 1 else 'differs'} from this machine's. "
-                    f"{_published_again(len(owed_again))}"
+                    f"{_published_again(len(owed_again), bucket=bucket is not None)}"
                 ),
-                fix_command=PUBLISH_PENDING_COMMAND,
+                fix_command=CLOUD_PUBLISHED_AGAIN_CURE if bucket is not None else PUBLISH_PENDING_COMMAND,
             )
         )
     elif failed:
         required = {str(stage) for stage in REQUIRED_STAGES}
         only_publish = set(failed) == {str(SyncStage.PUBLISH)}
+        # A cloud run's failed publish: the next cloud run takes it up (`v1-e40-t25`).
+        cloud_publish = only_publish and bucket is not None
         only_parse = set(failed) == {str(SyncStage.PARSE)}
         said = [details.stage(stage) for stage in failed]
         named = "; ".join(
@@ -1321,8 +1378,11 @@ def notifications_for(
         sent.append(
             Notification(
                 title=title,
-                message=f"{where}: {named}. {verdict}{_WHAT_WAS_CAPTURED_IS_KEPT}",
-                fix_command=PUBLISH_PENDING_COMMAND
+                message=f"{where}: {named}. {verdict}"
+                + (_WHAT_THE_BUCKET_CONFIRMED_IS_KEPT if cloud_publish else _WHAT_WAS_CAPTURED_IS_KEPT),
+                fix_command=CLOUD_PUBLISH_CURE
+                if cloud_publish
+                else PUBLISH_PENDING_COMMAND
                 if only_publish
                 else parse_commands(details)
                 if only_parse
@@ -1372,11 +1432,12 @@ def notifications_for(
         report_alone = _stage_outcome(record, SyncStage.REPORT) == str(StageOutcome.PENDING) and (
             _stage_outcome(record, SyncStage.PUBLISH) != str(StageOutcome.PENDING)
         )
+        kept = _LEFT_WITHOUT_A_SESSION if bucket is not None else "kept everything it fetched"
         sent.append(
             Notification(
                 title="caselist publish waiting for an AWS login",
                 message=(
-                    f"{where} kept everything it fetched; "
+                    f"{where} {kept}; "
                     + (
                         f"{owed} snapshot(s) and the run record wait to be published."
                         if owed
@@ -1396,8 +1457,12 @@ def notifications_for(
                     + (
                         f" Before the session expired, the bucket's {_manifests_of(owed_again)} "
                         f"{'were' if len(owed_again) > 1 else 'was'} found to differ from this "
-                        f"machine's; {'they are' if len(owed_again) > 1 else 'it is'} owed again, and "
-                        "the publish after the login uploads this machine's copy."
+                        f"machine's; {'they are' if len(owed_again) > 1 else 'it is'} owed again"
+                        + (
+                            "."
+                            if bucket is not None
+                            else ", and the publish after the login uploads this machine's copy."
+                        )
                         if owed_again
                         else ""
                     )

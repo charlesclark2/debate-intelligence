@@ -62,7 +62,7 @@ every copy of the suppression list and only the publish is owed, and `--publish`
 first, where the aggregates may come from the run's own copy of the list alone, which is never
 published, or the rebuild did not finish. `--publish-pending` is neither: it completes the snapshot
 publishes an earlier run deferred, never a parsed store's. A bucket-mode run, the cloud run's, names
-no command (`v1-e40-t18`): the next cloud run that imports into the caselist publishes it, and
+no command (`v1-e40-t18`): the next cloud run publishes it, whatever it imports (`v1-e40-t08`), and
 nothing is published from the operator's Mac (`docs/runbooks/caselist-cloud-run.md`, "A failed
 parse stage").
 
@@ -143,7 +143,7 @@ from debate_core.application.caselist_sync import (
     run_pull,
 )
 from debate_core.application.settings import Settings
-from debate_core.application.sync_runs import SyncRunDetails, SyncRunRecord
+from debate_core.application.sync_runs import CLOUD_PUBLISH_CURE, SyncRunDetails, SyncRunRecord
 
 __all__ = ["pull", "pull_summary"]
 
@@ -449,6 +449,10 @@ def _hint_for(failed: list[StageRecord], *, retryable: bool, bucket_mode: bool =
     A stage a store refused carries its own fix, a permission on this machine or a grant the AWS
     profile lacks, and that comes first: running the command again before it is made changes
     nothing.
+
+    In bucket mode a failed publish names the next cloud run (`v1-e40-t25`), never
+    `--publish-pending`, which publishes the working copy of the machine it is run on: the cloud
+    run's ends with its task.
     """
     fixes = list(dict.fromkeys(record.hint for record in failed if record.hint))
     if fixes:
@@ -465,6 +469,8 @@ def _hint_for(failed: list[StageRecord], *, retryable: bool, bucket_mode: bool =
             f"{again}Nothing that did download was lost: it is in the inbox and imported. Run the same "
             "command again — an archive already held is not fetched twice."
         )
+    if SyncStage.PUBLISH in stages and bucket_mode:
+        return f"{again}In bucket mode {CLOUD_PUBLISH_CURE}."
     if SyncStage.PUBLISH in stages:
         return f"{again}Re-run `caselist pull --publish-pending`: every confirmed source is skipped."
     return f"{again}Run the same command again; every stage is idempotent."

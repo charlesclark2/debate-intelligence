@@ -157,17 +157,33 @@ def test_importing_the_module_builds_no_app() -> None:
     assert not any(type(value).__name__ == "FastAPI" for value in vars(module).values())
 
 
+class _Imports(ast.NodeVisitor):
+    """Every module a file imports, at any depth.
+
+    A visitor rather than a walk over the tree: `scripts/affected_tests.py` reads a test that
+    parses Python and calls a walk as one that reads every Python file.
+    """
+
+    def __init__(self) -> None:
+        self.names: set[str] = set()
+
+    def visit_Import(self, node: ast.Import) -> None:
+        self.names |= {alias.name for alias in node.names}
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        self.names.add(node.module or "")
+
+
 def test_the_app_module_never_imports_the_composition_root() -> None:
     """Not even inside a function (`v1-e39-t23`): to the test selector, every test that builds the app
     would then reach every adapter the function wires, the parser, the writer, Cognito and S3 among them."""
     import debate_api.app as module
 
-    tree = ast.parse(Path(str(module.__file__)).read_text(encoding="utf-8"))
-    imported = {alias.name for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names}
-    imported |= {node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)}
+    imports = _Imports()
+    imports.visit(ast.parse(Path(str(module.__file__)).read_text(encoding="utf-8")))
 
-    assert "debate_api" in {name.split(".")[0] for name in imported}
-    assert not {name for name in imported if name.endswith("container")}
+    assert "debate_api.routes" in imports.names
+    assert not {name for name in imports.names if name.endswith("container")}
 
 
 def test_the_templates_and_the_script_ship_in_the_package() -> None:

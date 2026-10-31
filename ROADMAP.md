@@ -66,7 +66,7 @@ v2.3's extension work.
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 16 | 11 | 114 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
-| [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 27 | 17 | 164 |
+| [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 27 | 18 | 164 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 23 | 16 | 84 |
 | [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 1 | 21 | 9 | 52 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
@@ -475,7 +475,7 @@ Whitefish Bay Debate has a public, mobile-friendly team website: team informatio
 | [Home page: the academic case for debate](plan_specs/v1/e36-team-website/t09-home-academic-case.yaml) `v1-e36-t09-home-academic-case` | Succeeded | 1 | 5.0 |
 | [The export checks run against an export](plan_specs/v1/e36-team-website/t10-export-checks-in-ci.yaml) `v1-e36-t10-export-checks-in-ci` | Succeeded | 2 | 6.0 |
 | [Visual QA refuses a stale export](plan_specs/v1/e36-team-website/t11-visual-qa-freshness.yaml) `v1-e36-t11-visual-qa-freshness` | Pending | 2 | 2.0 |
-| [A pull request into main that touches site/ is built for prod before it merges, and site/ never trips the Python tests](plan_specs/v1/e36-team-website/t12-prod-build-before-main.yaml) `v1-e36-t12-prod-build-before-main` | Pending | 0 | 2.0 |
+| [A pull request into main that touches site/ is built for prod before it merges, and site/ never trips the Python tests](plan_specs/v1/e36-team-website/t12-prod-build-before-main.yaml) `v1-e36-t12-prod-build-before-main` | Succeeded | 0 | 2.0 |
 
 #### [E37 — Calendar & Announcements (Coach-Editable)](plan_specs/v1/e37-calendar-and-announcements/epic.yaml)
 

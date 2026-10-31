@@ -62,7 +62,7 @@ v2.3's extension work.
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 58 | 52 | 257 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 109 | 90 | 499 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 60 | 46 | 288 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 60 | 47 | 288 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 16 | 11 | 114 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
@@ -359,7 +359,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [Harms headings counted under Impact, the word the coach's debaters use](plan_specs/v1/e32-argument-landscape/t29-harms-headings-under-impact.yaml) `v1-e32-t29-harms-headings-under-impact` | Succeeded | 1 | 2.0 |
 | [A dry run fills the plan-text and analytic-text caches, so the first report after a parser bump reads sources once](plan_specs/v1/e32-argument-landscape/t30-dry-run-fills-the-text-caches.yaml) `v1-e32-t30-dry-run-fills-the-text-caches` | Pending | 0 | 1.0 |
 | [Model cassettes name their caselist, so one season's recordings can be deleted alone](plan_specs/v1/e32-argument-landscape/t31-cassettes-filed-by-caselist.yaml) `v1-e32-t31-cassettes-filed-by-caselist` | Pending | 0 | 2.0 |
-| [A landscape model stage stopped by throttling ends as retryable, not as a verdict](plan_specs/v1/e32-argument-landscape/t32-throttled-model-stage-is-retryable.yaml) `v1-e32-t32-throttled-model-stage-is-retryable` | Pending | 0 | 1.0 |
+| [A landscape model stage stopped by throttling ends as retryable, not as a verdict](plan_specs/v1/e32-argument-landscape/t32-throttled-model-stage-is-retryable.yaml) `v1-e32-t32-throttled-model-stage-is-retryable` | Succeeded | 0 | 1.0 |
 
 #### [E33 — Evidence File Builder](plan_specs/v1/e33-file-builder/epic.yaml)
 

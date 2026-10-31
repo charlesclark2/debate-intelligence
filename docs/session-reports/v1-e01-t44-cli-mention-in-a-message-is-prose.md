@@ -375,9 +375,44 @@ PM questions from v1-e01-t44 (a debate-research mention in a message read as pro
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-01
 
 **Notes:**
+
+A `debate-research` mention inside a sentence is now prose, and anything the rule cannot read as a
+sentence is still a run. That gives a real cut, measured with care.
+1. **ac1 passes.**
+   * The files that reach every command fell from 85 to 62. t38's four landscape merges fell from
+     787 files to 727, and f5a8221's edit alone from 111 to 88. Every after-list is a subset of its
+     before-list.
+   * The run check over the 24 dropped files: 648 passed, with 0 `debate_cli` calls and no start of
+     the program. Both sides of the recorder fired on positive controls.
+   * The collected count is unchanged: 0 lost, 8 added.
+   * The red runs were against two skeletons and the start commit's script.
+   * 21 mutants were caught. Mutants 1 and 2 catch the forbidden item, and over the real tree
+     mutant 2 drops exactly the smoke checks that start the installed build.
+   * Removing the whitespace check, which no mutant could tell from its absence, is agreement 8
+     applied properly.
+2. **The PM question: (a).** A code span that opens the line is prose. The backticks are positive
+   evidence of a message, no real run starts with one, and the mutants around the span rule are all
+   caught.
+3. **Decisions accepted:**
+   * a sentence, not "any text before", as the test for prose, because a shell line has text before
+     the program too;
+   * non-Python files read whole;
+   * t39's per-command reading unchanged;
+   * `--every-mention-runs` as the switch back, matching the start commit on all six diffs;
+   * measuring over the start tree.
+4. **Follow-ups 1, 2 and 3:** one p3 task in E41, the delivery-tooling epic.
+   * t39's argument reading reads a run-shaped string in an f-string's head or a comparison.
+   * The program alone is a run only where a program is started from, with its own mutants.
+   * A shell script's command words are read with their quotes stripped.
+
+   The last is the forbidden direction, latent today, and cheap to close.
+5. **Closing checks:** the affected set ran whole within the limit after the sync (45 files, 2,132
+   passed), and the whole-repo checks pass.
+6. **Merge:** once the PR's `ci` is green. It is a plain `scripts/task pr`. With it, E01's last open
+   task is done, and E01's Succeeded is true again.

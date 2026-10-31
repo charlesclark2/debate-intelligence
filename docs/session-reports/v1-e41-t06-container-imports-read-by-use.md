@@ -320,9 +320,36 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-01
 
 **Notes:**
+
+An import change that loads no new module is now read by the parts using its names, and a
+`debate_cli.container.X` string reaches part X. af7052e's edit alone fell from 177 files to 77.
+1. **ac1 passes.**
+   * All 12 diffs are subsets of before. `--whole-container` reproduces `dev`'s output exactly.
+   * The two merges that load a new module stay whole, with the module and the line named.
+   * The run check over all 100 dropped files: 1,468 passed, with no dropped file starting its own
+     merge's changed part, and a positive control that fired.
+   * Red: 20 failed against the skeleton, and 21 against `dev`'s script.
+   * 22 mutants were caught. Mutant 3 on a planted real break leaves out `commands/test_files.py`
+     with 21 failing tests, which is the forbidden item shown concretely.
+   * Rewriting mutant 1 until it failed on a selection, not only on reason text, and reordering
+     mutant 7's case until it could fail, is agreement 8 done properly.
+2. **Decisions accepted:**
+   * only the leading import block read by use;
+   * the load order compared, not only the set, which is stricter than the ruling and free;
+   * possibly-a-module treated as a module;
+   * `TYPE_CHECKING` loading nothing;
+   * the whole-file fallbacks for names used on import, bound twice or read by a computed name;
+   * the string reading, keeping a patched rebound name reachable;
+   * the replaced t43 case.
+3. **Follow-up, `doctor`'s floor of about 77 files: no task now.** With t43, t44 and this task, the
+   biggest test-selection costs are cut. The PM files the next cut only if a week of task PRs shows
+   container changes still costing more than agreement 10's two minutes.
+4. **Closing checks:** the affected set ran whole within the limit (46 files, 2,180 passed), and the
+   whole-repo checks pass.
+5. **Merge:** once the PR's `ci` is green. It is a plain `scripts/task pr`.

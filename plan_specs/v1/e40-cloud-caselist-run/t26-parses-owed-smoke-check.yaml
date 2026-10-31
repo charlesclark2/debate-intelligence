@@ -1,0 +1,70 @@
+# TASK v1-e40-t26-parses-owed-smoke-check - A smoke check reads parses_owed from caselist runs and caselist status
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t26-parses-owed-smoke-check
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "A smoke check reads parses_owed from caselist runs and caselist status"
+spec:
+  # Filed by the PM, 2026-11-01, from v1-e40-t08's Deviation 2 and Follow-up 2 (the PM's review, 2026-11-01).
+  description: >-
+    v1-e40-t08 added `parses_owed` to `caselist runs --json` and `caselist status --json`, and a
+    caption sentence to each, but no smoke check reads them (working agreement 5). Add one to
+    tests/smoke, in the existing harness's style, on the checkout's script and an installed
+    build: a data directory holding a parse-owed file shows its entries in both commands' --json
+    and the sentence in their captions, and one holding none shows nothing owed.
+  priority: 3
+  constraints:
+    packages: [tests/smoke]
+    forbidden:
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e40-t08-parse-owed
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The smoke check passes on the checkout's script and an installed build, and fails
+        against a break that drops `parses_owed` from either command's --json.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t26-parses-owed-smoke-check-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    A smoke check reads parses_owed from caselist runs and caselist status.
+  goalRef:
+    name: v1-e40-t26-parses-owed-smoke-check
+  graph:
+    nodes:
+      - id: parses-owed-smoke-check
+        kind: Task
+        name: Parses-owed smoke
+        description: >-
+          A smoke check reads parses_owed from caselist runs and caselist status.
+        estimatedEffort: 30m
+        acceptanceCriteria:
+          - type: test_passes
+            name: Parses-owed smoke tests pass
+            command: uv
+            args: [run, pytest, tests/smoke, -k, parses_owed]
+status:
+  phase: Pending

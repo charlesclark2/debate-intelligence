@@ -25,6 +25,9 @@ spec:
     External node in a later release, and refuse an epic Goal marked Succeeded while a task of
     it is not Succeeded or Cancelled. Make `task_helper.py`'s `ready` and `prereqs` refuse an
     unknown prerequisite.
+    (PM amendment 2026-11-01, from v1-e41-t05's follow-up.) While editing `task_helper.py`, also clear
+    the two pyright errors it carries on dev (v1-e41-t05's report names their lines), so that
+    `pyright scripts/task_helper.py` is clean.
   priority: 3
   constraints:
     packages: [scripts, tests/scripts, plan_specs/README.md]

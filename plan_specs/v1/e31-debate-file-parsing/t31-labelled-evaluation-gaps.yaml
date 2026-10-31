@@ -35,6 +35,11 @@ spec:
     The same counts found no document flagged ABBREVIATED. Use both as context for the tallies
     (counts only); the index's card-only rule (v1-e39-t12) hides the short no-cite items but not
     these.
+    (PM amendment 2026-11-01, from v1-e40-t08's review.) Since v1-e40-t08 a run on an image whose parser
+    version the store has no directory of parses every followed caselist in full and publishes it. So
+    ac4's open half, dev's re-parse, is the first scheduled dev cloud run on an image carrying both
+    docx-7 and v1-e40-t08, read from its record (the parse stage's counts and `stage_times`, the index
+    built from docx-7), not the restored-copy steps. Prod's re-parse stays v1-e40-t16.
   priority: 2
   constraints:
     # PM amendment 2026-10-27, Deviation 6: the version line in the structural fixtures and the

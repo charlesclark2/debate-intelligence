@@ -181,9 +181,43 @@ None. Dev moved after this branch started (`af29b74`, v1-e01-t44, which changes
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-01
 
 **Notes:**
+
+One hard stop now bounds a session's test runs. It kills the whole process group, and the probe
+explains what the old alarm left behind.
+1. **ac1 passes.**
+   * A seven-process tree that ignores TERM is gone within the limit plus the grace.
+   * A real `pytest -n 2` whose tests start subprocesses is gone whole, and the test asserts that
+     every worker and subprocess shares the controller's group and session.
+   * The exit code and the output pass through unchanged. Exit 124 at the limit, 128 plus the
+     signal's number for a killed child, and 126, 127 and 2 as documented.
+   * Red: 13 failed against a skeleton.
+   * Four mutants were caught. Mutant 1 needed the xdist test's tests to start subprocesses before
+     it could be told apart, and you found that rather than letting it pass.
+2. **The probe is the key finding.** The alarm kills the pytest controller, and xdist's workers exit
+   about 5 s later, but the processes their tests started run on as orphans. A group kill reaches
+   them. That is the right story for agreement 10 to tell, without claiming it was the whole of
+   v1-e40-t22's 30 minutes.
+3. **The deviation is accepted.** The prompt had no time-limit line, so adding one to item 9 is
+   right.
+4. **Decisions accepted:**
+   * Python stdlib for `start_new_session` on both platforms;
+   * a session, not only a group, so a terminal read cannot stop the run;
+   * Ctrl-C handled the same way;
+   * leftovers stopped after a command that finishes in time;
+   * the self-daemonizing escape pinned as a known limit;
+   * `uv run` covered.
+5. **Follow-up, the two pyright errors in `task_helper.py`:** the PM folds them into v1-e41-t07,
+   which edits that file's `ready` and `prereqs`.
+6. **Closing checks:** the affected set is over two minutes because of the planted-break harness. The
+   script itself stopped that run at 115 s with nothing left, which is its own small proof. It is
+   left to the PR's `ci`, which is also the tests' first run on Linux. The always-run list, the
+   changed areas and the whole-repo checks pass.
+7. **Merge:** once the PR's `ci` is green on Linux. It is a plain `scripts/task pr`. Dev moved by
+   v1-e01-t44, which touches none of this task's files, so the PR merges without a sync. From then on every session prompt names
+   `scripts/hard_stop.py`.

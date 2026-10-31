@@ -1033,6 +1033,57 @@ Success looks like an `ETag` and `"ServerSideEncryption": "aws:kms"`. `--if-none
 S3 refuse the write with `PreconditionFailed` if a list appeared in the meantime, so an existing
 list is never replaced.
 
+## What an identical rebuild records beside the manifest
+
+`v1-e39-t19`. An index id is the start of its SQLite file's sha256, so a weekly run that rebuilds
+under a longer suppression list, whose new entries stop nothing in the corpus, gets the same index
+id. The stage does not publish it again: `current.json` already names it, and no object of the index
+is uploaded twice. The published `manifest.json` therefore goes on naming the list the index was
+first built from. The cutover's comparison found exactly that: a manifest recording five entries
+after `RM-2026-90` had made six.
+
+So when `current.json` already names the index a run built or kept, and that run read other digests
+than the manifest records (the suppression list's, or a store's occurrence rows), the stage writes
+one more object beside the manifest:
+
+| Key | What it holds |
+|---|---|
+| `reports/tub/search/<index id>/checked-against.json` | What that run's rebuild read: the parser version, each store's version directory and occurrence digest, the suppression list's entries, path holds and sha256, and the counts. And `manifest_sha256`, the digest `current.json` names the manifest with |
+
+- **Which list an index was checked against** is the record's when there is one whose
+  `manifest_sha256` is the digest `current.json` names, and the manifest's otherwise. A record
+  naming another digest is left over from before the same index was published again, and says
+  nothing about the manifest there now.
+- **When it is written.** Only when what the run read differs from what the manifest, or the
+  record already there, says. A run under the same list writes nothing. It is written through the
+  same bucket client as the index, so in bucket mode under the run's lock: a run that lost its
+  lease writes no record, and its index stage fails with the reason.
+- **Who reads it.** `caselist restore-run-state` brings it back beside the restored manifest, and
+  `ops/caselist_run/compare_cloud_run.py` reads it there, so a comparison of an identical rebuild
+  under a longer list agrees. The function never reads it: it reads the three keys `current.json`
+  names. `tub index prune` keeps it with the current index's directory, and deletes it with a
+  superseded one, like the index's other files. It holds counts, digests, slugs and versions, and
+  no card, path, school or team code.
+
+To read it by hand, for a removal's audit or a comparison:
+
+**Operator command** (expected runtime seconds; reads only)
+Where: `$WT`. Set `ENV` to the environment to read.
+```bash
+cd "$WT"
+ENV=dev
+BUCKET=$(AWS_PROFILE=debate-admin terraform -chdir="infrastructure/envs/$ENV" output -raw evidence_bucket_name)
+aws s3 cp "s3://${BUCKET}/reports/tub/search/current.json" - --profile "debate-$ENV-evidence" > /tmp/tub-current.json
+INDEX_ID=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["index_id"])' /tmp/tub-current.json)
+aws s3 cp "s3://${BUCKET}/reports/tub/search/${INDEX_ID}/checked-against.json" - --profile "debate-$ENV-evidence" \
+  || echo "no record beside ${INDEX_ID}'s manifest: the manifest says what it was checked against"
+python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["manifest_sha256"])' /tmp/tub-current.json
+rm /tmp/tub-current.json
+```
+Success looks like the record's JSON, then a sha256. The record applies when its `manifest_sha256`
+is that last line, and its `suppression.entries` is then the list the published index was last
+checked against. Without a record, `aws s3 cp` prints a `404` and the line after it.
+
 ## Moving the index to format 2
 
 `v1-e39-t13` changed the index's format from 1 to 2: its words are stemmed, so `grow` finds

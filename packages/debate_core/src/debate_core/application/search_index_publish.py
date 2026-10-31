@@ -59,35 +59,43 @@ from __future__ import annotations
 
 import gzip
 import hashlib
+import json
 import logging
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final
+from typing import Final, Literal
 
-from pydantic import ValidationError
+from pydantic import Field, ValidationError
 
 from debate_core.application.errors import DomainError, NotFound
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectInfo
+from debate_core.domain.base import DomainModel, NonEmptyText, Sha256Hex
 from debate_core.domain.search_index import (
     SEARCH_INDEX_FORMAT_VERSION,
     SEARCH_INDEX_GZIP_NAME,
     SEARCH_INDEX_MANIFEST_NAME,
     SEARCH_INDEX_POINTER_KEY,
+    IndexCounts,
     SearchIndexManifest,
     SearchIndexPointer,
+    StoreState,
+    SuppressionListState,
     index_object_key,
 )
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
 
 __all__ = [
     "ALLOW_SHRINK_FLAG",
+    "CHECKED_AGAINST_NAME",
+    "CheckedAgainstRecord",
     "DEFAULT_MINIMUM_SHARE_PERCENT",
     "SHRINK_REASON_MAX_LENGTH",
     "AllowedShrink",
     "CurrentSearchIndex",
     "CurrentSearchIndexUnreadable",
     "PublishedSearchIndex",
+    "RecordedCheck",
     "SearchIndexFilesDamaged",
     "SearchIndexPublishService",
     "SearchIndexStoreEmpty",
@@ -96,6 +104,7 @@ __all__ = [
     "StoreShrink",
     "UnreadableSearchIndexManifest",
     "check_index_size",
+    "read_checked_against",
     "read_search_index_manifest",
 ]
 
@@ -334,6 +343,95 @@ class PublishedSearchIndex:
     """What `--allow-shrink` let through, or `None` for a publish the guard passed by itself."""
 
 
+CHECKED_AGAINST_NAME: Final = "checked-against.json"
+"""The record beside a published index's manifest, `reports/tub/search/<index id>/checked-against.json`."""
+
+
+class CheckedAgainstRecord(DomainModel):
+    """What the index `current.json` names was last checked against, beside its manifest (`v1-e39-t19`).
+
+    An index id is the start of its SQLite file's digest, so a rebuild from a longer suppression list
+    whose new entries stop nothing is the same index, and is not published again (`v1-e39-t09`). Its
+    manifest then names the list it was first built from. This record says what the rebuild read:
+    the part of a manifest a rebuild can change without changing a byte of the index. It stands
+    beside the manifest whose digest it names, and beside no other: a manifest written again at that
+    key, by a later publish of the same index, has another digest, and the record is then not read.
+
+    Not in the manifest, and not in the pointer: the function checks the manifest's bytes against the
+    pointer's digest and reads both with `extra="forbid"`, so either change would make it refuse the
+    index. The function never reads this record.
+    """
+
+    record_version: Literal[1] = Field(default=1, description="This record's own shape: 1.")
+    index_id: NonEmptyText = Field(description="The index it is about: the one `current.json` names.")
+    manifest_sha256: Sha256Hex = Field(
+        description="The manifest it stands beside, by the digest `current.json` names it with."
+    )
+    parser_version: NonEmptyText = Field(description="The parser version every store read was parsed by.")
+    stores: tuple[StoreState, ...] = Field(description="Every store the rebuild read, by caselist slug.")
+    snapshot: NonEmptyText = Field(description="The latest caselist snapshot among the stores read.")
+    suppression: SuppressionListState = Field(description="The suppression list the rebuild applied.")
+    counts: IndexCounts = Field(description="What the rebuild read, kept and left out.")
+
+    @classmethod
+    def of(cls, manifest: SearchIndexManifest, *, beside: SearchIndexPointer) -> CheckedAgainstRecord:
+        """What `manifest`'s build read, as a record beside the manifest `beside` names."""
+        return cls(
+            index_id=manifest.index_id,
+            manifest_sha256=beside.manifest_sha256,
+            parser_version=manifest.parser_version,
+            stores=manifest.stores,
+            snapshot=manifest.snapshot,
+            suppression=manifest.suppression,
+            counts=manifest.counts,
+        )
+
+    def stands_beside(self, pointer: SearchIndexPointer) -> bool:
+        """Whether this is a record of the index `pointer` names, beside the manifest it names."""
+        return self.index_id == pointer.index_id and self.manifest_sha256 == pointer.manifest_sha256
+
+    def to_json_bytes(self) -> bytes:
+        """The record's bytes, written the way the manifest's are."""
+        return (json.dumps(self.model_dump(mode="json"), indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+
+
+@dataclass(frozen=True, slots=True)
+class RecordedCheck:
+    """What :meth:`SearchIndexPublishService.record_checked_against` wrote, and what it replaced."""
+
+    record: CheckedAgainstRecord
+    key: str
+    replaced: CheckedAgainstRecord
+    """What the index was checked against before: the record beside its manifest, or the manifest's own."""
+
+    @property
+    def sentence(self) -> str:
+        """What changed: `the suppression list at 6 entries and 0 path holds, where it said 5 and 0`."""
+        new, old = self.record, self.replaced
+        said: list[str] = []
+        if new.suppression != old.suppression:
+            said.append(
+                f"the suppression list at {new.suppression.entries:,} entries and "
+                f"{new.suppression.path_holds:,} path holds, where it said {old.suppression.entries:,} and "
+                f"{old.suppression.path_holds:,}"
+            )
+        read_again = [store.caselist for store in new.stores if store not in old.stores]
+        if read_again:
+            said.append(f"the rows of {', '.join(read_again)} as read now")
+        return (
+            f"recorded what it was checked against beside its manifest, {CHECKED_AGAINST_NAME}: "
+            f"{'; '.join(said) or 'the counts of this rebuild'}"
+        )
+
+
+def read_checked_against(raw: bytes) -> CheckedAgainstRecord | None:
+    """The record in `raw`, or `None` for bytes that are not one this build reads, which are not read."""
+    try:
+        return CheckedAgainstRecord.model_validate_json(raw)
+    except ValidationError:
+        return None
+
+
 def read_search_index_manifest(directory: Path) -> SearchIndexManifest:
     """The manifest of the index built in `directory`. Raises :class:`UnreadableSearchIndexManifest`."""
     path = directory / SEARCH_INDEX_MANIFEST_NAME
@@ -432,6 +530,65 @@ class SearchIndexPublishService:
                     for_index, "the manifest current.json names is another index's", pointer.index_id
                 )
             return CurrentSearchIndex(pointer=pointer, manifest=manifest)
+
+    async def checked_against(self, current: CurrentSearchIndex) -> CheckedAgainstRecord:
+        """What the index `current` names was last checked against (`v1-e39-t19`).
+
+        The record beside its manifest, when there is one that stands beside it
+        (:meth:`CheckedAgainstRecord.stands_beside`); otherwise what its manifest says. A record that
+        is not one this build reads, or that names another manifest, is not read.
+        """
+        with tempfile.TemporaryDirectory(prefix="tub-index-checked-against-") as scratch:
+            landed = Path(scratch) / CHECKED_AGAINST_NAME
+            try:
+                await self._bucket.get_file(index_object_key(current.index_id, CHECKED_AGAINST_NAME), landed)
+            except NotFound:
+                recorded = None
+            else:
+                recorded = read_checked_against(landed.read_bytes())
+        if recorded is not None and recorded.stands_beside(current.pointer):
+            return recorded
+        return CheckedAgainstRecord.of(current.manifest, beside=current.pointer)
+
+    async def record_checked_against(
+        self, manifest: SearchIndexManifest, current: CurrentSearchIndex
+    ) -> RecordedCheck | None:
+        """Record beside `current`'s manifest what `manifest`, a rebuild of the same index, was built from.
+
+        `None`, writing nothing, when that is what it was already checked against
+        (:meth:`checked_against`). Otherwise the record is uploaded, checked as it lands, through the
+        bucket the index is published through: in bucket mode a client the run lock fences, so it is
+        written under the run's lock or not at all. Nothing of the index is uploaded, and the pointer
+        is not touched.
+        """
+        if manifest.index_id != current.index_id:
+            raise ValueError(
+                f"index {manifest.index_id} is not the one current.json names ({current.index_id}): "
+                "another index is published, not recorded beside this one's manifest"
+            )
+        record = CheckedAgainstRecord.of(manifest, beside=current.pointer)
+        replaced = await self.checked_against(current)
+        if record == replaced:
+            return None
+        key = index_object_key(manifest.index_id, CHECKED_AGAINST_NAME)
+        with tempfile.TemporaryDirectory(prefix="tub-index-checked-against-") as scratch:
+            path = Path(scratch) / CHECKED_AGAINST_NAME
+            path.write_bytes(record.to_json_bytes())
+            _landed(
+                manifest.index_id,
+                CHECKED_AGAINST_NAME,
+                await self._bucket.put_file(key, path),
+                hashlib.sha256(record.to_json_bytes()).hexdigest(),
+            )
+        logger.info(
+            "search index checked-against record written",
+            extra={
+                "index_id": manifest.index_id,
+                "suppression_entries": record.suppression.entries,
+                "replaced_suppression_entries": replaced.suppression.entries,
+            },
+        )
+        return RecordedCheck(record=record, key=key, replaced=replaced)
 
     async def publish(self, directory: Path, *, allow_shrink: str | None = None) -> PublishedSearchIndex:
         """Upload the gzip object, then the manifest, then the pointer; each checked as it lands.

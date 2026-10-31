@@ -25,6 +25,14 @@ it lands, are theirs. What is decided here is when each is asked, in the order t
    next run with a session finds `current.json` behind and publishes that same index, without a
    rebuild unless reconciling changed the suppression digest; `tub index publish --index <newest>`
    is the by-hand catch-up (`docs/runbooks/evidence-search.md`).
+5. **Record what the index was checked against, when `current.json` already names it** and this
+   run's index of it was built from other digests than the published manifest records
+   (`v1-e39-t19`). An index id is the start of its SQLite file's digest, so a suppression entry that
+   stops nothing rebuilds the same index, which is never uploaded again. The publisher writes
+   `checked-against.json` beside the manifest instead
+   (:meth:`~debate_core.application.search_index_publish.SearchIndexPublishService.record_checked_against`),
+   through the bucket the index is published through, so under the run's lock in bucket mode. A run
+   whose index was built from what the manifest, or the record already there, says writes nothing.
 
 The agent publishes only to its own environment, dev today. Publishing the index to prod stays the
 operator's step until the agent runs against prod (PM ruling 2026-10-20, question 1 (c)).
@@ -541,7 +549,36 @@ class SearchIndexRefresh:
         if published is not None and published.index_id != current.index_id:
             previous = published.manifest
             said += _growth_sentence(counts())
-        if pointer is not None and pointer.index_id == current.index_id:
+        if published is not None and published.index_id == current.index_id:
+            # The same index is never uploaded again. What this run checked it against is recorded
+            # beside its manifest when the manifest, or an earlier record, says otherwise (`v1-e39-t19`).
+            try:
+                recorded = await self._publisher.record_checked_against(current.manifest, published)
+            except StoreCredentialsExpired as expired:
+                return report(
+                    StageOutcome.PENDING,
+                    f"{said}, which current.json names; the record of what it was checked against is not "
+                    f"written, for want of an AWS login ({str(expired) or 'the AWS session has expired'}): "
+                    "the next run with a session writes it",
+                )
+            except Exception as failed:
+                return self._failed(
+                    f"{said}, which current.json names; the record of what it was checked against was not "
+                    "written, and current.json is as it was",
+                    failed,
+                    current,
+                    login_only,
+                    counts=counts(),
+                    hint=(
+                        "The next weekly run writes the record once the cause is fixed. The index is the "
+                        "one published, so nothing of it is published again."
+                    ),
+                )
+            if recorded is not None:
+                return report(
+                    StageOutcome.COMPLETED,
+                    f"{said}, which current.json names, so it is not published again; {recorded.sentence}",
+                )
             if built_now:
                 return report(StageOutcome.COMPLETED, f"{said}; current.json already names it")
             return report(
@@ -622,22 +659,22 @@ class SearchIndexRefresh:
         local_only: str | None,
         *,
         counts: SearchIndexStageCounts | None = None,
+        hint: str | None = None,
     ) -> SearchIndexStageReport:
         environment = self._environment
         by_hand = f"DEBATE_ENV={environment} debate-research tub index publish --env {environment} --newest"
-        if counts is None or still is None:
-            hint = None
-        elif isinstance(failed, SearchIndexWouldShrink | CurrentSearchIndexUnreadable):
-            hint = (
-                f"If the shrink is real (a removal, the card-only rule), `{by_hand} {ALLOW_SHRINK_FLAG} "
-                f'"<reason>"` publishes {still.index_id} by hand; otherwise restore the store whose '
-                "documents went missing. The weekly run never publishes past the shrink guard."
-            )
-        else:
-            hint = (
-                f"`{by_hand}` publishes the newest index, {still.index_id}, by hand once the cause is "
-                "fixed; the next weekly run tries again either way."
-            )
+        if hint is None and counts is not None and still is not None:
+            if isinstance(failed, SearchIndexWouldShrink | CurrentSearchIndexUnreadable):
+                hint = (
+                    f"If the shrink is real (a removal, the card-only rule), `{by_hand} {ALLOW_SHRINK_FLAG} "
+                    f'"<reason>"` publishes {still.index_id} by hand; otherwise restore the store whose '
+                    "documents went missing. The weekly run never publishes past the shrink guard."
+                )
+            else:
+                hint = (
+                    f"`{by_hand}` publishes the newest index, {still.index_id}, by hand once the cause is "
+                    "fixed; the next weekly run tries again either way."
+                )
         return SearchIndexStageReport(
             outcome=StageOutcome.FAILED,
             reason=reason,

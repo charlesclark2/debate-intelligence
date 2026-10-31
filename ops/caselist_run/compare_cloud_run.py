@@ -21,7 +21,12 @@ environment built from nothing but `HOME`, a `PATH` of the build's directory and
    the bucket's state is some other run's, and nothing is compared.
 3. **The cloud's side**, read from the restored files: each store's source records (`index.jsonl`)
    and occurrence records (`occurrences.jsonl`) in the version directory the cloud's index read, and
-   the cloud's index manifest.
+   the cloud's index manifest. When the restore brought back `checked-against.json` beside it, and
+   it names that manifest's digest, its stores, suppression list and counts are the cloud's
+   (`v1-e39-t19`): an index rebuilt under a longer list that stops nothing is the same index, is not
+   published again, and the record says what the rebuild read where the manifest says what the
+   first build read. A record naming another manifest, or one that is not JSON, is not read, and the
+   record says so.
 4. **Re-parse**, `caselist parse --caselist <store> --reparse` for each store, in the scratch
    directory: every source parsed again, into a new generation beside the restored one. Raw sources
    the copy lacks are read from the dev bucket's `raw/`, as a cloud run reads them. Nothing is
@@ -61,6 +66,9 @@ RUN_ID = re.compile(r"^\d{8}T\d{6}Z$")
 RUN_LOG = "caselist-sync-runs.jsonl"
 RUN_DETAILS = "caselist-sync-run-details.jsonl"
 COMPARISON_INDEX = "comparison-index"
+CHECKED_AGAINST = "checked-against.json"
+CHECKED_AGAINST_FIELDS = ("parser_version", "stores", "snapshot", "suppression", "counts")
+"""What the record beside a manifest says in its place: what an identical rebuild read (`v1-e39-t19`)."""
 OUTCOMES = ("PARSED", "UNSUPPORTED", "FAILED")
 INDEX_COUNTS = (
     "documents",
@@ -104,6 +112,8 @@ class Comparison:
     cloud: dict[str, RecordsOf] = field(default_factory=dict)
     mac: dict[str, RecordsOf] = field(default_factory=dict)
     mac_build: str = ""
+    checked_against: str = "its manifest"
+    """What the cloud's index side was read from: its manifest, or the record beside it."""
 
     def differences(self) -> list[str]:
         """Each way the two disagree, in words: empty when they agree."""
@@ -243,6 +253,27 @@ def _stores(manifest: dict[str, object]) -> list[dict[str, object]]:
     return [store for store in stores if isinstance(store, dict)]
 
 
+def checked_against(directory: Path, manifest: bytes) -> tuple[dict[str, object] | None, str]:
+    """The record beside a restored manifest of what an identical rebuild read, and what was read.
+
+    `None` and `its manifest` without a record; `None` and why for a record that is not JSON or names
+    another index or manifest than this one, which is not read (`v1-e39-t19`).
+    """
+    path = directory / CHECKED_AGAINST
+    if not path.is_file():
+        return None, "its manifest"
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError:
+        return None, "its manifest; the record beside it is not one this script reads"
+    if not isinstance(record, dict) or (record.get("index_id"), record.get("manifest_sha256")) != (
+        directory.name,
+        hashlib.sha256(manifest).hexdigest(),
+    ):
+        return None, "its manifest; the record beside it names another manifest"
+    return record, f"the record beside its manifest, `{CHECKED_AGAINST}`"
+
+
 def newest_line_for(path: Path, run_id: str | None) -> dict[str, object]:
     """The newest line of a run log or its details, or the newest for `run_id`; empty when absent."""
     if not path.is_file():
@@ -282,13 +313,19 @@ def compare(build: Path, run_id: str, scratch: Path) -> Comparison:
     manifest_path = scratch / "tub-index" / str(index_id) / "manifest.json"
     if not index_id or not manifest_path.is_file():
         raise ComparisonStopped("the restore brought no published index manifest")
+    published = manifest_path.read_bytes()
+    cloud_index = json.loads(published)
+    checked, read_from = checked_against(manifest_path.parent, published)
+    if checked is not None:
+        cloud_index.update({name: checked[name] for name in CHECKED_AGAINST_FIELDS if name in checked})
     comparison = Comparison(
         run_id=run_id,
         restored=restored,
         record=record,
         details=newest_line_for(scratch / RUN_DETAILS, run_id),
-        cloud_index=json.loads(manifest_path.read_text(encoding="utf-8")),
+        cloud_index=cloud_index,
         mac_build=mac_build,
+        checked_against=read_from,
     )
 
     stores = _stores(comparison.cloud_index)
@@ -371,6 +408,7 @@ def report(comparison: Comparison, *, today: str) -> str:
         f"| Objects published | {record.get('objects_published')} |",
         f"| Sources its parse stage parsed | {parse.get('attempted')} (cards {parse.get('cards')}) |",
         f"| Index | `{comparison.cloud_index.get('index_id')}` |",
+        f"| Index checked against | {comparison.checked_against} |",
         f"| Restored | {comparison.restored.get('manifests')} manifests, "
         f"{comparison.restored.get('parsed_objects')} parsed-store objects at "
         f"`{comparison.restored.get('parsed_version')}`, in {comparison.restored.get('seconds')} s |",

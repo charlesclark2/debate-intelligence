@@ -25,7 +25,9 @@ that does not hold the lease.
    `tub-index/<index id>/manifest.json`, marked as restored. The search index stage compares the
    stores' digests with it and skips a rebuild when they match; a restored directory holds the
    manifest alone, so it is never published from, and a changed digest rebuilds
-   (:mod:`debate_core.application.search_index_refresh`).
+   (:mod:`debate_core.application.search_index_refresh`). Beside it, since `v1-e39-t19`, the
+   record of what an identical rebuild last checked it against, `checked-against.json`, when the
+   bucket holds one that names that manifest's digest: what the cutover's comparison reads.
 4. **The parsed store's current version directory** of each configured caselist and `openev`:
    `parsed/<caselist>/<version>/`, where the version is this build's parser version. Each object is
    downloaded and checked against the SHA-256 the parsed store's publisher recorded in its metadata;
@@ -92,12 +94,14 @@ from debate_core.application.ports.evidence_store import EvidenceObjectStore, Ob
 from debate_core.application.ports.parsed_store import OPENEV_STORE
 from debate_core.application.ports.run_state import RUN_STATE_BUNDLE_KEY, RUN_STATE_PREFIX, RunStateFiles
 from debate_core.application.ports.suppression import HeldDigestList, SuppressionList
+from debate_core.application.search_index_publish import CHECKED_AGAINST_NAME, read_checked_against
 from debate_core.application.search_index_refresh import RESTORED_INDEX_MARKER, SEARCH_INDEX_DIRECTORY
 from debate_core.application.sync_runs import SYNC_RUN_DETAILS_FILENAME, SYNC_RUN_LOG_FILENAME
 from debate_core.domain.search_index import (
     SEARCH_INDEX_MANIFEST_NAME,
     SEARCH_INDEX_POINTER_KEY,
     SearchIndexPointer,
+    index_object_key,
 )
 
 __all__ = [
@@ -357,7 +361,27 @@ class RunState:
                 encoding="utf-8",
             )
             manifest.replace(directory / SEARCH_INDEX_MANIFEST_NAME)
+            await self._restore_checked_against(pointer, directory, Path(scratch))
         return pointer.index_id
+
+    async def _restore_checked_against(
+        self, pointer: SearchIndexPointer, directory: Path, scratch: Path
+    ) -> None:
+        """The record beside the published manifest of what it was last checked against (`v1-e39-t19`).
+
+        Restored beside the manifest when it stands beside it, and otherwise not: a record that names
+        another manifest, or that this build cannot read, is no record of this one.
+        """
+        restored = directory / CHECKED_AGAINST_NAME
+        restored.unlink(missing_ok=True)
+        landed = scratch / CHECKED_AGAINST_NAME
+        try:
+            await self._bucket.get_file(index_object_key(pointer.index_id, CHECKED_AGAINST_NAME), landed)
+        except NotFound:
+            return
+        record = read_checked_against(landed.read_bytes())
+        if record is not None and record.stands_beside(pointer):
+            landed.replace(restored)
 
     async def _restore_parsed(self, store: str, version: str) -> tuple[int, int, int]:
         """One store's version directory: (objects fetched, objects already held, bytes fetched)."""

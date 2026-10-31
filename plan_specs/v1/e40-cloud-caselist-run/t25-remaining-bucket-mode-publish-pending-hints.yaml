@@ -54,7 +54,7 @@ spec:
         publish, local mode is unchanged, and the cloud image and the Mac's installed build
         read every record written, by tests shown failing first.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

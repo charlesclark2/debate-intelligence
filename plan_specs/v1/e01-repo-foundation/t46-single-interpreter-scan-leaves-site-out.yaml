@@ -1,0 +1,69 @@
+# TASK v1-e01-t46-single-interpreter-scan-leaves-site-out - The single-interpreter scan leaves site/ out, as the Node project it is
+# Epic: E01 Repository & Delivery Foundation | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t46-single-interpreter-scan-leaves-site-out
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: "The single-interpreter scan leaves site/ out, as the Node project it is"
+spec:
+  # Filed by the PM, 2026-10-31, from v1-e36-t12's Follow-up work 1 (the PM's review, 2026-10-31).
+  description: >-
+    Since v1-e36-t12 a change only under `site/` runs no Python test, but
+    `tests/architecture/test_single_interpreter_source.py` scans every tracked file, so a Python
+    version written into a site page or source would fail it on dev's push run instead of on the
+    pull request. Nothing under `site/` runs this repository's Python, and the scan already
+    treats `site/pnpm-lock.yaml` as another ecosystem's. Add `site/` to the scan's permitted
+    directories, with a test that a Python version under `site/` is not reported and one under
+    `scripts/` still is.
+  priority: 3
+  constraints:
+    packages: [tests/architecture]
+    forbidden:
+      - A Python version outside site/ left unreported
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A Python version written under site/ is not reported, one under scripts/ or
+        packages/ still is, by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t46-single-interpreter-scan-leaves-site-out-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    The single-interpreter scan leaves site/ out, as the Node project it is.
+  goalRef:
+    name: v1-e01-t46-single-interpreter-scan-leaves-site-out
+  graph:
+    nodes:
+      - id: single-interpreter-scan-leaves-site-out
+        kind: Task
+        name: Scan leaves site out
+        description: >-
+          The single-interpreter scan leaves site/ out, as the Node project it is.
+        estimatedEffort: 30m
+        acceptanceCriteria:
+          - type: test_passes
+            name: Scan leaves site out tests pass
+            command: uv
+            args: [run, pytest, tests/architecture, -k, interpreter]
+status:
+  phase: Pending

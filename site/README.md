@@ -335,3 +335,7 @@ describes what that job does:
 
 That is about twenty seconds of work plus the install, well inside the CI budget in
 [`docs/process/working-agreements.md`](../docs/process/working-agreements.md).
+
+On a pull request into `main` the job then runs `SITE_ENV=prod SITE_URL=https://wfbdebate.com
+site/scripts/export-checks.sh`, the prod build validate-dev's site lane runs, in which the policy and
+consent guards are fatal (`v1-e36-t12`).

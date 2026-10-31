@@ -468,5 +468,58 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e40-t21-restored-copy-marker
+    - id: t22
+      kind: Task
+      name: 'In bucket mode the login banner and the parse stage''s other hints point at the cloud run, not the operator''s Mac'
+      description: >-
+        In bucket mode the login banner and the parse stage's other hints point at the cloud
+        run, not the operator's Mac.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t22-bucket-mode-hints-point-at-the-cloud.yaml
+        goalRef: v1-e40-t22-bucket-mode-hints-point-at-the-cloud
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t22-bucket-mode-hints-point-at-the-cloud reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t22-bucket-mode-hints-point-at-the-cloud
+    - id: t23
+      kind: Task
+      name: 'The leftover search drops its pre-marker list, and a report over a restored copy requires the marker'
+      description: >-
+        The leftover search drops its pre-marker list, and a report over a restored copy
+        requires the marker.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t23-restored-copy-marker-required.yaml
+        goalRef: v1-e40-t23-restored-copy-marker-required
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t23-restored-copy-marker-required reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t23-restored-copy-marker-required
+    - id: t24
+      kind: Task
+      name: 'A restore refuses both environments'' data directories, not only its own'
+      description: >-
+        A restore refuses both environments' data directories, not only its own.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t24-restore-refuses-either-data-directory.yaml
+        goalRef: v1-e40-t24-restore-refuses-either-data-directory
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t24-restore-refuses-either-data-directory reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t24-restore-refuses-either-data-directory
 status:
   phase: Pending

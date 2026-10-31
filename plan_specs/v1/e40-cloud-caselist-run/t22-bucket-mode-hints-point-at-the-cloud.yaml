@@ -1,0 +1,77 @@
+# TASK v1-e40-t22-bucket-mode-hints-point-at-the-cloud - In bucket mode the login banner and the parse stage's other hints point at the cloud run, not the operator's Mac
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t22-bucket-mode-hints-point-at-the-cloud
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "In bucket mode the login banner and the parse stage's other hints point at the cloud run, not the operator's Mac"
+spec:
+  # Filed by the PM, 2026-10-31, from v1-e40-t18's Follow-up work 2 and 3 (the PM's review, 2026-10-31).
+  description: >-
+    v1-e40-t18 made a failed parse stage name the cloud cure in bucket mode. Three hints there
+    still point at the Mac: the login banner's fix (`aws sso login && debate-research caselist
+    pull --publish-pending`, a publish of snapshots from wherever it is run),
+    `_FAILURE_RATE_FIX` (`caselist parse --caselist <slug> --failures`, which lists the Mac's
+    own store's failures, not the cloud run's), and `NewerFingerprintTable.fix` ("install that
+    build for the weekly agent"). In bucket mode, decided as v1-e40-t18 decides it (the details'
+    `bucket_run`, the service's `bucket_mode`), each names what the cloud run's operator does
+    instead, or says it is the PM's. Local mode keeps its wording. Tidy the pending reason's
+    `").;` join while there.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
+    forbidden:
+      - A bucket-mode hint naming a command that publishes from the operator's working copy
+      - A record shape an earlier build refuses to read
+      - Network or AWS access in any test
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        In bucket mode the login banner, the failure-rate hint and the newer-fingerprint
+        hint name the cloud run's cure and no Mac-side publish, local mode is unchanged, and
+        dev.164 and the Mac's installed build read every record written, by tests shown
+        failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t22-bucket-mode-hints-point-at-the-cloud-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    In bucket mode the login banner and the parse stage's other hints point at the cloud run,
+    not the operator's Mac.
+  goalRef:
+    name: v1-e40-t22-bucket-mode-hints-point-at-the-cloud
+  graph:
+    nodes:
+      - id: bucket-mode-hints-point-at-the-cloud
+        kind: Task
+        name: Bucket-mode hints
+        description: >-
+          In bucket mode the login banner and the parse stage's other hints point at the
+          cloud run, not the operator's Mac.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Bucket-mode hints tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, caselist_sync]
+status:
+  phase: Pending

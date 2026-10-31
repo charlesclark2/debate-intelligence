@@ -1,0 +1,78 @@
+# TASK v1-e40-t23-restored-copy-marker-required - The leftover search drops its pre-marker list, and a report over a restored copy requires the marker
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t23-restored-copy-marker-required
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "The leftover search drops its pre-marker list, and a report over a restored copy requires the marker"
+spec:
+  # Filed by the PM, 2026-10-31, from v1-e40-t21's Follow-up work 1 and 2 (the PM's review, 2026-10-31).
+  description: >-
+    v1-e40-t21's searches keep a second list, "restored before the marker": the old three-level
+    `debate.sqlite3` search, for copies builds before it made. Start only once a pass of either
+    runbook's search, on a build carrying v1-e40-t21, has printed `restored before the marker:
+    0`; the operator's record of that pass goes in the report. Then remove that list from
+    annual-purge.md, the landscape runbook and `test_restored_copy_search.py`, keeping the
+    purge's instruction to report any other directory holding `debate.sqlite3`, and make
+    `landscape report --restored-copy` refuse a directory with no marker, with a code and a hint
+    naming the restore command.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks, tests/docs]
+    forbidden:
+      - A school, team code or path in a refusal
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e40-t21-restored-copy-marker
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The operator's pass printing `restored before the marker: 0` is recorded; the second
+        list is gone from both runbooks and their test; a `--restored-copy` with no marker
+        is refused with its code and hint and a marked copy is accepted, by tests shown
+        failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t23-restored-copy-marker-required-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    The leftover search drops its pre-marker list, and a report over a restored copy requires
+    the marker.
+  goalRef:
+    name: v1-e40-t23-restored-copy-marker-required
+  graph:
+    nodes:
+      - id: restored-copy-marker-required
+        kind: Task
+        name: Marker required
+        description: >-
+          The leftover search drops its pre-marker list, and a report over a restored copy
+          requires the marker.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Marker required tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, restore]
+status:
+  phase: Pending

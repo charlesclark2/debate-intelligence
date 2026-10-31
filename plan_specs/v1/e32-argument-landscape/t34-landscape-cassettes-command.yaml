@@ -1,0 +1,77 @@
+# TASK v1-e32-t34-landscape-cassettes-command - A command lists and deletes one caselist's model cassettes, and the annual purge calls it
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t34-landscape-cassettes-command
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "A command lists and deletes one caselist's model cassettes, and the annual purge calls it"
+spec:
+  # Filed by the PM, 2026-10-31, from v1-e32-t31's Follow-up work 1 and 2 (the PM's review, 2026-10-31).
+  description: >-
+    v1-e32-t31 filed each model cassette under the caselists it serves and built
+    `caselist_cassettes` and `delete_caselist_cassettes`, but no command reaches them, so
+    annual-purge step 4 carries a heredoc copy of the delete rule, held to the application's by
+    a byte-for-byte test. Add `debate-research landscape cassettes --caselist <slug>` (a count
+    of sole-owned, shared and unattributed cassettes) with `--delete` behind a confirmation,
+    over those functions. Step 4 then calls it, and the heredoc script and its twin test go. Add
+    the sentence on `caselists` to `tests/fixtures/model_cassettes/README.md`. The command runs
+    from a checkout, as the model stage does.
+  priority: 3
+  constraints:
+    packages: [debate_cli, packages/debate_cli/tests, debate_core.application, packages/debate_core/tests, docs/runbooks, tests/docs, tests/fixtures/model_cassettes]
+    forbidden:
+      - A cassette deleted that another caselist still names, or one that names no caselist
+      - A school, team code or path in the command's output
+      - A real model call in a test
+  context:
+    - kind: TaskRef
+      name: v1-e32-t31-cassettes-filed-by-caselist
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The command counts and, behind a confirmation, deletes only a caselist's sole-owned
+        cassettes, keeping shared and unattributed ones; annual-purge step 4 calls it and
+        the heredoc copy is gone; by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t34-landscape-cassettes-command-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    A command lists and deletes one caselist's model cassettes, and the annual purge calls it.
+  goalRef:
+    name: v1-e32-t34-landscape-cassettes-command
+  graph:
+    nodes:
+      - id: landscape-cassettes-command
+        kind: Task
+        name: Cassettes command
+        description: >-
+          A command lists and deletes one caselist's model cassettes, and the annual purge
+          calls it.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Cassettes command tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests, -k, cassette]
+status:
+  phase: Pending

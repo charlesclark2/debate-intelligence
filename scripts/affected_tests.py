@@ -67,15 +67,28 @@ working tree's uncommitted and untracked files, and selects every test file one 
   * A change to `container.py` itself is read part by part too (v1-e01-t43): both sides are parsed
     and compared, and a part whose code changed, or a new one, is where the walk starts, so it
     reaches what asks for that part and for the parts that call it. Anything that runs when the
-    module is imported is the whole file's: an import, a module constant, the container's own
-    attributes, docstring and dunder methods (`__init__`), a part's decorators, defaults or class
-    body (a new part may add only `@property`, `@staticmethod`, `@classmethod` and literal
-    defaults). So are a part removed, renamed or moved, a changed part that assigns a module name
-    (`global`), a part module code uses, a part the graph's tree does not have, and a side that is
-    missing or does not parse. A change to comments or layout alone reaches no part. A file that
-    names the container module in a string is still reached by that name, unless it reads the
-    container whole, which its edges to every part already say. `--whole-container` reads any
-    change to the file as the whole file, as before.
+    module is imported is the whole file's: a module constant, the container's own attributes,
+    docstring and dunder methods (`__init__`), a part's decorators, defaults or class body (a new
+    part may add only `@property`, `@staticmethod`, `@classmethod` and literal defaults). So are a
+    part removed, renamed or moved, a changed part that assigns a module name (`global`), a part
+    module code uses, a part the graph's tree does not have, and a side that is missing or does not
+    parse. A change to comments or layout alone reaches no part.
+  * The imports at the top are read by use (v1-e41-t06). When they load the same modules in the
+    same order on both sides, nothing new runs on import and only names are rebound: the parts
+    that use a rebound name are walked from, with the files that import it from the container or
+    read it off the module. `import a.b` loads `a` and `a.b`; `from a.b import c` loads `a.b.c`
+    too unless `c` is known not to be a module (a workspace package's file, or the standard
+    library's). An `if TYPE_CHECKING:` block of imports loads nothing, and its names are read by
+    use like any other. A module loaded or no longer loaded is the whole file, and so is a rebound
+    name that code run on import uses or a definition binds, a module that reads its names by a
+    name it computes (`globals()`), a star import, and an import anywhere but the top, which are
+    read as module code, as before. An import inside a part is that part's.
+  * A file that names the container module in a string is still reached by that name, unless it
+    reads the container whole, which its edges to every part already say, or names it only as
+    `"debate_cli.container.X"`, a `monkeypatch.setattr` target (v1-e41-t06). That file asks for part
+    X, or `ServiceContainer.X`; any other X is a name the container imports or defines, reached
+    when an import rebinds it, and otherwise only as the whole file. `--whole-container` reads any
+    change to the file as the whole file, and those strings as naming the module, as before.
   * A file that can hold a container (a `debate_cli` module, or a file that imports one) reaches
     each part it names, as an attribute or a quoted word: `cli.services.X`, `services.X` after
     `services = cli.services`, a helper handed the container that calls `services.X`, or a test's
@@ -2910,7 +2923,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--whole-container",
         action="store_true",
-        help=f"read a change to {CONTAINER} as the whole file, as before v1-e01-t43",
+        help=(
+            f"read a change to {CONTAINER} as the whole file, as before v1-e01-t43, and a "
+            f"{CONTAINER_MODULE}.X string as naming the module, as before v1-e41-t06"
+        ),
     )
     parser.add_argument(
         "--every-mention-runs",

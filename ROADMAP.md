@@ -62,13 +62,13 @@ v2.3's extension work.
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 55 | 252 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 109 | 90 | 499 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 62 | 49 | 290 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 66 | 50 | 296 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 16 | 11 | 114 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 29 | 20 | 166 |
-| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 24 | 19 | 86 |
-| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 36 | 19 | 70 |
+| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 25 | 20 | 88 |
+| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 38 | 19 | 74 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -320,6 +320,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [An AWS budget alarm on the account's model spend, $100 a month with a first notice at $50](plan_specs/v1/e05-model-router/t16-bedrock-budget-alarm.yaml) `v1-e05-t16-bedrock-budget-alarm` | Succeeded | 1 | 2.0 |
 | [Dev back on the 5.5 models, and prod's Bedrock grant applied, once the quotas are restored](plan_specs/v1/e05-model-router/t17-switch-back-to-the-5-5-models.yaml) `v1-e05-t17-switch-back-to-the-5-5-models` | Blocked | 3 | 2.0 |
 | [The cost allocation tags are active by Terraform, so the budgets that filter on them never read zero again](plan_specs/v1/e05-model-router/t18-cost-allocation-tags-in-terraform.yaml) `v1-e05-t18-cost-allocation-tags-in-terraform` | InProgress | 1 | 1.0 |
+| [The cost allocation tags' import blocks are removed once both tags are in state](plan_specs/v1/e05-model-router/t19-cost-allocation-tag-imports-removed.yaml) `v1-e05-t19-cost-allocation-tag-imports-removed` | Pending | 1 | 0.5 |
 
 #### [E32 — Argument Landscape Reports](plan_specs/v1/e32-argument-landscape/epic.yaml)
 
@@ -359,6 +360,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [A landscape model stage stopped by throttling ends as retryable, not as a verdict](plan_specs/v1/e32-argument-landscape/t32-throttled-model-stage-is-retryable.yaml) `v1-e32-t32-throttled-model-stage-is-retryable` | Succeeded | 0 | 1.0 |
 | [A throttled landscape evaluation exits as retryable, and a throttled stop says how long to wait](plan_specs/v1/e32-argument-landscape/t33-landscape-evaluate-retry-exit.yaml) `v1-e32-t33-landscape-evaluate-retry-exit` | Pending | 1 | 1.0 |
 | [A command lists and deletes one caselist's model cassettes, and the annual purge calls it](plan_specs/v1/e32-argument-landscape/t34-landscape-cassettes-command.yaml) `v1-e32-t34-landscape-cassettes-command` | Pending | 1 | 1.0 |
+| [A CP text the landscape shows is whole: a text ending in a colon shows its planks, and a text split across paragraphs is joined](plan_specs/v1/e32-argument-landscape/t35-cp-texts-shown-whole.yaml) `v1-e32-t35-cp-texts-shown-whole` | Pending | 1 | 3.0 |
 
 #### [E33 — Evidence File Builder](plan_specs/v1/e33-file-builder/epic.yaml)
 
@@ -368,12 +370,14 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [Lossless card writer](plan_specs/v1/e33-file-builder/t02-lossless-card-writer.yaml) `v1-e33-t02-lossless-card-writer` | Succeeded | 3 | 15.0 |
 | [`debate-research files` commands](plan_specs/v1/e33-file-builder/t03-file-build-cli.yaml) `v1-e33-t03-file-build-cli` | Succeeded | 4 | 10.0 |
 | [Built-file quality checks](plan_specs/v1/e33-file-builder/t04-file-quality-checks.yaml) `v1-e33-t04-file-quality-checks` | Succeeded | 2 | 11.0 |
-| [Publish built files to S3](plan_specs/v1/e33-file-builder/t05-file-publish.yaml) `v1-e33-t05-file-publish` | InProgress | 3 | 9.0 |
+| [Publish built files to S3](plan_specs/v1/e33-file-builder/t05-file-publish.yaml) `v1-e33-t05-file-publish` | Succeeded | 3 | 9.0 |
 | [A recipe can name a camp (OpenEv) card](plan_specs/v1/e33-file-builder/t06-camp-pins.yaml) `v1-e33-t06-camp-pins` | Succeeded | 1 | 2.0 |
 | [A camp occurrence row carries its camp path's digest, so a camp-path withdrawal stops it before a rebuild](plan_specs/v1/e33-file-builder/t07-camp-path-on-occurrence-rows.yaml) `v1-e33-t07-camp-path-on-occurrence-rows` | Pending | 1 | 2.0 |
 | [Built files carry no provenance line; the sidecar keeps the provenance](plan_specs/v1/e33-file-builder/t08-provenance-line-one-function.yaml) `v1-e33-t08-provenance-line-one-function` | Succeeded | 0 | 1.0 |
 | [files build refuses a store written under another style profile, as it refuses another parser version](plan_specs/v1/e33-file-builder/t09-style-profile-version-refusal.yaml) `v1-e33-t09-style-profile-version-refusal` | Succeeded | 1 | 1.0 |
 | [files check and files publish warn when a built file's style profile is not the running one](plan_specs/v1/e33-file-builder/t10-sidecar-style-profile-warning.yaml) `v1-e33-t10-sidecar-style-profile-warning` | Pending | 1 | 1.0 |
+| [files suggest drafts a CP file a coach can build on: a CP text slot first, no other position's blocks, and plank-dependent blocks marked](plan_specs/v1/e33-file-builder/t11-suggest-drafts-a-cp-file-a-coach-can-build-on.yaml) `v1-e33-t11-suggest-drafts-a-cp-file-a-coach-can-build-on` | Pending | 1 | 2.0 |
+| [files check and files build name each warned or failed card, its check and why, as the quality report does](plan_specs/v1/e33-file-builder/t12-files-check-names-each-warned-card.yaml) `v1-e33-t12-files-check-names-each-warned-card` | Pending | 1 | 1.0 |
 
 
 ### v1.3 — URL → verified card
@@ -535,7 +539,8 @@ Debaters search the team's evidence store from a school Chromebook or at home: a
 | [The tub deploy test records each stub call alone, as the caselist run's does](plan_specs/v1/e39-evidence-search-pilot/t21-one-call-recorder-for-deploy-tests.yaml) `v1-e39-t21-one-call-recorder-for-deploy-tests` | Succeeded | 0 | 1.0 |
 | [Smoke checks for tub index build, publish and prune, and a test of P4's shape](plan_specs/v1/e39-evidence-search-pilot/t22-tub-index-commands-smoke-and-p4-shape.yaml) `v1-e39-t22-tub-index-commands-smoke-and-p4-shape` | Succeeded | 1 | 2.0 |
 | [uvicorn's app factory lives in the composition root, so app.py stops reaching every adapter](plan_specs/v1/e39-evidence-search-pilot/t23-uvicorn-factory-in-the-composition-root.yaml) `v1-e39-t23-uvicorn-factory-in-the-composition-root` | Pending | 1 | 1.0 |
-| [A card or cart download skips the header page, and the student can name its pocket](plan_specs/v1/e39-evidence-search-pilot/t24-download-skips-the-header-page-and-names-its-pocket.yaml) `v1-e39-t24-download-skips-the-header-page-and-names-its-pocket` | Pending | 1 | 2.0 |
+| [A card or cart download skips the header page, and the student can name its pocket](plan_specs/v1/e39-evidence-search-pilot/t24-download-skips-the-header-page-and-names-its-pocket.yaml) `v1-e39-t24-download-skips-the-header-page-and-names-its-pocket` | Succeeded | 1 | 2.0 |
+| [The weekly index stage skips an identical rebuild its record already matches, and publish --newest on the current index records instead of republishing](plan_specs/v1/e39-evidence-search-pilot/t25-identical-rebuild-skipped-and-newest-records.yaml) `v1-e39-t25-identical-rebuild-skipped-and-newest-records` | Pending | 1 | 2.0 |
 
 
 ### v1.8 — Weekly caselist run in the cloud
@@ -573,6 +578,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [In bucket mode the failed-publish banners and the CLI's next step point at the cloud run, not a publish from the Mac](plan_specs/v1/e40-cloud-caselist-run/t25-remaining-bucket-mode-publish-pending-hints.yaml) `v1-e40-t25-remaining-bucket-mode-publish-pending-hints` | Succeeded | 2 | 1.0 |
 | [A smoke check reads parses_owed from caselist runs and caselist status](plan_specs/v1/e40-cloud-caselist-run/t26-parses-owed-smoke-check.yaml) `v1-e40-t26-parses-owed-smoke-check` | Pending | 1 | 0.5 |
 | [store sync never moves reports/sync/, so a push of pulled copies cannot overwrite the run's lock or state files](plan_specs/v1/e40-cloud-caselist-run/t27-store-sync-leaves-the-run-state-alone.yaml) `v1-e40-t27-store-sync-leaves-the-run-state-alone` | Pending | 1 | 1.0 |
+| [The last bucket-mode wording pass: banners and the CLI name the next cloud run, and a cloud run's login hint names the task role](plan_specs/v1/e40-cloud-caselist-run/t28-last-bucket-mode-wording-pass.yaml) `v1-e40-t28-last-bucket-mode-wording-pass` | Pending | 1 | 2.0 |
 
 #### [E41 — Delivery Tooling Upkeep](plan_specs/v1/e41-delivery-tooling-upkeep/epic.yaml)
 
@@ -587,6 +593,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [The spec validator holds each epic's graph to its tasks' prerequisites, and the task helper refuses a prerequisite it cannot find](plan_specs/v1/e41-delivery-tooling-upkeep/t07-spec-graph-checks.yaml) `v1-e41-t07-spec-graph-checks` | Succeeded | 1 | 2.0 |
 | [Test selection reads a run-shaped string in an f-string or a comparison, and a shell script's quoted command words](plan_specs/v1/e41-delivery-tooling-upkeep/t08-run-shaped-strings-read-wherever-they-stand.yaml) `v1-e41-t08-run-shaped-strings-read-wherever-they-stand` | Pending | 1 | 2.0 |
 | [validate_specs.py is clean under pyright, and task start refuses an unknown prerequisite even under --force](plan_specs/v1/e41-delivery-tooling-upkeep/t09-validate-specs-pyright-and-start-refuses-unknown.yaml) `v1-e41-t09-validate-specs-pyright-and-start-refuses-unknown` | Pending | 1 | 1.0 |
+| [An unknown DEBATE_ name in .env is refused, and files build tells a newer-stamped store to install the newer build](plan_specs/v1/e41-delivery-tooling-upkeep/t10-unknown-env-names-refused-and-newer-stamp-hint.yaml) `v1-e41-t10-unknown-env-names-refused-and-newer-stamp-hint` | Pending | 1 | 1.0 |
 
 
 ## V2

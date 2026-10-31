@@ -43,4 +43,4 @@ RUN pip install --no-cache-dir --disable-pip-version-check --require-hashes --on
 # interface client for a handler; here the Web Adapter talks to the Runtime API instead, and
 # forwards each event to this server on port 8080 once /healthz answers. --no-access-log: an
 # access log line holds the client's address and the query string (gate item 4).
-ENTRYPOINT ["python3", "-m", "uvicorn", "debate_api.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8080", "--no-access-log"]
+ENTRYPOINT ["python3", "-m", "uvicorn", "debate_api.container:create_app_from_environment", "--factory", "--host", "0.0.0.0", "--port", "8080", "--no-access-log"]

@@ -9,10 +9,12 @@ Routes only — **no business logic here**. First spec:
 Before V2's service, `debate_api` serves the student evidence search pilot of
 [ADR-0019](../../docs/adr/0019-student-search-pilot-stack-sign-in-and-hosting.md): server-rendered
 pages from a plain ASGI app, which uvicorn serves and the Lambda Web Adapter forwards function URL
-events to. `debate_api.app:create_app` is the app factory; `debate_api.container` is its
-composition root, the only module that builds an adapter. Sign-in and the account pages are
-`v1-e39-t05`'s; the search pages, the card page and Copy card are `v1-e39-t06`'s; the landscape
-pages are `v1-e39-t17`'s.
+events to. `debate_api.container` is its composition root, the only module that builds an adapter,
+and holds uvicorn's app factory, `debate_api.container:create_app_from_environment`.
+`debate_api.app:create_app` builds the app over the services it is given and never imports the
+container, so a test of the app reaches only the adapters its own services name (`v1-e39-t23`).
+Sign-in and the account pages are `v1-e39-t05`'s; the search pages, the card page and Copy card
+are `v1-e39-t06`'s; the landscape pages are `v1-e39-t17`'s.
 
 | Module | What it holds |
 |---|---|
@@ -24,7 +26,7 @@ pages are `v1-e39-t17`'s.
 | `cookies` | the AES-GCM `__Host-` cookies and what each holds |
 | `configuration` | the environment variables, and the cookie keys (the placeholder is refused) |
 | `pages`, `templates/`, `static/` | server-rendered pages, the one first-party script and the one stylesheet |
-| `container` | the composition root: Parameter Store, Cognito, the audit log and the search index holder |
+| `container` | the composition root: Parameter Store, Cognito, the audit log and the search index holder, and uvicorn's app factory |
 
 The rules (lifetimes, who gets a session, the account changes) are in
 `debate_core.application.tub`; the adapters in `debate_core.integrations.cognito`,

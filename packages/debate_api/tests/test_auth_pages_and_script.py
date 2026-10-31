@@ -11,8 +11,10 @@
 
 from __future__ import annotations
 
+import ast
 import re
 from importlib.resources import files
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -149,10 +151,23 @@ def test_there_is_no_interactive_api_documentation(world: Any, path: str) -> Non
 
 
 def test_importing_the_module_builds_no_app() -> None:
-    """uvicorn runs `debate_api.app:create_app --factory`; a module-level app would be a second one."""
+    """uvicorn builds the app with `debate_api.container`'s factory; a module-level one would be a second."""
     import debate_api.app as module
 
     assert not any(type(value).__name__ == "FastAPI" for value in vars(module).values())
+
+
+def test_the_app_module_never_imports_the_composition_root() -> None:
+    """Not even inside a function (`v1-e39-t23`): to the test selector, every test that builds the app
+    would then reach every adapter the function wires, the parser, the writer, Cognito and S3 among them."""
+    import debate_api.app as module
+
+    tree = ast.parse(Path(str(module.__file__)).read_text(encoding="utf-8"))
+    imported = {alias.name for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names}
+    imported |= {node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)}
+
+    assert "debate_api" in {name.split(".")[0] for name in imported}
+    assert not {name for name in imported if name.endswith("container")}
 
 
 def test_the_templates_and_the_script_ship_in_the_package() -> None:

@@ -556,7 +556,7 @@ def test_uvicorn_serves_the_app_on_the_adapters_port_with_no_access_log() -> Non
     [entrypoint] = [line for line in dockerfile.splitlines() if line.startswith("ENTRYPOINT ")]
 
     assert '"--no-access-log"' in entrypoint
-    assert '"debate_api.app:create_app", "--factory"' in entrypoint
+    assert '"debate_api.container:create_app_from_environment", "--factory"' in entrypoint
     port = re.search(r'"--port", "(\d+)"', entrypoint)
     assert port
     assert re.search(rf"lambda_web_adapter_port\s*=\s*{port.group(1)}\n", module)

@@ -94,8 +94,15 @@ def test_the_functions_app_configures_it_and_a_tests_own_app_does_not(
     create_app(world.services)
     assert ours() == []
 
-    monkeypatch.setattr(debate_api.container, "build_pilot_services", lambda environ: world.services)
-    create_app()
+    configured_when_built: list[bool] = []
+
+    def build_pilot_services(environ: object) -> Any:
+        configured_when_built.append(ours() != [])
+        return world.services
+
+    monkeypatch.setattr(debate_api.container, "build_pilot_services", build_pilot_services)
+    debate_api.container.create_app_from_environment()
+    assert configured_when_built == [True], "the log is configured before the services are built"
     [handler] = ours()
     assert isinstance(handler, logging.StreamHandler)
     assert logging.getLogger(HOLDER).getEffectiveLevel() == logging.INFO

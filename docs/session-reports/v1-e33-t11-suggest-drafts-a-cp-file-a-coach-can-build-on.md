@@ -242,9 +242,53 @@ files).
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-31
 
 **Notes:**
+
+A CP draft now opens where a CP file opens and drops the other positions' blocks. And the count is
+honest about what the plank rule cannot see.
+1. **ac1 passes.**
+   * Red against a skeleton: 8 failed at assertions. The guards that must not change passed at red:
+     the byte-for-byte non-CP draft, places-nothing, t-usfg keeping its block, and the slot building
+     as written.
+   * Seven mutants were caught. 4a's `KeyError`s were rightly not counted, since the two
+     assertion-level catches carry it.
+   * The node criterion passes (56).
+2. **The count is the standard the gate asked for.**
+   * It went through the pure functions with neither cache wired. `find -newer` printed 0 after each
+     run, so nothing was written to the dev data directory.
+   * Counts only, no heading text.
+   * 15 of 83 blocks (16 cards) are placed elsewhere, broken down by kind. The plank rule's candidates
+     were each measured before one was chosen.
+   * The probes show plainly that the rule misses the coach's two examples. Saying so is worth more
+     than a rule tuned to pass.
+3. **Decisions accepted:**
+   * the spec's placeholder;
+   * "another position" meaning any id but the CP's own;
+   * placing a heading through the matcher's own `place()`, which keeps the matcher unchanged and
+     takes the affected set from 237 to 104 files;
+   * left-out cards not backfilled;
+   * refusing a draft that would hold only the slot;
+   * the `--json` key null for a non-CP draft;
+   * `LandscapeRunResult.overrides` as an additive field.
+4. **Deviation 1 (no smoke change):** accepted, since `tests/smoke` and the example corpus are outside
+   the packages. It joins question 1's task below. **Deviation 2:** the brief's own form, accepted.
+5. **PM questions:**
+   * **Q1: B.** A WARN in the quality checks for an unreplaced CP text slot, naming the block. Publish
+     still goes ahead. One p3 E33 task after v1-e33-t12, which is changing files check's warnings. It
+     also takes Follow-up 2: a CP in the example corpus, and a smoke assertion that its draft opens
+     with the slot.
+   * **Q2: B.** A coach-edited list of plan-mechanism words in the topic config, which the rule also
+     reads. One p3 task (config/landscape and its loader). The coach seeds it; preempt and waiver are
+     the first two.
+   * **Q3:** put to the coach. A (as built) stands until he answers. If he chooses B (keep
+     advantage-placed blocks, marked), it is a small follow-up on this service.
+6. **Closing checks:** the affected set (104 files) reached 62% at its limit with nothing failing,
+   and is left to the PR's `ci` under agreement 10. The changed areas and the always-run list (710),
+   ruff, pyright, lint-imports, thin handlers, the command blocks and the specs are clean.
+7. **Merge:** a plain `scripts/task pr` once `ci` is green. v1-e32-t35 is running in the landscape. If
+   `landscape_run.py` conflicts with it, whichever merges second rebases.

@@ -46,7 +46,7 @@ spec:
         The operator applies dev, the PM having read the plan, and an unconditional put of
         the lock is refused while a conditional one succeeds (operator).
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

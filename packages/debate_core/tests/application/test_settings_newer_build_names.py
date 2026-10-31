@@ -27,7 +27,9 @@ from debate_core.application.settings import (
     load_settings,
 )
 
-VALUE = "value-of-a-newer-setting-that-must-never-be-printed"
+#: Short on purpose: Pydantic's own report shortens a long input to its two ends with "..." between,
+#: so a long sentinel would not be found whole in a report that quoted it.
+VALUE = "nwr-K3y-7Qx9"
 
 
 @pytest.fixture(autouse=True)

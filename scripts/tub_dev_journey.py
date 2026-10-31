@@ -257,8 +257,16 @@ def run_journey(
         "the copy carries a provenance line (data-use policy 1.11)",
     )
 
+    offered = page.get_by_role("button", name="Download .docx")
+    step(
+        say,
+        "download offered",
+        offered.count() == 1,
+        "the card page offers no download: the index was parsed by another parser than the one this "
+        "deploy runs (v1-e39-t08)",
+    )
     with page.expect_download(timeout=STEP_TIMEOUT_MS) as downloading:
-        page.get_by_role("button", name="Download .docx").click()
+        offered.click()
     saved = downloads / "downloaded.docx"
     downloading.value.save_as(saved)
     try:

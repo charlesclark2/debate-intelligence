@@ -46,6 +46,7 @@ JOURNEY_STEPS: Final = [
     "PASS Copy card",
     "PASS the copy holds the card",
     "PASS no provenance line in the copy",
+    "PASS download offered",
     "PASS download",
 ]
 

@@ -62,7 +62,11 @@ login domain's minimum TLS version. Each has a read-back check.
 | [10](#step-10--sign-in-on-dev-and-record-the-managed-logins-asset-hosts) | Sign in on dev and record the managed login's asset hosts | Chrome on your Mac |
 | [11](#step-11--prod) | Prod: the same sequence, the deploys from a `main` worktree | `$WT`, then a `main` worktree |
 | [12](#step-12--the-web-filter-request-to-school-it) | The web-filter request to school IT | email |
+| [Dev's smoke checks](#devs-smoke-checks-v1-e39-t10) | What validate-dev checks in dev with no account, and running it by hand | `$WT` |
+| [The journey](#the-signed-in-journey-on-dev) | The signed-in journey on dev, with the synthetic seed in and out of dev's index | your Mac and `$WT` |
 | [Promotion](#promoting-the-pilot-to-prod) | Everything prod needs before the coach's beta, in order, across the pilot's tasks | your Mac, `$WT` and the `main` worktree |
+| [The beta](#the-coachs-beta-v1-e39-t10) | The coach's beta checklist on prod, after the promotion | a school Chromebook, and Word |
+| [The app log](#measuring-the-pilot-from-the-app-log-v1-e39-t10) | Query time, cold-start index load and peak `/tmp`, from the app log | the CloudWatch console |
 
 ## Before you start
 
@@ -898,6 +902,443 @@ Thank you,
 Success looks like: IT's confirmation, and a Chromebook on the school network that opens
 `https://tub.wfbdebate.com/` and shows the sign-in page at `auth.tub.wfbdebate.com`. Record the date.
 
+## Dev's smoke checks (`v1-e39-t10`)
+
+validate-dev's `cloud` job checks the pilot in dev on every run, through CloudFront, with no account:
+`tests/smoke/cloud -m "live and dev"`. Eight `GET` requests, none signed in: `/healthz` answers
+`{"status":"ok"}`; `/`, a search and `/account` asked for without a session are sent, `302`, to
+`https://auth.tub.dev.wfbdebate.com/oauth2/authorize` with the pilot's callback; `/signed-out` links
+`app.js` and `app.css` at content-hashed paths served `public, max-age=31536000, immutable`, and a
+stale digest is `404`; and every answer carries CloudFront's Content-Security-Policy. The workflow
+holds no secret, no AWS credential and no TOTP seed. It checks what dev serves, whichever commit was
+last deployed there, so a pilot that is down in dev turns `validate-dev` red.
+
+To run the same checks by hand, after a deploy to dev or to confirm a red `cloud` job:
+
+**Operator command** (expected runtime ~10 s)
+Where: `$WT`
+```bash
+cd "$WT"
+uv run pytest tests/smoke/cloud -m "live and dev" -n 0 -p no:randomly
+```
+Success looks like `3 passed`. A failure names the request and what came back, for example
+`GET /search?q=reserve+margin: 200` (a page answered without a session) or a CSP that is not the
+distribution's.
+
+## The signed-in journey on dev
+
+What only a signed-in debater sees is checked by `scripts/tub_dev_journey.py`, which opens a Chromium
+window and waits for **you to sign in** on managed login's own page with your dev account (step 10's)
+and the code your authenticator app shows. Nothing stores a password, a seed or a session: the window's
+profile is new and is deleted when the script ends. It then searches the dev seed's card, opens it,
+copies it and downloads it; after a removal, a second command checks the card is gone.
+
+Run it before the coach's beta, and after a deploy to dev that changes the pages. It needs the seed in
+dev's index, which this section puts there by the ordinary commands and takes out again at the end,
+because the weekly run indexes only the caselists it follows and its shrink guard refuses an index that
+drops a store dev's current one holds: left in, the seed would stop the next Wednesday's publish.
+
+**The seed.** One weekly archive of the synthetic caselist `testcl26`, dated 2026-10-27, three files
+from three invented schools (Quillfern Academy, Ostrander Vale, Brindlecote High), each a structural
+fixture of the repository (`tests/fixtures/debate_files/structural/`), so no real disclosure is in
+it. `testcl26` is a slug `tub index build` accepts (`v1-e39-t22`) and no weekly run follows
+(`caselist.sync_caselists` is `hsld26`, `hspolicy26`, `hspf26`), so no run imports into it, restores
+it, indexes it or gives it a landscape report, and nothing of it reaches a real caselist's report.
+Dev's `testcl26` already holds `RM-2026-90`'s synthetic weeks, up to 2026-09-29; none of their schools
+is reused. The seed indexes to **2 documents** and 4 occurrences: one card in all three files, and the
+card the journey opens, *Reserve margins are already below the planning standard*, in the Quillfern
+Academy file alone, which is the file the removal takes.
+
+**Where the stores come from.** Since the cutover the cloud run holds dev's state, and this Mac's data
+directory no longer holds the weeks the cloud ran. So the index is built from a working copy restored
+from the dev bucket (`caselist restore-run-state`, as for a hand publish to prod), the seed imported
+into that copy, and the copy deleted at the end (data-use policy 1.18). Every block that writes runs
+with the copy named for that one command (`env DEBATE_STORAGE__DATA_DIR=...`), so no override is left
+set. Do it all in one terminal window, not on a Wednesday, and not while a cloud run holds the lock.
+
+Once: `uv run playwright install chromium`, in `$WT`.
+
+### J1 — Write the seed
+
+**Operator command** (expected runtime seconds; writes one file under your home directory)
+Where: `$WT`
+```bash
+cd "$WT"
+uv run python scripts/tub_dev_journey.py seed --out "$HOME/tub-journey-seed"
+```
+Success looks like, as of `v1-e39-t10`:
+
+```text
+archive /Users/<you>/tub-journey-seed/testcl26-2026-10-27.zip
+archive sha256 494c3359887c43ac5236c6d0f51701c6f978580efe9cb7c290451a0116948657
+caselist testcl26, snapshot 2026-10-27
+remove b3afe1c4f57df962b3200ec08b3d1efe023c0243a9b31154f787348864036fa8  Quillfern Academy/QfAn/...
+keep   0cf11d8ceb4127b9cece994680afba6d38771a41d1b920ee508af25c0a7c0ab6  Ostrander Vale/OvTe/...
+keep   dcb67b1adf100a78da2f7e96969b9e7d1e555eeddbe64be019f034a922a20268  Brindlecote High/BrHo/...
+```
+The `remove` line's sha256 is `REMOVE_SHA` in J7. The script writes the same bytes every time, so
+running it again changes nothing.
+
+### J2 — Restore a working copy from the dev bucket
+
+It holds the dev lock while it restores and writes nothing to the bucket but the lock. About 10 GB.
+It stops if a pull is running, a `DEBATE_*` override is set, or it is Wednesday.
+
+**Operator command** (expected runtime several minutes)
+Where: your Mac, the window you keep to J10
+```bash
+COPY="$HOME/.debate-research/dev-journey-copy"
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+OVERRIDES=$(env | grep '^DEBATE_' | cut -d= -f1 | tr '\n' ' ')
+echo "running pull: ${PULL:-none}"
+echo "DEBATE_ overrides: ${OVERRIDES:-none}"
+if [[ -n "$PULL" || -n "$OVERRIDES" || "$(date +%u)" = 3 ]]; then
+  echo "STOP: a pull is running, a DEBATE_ override is set (above), or it is Wednesday, the cloud run's day"
+else
+  aws sso login --profile debate-dev-evidence
+  cd "$HOME" && env DEBATE_ENV=dev debate-research caselist restore-run-state --into "$COPY"
+  ls "$COPY/debate-research-restored-copy.json"
+fi
+```
+Success looks like the restore's summary and then the marker's path. `RUN_LOCK_HELD`: a cloud run is
+going; wait for it (`debate-research caselist runs --remote --last 1`) and run the block again.
+
+### J3 — Import the seed into the copy
+
+Every block from here starts with the same check, and stops unless `COPY` names a restored copy.
+First the dry run, which writes nothing:
+
+**Operator command** (expected runtime seconds)
+Where: the same window
+```bash
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+OVERRIDES=$(env | grep '^DEBATE_' | cut -d= -f1 | tr '\n' ' ')
+if [[ -n "$PULL" || -n "$OVERRIDES" || "$(date +%u)" = 3 ]]; then
+  echo "STOP: a pull is running, a DEBATE_ override is set, or it is Wednesday"
+elif [[ ! -f "${COPY}/debate-research-restored-copy.json" ]]; then
+  echo "STOP: COPY does not name a restored copy; run J2 in this window"
+else
+  cd "$HOME" && env DEBATE_ENV=dev DEBATE_STORAGE__DATA_DIR="$COPY" debate-research caselist import \
+    "$HOME/tub-journey-seed/testcl26-2026-10-27.zip" --caselist testcl26 --snapshot 2026-10-27 --dry-run
+fi
+```
+Read: **3** members, **3** first seen, nothing skipped, held or warned about. Anything held at a
+removed path means the seed reuses a path `RM-2026-90` removed: stop. `SnapshotOutOfOrder` means
+`testcl26` has a week after 2026-10-27: stop, and take it to the PM. Then the import, which writes the
+copy only:
+
+**Operator command** (expected runtime seconds)
+Where: the same window
+```bash
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+OVERRIDES=$(env | grep '^DEBATE_' | cut -d= -f1 | tr '\n' ' ')
+if [[ -n "$PULL" || -n "$OVERRIDES" || "$(date +%u)" = 3 ]]; then
+  echo "STOP: a pull is running, a DEBATE_ override is set, or it is Wednesday"
+elif [[ ! -f "${COPY}/debate-research-restored-copy.json" ]]; then
+  echo "STOP: COPY does not name a restored copy; run J2 in this window"
+else
+  cd "$HOME" && env DEBATE_ENV=dev DEBATE_STORAGE__DATA_DIR="$COPY" debate-research caselist import \
+    "$HOME/tub-journey-seed/testcl26-2026-10-27.zip" --caselist testcl26 --snapshot 2026-10-27
+fi
+```
+Success looks like the same counts, now applied: 3 members, 3 first seen, 3 newly stored.
+
+### J4 — Publish the seed's week, then parse it
+
+The function downloads a card from the bucket's `raw/`, so the seed's sources go there. The dry run
+first:
+
+**Operator command** (expected runtime seconds)
+Where: the same window
+```bash
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+OVERRIDES=$(env | grep '^DEBATE_' | cut -d= -f1 | tr '\n' ' ')
+if [[ -n "$PULL" || -n "$OVERRIDES" || "$(date +%u)" = 3 ]]; then
+  echo "STOP: a pull is running, a DEBATE_ override is set, or it is Wednesday"
+elif [[ ! -f "${COPY}/debate-research-restored-copy.json" ]]; then
+  echo "STOP: COPY does not name a restored copy; run J2 in this window"
+else
+  cd "$HOME" && env DEBATE_ENV=dev DEBATE_STORAGE__DATA_DIR="$COPY" debate-research caselist publish \
+    --caselist testcl26 --snapshot 2026-10-27 --dry-run
+fi
+```
+Read: every planned upload is `testcl26`'s: its 2026-10-27 manifest and the seed's **3** sources
+under `raw/caselist/testcl26/`. Anything of another caselist: stop. Then the publish, and the parse of
+the copy, which writes the copy only and is the plan of the next block's publish:
+
+**Operator command** (expected runtime ~1 min)
+Where: the same window
+```bash
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+OVERRIDES=$(env | grep '^DEBATE_' | cut -d= -f1 | tr '\n' ' ')
+if [[ -n "$PULL" || -n "$OVERRIDES" || "$(date +%u)" = 3 ]]; then
+  echo "STOP: a pull is running, a DEBATE_ override is set, or it is Wednesday"
+elif [[ ! -f "${COPY}/debate-research-restored-copy.json" ]]; then
+  echo "STOP: COPY does not name a restored copy; run J2 in this window"
+else
+  cd "$HOME" && env DEBATE_ENV=dev DEBATE_STORAGE__DATA_DIR="$COPY" debate-research caselist publish \
+    --caselist testcl26 --snapshot 2026-10-27
+  cd "$HOME" && env DEBATE_ENV=dev DEBATE_STORAGE__DATA_DIR="$COPY" debate-research caselist parse --caselist testcl26
+fi
+```
+Success looks like the publish making the uploads its dry run planned, then the parse's table with
+**Sources 3**, **Parsed 3** and **Cards 4**, and the version it wrote. `--publish-only` takes no
+`--dry-run`: that table is its plan, and it publishes that version directory of `testcl26` and nothing
+else. Anything but those counts: stop. Then its aggregates to the bucket, so a removal finds them:
+
+**Operator command** (expected runtime seconds)
+Where: the same window
+```bash
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+OVERRIDES=$(env | grep '^DEBATE_' | cut -d= -f1 | tr '\n' ' ')
+if [[ -n "$PULL" || -n "$OVERRIDES" || "$(date +%u)" = 3 ]]; then
+  echo "STOP: a pull is running, a DEBATE_ override is set, or it is Wednesday"
+elif [[ ! -f "${COPY}/debate-research-restored-copy.json" ]]; then
+  echo "STOP: COPY does not name a restored copy; run J2 in this window"
+else
+  cd "$HOME" && env DEBATE_ENV=dev DEBATE_STORAGE__DATA_DIR="$COPY" debate-research caselist parse \
+    --caselist testcl26 --publish-only
+fi
+```
+Success looks like `parsed/testcl26/<version>/` published, its uploads above zero.
+
+### J5 — Build dev's index with the seed, and check it before it is published
+
+The build indexes the stores dev's current index holds, read from its manifest, and `testcl26`, from
+the copy. It writes the copy only. The check then compares the new manifest with the current one: every
+store dev's index holds must be the same store (its `occurrences_sha256`), the suppression list the
+same list, and `testcl26` must hold 2 documents. A copy that is behind the bucket, or a list the copy
+lacks, stops here, before anything is published.
+
+**Operator command** (expected runtime a few minutes, a rebuild of the full corpus)
+Where: the same window
+```bash
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+OVERRIDES=$(env | grep '^DEBATE_' | cut -d= -f1 | tr '\n' ' ')
+if [[ -n "$PULL" || -n "$OVERRIDES" || "$(date +%u)" = 3 ]]; then
+  echo "STOP: a pull is running, a DEBATE_ override is set, or it is Wednesday"
+elif [[ ! -f "${COPY}/debate-research-restored-copy.json" ]]; then
+  echo "STOP: COPY does not name a restored copy; run J2 in this window"
+else
+  SEED="$HOME/tub-journey-seed"
+  BUCKET=$(cd "$WT" && python3 -c 'import tomllib; print(tomllib.load(open("config/profiles/dev.toml", "rb"))["storage"]["s3"]["bucket"])')
+  aws s3 cp "s3://${BUCKET}/reports/tub/search/current.json" "$SEED/current.json" --profile debate-dev-evidence
+  MANIFEST_KEY=$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["manifest_key"])' "$SEED/current.json")
+  aws s3 cp "s3://${BUCKET}/${MANIFEST_KEY}" "$SEED/before-manifest.json" --profile debate-dev-evidence
+  STORES=$(python3 -I -c 'import json, sys; print(" ".join("--caselist " + one["caselist"] for one in json.load(open(sys.argv[1]))["stores"]))' "$SEED/before-manifest.json")
+  echo "dev's index holds: $STORES"
+  cd "$HOME" && env DEBATE_ENV=dev DEBATE_STORAGE__DATA_DIR="$COPY" debate-research --json tub index build \
+    ${=STORES} --caselist testcl26 > "$SEED/seeded-build.json"
+  echo "build exit $?"
+  python3 -I - "$SEED/before-manifest.json" "$SEED/seeded-build.json" <<'PY'
+import json, sys
+before = json.load(open(sys.argv[1]))
+built = json.load(open(sys.argv[2]))["data"]["manifest"]
+old = {one["caselist"]: one["occurrences_sha256"] for one in before["stores"]}
+new = {one["caselist"]: one["occurrences_sha256"] for one in built["stores"]}
+problems = [f"{name}: not the store dev's index holds" for name in old if new.get(name) != old[name]]
+if built["suppression"]["sha256"] != before["suppression"]["sha256"]:
+    problems.append("the suppression list is not the one dev's index read")
+seeded = built["counts"]["documents_by_store"].get("testcl26")
+if seeded != 2:
+    problems.append(f"testcl26 holds {seeded} documents, not 2")
+print("built", built["index_id"], "from", sorted(new))
+print("\n".join("STOP: " + one for one in problems) or "OK: dev's stores and list, and the seed's 2 documents")
+PY
+fi
+```
+Success looks like `build exit 0`, the new index id with the stores and `testcl26`, then `OK: ...`. Any
+`STOP` line: publish nothing, delete the copy (J10) and take the lines to the PM. Then the publish,
+whose shrink guard passes because no store shrinks:
+
+**Operator command** (expected runtime ~2 min)
+Where: the same window
+```bash
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+OVERRIDES=$(env | grep '^DEBATE_' | cut -d= -f1 | tr '\n' ' ')
+if [[ -n "$PULL" || -n "$OVERRIDES" || "$(date +%u)" = 3 ]]; then
+  echo "STOP: a pull is running, a DEBATE_ override is set, or it is Wednesday"
+elif [[ ! -f "${COPY}/debate-research-restored-copy.json" ]]; then
+  echo "STOP: COPY does not name a restored copy; run J2 in this window"
+else
+  INDEX_DIR=$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["data"]["directory"])' "$HOME/tub-journey-seed/seeded-build.json")
+  echo "publishing $INDEX_DIR"
+  cd "$HOME" && env DEBATE_ENV=dev DEBATE_STORAGE__DATA_DIR="$COPY" debate-research tub index publish --env dev --index "$INDEX_DIR"
+fi
+```
+Success looks like the table ending in `reports/tub/search/current.json`, naming the index J5's check
+printed. Dev's function loads it within five minutes.
+
+### J6 — The journey
+
+Five minutes after J5's publish:
+
+**Operator command** (expected runtime ~3 min, most of it your sign-in)
+Where: `$WT`
+```bash
+cd "$WT"
+uv run python scripts/tub_dev_journey.py journey
+```
+Sign in when the window shows managed login. Success looks like one `PASS` line a step (sign in, search,
+result count, open the card, provenance on the card page, back link, Copy card, the copy holds the card,
+no provenance line in the copy, download offered, download), then `card path /cards/testcl26/<64 hex>`
+and `journey: every step passed`. Keep the card path for J8. `FAIL download offered` means the index
+was parsed by another parser than the one dev's function runs: parse and build with the build dev runs.
+Record the result in the session report or `docs/data/evidence-search-pilot.md`.
+
+### J7 — Remove the seed's Quillfern Academy file
+
+The removal runbook's procedure, with `--source` and the exercise id `RM-2026-91` (exercise ids run
+from 90, [the register](../data/caselist-removal-requests.md)), on this Mac's own data directory: in
+bucket mode the removal restores the run's state first. **The dry run decides whether to go on.** The
+run's state was saved by the cloud run, which never saw the seed's week (the seed went in through the
+copy), so read the plan before anything else.
+
+**Operator command** (expected runtime seconds)
+Where: `$WT`, a new window, so `COPY` and no other variable is set
+```bash
+REMOVE_SHA=b3afe1c4f57df962b3200ec08b3d1efe023c0243a9b31154f787348864036fa8
+if env | grep -q '^DEBATE_'; then
+  echo "STOP: DEBATE_ overrides are set in this shell"
+else
+  cd "$WT" && DEBATE_ENV=dev uv run debate-research caselist remove --source "$REMOVE_SHA" --request RM-2026-91 --reason POLICY
+fi
+```
+Go on only if **WILL BE REMOVED** lists that one file, with its object under `raw/caselist/testcl26/`
+and its parsed files under `parsed/testcl26/`, and **SHARED, KEPT** nothing. If the plan does not
+find the file, stop: publish the teardown (J9), delete the copy (J10), and take the plan to the PM.
+Then the removal runbook's [step 5](caselist-removal.md#step-5--execute-in-dev), the same flags with
+`--execute`, and its [P1b](caselist-removal.md#p1b--right-after-done-rebuild-the-parsed-stores-aggregates)
+for each caselist the plan listed, `testcl26` among them. Note the time `DONE` printed. Add
+`RM-2026-91` to the register as an operator exercise, as `RM-2026-90` is.
+
+### J8 — Five minutes after `DONE`: the card is gone
+
+**Operator command** (expected runtime ~2 min, most of it your sign-in)
+Where: `$WT`
+```bash
+cd "$WT"
+uv run python scripts/tub_dev_journey.py removed --card-path "/cards/testcl26/the-64-hex-J6-printed"
+```
+Success looks like `PASS the removed card's page`, `PASS the removed card is not in the results` and
+`removed: every step passed`. The other seed card stays, without Quillfern Academy's line.
+
+### J9 — Take the seed out of dev's index
+
+Rebuild from the copy with the stores J5 read, without `testcl26`, and publish it past the shrink guard,
+which refuses an index that drops a store: that is the one store it drops. The check compares the
+stores with J5's `before-manifest.json`.
+
+**Operator command** (expected runtime a few minutes)
+Where: the window J2 to J5 ran in
+```bash
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+OVERRIDES=$(env | grep '^DEBATE_' | cut -d= -f1 | tr '\n' ' ')
+if [[ -n "$PULL" || -n "$OVERRIDES" || "$(date +%u)" = 3 ]]; then
+  echo "STOP: a pull is running, a DEBATE_ override is set, or it is Wednesday"
+elif [[ ! -f "${COPY}/debate-research-restored-copy.json" ]]; then
+  echo "STOP: COPY does not name a restored copy; run J2 in this window"
+else
+  SEED="$HOME/tub-journey-seed"
+  STORES=$(python3 -I -c 'import json, sys; print(" ".join("--caselist " + one["caselist"] for one in json.load(open(sys.argv[1]))["stores"]))' "$SEED/before-manifest.json")
+  cd "$HOME" && env DEBATE_ENV=dev DEBATE_STORAGE__DATA_DIR="$COPY" debate-research --json tub index build \
+    ${=STORES} > "$SEED/teardown-build.json"
+  echo "build exit $?"
+  python3 -I - "$SEED/before-manifest.json" "$SEED/teardown-build.json" <<'PY'
+import json, sys
+before = json.load(open(sys.argv[1]))
+built = json.load(open(sys.argv[2]))["data"]["manifest"]
+old = {one["caselist"]: one["occurrences_sha256"] for one in before["stores"]}
+new = {one["caselist"]: one["occurrences_sha256"] for one in built["stores"]}
+print("built", built["index_id"], "from", sorted(new))
+print("OK: the stores dev's index held before the seed" if new == old else "STOP: the stores are not the ones before the seed")
+PY
+fi
+```
+Success looks like `build exit 0` and `OK: ...`. Then the publish:
+
+**Operator command** (expected runtime ~2 min)
+Where: the same window
+```bash
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+OVERRIDES=$(env | grep '^DEBATE_' | cut -d= -f1 | tr '\n' ' ')
+if [[ -n "$PULL" || -n "$OVERRIDES" || "$(date +%u)" = 3 ]]; then
+  echo "STOP: a pull is running, a DEBATE_ override is set, or it is Wednesday"
+elif [[ ! -f "${COPY}/debate-research-restored-copy.json" ]]; then
+  echo "STOP: COPY does not name a restored copy; run J2 in this window"
+else
+  INDEX_DIR=$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["data"]["directory"])' "$HOME/tub-journey-seed/teardown-build.json")
+  cd "$HOME" && env DEBATE_ENV=dev DEBATE_STORAGE__DATA_DIR="$COPY" debate-research tub index publish --env dev \
+    --index "$INDEX_DIR" --allow-shrink "v1-e39-t10 dev journey: the testcl26 seed taken out of the index"
+fi
+```
+Success looks like the table ending in `current.json` naming the teardown index, and the shrink it
+allowed naming `testcl26` alone. A shrink naming any other store: that store changed under the copy;
+take it to the PM before Wednesday.
+
+### J10 — Delete the copy
+
+**Operator command** (expected runtime seconds)
+Where: the same window
+```bash
+if [[ -f "${COPY}/debate-research-restored-copy.json" ]]; then
+  rm -rf "$COPY" "$HOME/tub-journey-seed"
+  ls -d "$COPY" 2>/dev/null | wc -l
+else
+  echo "STOP: COPY does not name a restored copy, so nothing is deleted"
+fi
+```
+Success looks like `0`. The seed archive goes with it; J1 writes it again, the same bytes.
+
+## Measuring the pilot from the app log (`v1-e39-t10`)
+
+The function's app log, `debate-<env>-tub-app`, holds two lines that the measurements ADR-0019 (c) 6
+and 7 ask for come from, and nothing about who searched or for what
+([What a refusal looks like in the app log](#what-a-refusal-looks-like-in-the-app-log)):
+
+* `INFO debate_core.application.search_index_holder: search index <id> loaded in <s> s: <n> bytes from a <m>-byte object; <t> bytes in its directory`,
+  once each time an environment fetches an index: the cold start's index load, the SQLite file's
+  bytes, the gzip object's bytes, and what the holder has on `/tmp` at that moment. At a replacement
+  that moment is before the old file is deleted, so `<t>` is the peak: both files.
+* `INFO debate_core.application.search_index_holder: search answered in <n> ms, by words` (or
+  `by passage`), once each search, the index already loaded.
+
+The queries below are CloudWatch Logs Insights queries, read-only, in the console (CloudWatch, Logs
+Insights, log group `debate-dev-tub-app` or `debate-prod-tub-app`, a time range that covers the use).
+
+**Query time, p50 and p95:**
+
+```text
+fields @timestamp, @message
+| filter @message like /search answered in/
+| parse @message "search answered in * ms, by *" as ms, mode
+| stats count() as searches, pct(ms, 50) as p50_ms, pct(ms, 95) as p95_ms, max(ms) as max_ms by mode
+```
+
+**The cold-start index load, and `/tmp` at each load:**
+
+```text
+fields @timestamp, @logStream, @message
+| filter @message like /search index .* loaded in/
+| parse @message "search index * loaded in * s: * bytes from a *-byte object; * bytes in its directory" as index_id, seconds, sqlite_bytes, gzip_bytes, directory_bytes
+| sort @timestamp asc
+```
+
+A line whose `directory_bytes` equals its `sqlite_bytes` is a cold start's load into an empty
+directory; one whose `directory_bytes` is larger is a replacement, and its `directory_bytes` is the
+peak `/tmp` use across that replacement. The cold start as a whole, the runtime's own start included,
+is in the `REPORT` lines' `Init Duration`, as in step 8:
+
+```text
+fields @timestamp, @message
+| filter @message like /Init Duration/
+| parse @message "Init Duration: * ms" as init_ms
+| stats count() as cold_starts, pct(init_ms, 50) as p50_init_ms, max(init_ms) as max_init_ms
+```
+
+Record each as [docs/data/evidence-search-pilot.md](../data/evidence-search-pilot.md) asks: dev after
+the journey, and prod after the beta's first week.
+
 ## Promoting the pilot to prod
 
 The prod work is spread over several tasks' operator follow-ups. This is the one list, in order,
@@ -939,6 +1380,60 @@ real run, in a window with no leftover `DEBATE_*` override.
     start at the 625 Mbps cap). On 2026-10-22 it was 314,054,035 bytes and growing about 11.6% a
     week, so about three weeks out. AWS takes time to answer, so the request goes in at the
     promotion. Added by the PM, 2026-10-22, from `v1-e39-t14`'s storage working.
+
+## The coach's beta (`v1-e39-t10`)
+
+On prod, after every item of [Promoting the pilot to prod](#promoting-the-pilot-to-prod) is ticked in
+[docs/data/evidence-search-pilot.md](../data/evidence-search-pilot.md), `v1-e39-t07`'s prod removal
+exercise (item 8) and prod's suppression list (item 5) among them. Not before: the beta is the
+first time anyone but the maintainer uses prod. The coach runs it with the beta's testers, in prod
+accounts the coach made (item 11); the two debaters who used dev on 2026-10-22 get new prod accounts,
+never their dev ones.
+
+The record is counts and yes or no, never a name, a username, a screenshot with a name in it, or a
+quotation with an identity (data-use policy, E39 gate items 8 and 9). The coach keeps the screenshots;
+the record says what they show. Each item below is one row of the beta's table in
+`docs/data/evidence-search-pilot.md`.
+
+**Each tester's first sign-in**, on their own device, with a screenshot of each managed-login page
+(`v1-e39-t05`'s open finding):
+
+1. Which second factors managed login offered: the authenticator app, the emailed code, or both.
+2. Which one the tester chose.
+3. Whether the pilot's own authenticator page (`/account/authenticator`) then appeared.
+4. Whether the tester reached the search page signed in, without help.
+
+**On a real school Chromebook**, on the school's network (moved here from `v1-e39-t06`, which had no
+Chromebook on 2026-10-21):
+
+5. Sign in.
+6. Search for words in a tag, an author or a card's text; filter by event, caselist and side.
+7. The result count above the results (`v1-e39-t11`).
+8. Open a card. Its provenance line is on the card page.
+9. *Back to results* returns to the same results (`v1-e39-t11`).
+10. *Open on openCaselist* opens the team's page in a new tab (`v1-e39-t11`).
+11. *Search by passage*: paste a sentence from a card, and that card is among the results (`v1-e39-t13`).
+12. *Copy card*, then paste into Google Docs: bold, underline, highlighting and sizes kept.
+13. The pasted card carries no provenance line (data-use policy 1.11).
+14. *Download .docx* opens in Google Docs, and a cart of several cards downloads as one file
+    (`v1-e39-t08`, closed; the operator confirmed both in Word with Verbatim and in Google Docs on
+    2026-10-31).
+
+**Once, on any computer with Word:**
+
+15. *Copy card*, then paste into Word: formatting kept, yes or no.
+16. A downloaded card opens in Word with Verbatim.
+
+**Then the app log**, by the operator, from [Measuring the pilot from the app log](#measuring-the-pilot-from-the-app-log-v1-e39-t10)
+for `debate-prod-tub-app` over the beta's days: the query time's p50 and p95, the cold-start index
+loads, and the peak `/tmp` use across an index replacement if a weekly publish to prod fell inside the
+beta. And the refusal lines' query from
+[What a refusal looks like in the app log](#what-a-refusal-looks-like-in-the-app-log), which should
+print nothing.
+
+**What ends the beta.** Every item answered for every tester, the problems found either fixed and
+deployed or written down as accepted by the coach, and the PM's go for the student pilot: three to
+five debaters for at least a week, whose tallies and themes the same document records.
 
 ## The managed login's asset hosts
 
@@ -1526,7 +2021,7 @@ every landscape page after the deploy means the apply has not reached the role: 
 
 ## What a refusal looks like in the app log
 
-The function logs to `debate-<env>-tub-app` (30 days). It never logs a query, a card id, a card's
+The function logs to `debate-<env>-tub-app` (30 days), one line a record, `<LEVEL> <logger>: <message>`: every `WARNING`, and the index holder's `INFO` lines alone (`v1-e39-t10`). It never logs a query, a card id, a card's
 text, a school, a team code, a username or an address (data-use policy, E39 gate item 4); what it
 logs about the index is the index id and the kind of failure. A student sees one page for every
 refusal below, **Search is not available right now** (`503`), or for Copy card the same sentence
@@ -1534,7 +2029,8 @@ beside the button.
 
 | App log line (`WARNING` unless marked) | What happened | What to do |
 |---|---|---|
-| `search index <id> loaded` (`INFO`) | An environment fetched and checked an index | Nothing |
+| `search index <id> loaded in <s> s: <n> bytes from a <m>-byte object; <t> bytes in its directory` (`INFO`) | An environment fetched and checked an index, in that time, and has `<t>` bytes on `/tmp` (`v1-e39-t10`) | Nothing; [the app log's measurements](#measuring-the-pilot-from-the-app-log-v1-e39-t10) read it |
+| `search answered in <n> ms, by words` (`INFO`; or `by passage`) | A search was answered in that time | Nothing; the query-time measurement reads it |
 | `search index <id> closed and deleted` (`INFO`) | A newer index replaced it, or the environment closed it | Nothing |
 | `the published search index was refused: the pointer is not a search index pointer this build reads` | `current.json` is not a pointer, or names keys outside its own index's directory | Publish again with `tub index publish`. If it says `current.json is not a pointer this build reads ... cannot be compared`, the shrink guard cannot read the current index either: compare the newest index's counts with the last run's `search_index` row, then publish with `--allow-shrink "<reason>"` ([the shrink guard](caselist-scheduled-sync.md#the-shrink-guard)) |
 | `search index <id> was refused: its format version is not 1, the one this build reads` | The index was built by a build whose format this deploy does not read | Deploy the build that wrote it, or rebuild and publish with this one |
@@ -1638,8 +2134,9 @@ published index is format 2; take it to the PM.
 - **Create a student's account.** That is the coach's `tub users add`, in prod
   ([the accounts guide](../guides/evidence-search-accounts.md)). The dev pool never holds a student, except the
   pilot validation students data-use policy 1.18 allows until the promotion.
-- **Publish an index.** `tub index publish` is `v1-e39-t02`'s, under the `EvidenceOperator`
-  profile. The weekly agent run rebuilds the index when the parsed store changed and publishes it to
+- **Publish an index**, except the signed-in journey's two on dev ([J5 and J9](#the-signed-in-journey-on-dev)),
+  which put the synthetic seed into dev's index and take it out again. `tub index publish` is
+  `v1-e39-t02`'s, under the `EvidenceOperator` profile. The weekly agent run rebuilds the index when the parsed store changed and publishes it to
   dev (`v1-e39-t09`); publishing it to prod is the operator's, with `tub index publish --newest`, as
   [Publishing a pending index by hand](caselist-scheduled-sync.md#publishing-a-pending-index-by-hand)
   says. Both refuse an index that would drop a store's cards, and `--allow-shrink` is the

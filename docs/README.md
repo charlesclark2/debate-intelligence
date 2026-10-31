@@ -64,6 +64,7 @@ regenerates it on `dev` ([`v1-e01-t16`](../plan_specs/v1/e01-repo-foundation/t16
 | [runbooks/evidence-store.md](runbooks/evidence-store.md) | Applying the dev and prod evidence buckets and checking the operator and takedown credentials |
 | [runbooks/landscape-report-from-the-cloud-run.md](runbooks/landscape-report-from-the-cloud-run.md) | Publishing a caselist's landscape report from the weeks the cloud run pulled: restore a copy, parse it, dry run, publish, delete the copy |
 | [runbooks/parsed-store-retention.md](runbooks/parsed-store-retention.md) | Retiring superseded parsed-store version directories in both buckets and on this machine, and undoing it |
+| [runbooks/run-lock-conditional-writes.md](runbooks/run-lock-conditional-writes.md) | Applying the evidence bucket's deny of an unconditional write of the run lock, and proving it without disturbing the lock |
 | [runbooks/team-website.md](runbooks/team-website.md) | Standing up the team website's hosting, domains and publisher credentials, and deploying, rolling back or taking down the site |
 | [runbooks/terraform-bootstrap.md](runbooks/terraform-bootstrap.md) | Creating the Terraform state buckets and the dev/prod environment roots |
 | [runbooks/website-content-accounts.md](runbooks/website-content-accounts.md) | The team Google account that owns the website's calendar and announcements sheet: owners, coach access, recovery, secrets |

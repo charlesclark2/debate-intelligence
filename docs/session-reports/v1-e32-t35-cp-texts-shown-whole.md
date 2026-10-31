@@ -241,9 +241,66 @@ to fix.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** CHANGES_REQUESTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-31
 
 **Notes:**
+
+The work is careful and almost all of it stands. The one change is to the grouping, a ruling against
+my own spec line, and it is better made now than after a republish.
+1. **What stands, accepted as built:**
+   * **The count.** It was read-only, proven by unchanged mtimes, with no words quoted. It found that
+     all 7 shown colon texts have t16 planks. The continuation shape (26 copies, a second analytic per
+     plank, never an undertag or a split paragraph) explains rank 3: the 5–5 tie between `should:` and
+     a bare `should`. That is exactly the finding the gate was for.
+   * **Showing a text whole:**
+     * colon lists by t16's rules and caps;
+     * the continuation rule, which joins on shape and ignores a capital (Deviation 1, accepted; the
+       PM amends the spec's "no capital");
+     * every line read back and checked for a school, with one naming a school withholding the
+       whole text;
+     * paragraph indices only in the reading, no words cached;
+     * one row per line in report.md.
+   * **The evidence:** red at the skeleton; 13 mutants caught, three of them by tests you added after
+     they survived; the node criterion passes (133).
+2. **The change: group and rank by the opening paragraph, and show the group's commonest whole text.**
+   Your measurement is why. Under whole-text grouping, the Advantage CP's 12-team text becomes 24
+   one-team texts. Its rows are then three ties picked by digest order, and the first is a copy with no
+   lines. The coach reads these rows to learn what the field runs. Here they would hide the most-read
+   advantage CP behind random single copies. That is worse than the cut-off this task fixes.
+
+   My spec line "the digest covers what is shown" wanted two things, and only one of them is right:
+   * **Right:** the checks cover what is shown. Read-back and the school check apply to every line of
+     the text quoted. Keep that exactly as built.
+   * **Wrong:** grouping by the whole text.
+
+   Build this:
+   * **Group key:** the opening paragraph's digest, as before t35. Rank groups by distinct teams, as
+     before.
+   * **Shown text:** the group's commonest whole text, counted by distinct teams reading that exact
+     whole text. Ties go to the existing tie-break.
+   * **Read-back and withholding:** applied to the shown whole text's every line. If the commonest
+     whole text cannot be read back or names a school, fall to the next whole text in that group,
+     as the group falls through today.
+   * **The rank row** says how many of the group's teams read the shown whole text, e.g. `12 teams;
+     the planks shown are 1 team's`. Use your judgment on the words and keep them short. Put the count
+     in the JSON as well.
+   * **The cached reading** gains whatever grouping needs (the opening paragraph's digest) inside the
+     same rules bump, `analytic-texts-3`. That means one re-read for the operator, not two. If
+     `analytic-texts-3` is already the version you set, leave it and say so.
+   * **Mutant 3** ("grouped and checked on the stem, shown whole") becomes two mutants: (3a) checked
+     on the stem only, which must be caught; (3b) grouped on the whole text, which must now be caught
+     too.
+   * **Re-measure on the same store, read-only as before:** the before/after table, the Advantage CP's
+     and States CP's rows (teams, and teams for the shown text), and distinct groups. Expect the
+     Advantage CP back at 12 teams, showing one whole text with lines.
+3. **The PM question:** answered by point 2, which is C with the checks kept on the whole text and
+   with the shown text's own team count. B's extra line is not needed once the group count is the
+   stem's.
+4. **Follow-ups:**
+   * **The runbook clause** ("or readings of older rules"): the PM's next batch.
+   * **Colon-less lists as planks:** not filed. t16's counts stay as they are unless the coach asks.
+5. **Then:** append the re-work to this report, not over it, and the PM reviews again. Run the
+   affected set once more within the limit, leaving the rest to `ci`.

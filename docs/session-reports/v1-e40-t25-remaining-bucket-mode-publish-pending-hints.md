@@ -349,9 +349,41 @@ new image, later"). Both new runbook sections say the rule holds for an older im
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-01
 
 **Notes:**
+
+The last bucket-mode hints that named a publish from the Mac now point at the cloud run, and both
+"imports into" sentences are gone.
+1. **ac1 and the amendment pass.**
+   * Red: 19 core and 2 CLI tests failed, every one an assertion. The CLI skeleton made the unit case
+     fail on its assertion, not on a `TypeError`. Good.
+   * Green: 17, 22, 320 and 275, across the new file, the CLI files, the neighbours and the node
+     criterion.
+   * Every bucket-mode banner's whole text is checked against the forbidden phrases.
+   * 19 mutants were caught, including all three amendment ones, and 3a by dev.164's and dev.200's
+     own readers.
+2. **Decisions accepted:**
+   * "takes up", not "publishes", because the bundle may not be saved;
+   * "what the bucket confirmed is kept" on the bucket-mode failed publish alone;
+   * "this machine's" kept where it is literally true of the task;
+   * titles unchanged;
+   * t22's split between the bracket and the details.
+
+   Leaving the suppression fallback's quoted login was right: it comes from the S3 adapter's hint,
+   which four other reasons share.
+3. **Follow-ups:**
+   * **1 and 2: (a), as one p3 task, the last pass on bucket-mode wording.** The stopped-run,
+     mixed-failure and backlog banners, and the CLI's "run the same command again", name the next
+     cloud run. The composition root also passes the S3 adapter a login hint for the run's
+     environment, so every record reason in a cloud run names the task role and the runbook's "A run
+     that found no AWS session", not `aws sso login`. After that task, the PM files no further
+     bucket-mode wording tasks unless a run's email shows one.
+   * **3:** the PM's next batch fixes the local runbook's `NEWER_FINGERPRINT_TABLE` line.
+4. **Closing checks:** the affected set (297 files) is left to the PR's `ci` under agreement 10. The
+   always-run list, the node criterion, the neighbours and the whole-repo checks pass.
+5. **Merge:** once the PR's `ci` is green, ideally before Monday's image deploy so the new wording
+   rides along. That is not required. It is a plain `scripts/task pr`.

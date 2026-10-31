@@ -1246,6 +1246,171 @@ def test_explain_names_the_factory_and_the_command_a_test_is_reached_through(wor
 
 
 # --------------------------------------------------------------------------------------------
+# A mention of the console script in a string (v1-e01-t44). It runs the app when the string, or a
+# line of it, starts with the program, when it is the program alone or a path to it, and when the
+# text before it is not a sentence. A sentence before it, or around the code span or quotes that
+# hold it, makes it prose. Each case commits CLI_WORLD and its files, then describes a change to
+# `caselist remove`'s module, which reaches every file that runs the app and names no command.
+# --------------------------------------------------------------------------------------------
+
+MENTIONS = "tests/mentions"
+REMOVE_MODULE = f"{CLI}/commands/caselist_remove.py"
+REACHES_REMOVE = (
+    {RUNS["remove"], RUNS["remove, installed"], RUNS["remove, by a helper"], RUNS["caselist help"]}
+    | {RUNS["verify, and remove through a fixture"]}
+    | CANNOT_TELL
+    | ALWAYS
+    | READS_SOURCE
+)
+COMMAND_LINES = {
+    f"{MENTIONS}/test_shell_command.py": (
+        "import subprocess\n\n\ndef test_remove():\n"
+        '    subprocess.run("debate-research caselist remove --team T", shell=True)\n'
+    ),
+    # A line of a script the test writes and runs, after a line that reads like words.
+    f"{MENTIONS}/test_script_line.py": (
+        "import subprocess\n\n\ndef test_version(tmp_path):\n"
+        '    (tmp_path / "check.sh").write_text("echo checking the build\\n  debate-research --version\\n")\n'
+        '    subprocess.run(["sh", str(tmp_path / "check.sh")])\n'
+    ),
+}
+PROGRAM_ALONE = {
+    f"{MENTIONS}/test_argument_list.py": (
+        "import subprocess\n\n\ndef test_remove():\n"
+        '    subprocess.run(["debate-research", "caselist", "remove", "--team", "T"])\n'
+    ),
+    f"{MENTIONS}/test_which.py": (
+        "import shutil\nimport subprocess\n\n\ndef test_version():\n"
+        '    subprocess.run([shutil.which("debate-research"), "--version"])\n'
+    ),
+}
+PATHS_TO_THE_PROGRAM = {
+    f"{MENTIONS}/test_path_to_the_program.py": (
+        "import subprocess\nimport sys\n\n\ndef test_version():\n"
+        '    subprocess.run([f"{sys.prefix}/bin/debate-research", "--version"])\n'
+    ),
+}
+# Shell syntax, an option, a program that runs its arguments, or nothing before its quote: no sentence.
+UNREADABLE_MENTIONS = {
+    f"{MENTIONS}/test_after_an_assignment.py": (
+        "import subprocess\n\n\ndef test_version():\n"
+        '    subprocess.run("DEBATE_ENV=dev debate-research --version", shell=True)\n'
+    ),
+    f"{MENTIONS}/test_after_an_operator.py": (
+        "import subprocess\n\n\ndef test_version():\n"
+        '    subprocess.run("cd /tmp && debate-research --version", shell=True)\n'
+    ),
+    f"{MENTIONS}/test_after_a_runner.py": (
+        "import subprocess\n\n\ndef test_version():\n"
+        '    subprocess.run("uv run debate-research --version", shell=True)\n'
+    ),
+    f"{MENTIONS}/test_after_an_option.py": (
+        "import subprocess\n\n\ndef test_version():\n"
+        '    subprocess.run("sudo -u someone debate-research --version", shell=True)\n'
+    ),
+    f"{MENTIONS}/test_quoted_after_a_runner.py": (
+        "import subprocess\n\n\ndef test_version():\n"
+        "    subprocess.run(\"uv run 'debate-research' --version\", shell=True)\n"
+    ),
+    f"{MENTIONS}/test_quoted_with_nothing_before.py": (
+        "import subprocess\n\n\ndef test_version():\n"
+        "    subprocess.run(\"'debate-research' --version\", shell=True)\n"
+    ),
+}
+MESSAGES = {
+    f"{MENTIONS}/test_code_span_in_a_sentence.py": (
+        'MESSAGE = "Run `debate-research caselist remove --team T` before you pull."\n'
+    ),
+    # A fragment a message joins into its sentence; a later span, after one with options.
+    f"{MENTIONS}/test_code_spans.py": (
+        "def hint(team):\n"
+        '    return f"`debate-research caselist remove --team {team}`"\n\n\n'
+        'BOTH = "Run `debate-research caselist remove --team A` and `debate-research caselist remove`."\n'
+    ),
+    f"{MENTIONS}/test_shell_line_in_a_code_span.py": (
+        'MESSAGE = "Never run `aws sso login && debate-research caselist remove` from cron."\n'
+    ),
+    f"{MENTIONS}/test_text_before.py": 'MESSAGE = "Fix: debate-research caselist remove, then pull again."\n',
+    f"{MENTIONS}/test_text_before_on_a_later_line.py": (
+        'MESSAGE = "The pull stopped.\\n\\nFix: debate-research caselist remove"\n'
+    ),
+    f"{MENTIONS}/test_quoted_in_a_sentence.py": (
+        "MESSAGE = \"Run 'debate-research caselist remove' before you pull.\"\n"
+    ),
+    # The data directory and a folder of the same name are not the program.
+    f"{MENTIONS}/test_data_directory.py": (
+        "from pathlib import Path\n\n"
+        'DATA = Path.home() / ".debate-research"\nDEV = "~/.debate-research/dev"\n'
+    ),
+    f"{MENTIONS}/test_folder_of_that_name.py": 'STATE = "/var/lib/debate-research/dev"\n',
+}
+CONFTEST_MENTIONS = {
+    f"{MENTIONS}/conftest.py": (
+        "import subprocess\n\nimport pytest\n\n\n"
+        '@pytest.fixture\ndef hint():\n    return "Run `debate-research caselist remove` first."\n\n\n'
+        '@pytest.fixture\ndef version():\n    return subprocess.run(["debate-research", "--version"])\n'
+    ),
+    f"{MENTIONS}/test_uses_the_hint.py": "def test_hint(hint):\n    assert hint\n",
+    f"{MENTIONS}/test_uses_the_version.py": "def test_version(version):\n    assert version\n",
+}
+
+
+def described_with_mentions(workspace: Workspace, files: dict[str, str], *args: str) -> Result:
+    workspace.commit({**CLI_WORLD, **files}, "setup")
+    workspace.commit(changed_in_the_world(REMOVE_MODULE), "described")
+    return workspace.run("--diff", "HEAD", *args)
+
+
+def test_a_string_that_starts_like_a_command_line_runs_the_app(workspace: Workspace) -> None:
+    result = described_with_mentions(workspace, COMMAND_LINES)
+    assert_selected(result, REACHES_REMOVE | set(COMMAND_LINES))
+
+
+def test_an_argument_list_or_a_lookup_that_names_the_program_alone_runs_the_app(
+    workspace: Workspace,
+) -> None:
+    result = described_with_mentions(workspace, PROGRAM_ALONE)
+    assert_selected(result, REACHES_REMOVE | set(PROGRAM_ALONE))
+
+
+def test_a_path_to_the_program_runs_the_app(workspace: Workspace) -> None:
+    result = described_with_mentions(workspace, PATHS_TO_THE_PROGRAM)
+    assert_selected(result, REACHES_REMOVE | set(PATHS_TO_THE_PROGRAM))
+
+
+def test_a_mention_the_rule_cannot_read_as_a_sentence_runs_the_app(workspace: Workspace) -> None:
+    result = described_with_mentions(workspace, UNREADABLE_MENTIONS)
+    assert_selected(result, REACHES_REMOVE | set(UNREADABLE_MENTIONS))
+
+
+def test_a_mention_inside_a_message_is_prose(workspace: Workspace) -> None:
+    result = described_with_mentions(workspace, MESSAGES)
+    assert_selected(result, REACHES_REMOVE)
+
+
+def test_a_conftest_reads_a_mention_in_a_message_as_prose_too(workspace: Workspace) -> None:
+    result = described_with_mentions(workspace, CONFTEST_MENTIONS)
+    assert_selected(result, REACHES_REMOVE | {f"{MENTIONS}/test_uses_the_version.py"})
+
+
+def test_a_shell_script_is_read_whole_so_any_mention_in_it_runs_the_app(workspace: Workspace) -> None:
+    files = {
+        f"{MENTIONS}/remove.sh": "echo 'Fix: run debate-research doctor first'\n",
+        f"{MENTIONS}/test_runs_the_script.py": (
+            "import subprocess\nfrom pathlib import Path\n\n\ndef test_script():\n"
+            '    subprocess.run(["sh", str(Path(__file__).parent / "remove.sh")])\n'
+        ),
+    }
+    result = described_with_mentions(workspace, files)
+    assert_selected(result, REACHES_REMOVE | {f"{MENTIONS}/test_runs_the_script.py"})
+
+
+def test_every_mention_runs_reads_any_mention_as_a_run_as_before(workspace: Workspace) -> None:
+    result = described_with_mentions(workspace, MESSAGES, "--every-mention-runs")
+    assert_selected(result, REACHES_REMOVE | set(MESSAGES))
+
+
+# --------------------------------------------------------------------------------------------
 # A change to container.py itself (v1-e01-t43): a factory's code is that factory's, and anything
 # that runs when the module is imported is the whole file's. Each case commits CLI_WORLD, with any
 # extra files it names, then describes one more commit to container.py.

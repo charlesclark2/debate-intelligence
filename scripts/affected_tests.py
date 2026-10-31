@@ -19,8 +19,17 @@ working tree's uncommitted and untracked files, and selects every test file one 
   files, so a test depends on every `conftest.py` above it, and on everything those import. A
   changed conftest selects every test beneath it. Reaching the root `conftest.py` is the whole
   selection.
-* **Runs.** A file that mentions a console script (`debate-research`) or `-m <module>` runs that
-  module, so it depends on it as if it imported it.
+* **Runs.** A file that runs a console script (`debate-research`) or `-m <module>` runs that
+  module, so it depends on it as if it imported it. A Python file's string literals are read one by
+  one (v1-e01-t44), on the console script's own line: it runs where the string is the program
+  alone, where the line starts with it, where it ends a path, and where the text before it is not
+  a sentence (shell syntax such as `&&` or `X=1`, an option, or a program that runs its arguments,
+  such as `uv run`). After a sentence, or inside a code span or quotes a sentence holds, it is
+  prose: `"Fix: run `debate-research caselist parse` first"` runs nothing. A code span may open
+  the line, as the fragments a message joins do. Part of another name (`~/.debate-research`), or a
+  name a slash goes on from (a folder, the User-Agent's `debate-research/<version>`), is not the
+  program. Any other file, such as a shell script, runs every console
+  script it names, and `--every-mention-runs` reads every mention that way, as before.
 * **Names.** A file read or run by path is found by its name, in the string literals of Python
   files (docstrings and comments describe files, they do not read them) and anywhere in a shell
   script. A changed data file (a fixture under `tests/fixtures/`, package data such as
@@ -131,6 +140,7 @@ Usage:
   uv run scripts/affected_tests.py --base A --head B   # B against its merge base with A
   uv run scripts/affected_tests.py --diff REV --graph REV2   # REV's changes over REV2's imports
   uv run scripts/affected_tests.py --whole-container   # a container.py change read as the whole file
+  uv run scripts/affected_tests.py --every-mention-runs   # any debate-research in a string read as a run
 """
 
 from __future__ import annotations
@@ -219,6 +229,22 @@ LARGEST_SEARCHED_FILE = 2_000_000
 SOURCE_READER = re.compile(r"\bast\.parse\(")
 DIRECTORY_WALK = re.compile(r"\b(?:rglob|glob|iterdir|walk)\(")
 MODULE_FLAG = re.compile(r"""(?:["']-m["']\s*,\s*["']|-m\s+)([A-Za-z_][\w.]*)""")
+# How a string holds a console script's name as prose rather than as a run of it (v1-e01-t44).
+PATH_SEPARATORS = ("/", "\\")
+QUOTE_MARKS = ("'", '"', "\N{LEFT SINGLE QUOTATION MARK}", "\N{LEFT DOUBLE QUOTATION MARK}")
+CODE_SPAN = re.compile(r"`[^`]*`")
+# A word a sentence can put before a name: letters, an apostrophe or a hyphen inside, one closing mark.
+SENTENCE_WORD = re.compile(
+    r"[A-Za-z][A-Za-z'\N{RIGHT SINGLE QUOTATION MARK}-]*[.,:!?)]?|[\N{EM DASH}\N{EN DASH}]"
+)
+# Words after which a shell runs the next word: its own keywords, and programs that run their arguments.
+RUNS_ITS_ARGUMENTS = frozenset(
+    {
+        *("if", "then", "else", "elif", "do", "while", "until", "time"),
+        *("exec", "env", "command", "builtin", "eval", "sudo", "doas", "nohup", "nice", "timeout"),
+        *("xargs", "watch", "caffeinate", "run", "uvx", "pipx", "sh", "bash", "zsh", "python", "python3"),
+    }
+)
 
 
 # --------------------------------------------------------------------------------------------
@@ -294,23 +320,15 @@ class Tree:
         Docstrings and other bare string statements, and comments, describe files rather than read
         them, so they are left out; `ast` gives the literals in source order, each in double quotes.
         """
-        if not path.endswith(".py"):
+        strings = self.strings(path)
+        if strings is None:
             return self.texts.get(path, "")
-        syntax = self.syntax(path)
-        if syntax is None:
-            return self.texts.get(path, "")
-        prose = {
-            id(node.value)
-            for node in ast.walk(syntax)
-            if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant)
-        }
-        strings = [
-            node
-            for node in ast.walk(syntax)
-            if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in prose
-        ]
-        strings.sort(key=lambda node: (node.lineno, node.col_offset))
-        return ", ".join(f'"{node.value}"' for node in strings)
+        return ", ".join(f'"{string}"' for string in strings)
+
+    def strings(self, path: str) -> list[str] | None:
+        """A Python file's string literals, as :meth:`literals` reads them; None for any other file."""
+        syntax = self.syntax(path) if path.endswith(".py") else None
+        return None if syntax is None else strings_in(syntax)
 
     _syntax: dict[str, ast.Module | None] = field(default_factory=dict, repr=False)
 
@@ -562,9 +580,9 @@ class Graph:
             self.dependents.setdefault(target, []).append((dependent, how))
 
 
-def build_graph(tree: Tree, layout: Layout) -> Graph:
+def build_graph(tree: Tree, layout: Layout, every_mention_runs: bool = False) -> Graph:
     graph = Graph(layout)
-    resolver = Resolver(layout)
+    resolver = Resolver(layout, every_mention_runs)
     package_edges = grimp_edges(tree, layout, graph) or {}
     container = read_container(tree, resolver) if CONTAINER in tree.texts else None
     registered = read_registry(tree, layout) if COMMAND_REGISTRY in tree.texts else None
@@ -598,7 +616,7 @@ def build_graph(tree: Tree, layout: Layout) -> Graph:
     for path in tree.texts:
         if layout.is_package_file(path):
             continue  # package code names the CLI in its messages; it does not start it
-        for target in resolver.runs_of(tree.literals(path)):
+        for target in resolver.runs_of(tree.literals(path), tree.strings(path)):
             graph.add(path, RUNS, target)
     conftests = sorted(path for path in tree.paths if PurePosixPath(path).name == "conftest.py")
     for test in layout.test_files:
@@ -765,7 +783,7 @@ def read_conftest(tree: Tree, resolver: Resolver, conftest: str) -> ConftestRead
         if isinstance(statement, ast.Import | ast.ImportFrom):
             continue
         used = {node.id for node in ast.walk(statement) if isinstance(node, ast.Name)}
-        runs = resolver.runs_of(literals_in(statement))
+        runs = resolver.runs_of(literals_in(statement), strings_in(statement))
         if isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
             if isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef):
                 used |= {
@@ -799,6 +817,11 @@ def read_conftest(tree: Tree, resolver: Resolver, conftest: str) -> ConftestRead
 
 def literals_in(node: ast.AST) -> str:
     """The string literals of one statement as `Tree.literals` gives a file's: docstrings left out."""
+    return ", ".join(f'"{string}"' for string in strings_in(node))
+
+
+def strings_in(node: ast.AST) -> list[str]:
+    """The string literals beneath a node in source order, without docstrings and other bare strings."""
     prose = {
         id(child.value)
         for child in ast.walk(node)
@@ -810,7 +833,7 @@ def literals_in(node: ast.AST) -> str:
         if isinstance(child, ast.Constant) and isinstance(child.value, str) and id(child) not in prose
     ]
     strings.sort(key=lambda child: (child.lineno, child.col_offset))
-    return ", ".join(f'"{child.value}"' for child in strings)
+    return [str(child.value) for child in strings]
 
 
 def fixture_of(definition: ast.stmt) -> tuple[str, bool] | None:
@@ -1521,8 +1544,9 @@ def grimp_edges(tree: Tree, layout: Layout, graph: Graph) -> dict[str, set[str]]
 class Resolver:
     """Turns an import statement in one file into the files of this repository it runs."""
 
-    def __init__(self, layout: Layout) -> None:
+    def __init__(self, layout: Layout, every_mention_runs: bool = False) -> None:
         self.layout = layout
+        self.every_mention_runs = every_mention_runs
         self.paths = layout.tree.paths
         self.folders_by_top_name: dict[str, set[str]] = {}
         for path in self.paths:
@@ -1614,17 +1638,80 @@ class Resolver:
         prefix = "" if str(path) == "." else str(path) + "/"
         return any(candidate.startswith(prefix) for candidate in self.paths)
 
-    def runs_of(self, text: str) -> set[str]:
-        """The modules a file runs as a program: a console script it names, or `-m module`."""
+    def runs_of(self, text: str, strings: list[str] | None = None) -> set[str]:
+        """The modules a file runs as a program: a console script it runs, or `-m module`.
+
+        `strings` are a Python file's string literals, and a console script runs only where one of
+        them starts the program (:func:`starts_the_program`, v1-e01-t44). A file without them, such
+        as a shell script, runs any console script it names, as does every file under
+        `--every-mention-runs`.
+        """
         found: set[str] = set()
         for script, module in self.layout.console_scripts.items():
-            if re.search(rf"(?<![\w-]){re.escape(script)}(?![\w-])", text):
+            mention = re.compile(rf"(?<![\w-]){re.escape(script)}(?![\w-])")
+            if strings is None or self.every_mention_runs:
+                runs = mention.search(text) is not None
+            else:
+                runs = any(
+                    starts_the_program(string, match.start(), match.end())
+                    for string in strings
+                    for match in mention.finditer(string)
+                )
+            if runs:
                 found |= self.in_packages(module, ())
         for module in MODULE_FLAG.findall(text):
             top = module.split(".")[0]
             if top in self.layout.packages:
                 found |= self.in_packages(module, ("__main__",))
         return found
+
+
+def starts_the_program(string: str, start: int, end: int) -> bool:
+    """Whether a console script's name at `string[start:end]` runs it, rather than mentioning it in prose.
+
+    Read on the name's own line of the string, from the start of the line:
+
+    * Another name, never a run: one the name ends (`~/.debate-research`), or one a slash goes on
+      from: a folder (`/var/lib/debate-research/dev`), the User-Agent's `debate-research/<version>`.
+    * A run: the program alone (an argument list's first word, `shutil.which`'s argument), a line
+      that starts with it (a command line, a line of a script), or a path to it (`f"{bin}/..."`).
+    * Prose, when a sentence comes before it: words, with no option, ending in a word a sentence
+      ends a phrase with (`Fix:`, `installed`, `of`), and not a program that runs its arguments
+      (`run`, `exec`, `env`). Around a code span or a quote that holds the name, the sentence is
+      the text before its opening mark. A code span may also open the line, as a fragment a
+      message joins into its sentence does (`` "`debate-research caselist parse`" ``).
+    * Anything else is a run: shell syntax (`&&`, `X=1`), an option or a runner before the name.
+    """
+    lead = string[string.rfind("\n", 0, start) + 1 : start]
+    if lead.endswith(".") or string[end : end + 1] in PATH_SEPARATORS:
+        return False
+    if string.strip() == string[start:end]:
+        return True
+    if not lead.strip():
+        return True
+    if lead.endswith(PATH_SEPARATORS):
+        return True
+    if lead.count("`") % 2:
+        before = lead[: lead.rfind("`")]
+        return bool(before.strip()) and not reads_as_a_sentence(before, runner_runs_it=False)
+    if lead.endswith(QUOTE_MARKS):
+        return not reads_as_a_sentence(lead[:-1], runner_runs_it=True)
+    return not reads_as_a_sentence(lead, runner_runs_it=True)
+
+
+def reads_as_a_sentence(lead: str, runner_runs_it: bool) -> bool:
+    """Whether text before a name is a sentence's, not a command line's, by its words and its last word.
+
+    `runner_runs_it` is whether a last word that runs its arguments (`run`, `exec`) runs the name.
+    Before a code span it does not: a sentence holds the span (``Never run `...` ``).
+    """
+    words = CODE_SPAN.sub("code", lead).split()
+    return bool(
+        words
+        and not any(word.startswith("-") for word in words)
+        and SENTENCE_WORD.fullmatch(words[-1])
+        and not (runner_runs_it and words[-1] in RUNS_ITS_ARGUMENTS)
+    )
 
 
 def imported_names(tree: ast.AST) -> Iterator[tuple[int, str, tuple[str, ...]]]:
@@ -2092,7 +2179,7 @@ def files_under(layout: Layout, prefixes: Iterable[str]) -> set[str]:
     }
 
 
-def select(tree: Tree, changes: list[Change]) -> Selection:
+def select(tree: Tree, changes: list[Change], every_mention_runs: bool = False) -> Selection:
     layout = Layout.of(tree)
     selection = Selection(total=len(layout.test_files))
     read_by: dict[str, tuple[str, ...]] = {}
@@ -2105,7 +2192,7 @@ def select(tree: Tree, changes: list[Change]) -> Selection:
                 selection.notes.append(f"{change.path} changes {', '.join(sorted(change.tables))}.")
             selection.whole = f"{change.path} is shared test ground"
             return selection
-    graph = build_graph(tree, layout)
+    graph = build_graph(tree, layout, every_mention_runs)
     selection.notes.extend(graph.notes)
     walk = Walk(layout, graph, naming_corpus(tree, changes))
     for change in changes:
@@ -2454,6 +2541,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help=f"read a change to {CONTAINER} as the whole file, as before v1-e01-t43",
     )
+    parser.add_argument(
+        "--every-mention-runs",
+        action="store_true",
+        help="read any mention of a console script in a string as running it, as before v1-e01-t44",
+    )
     parser.add_argument("--explain", action="store_true", help="print why each test file was selected")
     parser.add_argument("--run", action="store_true", help="run pytest over the selection with CI's markers")
     arguments = parser.parse_args(argv)
@@ -2479,7 +2571,7 @@ def main(argv: list[str] | None = None) -> int:
                 f"them reaches them: {', '.join(absent)}",
                 file=sys.stderr,
             )
-    selection = select(tree, changes)
+    selection = select(tree, changes, arguments.every_mention_runs)
     elapsed = time.monotonic() - started
 
     for note in selection.notes:

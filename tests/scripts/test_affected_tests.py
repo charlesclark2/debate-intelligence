@@ -1828,7 +1828,14 @@ def described_by_use(workspace: Workspace, setup: dict[str, str], *replacements:
 def test_an_import_that_loads_no_new_module_reaches_the_parts_using_the_names_it_rebinds(
     workspace: Workspace, replacements: list[tuple[str, str]], expected: set[str], rebound: str
 ) -> None:
-    result = described_by_use(workspace, container_setup(), *replacements)
+    # The rules first, so that the import of debate_core.verify_rules is what first loads debate_core.
+    setup = container_setup(
+        (
+            "from debate_core.container_limits import LIMIT\n" + RULES_IMPORT,
+            RULES_IMPORT + "from debate_core.container_limits import LIMIT\n",
+        )
+    )
+    result = described_by_use(workspace, setup, *replacements)
     assert_selected(result, expected)
     assert f"Its imports load the same modules and rebind {rebound}," in result.stderr
 

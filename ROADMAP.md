@@ -68,7 +68,7 @@ v2.3's extension work.
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 28 | 20 | 165 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 23 | 17 | 84 |
-| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 32 | 13 | 66 |
+| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 32 | 14 | 66 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -578,7 +578,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [A CI check that every locked package's licence is one the project accepts](plan_specs/v1/e41-delivery-tooling-upkeep/t02-licence-check-over-the-lock.yaml) `v1-e41-t02-licence-check-over-the-lock` | Pending | 1 | 2.0 |
 | [The docstrings say what the stamped build carries](plan_specs/v1/e41-delivery-tooling-upkeep/t03-stamp-docstrings.yaml) `v1-e41-t03-stamp-docstrings` | Pending | 1 | 0.5 |
 | [The single-interpreter scan leaves site/ out, as the Node project it is](plan_specs/v1/e41-delivery-tooling-upkeep/t04-single-interpreter-scan-leaves-site-out.yaml) `v1-e41-t04-single-interpreter-scan-leaves-site-out` | Pending | 1 | 0.5 |
-| [One hard stop for a session's test runs that kills the whole process group, named by agreement 10](plan_specs/v1/e41-delivery-tooling-upkeep/t05-test-runs-stopped-by-process-group.yaml) `v1-e41-t05-test-runs-stopped-by-process-group` | Pending | 1 | 1.0 |
+| [One hard stop for a session's test runs that kills the whole process group, named by agreement 10](plan_specs/v1/e41-delivery-tooling-upkeep/t05-test-runs-stopped-by-process-group.yaml) `v1-e41-t05-test-runs-stopped-by-process-group` | Succeeded | 1 | 1.0 |
 | [An import change in container.py that loads no new module reaches only the parts using its names](plan_specs/v1/e41-delivery-tooling-upkeep/t06-container-imports-read-by-use.yaml) `v1-e41-t06-container-imports-read-by-use` | Pending | 1 | 2.0 |
 | [The spec validator holds each epic's graph to its tasks' prerequisites, and the task helper refuses a prerequisite it cannot find](plan_specs/v1/e41-delivery-tooling-upkeep/t07-spec-graph-checks.yaml) `v1-e41-t07-spec-graph-checks` | Pending | 1 | 2.0 |
 

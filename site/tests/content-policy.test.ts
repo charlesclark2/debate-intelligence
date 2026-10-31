@@ -372,6 +372,81 @@ describe('named students', () => {
 })
 
 /**
+ * A check dated after the season's last day, 31 July of its second year, is not a check made in
+ * that season, any more than one dated before 1 August is. Until v1-e37-t13 the build accepted
+ * one, and only v1-e37-t11's tests of the shipped manifest refused it, so a prod build alone
+ * would have published a name or an image on it. The name, the image and the reference are
+ * invented.
+ */
+describe('a consent entry checked after its season ends', () => {
+  const NAME = 'Jordan Rivera'
+  const PATH = '/photos/planted-orientation.jpg'
+  const student = {
+    publishedName: NAME,
+    publishedForm: 'full-name-and-class-year' as const,
+    graduationYear: 2028,
+    consentReference: 'MC-PLANT-001',
+    season: CASE_SEASON,
+  }
+  const image = {
+    path: PATH,
+    consentReference: 'MC-PLANT-002',
+    depicts: '2 team members, both covered',
+    season: CASE_SEASON,
+  }
+
+  function input(markdown: string, dateChecked: string) {
+    return {
+      pages: [pageFrom(markdown)],
+      settings,
+      consent: {
+        ...consent,
+        season: CASE_SEASON,
+        students: [{ ...student, dateChecked }],
+        images: [{ ...image, dateChecked }],
+      },
+    }
+  }
+
+  const published = [
+    [
+      'a name',
+      `${NAME} reached quarterfinals.`,
+      /names "Jordan Rivera", whose consent entry is for season 2026-27, checked 2027-08-02/,
+    ],
+    [
+      'an image',
+      `![Two team members at orientation](${PATH})`,
+      /references the image \/photos\/planted-orientation\.jpg, whose consent entry is for season 2026-27, checked 2027-08-02/,
+    ],
+  ] as const
+
+  it.each(published)('fails a prod build on %s', (_case, markdown, reason) => {
+    expect(() => enforcePublishingPolicy(input(markdown, '2027-08-02'), PROD)).toThrow(PublishingPolicyError)
+    expect(() => enforcePublishingPolicy(input(markdown, '2027-08-02'), PROD)).toThrow(reason)
+  })
+
+  it.each(published)('lets a dev build come up, printing %s with the problems', (_case, markdown, reason) => {
+    const printed = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const report = enforcePublishingPolicy(input(markdown, '2027-08-02'), DEV)
+      expect(report.errors.map((error) => error.message).join('\n')).toMatch(reason)
+      const problems = printed.mock.calls
+        .map(([block]) => String(block))
+        .filter((block) => block.startsWith('Publishing policy problems, which will fail a prod build:'))
+      expect(problems.join('\n')).toMatch(reason)
+    } finally {
+      printed.mockRestore()
+    }
+  })
+
+  it.each(published)('builds %s checked on 31 July, the season\'s last day, in prod and in dev', (_case, markdown) => {
+    expect(enforcePublishingPolicy(input(markdown, '2027-07-31'), PROD).errors).toEqual([])
+    expect(enforcePublishingPolicy(input(markdown, '2027-07-31'), DEV).errors).toEqual([])
+  })
+})
+
+/**
  * The front matter a page publishes outside its body (v1-e37-t02 review, change 1). A title is
  * the page's <h1> and its <title>, a description is the meta description a search result or a
  * shared link shows, and a navLabel is printed in the navigation. Until the review only the export
@@ -444,6 +519,12 @@ describe('the start-of-season check', () => {
     expect(isStale({ season: '2026-27', dateChecked: '2026-07-31' }, '2026-27')).toBe(true)
     expect(isStale({ season: '2026-27', dateChecked: '2026-08-01' }, '2026-27')).toBe(false)
     expect(isStale({ season: '2025-26', dateChecked: '2026-09-18' }, '2026-27')).toBe(true)
+  })
+
+  it('calls an entry stale when it was last checked after the season ended, on 31 July', () => {
+    expect(isStale({ season: '2026-27', dateChecked: '2027-07-31' }, '2026-27')).toBe(false)
+    expect(isStale({ season: '2026-27', dateChecked: '2027-08-01' }, '2026-27')).toBe(true)
+    expect(isStale({ season: '2026-27', dateChecked: '2027-08-02' }, '2026-27')).toBe(true)
   })
 
   /**

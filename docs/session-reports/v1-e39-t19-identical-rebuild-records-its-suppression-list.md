@@ -209,9 +209,43 @@ it. That is optional; it closes no criterion of this task.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-01
 
 **Notes:**
+
+An identical rebuild under a longer suppression list now records what it was checked against, beside
+the manifest and under the run's lock, and the comparison agrees for the cutover's case.
+1. **Both criteria pass.**
+   * Red: 9 and 1, then 5. Green: 15 and 16, and the node criterion 17.
+   * PUTs are counted as versions in moto's versioned bucket: one record version, and the gzip
+     object, the manifest and the pointer untouched. That proves "no re-upload" well.
+   * Nine mutants were caught. The lock mutant is caught both by the missing renewal and by the
+     write after a takeover, against a real `BucketRunLock`.
+   * Rebuilding mutant 8 after its first form proved nothing is agreement 8 applied properly.
+2. **The record beside the manifest is the right call, and you showed why.** The holder checks the
+   manifest's sha256 against the pointer and reads it with `extra="forbid"`. An in-place update
+   would break every cold start, and moving the pointer would make every environment download an
+   unchanged index again.
+3. **Decisions accepted:**
+   * the record names its manifest by digest, so a stale record is never read;
+   * what it holds;
+   * dev.200's holder, `current()`, restore and prune, each run as that build's own code;
+   * the restore bringing the record back for the comparison;
+   * the stage's JSON left unchanged.
+4. **The deviation, `git ls-remote`:** noted and accepted, since it was read-only and the local tag
+   held the same commit. The rule stands: any live call to our remotes or accounts goes to the
+   operator.
+5. **Follow-ups:**
+   * **Lines in `evidence-store-layout.md` and `docs/data/search-index.md`:** in the PM's next batch.
+   * **The weekly identical rebuild skipped when a restored record matches the sources, and
+     `tub index publish --newest` on the current index recording instead of republishing:** one p3
+     E39 task.
+   * **The comparison record:** stays as measured.
+6. **Closing checks:** the affected set (252 files) is left to the PR's `ci` under agreement 10. The
+   always-run list (369) and the changed areas (510) pass, as do pyright, ruff, lint-imports and
+   the specs.
+7. **Merge:** once the PR's `ci` is green. If it merges before Monday's image deploy, Wednesday's
+   run writes dev's first record, the five-against-six list. It is a plain `scripts/task pr`.

@@ -321,9 +321,45 @@ PM questions from v1-e01-t43 (container.py diff read part by part)
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-01
 
 **Notes:**
+
+The script now reads a `container.py` change by part, and falls back to the whole file for anything
+that runs on import. The rule is exact. The gain is small until imports are read finer, and the
+measurement shows that plainly.
+1. **ac1 passes, read over t38's five merges together.**
+   * 1,776 files became 1,774, and none selects more. All 12 lists are subsets of `dev`'s, and
+     `--whole-container` reproduces `dev` on all 12.
+   * Red: 30 failed and 2 passed against the skeleton, and 32 failed against `dev`'s script.
+     Green: 109 cases, and the node criterion 139.
+   * 19 mutants, all caught. Mutant 1, the forbidden item, is caught by 6 cases, and over the real
+     tree it drops exactly the two smoke tests reached only through the call graph. That is the
+     strongest evidence here.
+2. **Decisions accepted:**
+   * t39's parts;
+   * syntax without line numbers;
+   * each whole-file fallback, with the reason each is safe;
+   * comments and layout reaching nothing;
+   * the name search kept, apart from the whole-readers;
+   * `--whole-container` as the way back;
+   * measuring over the start commit's tree.
+3. **PM question 2: (a).** Deviation 1 is accepted. The criterion is read over the five merges, as
+   t39's ac3 was.
+4. **PM question 1: (b), in its own p3 task with its own mutants.** An import change is read by the
+   parts that use the names it binds, only when the set of modules the container's top-level
+   imports load is the same on both sides. (c) is not taken, for the reason you give. The same task
+   takes the `"debate_cli.container.X"` strings (Follow-up 3), reaching part `X`, or the whole file
+   when `X` is an import.
+5. **The optional evidence run is recommended before the merge.** It finishes the only check the
+   session could not, that no dropped file starts its merge's changed part, and it costs about two
+   minutes. The PM records its result. A miss would mean the PR merges with `--whole-container` as
+   the default until a fix lands.
+6. **Your process-group hard stop** is what the PM's planned wrapper task should adopt. v1-e40-t22
+   lost a run to the same failed alarm.
+7. **Closing checks:** the affected set (44 files) is left to the PR's `ci` under agreement 10, after
+   two runs stopped at load 30 and 54. The node criterion and the whole-repo checks pass.
+8. **Merge:** after the evidence run, once the PR's `ci` is green. It is a plain `scripts/task pr`.

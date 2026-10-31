@@ -291,8 +291,10 @@ How to work:
    runbooks, guides, READMEs and your session report; scripts/check_command_blocks.py fails CI on one.
 9. Never run the whole test suite, in one command or in parts: CI runs what the pull request's
    changes reach, and everything on dev's push run (working agreement 10). While working, run the
-   tests for what you change. Before the report, run the affected set once with
-   `uv run scripts/affected_tests.py --run`, plus ruff, pyright on the changed packages,
+   tests for what you change. Bound every test run you start at 115 seconds with
+   `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest ...`, which stops the run
+   and every process it started, xdist workers included. Before the report, run the affected set
+   once with `uv run scripts/affected_tests.py --run`, plus ruff, pyright on the changed packages,
    lint-imports and scripts/validate_specs.py, and record the commands and results. If it says the
    whole selection is affected, run nothing more; agreement 10 says when to hand the operator one
    whole-selection run.

@@ -252,9 +252,17 @@ tests its changes reach, and the whole selection runs once per merge instead (`v
     written in 2026-10-20);
   * `ruff format --check`, `ruff check`, `pyright packages/<changed packages>`, `lint-imports`,
     `scripts/validate_specs.py`, and the docs checks when docs changed. These take seconds.
-* **A time limit goes on the interpreter, not on `uv`.** `perl -e 'alarm 115; exec @ARGV' uv run
-  pytest ...` stops `uv` and leaves its pytest child running to the end. Put the alarm on
-  `.venv/bin/python -m pytest ...` directly (`v1-e39-t09`, written in by the PM, 2026-10-21).
+* **A test run's time limit stops its whole process group.** A session bounds every test run it
+  starts at 115 seconds with `scripts/hard_stop.py`:
+  `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest ...`. The script runs the
+  command in a process group of its own, which pytest-xdist's workers join. At the limit it sends
+  TERM to the whole group, then KILL after 5 seconds, says on stderr that it stopped the run at its
+  115-second limit, and exits 124. A run that finishes in time exits with its own code. The perl
+  alarm sessions used before stopped only the process it was set on: on `uv` it left uv's pytest
+  running (`v1-e39-t09`), and on pytest it left the xdist workers running, which kept
+  `v1-e40-t22`'s run going for about 30 minutes at a load near 50 (`v1-e41-t05`). The group kill
+  reaches both, and the limit still goes on `.venv/bin/python`, which skips uv's sync. A process
+  that starts its own session or process group escapes the kill; pytest and xdist do not.
 * **Tests that share process-wide state are checked in one process.** A logging filter, a logger's
   handlers or any module-level registry is shared by every test in an xdist worker, so a test can
   pass or fail, or a leak can be hidden, by which other suite ran first. When a task's tests assert

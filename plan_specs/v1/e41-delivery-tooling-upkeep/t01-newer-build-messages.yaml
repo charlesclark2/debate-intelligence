@@ -63,7 +63,7 @@ spec:
         under another style profile gets a hint naming both without asserting which is
         newer; tests shown failing first.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

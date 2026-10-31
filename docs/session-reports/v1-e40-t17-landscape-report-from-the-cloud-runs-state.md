@@ -325,3 +325,17 @@ put at risk.
 9. **Merge `--partial`.** The hspolicy26 proof is the operator's after the merge, on any day but
    Wednesday, about 35 to 55 minutes. It is v1-e32-t29's republish, with no model spend. It should run
    before Wednesday 2026-11-04, so Friday's LD run follows a path already proven.
+
+## Operator records (recorded by the PM, 2026-10-31)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac3, the restore (step 1) | NOT RUN | PASS | 2026-10-30, on the installed `v1.1.0-dev.200`, `CASELIST=hspolicy26`: `exit 0`, 54 manifests restored, `"parsed_version": "2026.10.27-docx-7"`, `"parsed_objects": 0` (as predicted: the cloud image parses with docx-6), 17 manifests naming 4,342 raw sources, all 4,342 fetched (1,226,448,803 bytes), 0 suppressed |
+| ac3, the parse (step 2) | NOT RUN | PASS | Dry run: `exit 0`, parser `2026.10.27-docx-7`, 4,342 sources, 0 skipped, 0 suppressed, 4,342 to parse. Parse: `exit 0`, 4,342 attempted, 4,294 parsed, 139,491 cards, failure rate 0.0, threshold not exceeded, 980.9 s |
+| ac3, the dry run (step 3) | NOT RUN | PASS | The first attempt stopped with `USAGE_ERROR` (exit 2): an installed build carries no `config/landscape/`, and the block runs from `$HOME`, so nothing named the configuration. Nothing was read or written. Run again with `--config-dir` naming the main checkout's `config/landscape` (on `dev`, unchanged since 2026-10-26): `exit 0`, snapshot `2026-10-27`, docx-7, not stale, 4,294 sources, 139,491 cards, 69,589 counted, 98 positions, `would_ask 0`, `held_back 0`, 0 model calls, 3 scan hits all accepted before (`not_yet_accepted 0`), 7 files planned, all `UPLOAD` |
+| ac3, the publish (step 4) | NOT RUN | PASS | `exit 0`, snapshot `2026-10-27`, 0 model calls, 139,491 cards, 7 uploaded, 0 unchanged, nothing refused |
+| ac3, the copy deleted (step 5) | NOT RUN | PASS | `removed …/landscape-copy-hspolicy26`, the five `/tmp` files deleted, 0 landscape copies left |
+
+The runbook's missing `--config-dir` is fixed by the PM in the same batch as this record (2026-10-31), with the parse's measured time. Every criterion passes, so the Goal is `Succeeded`. This publish is also `v1-e32-t29`'s republish, which carries `v1-e32-t28`'s.

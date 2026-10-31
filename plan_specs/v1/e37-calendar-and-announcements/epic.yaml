@@ -338,5 +338,23 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e37-t12-stale-image-consent-refused
+    - id: t13
+      kind: Task
+      name: 'A consent entry checked after its season ends is stale to the build, for names and images'
+      description: >-
+        A consent entry checked after its season ends is stale to the build, for names and
+        images.
+      inputs:
+        specRef: plan_specs/v1/e37-calendar-and-announcements/t13-consent-checked-after-the-season-is-stale.yaml
+        goalRef: v1-e37-t13-consent-checked-after-the-season-is-stale
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e37-t13-consent-checked-after-the-season-is-stale reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e37-t13-consent-checked-after-the-season-is-stale
 status:
   phase: Pending

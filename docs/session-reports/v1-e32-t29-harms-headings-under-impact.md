@@ -567,3 +567,14 @@ Harms is read as an advantage's impact, by one rule, as ruled on 2026-10-27 (Q1 
    `v1-e32-t28`'s republish has not run either, and this task's block is t28's, so one republish after
    this task merges carries both. Paste t28's pilot lines with this task's: the Costs advantage's Teams
    column, its chain's Impact row, and the "no labelled impact" line.
+
+## Operator records (recorded by the PM, 2026-10-31)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| The republish to dev | NOT RUN | PASS (the upload) | 2026-10-30, through `v1-e40-t17`'s runbook rather than this report's block, on `v1.1.0-dev.200` with `--model-mode none`: hspolicy26's snapshot `2026-10-27` published to `reports/landscape/hspolicy26/2026-10-27/`, 7 uploaded, 0 unchanged, 3 scan hits all accepted before. It carries `v1-e32-t28`'s republish too |
+| The pilot check | NOT RUN | NOT RUN | The operator's, at `tub.dev.wfbdebate.com/landscape/hspolicy26`: no Harms row in any link-chain table, and the Costs advantage's table read for the newer snapshot's own counts |
+
+The Goal was already `Succeeded`; the pilot check is recorded here when it is read.

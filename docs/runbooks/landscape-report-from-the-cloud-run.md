@@ -32,27 +32,35 @@ version is refused with `PARSED_VERSION_NOT_IN_STORE`, which is what step 2 is f
 naming the data directory, a directory inside it or holding it, or one inside a checkout is refused with
 `RESTORED_COPY_REFUSED`.
 
-**One caselist per pass, in one terminal window**, which keeps `CASELIST` and `COPY` from the first block
-to the last. The output files under `/tmp` hold counts, except the scan's lines, which can name a school
+**One caselist per pass, in one terminal window**, which keeps `CASELIST`, `COPY` and `CFG` from the first
+block to the last. The output files under `/tmp` hold counts, except the scan's lines, which can name a school
 or a team: those are for your terminal only, and the last block deletes the files.
 
 ## Before you start
 
-The build on this Mac must be a dev release carrying `v1-e40-t17`. Set the caselist, then check the build,
-the day and the room:
+The build on this Mac must be a dev release carrying `v1-e40-t17`. An installed build carries no landscape
+configuration (`config/landscape/`: the topics, the taxonomies, the plan and analytic texts), so steps 3
+and 4 name it with `--config-dir "$CFG"`, from your checkout on `dev`. Without it the report stops with
+`Invalid value for --config-dir` (exit `2`) before it reads or writes anything, as the first proof run
+found on 2026-10-30. Pull that checkout first, with `git -C <checkout> pull --ff-only`, so its
+configuration is dev's. Set the caselist, then check the build, the configuration, the day and the room:
 
 **Operator command** (expected runtime a few seconds)
 Where: your Mac, in a new terminal window
 ```bash
 CASELIST=hspolicy26
 COPY="$HOME/.debate-research/landscape-copy-${CASELIST}"
+CFG="$HOME/Documents/debate/debate-intelligence-tool/debate-intelligence/config/landscape"
 debate-research --json --version | python3 -I -c 'import json, sys; print(json.load(sys.stdin)["data"]["tag"])'
 debate-research landscape report --help | grep -c -- '--restored-copy'
+git -C "$CFG" rev-parse --abbrev-ref HEAD
+grep -c -E "caselist: ${CASELIST}\$" "$CFG/topics.yaml"
 date +%A
 df -g "$HOME" | awk 'NR == 2 { print $4 " GB free" }'
 ```
-Success looks like a tag of the release carrying `v1-e40-t17` or later, then a count of 1 or more, a
-day that is not Wednesday, and 15 GB free or more. A count of `0` means the build is older: install a
+Success looks like a tag of the release carrying `v1-e40-t17` or later, then a count of 1 or more,
+`dev`, a count of `1` (the caselist has a topic in the checkout's `topics.yaml`), a day that is not
+Wednesday, and 15 GB free or more. A count of `0` means the build is older: install a
 newer dev release first. The copy needs about 6 GB for hspolicy26: its raw sources (1.1 GB through
 2026-10-20, measured from the manifests, plus the cloud's weeks) and the parsed store step 2 writes
 (the data directory's hspolicy26 parsed store is 4.0 GB).
@@ -109,9 +117,9 @@ copy, and install a newer release.
 
 Then the parse, under `caffeinate`:
 
-**Operator command** (expected runtime ~12 to 15 min for hspolicy26 from nothing: its full parses took
-611 to 747 s for 2,657 sources in October (`docs/data/caselist-parse-report.md`), and the cloud's weeks
-add some; much less when step 1 restored a directory)
+**Operator command** (expected runtime ~16 to 20 min for hspolicy26 from nothing: 4,342 sources took
+981 s on 2026-10-30, `v1-e40-t17`'s proof run, against 611 to 747 s for 2,657 sources in October
+(`docs/data/caselist-parse-report.md`); much less when step 1 restored a directory)
 Where: your Mac, in the same window
 ```bash
 if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif [ ! -d "$COPY" ]; then echo "STOP: no copy at ${COPY}"; else cd "$HOME" && caffeinate -i env DEBATE_ENV=dev DEBATE_STORAGE__DATA_DIR="$COPY" debate-research --json caselist parse --caselist "$CASELIST" > /tmp/landscape-parse.json; echo "exit $?"; grep -oE '"(version|attempted|parsed|cards|failure_rate|threshold_exceeded|elapsed_seconds)": ("[^"]*"|[0-9.]+|true|false)|"code": "[A-Z_]+"' /tmp/landscape-parse.json; fi
@@ -122,18 +130,20 @@ the file, which holds counts only.
 
 ## 3. The dry run, and its counts
 
-The report over the copy, writing nothing: not the classification cache, not the review queue, not the
-bundle, not the bucket. It signs in to dev, because it asks the bucket which files would go up, and it
+The report over the copy, writing nothing but the plan-text and analytic-text caches, in your data
+directory (`v1-e32-t30`): not the classification cache, not the review queue, not the bundle, not the
+bucket, and nothing in the copy. It signs in to dev, because it asks the bucket which files would go up, and it
 says how many cards it would ask the model about.
 With `--model-mode none` that is 0, and it asks none.
 
 **Operator command** (expected runtime ~5 to 12 min the first time this build reports the caselist, a
 few minutes after: the plan-text and analytic-text caches hold only `2026.10.20-docx-6` readings, so
-the first report on this build reads every on-topic source again, and a dry run keeps none of it; the
-analytic texts' first fill took 551 s on 2026-10-24)
+the first report on this build reads every on-topic source again, and the dry run keeps what it read in
+those two caches for step 4 (a build before `v1-e32-t30` keeps none of it); the analytic texts' first
+fill took 551 s on 2026-10-24)
 Where: your Mac, in the same window
 ```bash
-if [ "$(date +%u)" = 3 ]; then echo "STOP: it is Wednesday, the cloud run's day"; elif env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif [ ! -d "$COPY" ]; then echo "STOP: no copy at ${COPY}"; else aws sso login --profile debate-dev-evidence && cd "$HOME" && caffeinate -i env DEBATE_ENV=dev debate-research --json landscape report --caselist "$CASELIST" --restored-copy "$COPY" --model-mode none --publish --dry-run > /tmp/landscape-dry-run.json; echo "exit $?"; python3 -I -c 'import json, sys; e = json.load(open(sys.argv[1])); d = e.get("data") or (e.get("error") or {}).get("details") or {}; c = d.get("counts") or {}; m = (d.get("classification") or {}).get("model") or {}; s = d.get("scan") or {}; print("code", (e.get("error") or {}).get("code")); print("snapshot", d.get("snapshot"), "parsed_version", d.get("parsed_version"), "stale", (d.get("staleness") or {}).get("stale")); print("sources", c.get("sources"), "cards", c.get("cards"), "counted", c.get("cards_counted"), "positions", c.get("positions")); print("would_ask", m.get("would_ask"), "held_back", m.get("held_back"), "model_calls", d.get("model_calls")); print("scan_hits", len(s.get("hits") or []), "not_yet_accepted", s.get("not_yet_accepted"), "digest", s.get("digest")); print("planned", [one["action"] for one in (d.get("publish") or {}).get("planned") or []])' /tmp/landscape-dry-run.json; fi
+if [ "$(date +%u)" = 3 ]; then echo "STOP: it is Wednesday, the cloud run's day"; elif env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif [ ! -d "$COPY" ]; then echo "STOP: no copy at ${COPY}"; elif [ ! -f "$CFG/topics.yaml" ]; then echo "STOP: no topics.yaml in ${CFG}"; else aws sso login --profile debate-dev-evidence && cd "$HOME" && caffeinate -i env DEBATE_ENV=dev debate-research --json landscape report --caselist "$CASELIST" --restored-copy "$COPY" --config-dir "$CFG" --model-mode none --publish --dry-run > /tmp/landscape-dry-run.json; echo "exit $?"; python3 -I -c 'import json, sys; e = json.load(open(sys.argv[1])); d = e.get("data") or (e.get("error") or {}).get("details") or {}; c = d.get("counts") or {}; m = (d.get("classification") or {}).get("model") or {}; s = d.get("scan") or {}; print("code", (e.get("error") or {}).get("code")); print("snapshot", d.get("snapshot"), "parsed_version", d.get("parsed_version"), "stale", (d.get("staleness") or {}).get("stale")); print("sources", c.get("sources"), "cards", c.get("cards"), "counted", c.get("cards_counted"), "positions", c.get("positions")); print("would_ask", m.get("would_ask"), "held_back", m.get("held_back"), "model_calls", d.get("model_calls")); print("scan_hits", len(s.get("hits") or []), "not_yet_accepted", s.get("not_yet_accepted"), "digest", s.get("digest")); print("planned", [one["action"] for one in (d.get("publish") or {}).get("planned") or []]); t = d.get("text_caches") or {}; print("text_caches_read", [(t.get(k) or {}).get("read") for k in ("plan_texts", "analytic_texts")])' /tmp/landscape-dry-run.json; fi
 ```
 Success looks like:
 
@@ -143,7 +153,9 @@ Success looks like:
 * `stale False`;
 * `sources`, `cards` and `counted` above zero;
 * `would_ask 0`, `held_back 0` and `model_calls 0`;
-* `not_yet_accepted 0`, and `planned` seven entries, each `UPLOAD` or `UNCHANGED`.
+* `not_yet_accepted 0`, and `planned` seven entries, each `UPLOAD` or `UNCHANGED`;
+* `text_caches_read` two numbers, above zero the first time this build reports the caselist (`[None,
+  None]` from a build before `v1-e32-t30`).
 
 **Send the PM these lines** before the publish. They hold counts only. **Stop** on:
 
@@ -163,9 +175,9 @@ It prints every hit, the ones accepted before among them. If no line names a tea
 digest the dry run printed, in step 4's second block. If one does, stop and tell the PM that a hit names
 a team, without the line.
 
-**A model run** (`v1-e32-t06`'s LD report, never hspolicy26's proof): the same blocks, from a checkout of
-`dev`, with `uv run debate-research` in place of `debate-research` and `--model-mode live` in place of
-`--model-mode none`. Then `would_ask` is the number of cards the publish would send to the model and
+**A model run** (`v1-e32-t06`'s LD report, never hspolicy26's proof): the same blocks, with the installed
+build and `CFG` naming a checkout of `dev` that holds the caselist's taxonomy, and `--model-mode live` in
+place of `--model-mode none`. Not `uv run` from a checkout: every block runs from `$HOME`. Then `would_ask` is the number of cards the publish would send to the model and
 `held_back` the number over `--max-model-items` left for a later run. The PM reads both before the
 publish block runs.
 
@@ -174,15 +186,19 @@ publish block runs.
 The same report, written to the data directory and uploaded to `reports/landscape/<caselist>/<snapshot>/`
 in the dev bucket, under the dev run lock. Only after the PM has read the dry run's lines.
 
-**Operator command** (expected runtime about as long as the dry run, since it reads the same sources
-again and keeps them this time)
+**Operator command** (expected runtime a few minutes with a build carrying `v1-e32-t30`: the dry run
+filled the plan-text and analytic-text caches, so the publish parses no source again but the few holding
+a text the report quotes; about as long as the dry run with a build before it)
 Where: your Mac, in the same window
 ```bash
-if [ "$(date +%u)" = 3 ]; then echo "STOP: it is Wednesday, the cloud run's day"; elif env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif [ ! -d "$COPY" ]; then echo "STOP: no copy at ${COPY}"; else aws sso login --profile debate-dev-evidence && cd "$HOME" && caffeinate -i env DEBATE_ENV=dev debate-research --json landscape report --caselist "$CASELIST" --restored-copy "$COPY" --model-mode none --publish > /tmp/landscape-publish.json; echo "exit $?"; python3 -I -c 'import json, sys; e = json.load(open(sys.argv[1])); d = e.get("data") or (e.get("error") or {}).get("details") or {}; p = d.get("publish") or {}; print("code", (e.get("error") or {}).get("code")); print("snapshot", d.get("snapshot"), "model_calls", d.get("model_calls"), "cards", (d.get("counts") or {}).get("cards")); print("uploaded", len(p.get("uploaded") or []), "unchanged", len(p.get("unchanged") or []), "refused", p.get("refused"))' /tmp/landscape-publish.json; fi
+if [ "$(date +%u)" = 3 ]; then echo "STOP: it is Wednesday, the cloud run's day"; elif env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif [ ! -d "$COPY" ]; then echo "STOP: no copy at ${COPY}"; elif [ ! -f "$CFG/topics.yaml" ]; then echo "STOP: no topics.yaml in ${CFG}"; else aws sso login --profile debate-dev-evidence && cd "$HOME" && caffeinate -i env DEBATE_ENV=dev debate-research --json landscape report --caselist "$CASELIST" --restored-copy "$COPY" --config-dir "$CFG" --model-mode none --publish > /tmp/landscape-publish.json; echo "exit $?"; python3 -I -c 'import json, sys; e = json.load(open(sys.argv[1])); d = e.get("data") or (e.get("error") or {}).get("details") or {}; p = d.get("publish") or {}; print("code", (e.get("error") or {}).get("code")); print("snapshot", d.get("snapshot"), "model_calls", d.get("model_calls"), "cards", (d.get("counts") or {}).get("cards")); print("uploaded", len(p.get("uploaded") or []), "unchanged", len(p.get("unchanged") or []), "refused", p.get("refused"))' /tmp/landscape-publish.json; fi
 ```
 Success looks like `exit 0`, `code None`, the dry run's `snapshot` and `cards`, `model_calls 0`, and
 `uploaded` plus `unchanged` equal to 7, with `uploaded` above zero for a week not published before.
-`RUN_LOCK_HELD`: a run holds the lock; wait and run this block again. `STORE_CREDENTIALS_EXPIRED`: run it
+`RUN_LOCK_HELD`: a run holds the lock; wait and run this block again. In a model run, `MODEL_STAGE_INTERRUPTED`
+with exit `3` means the model was throttled or did not answer (`error.details.cause_code` says which): the
+cards it answered are cached, so run the same block again later and it asks only about the rest
+(`v1-e32-t32`). The same code with exit `1` is a refused call: stop and tell the PM. `STORE_CREDENTIALS_EXPIRED`: run it
 again, which signs in first. A scan refusal (exit `1`, `refused` naming the scan) means hits the dry run
 did not show: read them as step 3 says, then the next block.
 
@@ -193,7 +209,7 @@ it. It is accepted only while it is the digest of the hits this run finds:
 Where: your Mac, in the same window
 ```bash
 DIGEST=
-if [ -z "$DIGEST" ]; then echo "STOP: set DIGEST to the dry run's digest"; elif [ "$(date +%u)" = 3 ]; then echo "STOP: it is Wednesday, the cloud run's day"; elif env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif [ ! -d "$COPY" ]; then echo "STOP: no copy at ${COPY}"; else aws sso login --profile debate-dev-evidence && cd "$HOME" && caffeinate -i env DEBATE_ENV=dev debate-research --json landscape report --caselist "$CASELIST" --restored-copy "$COPY" --model-mode none --publish --accept-scan-hits "$DIGEST" > /tmp/landscape-publish.json; echo "exit $?"; python3 -I -c 'import json, sys; e = json.load(open(sys.argv[1])); d = e.get("data") or (e.get("error") or {}).get("details") or {}; p = d.get("publish") or {}; print("code", (e.get("error") or {}).get("code")); print("snapshot", d.get("snapshot"), "model_calls", d.get("model_calls")); print("uploaded", len(p.get("uploaded") or []), "unchanged", len(p.get("unchanged") or []), "refused", p.get("refused"), "accepted_now", (d.get("scan") or {}).get("accepted_now"))' /tmp/landscape-publish.json; fi
+if [ -z "$DIGEST" ]; then echo "STOP: set DIGEST to the dry run's digest"; elif [ "$(date +%u)" = 3 ]; then echo "STOP: it is Wednesday, the cloud run's day"; elif env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif [ ! -d "$COPY" ]; then echo "STOP: no copy at ${COPY}"; elif [ ! -f "$CFG/topics.yaml" ]; then echo "STOP: no topics.yaml in ${CFG}"; else aws sso login --profile debate-dev-evidence && cd "$HOME" && caffeinate -i env DEBATE_ENV=dev debate-research --json landscape report --caselist "$CASELIST" --restored-copy "$COPY" --config-dir "$CFG" --model-mode none --publish --accept-scan-hits "$DIGEST" > /tmp/landscape-publish.json; echo "exit $?"; python3 -I -c 'import json, sys; e = json.load(open(sys.argv[1])); d = e.get("data") or (e.get("error") or {}).get("details") or {}; p = d.get("publish") or {}; print("code", (e.get("error") or {}).get("code")); print("snapshot", d.get("snapshot"), "model_calls", d.get("model_calls")); print("uploaded", len(p.get("uploaded") or []), "unchanged", len(p.get("unchanged") or []), "refused", p.get("refused"), "accepted_now", (d.get("scan") or {}).get("accepted_now"))' /tmp/landscape-publish.json; fi
 ```
 Success is the block above's, with `accepted_now True`. The acceptance is recorded in your dev data
 directory, so next week's publish stops only on new hits.

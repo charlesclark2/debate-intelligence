@@ -1018,5 +1018,22 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e01-t45-stamp-docstrings
+    - id: t46
+      kind: Task
+      name: 'The single-interpreter scan leaves site/ out, as the Node project it is'
+      description: >-
+        The single-interpreter scan leaves site/ out, as the Node project it is.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t46-single-interpreter-scan-leaves-site-out.yaml
+        goalRef: v1-e01-t46-single-interpreter-scan-leaves-site-out
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t46-single-interpreter-scan-leaves-site-out reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t46-single-interpreter-scan-leaves-site-out
 status:
   phase: Pending

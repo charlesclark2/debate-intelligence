@@ -1,0 +1,69 @@
+# TASK v1-e40-t24-restore-refuses-either-data-directory - A restore refuses both environments' data directories, not only its own
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t24-restore-refuses-either-data-directory
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "A restore refuses both environments' data directories, not only its own"
+spec:
+  # Filed by the PM, 2026-10-31, from v1-e40-t21's Follow-up work 3 (the PM's review, 2026-10-31).
+  description: >-
+    In dev, `caselist restore-run-state --into ~/.debate-research/prod` is accepted while prod's
+    data directory is absent or empty, and the restored-copy marker would then land in a live
+    data directory. Make the restore's target refusal cover the data directories of both
+    environments (inside them, holding them, or either one itself), from the settings each would
+    resolve to, whatever the running environment.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests]
+    forbidden:
+      - A path in a refusal's message beyond what the current refusals print
+      - Network or AWS access in any test
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A dev restore into prod's data directory, inside it or holding it is refused, as is
+        the converse in prod, and a copy elsewhere is accepted, by tests shown failing
+        first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t24-restore-refuses-either-data-directory-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    A restore refuses both environments' data directories, not only its own.
+  goalRef:
+    name: v1-e40-t24-restore-refuses-either-data-directory
+  graph:
+    nodes:
+      - id: restore-refuses-either-data-directory
+        kind: Task
+        name: Either data directory refused
+        description: >-
+          A restore refuses both environments' data directories, not only its own.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Either data directory refused tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, restore]
+status:
+  phase: Pending

@@ -62,7 +62,7 @@ spec:
         deleted), and the operator's publish of hspolicy26's newest snapshot to dev through them,
         recorded as counts (operator).
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

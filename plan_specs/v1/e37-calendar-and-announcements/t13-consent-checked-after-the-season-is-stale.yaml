@@ -1,0 +1,72 @@
+# TASK v1-e37-t13-consent-checked-after-the-season-is-stale - A consent entry checked after its season ends is stale to the build, for names and images
+# Epic: E37 — Calendar & Announcements (Coach-Editable) | Release: v1.6 (Public team website) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e37-t13-consent-checked-after-the-season-is-stale
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e37-calendar-and-announcements
+  annotations:
+    debate/title: "A consent entry checked after its season ends is stale to the build, for names and images"
+spec:
+  # Filed by the PM, 2026-10-31, from v1-e37-t12's Follow-up work 2 (the PM's review, 2026-10-31).
+  description: >-
+    `isStale` accepts an entry for `2026-27` checked on `2027-08-02`, after the season ends.
+    v1-e37-t11's tests refuse that date, so CI catches it, but a prod build alone does not. Make
+    `isStale` treat a `dateChecked` after the season's end (31 July) as stale, which changes the
+    name rule and the image rule at once, and check that the results page's use of it
+    (`site/src/lib/results.ts`) still does what it should.
+  priority: 3
+  constraints:
+    packages: [site, docs/guides]
+    forbidden:
+      - A guard weakened
+      - A real student's name in a test fixture
+      - A dependency manifest or lockfile under site/ changed
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A name or an image published against an entry checked after its season ends fails a
+        prod build and is printed in a dev build, an entry checked within its season builds,
+        and the results page is unchanged for the shipped content, by tests shown failing
+        first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e37-t13-consent-checked-after-the-season-is-stale-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e37-calendar-and-announcements
+spec:
+  description: >-
+    A consent entry checked after its season ends is stale to the build, for names and images.
+  goalRef:
+    name: v1-e37-t13-consent-checked-after-the-season-is-stale
+  graph:
+    nodes:
+      - id: consent-checked-after-the-season-is-stal
+        kind: Task
+        name: Consent after the season
+        description: >-
+          A consent entry checked after its season ends is stale to the build, for names
+          and images.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Consent after the season tests pass
+            command: pnpm
+            args: [--dir, site, test]
+status:
+  phase: Pending

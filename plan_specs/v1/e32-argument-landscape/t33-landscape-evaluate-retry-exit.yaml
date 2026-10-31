@@ -1,0 +1,74 @@
+# TASK v1-e32-t33-landscape-evaluate-retry-exit - A throttled landscape evaluation exits as retryable, and a throttled stop says how long to wait
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t33-landscape-evaluate-retry-exit
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "A throttled landscape evaluation exits as retryable, and a throttled stop says how long to wait"
+spec:
+  # Filed by the PM, 2026-10-31, from v1-e32-t32's Follow-up work (the PM's review, 2026-10-31).
+  description: >-
+    v1-e32-t32 gave `landscape report` exit 3 when its model stage is stopped by a retryable
+    cause. `landscape evaluate` still exits 1 when throttled, like an evaluation below the bar,
+    though its outcome now carries `interrupted_by`. Give it the same rule (a cause in
+    `RETRYABLE_PROVIDER_FAILURES` exits 3, a refused or unclassified cause exits 1). And when
+    the cause is `ProviderRateLimited` with a `retry_after_seconds`, add it to `error.details`
+    of both commands as one more additive key, so the landscape runbook can say when to run
+    again.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
+    forbidden:
+      - A real model call in a test
+      - A refused model call made retryable
+      - A key removed or renamed in a --json envelope
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A throttled evaluation exits 3 with the cause's code, a refused one exits 1, and a
+        throttled stop of either command reports `retry_after_seconds` when the cause
+        carries it, by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t33-landscape-evaluate-retry-exit-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    A throttled landscape evaluation exits as retryable, and a throttled stop says how long to
+    wait.
+  goalRef:
+    name: v1-e32-t33-landscape-evaluate-retry-exit
+  graph:
+    nodes:
+      - id: landscape-evaluate-retry-exit
+        kind: Task
+        name: Evaluate retry exit
+        description: >-
+          A throttled landscape evaluation exits as retryable, and a throttled stop says
+          how long to wait.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Evaluate retry exit tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests, -k, landscape]
+status:
+  phase: Pending

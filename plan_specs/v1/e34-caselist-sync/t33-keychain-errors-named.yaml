@@ -31,7 +31,11 @@ spec:
     token that is already gone succeed quietly. A run that fails this way records the named code,
     and its notice gives the hint rather than "a bug in debate-research". `INTERNAL_ERROR` stays
     for what is truly unexpected.
-  priority: 2
+    (PM amendment 2026-10-31.) Since the cutover (2026-10-27) the scheduled run is the cloud task, whose
+    token store is Secrets Manager (v1-e40-t02). The keyring now serves commands run by hand on the Mac
+    and the Mac's agent only in a fallback week (caselist-cutover.md). The work stands; its priority
+    drops to 3.
+  priority: 3
   constraints:
     packages: [debate_core.integrations, debate_core.application, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, docs/runbooks]
     forbidden:

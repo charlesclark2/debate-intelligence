@@ -23,7 +23,7 @@ spec:
     is ruled.
   priority: 3
   constraints:
-    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests]
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke]
     forbidden:
       - Evidence text written to a cache
       - A model call in a dry run

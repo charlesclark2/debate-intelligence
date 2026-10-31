@@ -39,7 +39,7 @@ spec:
         loading a new module is still the whole file, and a `debate_cli.container.X` string
         reaches part `X`; every after-list is a subset of before; tests shown failing first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

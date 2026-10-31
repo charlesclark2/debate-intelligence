@@ -226,9 +226,51 @@ None. The affected set (210 files, several minutes) runs in the pull request's `
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-01
 
 **Notes:**
+
+A throttled evaluation now reads as "run it again", and the red run found a worse fault than the one
+filed.
+1. **The real find: a stopped evaluation could pass.** At `a698308` an evaluation stopped partway
+   whose answered cards met the bar exited 0, refused stops included. A score over part of the
+   labelled cards is not the format's score. `passed` now also requires `stopped is None`
+   (`commands/landscape.py`), which I read. Decision 2 is accepted, and it is the most valuable line
+   in this report.
+2. **ac1 passes.**
+   * Red at the start commit failed only on the missing field. You committed the plumbing alone and
+     ran red again, so each of the 9 failures carries its own reason. That is the standard agreement 8
+     asks for.
+   * Green: 14 of 14 selected; the changed areas in full, 275 passed.
+   * All four of the PM's mutants were caught, at assertions. The "key emitted for every cause" mutant
+     broke t32's exact-details cases too, which shows the envelope is pinned.
+   * The `--json` before and after for both commands shows one added key and no key removed or
+     renamed. Evaluate's `error.code` changing to `MODEL_STAGE_INTERRUPTED` for a stopped stage is the
+     point of the task, not a rename (Decision 1).
+3. **Validated against the code:**
+   * `ModelStageInterrupted` sets `retry_after_seconds` only for a `ProviderRateLimited` that carries
+     one, so the key is absent rather than null for any other cause (Decision 4).
+   * `_evaluation_failure` decides the scan first, then the stop through
+     `CommandFailure.from_exception`, then the bar. That is t32's helper reused, not copied.
+   * `bedrock/failures.py` builds `ProviderRateLimited` with no wait: its `after` is the attempt count,
+     not a `Retry-After`. Decision 6 is right, and the runbook's "usually absent" is the honest wording.
+4. **Decisions accepted:**
+   * the scan before the stop;
+   * evaluate's details as its summary plus the stop's own;
+   * evaluate's own message;
+   * Decision 7's note that a rerun in record mode asks every labelled card again.
+5. **Follow-ups:**
+   * **Bedrock's `Retry-After`: not filed.** AWS doesn't document one for Bedrock throttling, and
+     measuring it needs a live throttle. If a Friday run's envelope or the adapter's logs ever show
+     one, the PM files it then.
+   * **The publish block printing `cause_code` and `retry_after_seconds`: yes.** The PM's next batch
+     adds both to step 4's `python3 -I -c` line in `landscape-report-from-the-cloud-run.md`.
+6. **Closing checks:** the affected set (210 files) stopped at its limit with nothing failing, and is
+   left to the PR's `ci` under agreement 10. The always-run list and every file naming a changed
+   module (1,058 passed), ruff, pyright, lint-imports, thin handlers, the doc checks and the specs are
+   clean.
+7. **Merge:** a plain `scripts/task pr` once `ci` is green. Ideally before Friday's LD run, so a
+   throttle in its model stage exits 3 with this wording.

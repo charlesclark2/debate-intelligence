@@ -87,10 +87,12 @@ from debate_core.application.ports.caselist import CaselistRepository
 from debate_core.application.ports.parsed_store import OPENEV_STORE, ParsedStore
 from debate_core.application.ports.suppression import SuppressionList
 from debate_core.arguments.landscape.analytic_texts import plank_words
-from debate_core.arguments.landscape.matcher import PositionMatcher, tag_words
+from debate_core.arguments.landscape.headings import NormalizedHeading
+from debate_core.arguments.landscape.matcher import MatchItem, PositionMatcher, tag_words
 from debate_core.domain.caselist import Event, Side, sides_for_event
 from debate_core.domain.file_recipe import HEADING_MAX_LENGTH, FileRecipe, RecipeStatus
 from debate_core.domain.landscape import Position, PositionKind, PositionSide, Taxonomy
+from debate_core.domain.landscape_classification import ItemKind, section_item_id
 from debate_core.domain.landscape_report import LandscapeCard, TopCard
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
 
@@ -437,10 +439,25 @@ def _without_other_positions(
         raise AssertionError("a landscape run reports the taxonomy and overrides it placed under")
     matcher = PositionMatcher(run.taxonomy, run.overrides)
     elsewhere = {
-        one.block for one in ranked if matcher.heading_position(one.block) not in (None, position.id)
+        one.block
+        for one in ranked
+        if matcher.place(_directly_under(one)).position_id not in (None, position.id)
     }
     kept = [one for one in ranked if one.block not in elsewhere]
     return kept, OtherPositionsLeftOut(blocks=len(elsewhere), cards=len(ranked) - len(kept))
+
+
+def _directly_under(one: _Ranked) -> MatchItem:
+    """A section under `one`'s block heading alone, as the matcher reads a heading directly over a card."""
+    card = one.row
+    return MatchItem(
+        item_id=section_item_id(card.source_object_key.rsplit("/", 1)[-1], (one.block,)),
+        kind=ItemKind.SECTION,
+        source_sha256=card.source_object_key.rsplit("/", 1)[-1],
+        first_element_index=None,
+        headings=(NormalizedHeading(text=one.block, answer=False),),
+        tag=None,
+    )
 
 
 def _naming_the_plan(run: LandscapeRunResult, kept: Sequence[_Ranked]) -> frozenset[str]:

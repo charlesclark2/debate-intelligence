@@ -60,7 +60,7 @@ v2.3's extension work.
 
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
-| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 54 | 252 |
+| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 55 | 252 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 109 | 90 | 499 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 62 | 49 | 290 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 16 | 11 | 114 |
@@ -134,7 +134,7 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 | [The pull request's smoke tier reads the bundled profiles, as the installed build does](plan_specs/v1/e01-repo-foundation/t41-pr-smoke-reads-the-bundled-profiles.yaml) `v1-e01-t41-pr-smoke-reads-the-bundled-profiles` | Succeeded | 1 | 2.0 |
 | [Coverage measured in the test parts and combined, so the push run is never held by one unsplit job](plan_specs/v1/e01-repo-foundation/t42-coverage-measured-in-the-parts.yaml) `v1-e01-t42-coverage-measured-in-the-parts` | Succeeded | 1 | 2.0 |
 | [A change to container.py reaches only the tests of the parts it changes](plan_specs/v1/e01-repo-foundation/t43-container-diff-read-part-by-part.yaml) `v1-e01-t43-container-diff-read-part-by-part` | Succeeded | 0 | 2.0 |
-| [A test that mentions debate-research inside a longer message is not read as running the app](plan_specs/v1/e01-repo-foundation/t44-cli-mention-in-a-message-is-prose.yaml) `v1-e01-t44-cli-mention-in-a-message-is-prose` | Pending | 2 | 1.0 |
+| [A test that mentions debate-research inside a longer message is not read as running the app](plan_specs/v1/e01-repo-foundation/t44-cli-mention-in-a-message-is-prose.yaml) `v1-e01-t44-cli-mention-in-a-message-is-prose` | Succeeded | 2 | 1.0 |
 
 #### [E02 — Domain Core: Entities, Ports & Local Persistence](plan_specs/v1/e02-domain-core/epic.yaml)
 

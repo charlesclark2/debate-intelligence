@@ -326,9 +326,56 @@ restored-copy steps depends on whether a run publishes to prod, which is the PM'
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-01
 
 **Notes:**
+
+A published week, a failed parsed-store publish and a parser bump are now all owed, and the next run
+parses and publishes them whatever it imports. That closes the "next import" gap the last week's
+reviews kept hitting.
+1. **All three criteria and both amendments pass.**
+   * Every new test was red first, on assertions.
+   * The kill harness now requires nothing late at all 21 kill points.
+   * The bucket after a killed week equals an uninterrupted week's, key by key and ETag by ETag.
+   * 12 mutants, all caught in the end. Mutants 7 and 11 survived at first and each produced a test
+     (`[reported]` and the unfollowed caselist), which is agreement 8 working as intended.
+2. **Compatibility is shown properly.** The separate state file is the right call, because an older
+   build rewrites the pending-work file with the one key it knows. dev.164 and dev.200, each with its
+   own code, restore the five files they know, read everything this build writes, and leave the
+   parse-owed object untouched. A stale file after an older run costs one rebuild and loses nothing.
+3. **The full parse's cost is accepted.** About 40 minutes on the Mac, and up to 2 hours on the task
+   at three times slower, against a 6-hour deadline. The owed entries split the work if one run
+   cannot finish it. Follow-up 4's first real `stage_times` replaces the estimate.
+4. **Decisions accepted:**
+   * owed at the publish's confirmation, before the pending-work file lets the snapshot go;
+   * cleared per caselist, and by a removal per snapshot;
+   * owed only where a bucket exists;
+   * the bump check skipping caselists parsed anyway;
+   * an unfollowed caselist left owed and said;
+   * `none owed: …` as the fix line, told apart by `model_fields_set`;
+   * "and" in the cure;
+   * an unreadable file never overwritten or taken as empty;
+   * a drift republish owing a parse.
+5. **Deviation 1:** ruled already. `v1-e40-t25` takes both hints, with the text and places you give.
+   **Deviation 2:** one p3 task in the next PM batch, a smoke check for `parses_owed` in
+   `caselist runs --json` and `caselist status --json`.
+6. **What this changes for the operator, as the PM rules it:**
+   * The next image apply carries it. That is Thursday 2026-11-05 at the earliest, after Wednesday's
+     run is read, and never on a Wednesday. The first scheduled run on it, 2026-11-11, parses every
+     followed caselist in full under docx-7.
+   * That run is dev's docx-7 re-parse. The PM amends `v1-e31-t31` so that its open half (ac4's
+     re-parse) is satisfied by that run's record, not by the restored-copy steps.
+   * Prod still needs `v1-e40-t16`. The cloud run publishes to dev only until the run's home moves
+     at the pilot's promotion (`v1-e40-t11`), so prod's evidence store is still published by hand
+     from a restored copy.
+7. **The run that broke agreement 10:** thank you for reporting it. The empty zsh glob is exactly
+   the failure the hard stop is for, and it stopped the run with nothing left behind. `NULL_GLOB`
+   and a non-empty check are the right habit.
+8. **Closing checks:** the affected set (296 files) is left to the PR's `ci` under agreement 10. The
+   node criterion (152), the caselist application tests (1,699) and the other neighbours pass, as do
+   pyright, ruff, lint-imports and the specs.
+9. **Merge:** once the PR's `ci` is green. It is a plain `scripts/task pr`. The cloud picks it up
+   only with the next image.

@@ -7,13 +7,16 @@ Working agreement 10 bounds a session's test runs with this script, at 115 secon
     .venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest tests/scripts -k hard_stop
 
 Why not `perl -e 'alarm 115; exec @ARGV'`, which sessions used before: the alarm stops the one
-process it is set on, the pytest controller, and nothing it started. Its xdist workers are its
-children and keep running the tests they were given. `v1-e40-t22`'s run went on for about 30
-minutes at load averages near 50 after its alarm, until it was killed by pid.
+process it is set on, the pytest controller, and nothing it started. In a probe on 2026-10-31 its
+two xdist workers outlived it by about 5 seconds and then exited on their own, but the
+subprocesses their tests had started ran on as orphans until they were killed by hand. A test that
+runs a command or a parse pool leaves exactly that behind. `v1-e40-t22`'s run went on for about
+30 minutes at load averages near 50 after its alarm, until it was killed by pid.
 
 This script starts the command in a new session, so the command leads a process group of its own
 and everything it starts joins that group: pytest-xdist's workers do (`execnet` starts them as
-plain children), and so does the pytest that `uv run` starts. When the limit passes, the script
+plain children), so do the subprocesses their tests start, and so does the pytest that `uv run`
+starts. When the limit passes, the script
 sends SIGTERM to the whole group, waits a grace period (5 seconds unless `--grace` says otherwise)
 for it to be gone, sends SIGKILL to whatever is left, says on stderr that it stopped the run and at
 what limit, and exits 124, the code GNU `timeout` uses. A SIGINT, SIGTERM or SIGHUP sent to the
@@ -26,7 +29,8 @@ and stderr, so nothing is buffered or reordered.
 
 What a group kill cannot reach: a process that calls setsid() or setpgid() leaves the group, and
 so do its children. Daemons do that; pytest and pytest-xdist do not, which
-tests/scripts/test_hard_stop.py checks with a real `pytest -n 2` run. SIGKILL sent to this script
+tests/scripts/test_hard_stop.py checks with a real `pytest -n 2` run whose tests each start a
+subprocess. SIGKILL sent to this script
 itself also leaves the group running, since nothing is left to stop it.
 
 Python's standard library only, so it runs under any interpreter: macOS has no `setsid` command, and

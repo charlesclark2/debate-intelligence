@@ -265,23 +265,31 @@ def test_hard_stop_cannot_reach_a_child_that_started_its_own_session(tmp_path: P
     assert _survivors(escaped, within=0.5) == escaped
 
 
+# Two tests for two xdist workers. Each records its worker, then starts a subprocess and records
+# that, and waits on it, as a test that runs a command or a parse pool does. The subprocesses are
+# what outlives a stopped controller: in a probe on 2026-10-31, with the perl alarm on the
+# controller, the workers exited on their own about 5 s later and their subprocesses ran on.
 XDIST_TESTS = """
-import os, time
+import os, subprocess
 from pathlib import Path
 
 import pytest
 
+def record(role, pid, parent):
+    path = Path(os.environ["HARD_STOP_PID_DIR"]) / f"{role}-{pid}"
+    path.with_suffix(".tmp").write_text(f"{os.getpgid(pid)} {os.getsid(pid)} {parent}\\n")
+    path.with_suffix(".tmp").rename(path)
+
 @pytest.mark.parametrize("n", [1, 2])
 def test_hold(n):
-    pid_dir = Path(os.environ["HARD_STOP_PID_DIR"])
-    path = pid_dir / f"worker-{os.getpid()}"
-    path.with_suffix(".tmp").write_text(f"{os.getpgid(0)} {os.getsid(0)} {os.getppid()}\\n")
-    path.with_suffix(".tmp").rename(path)
-    time.sleep(60)
+    record("worker", os.getpid(), os.getppid())
+    held = subprocess.Popen(["sleep", "60"])
+    record("subprocess", held.pid, os.getpid())
+    held.wait()
 """
 
 
-def test_hard_stop_reaches_pytest_xdist_workers_which_stay_in_the_run_s_group(
+def test_hard_stop_reaches_xdist_workers_and_their_subprocesses_which_stay_in_the_run_s_group(
     tmp_path: Path, pid_dir: Path
 ) -> None:
     project = tmp_path / "project"
@@ -305,20 +313,22 @@ def test_hard_stop_reaches_pytest_xdist_workers_which_stay_in_the_run_s_group(
     run = _start("--grace", "1", "60", *pytest_command, cwd=project, env=env)
 
     deadline = time.monotonic() + OUTER_TIMEOUT
-    while len(_recorded(pid_dir)) < 2 and time.monotonic() < deadline and run.poll() is None:
+    while len(_recorded(pid_dir)) < 4 and time.monotonic() < deadline and run.poll() is None:
         time.sleep(0.05)
-    workers = _recorded(pid_dir)
+    recorded = _recorded(pid_dir)
     # Stopping the script stops its run the same way the limit does, without waiting for it.
     run.send_signal(signal.SIGTERM)
     code, _, stderr, _ = _finish(run)
 
-    assert len(workers) == 2, f"the xdist workers did not start: {stderr}"
-    # Each worker's parent is the pytest controller, the leader of the group the script made.
-    assert {(group, session) for _, group, session, parent in workers.values()} == {
-        (parent, parent) for *_, parent in workers.values()
-    }
-    assert len({parent for *_, parent in workers.values()}) == 1
-    assert _survivors(list(workers), within=3.0) == []
+    workers = {pid: parent for pid, (role, _, _, parent) in recorded.items() if role == "worker"}
+    held = {pid: parent for pid, (role, _, _, parent) in recorded.items() if role == "subprocess"}
+    assert (len(workers), len(held)) == (2, 2), f"the xdist workers did not start: {stderr}"
+    # The workers' parent is the pytest controller, which leads the session and process group the
+    # script made; neither xdist nor a test's subprocess starts another.
+    [controller] = set(workers.values())
+    assert set(held.values()) == set(workers)
+    assert {(group, session) for _, group, session, _ in recorded.values()} == {(controller, controller)}
+    assert _survivors(list(recorded), within=3.0) == []
     assert code == 128 + signal.SIGTERM
     assert "hard_stop: received SIGTERM" in stderr
 

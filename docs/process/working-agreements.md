@@ -259,10 +259,11 @@ tests its changes reach, and the whole selection runs once per merge instead (`v
   TERM to the whole group, then KILL after 5 seconds, says on stderr that it stopped the run at its
   115-second limit, and exits 124. A run that finishes in time exits with its own code. The perl
   alarm sessions used before stopped only the process it was set on: on `uv` it left uv's pytest
-  running (`v1-e39-t09`), and on pytest it left the xdist workers running, which kept
-  `v1-e40-t22`'s run going for about 30 minutes at a load near 50 (`v1-e41-t05`). The group kill
-  reaches both, and the limit still goes on `.venv/bin/python`, which skips uv's sync. A process
-  that starts its own session or process group escapes the kill; pytest and xdist do not.
+  running (`v1-e39-t09`), and on pytest it left behind the xdist workers and the subprocesses
+  their tests had started, which run on as orphans. `v1-e40-t22`'s run went on for about 30 minutes
+  at a load near 50 after its alarm (`v1-e41-t05`). The group kill reaches all of them, and the
+  limit still goes on `.venv/bin/python`, which skips uv's sync. A process that starts its own
+  session or process group escapes the kill; pytest, xdist and the subprocesses of a test do not.
 * **Tests that share process-wide state are checked in one process.** A logging filter, a logger's
   handlers or any module-level registry is shared by every test in an xdist worker, so a test can
   pass or fail, or a leak can be hidden, by which other suite ran first. When a task's tests assert

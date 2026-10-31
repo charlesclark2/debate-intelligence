@@ -47,6 +47,7 @@ from debate_core.application.errors import (
     ModelRequestRejected,
     ModelUnavailableError,
     NotFound,
+    ProviderError,
     ProviderRateLimited,
     ProviderUnavailable,
     RevisionMismatch,
@@ -57,6 +58,7 @@ from debate_core.application.errors import (
     StoreProfileNotConfigured,
     StoreUnavailable,
 )
+from debate_core.application.landscape_model_stage import ModelStageInterrupted
 
 ENVELOPE_KEYS = {"schema_version", "status", "command", "data", "error"}
 ERROR_KEYS = {"code", "message", "exit_code", "details", "hint"}
@@ -409,6 +411,39 @@ def test_a_model_call_a_retry_may_cure_still_exits_as_a_retrieval_failure(
 
     assert exit_code_for(exception) is ExitCode.RETRIEVAL_FAILURE
     assert (failure.code, failure.exit_code) == (code, ExitCode.RETRIEVAL_FAILURE)
+
+
+@pytest.mark.parametrize(
+    ("cause", "cause_code", "expected"),
+    [
+        *((cause, code, ExitCode.RETRIEVAL_FAILURE) for cause, code in MODEL_CALLS_A_RETRY_MAY_CURE),
+        *((cause, code, ExitCode.DOMAIN_FAILURE) for cause, code in REFUSED_MODEL_CALLS),
+        (ProviderError("bedrock", "a failure nobody classified"), "PROVIDER_ERROR", ExitCode.DOMAIN_FAILURE),
+    ],
+    ids=[
+        "landscape-stage-throttled",
+        "landscape-stage-unavailable",
+        "landscape-stage-no-credentials",
+        "landscape-stage-not-granted",
+        "landscape-stage-rejected-parameter",
+        "landscape-stage-unclassified",
+    ],
+)
+def test_a_stopped_landscape_model_stage_exits_as_its_cause_and_reports_the_causes_code(
+    cause: ProviderError, cause_code: str, expected: ExitCode
+) -> None:
+    """3 only for a cause on RETRYABLE_PROVIDER_FAILURES; a refused call stays a verdict (v1-e32-t32)."""
+    stopped = ModelStageInterrupted(cause, sent=1, unanswered=1)
+    failure = CommandFailure.from_exception(stopped)
+
+    assert exit_code_for(stopped) is expected
+    assert (failure.code, failure.exit_code) == ("MODEL_STAGE_INTERRUPTED", expected)
+    assert failure.details == {
+        "error": type(cause).__name__,
+        "cause_code": cause_code,
+        "sent": 1,
+        "unanswered": 1,
+    }
 
 
 #: The three store failures a retry may cure (v1-e01-t20): a store that did not answer, a session

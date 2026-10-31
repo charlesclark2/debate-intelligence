@@ -79,10 +79,15 @@ newest snapshot is not the newest week. A dry run, and a report kept on this mac
 
 `0` when the report was written (and published, when asked). `2` for an unknown caselist or snapshot,
 with the known ones, or a caselist and date `topics.yaml` maps to no topic with a taxonomy, naming
-the file to edit, or a `--restored-copy` refused. `1` for a publish the scan holds back, a
-classification stage over its model budget or whose model stopped answering (after writing the cache
-and the review queue, publishing nothing), a live run the data-use policy does not yet allow, a publish
-in bucket mode without `--restored-copy`, or a report that cannot be built.
+the file to edit, or a `--restored-copy` refused. `3` for a classification stage whose model was
+throttled or stopped answering partway (`v1-e32-t32`): the cache and the review queue keep what was
+answered, nothing is published, and the next run asks only about the cards not yet cached. `--json`'s
+`error.code` is `MODEL_STAGE_INTERRUPTED`, and `error.details.cause_code` the code of what stopped it
+(`PROVIDER_RATE_LIMITED`, `PROVIDER_UNAVAILABLE`). `1` for a publish the scan holds back, a
+classification stage over its model budget or whose model call was refused (`MODEL_ACCESS_DENIED`,
+`MODEL_REQUEST_REJECTED`; also after writing the cache and the review queue, publishing nothing), a live
+run the data-use policy does not yet allow, a publish in bucket mode without `--restored-copy`, or a
+report that cannot be built.
 
 ## `--model-mode`
 

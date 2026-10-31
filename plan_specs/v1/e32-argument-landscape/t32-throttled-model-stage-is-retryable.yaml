@@ -37,7 +37,7 @@ spec:
         access denial exits 1, and a rerun asks the model only about cards not yet cached,
         by tests shown failing first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

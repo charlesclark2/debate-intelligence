@@ -46,7 +46,11 @@ from debate_core.application.search_index_publish import (
     CheckedAgainstRecord,
     SearchIndexPublishService,
 )
-from debate_core.application.search_index_refresh import SEARCH_INDEX_DIRECTORY, SearchIndexRefresh
+from debate_core.application.search_index_refresh import (
+    RESTORED_INDEX_MARKER,
+    SEARCH_INDEX_DIRECTORY,
+    SearchIndexRefresh,
+)
 from debate_core.domain.caselist import Event
 from debate_core.domain.search_index import (
     SEARCH_INDEX_GZIP_NAME,
@@ -66,6 +70,7 @@ from debate_core.integrations.s3.search_index_source import S3SearchIndexSource
 from debate_core.testing.fakes.caselist import InMemoryCaselistRepository
 from debate_core.testing.fakes.parsed_store import InMemoryParsedStore
 
+from .test_caselist_sync_run_state import run_state
 from .test_search_index_stage import CASELIST, PARSER, STORES, CountingBuilder, suppression_of, write_store
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
@@ -492,3 +497,69 @@ def test_index_refresh_record_bytes_name_no_path_and_are_written_like_the_manife
     assert hashlib.sha256(world.body(key(index_id, SEARCH_INDEX_MANIFEST_NAME))).hexdigest() == (
         world.record(index_id).manifest_sha256
     )
+
+
+# ------------------------------------------------------------------------------------------------
+# A run's restore brings it back with the manifest, for the stage and the comparison
+# ------------------------------------------------------------------------------------------------
+
+
+def restored_index(world: BucketWorld, copy: Path) -> Path:
+    """What `caselist restore-run-state` restores of the published index into a new working copy."""
+    copy.mkdir()
+    state = run_state(copy, world.reads, world.bucket)
+    index_id = asyncio.run(state._restore_index_manifest())  # pyright: ignore[reportPrivateUsage]
+    assert index_id is not None
+    return copy / SEARCH_INDEX_DIRECTORY / index_id
+
+
+def test_index_refresh_record_comes_back_beside_the_manifest_a_run_restores(
+    world: BucketWorld, tmp_path: Path
+) -> None:
+    index_id = first_publish(world)
+    world.suppress(STOPS_NOTHING)
+    world.refresh()
+
+    directory = restored_index(world, tmp_path / "working-copy")
+
+    assert directory.name == index_id
+    assert sorted(one.name for one in directory.iterdir()) == [
+        CHECKED_AGAINST_NAME,
+        SEARCH_INDEX_MANIFEST_NAME,
+        RESTORED_INDEX_MARKER,
+    ]
+    assert (directory / CHECKED_AGAINST_NAME).read_bytes() == world.body(record_key(index_id))
+    assert (directory / SEARCH_INDEX_MANIFEST_NAME).read_bytes() == world.body(
+        key(index_id, SEARCH_INDEX_MANIFEST_NAME)
+    )
+
+
+def test_index_refresh_restore_without_a_record_restores_the_manifest_alone(
+    world: BucketWorld, tmp_path: Path
+) -> None:
+    first_publish(world)
+
+    directory = restored_index(world, tmp_path / "working-copy")
+
+    assert sorted(one.name for one in directory.iterdir()) == [
+        SEARCH_INDEX_MANIFEST_NAME,
+        RESTORED_INDEX_MARKER,
+    ]
+
+
+def test_index_refresh_restore_leaves_out_a_record_beside_another_manifest(
+    world: BucketWorld, tmp_path: Path
+) -> None:
+    index_id = first_publish(world)
+    world.suppress(STOPS_NOTHING)
+    world.refresh()
+    stale = json.loads(world.body(record_key(index_id)))
+    stale["manifest_sha256"] = "0" * 64
+    world.reads.put_object(Bucket=world.bucket, Key=record_key(index_id), Body=json.dumps(stale).encode())
+
+    directory = restored_index(world, tmp_path / "working-copy")
+
+    assert sorted(one.name for one in directory.iterdir()) == [
+        SEARCH_INDEX_MANIFEST_NAME,
+        RESTORED_INDEX_MARKER,
+    ]

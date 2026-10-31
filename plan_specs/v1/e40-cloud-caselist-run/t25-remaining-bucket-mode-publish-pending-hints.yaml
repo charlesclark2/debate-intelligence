@@ -26,6 +26,12 @@ spec:
     a cloud task. Give each the cloud run's wording, decided by `bucket_run` and `bucket_mode`
     as t22 does, and look at the suppression list's fallback reason, which quotes `aws sso
     login` in a record reason.
+    (PM amendment 2026-11-01, from v1-e40-t08's Follow-up 1, ruled (a).) Since v1-e40-t08 the next pull
+    parses what is owed whatever it imports, so two more hints drop "imports into": local mode's parse fix
+    (`_unpublished_parsed_store_fix`, "The next pull that imports into that caselist does the same; ...")
+    and the bucket-mode newer-table hint (`NewerFingerprintTable.cloud_fix`, "The next cloud run that
+    imports into <caselist> on an image ..."), with the tests and the runbook paragraph that pin them
+    (v1-e40-t08's report lists them).
   priority: 3
   constraints:
     packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
@@ -36,6 +42,9 @@ spec:
   context:
     - kind: TaskRef
       name: v1-e40-t22-bucket-mode-hints-point-at-the-cloud
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e40-t08-parse-owed
       relation: dependsOn
   acceptanceCriteria:
     - id: ac1

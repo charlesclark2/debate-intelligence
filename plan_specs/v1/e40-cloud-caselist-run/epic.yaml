@@ -594,6 +594,7 @@ spec:
         goalRef: v1-e40-t25-remaining-bucket-mode-publish-pending-hints
       dependsOn:
       - t22
+      - t08
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e40-t25-remaining-bucket-mode-publish-pending-hints reports phase Succeeded
@@ -603,5 +604,24 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e40-t25-remaining-bucket-mode-publish-pending-hints
+    - id: t26
+      kind: Task
+      name: 'A smoke check reads parses_owed from caselist runs and caselist status'
+      description: >-
+        A smoke check reads parses_owed from caselist runs and caselist status.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t26-parses-owed-smoke-check.yaml
+        goalRef: v1-e40-t26-parses-owed-smoke-check
+      dependsOn:
+      - t08
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t26-parses-owed-smoke-check reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t26-parses-owed-smoke-check
 status:
   phase: Pending

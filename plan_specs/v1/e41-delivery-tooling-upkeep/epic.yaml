@@ -251,5 +251,33 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e41-t07-spec-graph-checks
+    - id: ext-v1-e01-t44-cli-mention-in-a-message-is-prose
+      kind: External
+      name: 'Prerequisite from E01: A test that mentions debate-research inside a longer message is not read as running the app'
+      description: >-
+        Cross-epic prerequisite owned by v1-e01-repo-foundation (release v1.0).
+      inputs:
+        goalRef: v1-e01-t44-cli-mention-in-a-message-is-prose
+        specRef: plan_specs/v1/e01-repo-foundation/t44-cli-mention-in-a-message-is-prose.yaml
+    - id: t08
+      kind: Task
+      name: 'Test selection reads a run-shaped string in an f-string or a comparison, and a shell script''s quoted command words'
+      description: >-
+        Test selection reads a run-shaped string in an f-string or a comparison, and a shell
+        script's quoted command words.
+      inputs:
+        specRef: plan_specs/v1/e41-delivery-tooling-upkeep/t08-run-shaped-strings-read-wherever-they-stand.yaml
+        goalRef: v1-e41-t08-run-shaped-strings-read-wherever-they-stand
+      dependsOn:
+      - ext-v1-e01-t44-cli-mention-in-a-message-is-prose
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e41-t08-run-shaped-strings-read-wherever-they-stand reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e41-t08-run-shaped-strings-read-wherever-they-stand
 status:
   phase: Pending

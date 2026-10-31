@@ -359,5 +359,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e37-t13-consent-checked-after-the-season-is-stale
+    - id: t14
+      kind: Task
+      name: 'A check dated after the season says so, and the schedule and results use one season end'
+      description: >-
+        A check dated after the season says so, and the schedule and results use one season
+        end.
+      inputs:
+        specRef: plan_specs/v1/e37-calendar-and-announcements/t14-season-end-warning-and-one-definition.yaml
+        goalRef: v1-e37-t14-season-end-warning-and-one-definition
+      dependsOn:
+      - t13
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e37-t14-season-end-warning-and-one-definition reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e37-t14-season-end-warning-and-one-definition
 status:
   phase: Pending

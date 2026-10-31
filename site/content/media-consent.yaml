@@ -19,8 +19,9 @@
 #
 # What the build does with it:
 #   - a named student or an image of a person with no entry here FAILS a prod build;
-#   - an entry whose `dateChecked` predates the start of `season` WARNS on its own, so a lapsed
-#     start-of-season check is visible without anyone remembering to look;
+#   - an entry whose `dateChecked` is outside `season` (before 1 August, or after 31 July of its
+#     second year) WARNS on its own, so a lapsed start-of-season check, or a mistyped year, is
+#     visible without anyone remembering to look;
 #   - a name or an image that a page publishes against a lapsed entry (consent for another
 #     season, not checked this season, or a reference still to come) FAILS a prod build:
 #     names since v1-e36, images since v1-e37-t12.

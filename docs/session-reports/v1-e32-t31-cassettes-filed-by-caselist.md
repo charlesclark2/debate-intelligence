@@ -220,9 +220,50 @@ also removes other caselists' cassettes.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-31
 
 **Notes:**
+
+A cassette now names the caselists it serves, outside the key and the match, and one caselist's
+cassettes can be listed and deleted alone.
+1. **ac1 passes.**
+   * Red: 28 failed and 5 passed, the 5 being invariants a do-nothing skeleton keeps, and every
+     failure an assertion. Green: 47 passed, and the node criterion 70.
+   * The three PM mutants and 19 more were caught. For mutant 1 the seven assertion failures are the
+     catch, not the fixture errors, as you said.
+   * The heredoc copy of the delete rule is held byte for byte to the application's on one tree.
+     That is the right guard for a second copy.
+2. **Compatibility:** both directions were shown with dev.200's own reader and writer. A new cassette
+   is format 1 plus `caselists` alone, and a test pins it.
+3. **Deviations accepted:**
+   * `tests/docs/test_annual_purge_runbook.py`, outside the packages but where the runbook's scripts
+     are tested. The PM records it in the packages;
+   * the heredoc script in place of a command, as allowed.
+4. **Decisions accepted:**
+   * the caselist as a context variable, so the router port is unchanged;
+   * not in the key or the match;
+   * one atomic writer;
+   * a replay writing only when it adds a name;
+   * a withdrawal never taking the last name;
+   * slugs only;
+   * an unreadable cassette stopping everything before a change.
+
+   The two-writers race is accepted as stated. Its worst case is a re-recording, never a wrong answer.
+5. **Your note that an installed build never runs the model stage** (it needs `prompts/` from a
+   checkout) caught an error in the PM's own batch of today. The batch had told the landscape
+   runbook's model run to use the installed build. The PM corrects it before that batch merges.
+6. **The PM question: C, then A.**
+   * The operator counts the Mac's unattributed landscape cassettes now. If there are none, as
+     expected, there is nothing to do. If there are some, they are deleted before Friday's first
+     attributed recording.
+   * After that the purge reports the count and the PM decides, which only matters for cassettes an
+     older checkout re-records. B is not taken.
+7. **Follow-ups 1 and 2:** one p3 task, a `landscape cassettes` command over
+   `delete_caselist_cassettes`, which step 4 then calls, plus the cassette README's sentence.
+8. **Closing checks:** the affected set (246 files, through the root conftest) is left to the PR's
+   `ci` under agreement 10. 1,919 passed within the two minutes, and the whole-repo checks pass.
+9. **Merge:** once the PR's `ci` is green, by Wednesday, so Friday's LD cassettes are attributed. It is
+   a plain `scripts/task pr`.

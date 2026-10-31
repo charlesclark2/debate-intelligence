@@ -231,9 +231,62 @@ it into the PM review if it is wanted as the citation.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-01
 
 **Notes:**
+
+The Project and Environment tags are now held Active by Terraform. A reset shows as drift, and a
+destroy is refused before it can zero the budgets.
+1. **ac1, first half: passes.**
+   * Red at a skeleton that manages no tag: 0 passed, 2 failed, every failure an assertion.
+     Green at `d869f47`: 2 passed.
+   * The structural test covers what the Terraform tests cannot see: a third tag elsewhere in the
+     module or in the root, and the root's module call. Mutants 3b, 3c and 5 show it.
+   * 15 mutants, every catch an assertion. You dropped the first mutant 5, a trailing slash,
+     because it is not a defect. That is the right standard.
+   * `terraform_checks.sh` passes offline against the mirror, and no lock file changed.
+   * ac1's second half stays open (point 5).
+2. **The provider claims check out.**
+   * Your loopback stand-in ran the locked 5.100.0 binary and is the strongest evidence here. It
+     shows:
+     * create calls the same `UpdateCostAllocationTagsStatus` as a change;
+     * an import plan reads each tag and shows it no-op with `importing`;
+     * the apply makes no call;
+     * a destroy sends `Inactive`.
+   * The provider's generated docs (the Pulumi mirror of this resource) agree that the import id is
+     the tag key.
+   * I could not fetch the GitHub source from here. The optional curl citation block is not needed,
+     so the operator can skip it.
+3. **Deviations and decisions accepted:**
+   * the module called from the root, since that is the only place `terraform test` runs;
+   * the plan-check test in `tests/infrastructure`;
+   * the hand activation command taken out of step 5;
+   * import blocks rather than create, because only an import plan shows the PM that both tags are
+     already Active;
+   * the tag keys fixed in the module, with the root's `check` for the monitor's key;
+   * the plan block refusing AWS keys in the shell.
+
+   The JSON plan check counts change entries rather than text lines, and its 26-unchanged-`aws_ssoadmin`
+   test is exactly the run-lock lesson.
+4. **Follow-up rulings:**
+   * **Follow-up 1 (remove the import blocks after the apply): yes.** It becomes a p3 E05 task in
+     the next PM batch, after this Goal is Succeeded. After the apply, the blocks' only remaining
+     effect is to fail a new account's whole-root plan.
+   * **Follow-up 2 (`prevent_destroy`): declined, not filed.**
+     * `terraform test` destroys what it created at teardown, so `prevent_destroy` would make the
+       module's own tests fail.
+     * It would also block any deliberate change to the key list.
+     * The plan check's destroy refusal, the PM's read and step 5 are enough.
+5. **Merge and what comes next.**
+   * Merge `--partial` once the PR's `ci` is green. The Goal stays InProgress for ac1's second half.
+   * After the merge, the operator runs the runbook's "Applying the cost allocation tags":
+     * the plan;
+     * `COSTTAGSPLAN`, which must print `PLAN OK`;
+     * the PM's read;
+     * the apply.
+   * The expected plan is `Plan: 2 to import, 0 to add, 0 to change, 0 to destroy.`
+   * This apply comes before any other apply of `bootstrap/organization`, e05-t17's included.
+   * Not on a Wednesday.

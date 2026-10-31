@@ -532,6 +532,90 @@ def test_a_skip_in_the_slow_tier_fails_it_too(tmp_path: Path) -> None:
 
 
 # --------------------------------------------------------------------------------------------
+# cloud: dev's pilot checks, which need no account (v1-e39-t10)
+# --------------------------------------------------------------------------------------------
+
+
+def test_the_cloud_tier_is_tests_smoke_cloud_marked_live_and_dev() -> None:
+    assert driver.Tier("dev cloud", "live and dev", ("tests/smoke/cloud",)) == driver.CLOUD
+
+
+def test_the_cloud_tier_refuses_a_checkout_of_another_commit(tmp_path: Path) -> None:
+    repo, commit = tree(tmp_path, PASSING)
+
+    report = driver.cloud(OTHER_SHA, tmp_path / "work", pytest_command=pytest_in(repo), cwd=repo)
+
+    assert report.problems == [
+        f"the dev cloud tier would run {commit}, not {OTHER_SHA}; check out the validated commit"
+    ]
+    assert report.tier == {}
+
+
+CLOUD_SUITE = """
+import os
+import pytest
+@pytest.mark.live
+def test_dev_answers():
+    assert not any(name.startswith("DEBATE_") for name in os.environ)
+    assert "GH_TOKEN" not in os.environ and "GITHUB_TOKEN" not in os.environ
+def test_offline_is_not_in_this_tier():
+    raise AssertionError("the cloud tier ran a check not marked live")
+"""
+
+
+def test_the_cloud_tier_runs_only_its_marked_checks_with_no_token_and_no_setting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, commit = tree(tmp_path, CLOUD_SUITE)
+    (repo / "pytest.ini").write_text("[pytest]\nmarkers =\n    live: needs the network\n", encoding="utf-8")
+    git(repo, "commit", "-q", "-am", "markers")
+    commit = git(repo, "rev-parse", "HEAD")
+    monkeypatch.setenv("GH_TOKEN", "a-token-the-tests-must-not-see")
+    monkeypatch.setenv("DEBATE_ENV", "prod")
+    tier = driver.Tier("dev cloud", "live", ("checks",))
+
+    report = driver.cloud(commit, tmp_path / "work", pytest_command=pytest_in(repo), tier=tier, cwd=repo)
+
+    assert report.passed, report.problems
+    assert report.tier["counts"] == {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "skipped_names": (),
+    }
+    assert (tmp_path / "work" / "junit-dev-cloud.xml").is_file()
+
+
+def test_a_skip_in_the_cloud_tier_fails_it_too(tmp_path: Path) -> None:
+    repo, commit = tree(tmp_path, SKIPPING)
+
+    report = driver.cloud(commit, tmp_path / "work", pytest_command=pytest_in(repo), tier=TIER, cwd=repo)
+
+    assert any("1 skipped" in problem for problem in report.problems), report.problems
+
+
+def test_cli_cloud_writes_the_commit_its_checks_came_from(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, commit = tree(tmp_path, PASSING)
+    output = tmp_path / "github-output"
+    monkeypatch.setattr(
+        driver,
+        "cloud",
+        lambda sha, work: driver.tier_from_source(sha, work, TIER, pytest_command=pytest_in(repo), cwd=repo),
+    )
+
+    exit_code = driver.main(
+        ["cloud", "--sha", OTHER_SHA, "--work-dir", str(tmp_path / "work"), "--github-output", str(output)],
+        github=FakeGitHub(),
+    )
+
+    assert exit_code == driver.PROBLEM
+    assert output.read_text(encoding="utf-8") == f"tests_commit={commit}\n"
+
+
+# --------------------------------------------------------------------------------------------
 # conclude: what is posted, and on which commit
 # --------------------------------------------------------------------------------------------
 
@@ -589,6 +673,23 @@ def test_the_run_image_job_once_reported_must_succeed_too() -> None:
         "v0.1.0-dev.5 installed from its pre-release and validated: recorded and slow tiers green, "
         "the run image built and checked",
     )
+
+
+def test_the_cloud_job_once_reported_must_succeed_too() -> None:
+    """v1-e39-t10: dev's pilot is checked by the cloud job, and a red one is no validated dev."""
+    every = ALL_GREEN | {"image": "success"}
+    assert concluded(jobs=every | {"cloud": "failure"}) == driver.Conclusion(
+        SHA, "failure", "validation failed: cloud failure"
+    )
+    success = concluded(jobs=every | {"cloud": "success"})
+    assert success == driver.Conclusion(
+        SHA,
+        "success",
+        "v0.1.0-dev.5 installed from its pre-release and validated: recorded and slow tiers green, "
+        "the run image built and checked, dev pilot up",
+    )
+    longest = success.description.replace("v0.1.0-dev.5", "v1.10.0-dev.999")
+    assert len(longest) <= driver.DESCRIPTION_LIMIT, len(longest)
 
 
 def junit_report(directory: Path, *, tests: int, skipped: int) -> Path:

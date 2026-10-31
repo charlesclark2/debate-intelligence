@@ -69,6 +69,20 @@ Each loaded index keeps the parser version its manifest names, and every lease h
 parser found the card in, so a download is built only when the function's own parser is the same
 one: the card page and the download route ask, and switch download off when it is not.
 
+## What the app log learns (`v1-e39-t10`)
+
+Two `INFO` lines, which the function's logging configuration sends to its app log
+(:mod:`debate_api.app_logging`), say how the pilot performs and nothing about who used it or for
+what:
+
+* `search index <id> loaded in <s> s: <n> bytes from a <m>-byte object; <t> bytes in its directory`,
+  once per index an environment fetches. The time runs from the manifest's read to the reader's open,
+  the fetch a cold start or a new pointer waits for. The directory's total is taken before the old
+  index is deleted, so at a replacement it is the peak the holder puts on `/tmp`: both SQLite files.
+* `search answered in <n> ms`, once per search a lease answers, the index already loaded. Not even
+  the search's mode: a passage search's words could be any word, that one included. No query, card,
+  cursor, filter or user is in either line.
+
 ## What never waits
 
 Only a request that searches or shows a card leases the index. Sign-in, the callback, the health
@@ -82,6 +96,7 @@ import hashlib
 import logging
 import os
 import threading
+import time
 import uuid
 import zlib
 from collections.abc import Callable, Generator
@@ -215,7 +230,7 @@ class ScreenedSearch:
     download all go through the same list. It offers no search without it.
     """
 
-    __slots__ = ("_is_suppressed", "_parser_version", "_service")
+    __slots__ = ("_is_suppressed", "_parser_version", "_service", "_timer")
 
     def __init__(
         self,
@@ -223,10 +238,12 @@ class ScreenedSearch:
         is_suppressed: SuppressionPredicate | None,
         *,
         parser_version: str,
+        timer: Callable[[], float] = time.perf_counter,
     ) -> None:
         self._service = service
         self._is_suppressed = is_suppressed
         self._parser_version = parser_version
+        self._timer = timer
 
     @property
     def parser_version(self) -> str:
@@ -241,9 +258,12 @@ class ScreenedSearch:
         *,
         passage: bool = False,
     ) -> SearchPage:
-        return self._service.search(
+        started = self._timer()
+        page = self._service.search(
             query, filters, cursor, passage=passage, is_suppressed=self._is_suppressed
         )
+        logger.info("search answered in %d ms", round((self._timer() - started) * 1000))
+        return page
 
     def card(self, caselist: str, cluster_id: str) -> Card | None:
         return self._service.card(caselist, cluster_id, is_suppressed=self._is_suppressed)
@@ -302,7 +322,9 @@ class SearchIndexHolder:
         recheck_interval: timedelta = POINTER_RECHECK_INTERVAL,
         build_service: Callable[[SearchIndexReader], EvidenceSearchService] = EvidenceSearchService,
         suppression_list: SuppressionListSource | None = None,
+        timer: Callable[[], float] = time.perf_counter,
     ) -> None:
+        """`timer` measures the two `INFO` lines' times, in seconds; a test passes its own."""
         self._source = source
         self._suppression_source = suppression_list
         self._suppressed: SuppressionPredicate | None = None
@@ -312,6 +334,7 @@ class SearchIndexHolder:
         self._clock = clock
         self._interval = recheck_interval
         self._build_service = build_service
+        self._timer = timer
         self._lock = threading.Lock()
         self._current: _LoadedIndex | None = None
         self._checked_at: datetime | None = None
@@ -335,7 +358,9 @@ class SearchIndexHolder:
             loaded = self._current
             if loaded is None:
                 raise SearchIndexUnavailable() from self._refused
-            screened = ScreenedSearch(loaded.service, self._suppressed, parser_version=loaded.parser_version)
+            screened = ScreenedSearch(
+                loaded.service, self._suppressed, parser_version=loaded.parser_version, timer=self._timer
+            )
             loaded.leases += 1
         try:
             yield screened
@@ -440,6 +465,7 @@ class SearchIndexHolder:
 
     def _load(self, pointer: SearchIndexPointer) -> _LoadedIndex:
         index_id = pointer.index_id
+        started = self._timer()
         manifest = self._manifest(pointer)
         path = self._directory / f"{index_id}-{uuid.uuid4().hex}{_INDEX_FILE_SUFFIX}"
         self._download(pointer, manifest, path)
@@ -452,7 +478,14 @@ class SearchIndexHolder:
             reader.close()
             path.unlink(missing_ok=True)
             raise SearchIndexRefused(SearchIndexRefusal.UNREADABLE_INDEX, index_id)
-        logger.info("search index %s loaded", index_id)
+        logger.info(
+            "search index %s loaded in %.2f s: %d bytes from a %d-byte object; %d bytes in its directory",
+            index_id,
+            self._timer() - started,
+            path.stat().st_size,
+            manifest.gzip_object.bytes,
+            self._directory_bytes(),
+        )
         return _LoadedIndex(
             index_id=index_id,
             sqlite_sha256=pointer.sqlite_sha256,
@@ -545,6 +578,10 @@ class SearchIndexHolder:
         loaded.reader.close()
         loaded.path.unlink(missing_ok=True)
         logger.info("search index %s closed and deleted", loaded.index_id)
+
+    def _directory_bytes(self) -> int:
+        """The bytes of every file in the holder's directory: what it has on `/tmp` at this moment."""
+        return sum(entry.stat().st_size for entry in self._directory.iterdir() if entry.is_file())
 
     def _clear_leftovers(self) -> None:
         """Delete index files a previous process in this environment left: /tmp outlives a process."""

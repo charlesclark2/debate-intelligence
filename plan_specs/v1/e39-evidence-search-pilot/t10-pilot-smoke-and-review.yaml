@@ -106,7 +106,7 @@ spec:
         are recorded in docs/data/evidence-search-pilot.md, as counts and yes or no, before
         the beta (operator).
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

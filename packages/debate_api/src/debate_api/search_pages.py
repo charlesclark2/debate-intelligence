@@ -66,8 +66,9 @@ kept in the browser, and the download is :mod:`debate_api.download`'s POST.
 
 A search is a `GET`, so its words are in the URL, and since `v1-e39-t11` in a card page's URL too.
 No handler logs, and nothing here passes the query, a card id or card text to anything that does:
-the access log is off in the image, the edge keeps no log, and the index holder logs only index ids.
-A test reads every log record a search and a card view make.
+the access log is off in the image, the edge keeps no log, and the index holder logs only index ids,
+times and sizes (:mod:`debate_api.app_logging` says which of its lines reach the app log). A test
+reads every log record a search and a card view make.
 """
 
 from __future__ import annotations

@@ -4,8 +4,9 @@
 The record of the student search pilot (E39, v1.7): who used it in which environment, as counts,
 what the promotion to prod did, the coach's beta and the student pilot, and the decision for the
 whole team. It never holds a name, a username, a quotation with an identity, or card text
-(data-use policy, E39 gate items 8 and 9). `v1-e39-t10` completes it; the PM started it on
-2026-10-22 so that the early evidence is not lost.
+(data-use policy, E39 gate items 8 and 9). `v1-e39-t10` laid out the tables below; the operator,
+the coach and the PM fill them in. The PM started it on 2026-10-22 so that the early evidence is not
+lost.
 
 ## Early evidence, before the beta
 
@@ -57,10 +58,101 @@ ticked yes or no with its date, before the coach's beta (`v1-e39-t10` ac7).
 | 11. The beta's prod accounts created | | | |
 | 12. The Lambda bandwidth-quota request sent | | | |
 
+## Dev's checks before the promotion
+
+`validate-dev`'s `cloud` job and the operator's signed-in journey on dev
+([the runbook](../runbooks/evidence-search.md#the-signed-in-journey-on-dev)), each with its date and
+the commit dev ran. Yes or no, and the step that failed if one did.
+
+| Check | Date | Dev's deployed commit | Passed | Notes |
+|---|---|---|---|---|
+| The dev cloud checks by hand (`3 passed`) | | | | |
+| The journey (J6): every step `PASS` | | | | |
+| The removed card gone five minutes after `DONE` (J8) | | | | |
+| The seed out of dev's index (J9), shrink allowed for `testcl26` alone | | | | |
+
+## Measured from the app log
+
+The CloudWatch Logs Insights queries of
+[the runbook](../runbooks/evidence-search.md#measuring-the-pilot-from-the-app-log-v1-e39-t10), over the
+time range in the row (`v1-e39-t10` ac5). Times in milliseconds or seconds as the query gives them;
+bytes as logged.
+
+| Environment | Time range | Searches | Query p50 (ms) | Query p95 (ms) | Cold-start index loads | Index load (s), median and max | Init Duration (ms), median and max | Index loaded: SQLite bytes, gzip bytes | Peak `/tmp` across a replacement (bytes) |
+|---|---|---:|---:|---:|---:|---|---|---|---:|
+| dev | | | | | | | | | |
+| prod, the beta | | | | | | | | | |
+| prod, the pilot | | | | | | | | | |
+
+A replacement is a load line whose directory total is above its own SQLite bytes; with none in the
+range, the peak column says *no replacement* rather than a number.
+
 ## The coach's beta
 
-Written by `v1-e39-t10`.
+[The checklist](../runbooks/evidence-search.md#the-coachs-beta-v1-e39-t10), on prod, once every item of
+the promotion above is ticked (`v1-e39-t10` ac2, ac6). One column per tester, numbered in the order
+they started, never named; each cell yes, no, or the count asked for. The coach keeps the screenshots.
+
+**Each tester's first sign-in**
+
+| | Tester 1 | Tester 2 | Tester 3 | Tester 4 | Tester 5 |
+|---|---|---|---|---|---|
+| Date | | | | | |
+| Device (Chromebook, phone, other) | | | | | |
+| Factors managed login offered (authenticator, email, both) | | | | | |
+| Factor chosen | | | | | |
+| The pilot's authenticator page appeared afterwards | | | | | |
+| Reached the search page signed in, without help | | | | | |
+
+**On a school Chromebook, on the school's network**
+
+| Check | Yes / no | Date | Notes (no names) |
+|---|---|---|---|
+| 5. Sign in | | | |
+| 6. Search by words, filtered by event, caselist and side | | | |
+| 7. The result count shown | | | |
+| 8. Open a card; its provenance line on the card page | | | |
+| 9. *Back to results* returns to the same results | | | |
+| 10. *Open on openCaselist* opens the team's page in a new tab | | | |
+| 11. *Search by passage* finds the card a pasted sentence came from | | | |
+| 12. *Copy card* into Google Docs, formatting kept | | | |
+| 13. No provenance line in the pasted card | | | |
+| 14. *Download .docx* and a cart open in Google Docs | | | |
+
+**Once, with Word**
+
+| Check | Yes / no | Date | Notes |
+|---|---|---|---|
+| 15. *Copy card* into Word, formatting kept | | | |
+| 16. A downloaded card opens in Word with Verbatim | | | |
+
+**Found in the beta**: each problem as one line, what it was and what was done (fixed in which deploy,
+or accepted by the coach), with no tester named.
 
 ## The student pilot, and the decision
 
-Written by `v1-e39-t10`.
+Three to five debaters, prod accounts, at least a week (`v1-e39-t10` ac3), after the PM's go on the
+beta. Tallies are counts over the pilot's dates, counted from the audit log group's `searched`,
+`card-viewed`, `card-copied` and `cards-downloaded` records; only the counts are copied here (data-use
+policy, E39 gate items 4, 8 and 9). Themes are what debaters said, summarised by the coach, never
+quoted with an identity.
+
+| | Count |
+|---|---:|
+| Pilot dates (first, last) | |
+| Debaters with an account | |
+| Debaters who signed in at least once | |
+| Days with at least one search | |
+| Searches | |
+| Card pages viewed | |
+| Cards copied | |
+| Files downloaded (cards in them) | |
+| Sign-ins that needed the coach's help | |
+| Sessions refused with *Search is not available right now* | |
+
+| Theme | How many debaters raised it | What it means for the whole team |
+|---|---:|---|
+| | | |
+
+**The decision**: go or no-go for the whole team, the date, who decided (the coach, with the PM), and
+the reasons in a sentence each.

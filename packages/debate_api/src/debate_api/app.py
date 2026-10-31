@@ -30,6 +30,7 @@ from collections.abc import Awaitable, Callable
 from fastapi import FastAPI, Request, Response
 
 from debate_api.access import RouteAccess, install_gate
+from debate_api.app_logging import configure_app_logging
 from debate_api.cookies import CookieSealer
 from debate_api.errors import install_error_handlers
 from debate_api.pages import PageRenderer, load_app_script, load_app_stylesheet
@@ -53,11 +54,13 @@ def create_app(services: PilotServices | None = None) -> FastAPI:
     Building them reads the client secret and the cookie keys from Parameter Store, and refuses to
     go on if the cookie keys are still Terraform's placeholder
     (:class:`~debate_api.configuration.CookieKeysNotSet`), so a misconfigured function never starts.
+    It first sends the function's log lines to stderr, its app log (:mod:`debate_api.app_logging`).
     """
     if services is None:
         # Imported here: the composition root builds AWS adapters, which a test never needs.
         from debate_api.container import build_pilot_services
 
+        configure_app_logging()
         services = build_pilot_services(os.environ)
     app = FastAPI(title="Team evidence search", docs_url=None, redoc_url=None, openapi_url=None)
     script, stylesheet = load_app_script(), load_app_stylesheet()

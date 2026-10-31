@@ -278,7 +278,9 @@ def test_index_refresh_writes_the_record_again_for_a_list_longer_still_and_nothi
 # ------------------------------------------------------------------------------------------------
 
 
-def test_index_refresh_rebuilding_under_the_list_the_manifest_names_writes_nothing(world: BucketWorld) -> None:
+def test_index_refresh_rebuilding_under_the_list_the_manifest_names_writes_nothing(
+    world: BucketWorld,
+) -> None:
     index_id = first_publish(world)
     world.forget_local_indexes()
 
@@ -311,7 +313,7 @@ def test_index_refresh_rebuilding_under_the_list_the_record_names_writes_nothing
 
 
 def test_index_refresh_a_record_beside_another_manifest_is_not_read(world: BucketWorld) -> None:
-    """A record names the manifest it stands beside by digest: one naming another manifest is not this one's."""
+    """A record names the manifest it stands beside by digest: one naming another is not this one's."""
     index_id = first_publish(world)
     world.suppress(STOPS_NOTHING)
     world.refresh()
@@ -331,7 +333,9 @@ def test_index_refresh_a_record_beside_another_manifest_is_not_read(world: Bucke
 # ------------------------------------------------------------------------------------------------
 
 
-def test_index_refresh_a_different_index_is_published_as_before_and_records_nothing(world: BucketWorld) -> None:
+def test_index_refresh_a_different_index_is_published_as_before_and_records_nothing(
+    world: BucketWorld,
+) -> None:
     first = first_publish(world)
     write_store(world.parsed, OPENEV_STORE, [*CAMP_TEXTS, "Invented later camp evidence"])
     world.suppress(STOPS_NOTHING)
@@ -403,7 +407,9 @@ def test_index_refresh_writes_the_record_under_the_runs_lock(locked: Locked) -> 
 
     assert report.outcome is StageOutcome.COMPLETED
     assert world.record(index_id).suppression.entries == 2
-    assert locked.lock_versions() == before + 1, "the record's write renewed the lease, and nothing else wrote"
+    assert locked.lock_versions() == before + 1, (
+        "the record's write renewed the lease, and nothing else wrote"
+    )
 
 
 def test_index_refresh_writes_no_record_once_the_runs_lease_was_taken(
@@ -447,9 +453,11 @@ def test_index_refresh_record_is_never_read_by_the_function_which_loads_the_inde
     world.refresh()
     assert record_key(index_id) in world.versions()
     read: list[str] = []
-    world.reads.meta.events.register(
-        "before-parameter-build.s3.GetObject", lambda params, **_: read.append(str(params.get("Key")))
-    )
+
+    def reading(params: dict[str, Any], **_: object) -> None:
+        read.append(str(params.get("Key")))
+
+    world.reads.meta.events.register("before-parameter-build.s3.GetObject", reading)
     holder = SearchIndexHolder(
         S3SearchIndexSource(bucket=world.bucket, client=world.reads),
         directory=tmp_path / "function-tmp",
@@ -469,7 +477,9 @@ def test_index_refresh_record_is_never_read_by_the_function_which_loads_the_inde
     ]
 
 
-def test_index_refresh_record_bytes_name_no_path_and_are_written_like_the_manifest(world: BucketWorld) -> None:
+def test_index_refresh_record_bytes_name_no_path_and_are_written_like_the_manifest(
+    world: BucketWorld,
+) -> None:
     index_id = first_publish(world)
     world.suppress(STOPS_NOTHING)
     world.refresh()

@@ -406,7 +406,7 @@ class RecordedCheck:
 
     @property
     def sentence(self) -> str:
-        """`the suppression list at 6 entries and 0 path holds, where it said 5 and 0`, and the stores read again."""
+        """What changed: `the suppression list at 6 entries and 0 path holds, where it said 5 and 0`."""
         new, old = self.record, self.replaced
         said: list[str] = []
         if new.suppression != old.suppression:
@@ -561,7 +561,34 @@ class SearchIndexPublishService:
         written under the run's lock or not at all. Nothing of the index is uploaded, and the pointer
         is not touched.
         """
-        return None
+        if manifest.index_id != current.index_id:
+            raise ValueError(
+                f"index {manifest.index_id} is not the one current.json names ({current.index_id}): "
+                "another index is published, not recorded beside this one's manifest"
+            )
+        record = CheckedAgainstRecord.of(manifest, beside=current.pointer)
+        replaced = await self.checked_against(current)
+        if record == replaced:
+            return None
+        key = index_object_key(manifest.index_id, CHECKED_AGAINST_NAME)
+        with tempfile.TemporaryDirectory(prefix="tub-index-checked-against-") as scratch:
+            path = Path(scratch) / CHECKED_AGAINST_NAME
+            path.write_bytes(record.to_json_bytes())
+            _landed(
+                manifest.index_id,
+                CHECKED_AGAINST_NAME,
+                await self._bucket.put_file(key, path),
+                hashlib.sha256(record.to_json_bytes()).hexdigest(),
+            )
+        logger.info(
+            "search index checked-against record written",
+            extra={
+                "index_id": manifest.index_id,
+                "suppression_entries": record.suppression.entries,
+                "replaced_suppression_entries": replaced.suppression.entries,
+            },
+        )
+        return RecordedCheck(record=record, key=key, replaced=replaced)
 
     async def publish(self, directory: Path, *, allow_shrink: str | None = None) -> PublishedSearchIndex:
         """Upload the gzip object, then the manifest, then the pointer; each checked as it lands.

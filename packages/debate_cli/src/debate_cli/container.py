@@ -424,8 +424,7 @@ MODEL_CASSETTES_DIRECTORY: Final = "model-cassettes"
 the data directory, never committed, and under its retention and removal."""
 
 _ECS_METADATA_VARIABLE: Final = "ECS_CONTAINER_METADATA_URI_V4"
-"""Set by ECS in every task's containers: how the run lock tells the cloud run from the Mac, and the S3
-adapters' login hint does too (`v1-e40-t28`)."""
+"""Set by ECS in every task's containers: how the run lock tells the cloud run from the Mac."""
 
 _EVERYDAY_PROFILE_SETTING: Final = "storage.s3.aws_profile"
 _REMOVAL_PROFILE_SETTING: Final = "DEBATE_REMOVAL_PROFILE"

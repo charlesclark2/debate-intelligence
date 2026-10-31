@@ -234,8 +234,9 @@ test-seconds at `-n 4`.
    * `v1-e40-t22`'s newer-fingerprint-table hint says "the next cloud run that imports into the
      caselist, on an image whose fingerprint version is the table's or later".
 
-   Both are true but narrower than the behaviour. See Follow-up 1. The runbook sentences that
-   described the old rule as fact are corrected.
+   Both are true but narrower than the behaviour. The PM ruled on 2026-11-01 that `v1-e40-t25`
+   changes them (Follow-up 1). The runbook sentences that described the old rule as fact are
+   corrected.
 2. **No smoke check was added.** Working agreement 5 asks for smoke checks when a user-facing
    surface changes. `caselist runs` and `caselist status` gain a `parses_owed` key and a caption
    sentence, and `caselist pull` parses more. The spec has no smoke node, and `tests/smoke/` is not
@@ -286,13 +287,32 @@ restored-copy steps depends on whether a run publishes to prod, which is the PM'
 
 ## Follow-up work
 
-1. **The two remaining "imports into" hints** (Deviation 1), for `v1-e40-t25` or a small E40 task.
-   Question for the PM:
+1. **The two remaining "imports into" hints** (Deviation 1). **PM ruling, 2026-11-01: (a).** They
+   drop "imports into" in `v1-e40-t25`, whose spec the PM amends in the next batch; this task does
+   not change them. Their exact current text and where they live, at this branch's head:
+   * **Local mode's parse fix**: `_unpublished_parsed_store_fix` in
+     `packages/debate_core/src/debate_core/application/caselist_sync.py` (the last sentence it
+     appends, used when `bucket_mode` is off):
 
-   > **v1-e40-t08, Follow-up 1: should local mode's parse fix and the newer-table hint drop "imports into"?**
-   > (a) **Yes, in `v1-e40-t25` (recommended):** it already edits `caselist_sync`'s bucket-mode wording, and these are two sentences.
-   > (b) Leave them: they are true, only narrower than the behaviour.
-   > Why (a): since this task the next pull parses what is owed whatever it imports, and a hint that says otherwise sends a person to wait for an import.
+     > The next pull that imports into that caselist does the same; `caselist pull --publish-pending` does not.
+
+     Its tests pin it whole: `PUBLISH_ONLY_FIX` in `test_pull_parses_new_sources.py`, and the fix
+     texts in `test_caselist_sync_names_publish_only_per_caselist.py`,
+     `test_pull_notification_says_retry_or_person.py` and
+     `test_sync_banner_says_what_happened_and_shows_its_fix_whole.py`, all under
+     `packages/debate_core/tests/application/caselist/`.
+   * **The newer-table hint in bucket mode**: `NewerFingerprintTable.cloud_fix` in
+     `packages/debate_core/src/debate_core/application/caselist/occurrence_table_guard.py`, with its
+     docstring ("the next cloud run that imports into the caselist on it"):
+
+     > The occurrence table of `<caselist>` `<version>` in `<store>` is stamped `<stamped>`, and the cloud run's image's fingerprint version is `<build>`. The next cloud run that imports into `<caselist>` on an image whose fingerprint version is `<stamped>` or later rebuilds and publishes it: a new image is built and applied as `<CLOUD_NEW_IMAGE_RUNBOOK>` says, after the PM's word; never a rebuild or a publish from the operator's Mac.
+
+     Pinned in `test_caselist_sync_bucket_mode_hints_point_at_the_cloud.py`, and its runbook
+     paragraph, "A parse stage refused a newer occurrence table" in `caselist-cloud-run.md`, says the
+     same.
+
+   The behaviour behind both is this task's: a caselist whose parse raised, or whose parsed store
+   was not published, stays owed, and the next pull parses it whether or not it imports anything.
 2. **A smoke check for `parses_owed`** in `caselist runs --json` and `caselist status --json`
    (Deviation 2), for the PM to file.
 3. **Clearing on a by-hand `caselist parse --publish`.** Only the pull's parse stage clears an

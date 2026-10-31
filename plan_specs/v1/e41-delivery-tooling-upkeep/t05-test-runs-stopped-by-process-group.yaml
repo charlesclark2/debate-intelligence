@@ -42,7 +42,7 @@ spec:
         so, passes a command that finishes in time through with its exit code, and agreement
         10 and the session prompt name it, by tests shown failing first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

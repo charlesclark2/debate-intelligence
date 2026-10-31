@@ -91,11 +91,12 @@ the file to edit, or a `--restored-copy` refused. `3` for a classification stage
 throttled or stopped answering partway (`v1-e32-t32`): the cache and the review queue keep what was
 answered, nothing is published, and the next run asks only about the cards not yet cached. `--json`'s
 `error.code` is `MODEL_STAGE_INTERRUPTED`, and `error.details.cause_code` the code of what stopped it
-(`PROVIDER_RATE_LIMITED`, `PROVIDER_UNAVAILABLE`). `1` for a publish the scan holds back, a
-classification stage over its model budget or whose model call was refused (`MODEL_ACCESS_DENIED`,
-`MODEL_REQUEST_REJECTED`; also after writing the cache and the review queue, publishing nothing), a live
-run the data-use policy does not yet allow, a publish in bucket mode without `--restored-copy`, or a
-report that cannot be built.
+(`PROVIDER_RATE_LIMITED`, `PROVIDER_UNAVAILABLE`). A rate limit that said how long to wait adds
+`error.details.retry_after_seconds`, and the key is absent otherwise (`v1-e32-t33`). `1` for a
+publish the scan holds back, a classification stage over its model budget or whose model call was refused
+(`MODEL_ACCESS_DENIED`, `MODEL_REQUEST_REJECTED`; also after writing the cache and the review queue,
+publishing nothing), a live run the data-use policy does not yet allow, a publish in bucket mode without
+`--restored-copy`, or a report that cannot be built.
 
 ## `--model-mode`
 
@@ -120,13 +121,19 @@ about, and the command prints, for the caselist's format, how many of the cards 
 name the coach's position (the bar is 85%), and what the scan of the prompt inputs and of the prompt's
 cassettes on this machine found: counts, never a name. `--model-mode replay` (the default) answers from
 those cassettes; `record`, once, after the data-use policy records its open question 4 as answered,
-makes the calls and writes them. It caches, writes and publishes no report. Exit `0` when the format
-meets the bar and both scans are clean, `1` otherwise.
+makes the calls and writes them. It caches, writes and publishes no report. Exit `0` when the stage ran
+to the end, the format meets the bar and both scans are clean. A stage the model stopped partway is judged
+as `landscape report`'s is (`v1-e32-t33`): `3` when it was throttled or did not answer, `1` when the call
+was refused, with `error.code` `MODEL_STAGE_INTERRUPTED` and the same `cause_code`, `sent`, `unanswered`
+and, for a rate limit that said how long to wait, `retry_after_seconds` in `error.details`, beside the
+summary. Only `record` calls a model, and a rerun of it asks about every labelled card again. `1`
+otherwise (`EVALUATION_BELOW_BAR`), and for a name either scan found even when the stage also stopped.
 """
 
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 from datetime import date
 from enum import StrEnum
 from pathlib import Path
@@ -375,7 +382,7 @@ def evaluate(
             )
         )
     payload = evaluation_summary(result)
-    passed = result.meets_target and result.sent.clean and result.cassettes.clean
+    passed = result.stopped is None and result.meets_target and result.sent.clean and result.cassettes.clean
     if passed or not cli.output.is_json:
         cli.output.success(command_name(ctx), payload, display=_evaluation_display(result))
     if not passed:
@@ -444,8 +451,26 @@ def _scan_line(scan: NameScan) -> str:
 
 
 def _evaluation_failure(result: FormatEvaluation, payload: dict[str, JsonValue]) -> CommandFailure:
+    """Why the evaluation failed: a name the scan found, then a stopped stage, then the bar.
+
+    A name in the prompt inputs or the cassettes decides first, because no retry removes it. A stage the
+    model stopped partway is judged as `landscape report`'s is (`v1-e32-t33`): the same
+    :class:`~debate_core.application.landscape_model_stage.ModelStageInterrupted`, so the same exit code
+    (`3` for a cause a retry may cure, `1` for a refused or unclassified one), error code and stop details,
+    beside every key of the summary.
+    """
+    stopped = result.stopped
     if not (result.sent.clean and result.cassettes.clean):
         message = "the scan found a school, team code or tournament in the prompt inputs or the cassettes"
+    elif stopped is not None:
+        failure = CommandFailure.from_exception(stopped)
+        return dataclasses.replace(
+            failure,
+            message=f"the model stage stopped on {stopped.error} after {stopped.sent} card(s), with "
+            f"{stopped.unanswered} not asked, so the evaluation is incomplete and was not measured "
+            "against the bar",
+            details={**payload, **failure.details},
+        )
     else:
         message = (
             f"the model stage's accuracy is under the bar of {TARGET_ACCURACY:.0%}, or nothing was counted"

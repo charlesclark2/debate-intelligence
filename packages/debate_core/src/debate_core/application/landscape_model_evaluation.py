@@ -127,7 +127,7 @@ class FormatEvaluation:
 
     @property
     def stopped(self) -> ModelStageInterrupted | None:
-        """The stop as a landscape run raises it, so the CLI judges both commands by one rule (`v1-e32-t33`)."""
+        """The stop as a landscape run raises it, so the CLI judges both commands alike (`v1-e32-t33`)."""
         if self.interrupted_by is None:
             return None
         return ModelStageInterrupted(self.interrupted_by, sent=self.asked, unanswered=self.unanswered)

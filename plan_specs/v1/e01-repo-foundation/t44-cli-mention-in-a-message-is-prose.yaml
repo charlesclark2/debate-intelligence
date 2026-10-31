@@ -38,7 +38,7 @@ spec:
         Over t38's landscape merges, fewer files reach every command, a real run is still
         read as one, and the collected count is unchanged; tests shown failing first.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

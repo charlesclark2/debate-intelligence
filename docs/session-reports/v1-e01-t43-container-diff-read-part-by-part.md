@@ -174,7 +174,7 @@ caught its mutant (13, 14 and 17).
   - `uv run --frozen python scripts/check_links.py` → `OK: 3018 relative links and anchors in 466
     Markdown files`.
   - `uv run --frozen python scripts/check_command_blocks.py --base origin/dev` → `OK: no # comments
-    in 590 shell code blocks in 199 Markdown files (1 session reports changed since origin/dev)`.
+    in 589 shell code blocks in 199 Markdown files (1 session reports changed since origin/dev)`.
   - `uv run --frozen python scripts/docs_index.py --check-descriptions` → `All 59 indexed
     documents under docs/ have a description`.
 

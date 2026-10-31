@@ -241,9 +241,49 @@ Scratchpad files, kept for the review: `entrypoint_smoke.py`, `before_selection.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-01
 
 **Notes:**
+
+The edge is gone. A parser-only merge now selects 10 API files instead of 25, and no id was lost.
+1. **ac1, the session's halves: pass.** I read the code:
+   * `create_app_from_environment` calls `configure_app_logging()` and then
+     `create_app(build_pilot_services(os.environ))`;
+   * the Dockerfile's `ENTRYPOINT` names it with `--factory`;
+   * app.py imports nothing from the container, and `create_app` has no default.
+
+   The collected ids are 1,066 → 1,068 with `comm` showing 0 lost; the two added are the new tests.
+   The measurement uses t20's own command on `387c961`: 25 → 10. You explained the two files over
+   t20's predicted 8 (both arrived with v1-e39-t10), and the eleventh from your first run, which was
+   a selector quirk you worked around and filed rather than hid.
+2. **The red run and the mutants.** The added ordering check is the right strengthening: the old test
+   could not tell logging-after-build from logging-before (mutant 1b). Every mutant failed at an
+   assertion. Mutant 3's offline loader check shows exactly what it would have shipped: a function
+   that never passes the Web Adapter's readiness check.
+3. **Deviation 1: accepted.** The image's smoke check is the held dev deploy's `/healthz`. The offline
+   loader check, the real entry string through uvicorn's own `Config.load()` with Parameter Store
+   stubbed and sockets refused, covers what this task changed. The Goal stays `InProgress` until that
+   deploy passes. The PM records it and sets the phase in a batch.
+4. **Decisions accepted:**
+   * the factory in the container;
+   * the name;
+   * t20's one merge as "the measurement";
+   * the entry-point test placed where it adds no selection edge;
+   * contracts left alone, as the brief said.
+5. **Follow-ups:** one p3 E41 task in the next PM batch, holding both.
+   * **1:** the selector's directory-walk pattern stops matching `ast.walk(`, so a test that walks one
+     parsed file's tree is no longer selected by every Python change. `test_card_download_image.py`
+     is the other known case.
+   * **2:** a lint-imports `forbidden` contract keeping `debate_api.container` out of every other
+     `debate_api` module. It turns the new import test into a rule, and it is cheap while the edge is
+     one-way.
+6. **Closing checks:** the affected set stopped at 92% at its limit (3,338 passed, none failed) and is
+   left to the PR's `ci` under agreement 10. The changed areas and the always-run list (1,726), the
+   API suite (1,068), the browser suite (27), ruff, pyright, lint-imports, thin handlers, the specs
+   and the doc checks are clean.
+7. **Merge:** `--partial` once `ci` is green. Then the held dev pilot deploy carries this task,
+   v1-e39-t24 and v1-e39-t10's logging. Its `/healthz` through CloudFront closes this task's ac1, and
+   v1-e39-t10's journey follows.

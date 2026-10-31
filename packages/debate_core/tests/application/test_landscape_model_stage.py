@@ -290,7 +290,11 @@ async def test_the_cassettes_a_stage_records_and_replays_name_each_caselist_it_r
         ByTag(FIRST_ANSWERS), mode=ModelMode.RECORD, cassette_dir=tmp_path, environ={}
     )
     recorded = await evaluate_labelled_cards(
-        READING, TAXONOMY, LABELLED, stage_over(recording, prompts), cassette_texts=lambda: texts_under(tmp_path)
+        READING,
+        TAXONOMY,
+        LABELLED,
+        stage_over(recording, prompts),
+        cassette_texts=lambda: texts_under(tmp_path),
     )
     [cassette] = sorted((tmp_path / CLASSIFY_POSITION_PROMPT_ID).glob("*.json"))
     assert json.loads(cassette.read_text(encoding="utf-8"))["caselists"] == ["hspolicy99"]
@@ -299,7 +303,11 @@ async def test_the_cassettes_a_stage_records_and_replays_name_each_caselist_it_r
     replaying = RecordReplayModelRouter(None, mode=ModelMode.REPLAY, cassette_dir=tmp_path)
     another = dataclasses.replace(READING, caselist="hspolicy98")
     replayed = await evaluate_labelled_cards(
-        another, TAXONOMY, LABELLED, stage_over(replaying, prompts), cassette_texts=lambda: texts_under(tmp_path)
+        another,
+        TAXONOMY,
+        LABELLED,
+        stage_over(replaying, prompts),
+        cassette_texts=lambda: texts_under(tmp_path),
     )
     assert json.loads(cassette.read_text(encoding="utf-8"))["caselists"] == ["hspolicy98", "hspolicy99"]
     assert (replayed.correct, replayed.cassettes.texts, replayed.cassettes.clean) == (2, 1, True)

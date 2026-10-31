@@ -12,7 +12,10 @@ not already cached under this prompt version. :meth:`ModelClassificationStage.ru
 3. **asks** in batches of `batch_size`, each one call to `landscape.classify_position` through the
    :class:`~debate_core.application.structured_output.StructuredOutputGuard` on the `high_volume` route.
    A batch whose answer leaves a card unanswered, answers one twice or names one it was not asked about
-   is repaired once, as an answer that does not fit the schema is, and then refused;
+   is repaired once, as an answer that does not fit the schema is, and then refused. Each call is
+   filed under the caselist the stage runs on
+   (:func:`~debate_core.application.cassette_filing.filed_under`), so a cassette it records or replays
+   names that caselist (`v1-e32-t31`);
 4. **judges** each answer (:func:`~debate_core.arguments.landscape.model_stage.judge`): an unknown
    position id, a rationale echoing twelve or more consecutive words of the card, or no position at all
    places nothing, and the card stays in the review queue.
@@ -42,6 +45,7 @@ from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Final, Protocol
 
+from debate_core.application.cassette_filing import filed_under
 from debate_core.application.errors import DomainError, OutputProblem, ProviderError, error_code_of
 from debate_core.application.model_errors import ModelOutputError, ValidationPolicy
 from debate_core.application.ports.parsed_store import ParsedStore
@@ -271,13 +275,14 @@ class ModelClassificationStage:
             )
             size = len(batch)
             try:
-                answered = await self._guard.generate(
-                    CLASSIFICATION_TASK_CLASS,
-                    prompt,
-                    ModelPositionAnswers,
-                    policy=CLASSIFICATION_POLICY,
-                    check=lambda answers, size=size: _as_output_problems(answers, size),
-                )
+                with filed_under(caselist):
+                    answered = await self._guard.generate(
+                        CLASSIFICATION_TASK_CLASS,
+                        prompt,
+                        ModelPositionAnswers,
+                        policy=CLASSIFICATION_POLICY,
+                        check=lambda answers, size=size: _as_output_problems(answers, size),
+                    )
             except ModelOutputError as invalid:
                 calls += invalid.attempts
                 for item in batch:

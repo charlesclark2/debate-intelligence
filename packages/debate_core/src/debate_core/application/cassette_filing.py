@@ -49,7 +49,12 @@ _FILING: Final[ContextVar[str | None]] = ContextVar("cassette_filing", default=N
 
 def is_caselist_slug(value: object) -> bool:
     """Whether `value` is a caselist's slug (`hsld26`): the one thing a cassette may say about a caselist."""
-    return False
+    return isinstance(value, str) and _SLUG.fullmatch(value) is not None
+
+
+def _refuse_a_non_slug(caselist: str) -> None:
+    if not is_caselist_slug(caselist):
+        raise ValueError(f"a cassette is filed under a caselist's slug, such as hsld26; got {caselist!r}")
 
 
 @contextmanager
@@ -58,12 +63,17 @@ def filed_under(caselist: str) -> Generator[None, None, None]:
 
     Raises `ValueError` for a value that is not a caselist slug, before any call is made.
     """
-    yield
+    _refuse_a_non_slug(caselist)
+    token = _FILING.set(caselist)
+    try:
+        yield
+    finally:
+        _FILING.reset(token)
 
 
 def filing_caselist() -> str | None:
     """The caselist the current block's model calls are filed under; None outside :func:`filed_under`."""
-    return None
+    return _FILING.get()
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,7 +119,27 @@ class CaselistCassettes:
 
 def caselist_cassettes(files: CassetteFiles, caselist: str) -> CaselistCassettes:
     """What `files` holds of `caselist`, read and changed nothing. Raises `ValueError` for a non-slug."""
-    return CaselistCassettes(caselist=caselist, sole=(), shared=(), unattributed=(), others=0)
+    _refuse_a_non_slug(caselist)
+    sole: list[str] = []
+    shared: list[str] = []
+    unattributed: list[str] = []
+    others = 0
+    for filing in sorted(files.filings(), key=lambda one: one.cassette):
+        if not filing.caselists:
+            unattributed.append(filing.cassette)
+        elif caselist not in filing.caselists:
+            others += 1
+        elif len(filing.caselists) == 1:
+            sole.append(filing.cassette)
+        else:
+            shared.append(filing.cassette)
+    return CaselistCassettes(
+        caselist=caselist,
+        sole=tuple(sole),
+        shared=tuple(shared),
+        unattributed=tuple(unattributed),
+        others=others,
+    )
 
 
 def delete_caselist_cassettes(files: CassetteFiles, caselist: str) -> CaselistCassettes:
@@ -117,4 +147,9 @@ def delete_caselist_cassettes(files: CassetteFiles, caselist: str) -> CaselistCa
 
     Everything is listed first, so an unreadable cassette stops the delete before anything changes.
     """
-    return caselist_cassettes(files, caselist)
+    listed = caselist_cassettes(files, caselist)
+    for cassette in listed.shared:
+        files.withdraw(cassette, caselist)
+    for cassette in listed.sole:
+        files.delete(cassette)
+    return listed

@@ -186,7 +186,9 @@ def test_a_cassette_delete_takes_a_caselist_slug_and_nothing_else(cassettes: Pat
     assert snapshot(cassettes) == before
 
 
-@pytest.mark.parametrize("name", ["../outside.json", "example.sort-card/../../outside.json", "a/b/c.json", "x.json"])
+@pytest.mark.parametrize(
+    "name", ["../outside.json", "example.sort-card/../../outside.json", "a/b/c.json", "x.json"]
+)
 def test_a_cassette_directory_deletes_and_withdraws_only_its_own_cassettes(
     cassettes: Path, name: str
 ) -> None:

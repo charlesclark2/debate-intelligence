@@ -43,6 +43,30 @@ model's answer is being replayed. Its output is validated strictly, as every rou
 (:func:`~debate_core.application.structured_output.validate_model_output`); a hand-written cassette
 with `"output": null` replays an answer that never called the schema's tool (v1-e05-t05, ac5).
 
+## The caselists a cassette answered (v1-e32-t31)
+
+A cassette recorded or replayed inside
+:func:`~debate_core.application.cassette_filing.filed_under` names that caselist in a top-level
+`caselists` list, sorted, beside the fields above. The landscape's model stage opens it for the
+caselist it runs on. The caselist is not part of the key or of the match: an identical card in two
+caselists is one call and one cassette, and a call whose recorded values differ is unrecorded under
+any caselist. So the list is a set, which grows:
+
+* **record** writes the caselists the file at that key already named, plus this one. The key covers
+  the prompt's variables, the card excerpts among them, so every caselist that named the old file holds
+  the cards the new one answers;
+* **replay** adds the caselist to a cassette that does not name it yet, rewriting the file with the
+  same writer as a recording (pretty-printed, fsynced, renamed into place) and every other value as it
+  was. A replay inside no caselist, or for one already named, writes nothing; live mode writes nothing.
+
+A cassette with no `caselists` was recorded before this task, or outside any caselist (every committed
+cassette): it replays as before, and is **unattributed** to the per-caselist listing and delete
+(:func:`~debate_core.application.cassette_filing.delete_caselist_cassettes`), which never delete it.
+A `caselists` that is not a list of caselist slugs is a
+:class:`~debate_core.integrations.models.errors.FixtureFileError`. The cassette's format stays 1: a
+build before this one checks the format, the call, the key, the request and the response, and reads
+past a field it does not know, so it replays a cassette this build wrote.
+
 ## A refused answer (v1-e05-t10)
 
 When the real router raises `InvalidModelOutput`, record mode writes the answer the router handed
@@ -63,14 +87,16 @@ or an invalid answer the router did not hand over, since record mode has no answ
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, cast
 
 from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
 
-from debate_core.application.cassette_filing import CassetteFiling
+from debate_core.application.cassette_filing import CassetteFiling, filing_caselist, is_caselist_slug
+from debate_core.application.durable_files import fsync_directory
 from debate_core.application.errors import InvalidModelOutput, OutputProblem
 from debate_core.application.model_errors import describe_problems
 from debate_core.application.ports.model_router import ModelRouter
@@ -88,6 +114,7 @@ from debate_core.domain.model_contracts import (
     ResolvedRoute,
     TaskClass,
 )
+from debate_core.domain.prompt_spec import is_prompt_id
 from debate_core.integrations.models._recorded_files import (
     read_json_object,
     safe_directory_name,
@@ -98,7 +125,12 @@ from debate_core.integrations.models.errors import (
     MissingFixtureError,
     RecordingRefusedError,
 )
-from debate_core.integrations.models.fixture_key import embedding_key, fixture_key, rerank_key
+from debate_core.integrations.models.fixture_key import (
+    FIXTURE_KEY_LENGTH,
+    embedding_key,
+    fixture_key,
+    rerank_key,
+)
 from debate_core.integrations.models.model_mode import (
     CI_VARIABLE,
     MODEL_MODE_VARIABLE,
@@ -125,6 +157,9 @@ CASSETTE_FORMAT: Final = 1
 
 _EMBED_DIRECTORY: Final = "_embed"
 _RERANK_DIRECTORY: Final = "_rerank"
+_CASELISTS: Final = "caselists"
+"""The top-level key naming the caselists a cassette was recorded or replayed for (v1-e32-t31)."""
+_CASSETTE_NAME: Final = re.compile(rf"[0-9a-f]{{{FIXTURE_KEY_LENGTH}}}\.json")
 _PROBLEMS: Final = "problems"
 """The response key that makes a cassette a refused answer's: why the real router refused it."""
 _RECORDED_PROBLEMS: Final = TypeAdapter(tuple[OutputProblem, ...])
@@ -166,14 +201,57 @@ class CassetteDirectory:
     # Filing by caselist -----------------------------------------------------------------------
 
     def filings(self) -> list[CassetteFiling]:
-        """Every cassette under the directory, by name, with the caselists it names."""
-        return []
+        """Every cassette under the directory, by name, with the caselists it names.
+
+        Raises :class:`FixtureFileError` for a file that is not filed as a cassette is, or does not read.
+        """
+        if not self.root.is_dir():
+            return []
+        found: list[CassetteFiling] = []
+        for path in sorted(self.root.glob("*/*.json")):
+            name = path.relative_to(self.root).as_posix()
+            try:
+                self._filed(name)
+            except ValueError as error:
+                raise FixtureFileError(
+                    path, "it is not filed as a cassette is, <prompt>/<key>.json"
+                ) from error
+            document = read_json_object(path)
+            if document is not None:
+                found.append(CassetteFiling(cassette=name, caselists=frozenset(_caselists(path, document))))
+        return found
 
     def delete(self, cassette: str) -> None:
         """Delete the cassette named `cassette` (`<prompt>/<key>.json`)."""
+        path = self._filed(cassette)
+        path.unlink()
+        fsync_directory(path.parent)
 
     def withdraw(self, cassette: str, caselist: str) -> None:
-        """Take `caselist` off the caselists of the cassette named `cassette`, keeping all it recorded."""
+        """Take `caselist` off the caselists of the cassette named `cassette`, keeping all it recorded.
+
+        Raises `ValueError` when no other caselist would be left: a cassette is deleted, not left
+        unattributed.
+        """
+        path = self._filed(cassette)
+        document = read_json_object(path)
+        if document is None:
+            raise FileNotFoundError(path)
+        named = _caselists(path, document)
+        remaining = [one for one in named if one != caselist]
+        if len(remaining) == len(named):
+            return
+        if not remaining:
+            raise ValueError(f"cassette {cassette} names no caselist but {caselist}; delete it instead")
+        write_pretty_json(path, {**document, _CASELISTS: remaining})
+
+    def _filed(self, cassette: str) -> Path:
+        """The path of the cassette named `cassette`, or a `ValueError` for a name no cassette has."""
+        directory, _, name = cassette.partition("/")
+        known = directory in (_EMBED_DIRECTORY, _RERANK_DIRECTORY) or is_prompt_id(directory)
+        if not (known and _CASSETTE_NAME.fullmatch(name)):
+            raise ValueError(f"{cassette!r} names no cassette: one is <prompt>/<key>.json")
+        return self.root / directory / name
 
     # Writing ----------------------------------------------------------------------------------
 
@@ -226,6 +304,12 @@ class CassetteDirectory:
             "request": dict(request),
             "response": dict(response),
         }
+        caselists = _caselists_already_at(path)
+        filing = filing_caselist()
+        if filing is not None:
+            caselists = sorted({*caselists, filing})
+        if caselists:
+            document[_CASELISTS] = list(caselists)
         write_pretty_json(path, redact(document))
         return path
 
@@ -245,6 +329,7 @@ class CassetteDirectory:
             raise FixtureFileError(path, f"it is not a format-{CASSETTE_FORMAT} cassette")
         if document.get("call") != call or document.get("key") != path.stem:
             raise FixtureFileError(path, f"it is not the {call} cassette filed under this key")
+        caselists = _caselists(path, document)
         recorded_request = document.get("request")
         if as_recorded(path, recorded_request) != as_recorded(path, dict(request)):
             raise self._missing(
@@ -258,6 +343,9 @@ class CassetteDirectory:
         response = document.get("response")
         if not isinstance(response, dict):
             raise FixtureFileError(path, "it has no `response` object")
+        filing = filing_caselist()
+        if filing is not None and filing not in caselists:
+            write_pretty_json(path, {**document, _CASELISTS: sorted({*caselists, filing})})
         return RecordedCall(path=path, response=dict(response))  # pyright: ignore[reportUnknownArgumentType]
 
     def _missing(
@@ -452,6 +540,26 @@ def _replayed_refusal(recorded: RecordedCall, prompt: ModelPrompt) -> InvalidMod
         problems=problems,
         usage=_validated(recorded, ModelUsage, usage) if usage is not None else None,
     )
+
+
+def _caselists(path: Path, document: Mapping[str, object]) -> list[str]:
+    """The caselists `document` names, sorted; none for a cassette recorded before v1-e32-t31."""
+    value = document.get(_CASELISTS)
+    if value is None:
+        return []
+    named = cast(list[object], value) if isinstance(value, list) else None
+    if named is None or not all(is_caselist_slug(one) for one in named):
+        raise FixtureFileError(path, f"its `{_CASELISTS}` is not a list of caselist slugs")
+    return sorted({str(one) for one in named})
+
+
+def _caselists_already_at(path: Path) -> list[str]:
+    """The caselists the file a recording replaces named: none when there is none, or it does not read."""
+    try:
+        document = read_json_object(path)
+        return _caselists(path, document) if document is not None else []
+    except FixtureFileError:
+        return []
 
 
 def _parsed_request(path: Path, value: object) -> ModelRequest:

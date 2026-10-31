@@ -166,7 +166,7 @@ def test_a_cassette_recorded_before_caselists_still_replays(tmp_path: Path) -> N
 
 
 def test_a_call_whose_recorded_values_differ_misses_under_any_caselist(tmp_path: Path) -> None:
-    """The caselist adds no near miss: a call with other parameters is still unrecorded, and nothing is written."""
+    """The caselist adds no near miss: a call with other parameters is unrecorded, and nothing is written."""
     run(record_under(tmp_path, FIRST))
     path = only_cassette(tmp_path)
     before = path.read_bytes()

@@ -304,3 +304,143 @@ my own spec line, and it is better made now than after a republish.
    * **Colon-less lists as planks:** not filed. t16's counts stay as they are unless the coach asks.
 5. **Then:** append the re-work to this report, not over it, and the PM reviews again. Run the
    affected set once more within the limit, leaving the rest to `ci`.
+
+## Re-work after the PM review of 2026-10-31
+
+**Session status:** COMPLETE again; the Goal stays `Succeeded`, every criterion passing under the ruling.
+
+### What changed
+
+The grouping now follows the PM's point 2. Everything else in the review's point 1 stands as built.
+
+* **Group key:** a CP text's reading keeps its opening paragraph's digest
+  (`AnalyticTextReading.opening_digest`: the stem's own digest, equal to `digest` when the text has no
+  lines). The report keys a CP group on it and ranks groups by distinct teams, as before t35. A reading
+  without it falls back to `digest`, which is the opening for any reading with no lines.
+* **Shown text:** the report gives a CP group each source's teams (`TextGroup.source_teams`).
+  `top_texts` then orders the group's whole texts (`whole_texts_by_teams`) by the distinct teams whose
+  files hold that exact whole text, then by the existing tie-break (first copy by source and paragraph).
+  It shows the first one that names no school. Each whole text passed over for naming a school counts as
+  withheld; a group with none left is not shown. Read-back is unchanged: a whole text not read back as
+  read has no copy to choose. Every other kind (alternatives, roles of the ballot, planks) keeps the
+  commonest wording by copies, exactly as before.
+* **The count:** `QuotedText.text_teams`, the group's teams whose files hold the shown whole text. It is
+  never more than the group's teams, a rule the model enforces. The rank row says it only when the shown
+  text has planks and fewer teams read them: `| 1 | 12 (1 with these planks) | ... |`. Texts without lines,
+  and every golden row, render as before.
+* **The rules version** was already `analytic-texts-3` (set in `25cff2c`), so I left it and the opening
+  digest goes in under it. On hspolicy26's config the rules digest is still `54b853442079…`, and the
+  operator re-reads once. No build carrying t35 has reported yet, so no cache holds t35 readings without
+  the opening digest.
+* **The guide's paragraph** says how a CP text is grouped and what the note means. The fixture, its README
+  and its hand-written section were redone for the new rule (below).
+
+**"The JSON".** The bundle has no JSON file: report.md and five CSVs. The CLI's `--json` output carries
+counts and never a text. So the count is on the report model (`QuotedText.text_teams`), the JSON form of
+the report that `LandscapeReport.model_dump_json` gives. If the PM meant a CLI field, it would have to be
+a count with no text beside it; I did not add one.
+
+### Commits
+
+`c4b2c1b` tests and fixture, run red against a skeleton (fields with no rule);
+`3e02d83` the grouping; `3a09102` the fixture README's mutant notes, as the runs found them;
+`df8276f` the guide.
+
+### Tests shown failing first
+
+The skeleton has `opening_digest`, `source_teams` and `text_teams` as fields with no rule and no use.
+Against it, the two new modules gave **11 failed, 17 passed**:
+* the opening-digest assertions;
+* the four `top_texts` group tests (most teams, tie-break, fall-through, all withheld);
+* the two validators;
+* both report tests. The report-level red shows the first build's whole-text grouping: rank 1 at 4 teams,
+  where the colon list and the dash continuation share their words.
+
+The 17 that passed are t35's first-round tests, whose rules did not change.
+
+### The fixture, by hand
+
+`tests/fixtures/landscape/cp_texts_shown_whole` now holds one opening paragraph read by 6 teams, in three
+whole texts:
+* a colon list with two planks: 3 teams, 2 copies;
+* the same opening with a plank naming `Birchmoor`: 4 teams, 4 copies;
+* a dash continuation: 1 team, 3 copies.
+
+It also holds a Congress text read by 2 teams. The 4-team text is passed over for naming a school, so
+the 3-team text shows as `6 (3 with these planks)`. The most-copies, 1-team text does not show. Rank 2
+is the Congress text at 2 teams, and 1 text is withheld.
+
+### Mutants (agreement 8)
+
+The same harness, a fresh `HYPOTHESIS_STORAGE_DIRECTORY` per run, and the same suites plus the cache
+store's test. Each file was restored from HEAD, and the tree was clean after the run.
+
+| Mutant | Result | Caught by |
+|---|---|---|
+| 1 the planks dropped | CAUGHT, 9 failed | the colon, caps, inline, opening and read-back tests, the docx plank test, both report tests |
+| 2 a plank naming a school shown (school check on the first line only) | CAUGHT, 4 failed | the fall-through and all-withheld tests, both report tests |
+| **3a checked on the stem only** (read back against the opening digest, shown whole) | CAUGHT | `test_a_whole_text_whose_plank_reads_differently_now_is_not_quoted` |
+| **3b grouped on the whole text** | CAUGHT, 2 failed | both report tests |
+| 14 the shown whole text chosen by copies, not teams | CAUGHT, 3 failed | `test_a_group_shows_the_whole_text_the_most_of_its_teams_read_and_how_many`, both report tests |
+| 15 no fall-through (a group withheld when its first whole text names a school) | CAUGHT, 4 failed | the fall-through and all-withheld tests, both report tests |
+| 16 the group's teams given as the shown text's | CAUGHT, 5 failed | the most-teams, tie-break and fall-through tests, both report tests |
+| 4 to 13 (the continuation's limits, the missing line, the rows, the line order) | all CAUGHT | as in the first round |
+
+### The re-measure (the same store, read-only as before)
+
+The same method and store (`~/.debate-research/dev`, hspolicy26, snapshot 2026-10-20, 3,825 sources).
+The before side is the cache's readings, the after side the 138 sources holding a quoted CP text read
+again in memory by this build, and both are ranked by the report's own `_landscape_texts`. It took 91.5 s
+at a load of 11. The store's 11 files were unchanged afterwards (mtimes and sizes). The before side is
+pre-t35 grouping by the opening. Its shown wording is chosen by this build's teams rule, which is why it
+has a "shown" count at all; t35's first build had none.
+
+| CP | Before: rank, teams (teams reading the shown text), lines | After: rank, teams (teams reading the shown text), lines | Distinct groups before → after |
+|---|---|---|---|
+| Advantage CP | 1: 12 (9), 0 · 2: 1 (1), 0 · 3: 1 (1), 0 | 1: **12 (1), 6 lines** · 2: 1 (1), 0 · 3: 1 (1), 4 lines | 5 → 5 |
+| States CP | 1: 9 (9), 0 · 2: 3 (3), 0 · 3: 3 (2), 0 | 1: **9 (7), 5 lines** · 2: 3 (3), 6 lines · 3: 3 (1), 3 lines | 30 → 30 |
+| Vouchers CP | 3: 1 (1), 0 | 3: 1 (1), 5 lines | 4 → 4 |
+| Taxes PIC | 1: 1 (1), 0 | 1: 1 (1), 4 lines | 1 → 1 |
+| Public option, NHS, Smokers PIC, Delay CP | unchanged | unchanged, no lines | unchanged |
+
+* The Advantage CP is back at 12 teams, showing one whole text with lines, as the PM expected. Its row
+  will read `12 (1 with these planks)`: every team's planks differ.
+* The States CP keeps its ranks and team counts. Rank 1 shows the planks 7 of its 9 teams read.
+  Rank 3 (the 5–5 tie group the coach read cut short) shows a whole text with 3 planks, read by 1 of its
+  3 teams.
+* Distinct groups, coverage (235 found, 160 counted, 0 withheld, 0 unread) and the planks section are all
+  as before t35. 121 of the 169 copies in range carry lines, as in the first round.
+
+**What the next republish will show differently**, replacing the first round's table: the same CPs, the
+same ranks and team counts as before t35. Each CP text that has planks is shown whole, its rank row naming
+how many of its teams read those planks when that is fewer. The cache refresh is as the first round said:
+one re-read of every on-topic source at the first dry run on this build.
+
+### Checks before this section
+
+| Check | Result |
+|---|---|
+| `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest packages/debate_core/tests -k analytic_text -n 4 -q` (the node criterion) | **138 passed** in 13.98 s (28 of them the new modules') |
+| Neighbouring suites (as in the first round, plus the store test) | 343 passed |
+| `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python scripts/affected_tests.py --run` | 143 of 605 files from 18 changed files. **Stopped at the 115-second limit at 43%: 2,160 passed, none failed** (load 20 to 26 from other sessions). The rest is left to `ci`, as the review says. |
+| `ruff format --check` / `ruff check` (packages, tests) | 1202 files formatted / All checks passed |
+| `pyright packages/debate_core` / `lint-imports` | 0 errors / 19 contracts kept |
+| `scripts/check_links.py` / `scripts/validate_specs.py` | OK / OK: 537 files |
+
+### Deviations
+
+2. **The spec's ac1 phrase "the group's digest covers what is shown"** is superseded by the PM's ruling
+   (point 2). The checks cover what is shown; the group is the opening paragraph's. I did not edit the
+   spec. It wants the PM's amendment, with Deviation 1's "no capital".
+
+### Decisions
+
+* **"That exact whole text" is the text word for word**, as `commonest_text` compares wordings. A colon
+  list and a dash continuation with the same planks are two whole texts, each with its own teams. On the
+  store, this matters only inside groups that mix the two shapes.
+* **Withheld for a CP text** counts each whole text passed over for naming a school, and every whole text
+  of a group none of which can be shown. A school-naming text ranked below the one shown is not shown and
+  not counted, as a non-commonest copy never was.
+* **The row's note** appears only when the shown text has planks and fewer of the group's teams read
+  them. With no planks shown, the note would only count punctuation variants, and the golden report's
+  rows would change for nothing.

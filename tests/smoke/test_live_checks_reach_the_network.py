@@ -9,7 +9,9 @@ Their own tests called them against the app in-process, with no socket, and coul
 This runs socket_probes/live_then_plain_checks.py in a real pytest, from the repository root so that
 it reads pyproject.toml's options itself, with the stand-in for dev a loopback server in that pytest's
 own process: a `live` check, then a plain one. The first must get the server's answer and the second
-must be refused, with and without `--force-enable-socket`.
+must be refused: as the runbook runs the cloud checks (`-n 0`), with `--force-enable-socket` added, and
+in xdist workers, as validate-dev's driver runs them (it passes no `-n`, so pyproject's
+`--numprocesses=auto` holds; two workers here).
 
 `in_process`: it tests tests/smoke's own machinery, so it runs in `ci` and is not part of
 validate-dev's recorded tier.
@@ -54,7 +56,9 @@ def test_the_child_run_starts_from_blocked_sockets() -> None:
 
 
 @pytest.mark.parametrize(
-    "extra", [[], ["--force-enable-socket"]], ids=["as-configured", "force-enable-socket"]
+    "extra",
+    [["-n", "0"], ["-n", "0", "--force-enable-socket"], ["-n", "2"]],
+    ids=["as-the-runbook-runs-it", "force-enable-socket", "in-xdist-workers"],
 )
 def test_a_live_check_reaches_loopback_and_the_next_plain_check_is_refused(
     tmp_path: Path, extra: list[str]
@@ -68,8 +72,6 @@ def test_a_live_check_reaches_loopback_and_the_next_plain_check_is_refused(
             str(PROBES),
             "-m",
             "not slow",
-            "-n",
-            "0",
             "-p",
             "no:randomly",
             "-p",

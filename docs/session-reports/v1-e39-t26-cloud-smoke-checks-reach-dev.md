@@ -162,9 +162,44 @@ log into the session. Once the run is green, the PM can set the Goal to `Succeed
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-31
 
 **Notes:**
+
+A one-line fix with the test that should have existed: a `live` check through real pytest, with the
+repository's own options. That test fails at the start commit with the operator's exact error.
+1. **ac1's first part passes.**
+   * Red at the start: `SocketBlockedError: A test tried to use socket.getaddrinfo.` in the runbook's
+     shape and in xdist workers, with `--force-enable-socket` passing, which is exactly the
+     operator's observation. Green in all three shapes.
+   * The plain check is refused in every case, and the stand-in and harness tests are unchanged.
+   * The child reads pyproject from the root, and a test asserts `--disable-socket` is still in
+     `addopts`, so the test cannot pass by the option being removed.
+   * The node criterion passes (16).
+2. **The live call:** `3 passed in 4.22s` with no extra flag. These are read-only, unauthenticated
+   GETs, as allowed.
+3. **The deviation, no restore: accepted.**
+   * pytest-socket removes its restrictions in its own teardown and re-applies the command line's
+     choice at the next setup.
+   * The plain branch blocks itself either way.
+   * The restore mutant surviving every run is agreement 8 working as intended. You then tested the
+     property mutant 2 stood for (the plain check after a live one is refused), and it is caught.
+4. **Decisions accepted:**
+   * the fixture rather than a driver flag or per-check markers, so `live` alone is enough wherever
+     the checks run;
+   * the loopback probe as a thread in the child, with `trust_env=False` and the outer run's
+     options dropped;
+   * three shapes, including the driver's xdist workers.
+5. **Follow-up (redundant `enable_socket` markers):** not filed. Leave them as belt and braces, and
+   the next task to touch tests/smoke may tidy them.
+6. **Closing checks:** the affected set (80 files, all of tests/smoke) stopped at 34% at its limit
+   under a load of 23 to 39 with nothing failing, and is left to the PR's `ci` under agreement 10.
+   The network-gate files (26), the always-run list (369), ruff, pyright, lint-imports, the doc
+   checks and the specs are clean.
+7. **Merge:** `--partial`, as soon as `ci` is green, ideally before Monday 2026-11-02's image
+   deploy. The first validate-dev run on a pre-release with this branch is ac1's last part. Once its
+   cloud job is green (`== dev cloud tier: passed`), the PM records it and sets the Goal. That run's
+   release is then green, and Monday's deploy takes it.

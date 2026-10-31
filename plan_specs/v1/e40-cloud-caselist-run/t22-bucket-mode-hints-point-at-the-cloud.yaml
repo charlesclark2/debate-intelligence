@@ -41,7 +41,7 @@ spec:
         dev.164 and the Mac's installed build read every record written, by tests shown
         failing first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -353,6 +353,13 @@ hand, restores the bucket's parsed store, parses what it lacks and publishes it
 (`caselist-cloud-run.md`, "A failed parse stage"). The pull is told it is in bucket mode by the
 composition root (`bucket_mode`); the banners read it from the run's details (`bucket_run`).
 
+**Nor does a bucket-mode run point at the Mac otherwise** (`v1-e40-t22`). A stage over its failure
+rate names the failures file the cloud run publishes with the parsed store, not `caselist parse
+--failures`, which lists the Mac's own store (`caselist-cloud-run.md`, "A parse stage over its
+failure rate"). A table a newer build stamped names a new image for the cloud run, not a build for
+the weekly agent (:attr:`NewerFingerprintTable.cloud_fix
+<debate_core.application.caselist.occurrence_table_guard.NewerFingerprintTable.cloud_fix>`).
+
 The stage is not in :data:`REQUIRED_STAGES`, so by `v1-e34-t13`'s rule none of this changes the
 command's exit status: the run captured everything.
 
@@ -649,6 +656,7 @@ if TYPE_CHECKING:  # pragma: no cover - sync_runs imports this module, so its ty
 __all__ = [
     "archive_entries",
     "BULK_DOWNLOAD_WINDOW",
+    "CLOUD_FAILURE_RATE_RUNBOOK",
     "CLOUD_PARSE_STAGE_RUNBOOK",
     "DEFAULT_BULK_DOWNLOADS_PER_DAY",
     "DEFAULT_FULL_ARCHIVE_INTERVAL_DAYS",
@@ -1644,6 +1652,10 @@ def parse_command(caselist: str, *, publish_only: bool) -> str:
 CLOUD_PARSE_STAGE_RUNBOOK: Final = 'caselist-cloud-run.md, "A failed parse stage"'
 """The runbook section a bucket-mode run's parse stage points to (`v1-e40-t18`): what the cloud cure
 is, how to start a run by hand, and why nothing is published from the operator's Mac."""
+
+CLOUD_FAILURE_RATE_RUNBOOK: Final = 'caselist-cloud-run.md, "A parse stage over its failure rate"'
+"""The runbook section a bucket-mode parse stage over its failure rate points to (`v1-e40-t22`): where
+the cloud run's failures are, and that why they failed is the PM's."""
 
 
 def cloud_parse_cure(caselists: Sequence[str]) -> str:
@@ -2845,11 +2857,15 @@ class _RunTally:
         return next((record.outcome for record in reversed(self.stages) if record.stage is stage), None)
 
     def add_to_reason(self, stage: SyncStage, sentence: str) -> None:
-        """Append `sentence` to the reason the latest record of `stage` gives."""
+        """Append `sentence` to the reason the latest record of `stage` gives.
+
+        A reason that ends a sentence loses its full stop to the semicolon (`v1-e40-t22`): a pending
+        parse stage's reason ends with its fix, and read `…stage").; this machine's copy…` before.
+        """
         for index in range(len(self.stages) - 1, -1, -1):
             record = self.stages[index]
             if record.stage is stage:
-                reason = f"{record.reason}; {sentence}" if record.reason else sentence
+                reason = f"{record.reason.removesuffix('.')}; {sentence}" if record.reason else sentence
                 self.stages[index] = replace(record, reason=reason)
                 return
 
@@ -4342,7 +4358,7 @@ class CaselistSyncService:
                         f"{caselist}: {parsed.failed} of the {parsed.tried} source(s) tried failed, "
                         "over the failure-rate threshold",
                         (PARSE_FAILURE_RATE_EXCEEDED,),
-                        _FAILURE_RATE_FIX,
+                        _CLOUD_FAILURE_RATE_FIX if self._bucket_mode else _FAILURE_RATE_FIX,
                     )
                 )
             if not publishing:
@@ -4931,7 +4947,9 @@ class CaselistSyncService:
         message = reported_error_message(error)
         sentence = f"{about}: {message}" if about else message
         return _StageFailure(
-            self._naming_no_local_directory(sentence), (reported_error_code(error),), fix_for(error)
+            self._naming_no_local_directory(sentence),
+            (reported_error_code(error),),
+            fix_for(error, bucket_mode=self._bucket_mode),
         )
 
     def _camp_failure(self, selection: OpenEvSelection, error: DomainError | OSError) -> _StageFailure:
@@ -4939,7 +4957,7 @@ class CaselistSyncService:
         return _StageFailure(
             self._naming_no_local_directory(_camp_download_refused(selection, error)),
             (reported_error_code(error),),
-            fix_for(error),
+            fix_for(error, bucket_mode=self._bucket_mode),
         )
 
     def _naming_no_local_directory(self, text: str) -> str:
@@ -5183,6 +5201,13 @@ _FAILURE_RATE_FIX: Final = (
     "`debate-research caselist parse --caselist <slug> --failures` lists the sources that failed, "
     "with their reasons."
 )
+_CLOUD_FAILURE_RATE_FIX: Final = (
+    "The cloud run's failed sources are listed in failures.jsonl of the caselist's parsed store in the "
+    "bucket, once the run has published it, never in the operator's Mac's own store; why they failed is "
+    f"the PM's to look into ({CLOUD_FAILURE_RATE_RUNBOOK})."
+)
+""":data:`_FAILURE_RATE_FIX` in bucket mode (`v1-e40-t22`): `--failures` reads the parsed store of the
+machine it runs on, and the cloud run's is the one in the bucket."""
 
 
 def _unpublished_parsed_store_fix(owed: Sequence[ParsedStoreOwed], *, bucket_mode: bool) -> str:
@@ -5637,7 +5662,7 @@ _UNREADABLE_PENDING_WORK_FIX: Final = (
 )
 
 
-def fix_for(error: BaseException) -> str | None:
+def fix_for(error: BaseException, *, bucket_mode: bool = False) -> str | None:
     """The fix a refused store calls for, or `None` for a failure with no fix a sentence can state.
 
     Told apart by the error's type and never by its message (`v1-e34-t13`): the filesystem adapters
@@ -5646,7 +5671,8 @@ def fix_for(error: BaseException) -> str | None:
     came from the bucket. Neither is fixed by a login, and neither sentence offers one. The
     bucket's refusal, and a profile the AWS config does not define, carry the fix the store's
     adapter wrote, and that is the one given (`v1-e29-t07`). An occurrence table a newer build
-    stamped carries its own, which names both versions and the store (`v1-e34-t29`).
+    stamped carries its own, which names both versions and the store (`v1-e34-t29`); in bucket mode,
+    the one that names a new image for the cloud run rather than the weekly agent (`v1-e40-t22`).
 
     Public because the run monitor asks the same question of an error that ended a run before any
     stage could record it (`v1-e34-t19`): that run's notification carries the same fix.
@@ -5664,7 +5690,7 @@ def fix_for(error: BaseException) -> str | None:
     if isinstance(error, PendingWorkUnreadable):
         return _UNREADABLE_PENDING_WORK_FIX
     if isinstance(error, NewerFingerprintTable):
-        return error.fix
+        return error.cloud_fix if bucket_mode else error.fix
     return None
 
 

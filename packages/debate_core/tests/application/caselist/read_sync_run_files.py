@@ -22,7 +22,8 @@ those, it also prints the key as written and as the build's model kept it, the p
 in the record, and the notifications the build's own `notifications_for` makes of the record and the
 details it kept: each title and command, and the parsed store's sentence of a login banner. Since
 `v1-e40-t18` it also prints, for the same files, whether the build kept the details' `bucket_run` and
-the parse stage's hint as it kept it, which is the cloud cure in a bucket-mode run.
+the parse stage's hint as it kept it, which is the cloud cure in a bucket-mode run. Since `v1-e40-t22`
+it also prints each banner's hint, which is where the failure-rate and newer-table hints reach one.
 
     python read_sync_run_files.py <directory written> <label of the reader>
 """
@@ -208,6 +209,8 @@ def _print_what_t31_added(
         )
         for notification in sent:
             print(f"  banner {notification.title!r}: fix {notification.fix_command!r}")
+            if notification.hint:
+                print(f"    hint {notification.hint!r}")
             waits = notification.message.partition(" The parsed store waits too")[2]
             if waits:
                 print(f"    the parsed store waits too{waits}")

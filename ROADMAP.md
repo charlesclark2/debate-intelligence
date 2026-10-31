@@ -62,7 +62,7 @@ v2.3's extension work.
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 55 | 252 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 109 | 90 | 499 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 66 | 50 | 296 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 66 | 51 | 296 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 16 | 11 | 114 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
@@ -358,7 +358,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [A dry run fills the plan-text and analytic-text caches, so the first report after a parser bump reads sources once](plan_specs/v1/e32-argument-landscape/t30-dry-run-fills-the-text-caches.yaml) `v1-e32-t30-dry-run-fills-the-text-caches` | Succeeded | 0 | 1.0 |
 | [Model cassettes name their caselist, so one season's recordings can be deleted alone](plan_specs/v1/e32-argument-landscape/t31-cassettes-filed-by-caselist.yaml) `v1-e32-t31-cassettes-filed-by-caselist` | Succeeded | 0 | 2.0 |
 | [A landscape model stage stopped by throttling ends as retryable, not as a verdict](plan_specs/v1/e32-argument-landscape/t32-throttled-model-stage-is-retryable.yaml) `v1-e32-t32-throttled-model-stage-is-retryable` | Succeeded | 0 | 1.0 |
-| [A throttled landscape evaluation exits as retryable, and a throttled stop says how long to wait](plan_specs/v1/e32-argument-landscape/t33-landscape-evaluate-retry-exit.yaml) `v1-e32-t33-landscape-evaluate-retry-exit` | Pending | 1 | 1.0 |
+| [A throttled landscape evaluation exits as retryable, and a throttled stop says how long to wait](plan_specs/v1/e32-argument-landscape/t33-landscape-evaluate-retry-exit.yaml) `v1-e32-t33-landscape-evaluate-retry-exit` | Succeeded | 1 | 1.0 |
 | [A command lists and deletes one caselist's model cassettes, and the annual purge calls it](plan_specs/v1/e32-argument-landscape/t34-landscape-cassettes-command.yaml) `v1-e32-t34-landscape-cassettes-command` | Pending | 1 | 1.0 |
 | [A CP text the landscape shows is whole: a text ending in a colon shows its planks, and a text split across paragraphs is joined](plan_specs/v1/e32-argument-landscape/t35-cp-texts-shown-whole.yaml) `v1-e32-t35-cp-texts-shown-whole` | Pending | 1 | 3.0 |
 

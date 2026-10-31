@@ -64,6 +64,12 @@ locals {
   retired_parsed_expiration_days   = 1
   retired_parsed_grace_period_days = 30
 
+  # The weekly run's lock object (v1-e40-t04, ADR-0020 (4)): which runner holds a lease to write to
+  # this bucket. debate_core's RUN_LOCK_KEY (application/caselist/run_lock.py) names the same key,
+  # and every write of it there is a conditional PutObject. The bucket policy below refuses any
+  # other kind of write to it (v1-e40-t07).
+  run_lock_key = "reports/sync/run-lock.json"
+
   # Nothing here is large enough that an abandoned multipart upload should be paid for for a week
   # and a day. Parts of an incomplete upload are billed and are invisible in a normal listing.
   abort_incomplete_multipart_upload_days = 7
@@ -396,6 +402,31 @@ locals {
           Condition = {
             Null            = { "s3:x-amz-server-side-encryption-aws-kms-key-id" = "false" }
             StringNotEquals = { "s3:x-amz-server-side-encryption-aws-kms-key-id" = aws_kms_key.evidence.arn }
+          }
+        },
+        {
+          # The run lock changes only by compare-and-swap (v1-e40-t07): a PutObject of its key must
+          # carry If-Match or If-None-Match, so a tool or a hand command that writes it blind is
+          # refused instead of overwriting a live holder. The two Null tests are ANDed: the deny
+          # bites only when both headers are absent. The condition keys are AWS's own
+          # (https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-writes-enforce.html).
+          #
+          # s3:PutObject also authorises CompleteMultipartUpload, which carries the headers, and
+          # CopyObject, CreateMultipartUpload and UploadPart, which cannot: so a copy or a multipart
+          # upload onto this key is refused whatever it sends. The lock is one small PutObject.
+          # s3:ObjectCreationOperation, which AWS's example uses to let the parts through, is left
+          # out on purpose. One key, no wildcard, and nothing but PutObject: a release is a
+          # conditional PutObject of state "free", never a delete.
+          Sid       = "DenyUnconditionalWritesOfTheRunLock"
+          Effect    = "Deny"
+          Principal = { AWS = "*" }
+          Action    = "s3:PutObject"
+          Resource  = "${aws_s3_bucket.evidence.arn}/${local.run_lock_key}"
+          Condition = {
+            Null = {
+              "s3:if-match"      = "true"
+              "s3:if-none-match" = "true"
+            }
           }
         },
       ],

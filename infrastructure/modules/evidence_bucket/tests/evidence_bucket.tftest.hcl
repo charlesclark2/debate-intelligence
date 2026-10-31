@@ -72,6 +72,10 @@ variables {
   bucket_suffix                     = "a7508de8"
   noncurrent_version_retention_days = 30
 
+  # Not a module input either: the run lock's object ARN under the mocked bucket, written out by
+  # hand (v1-e40-t07). The key is debate_core's RUN_LOCK_KEY.
+  run_lock_object_arn = "arn:aws:s3:::debate-mock-evidence/reports/sync/run-lock.json"
+
   # The two tables below are not module inputs. They are the hand-written expectations the
   # statement-coverage assertions of both permission sets read (v1-e29-t06), kept here once so
   # the two assertions cannot drift apart.
@@ -215,6 +219,101 @@ run "bucket_policy_requires_tls_and_this_key" {
       if try(statement.Sid, "") == "DenyUploadsThatOverrideEvidenceEncryption"
     ])
     error_message = "The encryption-override deny must be guarded by a Null condition, or every ordinary PutObject that omits the header would be denied."
+  }
+}
+
+# ---------------------------------------------------------------------------------------------
+# The run lock is written only by compare-and-swap (v1-e40-t07)
+# ---------------------------------------------------------------------------------------------
+
+# reports/sync/run-lock.json is v1-e40-t04's lock, and its every write in debate_core is a PutObject
+# with If-Match or If-None-Match. The bucket refuses one with neither, on that key alone. The three
+# assertions each catch a way of widening it that the other two let through: the statement itself
+# (another key, a prefix, another action, a lost condition), the requirement moved into a statement
+# that reaches further, and a statement added or dropped. The expected statement is written out here
+# by hand, from AWS's condition keys, not read back from main.tf.
+run "bucket_policy_refuses_an_unconditional_write_of_the_run_lock_and_nothing_else" {
+  assert {
+    # The whole statement rather than field by field, so that a field nobody thought to read
+    # (NotResource, NotAction, a narrower Principal, a third condition key) cannot change what it
+    # does. A wildcard or a prefix in Resource, a second resource, another action, or a condition
+    # that lost a key all fail here: without the condition the deny refuses the lock's own writes,
+    # and with one key alone the seed's If-None-Match or every renewal's If-Match.
+    condition = alltrue([
+      for statement in jsondecode(aws_s3_bucket_policy.evidence.policy).Statement :
+      jsonencode(statement) == jsonencode({
+        Sid       = "DenyUnconditionalWritesOfTheRunLock"
+        Effect    = "Deny"
+        Principal = { AWS = "*" }
+        Action    = "s3:PutObject"
+        Resource  = var.run_lock_object_arn
+        Condition = {
+          Null = {
+            "s3:if-match"      = "true"
+            "s3:if-none-match" = "true"
+          }
+        }
+      })
+      if try(statement.Sid, "") == "DenyUnconditionalWritesOfTheRunLock"
+    ])
+    error_message = "The run lock deny must be exactly: Deny, every principal, s3:PutObject, ${var.run_lock_object_arn} and no other key, unless s3:if-match or s3:if-none-match is present."
+  }
+
+  assert {
+    # The statement above is found by its Sid, so this is what stops the requirement from moving
+    # into another statement, which would reach every key that statement reaches.
+    condition = alltrue([
+      for statement in jsondecode(aws_s3_bucket_policy.evidence.policy).Statement :
+      !strcontains(jsonencode(statement), "s3:if-match") && !strcontains(jsonencode(statement), "s3:if-none-match") && !strcontains(jsonencode(statement), "run-lock")
+      if try(statement.Sid, "") != "DenyUnconditionalWritesOfTheRunLock"
+    ])
+    error_message = "No other statement may require a conditional write or name the run lock: the requirement is on reports/sync/run-lock.json and no other key (task spec: forbidden)."
+  }
+
+  assert {
+    # Every statement the bucket policy holds with no additional readers, by Sid, and how many. A
+    # second deny that reached another key fails here, under a Sid of its own or a repeated one, and
+    # so does a policy that lost the run lock deny, which the first assertion would pass unread.
+    condition = toset([
+      for statement in jsondecode(aws_s3_bucket_policy.evidence.policy).Statement : try(statement.Sid, "")
+      ]) == toset([
+      "DenyInsecureTransport",
+      "DenyUploadsThatOverrideEvidenceEncryption",
+      "DenyUploadsUnderAnotherKey",
+      "DenyUnconditionalWritesOfTheRunLock",
+    ]) && length(jsondecode(aws_s3_bucket_policy.evidence.policy).Statement) == 4
+    error_message = "The bucket policy must hold the TLS deny, the two encryption denies and the run lock deny, and nothing else."
+  }
+}
+
+# Both environments call this one module (infrastructure/envs/*/evidence_store.tf), so prod carries
+# the same statement. Asserted under prod's inputs as well, so that a later per-environment switch
+# cannot leave prod's lock unguarded.
+run "prod_refuses_an_unconditional_write_of_the_run_lock_too" {
+  variables {
+    name_prefix                       = "debate-prod-evidence"
+    environment                       = "prod"
+    noncurrent_version_retention_days = 365
+  }
+
+  assert {
+    condition = length([
+      for statement in jsondecode(aws_s3_bucket_policy.evidence.policy).Statement :
+      statement if jsonencode(statement) == jsonencode({
+        Sid       = "DenyUnconditionalWritesOfTheRunLock"
+        Effect    = "Deny"
+        Principal = { AWS = "*" }
+        Action    = "s3:PutObject"
+        Resource  = var.run_lock_object_arn
+        Condition = {
+          Null = {
+            "s3:if-match"      = "true"
+            "s3:if-none-match" = "true"
+          }
+        }
+      })
+    ]) == 1
+    error_message = "prod's bucket policy must refuse an unconditional write of the run lock, exactly as dev's does."
   }
 }
 

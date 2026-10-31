@@ -81,9 +81,10 @@ import os
 import re
 import tempfile
 import tomllib
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from datetime import timedelta
 from enum import StrEnum
+from fnmatch import fnmatchcase
 from pathlib import Path
 from typing import Any, Final, cast
 from urllib.parse import urlsplit
@@ -119,6 +120,7 @@ __all__ = [
     "ENV_PREFIX",
     "PROFILE_DIRECTORY_VARIABLE",
     "PROFILE_SUBDIRECTORY",
+    "RESERVED_SETTING_PATTERNS",
     "SECRET_PLACEHOLDER",
     "FIRST_BACKFILE_SEASON_START",
     "MAX_CASELIST_BULK_DOWNLOADS_PER_DAY",
@@ -192,6 +194,19 @@ budget above it, which `test_settings_environments.py` checks. The AWS Budgets a
 (v1-e05-t16) watches the account's real total, which no one machine's usage log can see.
 """
 
+RESERVED_SETTING_PATTERNS: Final = ("providers.*_api_key", "providers.*_token")
+"""Settings names this build keeps for settings a newer build may add (`v1-e41-t01`), as dotted globs.
+
+A name this build does not know is refused whatever it is: `extra="forbid"` is the typo protection,
+and a newer build's setting is no exception. A refused name that matches one of these also gets a
+hint saying a newer build may define it, and how to get past it. Each pattern is a spelling the
+providers group already uses for a credential, `openalex_api_key` and `semantic_scholar_api_key`,
+and `caselist_token`: credentials are what a `.env` carries (they are never committed to a profile),
+and a `.env` is read from the folder a command runs in, so it is where a newer checkout's setting
+reaches an older installed build. Few and written out, so that adding one is a decision a reviewer
+sees, and so that a typo elsewhere is never told an upgrade would fix it.
+"""
+
 type SourceLabeller = Callable[[str], str]
 """A layer that labels itself per field, given the field's dotted path."""
 
@@ -205,11 +220,16 @@ class ConfigurationError(DomainError):
     profile file that is not valid TOML.
     """
 
-    def __init__(self, message: str, *, field: str | None = None, source: str | None = None) -> None:
+    def __init__(
+        self, message: str, *, field: str | None = None, source: str | None = None, hint: str | None = None
+    ) -> None:
         self.field = field
         """Dotted path of the offending setting, when the failure is about one setting."""
         self.source = source
         """Where the offending value came from: a file path, an environment variable name."""
+        self.hint = hint
+        """What to do about it, when there is something to say: an unknown name a newer build may
+        define (:data:`RESERVED_SETTING_PATTERNS`)."""
         super().__init__(message)
 
 
@@ -1628,7 +1648,12 @@ def load_settings(
     try:
         settings = Settings(**merged)
     except ValidationError as error:
-        raise _configuration_error(error, sources) from error
+        refusal = _configuration_error(error, sources)
+        if any(detail["type"] == _UNKNOWN_SETTING for detail in error.errors()):
+            # Pydantic's own report quotes every input, and an unknown name's value can be a
+            # credential a newer build reads (v1-e41-t01): the refusal names it and chains nothing.
+            raise refusal from None
+        raise refusal from error
 
     _refuse_stand_in_endpoints_outside_dev(settings, sources)
     settings.attach_field_sources(sources)
@@ -1813,21 +1838,70 @@ def _walk_leaves(values: Mapping[str, Any], prefix: str = "") -> Iterator[tuple[
             yield path, value
 
 
+#: Pydantic's error type for a name the model does not declare.
+_UNKNOWN_SETTING: Final = "extra_forbidden"
+
+
 def _configuration_error(error: ValidationError, sources: Mapping[str, str]) -> ConfigurationError:
-    """Turn Pydantic's report into one that names the field and where its value came from."""
+    """Turn Pydantic's report into one that names the field and where its value came from.
+
+    Never quotes a value: `msg` is Pydantic's sentence about the field, and the input stays out.
+    """
     problems: list[str] = []
+    reserved: list[tuple[str, str]] = []
     first_field: str | None = None
     for detail in error.errors():
         field = ".".join(str(part) for part in detail["loc"])
         first_field = first_field or field
         origin = sources.get(field, "default")
         problems.append(f"{field} (from {origin}): {detail['msg']}")
+        if detail["type"] == _UNKNOWN_SETTING and _reserved_pattern_of(field) is not None:
+            reserved.append((field, origin))
     joined = "; ".join(problems)
     return ConfigurationError(
         f"invalid configuration: {joined}",
         field=first_field,
         source=sources.get(first_field or "", None),
+        hint=_newer_build_hint(reserved),
     )
+
+
+def _reserved_pattern_of(field: str) -> str | None:
+    """The first of :data:`RESERVED_SETTING_PATTERNS` that `field` matches whole, or `None`."""
+    return next((pattern for pattern in RESERVED_SETTING_PATTERNS if fnmatchcase(field, pattern)), None)
+
+
+def _newer_build_hint(reserved: Sequence[tuple[str, str]]) -> str | None:
+    """The hint for unknown names a newer build may define, each with where it came from, or `None`.
+
+    Names and sources only, never a value. Says the names are refused all the same, and gives each
+    source's way past it: a `.env` is read from the folder a command runs in, so another folder; a
+    variable can be unset; a file can be edited. Upgrading fixes every one of them.
+    """
+    if not reserved:
+        return None
+    names = " and ".join(field for field, _ in reserved)
+    patterns = " and ".join(dict.fromkeys(_reserved_pattern_of(field) or "" for field, _ in reserved))
+    fixes = " ".join(dict.fromkeys(_way_past(origin) for _, origin in reserved))
+    return (
+        f"A newer build may define {names}: this build keeps names matching {patterns} for settings "
+        f"added after it, and refuses each one it does not know. {fixes}"
+    )
+
+
+def _way_past(origin: str) -> str:
+    """How to get past a refused name from `origin`, a source label, short of upgrading."""
+    kind, _, where = origin.partition(":")
+    if kind == "dotenv":
+        return (
+            "The .env file is read from the checkout or folder a command runs in, so run the command "
+            "from another folder, or install the newer build."
+        )
+    if kind == "env":
+        return f"Unset {where} in this shell, or install the newer build."
+    if kind == "profile":
+        return f"Remove it from the profile file {where}, or install the newer build."
+    return f"Remove it from {origin}, or install the newer build."
 
 
 def _walk_fields(model: BaseModel, prefix: str = "") -> Iterator[tuple[str, Any]]:

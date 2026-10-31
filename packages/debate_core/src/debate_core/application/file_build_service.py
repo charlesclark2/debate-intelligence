@@ -9,7 +9,9 @@
    re-parsing its source with the running parser, so a store of another parser, fingerprint or style
    profile version (`v1-e33-t09`) would give `OCCURRENCE_MISMATCH` for every card. Before anything is
    resolved, every caselist the recipe reads is compared with the running build, and one refusal
-   names every version that differs, both values of each, and the re-parse.
+   names every version that differs, both values of each, and each caselist's way forward: the
+   re-parse, the newer build a newer parser's store needs, or both ways for a style profile alone,
+   whose versions have no order (`v1-e41-t01`).
 4. **Refuses an output directory inside a git working tree** (PM amendment 2026-10-21): a built file
    holds card text and its sidecar names who disclosed each card, and neither is ever committed.
 5. **Resolves** every card to one occurrence, listing every error at once.
@@ -400,11 +402,14 @@ class FileBuildService:
         """One refusal for every caselist the recipe reads that this build did not parse, or `None`.
 
         A caselist's store is the version of its newest directory, which the store lists by parser
-        version and then generation. :meth:`_versions_that_differ` compares it with this build.
+        version and then generation. :meth:`_versions_that_differ` compares it with this build, and
+        the hint gives each caselist its own way forward (`v1-e41-t01`, :func:`_store_hint`).
         """
         other: list[str] = []
         unparsed: list[str] = []
         reparse: list[str] = []
+        newer: list[tuple[str, str]] = []
+        profile_only: list[tuple[str, tuple[str, ...]]] = []
         for caselist in sorted(
             {recipe.caselist} | {ref.pin.caselist for _, ref in recipe.card_refs() if ref.pin}
         ):
@@ -421,17 +426,32 @@ class FileBuildService:
                 )
                 reparse.append(caselist)
             elif differs:
-                other.extend(differs)
-                reparse.append(caselist)
-        if not reparse:
+                other.extend(differs.described(caselist, self._parser_version, self._profile_version))
+                if differs.parsed_by is not None and differs.parsed_by > self._parser_version:
+                    newer.append((caselist, differs.parsed_by))
+                elif differs.parsed_by is None and not differs.stamped:
+                    profile_only.append((caselist, differs.read_through))
+                else:
+                    reparse.append(caselist)
+        if not (reparse or newer or profile_only):
             return None
         code = (
             BuildRefusalCode.STORE_PARSED_BY_ANOTHER_VERSION if other else BuildRefusalCode.STORE_NOT_PARSED
         )
         reason = "this machine's parsed store was not built by this build" if other else "a store is missing"
-        return BuildRefusal(code, f"{reason}: {'; '.join(other + unparsed)}", _reparse_hint(reparse))
+        return BuildRefusal(
+            code,
+            f"{reason}: {'; '.join(other + unparsed)}",
+            _store_hint(
+                reparse,
+                newer,
+                profile_only,
+                parser_version=self._parser_version,
+                profile_version=self._profile_version,
+            ),
+        )
 
-    async def _versions_that_differ(self, caselist: str, newest: str) -> list[str] | None:
+    async def _versions_that_differ(self, caselist: str, newest: str) -> _VersionsThatDiffer | None:
         """Each of the parser, fingerprint and style profile versions of `newest` that is not this build's.
 
         `newest` must be this build's parser version, its occurrence table stamped with this build's
@@ -441,30 +461,17 @@ class FileBuildService:
         differs is named with both values. `None` when `newest` is this build's parser version and
         has no occurrence table.
         """
-        differs: list[str] = []
         parsed_by = parse_version_directory(newest)[0]
-        if parsed_by != self._parser_version:
-            differs.append(
-                f"{caselist} was parsed by parser {parsed_by}, and this build's parser is "
-                f"{self._parser_version}"
-            )
+        other_parser = parsed_by if parsed_by != self._parser_version else None
         stamps = await self._store.read_occurrence_stamps(caselist, newest)
         if stamps is None:
-            return differs or None
-        stamped = sorted(stamps - {FINGERPRINT_VERSION})
-        if stamped:
-            differs.append(
-                f"{caselist}'s occurrence table is stamped {', '.join(stamped)}, and this build's "
-                f"fingerprint version is {FINGERPRINT_VERSION}"
-            )
+            return _VersionsThatDiffer(other_parser) if other_parser is not None else None
         profiles = await self._store.read_occurrence_profiles(caselist, newest)
-        read_through = sorted((profiles or frozenset()) - {self._profile_version})
-        if read_through:
-            differs.append(
-                f"{caselist}'s occurrence table was read through style profile {', '.join(read_through)}, "
-                f"and this build's style profile is {self._profile_version}"
-            )
-        return differs
+        return _VersionsThatDiffer(
+            other_parser,
+            stamped=tuple(sorted(stamps - {FINGERPRINT_VERSION})),
+            read_through=tuple(sorted((profiles or frozenset()) - {self._profile_version})),
+        )
 
     async def _missing_sources(self, resolved: ResolvedRecipe) -> tuple[CardProblem, ...]:
         """Each card whose source is not in the blob store, with the `store get` that fetches it."""
@@ -568,6 +575,78 @@ def _write_whole(target: Path, body: bytes) -> None:
         stream.flush()
         os.fsync(stream.fileno())
     os.replace(incoming, target)
+
+
+@dataclass(frozen=True, slots=True)
+class _VersionsThatDiffer:
+    """What of a caselist's newest directory is not this build's; empty (falsy) when nothing is."""
+
+    parsed_by: str | None
+    """The directory's parser version, when it is not this build's."""
+    stamped: tuple[str, ...] = ()
+    """Fingerprint versions its occurrence table is stamped with besides this build's."""
+    read_through: tuple[str, ...] = ()
+    """Style profile versions its rows were read through besides this build's."""
+
+    def __bool__(self) -> bool:
+        return self.parsed_by is not None or bool(self.stamped) or bool(self.read_through)
+
+    def described(self, caselist: str, parser_version: str, profile_version: str) -> list[str]:
+        """Each version that differs, with both values, as the refusal's message names it."""
+        described: list[str] = []
+        if self.parsed_by is not None:
+            described.append(
+                f"{caselist} was parsed by parser {self.parsed_by}, and this build's parser is "
+                f"{parser_version}"
+            )
+        if self.stamped:
+            described.append(
+                f"{caselist}'s occurrence table is stamped {', '.join(self.stamped)}, and this build's "
+                f"fingerprint version is {FINGERPRINT_VERSION}"
+            )
+        if self.read_through:
+            described.append(
+                f"{caselist}'s occurrence table was read through style profile "
+                f"{', '.join(self.read_through)}, and this build's style profile is {profile_version}"
+            )
+        return described
+
+
+def _store_hint(
+    reparse: Sequence[str],
+    newer: Sequence[tuple[str, str]],
+    profile_only: Sequence[tuple[str, Sequence[str]]],
+    *,
+    parser_version: str,
+    profile_version: str,
+) -> str:
+    """The way forward for each caselist the build refused, in one hint (`v1-e41-t01`).
+
+    * **Re-parse** a caselist this build can bring up to date: no store, no occurrence table, an older
+      parser version or another fingerprint version.
+    * **Install the newer build** for a caselist a newer parser wrote. Its directory sorts above this
+      build's parser version, the order :func:`parse_version_directory` gives and the store lists in,
+      so a re-parse here would write a directory below it and the build would read the newer one and
+      refuse again. The same comparison judges a directory `newer_than_this_build` for retention.
+    * **Name both ways** for a caselist whose style profile is all that differs. Profile versions
+      have no order, so nothing here can say which build is newer; the hint says that decides it.
+    """
+    parts = [_reparse_hint(reparse)] if reparse else []
+    parts.extend(
+        f"{caselist} was parsed by parser {parsed_by}, which is newer than this build's {parser_version}: "
+        "install that newer build and build with it. A re-parse with this build would write a directory "
+        f"that sorts below {parsed_by}, and the build would refuse again."
+        for caselist, parsed_by in newer
+    )
+    parts.extend(
+        f"{caselist}'s occurrence table was read through style profile {', '.join(read_through)}, and this "
+        f"build's style profile is {profile_version}. Style profile versions have no order, so which way "
+        "to go depends on which build is newer: if this one is, re-parse with it "
+        f"(`debate-research caselist parse --caselist {caselist}`), then build again; if the build that "
+        "parsed it is, build with that one."
+        for caselist, read_through in profile_only
+    )
+    return " ".join(parts)
 
 
 def _reparse_hint(caselists: Sequence[str]) -> str:

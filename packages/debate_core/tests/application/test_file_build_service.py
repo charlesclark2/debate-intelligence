@@ -567,6 +567,118 @@ def test_an_occurrence_table_with_no_rows_names_no_profile_and_is_not_refused_fo
 
 
 # ------------------------------------------------------------------------------------------------
+# v1-e41-t01: the hint says which way to go, and only when the versions say it
+# ------------------------------------------------------------------------------------------------
+
+#: A parser version that sorts above this build's, as a newer build's would.
+NEWER_PARSER: Final = "2099.01.01-docx-99"
+
+REPARSE_HSPOLICY26: Final = (
+    "Re-parse with this build: `debate-research caselist parse --caselist hspolicy26`, then build again."
+)
+
+
+def test_a_store_an_older_parser_wrote_keeps_the_reparse_hint(world: World) -> None:
+    first, _ = world.add(SOURCE_ONE)
+    world.store = SpyStore()
+    world.publish(version=OLD_PARSER)
+    result = world.build(world.recipe([{"fingerprint": first.fingerprint}]))
+
+    assert result.refusal is not None
+    assert result.refusal.code is BuildRefusalCode.STORE_PARSED_BY_ANOTHER_VERSION
+    assert result.refusal.hint == REPARSE_HSPOLICY26
+
+
+def test_a_store_a_newer_parser_wrote_says_to_install_the_newer_build_and_not_to_reparse(
+    world: World,
+) -> None:
+    """A re-parse here would write this build's parser version, which sorts below the newer directory,
+    so the build would read the newer one and refuse again."""
+    first, _ = world.add(SOURCE_ONE)
+    world.publish(version=NEWER_PARSER)
+    result = world.build(world.recipe([{"fingerprint": first.fingerprint}]))
+
+    assert result.refusal is not None
+    assert result.refusal.code is BuildRefusalCode.STORE_PARSED_BY_ANOTHER_VERSION
+    assert result.refusal.message == (
+        "this machine's parsed store was not built by this build: hspolicy26 was parsed by parser "
+        f"{NEWER_PARSER}, and this build's parser is {PARSER.parser_version}"
+    )
+    assert result.refusal.hint == (
+        f"hspolicy26 was parsed by parser {NEWER_PARSER}, which is newer than this build's "
+        f"{PARSER.parser_version}: install that newer build and build with it. A re-parse with this build "
+        f"would write a directory that sorts below {NEWER_PARSER}, and the build would refuse again."
+    )
+
+
+def test_a_newer_parser_decides_the_hint_whatever_else_differs(world: World) -> None:
+    first, _ = world.add(SOURCE_ONE)
+    world.publish(
+        version=NEWER_PARSER,
+        rows=[
+            row.model_copy(update={"fingerprint_version": OLD_FINGERPRINTS, "profile_version": OTHER_PROFILE})
+            for row in world.rows
+        ],
+    )
+    result = world.build(world.recipe([{"fingerprint": first.fingerprint}]))
+
+    assert result.refusal is not None and result.refusal.hint is not None
+    assert result.refusal.hint.startswith(f"hspolicy26 was parsed by parser {NEWER_PARSER}, which is newer")
+    assert "Re-parse" not in result.refusal.hint and "style profile" not in result.refusal.hint
+
+
+def test_a_store_under_another_style_profile_names_both_and_asserts_no_direction(world: World) -> None:
+    """Style profile versions have no order: the hint gives both ways and says what decides between them."""
+    first, _ = world.add(SOURCE_ONE)
+    reparsed = asyncio.run(FileBuilderWorld(parser=OTHER_PROFILE_PARSER).add_source(SOURCE_ONE))
+    world.publish(version=SECOND_GENERATION, rows=[card.occurrence for card in reparsed])
+    result = world.build(world.recipe([{"fingerprint": first.fingerprint}]))
+
+    assert result.refusal is not None
+    assert result.refusal.code is BuildRefusalCode.STORE_PARSED_BY_ANOTHER_VERSION
+    assert result.refusal.hint == (
+        f"hspolicy26's occurrence table was read through style profile {OTHER_PROFILE}, and this build's "
+        f"style profile is {PARSER.profile_version}. Style profile versions have no order, so which way to "
+        "go depends on which build is newer: if this one is, re-parse with it "
+        "(`debate-research caselist parse --caselist hspolicy26`), then build again; if the build that "
+        "parsed it is, build with that one."
+    )
+
+
+def test_a_profile_and_a_fingerprint_that_differ_keep_the_reparse_hint(world: World) -> None:
+    """Only a profile alone leaves the direction open; v1-e33-t03's fingerprint refusal re-parses."""
+    first, _ = world.add(SOURCE_ONE)
+    world.publish(
+        rows=[
+            row.model_copy(update={"fingerprint_version": OLD_FINGERPRINTS, "profile_version": OTHER_PROFILE})
+            for row in world.rows
+        ]
+    )
+    result = world.build(world.recipe([{"fingerprint": first.fingerprint}]))
+
+    assert result.refusal is not None and result.refusal.hint == REPARSE_HSPOLICY26
+
+
+def test_caselists_needing_different_fixes_each_get_their_own_in_one_hint(world: World) -> None:
+    """hspolicy26 from a newer parser, hsld26 from an older one: one refusal, and each its own way."""
+    first, _ = world.add(SOURCE_ONE)
+    world.publish(version=NEWER_PARSER)
+    asyncio.run(world.store.write_aggregates("hsld26", OLD_PARSER, index=(), failures=(), occurrences=()))
+    pin = {"caselist": "hsld26", "source_sha256": "1a" * 32, "element_index": 0}
+    result = world.build(
+        world.recipe([{"fingerprint": first.fingerprint}, {"fingerprint": "b1" * 32, "pin": pin}])
+    )
+
+    assert result.refusal is not None
+    assert result.refusal.hint == (
+        "Re-parse with this build: `debate-research caselist parse --caselist hsld26`, then build again. "
+        f"hspolicy26 was parsed by parser {NEWER_PARSER}, which is newer than this build's "
+        f"{PARSER.parser_version}: install that newer build and build with it. A re-parse with this build "
+        f"would write a directory that sorts below {NEWER_PARSER}, and the build would refuse again."
+    )
+
+
+# ------------------------------------------------------------------------------------------------
 # ac10: an output directory inside a git working tree is refused
 # ------------------------------------------------------------------------------------------------
 

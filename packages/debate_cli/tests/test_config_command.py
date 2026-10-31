@@ -249,6 +249,66 @@ def test_an_invalid_setting_is_reported_with_the_field_that_is_wrong(
 
 
 # ---------------------------------------------------------------------------------------------
+# A setting a newer build may define, from a .env in the folder the command runs in (v1-e41-t01)
+# ---------------------------------------------------------------------------------------------
+
+NEWER_KEY = "provider-key-a-newer-build-reads-that-must-never-be-printed"
+
+
+@pytest.fixture
+def newer_dotenv(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    """A folder outside any checkout whose `.env` sets a provider key this build has no field for."""
+    folder = tmp_path / "beside-a-newer-checkout"
+    folder.mkdir()
+    dotenv = folder / ".env"
+    dotenv.write_text(f"DEBATE_PROVIDERS__CORE_API_KEY={NEWER_KEY}\n", encoding="utf-8")
+    monkeypatch.chdir(folder)
+    return dotenv
+
+
+def test_a_reserved_name_from_dotenv_is_refused_with_the_newer_build_hint(newer_dotenv: Path) -> None:
+    result = runner.invoke(create_app(), ["--json", "config", "show"])
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE
+    assert envelope_of(result)["error"] == {
+        "code": "CONFIGURATION_ERROR",
+        "message": (
+            f"invalid configuration: providers.core_api_key (from dotenv:{newer_dotenv}): "
+            "Extra inputs are not permitted"
+        ),
+        "exit_code": 1,
+        "details": {"field": "providers.core_api_key", "source": f"dotenv:{newer_dotenv}"},
+        "hint": (
+            "A newer build may define providers.core_api_key: this build keeps names matching "
+            "providers.*_api_key for settings added after it, and refuses each one it does not know. "
+            "The .env file is read from the checkout or folder a command runs in, so run the command "
+            "from another folder, or install the newer build."
+        ),
+    }
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["config", "show"],
+        ["--json", "config", "show"],
+        ["--verbose", "config", "show"],
+        ["--json", "--verbose", "config", "show"],
+    ],
+)
+def test_a_reserved_names_value_reaches_neither_stream_in_any_mode(
+    newer_dotenv: Path, arguments: list[str]
+) -> None:
+    """Only its name is printed: the refusal quotes no value, and chains no report that does."""
+    result = runner.invoke(create_app(), arguments)
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE
+    written = everything_written(result)
+    assert "providers.core_api_key" in written
+    assert NEWER_KEY not in written
+
+
+# ---------------------------------------------------------------------------------------------
 # The command stays thin
 # ---------------------------------------------------------------------------------------------
 

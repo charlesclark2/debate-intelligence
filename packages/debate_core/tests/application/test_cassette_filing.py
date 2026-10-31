@@ -198,3 +198,12 @@ def test_a_cassette_directory_deletes_and_withdraws_only_its_own_cassettes(
         directory.delete(name)
     with pytest.raises(ValueError, match="cassette"):
         directory.withdraw(name, PURGED)
+
+
+def test_a_cassette_never_loses_its_last_caselist_to_a_withdrawal(cassettes: Path) -> None:
+    """Taking the only name off would leave a cassette no caselist's delete reaches: it is deleted instead."""
+    before = snapshot(cassettes)
+
+    with pytest.raises(ValueError, match="delete it instead"):
+        CassetteDirectory(cassettes).withdraw(name_of(cassettes, SOLE), PURGED)
+    assert snapshot(cassettes) == before

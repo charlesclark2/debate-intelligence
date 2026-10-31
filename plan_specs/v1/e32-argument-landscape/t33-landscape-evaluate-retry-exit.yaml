@@ -30,7 +30,10 @@ spec:
       - A real model call in a test
       - A refused model call made retryable
       - A key removed or renamed in a --json envelope
-  context: []
+  context:
+    - kind: TaskRef
+      name: v1-e32-t32-throttled-model-stage-is-retryable
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-

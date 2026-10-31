@@ -24,6 +24,10 @@ spec:
     purge's instruction to report any other directory holding `debate.sqlite3`, and make
     `landscape report --restored-copy` refuse a directory with no marker, with a code and a hint
     naming the restore command.
+    (PM record 2026-11-01.) The starting condition is met: on 2026-10-31 the operator ran the two searches
+    of the landscape runbook's step 5, which print `restored copies: 0` and `restored before the marker: 0`,
+    on `v1.1.0-dev.200`. The search is plain `find` and does not depend on the build, and the only copy
+    restored before the marker (hspolicy26, 2026-10-30) was deleted that day.
   priority: 3
   constraints:
     packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks, tests/docs]

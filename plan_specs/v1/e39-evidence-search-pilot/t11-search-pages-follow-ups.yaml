@@ -43,6 +43,9 @@ spec:
     - kind: TaskRef
       name: v1-e39-t07-removal-audit-and-exposure
       relation: dependsOn
+    - kind: TaskRef
+      name: v1-e39-t06-search-pages
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-

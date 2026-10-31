@@ -49,6 +49,9 @@ spec:
     - kind: TaskRef
       name: v1-e05-t13-dev-routes-to-callable-claude-models
       relation: dependsOn
+    - kind: TaskRef
+      name: v1-e32-t07-model-classification-stage
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-

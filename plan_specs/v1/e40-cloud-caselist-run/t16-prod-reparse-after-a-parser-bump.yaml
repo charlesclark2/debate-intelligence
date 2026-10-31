@@ -39,6 +39,9 @@ spec:
     - kind: TaskRef
       name: v1-e40-t10-restore-with-sources
       relation: dependsOn
+    - kind: TaskRef
+      name: v1-e31-t31-labelled-evaluation-gaps
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-

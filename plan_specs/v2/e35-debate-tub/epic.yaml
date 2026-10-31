@@ -218,6 +218,14 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v2-e35-t04-tub-ui
+    - id: ext-v1-e29-t08-takedown-preflight-identity
+      kind: External
+      name: 'Prerequisite from E29: The takedown preflight refuses the everyday profile before it writes anything'
+      description: >-
+        Cross-epic prerequisite owned by v1-e29-cloud-evidence-store (release v1.1).
+      inputs:
+        goalRef: v1-e29-t08-takedown-preflight-identity
+        specRef: plan_specs/v1/e29-cloud-evidence-store/t08-takedown-preflight-identity.yaml
     - id: t05
       kind: Task
       name: Access audit and removal
@@ -231,6 +239,7 @@ spec:
       - t03
       - ext-v1-e30-t01-caselist-data-use-policy
       - ext-v1-e30-t07-source-removal
+      - ext-v1-e29-t08-takedown-preflight-identity
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v2-e35-t05-tub-access-and-removal reports phase Succeeded

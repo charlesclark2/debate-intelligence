@@ -60,7 +60,7 @@ v2.3's extension work.
 
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
-| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 59 | 52 | 258 |
+| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 54 | 252 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 109 | 90 | 499 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 62 | 49 | 290 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 16 | 11 | 114 |
@@ -68,7 +68,7 @@ v2.3's extension work.
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 28 | 19 | 165 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 23 | 16 | 84 |
-| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 1 | 24 | 12 | 55 |
+| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 32 | 13 | 66 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -125,20 +125,16 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 | [Tests stop reaching code they do not use: fakes by port, no port re-exports, and a graph option](plan_specs/v1/e01-repo-foundation/t30-test-selection-reach.yaml) `v1-e01-t30-test-selection-reach` | Succeeded | 1 | 4.0 |
 | [Repository checks stop flagging true values, and the smoke tests type-check](plan_specs/v1/e01-repo-foundation/t31-repo-check-false-positives.yaml) `v1-e01-t31-repo-check-false-positives` | Succeeded | 1 | 1.0 |
 | [Test selection, round three: command registration, quoted words, the root pyproject and the contract suites](plan_specs/v1/e01-repo-foundation/t32-test-selection-reach-round-three.yaml) `v1-e01-t32-test-selection-reach-round-three` | Succeeded | 1 | 3.0 |
-| [When a newer build wrote the database or added a setting, the error says so](plan_specs/v1/e01-repo-foundation/t33-newer-build-messages.yaml) `v1-e01-t33-newer-build-messages` | Pending | 0 | 2.0 |
-| [validate-dev is green again, and a red one is seen](plan_specs/v1/e01-repo-foundation/t34-validate-dev-green-again.yaml) `v1-e01-t34-validate-dev-green-again` | InProgress | 1 | 3.0 |
+| [validate-dev is green again, and a red one is seen](plan_specs/v1/e01-repo-foundation/t34-validate-dev-green-again.yaml) `v1-e01-t34-validate-dev-green-again` | Succeeded | 1 | 3.0 |
 | [CI's pyright covers tests/architecture and tests/smoke](plan_specs/v1/e01-repo-foundation/t35-pyright-scope-tests.yaml) `v1-e01-t35-pyright-scope-tests` | Succeeded | 1 | 1.0 |
 | [A dev pre-release for a commit dev has moved past with a workflow change is reported superseded, not failed](plan_specs/v1/e01-repo-foundation/t36-prerelease-superseded-commit.yaml) `v1-e01-t36-prerelease-superseded-commit` | Succeeded | 1 | 2.0 |
-| [A CI check that every locked package's licence is one the project accepts](plan_specs/v1/e01-repo-foundation/t37-licence-check-over-the-lock.yaml) `v1-e01-t37-licence-check-over-the-lock` | Pending | 0 | 2.0 |
 | [A pull request into dev runs the tests its changes reach; a push to dev and a pull request into main run them all](plan_specs/v1/e01-repo-foundation/t38-ci-affected-tests-on-dev-pull-requests.yaml) `v1-e01-t38-ci-affected-tests-on-dev-pull-requests` | Succeeded | 1 | 3.0 |
 | [The container imports each integration in its own factory, and selection follows a command to its factories](plan_specs/v1/e01-repo-foundation/t39-container-builds-integrations-lazily.yaml) `v1-e01-t39-container-builds-integrations-lazily` | Succeeded | 1 | 4.0 |
 | [The planted-break check runs the tests nearest a break by what reads it, not by path](plan_specs/v1/e01-repo-foundation/t40-planted-break-nearest-ordering.yaml) `v1-e01-t40-planted-break-nearest-ordering` | Succeeded | 1 | 1.0 |
 | [The pull request's smoke tier reads the bundled profiles, as the installed build does](plan_specs/v1/e01-repo-foundation/t41-pr-smoke-reads-the-bundled-profiles.yaml) `v1-e01-t41-pr-smoke-reads-the-bundled-profiles` | Succeeded | 1 | 2.0 |
 | [Coverage measured in the test parts and combined, so the push run is never held by one unsplit job](plan_specs/v1/e01-repo-foundation/t42-coverage-measured-in-the-parts.yaml) `v1-e01-t42-coverage-measured-in-the-parts` | Succeeded | 1 | 2.0 |
-| [A change to container.py reaches only the tests of the parts it changes](plan_specs/v1/e01-repo-foundation/t43-container-diff-read-part-by-part.yaml) `v1-e01-t43-container-diff-read-part-by-part` | Pending | 0 | 2.0 |
-| [A test that mentions debate-research inside a longer message is not read as running the app](plan_specs/v1/e01-repo-foundation/t44-cli-mention-in-a-message-is-prose.yaml) `v1-e01-t44-cli-mention-in-a-message-is-prose` | Pending | 0 | 1.0 |
-| [The docstrings say what the stamped build carries](plan_specs/v1/e01-repo-foundation/t45-stamp-docstrings.yaml) `v1-e01-t45-stamp-docstrings` | Pending | 0 | 0.5 |
-| [The single-interpreter scan leaves site/ out, as the Node project it is](plan_specs/v1/e01-repo-foundation/t46-single-interpreter-scan-leaves-site-out.yaml) `v1-e01-t46-single-interpreter-scan-leaves-site-out` | Pending | 0 | 0.5 |
+| [A change to container.py reaches only the tests of the parts it changes](plan_specs/v1/e01-repo-foundation/t43-container-diff-read-part-by-part.yaml) `v1-e01-t43-container-diff-read-part-by-part` | Succeeded | 0 | 2.0 |
+| [A test that mentions debate-research inside a longer message is not read as running the app](plan_specs/v1/e01-repo-foundation/t44-cli-mention-in-a-message-is-prose.yaml) `v1-e01-t44-cli-mention-in-a-message-is-prose` | Pending | 2 | 1.0 |
 
 #### [E02 — Domain Core: Entities, Ports & Local Persistence](plan_specs/v1/e02-domain-core/epic.yaml)
 
@@ -263,7 +259,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
 | [OpenCaselist API client](plan_specs/v1/e34-caselist-sync/t01-caselist-api-client.yaml) `v1-e34-t01-caselist-api-client` | Succeeded | 2 | 11.0 |
-| [Weekly scheduled sync](plan_specs/v1/e34-caselist-sync/t02-scheduled-sync.yaml) `v1-e34-t02-scheduled-sync` | Succeeded | 3 | 11.0 |
+| [Weekly scheduled sync](plan_specs/v1/e34-caselist-sync/t02-scheduled-sync.yaml) `v1-e34-t02-scheduled-sync` | Succeeded | 4 | 11.0 |
 | [Sync run log and staleness warnings](plan_specs/v1/e34-caselist-sync/t03-sync-monitoring.yaml) `v1-e34-t03-sync-monitoring` | Succeeded | 1 | 9.0 |
 | [Periodic full-archive refresh](plan_specs/v1/e34-caselist-sync/t04-full-archive-refresh.yaml) `v1-e34-t04-full-archive-refresh` | Succeeded | 2 | 6.5 |
 | [Install and enable the weekly agent](plan_specs/v1/e34-caselist-sync/t05-enable-schedule.yaml) `v1-e34-t05-enable-schedule` | Succeeded | 6 | 1.5 |
@@ -319,11 +315,11 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [A prompt may set its own effort, so a classifier need not think at the route's default](plan_specs/v1/e05-model-router/t11-per-prompt-effort.yaml) `v1-e05-t11-per-prompt-effort` | Pending | 1 | 2.0 |
 | [An installed build carries config/model_pricing.yaml beside the routing files](plan_specs/v1/e05-model-router/t12-installed-build-carries-model-pricing.yaml) `v1-e05-t12-installed-build-carries-model-pricing` | Succeeded | 1 | 1.0 |
 | [Dev routes to Claude models this account can call while the 5.5 quotas are held at zero](plan_specs/v1/e05-model-router/t13-dev-routes-to-callable-claude-models.yaml) `v1-e05-t13-dev-routes-to-callable-claude-models` | Succeeded | 1 | 2.0 |
-| [A cheaper model for the high-volume route, chosen by the coach-labelled evaluation](plan_specs/v1/e05-model-router/t14-cheaper-model-for-high-volume-evaluated-first.yaml) `v1-e05-t14-cheaper-model-for-high-volume-evaluated-first` | Pending | 1 | 3.0 |
+| [A cheaper model for the high-volume route, chosen by the coach-labelled evaluation](plan_specs/v1/e05-model-router/t14-cheaper-model-for-high-volume-evaluated-first.yaml) `v1-e05-t14-cheaper-model-for-high-volume-evaluated-first` | Pending | 2 | 3.0 |
 | [A monthly model budget beside the daily one, at the coach's $50 ceiling](plan_specs/v1/e05-model-router/t15-monthly-model-budget.yaml) `v1-e05-t15-monthly-model-budget` | Succeeded | 1 | 2.0 |
 | [An AWS budget alarm on the account's model spend, $100 a month with a first notice at $50](plan_specs/v1/e05-model-router/t16-bedrock-budget-alarm.yaml) `v1-e05-t16-bedrock-budget-alarm` | Succeeded | 1 | 2.0 |
-| [Dev back on the 5.5 models, and prod's Bedrock grant applied, once the quotas are restored](plan_specs/v1/e05-model-router/t17-switch-back-to-the-5-5-models.yaml) `v1-e05-t17-switch-back-to-the-5-5-models` | Pending | 2 | 2.0 |
-| [The cost allocation tags are active by Terraform, so the budgets that filter on them never read zero again](plan_specs/v1/e05-model-router/t18-cost-allocation-tags-in-terraform.yaml) `v1-e05-t18-cost-allocation-tags-in-terraform` | Pending | 0 | 1.0 |
+| [Dev back on the 5.5 models, and prod's Bedrock grant applied, once the quotas are restored](plan_specs/v1/e05-model-router/t17-switch-back-to-the-5-5-models.yaml) `v1-e05-t17-switch-back-to-the-5-5-models` | Blocked | 3 | 2.0 |
+| [The cost allocation tags are active by Terraform, so the budgets that filter on them never read zero again](plan_specs/v1/e05-model-router/t18-cost-allocation-tags-in-terraform.yaml) `v1-e05-t18-cost-allocation-tags-in-terraform` | Pending | 1 | 1.0 |
 
 #### [E32 — Argument Landscape Reports](plan_specs/v1/e32-argument-landscape/epic.yaml)
 
@@ -361,7 +357,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [A dry run fills the plan-text and analytic-text caches, so the first report after a parser bump reads sources once](plan_specs/v1/e32-argument-landscape/t30-dry-run-fills-the-text-caches.yaml) `v1-e32-t30-dry-run-fills-the-text-caches` | Succeeded | 0 | 1.0 |
 | [Model cassettes name their caselist, so one season's recordings can be deleted alone](plan_specs/v1/e32-argument-landscape/t31-cassettes-filed-by-caselist.yaml) `v1-e32-t31-cassettes-filed-by-caselist` | Succeeded | 0 | 2.0 |
 | [A landscape model stage stopped by throttling ends as retryable, not as a verdict](plan_specs/v1/e32-argument-landscape/t32-throttled-model-stage-is-retryable.yaml) `v1-e32-t32-throttled-model-stage-is-retryable` | Succeeded | 0 | 1.0 |
-| [A throttled landscape evaluation exits as retryable, and a throttled stop says how long to wait](plan_specs/v1/e32-argument-landscape/t33-landscape-evaluate-retry-exit.yaml) `v1-e32-t33-landscape-evaluate-retry-exit` | Pending | 0 | 1.0 |
+| [A throttled landscape evaluation exits as retryable, and a throttled stop says how long to wait](plan_specs/v1/e32-argument-landscape/t33-landscape-evaluate-retry-exit.yaml) `v1-e32-t33-landscape-evaluate-retry-exit` | Pending | 1 | 1.0 |
 | [A command lists and deletes one caselist's model cassettes, and the annual purge calls it](plan_specs/v1/e32-argument-landscape/t34-landscape-cassettes-command.yaml) `v1-e32-t34-landscape-cassettes-command` | Pending | 1 | 1.0 |
 
 #### [E33 — Evidence File Builder](plan_specs/v1/e33-file-builder/epic.yaml)
@@ -496,7 +492,7 @@ Whitefish Bay Debate has a public, mobile-friendly team website: team informatio
 | [A coach's schedule or results edit passes the site's tests without editing a test](plan_specs/v1/e37-calendar-and-announcements/t10-coach-edits-need-no-test-edit.yaml) `v1-e37-t10-coach-edits-need-no-test-edit` | Succeeded | 2 | 3.0 |
 | [The shipped-content checks follow the publishing policy, and a season change is one edit of three files](plan_specs/v1/e37-calendar-and-announcements/t11-content-guards-follow-the-policy.yaml) `v1-e37-t11-content-guards-follow-the-policy` | Succeeded | 0 | 1.0 |
 | [The prod build refuses an image whose consent has lapsed, as it refuses a lapsed name](plan_specs/v1/e37-calendar-and-announcements/t12-stale-image-consent-refused.yaml) `v1-e37-t12-stale-image-consent-refused` | Succeeded | 0 | 1.0 |
-| [A consent entry checked after its season ends is stale to the build, for names and images](plan_specs/v1/e37-calendar-and-announcements/t13-consent-checked-after-the-season-is-stale.yaml) `v1-e37-t13-consent-checked-after-the-season-is-stale` | Pending | 0 | 1.0 |
+| [A consent entry checked after its season ends is stale to the build, for names and images](plan_specs/v1/e37-calendar-and-announcements/t13-consent-checked-after-the-season-is-stale.yaml) `v1-e37-t13-consent-checked-after-the-season-is-stale` | Pending | 1 | 1.0 |
 
 #### [E38 — Team Donations](plan_specs/v1/e38-donations/epic.yaml)
 
@@ -525,19 +521,19 @@ Debaters search the team's evidence store from a school Chromebook or at home: a
 | [Download a card or a small file as Verbatim .docx through the E33 writer](plan_specs/v1/e39-evidence-search-pilot/t08-card-download.yaml) `v1-e39-t08-card-download` | InProgress | 3 | 4.0 |
 | [The weekly agent run rebuilds and publishes the search index when the parsed store changed](plan_specs/v1/e39-evidence-search-pilot/t09-weekly-index-refresh.yaml) `v1-e39-t09-weekly-index-refresh` | Succeeded | 1 | 3.0 |
 | [Dev smoke checks, the coach's beta and the student pilot](plan_specs/v1/e39-evidence-search-pilot/t10-pilot-smoke-and-review.yaml) `v1-e39-t10-pilot-smoke-and-review` | Pending | 2 | 3.0 |
-| [Search pages: a result count, a way back to the results, a link to the disclosed file, and Copy card without the provenance line](plan_specs/v1/e39-evidence-search-pilot/t11-search-pages-follow-ups.yaml) `v1-e39-t11-search-pages-follow-ups` | Succeeded | 1 | 4.0 |
+| [Search pages: a result count, a way back to the results, a link to the disclosed file, and Copy card without the provenance line](plan_specs/v1/e39-evidence-search-pilot/t11-search-pages-follow-ups.yaml) `v1-e39-t11-search-pages-follow-ups` | Succeeded | 2 | 4.0 |
 | [Only real cards come back: entries with no cite or a few words of text, counted before any rule](plan_specs/v1/e39-evidence-search-pilot/t12-card-only-results.yaml) `v1-e39-t12-card-only-results` | Succeeded | 1 | 3.0 |
 | [Find a card that says something: passage search, word stems and prefixes](plan_specs/v1/e39-evidence-search-pilot/t13-passage-search.yaml) `v1-e39-t13-passage-search` | Succeeded | 2 | 5.0 |
 | [An index that would drop most of the cards is never published](plan_specs/v1/e39-evidence-search-pilot/t14-index-shrink-guard.yaml) `v1-e39-t14-index-shrink-guard` | Succeeded | 1 | 3.0 |
 | [tub index prune: the runbook's prune of superseded index versions as one command](plan_specs/v1/e39-evidence-search-pilot/t15-tub-index-prune.yaml) `v1-e39-t15-tub-index-prune` | Succeeded | 1 | 2.0 |
 | [Open on OpenEv: a camp card links to its camp file](plan_specs/v1/e39-evidence-search-pilot/t16-open-on-openev.yaml) `v1-e39-t16-open-on-openev` | Pending | 1 | 3.0 |
 | [The landscape report and its school view on the pilot, for signed-in team members](plan_specs/v1/e39-evidence-search-pilot/t17-landscape-pages.yaml) `v1-e39-t17-landscape-pages` | Succeeded | 2 | 6.0 |
-| [Backfile seasons searchable on the pilot, without slowing its cold start](plan_specs/v1/e39-evidence-search-pilot/t18-backfiles-in-the-pilot-index.yaml) `v1-e39-t18-backfiles-in-the-pilot-index` | Pending | 2 | 4.0 |
+| [Backfile seasons searchable on the pilot, without slowing its cold start](plan_specs/v1/e39-evidence-search-pilot/t18-backfiles-in-the-pilot-index.yaml) `v1-e39-t18-backfiles-in-the-pilot-index` | Blocked | 2 | 4.0 |
 | [A rebuilt index identical to the published one records the suppression list it was checked against](plan_specs/v1/e39-evidence-search-pilot/t19-identical-rebuild-records-its-suppression-list.yaml) `v1-e39-t19-identical-rebuild-records-its-suppression-list` | Pending | 1 | 2.0 |
 | [The pilot API's test world split by surface, so a change selects only the tests it reaches](plan_specs/v1/e39-evidence-search-pilot/t20-api-conftest-split-by-surface.yaml) `v1-e39-t20-api-conftest-split-by-surface` | Succeeded | 1 | 2.0 |
 | [The tub deploy test records each stub call alone, as the caselist run's does](plan_specs/v1/e39-evidence-search-pilot/t21-one-call-recorder-for-deploy-tests.yaml) `v1-e39-t21-one-call-recorder-for-deploy-tests` | Succeeded | 0 | 1.0 |
-| [Smoke checks for tub index build, publish and prune, and a test of P4's shape](plan_specs/v1/e39-evidence-search-pilot/t22-tub-index-commands-smoke-and-p4-shape.yaml) `v1-e39-t22-tub-index-commands-smoke-and-p4-shape` | Pending | 0 | 2.0 |
-| [uvicorn's app factory lives in the composition root, so app.py stops reaching every adapter](plan_specs/v1/e39-evidence-search-pilot/t23-uvicorn-factory-in-the-composition-root.yaml) `v1-e39-t23-uvicorn-factory-in-the-composition-root` | Pending | 0 | 1.0 |
+| [Smoke checks for tub index build, publish and prune, and a test of P4's shape](plan_specs/v1/e39-evidence-search-pilot/t22-tub-index-commands-smoke-and-p4-shape.yaml) `v1-e39-t22-tub-index-commands-smoke-and-p4-shape` | Pending | 1 | 2.0 |
+| [uvicorn's app factory lives in the composition root, so app.py stops reaching every adapter](plan_specs/v1/e39-evidence-search-pilot/t23-uvicorn-factory-in-the-composition-root.yaml) `v1-e39-t23-uvicorn-factory-in-the-composition-root` | Pending | 1 | 1.0 |
 
 
 ### v1.8 — Weekly caselist run in the cloud
@@ -551,7 +547,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [ADR-0020: the weekly caselist run in the cloud, its credentials and its state](plan_specs/v1/e40-cloud-caselist-run/t01-cloud-run-adr.yaml) `v1-e40-t01-cloud-run-adr` | Succeeded | 2 | 3.0 |
 | [The caselist token in Secrets Manager, and a scheduled login that renews it](plan_specs/v1/e40-cloud-caselist-run/t02-secrets-token-store-and-login.yaml) `v1-e40-t02-secrets-token-store-and-login` | InProgress | 1 | 4.0 |
 | [The weekly run as a container on a schedule](plan_specs/v1/e40-cloud-caselist-run/t03-run-image-and-schedule.yaml) `v1-e40-t03-run-image-and-schedule` | Succeeded | 1 | 4.0 |
-| [A cloud run keeps its state in the evidence bucket](plan_specs/v1/e40-cloud-caselist-run/t04-run-state-on-s3.yaml) `v1-e40-t04-run-state-on-s3` | InProgress | 1 | 5.0 |
+| [A cloud run keeps its state in the evidence bucket](plan_specs/v1/e40-cloud-caselist-run/t04-run-state-on-s3.yaml) `v1-e40-t04-run-state-on-s3` | Succeeded | 1 | 5.0 |
 | [A failed or late cloud run emails the coach](plan_specs/v1/e40-cloud-caselist-run/t05-run-alerts.yaml) `v1-e40-t05-run-alerts` | Succeeded | 1 | 2.0 |
 | [Cut over: the cloud run takes the schedule and the Mac stops](plan_specs/v1/e40-cloud-caselist-run/t06-cutover.yaml) `v1-e40-t06-cutover` | Succeeded | 4 | 2.0 |
 | [The evidence bucket itself refuses an unconditional write of the run lock](plan_specs/v1/e40-cloud-caselist-run/t07-lock-writes-conditional-at-the-bucket.yaml) `v1-e40-t07-lock-writes-conditional-at-the-bucket` | Pending | 1 | 1.0 |
@@ -563,15 +559,28 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [In bucket mode, the report stage counts a source the bucket holds at its manifest digest as present](plan_specs/v1/e40-cloud-caselist-run/t13-bucket-mode-report-counts-held-sources.yaml) `v1-e40-t13-bucket-mode-report-counts-held-sources` | InProgress | 1 | 3.0 |
 | [The deploy script's region test, which failed once under load, made deterministic](plan_specs/v1/e40-cloud-caselist-run/t14-deploy-script-region-test-under-load.yaml) `v1-e40-t14-deploy-script-region-test-under-load` | Succeeded | 0 | 1.0 |
 | [A plan check for a new run image after the cutover, with the schedule left enabled](plan_specs/v1/e40-cloud-caselist-run/t15-image-plan-check-after-the-cutover.yaml) `v1-e40-t15-image-plan-check-after-the-cutover` | Succeeded | 1 | 1.0 |
-| [Prod's parsed store re-parsed after a parser bump, from a copy restored with its sources](plan_specs/v1/e40-cloud-caselist-run/t16-prod-reparse-after-a-parser-bump.yaml) `v1-e40-t16-prod-reparse-after-a-parser-bump` | Pending | 1 | 2.0 |
+| [Prod's parsed store re-parsed after a parser bump, from a copy restored with its sources](plan_specs/v1/e40-cloud-caselist-run/t16-prod-reparse-after-a-parser-bump.yaml) `v1-e40-t16-prod-reparse-after-a-parser-bump` | Pending | 2 | 2.0 |
 | [A landscape report counts the weeks the cloud run pulled, from a copy restored from the bucket](plan_specs/v1/e40-cloud-caselist-run/t17-landscape-report-from-the-cloud-runs-state.yaml) `v1-e40-t17-landscape-report-from-the-cloud-runs-state` | Succeeded | 1 | 3.0 |
 | [In bucket mode a failed parse stage names the cloud cure, never a publish from the operator's Mac](plan_specs/v1/e40-cloud-caselist-run/t18-cloud-parse-stage-cure.yaml) `v1-e40-t18-cloud-parse-stage-cure` | Succeeded | 0 | 2.0 |
-| [The weekly cloud run builds the landscape reports, counted for cost first](plan_specs/v1/e40-cloud-caselist-run/t19-landscape-stage-in-the-weekly-run.yaml) `v1-e40-t19-landscape-stage-in-the-weekly-run` | Pending | 0 | 4.0 |
-| [The caselist pull table's Detail column shortens digests as its panel does](plan_specs/v1/e40-cloud-caselist-run/t20-pull-table-shortens-digests.yaml) `v1-e40-t20-pull-table-shortens-digests` | Pending | 0 | 1.0 |
+| [The weekly cloud run builds the landscape reports, counted for cost first](plan_specs/v1/e40-cloud-caselist-run/t19-landscape-stage-in-the-weekly-run.yaml) `v1-e40-t19-landscape-stage-in-the-weekly-run` | Pending | 2 | 4.0 |
+| [The caselist pull table's Detail column shortens digests as its panel does](plan_specs/v1/e40-cloud-caselist-run/t20-pull-table-shortens-digests.yaml) `v1-e40-t20-pull-table-shortens-digests` | Pending | 1 | 1.0 |
 | [A restored working copy carries a marker, so leftover copies are found exactly](plan_specs/v1/e40-cloud-caselist-run/t21-restored-copy-marker.yaml) `v1-e40-t21-restored-copy-marker` | Succeeded | 0 | 1.0 |
 | [In bucket mode the login banner and the parse stage's other hints point at the cloud run, not the operator's Mac](plan_specs/v1/e40-cloud-caselist-run/t22-bucket-mode-hints-point-at-the-cloud.yaml) `v1-e40-t22-bucket-mode-hints-point-at-the-cloud` | Succeeded | 0 | 1.0 |
 | [The leftover search drops its pre-marker list, and a report over a restored copy requires the marker](plan_specs/v1/e40-cloud-caselist-run/t23-restored-copy-marker-required.yaml) `v1-e40-t23-restored-copy-marker-required` | Pending | 1 | 1.0 |
-| [A restore refuses both environments' data directories, not only its own](plan_specs/v1/e40-cloud-caselist-run/t24-restore-refuses-either-data-directory.yaml) `v1-e40-t24-restore-refuses-either-data-directory` | Pending | 0 | 1.0 |
+| [A restore refuses both environments' data directories, not only its own](plan_specs/v1/e40-cloud-caselist-run/t24-restore-refuses-either-data-directory.yaml) `v1-e40-t24-restore-refuses-either-data-directory` | Pending | 1 | 1.0 |
+| [In bucket mode the failed-publish banners and the CLI's next step point at the cloud run, not a publish from the Mac](plan_specs/v1/e40-cloud-caselist-run/t25-remaining-bucket-mode-publish-pending-hints.yaml) `v1-e40-t25-remaining-bucket-mode-publish-pending-hints` | Pending | 1 | 1.0 |
+
+#### [E41 — Delivery Tooling Upkeep](plan_specs/v1/e41-delivery-tooling-upkeep/epic.yaml)
+
+| Task | Status | Prereqs | Est. hours |
+|---|---|---|---|
+| [When a newer build wrote the database or added a setting, the error says so](plan_specs/v1/e41-delivery-tooling-upkeep/t01-newer-build-messages.yaml) `v1-e41-t01-newer-build-messages` | Pending | 2 | 2.0 |
+| [A CI check that every locked package's licence is one the project accepts](plan_specs/v1/e41-delivery-tooling-upkeep/t02-licence-check-over-the-lock.yaml) `v1-e41-t02-licence-check-over-the-lock` | Pending | 1 | 2.0 |
+| [The docstrings say what the stamped build carries](plan_specs/v1/e41-delivery-tooling-upkeep/t03-stamp-docstrings.yaml) `v1-e41-t03-stamp-docstrings` | Pending | 1 | 0.5 |
+| [The single-interpreter scan leaves site/ out, as the Node project it is](plan_specs/v1/e41-delivery-tooling-upkeep/t04-single-interpreter-scan-leaves-site-out.yaml) `v1-e41-t04-single-interpreter-scan-leaves-site-out` | Pending | 1 | 0.5 |
+| [One hard stop for a session's test runs that kills the whole process group, named by agreement 10](plan_specs/v1/e41-delivery-tooling-upkeep/t05-test-runs-stopped-by-process-group.yaml) `v1-e41-t05-test-runs-stopped-by-process-group` | Pending | 1 | 1.0 |
+| [An import change in container.py that loads no new module reaches only the parts using its names](plan_specs/v1/e41-delivery-tooling-upkeep/t06-container-imports-read-by-use.yaml) `v1-e41-t06-container-imports-read-by-use` | Pending | 1 | 2.0 |
+| [The spec validator holds each epic's graph to its tasks' prerequisites, and the task helper refuses a prerequisite it cannot find](plan_specs/v1/e41-delivery-tooling-upkeep/t07-spec-graph-checks.yaml) `v1-e41-t07-spec-graph-checks` | Pending | 1 | 2.0 |
 
 
 ## V2
@@ -584,16 +593,16 @@ Keyless CI deploys, DynamoDB + S3 repositories passing the same contract tests, 
 
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
-| [GitHub OIDC deploy roles](plan_specs/v2/e10-aws-foundation/t03-github-oidc-deploy.yaml) `v2-e10-t03-github-oidc-deploy` | Pending | 1 | 8.0 |
-| [KMS keys and Secrets Manager](plan_specs/v2/e10-aws-foundation/t04-kms-secrets.yaml) `v2-e10-t04-kms-secrets` | Pending | 1 | 9.0 |
-| [Networking, ECR and ECS/Fargate cluster](plan_specs/v2/e10-aws-foundation/t05-container-platform.yaml) `v2-e10-t05-container-platform` | Pending | 1 | 10.0 |
+| [GitHub OIDC deploy roles](plan_specs/v2/e10-aws-foundation/t03-github-oidc-deploy.yaml) `v2-e10-t03-github-oidc-deploy` | Blocked | 1 | 8.0 |
+| [KMS keys and Secrets Manager](plan_specs/v2/e10-aws-foundation/t04-kms-secrets.yaml) `v2-e10-t04-kms-secrets` | Blocked | 1 | 9.0 |
+| [Networking, ECR and ECS/Fargate cluster](plan_specs/v2/e10-aws-foundation/t05-container-platform.yaml) `v2-e10-t05-container-platform` | Blocked | 1 | 10.0 |
 | [Observability baseline](plan_specs/v2/e10-aws-foundation/t06-observability-baseline.yaml) `v2-e10-t06-observability-baseline` | Pending | 1 | 11.0 |
 
 #### [E11 — Cloud Persistence Adapters](plan_specs/v2/e11-cloud-persistence/epic.yaml)
 
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
-| [AppTable access-pattern design](plan_specs/v2/e11-cloud-persistence/t01-access-pattern-design.yaml) `v2-e11-t01-access-pattern-design` | Pending | 1 | 8.0 |
+| [AppTable access-pattern design](plan_specs/v2/e11-cloud-persistence/t01-access-pattern-design.yaml) `v2-e11-t01-access-pattern-design` | Blocked | 1 | 8.0 |
 | [DynamoDB tables in Terraform](plan_specs/v2/e11-cloud-persistence/t02-dynamodb-tables.yaml) `v2-e11-t02-dynamodb-tables` | Pending | 2 | 6.0 |
 | [DynamoDB repository implementations](plan_specs/v2/e11-cloud-persistence/t03-dynamodb-repositories.yaml) `v2-e11-t03-dynamodb-repositories` | Pending | 2 | 13.0 |
 | [S3 snapshot and export store](plan_specs/v2/e11-cloud-persistence/t04-s3-snapshot-store.yaml) `v2-e11-t04-s3-snapshot-store` | Pending | 3 | 8.0 |
@@ -604,8 +613,8 @@ Keyless CI deploys, DynamoDB + S3 repositories passing the same contract tests, 
 
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
-| [Cognito user pool and Google federation](plan_specs/v2/e12-identity-api/t01-cognito-user-pool.yaml) `v2-e12-t01-cognito-user-pool` | Pending | 2 | 8.0 |
-| [FastAPI service skeleton](plan_specs/v2/e12-identity-api/t02-fastapi-service.yaml) `v2-e12-t02-fastapi-service` | Pending | 1 | 9.0 |
+| [Cognito user pool and Google federation](plan_specs/v2/e12-identity-api/t01-cognito-user-pool.yaml) `v2-e12-t01-cognito-user-pool` | Blocked | 2 | 8.0 |
+| [FastAPI service skeleton](plan_specs/v2/e12-identity-api/t02-fastapi-service.yaml) `v2-e12-t02-fastapi-service` | Blocked | 1 | 9.0 |
 | [Authentication, roles and tenancy](plan_specs/v2/e12-identity-api/t03-authn-authz.yaml) `v2-e12-t03-authn-authz` | Pending | 2 | 9.0 |
 | [API Gateway + ECS Fargate deployment](plan_specs/v2/e12-identity-api/t04-api-deploy.yaml) `v2-e12-t04-api-deploy` | Pending | 3 | 11.0 |
 | [Core resource endpoints](plan_specs/v2/e12-identity-api/t05-core-endpoints.yaml) `v2-e12-t05-core-endpoints` | Pending | 5 | 12.0 |
@@ -647,7 +656,7 @@ Debaters sign in to the web app and browse, search and download the team's evide
 | [Index the evidence store](plan_specs/v2/e35-debate-tub/t02-tub-index-sync.yaml) `v2-e35-t02-tub-index-sync` | Pending | 3 | 13.0 |
 | [Tub API](plan_specs/v2/e35-debate-tub/t03-tub-api.yaml) `v2-e35-t03-tub-api` | Pending | 2 | 13.0 |
 | [Tub UI](plan_specs/v2/e35-debate-tub/t04-tub-ui.yaml) `v2-e35-t04-tub-ui` | Pending | 2 | 15.0 |
-| [Access audit and removal](plan_specs/v2/e35-debate-tub/t05-tub-access-and-removal.yaml) `v2-e35-t05-tub-access-and-removal` | Pending | 3 | 12.0 |
+| [Access audit and removal](plan_specs/v2/e35-debate-tub/t05-tub-access-and-removal.yaml) `v2-e35-t05-tub-access-and-removal` | Pending | 4 | 12.0 |
 | [Tub smoke checks and debater review](plan_specs/v2/e35-debate-tub/t06-tub-smoke-and-review.yaml) `v2-e35-t06-tub-smoke-and-review` | Pending | 2 | 10.0 |
 
 
@@ -691,13 +700,13 @@ Saved card library with revisions, folders, sharing and bulk export; pasted card
 | [Library UI](plan_specs/v2/e17-card-library/t03-library-ui.yaml) `v2-e17-t03-library-ui` | Pending | 2 | 12.0 |
 | [Revision history and restore](plan_specs/v2/e17-card-library/t04-revision-history.yaml) `v2-e17-t04-revision-history` | Pending | 1 | 10.0 |
 | [Bulk DOCX export](plan_specs/v2/e17-card-library/t05-bulk-export.yaml) `v2-e17-t05-bulk-export` | Pending | 4 | 10.0 |
-| [Organization sharing](plan_specs/v2/e17-card-library/t06-team-sharing.yaml) `v2-e17-t06-team-sharing` | Pending | 1 | 10.0 |
+| [Organization sharing](plan_specs/v2/e17-card-library/t06-team-sharing.yaml) `v2-e17-t06-team-sharing` | Pending | 2 | 10.0 |
 
 #### [E18 — Card Extensions](plan_specs/v2/e18-card-extensions/epic.yaml)
 
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
-| [Pasted-card parser](plan_specs/v2/e18-card-extensions/t01-card-parser.yaml) `v2-e18-t01-card-parser` | Pending | 1 | 11.5 |
+| [Pasted-card parser](plan_specs/v2/e18-card-extensions/t01-card-parser.yaml) `v2-e18-t01-card-parser` | Blocked | 1 | 11.5 |
 | [Claim/warrant component extraction](plan_specs/v2/e18-card-extensions/t02-component-extraction.yaml) `v2-e18-t02-component-extraction` | Pending | 2 | 9.0 |
 | [Extension, CX question and answer generation](plan_specs/v2/e18-card-extensions/t03-extension-generator.yaml) `v2-e18-t03-extension-generator` | Pending | 1 | 10.0 |
 | [Extensions API and UI](plan_specs/v2/e18-card-extensions/t04-extension-ui.yaml) `v2-e18-t04-extension-ui` | Pending | 3 | 10.0 |
@@ -715,7 +724,7 @@ Quotas, audit logs, retention/deletion, backups, cost telemetry and a completed 
 | [Quotas and rate limits](plan_specs/v2/e19-production-readiness/t01-quotas-rate-limits.yaml) `v2-e19-t01-quotas-rate-limits` | Pending | 2 | 10.0 |
 | [Audit logging](plan_specs/v2/e19-production-readiness/t02-audit-logging.yaml) `v2-e19-t02-audit-logging` | Pending | 2 | 10.0 |
 | [Account export, deletion and retention](plan_specs/v2/e19-production-readiness/t03-account-lifecycle.yaml) `v2-e19-t03-account-lifecycle` | Pending | 3 | 14.0 |
-| [Privacy and legal review](plan_specs/v2/e19-production-readiness/t04-privacy-legal-review.yaml) `v2-e19-t04-privacy-legal-review` | Pending | 0 | 13.0 |
+| [Privacy and legal review](plan_specs/v2/e19-production-readiness/t04-privacy-legal-review.yaml) `v2-e19-t04-privacy-legal-review` | Blocked | 0 | 13.0 |
 | [Backups and restore drill](plan_specs/v2/e19-production-readiness/t05-backups-dr.yaml) `v2-e19-t05-backups-dr` | Pending | 4 | 10.0 |
 | [Cost telemetry dashboard](plan_specs/v2/e19-production-readiness/t06-cost-dashboard.yaml) `v2-e19-t06-cost-dashboard` | Pending | 2 | 8.0 |
 | [Load and security testing](plan_specs/v2/e19-production-readiness/t07-load-security-testing.yaml) `v2-e19-t07-load-security-testing` | Pending | 2 | 14.0 |
@@ -774,7 +783,7 @@ A DA (or other) file can be audited for 1NC shell coherence with explained card-
 | [1NC shell identification](plan_specs/v3/e23-file-auditing/t01-shell-identification.yaml) `v3-e23-t01-shell-identification` | Pending | 1 | 11.0 |
 | [Shell coherence checks](plan_specs/v3/e23-file-auditing/t02-coherence-checks.yaml) `v3-e23-t02-coherence-checks` | Pending | 2 | 10.0 |
 | [Card-vs-alternative comparison](plan_specs/v3/e23-file-auditing/t03-card-comparison.yaml) `v3-e23-t03-card-comparison` | Pending | 1 | 12.0 |
-| [Newer external evidence suggestions](plan_specs/v3/e23-file-auditing/t04-newer-evidence.yaml) `v3-e23-t04-newer-evidence` | Pending | 3 | 7.0 |
+| [Newer external evidence suggestions](plan_specs/v3/e23-file-auditing/t04-newer-evidence.yaml) `v3-e23-t04-newer-evidence` | Pending | 4 | 7.0 |
 | [Audit report UI](plan_specs/v3/e23-file-auditing/t05-audit-report-ui.yaml) `v3-e23-t05-audit-report-ui` | Pending | 2 | 13.0 |
 | [File audit evaluation](plan_specs/v3/e23-file-auditing/t06-audit-eval.yaml) `v3-e23-t06-audit-eval` | Pending | 2 | 11.0 |
 

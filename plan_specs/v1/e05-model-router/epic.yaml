@@ -285,6 +285,14 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e05-t10-record-mode-keeps-invalid-answers
+    - id: ext-v1-e32-t07-model-classification-stage
+      kind: External
+      name: 'Prerequisite from E32: Model classification of what headings cannot place'
+      description: >-
+        Cross-epic prerequisite owned by v1-e32-argument-landscape (release v1.2).
+      inputs:
+        goalRef: v1-e32-t07-model-classification-stage
+        specRef: plan_specs/v1/e32-argument-landscape/t07-model-classification-stage.yaml
     - id: t11
       kind: Task
       name: 'A prompt may set its own effort, so a classifier need not think at the route''s default'
@@ -294,6 +302,8 @@ spec:
       inputs:
         specRef: plan_specs/v1/e05-model-router/t11-per-prompt-effort.yaml
         goalRef: v1-e05-t11-per-prompt-effort
+      dependsOn:
+      - ext-v1-e32-t07-model-classification-stage
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e05-t11-per-prompt-effort reports phase Succeeded
@@ -311,6 +321,8 @@ spec:
       inputs:
         specRef: plan_specs/v1/e05-model-router/t12-installed-build-carries-model-pricing.yaml
         goalRef: v1-e05-t12-installed-build-carries-model-pricing
+      dependsOn:
+      - t07
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e05-t12-installed-build-carries-model-pricing reports phase Succeeded
@@ -329,6 +341,8 @@ spec:
       inputs:
         specRef: plan_specs/v1/e05-model-router/t13-dev-routes-to-callable-claude-models.yaml
         goalRef: v1-e05-t13-dev-routes-to-callable-claude-models
+      dependsOn:
+      - t07
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e05-t13-dev-routes-to-callable-claude-models reports phase Succeeded
@@ -348,6 +362,7 @@ spec:
         goalRef: v1-e05-t14-cheaper-model-for-high-volume-evaluated-first
       dependsOn:
       - t13
+      - ext-v1-e32-t07-model-classification-stage
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e05-t14-cheaper-model-for-high-volume-evaluated-first reports phase Succeeded
@@ -407,6 +422,7 @@ spec:
       dependsOn:
       - t13
       - t08
+      - ext-v1-e32-t07-model-classification-stage
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e05-t17-switch-back-to-the-5-5-models reports phase Succeeded
@@ -425,6 +441,8 @@ spec:
       inputs:
         specRef: plan_specs/v1/e05-model-router/t18-cost-allocation-tags-in-terraform.yaml
         goalRef: v1-e05-t18-cost-allocation-tags-in-terraform
+      dependsOn:
+      - t16
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e05-t18-cost-allocation-tags-in-terraform reports phase Succeeded

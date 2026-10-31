@@ -32,6 +32,9 @@ spec:
     the model spend budget's counts block (aws-account-baseline.md), add the new service names and usage
     types to `model_spend_budget`'s lists, its tests and the plan check, and plan and apply it, as that
     runbook says.
+    (PM amendment 2026-11-01, the dependency audit.) Blocked until the 5.5 models' Bedrock quotas are
+    restored, a condition outside this repository; it also waits on v1-e32-t07. The PM sets it back to
+    Pending when the quotas are confirmed.
   priority: 3
   constraints:
     packages: [config, infrastructure/modules/bedrock_access, infrastructure/modules/model_spend_budget, infrastructure/envs, infrastructure/bootstrap/organization, packages/debate_core/tests, tests/docs, docs/runbooks, docs/data]
@@ -46,6 +49,9 @@ spec:
       relation: dependsOn
     - kind: TaskRef
       name: v1-e05-t08-bedrock-invoke-access
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e32-t07-model-classification-stage
       relation: dependsOn
   acceptanceCriteria:
     - id: ac1
@@ -66,7 +72,7 @@ spec:
         Prod makes no model call for an item dev has classified at the same prompt version
         and model, by test, before prod's first live call. (PM amendment 2026-10-27.)
 status:
-  phase: Pending
+  phase: Blocked
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

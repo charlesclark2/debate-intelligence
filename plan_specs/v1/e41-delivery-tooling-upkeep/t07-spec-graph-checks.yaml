@@ -1,0 +1,78 @@
+# TASK v1-e41-t07-spec-graph-checks - The spec validator holds each epic's graph to its tasks' prerequisites, and the task helper refuses a prerequisite it cannot find
+# Epic: E41 — Delivery Tooling Upkeep | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e41-t07-spec-graph-checks
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+  annotations:
+    debate/title: "The spec validator holds each epic's graph to its tasks' prerequisites, and the task helper refuses a prerequisite it cannot find"
+spec:
+  # Filed by the PM, 2026-11-01, from the PM's dependency audit of 2026-11-01.
+  description: >-
+    The audit found 38 places where an epic's graph and its tasks' `spec.context` disagreed, one
+    epic graph edge to a later release (which the validator refuses in a context but not in a
+    graph), an epic marked Succeeded with open tasks, and PM-filed tasks with no prerequisites.
+    `scripts/task ready` reads only `spec.context` and treats a prerequisite it cannot find as
+    met. Make `validate_specs.py` require that each Task node's `dependsOn` names exactly its
+    task's prerequisites (a same-epic node or an External node per cross-epic one), refuse an
+    External node in a later release, and refuse an epic Goal marked Succeeded while a task of
+    it is not Succeeded or Cancelled. Make `task_helper.py`'s `ready` and `prereqs` refuse an
+    unknown prerequisite.
+  priority: 3
+  constraints:
+    packages: [scripts, tests/scripts, plan_specs/README.md]
+    forbidden:
+      - A spec tree on dev that the new checks refuse when this merges
+  context:
+    - kind: TaskRef
+      name: v1-e01-t05-spec-tooling
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The validator refuses a graph edge missing from a task's context, a context
+        prerequisite missing from the graph, an External node in a later release and a
+        Succeeded epic with an open task; `task ready` and `task prereqs` refuse an unknown
+        prerequisite; dev's spec tree passes; by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e41-t07-spec-graph-checks-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+spec:
+  description: >-
+    The spec validator holds each epic's graph to its tasks' prerequisites, and the task helper
+    refuses a prerequisite it cannot find.
+  goalRef:
+    name: v1-e41-t07-spec-graph-checks
+  graph:
+    nodes:
+      - id: spec-graph-checks
+        kind: Task
+        name: Spec graph checks
+        description: >-
+          The spec validator holds each epic's graph to its tasks' prerequisites, and the
+          task helper refuses a prerequisite it cannot find.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Spec graph checks tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, -k, validate_specs or task_helper]
+status:
+  phase: Pending

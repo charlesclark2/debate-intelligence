@@ -71,6 +71,14 @@ spec:
   version: '1'
   graph:
     nodes:
+    - id: ext-v1-e30-t01-caselist-data-use-policy
+      kind: External
+      name: 'Prerequisite from E30: Caselist and OpenEv data-use policy'
+      description: >-
+        Cross-epic prerequisite owned by v1-e30-caselist-ingestion (release v1.1).
+      inputs:
+        goalRef: v1-e30-t01-caselist-data-use-policy
+        specRef: plan_specs/v1/e30-caselist-ingestion/t01-caselist-data-use-policy.yaml
     - id: t01
       kind: Task
       name: 'ADR-0019: the student search pilot''s stack, sign-in and hosting'
@@ -79,6 +87,8 @@ spec:
       inputs:
         specRef: plan_specs/v1/e39-evidence-search-pilot/t01-pilot-architecture-adr.yaml
         goalRef: v1-e39-t01-pilot-architecture-adr
+      dependsOn:
+      - ext-v1-e30-t01-caselist-data-use-policy
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e39-t01-pilot-architecture-adr reports phase Succeeded
@@ -88,6 +98,22 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e39-t01-pilot-architecture-adr
+    - id: ext-v1-e31-t20-long-cuts-and-limits
+      kind: External
+      name: 'Prerequisite from E31: Long cuts join the one cluster that holds them, and the matching limits are set from samples'
+      description: >-
+        Cross-epic prerequisite owned by v1-e31-debate-file-parsing (release v1.1).
+      inputs:
+        goalRef: v1-e31-t20-long-cuts-and-limits
+        specRef: plan_specs/v1/e31-debate-file-parsing/t20-long-cuts-and-limits.yaml
+    - id: ext-v1-e30-t07-source-removal
+      kind: External
+      name: 'Prerequisite from E30: Source removal and suppression list'
+      description: >-
+        Cross-epic prerequisite owned by v1-e30-caselist-ingestion (release v1.1).
+      inputs:
+        goalRef: v1-e30-t07-source-removal
+        specRef: plan_specs/v1/e30-caselist-ingestion/t07-source-removal.yaml
     - id: t02
       kind: Task
       name: 'tub index build and publish: one searchable document per card cluster, from the parsed store'
@@ -99,6 +125,8 @@ spec:
         goalRef: v1-e39-t02-search-index-build
       dependsOn:
       - t01
+      - ext-v1-e31-t20-long-cuts-and-limits
+      - ext-v1-e30-t07-source-removal
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e39-t02-search-index-build reports phase Succeeded
@@ -206,6 +234,22 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e39-t07-removal-audit-and-exposure
+    - id: ext-v1-e33-t02-lossless-card-writer
+      kind: External
+      name: 'Prerequisite from E33: Lossless card writer'
+      description: >-
+        Cross-epic prerequisite owned by v1-e33-file-builder (release v1.2).
+      inputs:
+        goalRef: v1-e33-t02-lossless-card-writer
+        specRef: plan_specs/v1/e33-file-builder/t02-lossless-card-writer.yaml
+    - id: ext-v1-e33-t08-provenance-line-one-function
+      kind: External
+      name: 'Prerequisite from E33: Built files carry no provenance line; the sidecar keeps the provenance'
+      description: >-
+        Cross-epic prerequisite owned by v1-e33-file-builder (release v1.2).
+      inputs:
+        goalRef: v1-e33-t08-provenance-line-one-function
+        specRef: plan_specs/v1/e33-file-builder/t08-provenance-line-one-function.yaml
     - id: t08
       kind: Task
       name: 'Download a card or a small file as Verbatim .docx through the E33 writer'
@@ -216,6 +260,8 @@ spec:
         goalRef: v1-e39-t08-card-download
       dependsOn:
       - t07
+      - ext-v1-e33-t02-lossless-card-writer
+      - ext-v1-e33-t08-provenance-line-one-function
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e39-t08-card-download reports phase Succeeded
@@ -403,6 +449,14 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e39-t17-landscape-pages
+    - id: ext-v1-e34-t34-backfile-seasons-import
+      kind: External
+      name: 'Prerequisite from E34: Earlier seasons'' complete archives, from 2021-22 on, imported and parsed as backfiles'
+      description: >-
+        Cross-epic prerequisite owned by v1-e34-caselist-sync (release v1.1).
+      inputs:
+        goalRef: v1-e34-t34-backfile-seasons-import
+        specRef: plan_specs/v1/e34-caselist-sync/t34-backfile-seasons-import.yaml
     - id: t18
       kind: Task
       name: 'Backfile seasons searchable on the pilot, without slowing its cold start'
@@ -413,6 +467,7 @@ spec:
         goalRef: v1-e39-t18-backfiles-in-the-pilot-index
       dependsOn:
       - t14
+      - ext-v1-e34-t34-backfile-seasons-import
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e39-t18-backfiles-in-the-pilot-index reports phase Succeeded
@@ -442,6 +497,14 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e39-t19-identical-rebuild-records-its-suppression-list
+    - id: ext-v1-e01-t32-test-selection-reach-round-three
+      kind: External
+      name: 'Prerequisite from E01: Test selection, round three: command registration, quoted words, the root pyproject and the contract suites'
+      description: >-
+        Cross-epic prerequisite owned by v1-e01-repo-foundation (release v1.0).
+      inputs:
+        goalRef: v1-e01-t32-test-selection-reach-round-three
+        specRef: plan_specs/v1/e01-repo-foundation/t32-test-selection-reach-round-three.yaml
     - id: t20
       kind: Task
       name: 'The pilot API''s test world split by surface, so a change selects only the tests it reaches'
@@ -451,6 +514,8 @@ spec:
       inputs:
         specRef: plan_specs/v1/e39-evidence-search-pilot/t20-api-conftest-split-by-surface.yaml
         goalRef: v1-e39-t20-api-conftest-split-by-surface
+      dependsOn:
+      - ext-v1-e01-t32-test-selection-reach-round-three
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e39-t20-api-conftest-split-by-surface reports phase Succeeded
@@ -485,6 +550,8 @@ spec:
       inputs:
         specRef: plan_specs/v1/e39-evidence-search-pilot/t22-tub-index-commands-smoke-and-p4-shape.yaml
         goalRef: v1-e39-t22-tub-index-commands-smoke-and-p4-shape
+      dependsOn:
+      - t15
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e39-t22-tub-index-commands-smoke-and-p4-shape reports phase Succeeded
@@ -503,6 +570,8 @@ spec:
       inputs:
         specRef: plan_specs/v1/e39-evidence-search-pilot/t23-uvicorn-factory-in-the-composition-root.yaml
         goalRef: v1-e39-t23-uvicorn-factory-in-the-composition-root
+      dependsOn:
+      - t20
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e39-t23-uvicorn-factory-in-the-composition-root reports phase Succeeded

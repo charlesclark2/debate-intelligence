@@ -341,3 +341,13 @@ and the E01 specs printed nothing. Then `uv sync --all-packages`, and each run b
 
 ac3's post-merge run is still `NOT RUN` and the Goal stays `InProgress`. The pull request goes in
 with `--partial`, as the PM ruled.
+
+## Operator records (recorded by the PM, 2026-11-01)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac3, one validate-dev run on dev after the merge is green | NOT RUN | PASS | validate-dev on `v1.1.0-dev.164` (`03b23e2`), run `40644901906`, 2026-10-28, after this task's merge: green, with the slow tier `passed` (`SLOW_RESULT: success`) and LibreOffice installed on the runner. validate-dev has been green on dev's pre-releases since, through `v1.1.0-dev.195` |
+
+Every criterion passes, so the Goal is `Succeeded` (the PM's dependency audit, 2026-11-01).

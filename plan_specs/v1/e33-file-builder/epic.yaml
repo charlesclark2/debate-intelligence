@@ -166,6 +166,14 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e33-t03-file-build-cli
+    - id: ext-v1-e30-t07-source-removal
+      kind: External
+      name: 'Prerequisite from E30: Source removal and suppression list'
+      description: >-
+        Cross-epic prerequisite owned by v1-e30-caselist-ingestion (release v1.1).
+      inputs:
+        goalRef: v1-e30-t07-source-removal
+        specRef: plan_specs/v1/e30-caselist-ingestion/t07-source-removal.yaml
     - id: t04
       kind: Task
       name: Built-file quality checks
@@ -177,6 +185,7 @@ spec:
         goalRef: v1-e33-t04-file-quality-checks
       dependsOn:
       - t02
+      - ext-v1-e30-t07-source-removal
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e33-t04-file-quality-checks reports phase Succeeded
@@ -236,6 +245,8 @@ spec:
       inputs:
         specRef: plan_specs/v1/e33-file-builder/t07-camp-path-on-occurrence-rows.yaml
         goalRef: v1-e33-t07-camp-path-on-occurrence-rows
+      dependsOn:
+      - t06
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e33-t07-camp-path-on-occurrence-rows reports phase Succeeded

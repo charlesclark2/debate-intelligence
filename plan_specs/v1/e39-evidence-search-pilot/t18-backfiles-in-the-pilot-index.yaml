@@ -26,6 +26,10 @@ spec:
     for card clusters the current season lacks. After the ruling, build it. A result from a
     backfile season says its season. Removal reaches backfile cards within five minutes, as for
     current ones (gate item 1).
+    (PM amendment 2026-11-01, the dependency audit.) Blocked until the backfile seasons are in the dev
+    store: their import runs in the cloud as v1-e40-t09 (ac3, InProgress), which ships in a later release
+    and so cannot be listed as a prerequisite. The PM sets this task back to Pending when v1-e40-t09's
+    imports are recorded.
   priority: 2
   constraints:
     packages: [debate_core.application, debate_core.integrations, packages/debate_core/tests, debate_api, packages/debate_api/tests, debate_cli, packages/debate_cli/tests, infrastructure/modules/evidence_search, docs/runbooks]
@@ -51,7 +55,7 @@ spec:
         line, and is gone within five minutes of a removal; the cold start stays within
         ADR-0019's target; tests shown failing first.
 status:
-  phase: Pending
+  phase: Blocked
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

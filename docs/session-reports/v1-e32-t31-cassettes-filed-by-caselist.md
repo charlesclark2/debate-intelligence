@@ -267,3 +267,13 @@ cassettes can be listed and deleted alone.
    `ci` under agreement 10. 1,919 passed within the two minutes, and the whole-repo checks pass.
 9. **Merge:** once the PR's `ci` is green, by Wednesday, so Friday's LD cassettes are attributed. It is
    a plain `scripts/task pr`.
+
+## PM record, 2026-11-01
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+**Option C, read.** The operator counted the Mac's landscape cassettes on 2026-10-31: there is no
+`~/.debate-research/dev/landscape/model-cassettes` directory, so there are no unattributed cassettes.
+Friday's hsld26 recordings will be the first, attributed once this task is in the build that runs
+them. Nothing is left to delete, and A governs from here. (Written into the worktree after the pull
+request was opened, so it is recorded here instead.)

@@ -1,16 +1,16 @@
-# TASK v1-e01-t33-newer-build-messages - When a newer build wrote the database or added a setting, the error says so
-# Epic: E01 Repository & Delivery Foundation | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+# TASK v1-e41-t01-newer-build-messages - When a newer build wrote the database or added a setting, the error says so
+# Epic: E41 — Delivery Tooling Upkeep | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Goal
 metadata:
-  name: v1-e01-t33-newer-build-messages
+  name: v1-e41-t01-newer-build-messages
   namespace: debate-intelligence
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.0
-    debate/epic: v1-e01-repo-foundation
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
   annotations:
     debate/title: "When a newer build wrote the database or added a setting, the error says so"
 spec:
@@ -31,6 +31,8 @@ spec:
     install the newer build instead. Style profile versions have no order, so when only the
     profile differs the hint names both and says which way to go depends on which build is
     newer, never asserting one.
+    (PM note 2026-11-01, the dependency audit.) Moved from E01 as `v1-e01-t33-newer-build-messages`, unstarted: E01 belongs
+    to the released v1.0, and this task's prerequisites ship later.
   priority: 3
   constraints:
     packages: [debate_core.application, debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests]
@@ -39,6 +41,12 @@ spec:
       - A secret's value in an error or a hint
       - Network or AWS access in any test
   context:
+    - kind: TaskRef
+      name: v1-e39-t06-search-pages
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e33-t09-style-profile-version-refusal
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-
@@ -60,19 +68,19 @@ status:
 apiVersion: planspec.io/v1alpha1
 kind: Plan
 metadata:
-  name: v1-e01-t33-newer-build-messages-plan
+  name: v1-e41-t01-newer-build-messages-plan
   namespace: debate-intelligence
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.0
-    debate/epic: v1-e01-repo-foundation
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
 spec:
   description: >-
     Give the newer-schema refusal a code and hint, and the unknown-setting refusal a newer-build
     hint.
   goalRef:
-    name: v1-e01-t33-newer-build-messages
+    name: v1-e41-t01-newer-build-messages
   graph:
     nodes:
       - id: messages

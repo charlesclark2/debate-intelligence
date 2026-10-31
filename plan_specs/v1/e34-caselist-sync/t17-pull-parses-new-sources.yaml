@@ -33,6 +33,11 @@ spec:
     it off defaults to on only if those figures fit that window. The stage passes the
     suppression list as t06 requires. Out of scope: the parse pipeline's own behaviour, the
     landscape stage, and the scheduled time.
+    (PM amendment 2026-11-01, the dependency audit.) ac5 named the Mac's scheduled run, which the cloud
+    task replaced at the cutover (2026-10-27). It is read from the cloud run instead: the first scheduled
+    dev cloud run after this build shows the parse stage's counts in `caselist runs --remote --last 1` and
+    exits as v1-e34-t13's rule says. The PM reads it on Thursday 2026-11-05, from Wednesday's run. This task
+    holds back v1-e31-t10, v1-e31-t17, v1-e34-t20 and v1-e34-t21 until then.
   priority: 2
   constraints:
     packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke, docs/runbooks]
@@ -71,9 +76,9 @@ spec:
         default and the operator-run figures that justify it.
     - id: ac5
       description: >-
-        Operator-run: the first scheduled run after the agent is reinstalled with this build
-        shows the stage's counts in `caselist runs --last 1` and exits as v1-e34-t13's
-        rule says.
+        Operator-run: the first scheduled dev cloud run after this build shows the parse
+        stage's counts in `caselist runs --remote --last 1` and exits as v1-e34-t13's rule
+        says (amended 2026-11-01: the cloud task replaced the Mac's schedule).
     - id: ac6
       description: >-
         Added by the PM, 2026-10-10, from v1-e31-t06's first corpus run. The parse failure

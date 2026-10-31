@@ -215,6 +215,14 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e31-t05-parser-eval
+    - id: ext-v1-e30-t07-source-removal
+      kind: External
+      name: 'Prerequisite from E30: Source removal and suppression list'
+      description: >-
+        Cross-epic prerequisite owned by v1-e30-caselist-ingestion (release v1.1).
+      inputs:
+        goalRef: v1-e30-t07-source-removal
+        specRef: plan_specs/v1/e30-caselist-ingestion/t07-source-removal.yaml
     - id: t06
       kind: Task
       name: Incremental parse pipeline
@@ -230,6 +238,7 @@ spec:
       - t04
       - ext-v1-e30-t05-caselist-publish
       - ext-v1-e30-t06-initial-backfill
+      - ext-v1-e30-t07-source-removal
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e31-t06-parse-pipeline reports phase Succeeded
@@ -621,6 +630,14 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e31-t25-labeller-safeguards
+    - id: ext-v1-e30-t23-held-digests-and-manifest-fsync
+      kind: External
+      name: 'Prerequisite from E30: Held digests are remembered once the copy is gone, and a manifest write survives a power cut'
+      description: >-
+        Cross-epic prerequisite owned by v1-e30-caselist-ingestion (release v1.1).
+      inputs:
+        goalRef: v1-e30-t23-held-digests-and-manifest-fsync
+        specRef: plan_specs/v1/e30-caselist-ingestion/t23-held-digests-and-manifest-fsync.yaml
     - id: t26
       kind: Task
       name: 'parse --publish sends nothing of a held upload'
@@ -629,6 +646,8 @@ spec:
       inputs:
         specRef: plan_specs/v1/e31-debate-file-parsing/t26-held-upload-parsed-publish.yaml
         goalRef: v1-e31-t26-held-upload-parsed-publish
+      dependsOn:
+      - ext-v1-e30-t23-held-digests-and-manifest-fsync
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e31-t26-held-upload-parsed-publish reports phase Succeeded

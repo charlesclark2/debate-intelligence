@@ -32,7 +32,13 @@ spec:
       - A model call made in a week the budget would refuse
       - A card classified a second time
       - A model call or network or AWS access in any test
-  context: []
+  context:
+    - kind: TaskRef
+      name: v1-e40-t17-landscape-report-from-the-cloud-runs-state
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e32-t07-model-classification-stage
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-

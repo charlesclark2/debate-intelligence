@@ -363,3 +363,14 @@ measurement shows that plainly.
 7. **Closing checks:** the affected set (44 files) is left to the PR's `ci` under agreement 10, after
    two runs stopped at load 30 and 54. The node criterion and the whole-repo checks pass.
 8. **Merge:** after the evidence run, once the PR's `ci` is green. It is a plain `scripts/task pr`.
+
+## PM record, 2026-11-01
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+**The optional evidence run, read.** The operator ran Operator follow-ups' block on 2026-11-01: `1369
+passed, 2 warnings in 131.02s`. No test file in the dropped union started `_build_file_build`
+(f5a8221's changed part). Seven started `_build_caselist_status` (65f56d7's changed part): the PM
+rebuilt 65f56d7's edit-alone commit and ran both scripts (198 → 165 files, 0 added, as the session
+measured), and all seven are still selected for 65f56d7. They appear only because f5a8221's edit,
+which changed another part, drops them. No dropped file starts its merge's changed part.

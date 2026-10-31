@@ -51,6 +51,17 @@ labels:
 * **Inside an epic:** `epic.yaml`'s Plan is the source of truth for task ordering. Cross-epic
   prerequisites appear there as `External` nodes.
 * **Releases** reference their epics as `External` nodes and end in a review `Gate`.
+* **A follow-up task names what it follows from.** A task the PM files from another task's findings
+  lists that task in `spec.context`, together with every task its description says must come
+  first. The epic's graph names the same prerequisites: a same-epic node, or an `External` node per
+  cross-epic one (`v1-e41-t07` checks it). A follow-up whose prerequisite ships in a later release
+  than the epic it would join goes to the current release's upkeep epic instead (E41, in v1.8), so
+  delivery tooling found after v1.0 shipped no longer lands in E01.
+* **Waiting on something outside the repository is `Blocked`.** A task that waits on a quota, an
+  operator's run in a later release or the coach's word has `status.phase: Blocked` and an amendment
+  naming the condition; `scripts/task ready` lists only `Pending` and `Ready` tasks. The PM sets it
+  back to `Pending` when the condition is met. V2's root tasks are held this way until Charlie starts
+  V2 (2026-11-01).
 
 ## Acceptance criteria
 

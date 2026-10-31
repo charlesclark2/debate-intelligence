@@ -28,7 +28,10 @@ spec:
       - A guard weakened
       - A real student's name in a test fixture
       - A dependency manifest or lockfile under site/ changed
-  context: []
+  context:
+    - kind: TaskRef
+      name: v1-e37-t12-stale-image-consent-refused
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-

@@ -27,7 +27,10 @@ spec:
     forbidden:
       - A path in a refusal's message beyond what the current refusals print
       - Network or AWS access in any test
-  context: []
+  context:
+    - kind: TaskRef
+      name: v1-e40-t21-restored-copy-marker
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-

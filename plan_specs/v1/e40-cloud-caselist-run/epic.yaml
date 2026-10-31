@@ -73,6 +73,22 @@ spec:
   version: '1'
   graph:
     nodes:
+    - id: ext-v1-e39-t09-weekly-index-refresh
+      kind: External
+      name: 'Prerequisite from E39: The weekly agent run rebuilds and publishes the search index when the parsed store changed'
+      description: >-
+        Cross-epic prerequisite owned by v1-e39-evidence-search-pilot (release v1.7).
+      inputs:
+        goalRef: v1-e39-t09-weekly-index-refresh
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t09-weekly-index-refresh.yaml
+    - id: ext-v1-e34-t30-doctor-unparsed-store
+      kind: External
+      name: 'Prerequisite from E34: doctor says when a store the weekly run will index has never been parsed'
+      description: >-
+        Cross-epic prerequisite owned by v1-e34-caselist-sync (release v1.1).
+      inputs:
+        goalRef: v1-e34-t30-doctor-unparsed-store
+        specRef: plan_specs/v1/e34-caselist-sync/t30-doctor-unparsed-store.yaml
     - id: t01
       kind: Task
       name: 'ADR-0020: the weekly caselist run in the cloud, its credentials and its state'
@@ -81,6 +97,9 @@ spec:
       inputs:
         specRef: plan_specs/v1/e40-cloud-caselist-run/t01-cloud-run-adr.yaml
         goalRef: v1-e40-t01-cloud-run-adr
+      dependsOn:
+      - ext-v1-e39-t09-weekly-index-refresh
+      - ext-v1-e34-t30-doctor-unparsed-store
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e40-t01-cloud-run-adr reports phase Succeeded
@@ -227,6 +246,14 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e40-t08-parse-owed
+    - id: ext-v1-e34-t34-backfile-seasons-import
+      kind: External
+      name: 'Prerequisite from E34: Earlier seasons'' complete archives, from 2021-22 on, imported and parsed as backfiles'
+      description: >-
+        Cross-epic prerequisite owned by v1-e34-caselist-sync (release v1.1).
+      inputs:
+        goalRef: v1-e34-t34-backfile-seasons-import
+        specRef: plan_specs/v1/e34-caselist-sync/t34-backfile-seasons-import.yaml
     - id: t09
       kind: Task
       name: 'The backfile imports run once each in the cloud, not on the operator''s machine'
@@ -237,6 +264,7 @@ spec:
         goalRef: v1-e40-t09-cloud-backfile-import
       dependsOn:
       - t06
+      - ext-v1-e34-t34-backfile-seasons-import
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e40-t09-cloud-backfile-import reports phase Succeeded
@@ -359,6 +387,14 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e40-t15-image-plan-check-after-the-cutover
+    - id: ext-v1-e31-t31-labelled-evaluation-gaps
+      kind: External
+      name: 'Prerequisite from E31: Where the labelled evaluation''s missed cites, tags and highlights go, counted before any rule'
+      description: >-
+        Cross-epic prerequisite owned by v1-e31-debate-file-parsing (release v1.1).
+      inputs:
+        goalRef: v1-e31-t31-labelled-evaluation-gaps
+        specRef: plan_specs/v1/e31-debate-file-parsing/t31-labelled-evaluation-gaps.yaml
     - id: t16
       kind: Task
       name: 'Prod''s parsed store re-parsed after a parser bump, from a copy restored with its sources'
@@ -370,6 +406,7 @@ spec:
         goalRef: v1-e40-t16-prod-reparse-after-a-parser-bump
       dependsOn:
       - t10
+      - ext-v1-e31-t31-labelled-evaluation-gaps
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e40-t16-prod-reparse-after-a-parser-bump reports phase Succeeded
@@ -417,6 +454,14 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e40-t18-cloud-parse-stage-cure
+    - id: ext-v1-e32-t07-model-classification-stage
+      kind: External
+      name: 'Prerequisite from E32: Model classification of what headings cannot place'
+      description: >-
+        Cross-epic prerequisite owned by v1-e32-argument-landscape (release v1.2).
+      inputs:
+        goalRef: v1-e32-t07-model-classification-stage
+        specRef: plan_specs/v1/e32-argument-landscape/t07-model-classification-stage.yaml
     - id: t19
       kind: Task
       name: 'The weekly cloud run builds the landscape reports, counted for cost first'
@@ -425,6 +470,9 @@ spec:
       inputs:
         specRef: plan_specs/v1/e40-cloud-caselist-run/t19-landscape-stage-in-the-weekly-run.yaml
         goalRef: v1-e40-t19-landscape-stage-in-the-weekly-run
+      dependsOn:
+      - t17
+      - ext-v1-e32-t07-model-classification-stage
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e40-t19-landscape-stage-in-the-weekly-run reports phase Succeeded
@@ -434,6 +482,14 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e40-t19-landscape-stage-in-the-weekly-run
+    - id: ext-v1-e30-t27-command-panels-print-summaries
+      kind: External
+      name: 'Prerequisite from E30: caselist publish, verify, parse and pull panels print a summary, not the whole record'
+      description: >-
+        Cross-epic prerequisite owned by v1-e30-caselist-ingestion (release v1.1).
+      inputs:
+        goalRef: v1-e30-t27-command-panels-print-summaries
+        specRef: plan_specs/v1/e30-caselist-ingestion/t27-command-panels-print-summaries.yaml
     - id: t20
       kind: Task
       name: 'The caselist pull table''s Detail column shortens digests as its panel does'
@@ -442,6 +498,8 @@ spec:
       inputs:
         specRef: plan_specs/v1/e40-cloud-caselist-run/t20-pull-table-shortens-digests.yaml
         goalRef: v1-e40-t20-pull-table-shortens-digests
+      dependsOn:
+      - ext-v1-e30-t27-command-panels-print-summaries
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e40-t20-pull-table-shortens-digests reports phase Succeeded
@@ -495,6 +553,8 @@ spec:
       inputs:
         specRef: plan_specs/v1/e40-cloud-caselist-run/t23-restored-copy-marker-required.yaml
         goalRef: v1-e40-t23-restored-copy-marker-required
+      dependsOn:
+      - t21
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e40-t23-restored-copy-marker-required reports phase Succeeded
@@ -512,6 +572,8 @@ spec:
       inputs:
         specRef: plan_specs/v1/e40-cloud-caselist-run/t24-restore-refuses-either-data-directory.yaml
         goalRef: v1-e40-t24-restore-refuses-either-data-directory
+      dependsOn:
+      - t21
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e40-t24-restore-refuses-either-data-directory reports phase Succeeded
@@ -521,5 +583,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e40-t24-restore-refuses-either-data-directory
+    - id: t25
+      kind: Task
+      name: 'In bucket mode the failed-publish banners and the CLI''s next step point at the cloud run, not a publish from the Mac'
+      description: >-
+        In bucket mode the failed-publish banners and the CLI's next step point at the cloud
+        run, not a publish from the Mac.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t25-remaining-bucket-mode-publish-pending-hints.yaml
+        goalRef: v1-e40-t25-remaining-bucket-mode-publish-pending-hints
+      dependsOn:
+      - t22
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t25-remaining-bucket-mode-publish-pending-hints reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t25-remaining-bucket-mode-publish-pending-hints
 status:
   phase: Pending

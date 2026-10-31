@@ -25,7 +25,10 @@ spec:
     packages: [tests/smoke, tests/docs]
     forbidden:
       - Network or AWS access in any test
-  context: []
+  context:
+    - kind: TaskRef
+      name: v1-e39-t15-tub-index-prune
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-

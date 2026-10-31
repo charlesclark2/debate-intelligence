@@ -364,6 +364,7 @@ def test_a_ready_recipe_still_holding_the_cp_text_slot_builds_the_placeholder_as
         root = ElementTree.fromstring(archive.read("word/document.xml"))
     texts = ["".join(text.text or "" for text in paragraph.iter(f"{W}t")) for paragraph in root.iter(f"{W}p")]
     assert texts[2:4] == ["Synthetic block", CP_TEXT_SLOT]
+    assert json.loads(result.files.quality_json.read_text(encoding="utf-8"))["status"] == "PASS"
 
 
 def test_a_build_with_out_dir_writes_there(world: World) -> None:

@@ -150,6 +150,8 @@ import ast
 import bisect
 import contextlib
 import importlib
+import importlib.util
+import pkgutil
 import posixpath
 import re
 import subprocess
@@ -158,7 +160,7 @@ import tempfile
 import time
 import tomllib
 from collections import deque
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 
@@ -194,6 +196,14 @@ COMMAND_REGISTRY = f"{CLI_SOURCE}/command_registry.py"
 REGISTERING_FUNCTION = "register_commands"
 # A part of a file is named `<file>::<part>`: a container method, or the app for one command module.
 PART = "::"
+# A string naming one name of the container module, as a `monkeypatch.setattr` target does, and any
+# mention of the module at all (v1-e41-t06).
+CONTAINER_NAME = re.compile(rf"{re.escape(CONTAINER_MODULE)}\.([A-Za-z_]\w*)(?:\.([A-Za-z_]\w*))?")
+NAMES_THE_CONTAINER = re.compile(rf"(?<![\w-])(?:{re.escape(CONTAINER_MODULE)}|container\.py)(?![\w-])")
+# What reads a module's names by a name it computes, so that no reader of a name can be told apart.
+COMPUTED_NAME_READS = frozenset({"globals", "vars", "locals", "eval", "exec", "__dict__", "__getattr__"})
+# A workspace package's file, by its path below `src/`: what an import can load from this repository.
+SOURCE_FILE = re.compile(r"^packages/[^/]+/src/(.+)$")
 # What asks for help: before any command's word, the root's, which lists every command.
 HELP_FLAGS = frozenset({"--help", "-h"})
 # Calls that read the container by a name they compute, or as a whole.
@@ -391,10 +401,75 @@ def with_readings(root: Path, changes: list[Change], before: str, after: str | N
         elif change.path == CONTAINER and not change.deleted:
             change = replace(
                 change,
-                container=container_diff(file_at(root, before, CONTAINER), file_at(root, after, CONTAINER)),
+                container=container_diff(
+                    file_at(root, before, CONTAINER),
+                    file_at(root, after, CONTAINER),
+                    lambda: Modules.of(package_paths_at(root, before)),
+                    lambda: Modules.of(package_paths_at(root, after)),
+                ),
             )
         read.append(change)
     return read
+
+
+def package_paths_at(root: Path, revision: str | None) -> frozenset[str]:
+    """The files under packages/ at a commit, or in the working tree (v1-e41-t06)."""
+    if revision is None:
+        listed = git(root, "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "packages")
+        return frozenset(path for path in listed.decode().split("\0") if path and (root / path).is_file())
+    listed = git(root, "ls-tree", "-r", "-z", "--name-only", revision, "--", "packages")
+    return frozenset(path for path in listed.decode().split("\0") if path)
+
+
+@dataclass(frozen=True)
+class Modules:
+    """Which dotted names are modules on one side of a change (v1-e41-t06).
+
+    A workspace package's are its files and folders on that side; the standard library's are the
+    running interpreter's, the same on both sides. Any other name cannot be told, and an import of it
+    counts as loading it.
+    """
+
+    found: frozenset[str] = frozenset()
+    tops: frozenset[str] = frozenset()
+
+    @classmethod
+    def of(cls, paths: Iterable[str]) -> Modules:
+        found: set[str] = set()
+        for path in paths:
+            match = SOURCE_FILE.match(path)
+            if match is None:
+                continue
+            *folders, name = match.group(1).split("/")
+            found |= {".".join(folders[:depth]) for depth in range(1, len(folders) + 1)}
+            if name.endswith(".py") and name != "__init__.py":
+                found.add(".".join([*folders, name.removesuffix(".py")]))
+        return cls(frozenset(found), frozenset(name.split(".")[0] for name in found))
+
+    def is_module(self, name: str) -> bool | None:
+        """Whether a dotted name is a module; None when it cannot be told."""
+        top = name.split(".")[0]
+        if top in self.tops:
+            return name in self.found
+        if top in sys.stdlib_module_names:
+            return is_standard_module(name)
+        return None
+
+
+def is_standard_module(name: str) -> bool | None:
+    """Whether a standard library name is a module: a top-level one, or a file in its package."""
+    parent, _, child = name.rpartition(".")
+    if not parent:
+        return True
+    try:
+        spec = importlib.util.find_spec(parent)
+    except (ImportError, ValueError):
+        return None
+    if spec is None:
+        return None
+    if spec.submodule_search_locations is None:
+        return False  # a module that is not a package has no modules in it
+    return any(module.name == child for module in pkgutil.iter_modules(spec.submodule_search_locations))
 
 
 def changed_tables(root: Path, before: str, after: str | None) -> frozenset[str] | None:
@@ -574,13 +649,18 @@ class Graph:
     # The container's parts, and the files that read it whole, by reflection or as source (v1-e01-t43).
     container_parts: frozenset[str] = frozenset()
     container_readers: set[str] = field(default_factory=set)
+    # The files that name the container module only in `debate_cli.container.X` strings -> each X that
+    # is not a part: a name it imports or defines, reached when an import rebinds it (v1-e41-t06).
+    container_named: dict[str, frozenset[str]] = field(default_factory=dict)
 
     def add(self, dependent: str, how: str, target: str) -> None:
         if dependent != target:
             self.dependents.setdefault(target, []).append((dependent, how))
 
 
-def build_graph(tree: Tree, layout: Layout, every_mention_runs: bool = False) -> Graph:
+def build_graph(
+    tree: Tree, layout: Layout, every_mention_runs: bool = False, whole_container: bool = False
+) -> Graph:
     graph = Graph(layout)
     resolver = Resolver(layout, every_mention_runs)
     package_edges = grimp_edges(tree, layout, graph) or {}
@@ -631,6 +711,8 @@ def build_graph(tree: Tree, layout: Layout, every_mention_runs: bool = False) ->
             add_conftest_fixtures(tree, layout, resolver, graph, conftest, conftests)
     if container is not None:
         add_container_parts(tree, layout, graph, container)
+        if not whole_container:
+            add_container_names(tree, graph, container)
     if registered is not None:
         add_app_commands(layout, graph, registered)
     return graph
@@ -987,24 +1069,40 @@ INERT_NODES = (ast.Constant, ast.Expr, ast.Pass, ast.UnaryOp, ast.USub, ast.Load
 class ContainerDiff:
     """A change to `container.py`, part by part, at the parts :func:`read_container` reads (v1-e01-t43).
 
-    `parts` are the parts whose code changed, and the new ones. `whole` says why the change is read
+    `parts` are the parts whose code changed, the new ones, and the parts that use a name the
+    top-level imports rebind (v1-e41-t06), which `uses` maps to those names. `names` are the names
+    rebound, for the files that import them from the container. `whole` says why the change is read
     as the whole file instead, as every change to it was before: it changed code that runs when the
-    module is imported, or removed or moved a part, or one side cannot be read.
+    module is imported, or which modules the imports load, or removed or moved a part, or one side
+    cannot be read.
     """
 
     parts: frozenset[str] = frozenset()
     whole: str | None = None
+    names: frozenset[str] = frozenset()
+    uses: dict[str, frozenset[str]] = field(default_factory=dict)
 
 
 @dataclass
 class ContainerOutline:
-    """One side of `container.py`: the code that runs on import, and each part's code."""
+    """One side of `container.py`: the code that runs on import, and each part's code.
+
+    `imports` are the imports at the top, read by what they load and bind (v1-e41-t06), and
+    `module_code` the rest of `on_import`; `imports` is None when imports must be read as module
+    code, as `on_import` holds them.
+    """
 
     on_import: list[tuple[str, str]] = field(default_factory=list)  # (what it is, its syntax) in order
     code: dict[str, str] = field(default_factory=dict)  # part -> the syntax of its definitions
     run_on_import: dict[str, list[ast.AST]] = field(default_factory=dict)  # part -> what defining it runs
     places: list[tuple[str, str]] = field(default_factory=list)  # (the class or the module, part), in order
     rebinding: set[str] = field(default_factory=set)  # parts that assign a module name (`global`)
+    imports: list[ast.stmt] | None = None
+    module_code: list[tuple[str, str]] = field(default_factory=list)
+    uses: dict[str, set[str]] = field(default_factory=dict)  # part -> every name its code mentions
+    reads_on_import: set[str] = field(default_factory=set)  # names code run on import mentions
+    binds_on_import: set[str] = field(default_factory=set)  # module names bound other than by an import
+    computed_reads: bool = False  # it reads module names by a name it computes (`globals()`)
 
 
 def outline_container(text: str | None) -> ContainerOutline | str:
@@ -1035,25 +1133,107 @@ def outline_container(text: str | None) -> ContainerOutline | str:
         outline.run_on_import.setdefault(definition.name, []).extend(run_on_import(definition, postponed))
 
     container_class = classes[0]
+    outline.imports = leading_imports(syntax)
+    read_by_use = {id(statement) for statement in outline.imports or ()}
+    runs: list[ast.AST] = []  # the code that runs on import, the imports read by use left out
+
+    def runs_on_import(item: tuple[str, str], *code: ast.AST) -> None:
+        outline.on_import.append(item)
+        outline.module_code.append(item)
+        runs.extend(code)
+
     for statement in syntax.body:
         if statement is container_class:
             header = evaluated_with_the_definition(container_class)
-            outline.on_import.append((f"{CONTAINER_CLASS}'s bases and decorators", dump_all(header)))
+            runs_on_import((f"{CONTAINER_CLASS}'s bases and decorators", dump_all(header)), *header)
             for member in container_class.body:
                 is_method = isinstance(member, ast.FunctionDef | ast.AsyncFunctionDef)
                 if is_method and not (member.name.startswith("__") and member.name.endswith("__")):
                     add_part(CONTAINER_CLASS, member)
                 else:
-                    outline.on_import.append((what_runs(member, CONTAINER_CLASS), ast.dump(member)))
+                    runs_on_import((what_runs(member, CONTAINER_CLASS), ast.dump(member)), member)
         elif isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
             add_part("module", statement)
-        else:
+            outline.binds_on_import.add(statement.name)
+        elif id(statement) in read_by_use:
             outline.on_import.append((what_runs(statement, None), ast.dump(statement)))
+            if isinstance(statement, ast.If):
+                runs.append(statement.test)  # `TYPE_CHECKING` itself is read on import
+        else:
+            runs_on_import((what_runs(statement, None), ast.dump(statement)), statement)
+            outline.binds_on_import |= {
+                node.id
+                for node in ast.walk(statement)
+                if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store)
+            }
+    outline.binds_on_import.add(CONTAINER_CLASS)
     for name, defined in definitions.items():
         outline.code[name] = dump_all(defined)
+        outline.uses[name] = names_in(*defined)
+        runs.extend(outline.run_on_import[name])
         if any(isinstance(node, ast.Global) for definition in defined for node in ast.walk(definition)):
             outline.rebinding.add(name)
+    # A name in a string counts too: `__all__`'s, or a `getattr` with a literal name.
+    outline.reads_on_import = names_in(*runs) | {
+        string for node in runs for string in strings_in(node) if string.isidentifier()
+    }
+    outline.computed_reads = bool(COMPUTED_NAME_READS & (names_in(syntax) | definitions.keys()))
     return outline
+
+
+def leading_imports(syntax: ast.Module) -> list[ast.stmt] | None:
+    """The imports at the top of a module, after its docstring, read by what they load and bind (v1-e41-t06).
+
+    They are the plain imports and the `if TYPE_CHECKING:` blocks of imports before any other
+    statement; a `from __future__` import stays module code. None when an import is anywhere else
+    at module level, or a star import binds names it does not list: then the imports are read as
+    module code, in order, as before.
+    """
+    body = syntax.body
+    start = 1 if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) else 0
+    section: list[ast.stmt] = []
+    end = start
+    while end < len(body) and (
+        isinstance(body[end], ast.Import | ast.ImportFrom) or is_typing_block(body[end])
+    ):
+        statement = body[end]
+        if not (isinstance(statement, ast.ImportFrom) and statement.module == "__future__"):
+            section.append(statement)
+        end += 1
+    if any(imports_at_module_level(statement) for statement in body[end:]):
+        return None
+    for statement in section:
+        for node in statement.body if isinstance(statement, ast.If) else [statement]:
+            if isinstance(node, ast.ImportFrom) and any(alias.name == "*" for alias in node.names):
+                return None
+    return section
+
+
+def is_typing_block(statement: ast.stmt) -> bool:
+    """`if TYPE_CHECKING:` holding only imports, with no `else`: nothing in it runs."""
+    if not isinstance(statement, ast.If) or statement.orelse or not statement.body:
+        return False
+    test = statement.test
+    named = (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or (
+        isinstance(test, ast.Attribute)
+        and test.attr == "TYPE_CHECKING"
+        and isinstance(test.value, ast.Name)
+        and test.value.id == "typing"
+    )
+    return named and all(isinstance(node, ast.Import | ast.ImportFrom) for node in statement.body)
+
+
+def imports_at_module_level(statement: ast.stmt) -> bool:
+    """Whether a statement binds a module name by an import: in a function or a class body it does not."""
+    if isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+        return False
+    if isinstance(statement, ast.Import | ast.ImportFrom):
+        return True
+    return any(
+        imports_at_module_level(child)
+        for child in ast.iter_child_nodes(statement)
+        if isinstance(child, ast.stmt)
+    )
 
 
 def run_on_import(definition: ast.stmt, postponed: bool) -> list[ast.AST]:
@@ -1113,25 +1293,43 @@ def is_inert(nodes: list[ast.AST]) -> bool:
     )
 
 
-def container_diff(old_text: str | None, new_text: str | None) -> ContainerDiff:
+def container_diff(
+    old_text: str | None,
+    new_text: str | None,
+    old_modules: Callable[[], Modules] = Modules,
+    new_modules: Callable[[], Modules] = Modules,
+) -> ContainerDiff:
     """Compare two sides of `container.py` part by part, failing toward the whole file.
 
     A part's code changing, or a new part, is that part's. The whole file is changed by anything
-    that runs on import: an import, a module constant, the container's own attributes, docstring and
-    dunder methods, any part's decorators, defaults or class body (a new part may add only
-    `@property`, `@staticmethod`, `@classmethod` and literal defaults); and by a part removed,
-    renamed or moved, a changed part that assigns a module name, and a side that cannot be read.
+    that runs on import: a module constant, the container's own attributes, docstring and dunder
+    methods, any part's decorators, defaults or class body (a new part may add only `@property`,
+    `@staticmethod`, `@classmethod` and literal defaults); and by a part removed, renamed or moved,
+    a changed part that assigns a module name, and a side that cannot be read.
+
+    The imports at the top are read by use (v1-e41-t06): when they load the same modules in the same
+    order on both sides, nothing new runs on import, and a name they rebind is the change of the
+    parts that use it. A module loaded, or no longer loaded, is the whole file, and so is a rebound
+    name that code run on import uses. `old_modules` and `new_modules` say which names are modules on
+    each side, asked only when the imports differ.
     """
     old, new = outline_container(old_text), outline_container(new_text)
     if isinstance(old, str) or isinstance(new, str):
         return ContainerDiff(whole=old if isinstance(old, str) else str(new))
-    for index in range(max(len(old.on_import), len(new.on_import))):
-        # Compared without the labels, whose line numbers move when a part above grows.
-        before = old.on_import[index] if index < len(old.on_import) else None
-        after = new.on_import[index] if index < len(new.on_import) else None
-        if before is None or after is None or before[1] != after[1]:
-            what = (after or before or ("module code", ""))[0]
-            return ContainerDiff(whole=f"it changes {what}, which runs when the module is imported")
+    by_use = old.imports is not None and new.imports is not None
+    what = (
+        first_difference(old.module_code, new.module_code)
+        if by_use
+        else first_difference(old.on_import, new.on_import)
+    )
+    if what is not None:
+        return ContainerDiff(whole=f"it changes {what}, which runs when the module is imported")
+    rebound: frozenset[str] = frozenset()
+    if by_use:
+        read = imports_by_use(old, new, old_modules, new_modules)
+        if isinstance(read, str):
+            return ContainerDiff(whole=read)
+        rebound = read
     removed = sorted(old.code.keys() - new.code.keys())
     if removed:
         return ContainerDiff(whole=f"it removes or renames {removed[0]}")
@@ -1156,10 +1354,116 @@ def container_diff(old_text: str | None, new_text: str | None) -> ContainerDiff:
                 whole=f"the new {part} runs code on import: a decorator, a default or a class body"
             )
         changed.add(part)
-    rebinding = sorted(changed & (old.rebinding | new.rebinding))
+    uses: dict[str, frozenset[str]] = {}
+    for part in sorted(new.code.keys() - changed):
+        used = rebound & (new.uses[part] | old.uses.get(part, set()))
+        if used:
+            uses[part] = frozenset(used)
+    rebinding = sorted((changed | uses.keys()) & (old.rebinding | new.rebinding))
     if rebinding:
         return ContainerDiff(whole=f"{rebinding[0]} assigns a module name, which every part reads")
-    return ContainerDiff(parts=frozenset(changed))
+    return ContainerDiff(parts=frozenset(changed | uses.keys()), names=rebound, uses=uses)
+
+
+def first_difference(old: list[tuple[str, str]], new: list[tuple[str, str]]) -> str | None:
+    """What the first statement run on import that differs is; None when none does."""
+    for index in range(max(len(old), len(new))):
+        # Compared without the labels, whose line numbers move when a part above grows.
+        before = old[index] if index < len(old) else None
+        after = new[index] if index < len(new) else None
+        if before is None or after is None or before[1] != after[1]:
+            return (after or before or ("module code", ""))[0]
+    return None
+
+
+@dataclass
+class ImportReading:
+    """What one side's imports at the top do (v1-e41-t06): the modules they load, in the order they
+    are first loaded, with the line that first loads each, and what each name is bound to, in order."""
+
+    loads: dict[str, int] = field(default_factory=dict)
+    binds: dict[str, list[str]] = field(default_factory=dict)
+
+
+def read_imports(statements: list[ast.stmt], modules: Modules) -> ImportReading:
+    """The modules a side's imports load, and what they bind.
+
+    `import a.b` loads `a` and `a.b` and binds `a`; `from a.b import c` loads `a`, `a.b`, and
+    `a.b.c` unless `c` is known not to be a module. An `if TYPE_CHECKING:` block loads nothing,
+    since it never runs; its names are bound for the type checker only, and a change to them is read
+    by the parts that use them like any other.
+    """
+    reading = ImportReading()
+
+    def load(module: str, line: int) -> None:
+        names = module.split(".")
+        for depth in range(1, len(names) + 1):
+            reading.loads.setdefault(".".join(names[:depth]), line)
+
+    for statement in statements:
+        typing_only = isinstance(statement, ast.If)
+        kind = "for the type checker only, " if typing_only else ""
+        for node in statement.body if isinstance(statement, ast.If) else [statement]:
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if not typing_only:
+                        load(alias.name, node.lineno)
+                    bound = alias.asname or alias.name.split(".")[0]
+                    target = alias.name if alias.asname else bound
+                    reading.binds.setdefault(bound, []).append(f"{kind}the module {target}")
+            elif isinstance(node, ast.ImportFrom):
+                package = CONTAINER_MODULE.split(".")[: -node.level] if node.level else []
+                module = ".".join([*package, *([node.module] if node.module else [])])
+                if not typing_only:
+                    load(module, node.lineno)
+                for alias in node.names:
+                    if not typing_only and modules.is_module(f"{module}.{alias.name}") is not False:
+                        load(f"{module}.{alias.name}", node.lineno)
+                    reading.binds.setdefault(alias.asname or alias.name, []).append(
+                        f"{kind}{alias.name} from {module}"
+                    )
+    return reading
+
+
+def imports_by_use(
+    old: ContainerOutline,
+    new: ContainerOutline,
+    old_modules: Callable[[], Modules],
+    new_modules: Callable[[], Modules],
+) -> frozenset[str] | str:
+    """The names two sides' imports at the top rebind; why the change is the whole file, as a string.
+
+    It is the whole file when the imports load a module the other side's do not, or load the same
+    modules in another order, or rebind a name that code run on import uses or that module code
+    binds too, or when the module reads its names by a name it computes.
+    """
+    if dump_all(old.imports or ()) == dump_all(new.imports or ()):
+        return frozenset()
+    before, after = (
+        read_imports(old.imports or [], old_modules()),
+        read_imports(new.imports or [], new_modules()),
+    )
+    for module, line in after.loads.items():
+        if module not in before.loads:
+            return f"it loads {module}, which its imports did not load before (line {line})"
+    for module, line in before.loads.items():
+        if module not in after.loads:
+            return f"it no longer loads {module}, which its imports loaded (line {line})"
+    if list(before.loads) != list(after.loads):
+        return "it changes the order in which its imports load modules"
+    rebound = frozenset(
+        name
+        for name in before.binds.keys() | after.binds.keys()
+        if before.binds.get(name) != after.binds.get(name)
+    )
+    for name in sorted(rebound):
+        if name in old.reads_on_import | new.reads_on_import:
+            return f"it rebinds {name}, which code run on import uses"
+        if name in old.binds_on_import | new.binds_on_import:
+            return f"it rebinds {name}, which module code binds too"
+    if rebound and (old.computed_reads or new.computed_reads):
+        return f"it rebinds {sorted(rebound)[0]}, and the module reads names by a name it computes"
+    return rebound
 
 
 def reads_the_container_whole(syntax: ast.AST) -> bool:
@@ -1295,6 +1599,45 @@ def add_container_parts(tree: Tree, layout: Layout, graph: Graph, reading: Conta
             if how == RUNS or (how == IMPORTS and (used is None or names_in(used) & readers)):
                 for part in every_part:
                     graph.add(dependent, READS_EVERY_PART, part_of(CONTAINER, part))
+
+
+def add_container_names(tree: Tree, graph: Graph, reading: ContainerReading) -> None:
+    """A file naming the container module only in `debate_cli.container.X` strings asks for X (v1-e41-t06).
+
+    Such a string is a `monkeypatch.setattr` target, or a module's name for `importlib`. When X is
+    a part, or `ServiceContainer.X` is, the file asks for that part. Any other X is a name the
+    container imports or defines at module level, which a change to the file's imports reaches if
+    it rebinds X, and any other change only as the whole file. A file that names the module any
+    other way, alone or as a path, is still reached by that name.
+    """
+    for path, text in tree.texts.items():
+        if not path.endswith(".py") or ("container.py" not in text and CONTAINER_MODULE not in text):
+            continue
+        named = container_names(tree.strings(path))
+        if not named:
+            continue
+        others: set[str] = set()
+        for name, attribute in named:
+            if name in reading.part_files:
+                graph.add(path, ASKS, part_of(CONTAINER, name))
+            elif name == CONTAINER_CLASS and attribute in reading.part_files:
+                graph.add(path, ASKS, part_of(CONTAINER, attribute))
+            else:
+                others.add(name)
+        graph.container_named[path] = frozenset(others)
+
+
+def container_names(strings: list[str] | None) -> set[tuple[str, str | None]]:
+    """The names a file's strings name as `debate_cli.container.X[.Y]`; none if they name it another way."""
+    named: set[tuple[str, str | None]] = set()
+    for string in strings or ():
+        if not NAMES_THE_CONTAINER.search(string):
+            continue
+        match = CONTAINER_NAME.fullmatch(string)
+        if match is None:
+            return set()
+        named.add((match.group(1), match.group(2)))
+    return named
 
 
 def read_registry(tree: Tree, layout: Layout) -> dict[str, list[tuple[str, ...]]] | None:
@@ -2179,7 +2522,9 @@ def files_under(layout: Layout, prefixes: Iterable[str]) -> set[str]:
     }
 
 
-def select(tree: Tree, changes: list[Change], every_mention_runs: bool = False) -> Selection:
+def select(
+    tree: Tree, changes: list[Change], every_mention_runs: bool = False, whole_container: bool = False
+) -> Selection:
     layout = Layout.of(tree)
     selection = Selection(total=len(layout.test_files))
     read_by: dict[str, tuple[str, ...]] = {}
@@ -2192,7 +2537,7 @@ def select(tree: Tree, changes: list[Change], every_mention_runs: bool = False) 
                 selection.notes.append(f"{change.path} changes {', '.join(sorted(change.tables))}.")
             selection.whole = f"{change.path} is shared test ground"
             return selection
-    graph = build_graph(tree, layout, every_mention_runs)
+    graph = build_graph(tree, layout, every_mention_runs, whole_container)
     selection.notes.extend(graph.notes)
     walk = Walk(layout, graph, naming_corpus(tree, changes))
     for change in changes:
@@ -2295,13 +2640,28 @@ class Walk:
         self.why[path] = ("was deleted" if change.deleted else "changed", None)
         parts = self.changed_parts(change)
         if parts is not None:
+            reading = change.container or ContainerDiff()
             self.read_by_part.add(path)
             for part in sorted(parts):
-                self.why[part_of(path, part)] = ("changed", None)
+                used = reading.uses.get(part)
+                how = f"uses {listed(sorted(used))}, which an import rebinds" if used else "changed"
+                self.why[part_of(path, part)] = (how, None)
                 self.queue.append(part_of(path, part))
             for dependent, how in self.graph.dependents.get(path, ()):
                 if how != IMPORTS:
                     self.reach(dependent, how, path)  # an importer asks for the parts it names
+                elif reading.names:
+                    # One that imports a rebound name from the container, or reads it off the module.
+                    used = self.names_used(dependent, reading.names)
+                    if used:
+                        self.reach(dependent, f"uses {listed(used)}, which an import rebinds, from", path)
+            for named, names in sorted(self.graph.container_named.items()):
+                if names & reading.names:
+                    self.reach(
+                        named,
+                        f"names {listed(sorted(names & reading.names))}, which an import rebinds, in",
+                        path,
+                    )
         elif not change.deleted:
             self.queue.append(path)
         lost_from = deleted_module_name(path, self.layout) if change.deleted else None
@@ -2328,7 +2688,19 @@ class Walk:
             return None
         changed = ", ".join(sorted(reading.parts)) or "none: only comments or layout"
         self.notes.append(f"{CONTAINER} is read by part. Parts changed: {changed}.")
+        if reading.names:
+            self.notes.append(
+                f"Its imports load the same modules and rebind {', '.join(sorted(reading.names))}, "
+                "so the parts and files that use those names are walked from."
+            )
         return reading.parts
+
+    def names_used(self, path: str, names: frozenset[str]) -> list[str]:
+        """The names a file mentions as a word, of those given; all of them when it cannot be read."""
+        text = self.layout.tree.texts.get(path)
+        if text is None:
+            return sorted(names)
+        return sorted(names & set(re.findall(r"[A-Za-z_]\w*", text)))
 
     def run(self) -> str | None:
         """Walk until nothing new is reached; the reason if the whole selection is affected."""
@@ -2376,8 +2748,11 @@ class Walk:
             mentioners.discard(path)
             mentioners = {mentioner for mentioner in mentioners if self.can_read(mentioner, path)}
             if path in self.read_by_part:
-                # Their reading is in the graph already, as edges to every part (v1-e01-t39).
+                # Their reading is in the graph already, as edges to every part (v1-e01-t39), and
+                # a `debate_cli.container.X` string's as an edge to part X, or by the names an
+                # import rebinds (v1-e41-t06).
                 mentioners -= self.graph.container_readers
+                mentioners -= self.graph.container_named.keys()
             for mentioner in sorted(mentioners):
                 self.reach(mentioner, HAS_A_PATH_TO if mentioner in denoters else NAMES, path)
             if path in self.data_files and not mentioners:
@@ -2571,7 +2946,7 @@ def main(argv: list[str] | None = None) -> int:
                 f"them reaches them: {', '.join(absent)}",
                 file=sys.stderr,
             )
-    selection = select(tree, changes, arguments.every_mention_runs)
+    selection = select(tree, changes, arguments.every_mention_runs, arguments.whole_container)
     elapsed = time.monotonic() - started
 
     for note in selection.notes:

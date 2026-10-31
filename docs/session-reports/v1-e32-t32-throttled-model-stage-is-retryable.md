@@ -142,9 +142,35 @@ None. The affected set (about 206 files, several minutes) runs in the pull reque
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-31
 
 **Notes:**
+
+A throttled or unanswering model now stops the landscape stage as "retry later", and a refusal stays
+a verdict.
+1. **ac1 passes.**
+   * Red: 12 failed before any code change, each for its own reason. The throttled and unavailable
+     runs exited 1, the refused runs lacked `cause_code`, and the rerun failed at its first exit.
+   * Green: 252 passed across the five files, and the node criterion gave 73 passed.
+   * The three mutants were each caught by the tests meant for them. The cache mutant fails the
+     rerun test at the exact assertion that it asks only about the throttled card.
+2. **Decisions accepted:**
+   * the cause carried on `ModelStageInterrupted` and raised `from` it, judged by `isinstance`
+     against v1-e05-t09's tuple, so subclasses follow without each declaring a code;
+   * an unclassified cause exits 1, consistent with "nothing reaches 3 because nobody classified
+     it", and pinned by a test;
+   * `error.code` unchanged and `cause_code` added under `details`: additive, as asked;
+   * one stored field with read-only name properties, so the name and the error cannot disagree;
+   * the proof at the command through the scripted router, with no model called and v1-e40-t17's
+     flags untouched.
+3. **Follow-ups:** one p3 task in the next PM batch. It gives `landscape evaluate` the same exit rule
+   and passes `retry_after_seconds` on as one more additive key in `error.details`, which the
+   v1-e40-t17 runbook can then quote.
+4. **Closing checks:** the affected set (206 files, several minutes) is left to the PR's `ci` under
+   agreement 10. The always-run list plus every file that reads a changed name gave 952 passed, and
+   ruff, pyright, lint-imports, the thin handlers and the specs pass.
+5. **Merge:** once the PR's `ci` is green, before Thursday, so Friday's LD run can install a build that
+   carries it. It is a plain `scripts/task pr`.

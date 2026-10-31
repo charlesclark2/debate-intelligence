@@ -54,11 +54,19 @@ ones.
 
 ## `--dry-run`
 
-Writes nothing: not the classification cache, the review queue, the bundle, the acceptance log or
-the bucket. With `--publish` it asks the bucket which files would go up. In every model mode it says
-how many cards it would ask the model about (`--json`: `classification.model.would_ask`, `null` in a
-run that is no dry run), and asks none: under `none` that is 0, and under `replay` or `live` it is
-what a run would send, with what it would hold back over `--max-model-items` (`v1-e40-t17`).
+Writes nothing but the plan-text and analytic-text caches: not the classification cache, the review
+queue, the bundle, the acceptance log, the model cassettes or usage log, or the bucket. The two text
+caches are keyed on the parser version, so the first report after a parser bump reads every on-topic
+source again; a dry run keeps those readings, derived fields and never evidence text, in the data
+directory (never in a `--restored-copy`), and the publish after it parses none of those sources to
+fill them (`v1-e32-t30`, the PM's ruling of 2026-10-31). Like every run, it still reads again, in
+memory, the few sources holding a CP text, alternative or role of the ballot the report quotes.
+`--json`'s `text_caches` says, for each cache, how many sources the run asked for, found cached,
+read and could not read, and how many entries it wrote, in every run. With `--publish` it asks the
+bucket which files would go up. In every model mode it says how many cards it would ask the model
+about (`--json`: `classification.model.would_ask`, `null` in a run that is no dry run), and asks
+none: under `none` that is 0, and under `replay` or `live` it is what a run would send, with what it
+would hold back over `--max-model-items` (`v1-e40-t17`).
 
 ## `--restored-copy`
 
@@ -133,6 +141,7 @@ from debate_cli.options.bucket_environment import CONFIRM_PROD_FLAG, SYNCABLE_EN
 from debate_cli.options.landscape_config import landscape_config_dir
 from debate_cli.options.snapshot_date import parse_snapshot_date
 from debate_cli.output import CliOutput, CommandFailure, JsonValue, OutputMode
+from debate_core.application.analytic_texts import AnalyticTextCounts
 from debate_core.application.errors import error_code_of
 from debate_core.application.landscape_model_evaluation import TARGET_ACCURACY, FormatEvaluation
 from debate_core.application.landscape_model_stage import (
@@ -155,6 +164,7 @@ from debate_core.application.landscape_run import (
     PublishRefusal,
 )
 from debate_core.application.landscape_staleness import FailedSyncRun
+from debate_core.application.plan_texts import PlanTextCounts
 from debate_core.application.settings import Environment, Settings, find_repository_root
 from debate_core.arguments.landscape.model_stage import NameScan
 from debate_core.domain.landscape_trends import LandscapeTrends, TrendLabel
@@ -214,7 +224,14 @@ def report(
         typer.Option("--publish/--no-publish", help="Also upload it to this environment's evidence bucket."),
     ] = False,
     dry_run: Annotated[
-        bool, typer.Option("--dry-run", help="Say what a run would write and upload, and write nothing.")
+        bool,
+        typer.Option(
+            "--dry-run",
+            help=(
+                "Say what a run would write and upload, and write nothing but the plan-text and "
+                "analytic-text caches, which the publish after it reads instead of the sources."
+            ),
+        ),
     ] = False,
     accept_scan_hits: Annotated[
         str | None,
@@ -658,6 +675,10 @@ def run_summary(
             "items": queue.queued_items,
             "location": result.classification.review_queue_location,
         },
+        "text_caches": {
+            "plan_texts": _text_cache(result.plan_texts),
+            "analytic_texts": _text_cache(result.analytic_texts.read if result.analytic_texts else None),
+        },
         "aff_assignments": result.aff_assignments,
         "aff_identification": {one.method: one.rounds for one in result.report.aff_identification},
         "staleness": {
@@ -704,6 +725,42 @@ def run_summary(
     }
 
 
+def _text_cache(counts: PlanTextCounts | AnalyticTextCounts | None) -> dict[str, JsonValue] | None:
+    """How a text cache was read and written (`v1-e32-t30`); None when the run read none of it."""
+    if counts is None:
+        return None
+    return {
+        "sources": counts.sources,
+        "cached": counts.hits,
+        "read": counts.parsed,
+        "unread": counts.unread,
+        "entries_written": counts.parsed if counts.cache_written else 0,
+        "written": counts.cache_written,
+    }
+
+
+def _text_cache_lines(result: LandscapeRunResult) -> list[str]:
+    """Each text cache's line: sources read and already cached, and the entries written, a dry run too."""
+    lines: list[str] = []
+    for label, counts in (
+        ("Plan-text cache", result.plan_texts),
+        ("Analytic-text cache", result.analytic_texts.read if result.analytic_texts else None),
+    ):
+        if counts is None:
+            continue
+        entries = counts.parsed if counts.cache_written else 0
+        written = (
+            f"{entries} {'entry' if entries == 1 else 'entries'} written"
+            if entries
+            else ("older entries dropped" if counts.cache_written else "nothing written")
+        )
+        lines.append(
+            f"{label}: {counts.parsed} of {counts.sources} source(s) read, {counts.hits} already cached, "
+            f"{written}."
+        )
+    return lines
+
+
 def _model_lines(result: LandscapeRunResult) -> list[str]:
     """The model stage's line, when the run had one: asked, cached, held back, refused, tokens."""
     if result.model_mode is LandscapeModelMode.NONE:
@@ -747,6 +804,7 @@ def _display(result: LandscapeRunResult, settings: Settings) -> str:
         f"({_share(header.rounds_with_a_read, header.rounds)}); teams {header.teams}.",
         f"Affirmative rounds with no identified aff: {unclassified.aff_rounds_unidentified} of "
         f"{unclassified.aff_rounds}; aff assignments {result.aff_assignments}.",
+        *_text_cache_lines(result),
         *_model_lines(result),
         *_would_ask_lines(result),
         f"Review queue: {result.classification.review_queue.counts.rows} rows "
@@ -830,7 +888,7 @@ def _bundle_lines(result: LandscapeRunResult) -> list[str]:
     head = (
         f"Wrote {files} files to {result.directory}:"
         if result.written
-        else f"Dry run: nothing written; the bundle's {files} files would go to {result.directory}:"
+        else f"Dry run: the bundle is not written; its {files} files would go to {result.directory}:"
     )
     return [
         head,

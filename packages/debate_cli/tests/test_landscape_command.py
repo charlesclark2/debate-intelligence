@@ -96,6 +96,11 @@ BUNDLE = (
 )
 KEYS = [f"reports/landscape/{CASELIST}/2026-09-15/{name}" for name in BUNDLE]
 PLANTED_TOURNAMENT = {("neg-two", 0): "At Thistle Open, new spending triggers a crowd-out"}
+TEXT_CACHES = {
+    Path("landscape") / "plan_texts" / f"{CASELIST}.jsonl",
+    Path("landscape") / "analytic_texts" / f"{CASELIST}.jsonl",
+}
+"""The plan-text and analytic-text caches: all a dry run writes (`v1-e32-t30`)."""
 
 
 def _installation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, world: SyntheticRun) -> None:
@@ -711,7 +716,7 @@ def test_a_dry_run_tells_a_person_the_seven_files_it_would_write(world: Syntheti
     assert result.exit_code == ExitCode.OK, result.output
     directory = world.data_dir / "reports" / "landscape" / CASELIST / "2026-09-15"
     lines = result.stdout.splitlines()
-    would = lines.index(f"Dry run: nothing written; the bundle's 7 files would go to {directory}:")
+    would = lines.index(f"Dry run: the bundle is not written; its 7 files would go to {directory}:")
     assert lines[would + 1 : would + 3] == [
         "  circuit-wide: positions.csv, top_cards.csv, impact_cards.csv, trends.csv, report.md",
         "  school view, naming schools and team codes: schools.csv, schools.md",
@@ -933,7 +938,7 @@ def test_publish_a_second_identical_run_uploads_nothing(world: SyntheticRun, buc
     assert {one["action"] for one in publish["planned"]} == {"UNCHANGED"}
 
 
-def test_publish_dry_run_lists_the_planned_uploads_and_writes_nothing(
+def test_publish_dry_run_lists_the_planned_uploads_and_writes_nothing_but_the_text_caches(
     world: SyntheticRun, buckets: S3Client
 ) -> None:
     result = landscape(world, "--caselist", CASELIST, "--publish", "--dry-run")
@@ -946,7 +951,11 @@ def test_publish_dry_run_lists_the_planned_uploads_and_writes_nothing(
     assert data["publish"]["uploaded"] == [] and data["written"] is False
     assert _keys(buckets, DEV_BUCKET) == []
     assert not (world.data_dir / "reports").exists()
-    assert not (world.data_dir / "landscape").exists()
+    # `v1-e32-t30`: the plan-text and analytic-text caches are the one thing a dry run keeps.
+    landscape_state = world.data_dir / "landscape"
+    assert {
+        path.relative_to(world.data_dir) for path in landscape_state.rglob("*") if path.is_file()
+    } == TEXT_CACHES
 
 
 def test_publish_with_debate_env_unset_goes_to_dev_never_prod(
@@ -1407,6 +1416,99 @@ def test_scan_acceptances_from_a_copys_publish_are_kept_in_the_data_directory(
     assert log.is_file()
     assert not (copy / "landscape").exists()
     assert set(KEYS) <= set(_keys(buckets, DEV_BUCKET))
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e32-t30: a dry run fills the plan-text and analytic-text caches (the PM's ruling of 2026-10-31)
+#
+# The two caches are keyed on the parser version, so a dry run on a new build reads every on-topic
+# source, and now keeps what it read, in the data directory, for the publish after it. It writes
+# nothing else: not the classification cache, the review queue, the scan acceptances, the model
+# cassettes or usage log, the bundle, any bucket object, and nothing in a restored copy. Of
+# `synthetic26`'s two affirmative and four on-topic sources, only `aff-two` has bytes to read.
+# ------------------------------------------------------------------------------------------------
+
+FIRST_FILL = {
+    "plan_texts": {"sources": 2, "cached": 0, "read": 1, "unread": 1, "entries_written": 1, "written": True},
+    "analytic_texts": {
+        "sources": 4,
+        "cached": 0,
+        "read": 1,
+        "unread": 3,
+        "entries_written": 1,
+        "written": True,
+    },
+}
+
+
+def _listing(root: Path) -> dict[Path, str]:
+    """Every file under `root`, by its path under it, with the SHA-256 of its bytes."""
+    return {
+        path.relative_to(root): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in root.rglob("*")
+        if path.is_file()
+    }
+
+
+def _only_the_text_caches_added(before: dict[Path, str], after: dict[Path, str]) -> bool:
+    return set(after) - set(before) == TEXT_CACHES and all(after.get(path) == before[path] for path in before)
+
+
+def test_a_dry_run_over_a_restored_copy_fills_the_text_caches_here_and_writes_nothing_in_the_copy(
+    stale_world: SyntheticRun, tmp_path: Path
+) -> None:
+    copy = _restored_copy(tmp_path / "copy-root")
+    here, there = _listing(stale_world.data_dir), _listing(copy)
+
+    result = landscape(stale_world, "--caselist", CASELIST, "--dry-run", "--restored-copy", str(copy))
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert _listing(copy) == there
+    assert _only_the_text_caches_added(here, _listing(stale_world.data_dir))
+    assert _data(result)["text_caches"] == FIRST_FILL
+
+
+@pytest.mark.parametrize("mode", ["none", "replay"])
+def test_a_publishs_dry_run_writes_nothing_but_the_text_caches_in_any_model_mode(
+    world: SyntheticRun, buckets: S3Client, model_router: _PlacesEverything, mode: str
+) -> None:
+    before = _listing(world.data_dir)
+
+    result = landscape(world, "--caselist", CASELIST, "--publish", "--dry-run", "--model-mode", mode)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert _only_the_text_caches_added(before, _listing(world.data_dir))
+    assert _keys(buckets, DEV_BUCKET) == []
+    assert model_router.calls == []
+
+
+def test_the_publish_after_a_dry_run_reads_its_text_caches_and_parses_nothing(
+    world: SyntheticRun, buckets: S3Client
+) -> None:
+    dry = landscape(world, "--caselist", CASELIST, "--publish", "--dry-run")
+    assert dry.exit_code == ExitCode.OK, dry.output
+    assert _data(dry)["text_caches"] == FIRST_FILL
+
+    published = landscape(world, "--caselist", CASELIST, "--publish")
+
+    assert published.exit_code == ExitCode.OK, published.output
+    caches = _data(published)["text_caches"]
+    assert caches["plan_texts"] == {
+        "sources": 2, "cached": 1, "read": 0, "unread": 1, "entries_written": 0, "written": False,
+    }  # fmt: skip
+    assert caches["analytic_texts"] == {
+        "sources": 4, "cached": 1, "read": 0, "unread": 3, "entries_written": 0, "written": False,
+    }  # fmt: skip
+    assert set(KEYS) <= set(_keys(buckets, DEV_BUCKET))
+
+
+def test_a_dry_run_tells_a_person_what_it_kept_in_the_text_caches(world: SyntheticRun) -> None:
+    shown = landscape(world, "--caselist", CASELIST, "--dry-run", json_output=False)
+
+    assert shown.exit_code == ExitCode.OK, shown.output
+    lines = shown.stdout.splitlines()
+    assert "Plan-text cache: 1 of 2 source(s) read, 0 already cached, 1 entry written." in lines
+    assert "Analytic-text cache: 1 of 4 source(s) read, 0 already cached, 1 entry written." in lines
 
 
 def _data_of_failure(result: Result) -> dict[str, Any]:

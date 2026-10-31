@@ -135,7 +135,10 @@ class PlanTextService:
         self._local = local
 
     def without_writes(self) -> PlanTextService:
-        """The same reading over a view of the cache that is never written: what a dry run reads with."""
+        """The same reading over a view of the cache that is never written.
+
+        A landscape dry run no longer reads with it: it fills this cache as a run does (`v1-e32-t30`).
+        """
         return PlanTextService(
             parser=self._parser,
             runner=self._runner,
@@ -301,7 +304,7 @@ def _loader(source: SourceDocument, local: LocalEvidence) -> Callable[[], bytes]
 
 
 class _UnwrittenPlanTexts:
-    """The plan-text cache as it is, read; every write dropped (`v1-e32-t05`'s dry run)."""
+    """The plan-text cache as it is, read; every write dropped (`PlanTextService.without_writes`)."""
 
     def __init__(self, inner: PlanTextStore) -> None:
         self._inner = inner

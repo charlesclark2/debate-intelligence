@@ -1267,10 +1267,10 @@ COMMAND_LINES = {
         "import subprocess\n\n\ndef test_remove():\n"
         '    subprocess.run("debate-research caselist remove --team T", shell=True)\n'
     ),
-    # A line of a script the test writes and runs; the first word of its arguments is an option.
+    # A line of a script the test writes and runs, after a line that reads like words.
     f"{MENTIONS}/test_script_line.py": (
         "import subprocess\n\n\ndef test_version(tmp_path):\n"
-        '    (tmp_path / "check.sh").write_text("set -e\\n  debate-research --version\\n")\n'
+        '    (tmp_path / "check.sh").write_text("echo checking the build\\n  debate-research --version\\n")\n'
         '    subprocess.run(["sh", str(tmp_path / "check.sh")])\n'
     ),
 }
@@ -1290,7 +1290,7 @@ PATHS_TO_THE_PROGRAM = {
         '    subprocess.run([f"{sys.prefix}/bin/debate-research", "--version"])\n'
     ),
 }
-# Shell syntax, an option or a program that runs its arguments before the mention: no sentence.
+# Shell syntax, an option, a program that runs its arguments, or nothing before its quote: no sentence.
 UNREADABLE_MENTIONS = {
     f"{MENTIONS}/test_after_an_assignment.py": (
         "import subprocess\n\n\ndef test_version():\n"
@@ -1308,9 +1308,13 @@ UNREADABLE_MENTIONS = {
         "import subprocess\n\n\ndef test_version():\n"
         '    subprocess.run("sudo -u someone debate-research --version", shell=True)\n'
     ),
-    f"{MENTIONS}/test_quoted_after_an_option.py": (
+    f"{MENTIONS}/test_quoted_after_a_runner.py": (
         "import subprocess\n\n\ndef test_version():\n"
-        "    subprocess.run(\"sh -c 'debate-research --version'\", shell=True)\n"
+        "    subprocess.run(\"uv run 'debate-research' --version\", shell=True)\n"
+    ),
+    f"{MENTIONS}/test_quoted_with_nothing_before.py": (
+        "import subprocess\n\n\ndef test_version():\n"
+        "    subprocess.run(\"'debate-research' --version\", shell=True)\n"
     ),
 }
 MESSAGES = {
@@ -1334,7 +1338,10 @@ MESSAGES = {
         "MESSAGE = \"Run 'debate-research caselist remove' before you pull.\"\n"
     ),
     # The data directory and a folder of the same name are not the program.
-    f"{MENTIONS}/test_data_directory.py": 'DATA = "~/.debate-research/dev"\n',
+    f"{MENTIONS}/test_data_directory.py": (
+        "from pathlib import Path\n\n"
+        'DATA = Path.home() / ".debate-research"\nDEV = "~/.debate-research/dev"\n'
+    ),
     f"{MENTIONS}/test_folder_of_that_name.py": 'STATE = "/var/lib/debate-research/dev"\n',
 }
 CONFTEST_MENTIONS = {

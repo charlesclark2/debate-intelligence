@@ -1706,8 +1706,7 @@ def reads_as_a_sentence(lead: str, runner_runs_it: bool) -> bool:
     """
     words = CODE_SPAN.sub("code", lead).split()
     return bool(
-        lead[-1:].isspace()
-        and words
+        words
         and not any(word.startswith("-") for word in words)
         and SENTENCE_WORD.fullmatch(words[-1])
         and not (runner_runs_it and words[-1] in RUNS_ITS_ARGUMENTS)

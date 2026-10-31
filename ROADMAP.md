@@ -67,8 +67,8 @@ v2.3's extension work.
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 29 | 20 | 166 |
-| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 23 | 17 | 84 |
-| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 34 | 16 | 68 |
+| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 24 | 18 | 86 |
+| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 36 | 17 | 70 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -519,7 +519,7 @@ Debaters search the team's evidence store from a school Chromebook or at home: a
 | [Accounts and sign-in: the session flow, roles, and the coach's tub users commands](plan_specs/v1/e39-evidence-search-pilot/t05-accounts-and-sign-in.yaml) `v1-e39-t05-accounts-and-sign-in` | Succeeded | 1 | 5.0 |
 | [Search pages: search, results, the card page and Copy card, on a Chromebook](plan_specs/v1/e39-evidence-search-pilot/t06-search-pages.yaml) `v1-e39-t06-search-pages` | Succeeded | 2 | 6.0 |
 | [Removal, access audit and exposure: the pilot meets the policy's E39 gate](plan_specs/v1/e39-evidence-search-pilot/t07-removal-audit-and-exposure.yaml) `v1-e39-t07-removal-audit-and-exposure` | Succeeded | 1 | 5.0 |
-| [Download a card or a small file as Verbatim .docx through the E33 writer](plan_specs/v1/e39-evidence-search-pilot/t08-card-download.yaml) `v1-e39-t08-card-download` | InProgress | 3 | 4.0 |
+| [Download a card or a small file as Verbatim .docx through the E33 writer](plan_specs/v1/e39-evidence-search-pilot/t08-card-download.yaml) `v1-e39-t08-card-download` | Succeeded | 3 | 4.0 |
 | [The weekly agent run rebuilds and publishes the search index when the parsed store changed](plan_specs/v1/e39-evidence-search-pilot/t09-weekly-index-refresh.yaml) `v1-e39-t09-weekly-index-refresh` | Succeeded | 1 | 3.0 |
 | [Dev smoke checks, the coach's beta and the student pilot](plan_specs/v1/e39-evidence-search-pilot/t10-pilot-smoke-and-review.yaml) `v1-e39-t10-pilot-smoke-and-review` | Pending | 2 | 3.0 |
 | [Search pages: a result count, a way back to the results, a link to the disclosed file, and Copy card without the provenance line](plan_specs/v1/e39-evidence-search-pilot/t11-search-pages-follow-ups.yaml) `v1-e39-t11-search-pages-follow-ups` | Succeeded | 2 | 4.0 |
@@ -535,6 +535,7 @@ Debaters search the team's evidence store from a school Chromebook or at home: a
 | [The tub deploy test records each stub call alone, as the caselist run's does](plan_specs/v1/e39-evidence-search-pilot/t21-one-call-recorder-for-deploy-tests.yaml) `v1-e39-t21-one-call-recorder-for-deploy-tests` | Succeeded | 0 | 1.0 |
 | [Smoke checks for tub index build, publish and prune, and a test of P4's shape](plan_specs/v1/e39-evidence-search-pilot/t22-tub-index-commands-smoke-and-p4-shape.yaml) `v1-e39-t22-tub-index-commands-smoke-and-p4-shape` | Succeeded | 1 | 2.0 |
 | [uvicorn's app factory lives in the composition root, so app.py stops reaching every adapter](plan_specs/v1/e39-evidence-search-pilot/t23-uvicorn-factory-in-the-composition-root.yaml) `v1-e39-t23-uvicorn-factory-in-the-composition-root` | Pending | 1 | 1.0 |
+| [A card or cart download skips the header page, and the student can name its pocket](plan_specs/v1/e39-evidence-search-pilot/t24-download-skips-the-header-page-and-names-its-pocket.yaml) `v1-e39-t24-download-skips-the-header-page-and-names-its-pocket` | Pending | 1 | 2.0 |
 
 
 ### v1.8 — Weekly caselist run in the cloud
@@ -569,8 +570,9 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [In bucket mode the login banner and the parse stage's other hints point at the cloud run, not the operator's Mac](plan_specs/v1/e40-cloud-caselist-run/t22-bucket-mode-hints-point-at-the-cloud.yaml) `v1-e40-t22-bucket-mode-hints-point-at-the-cloud` | Succeeded | 0 | 1.0 |
 | [The leftover search drops its pre-marker list, and a report over a restored copy requires the marker](plan_specs/v1/e40-cloud-caselist-run/t23-restored-copy-marker-required.yaml) `v1-e40-t23-restored-copy-marker-required` | Pending | 1 | 1.0 |
 | [A restore refuses both environments' data directories, not only its own](plan_specs/v1/e40-cloud-caselist-run/t24-restore-refuses-either-data-directory.yaml) `v1-e40-t24-restore-refuses-either-data-directory` | Pending | 1 | 1.0 |
-| [In bucket mode the failed-publish banners and the CLI's next step point at the cloud run, not a publish from the Mac](plan_specs/v1/e40-cloud-caselist-run/t25-remaining-bucket-mode-publish-pending-hints.yaml) `v1-e40-t25-remaining-bucket-mode-publish-pending-hints` | Pending | 2 | 1.0 |
+| [In bucket mode the failed-publish banners and the CLI's next step point at the cloud run, not a publish from the Mac](plan_specs/v1/e40-cloud-caselist-run/t25-remaining-bucket-mode-publish-pending-hints.yaml) `v1-e40-t25-remaining-bucket-mode-publish-pending-hints` | Succeeded | 2 | 1.0 |
 | [A smoke check reads parses_owed from caselist runs and caselist status](plan_specs/v1/e40-cloud-caselist-run/t26-parses-owed-smoke-check.yaml) `v1-e40-t26-parses-owed-smoke-check` | Pending | 1 | 0.5 |
+| [store sync never moves reports/sync/, so a push of pulled copies cannot overwrite the run's lock or state files](plan_specs/v1/e40-cloud-caselist-run/t27-store-sync-leaves-the-run-state-alone.yaml) `v1-e40-t27-store-sync-leaves-the-run-state-alone` | Pending | 1 | 1.0 |
 
 #### [E41 — Delivery Tooling Upkeep](plan_specs/v1/e41-delivery-tooling-upkeep/epic.yaml)
 
@@ -584,6 +586,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [An import change in container.py that loads no new module reaches only the parts using its names](plan_specs/v1/e41-delivery-tooling-upkeep/t06-container-imports-read-by-use.yaml) `v1-e41-t06-container-imports-read-by-use` | Pending | 1 | 2.0 |
 | [The spec validator holds each epic's graph to its tasks' prerequisites, and the task helper refuses a prerequisite it cannot find](plan_specs/v1/e41-delivery-tooling-upkeep/t07-spec-graph-checks.yaml) `v1-e41-t07-spec-graph-checks` | Succeeded | 1 | 2.0 |
 | [Test selection reads a run-shaped string in an f-string or a comparison, and a shell script's quoted command words](plan_specs/v1/e41-delivery-tooling-upkeep/t08-run-shaped-strings-read-wherever-they-stand.yaml) `v1-e41-t08-run-shaped-strings-read-wherever-they-stand` | Pending | 1 | 2.0 |
+| [validate_specs.py is clean under pyright, and task start refuses an unknown prerequisite even under --force](plan_specs/v1/e41-delivery-tooling-upkeep/t09-validate-specs-pyright-and-start-refuses-unknown.yaml) `v1-e41-t09-validate-specs-pyright-and-start-refuses-unknown` | Pending | 1 | 1.0 |
 
 
 ## V2

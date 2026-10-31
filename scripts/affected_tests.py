@@ -54,8 +54,19 @@ working tree's uncommitted and untracked files, and selects every test file one 
   * Each method of `ServiceContainer`, and each function and class beside it, is a part. An import
     inside one is that part's, and one at the top is the parts' whose code uses the name it binds.
     An import that module code uses (a constant, a base class, a decorator), or that nothing uses,
-    is the whole module's, as a change to the file itself is. A part reaches the parts that call
-    it (`self.X`).
+    is the whole module's. A part reaches the parts that call it (`self.X`).
+  * A change to `container.py` itself is read part by part too (v1-e01-t43): both sides are parsed
+    and compared, and a part whose code changed, or a new one, is where the walk starts, so it
+    reaches what asks for that part and for the parts that call it. Anything that runs when the
+    module is imported is the whole file's: an import, a module constant, the container's own
+    attributes, docstring and dunder methods (`__init__`), a part's decorators, defaults or class
+    body (a new part may add only `@property`, `@staticmethod`, `@classmethod` and literal
+    defaults). So are a part removed, renamed or moved, a changed part that assigns a module name
+    (`global`), a part module code uses, a part the graph's tree does not have, and a side that is
+    missing or does not parse. A change to comments or layout alone reaches no part. A file that
+    names the container module in a string is still reached by that name, unless it reads the
+    container whole, which its edges to every part already say. `--whole-container` reads any
+    change to the file as the whole file, as before.
   * A file that can hold a container (a `debate_cli` module, or a file that imports one) reaches
     each part it names, as an attribute or a quoted word: `cli.services.X`, `services.X` after
     `services = cli.services`, a helper handed the container that calls `services.X`, or a test's
@@ -119,6 +130,7 @@ Usage:
   uv run scripts/affected_tests.py --diff REV          # what commit REV changed
   uv run scripts/affected_tests.py --base A --head B   # B against its merge base with A
   uv run scripts/affected_tests.py --diff REV --graph REV2   # REV's changes over REV2's imports
+  uv run scripts/affected_tests.py --whole-container   # a container.py change read as the whole file
 """
 
 from __future__ import annotations
@@ -137,7 +149,7 @@ import time
 import tomllib
 from collections import deque
 from collections.abc import Iterable, Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 
 DEFAULT_BASE = "origin/dev"
@@ -321,6 +333,8 @@ class Change:
     # For the root pyproject.toml: the tables that differ, `tool.<name>` for a tool's own (v1-e01-t32).
     # None when either version is missing or does not parse; empty when only comments or layout moved.
     tables: frozenset[str] | None = None
+    # For container.py: what changed, part by part (v1-e01-t43). None reads it as the whole file.
+    container: ContainerDiff | None = None
 
 
 def changed_files(root: Path, base: str, head: str | None, diff: str | None) -> list[Change]:
@@ -329,7 +343,7 @@ def changed_files(root: Path, base: str, head: str | None, diff: str | None) -> 
         if len(parents) < 2:
             raise SystemExit(f"affected_tests: {diff} has no parent to compare with")
         listing = git(root, "diff", "--name-status", "--no-renames", "-z", parents[1], parents[0])
-        return with_tables(root, parse_name_status(listing), parents[1], parents[0])
+        return with_readings(root, parse_name_status(listing), parents[1], parents[0])
     tip = head or "HEAD"
     merge_base = git(root, "merge-base", base, tip).decode().strip()
     changes = {
@@ -346,17 +360,23 @@ def changed_files(root: Path, base: str, head: str | None, diff: str | None) -> 
             if path:
                 changes[path] = Change(path, deleted=False)
     ordered = sorted(changes.values(), key=lambda change: change.path)
-    return with_tables(root, ordered, merge_base, head)
+    return with_readings(root, ordered, merge_base, head)
 
 
-def with_tables(root: Path, changes: list[Change], before: str, after: str | None) -> list[Change]:
-    """`changes`, with the tables a root pyproject.toml change touched (`after` None: the working tree)."""
-    return [
-        Change(change.path, change.deleted, changed_tables(root, before, after))
-        if change.path == ROOT_PYPROJECT and not change.deleted
-        else change
-        for change in changes
-    ]
+def with_readings(root: Path, changes: list[Change], before: str, after: str | None) -> list[Change]:
+    """`changes`, with the tables a root pyproject.toml change touched and the parts a container.py
+    change touched (`after` None: the working tree)."""
+    read: list[Change] = []
+    for change in changes:
+        if change.path == ROOT_PYPROJECT and not change.deleted:
+            change = replace(change, tables=changed_tables(root, before, after))
+        elif change.path == CONTAINER and not change.deleted:
+            change = replace(
+                change,
+                container=container_diff(file_at(root, before, CONTAINER), file_at(root, after, CONTAINER)),
+            )
+        read.append(change)
+    return read
 
 
 def changed_tables(root: Path, before: str, after: str | None) -> frozenset[str] | None:
@@ -379,20 +399,22 @@ def changed_tables(root: Path, before: str, after: str | None) -> frozenset[str]
     return frozenset(tables)
 
 
+def file_at(root: Path, revision: str | None, path: str) -> str | None:
+    """A file's text at a commit, or in the working tree; None if it is missing."""
+    if revision is None:
+        file = root / path
+        return file.read_text(encoding="utf-8", errors="replace") if file.is_file() else None
+    shown = subprocess.run(["git", "show", f"{revision}:{path}"], cwd=root, capture_output=True, check=False)
+    if shown.returncode != 0:
+        return None
+    return shown.stdout.decode("utf-8", errors="replace")
+
+
 def pyproject_at(root: Path, revision: str | None) -> dict[str, object] | None:
     """The root pyproject.toml at a commit, or in the working tree; None if missing or unreadable."""
-    if revision is None:
-        file = root / ROOT_PYPROJECT
-        if not file.is_file():
-            return None
-        data = file.read_text(encoding="utf-8")
-    else:
-        shown = subprocess.run(
-            ["git", "show", f"{revision}:{ROOT_PYPROJECT}"], cwd=root, capture_output=True, check=False
-        )
-        if shown.returncode != 0:
-            return None
-        data = shown.stdout.decode("utf-8", errors="replace")
+    data = file_at(root, revision, ROOT_PYPROJECT)
+    if data is None:
+        return None
     try:
         return tomllib.loads(data)
     except tomllib.TOMLDecodeError:
@@ -531,6 +553,9 @@ class Graph:
     app_commands: dict[str, tuple[tuple[str, ...], ...]] = field(default_factory=dict)
     command_children: dict[tuple[str, ...], set[str]] = field(default_factory=dict)
     labels: dict[str, str] = field(default_factory=dict)  # a part -> how --explain shows it
+    # The container's parts, and the files that read it whole, by reflection or as source (v1-e01-t43).
+    container_parts: frozenset[str] = frozenset()
+    container_readers: set[str] = field(default_factory=set)
 
     def add(self, dependent: str, how: str, target: str) -> None:
         if dependent != target:
@@ -930,6 +955,190 @@ def read_container(tree: Tree, resolver: Resolver) -> ContainerReading | None:
     return reading
 
 
+# What a new part may run on import and still be its own: `@property` and its kind, literal defaults.
+INERT_DECORATORS = frozenset({"property", "staticmethod", "classmethod"})
+INERT_NODES = (ast.Constant, ast.Expr, ast.Pass, ast.UnaryOp, ast.USub, ast.Load)
+
+
+@dataclass(frozen=True)
+class ContainerDiff:
+    """A change to `container.py`, part by part, at the parts :func:`read_container` reads (v1-e01-t43).
+
+    `parts` are the parts whose code changed, and the new ones. `whole` says why the change is read
+    as the whole file instead, as every change to it was before: it changed code that runs when the
+    module is imported, or removed or moved a part, or one side cannot be read.
+    """
+
+    parts: frozenset[str] = frozenset()
+    whole: str | None = None
+
+
+@dataclass
+class ContainerOutline:
+    """One side of `container.py`: the code that runs on import, and each part's code."""
+
+    on_import: list[tuple[str, str]] = field(default_factory=list)  # (what it is, its syntax) in order
+    code: dict[str, str] = field(default_factory=dict)  # part -> the syntax of its definitions
+    run_on_import: dict[str, list[ast.AST]] = field(default_factory=dict)  # part -> what defining it runs
+    places: list[tuple[str, str]] = field(default_factory=list)  # (the class or the module, part), in order
+    rebinding: set[str] = field(default_factory=set)  # parts that assign a module name (`global`)
+
+
+def outline_container(text: str | None) -> ContainerOutline | str:
+    """One side of `container.py` outlined part by part; why it cannot be, as a string."""
+    if text is None:
+        return "it is missing on one side"
+    try:
+        syntax = ast.parse(text)
+    except (SyntaxError, ValueError):
+        return "one side does not parse"
+    classes = [
+        node for node in syntax.body if isinstance(node, ast.ClassDef) and node.name == CONTAINER_CLASS
+    ]
+    if len(classes) != 1:
+        return f"one side has no single {CONTAINER_CLASS} class"
+    postponed = any(
+        isinstance(statement, ast.ImportFrom)
+        and statement.module == "__future__"
+        and any(alias.name == "annotations" for alias in statement.names)
+        for statement in syntax.body
+    )
+    outline = ContainerOutline()
+    definitions: dict[str, list[ast.stmt]] = {}
+
+    def add_part(place: str, definition: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef) -> None:
+        definitions.setdefault(definition.name, []).append(definition)
+        outline.places.append((place, definition.name))
+        outline.run_on_import.setdefault(definition.name, []).extend(run_on_import(definition, postponed))
+
+    container_class = classes[0]
+    for statement in syntax.body:
+        if statement is container_class:
+            header = evaluated_with_the_definition(container_class)
+            outline.on_import.append((f"{CONTAINER_CLASS}'s bases and decorators", dump_all(header)))
+            for member in container_class.body:
+                is_method = isinstance(member, ast.FunctionDef | ast.AsyncFunctionDef)
+                if is_method and not (member.name.startswith("__") and member.name.endswith("__")):
+                    add_part(CONTAINER_CLASS, member)
+                else:
+                    outline.on_import.append((what_runs(member, CONTAINER_CLASS), ast.dump(member)))
+        elif isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+            add_part("module", statement)
+        else:
+            outline.on_import.append((what_runs(statement, None), ast.dump(statement)))
+    for name, defined in definitions.items():
+        outline.code[name] = dump_all(defined)
+        if any(isinstance(node, ast.Global) for definition in defined for node in ast.walk(definition)):
+            outline.rebinding.add(name)
+    return outline
+
+
+def run_on_import(definition: ast.stmt, postponed: bool) -> list[ast.AST]:
+    """What defining a part runs: decorators and defaults, a class's body but its methods' bodies,
+    and annotations unless `from __future__ import annotations` postpones them."""
+    found = list(evaluated_with_the_definition(definition))
+    if isinstance(definition, ast.ClassDef):
+        for member in definition.body:
+            if isinstance(member, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+                found.extend(run_on_import(member, postponed))
+            else:
+                found.append(member)
+    elif isinstance(definition, ast.FunctionDef | ast.AsyncFunctionDef) and not postponed:
+        arguments = definition.args
+        every = [
+            *arguments.posonlyargs,
+            *arguments.args,
+            *arguments.kwonlyargs,
+            arguments.vararg,
+            arguments.kwarg,
+        ]
+        found.extend(
+            argument.annotation for argument in every if argument is not None and argument.annotation
+        )
+        if definition.returns is not None:
+            found.append(definition.returns)
+    return found
+
+
+def dump_all(nodes: Iterable[ast.AST]) -> str:
+    return "\n".join(ast.dump(node) for node in nodes)
+
+
+def what_runs(statement: ast.stmt, within: str | None) -> str:
+    """How a reader names a statement module code runs, for the reason a change is read whole."""
+    if isinstance(statement, ast.Import | ast.ImportFrom):
+        kind = "an import"
+    elif isinstance(statement, ast.Assign | ast.AnnAssign | ast.AugAssign):
+        kind = f"a class attribute of {within}" if within else "a module constant"
+    elif isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+        kind = f"{within}.{statement.name}" if within else statement.name
+    elif isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Constant):
+        kind = f"{within}'s docstring" if within else "the module docstring"
+    elif isinstance(statement, ast.If):
+        kind = "an `if` block"
+    else:
+        kind = "module code"
+    return f"{kind} (line {statement.lineno})"
+
+
+def is_inert(nodes: list[ast.AST]) -> bool:
+    """Whether what defining a part runs can neither fail nor reach anything: literals and `@property`."""
+    return all(
+        isinstance(node, INERT_NODES) or (isinstance(node, ast.Name) and node.id in INERT_DECORATORS)
+        for top in nodes
+        for node in ast.walk(top)
+    )
+
+
+def container_diff(old_text: str | None, new_text: str | None) -> ContainerDiff:
+    """Compare two sides of `container.py` part by part, failing toward the whole file.
+
+    A part's code changing, or a new part, is that part's. The whole file is changed by anything
+    that runs on import: an import, a module constant, the container's own attributes, docstring and
+    dunder methods, any part's decorators, defaults or class body (a new part may add only
+    `@property`, `@staticmethod`, `@classmethod` and literal defaults); and by a part removed,
+    renamed or moved, a changed part that assigns a module name, and a side that cannot be read.
+    """
+    old, new = outline_container(old_text), outline_container(new_text)
+    if isinstance(old, str) or isinstance(new, str):
+        return ContainerDiff(whole=old if isinstance(old, str) else str(new))
+    for index in range(max(len(old.on_import), len(new.on_import))):
+        # Compared without the labels, whose line numbers move when a part above grows.
+        before = old.on_import[index] if index < len(old.on_import) else None
+        after = new.on_import[index] if index < len(new.on_import) else None
+        if before is None or after is None or before[1] != after[1]:
+            what = (after or before or ("module code", ""))[0]
+            return ContainerDiff(whole=f"it changes {what}, which runs when the module is imported")
+    removed = sorted(old.code.keys() - new.code.keys())
+    if removed:
+        return ContainerDiff(whole=f"it removes or renames {removed[0]}")
+    kept = old.code.keys() & new.code.keys()
+
+    def order(outline: ContainerOutline) -> list[tuple[str, str]]:
+        return [place for place in dict.fromkeys(outline.places) if place[1] in kept]
+
+    if order(old) != order(new):
+        return ContainerDiff(whole="it moves a part, and a class body runs in order")
+    changed: set[str] = set()
+    for part in sorted(kept):
+        if dump_all(old.run_on_import[part]) != dump_all(new.run_on_import[part]):
+            return ContainerDiff(
+                whole=f"it changes what defining {part} runs on import: a decorator, a default, a class body"
+            )
+        if old.code[part] != new.code[part]:
+            changed.add(part)
+    for part in sorted(new.code.keys() - kept):
+        if not is_inert(new.run_on_import[part]):
+            return ContainerDiff(
+                whole=f"the new {part} runs code on import: a decorator, a default or a class body"
+            )
+        changed.add(part)
+    rebinding = sorted(changed & (old.rebinding | new.rebinding))
+    if rebinding:
+        return ContainerDiff(whole=f"{rebinding[0]} assigns a module name, which every part reads")
+    return ContainerDiff(parts=frozenset(changed))
+
+
 def reads_the_container_whole(syntax: ast.AST) -> bool:
     """Whether a file reads the container class by reflection, or the container module as source.
 
@@ -1014,6 +1223,7 @@ def add_container_parts(tree: Tree, layout: Layout, graph: Graph, reading: Conta
     a quoted word; one that reads the container whole reaches every part. A file that does not
     parse reaches every part too.
     """
+    graph.container_parts = frozenset(reading.part_files)
     for part, files in sorted(reading.part_files.items()):
         node = part_of(CONTAINER, part)
         graph.labels[node] = f"{CONTAINER_MODULE}'s {part} ({CONTAINER})"
@@ -1035,6 +1245,8 @@ def add_container_parts(tree: Tree, layout: Layout, graph: Graph, reading: Conta
     for holder in sorted(holders):
         syntax = tree.syntax(holder) if holder.endswith(".py") else None
         readers = container_readers(syntax) if syntax is not None else None
+        if syntax is None or reads_the_container_whole(syntax):
+            graph.container_readers.add(holder)
         if readers is None or (readers and holder not in layout.path_modules):
             for part in every_part:
                 graph.add(holder, READS_EVERY_PART, part_of(CONTAINER, part))
@@ -1966,6 +2178,8 @@ class Walk:
         self.notes: list[str] = []
         self.runs: dict[str, frozenset[Run]] = {}
         self.runners: dict[str, list[tuple[str, str]]] = {}
+        # A changed container.py walked from the parts it changed, until something reaches it whole.
+        self.read_by_part: set[str] = set()
         self.conftests = sorted(
             path for path in layout.tree.paths if PurePosixPath(path).name == "conftest.py"
         )
@@ -1974,6 +2188,11 @@ class Walk:
         if path not in self.why:
             self.why[path] = (how, via)
             self.queue.append(path)
+        elif path in self.read_by_part:
+            # Module code uses a part that changed, or an import it runs did: the whole file after all.
+            self.read_by_part.discard(path)
+            self.queue.append(path)
+            self.to_search[path] = keys_for(path, self.layout, deleted=False)
         elif self.reached_by_fixtures(path) and how not in FIXTURE_EDGES:
             # First reached through an import its fixtures carry, now by a name or a change: every
             # test beneath it is reached after all.
@@ -1987,7 +2206,16 @@ class Walk:
     def start(self, change: Change) -> None:
         path = change.path
         self.why[path] = ("was deleted" if change.deleted else "changed", None)
-        if not change.deleted:
+        parts = self.changed_parts(change)
+        if parts is not None:
+            self.read_by_part.add(path)
+            for part in sorted(parts):
+                self.why[part_of(path, part)] = ("changed", None)
+                self.queue.append(part_of(path, part))
+            for dependent, how in self.graph.dependents.get(path, ()):
+                if how != IMPORTS:
+                    self.reach(dependent, how, path)  # an importer asks for the parts it names
+        elif not change.deleted:
             self.queue.append(path)
         lost_from = deleted_module_name(path, self.layout) if change.deleted else None
         if lost_from is not None:
@@ -1997,6 +2225,23 @@ class Walk:
         self.to_search[path] = keys_for(path, self.layout, change.deleted)
         if is_data_file(path):
             self.data_files.add(path)
+
+    def changed_parts(self, change: Change) -> frozenset[str] | None:
+        """The parts a change to container.py is walked from; None to walk the whole file (v1-e01-t43)."""
+        reading = change.container
+        if change.path != CONTAINER or reading is None:
+            return None
+        if reading.whole is not None:
+            self.notes.append(f"{CONTAINER} is read as one file: {reading.whole}.")
+            return None
+        missing = sorted(reading.parts - self.graph.container_parts)
+        if not self.graph.container_parts or missing:
+            unread = f"has no {', '.join(missing)}" if self.graph.container_parts else "is not read by part"
+            self.notes.append(f"{CONTAINER} is read as one file: this tree's container {unread}.")
+            return None
+        changed = ", ".join(sorted(reading.parts)) or "none: only comments or layout"
+        self.notes.append(f"{CONTAINER} is read by part. Parts changed: {changed}.")
+        return reading.parts
 
     def run(self) -> str | None:
         """Walk until nothing new is reached; the reason if the whole selection is affected."""
@@ -2043,6 +2288,9 @@ class Walk:
                 mentioners |= mentions.get(key, set())
             mentioners.discard(path)
             mentioners = {mentioner for mentioner in mentioners if self.can_read(mentioner, path)}
+            if path in self.read_by_part:
+                # Their reading is in the graph already, as edges to every part (v1-e01-t39).
+                mentioners -= self.graph.container_readers
             for mentioner in sorted(mentioners):
                 self.reach(mentioner, HAS_A_PATH_TO if mentioner in denoters else NAMES, path)
             if path in self.data_files and not mentioners:
@@ -2201,6 +2449,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--graph", metavar="REV", help="build the import graph from REV's files rather than the changes' own"
     )
+    parser.add_argument(
+        "--whole-container",
+        action="store_true",
+        help=f"read a change to {CONTAINER} as the whole file, as before v1-e01-t43",
+    )
     parser.add_argument("--explain", action="store_true", help="print why each test file was selected")
     parser.add_argument("--run", action="store_true", help="run pytest over the selection with CI's markers")
     arguments = parser.parse_args(argv)
@@ -2214,6 +2467,8 @@ def main(argv: list[str] | None = None) -> int:
     root = repository_root()
     started = time.monotonic()
     changes = changed_files(root, arguments.base, arguments.head, arguments.diff)
+    if arguments.whole_container:
+        changes = [replace(change, container=None) for change in changes]
     revision = arguments.graph or arguments.diff or arguments.head
     tree = Tree.at(root, revision) if revision else Tree.working(root)
     if arguments.graph:

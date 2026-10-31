@@ -26,8 +26,9 @@ working tree's uncommitted and untracked files, and selects every test file one 
   a sentence (shell syntax such as `&&` or `X=1`, an option, or a program that runs its arguments,
   such as `uv run`). After a sentence, or inside a code span or quotes a sentence holds, it is
   prose: `"Fix: run `debate-research caselist parse` first"` runs nothing. A code span may open
-  the line, as the fragments a message joins do. Part of another name (`~/.debate-research`) or a
-  folder in a path is not the program. Any other file, such as a shell script, runs every console
+  the line, as the fragments a message joins do. Part of another name (`~/.debate-research`), or a
+  name a slash goes on from (a folder, the User-Agent's `debate-research/<version>`), is not the
+  program. Any other file, such as a shell script, runs every console
   script it names, and `--every-mention-runs` reads every mention that way, as before.
 * **Names.** A file read or run by path is found by its name, in the string literals of Python
   files (docstrings and comments describe files, they do not read them) and anywhere in a shell
@@ -1670,8 +1671,8 @@ def starts_the_program(string: str, start: int, end: int) -> bool:
 
     Read on the name's own line of the string, from the start of the line:
 
-    * Another name, never a run: one the name ends (`~/.debate-research`), or a folder in a path
-      (`/var/lib/debate-research/dev`).
+    * Another name, never a run: one the name ends (`~/.debate-research`), or one a slash goes on
+      from: a folder (`/var/lib/debate-research/dev`), the User-Agent's `debate-research/<version>`.
     * A run: the program alone (an argument list's first word, `shutil.which`'s argument), a line
       that starts with it (a command line, a line of a script), or a path to it (`f"{bin}/..."`).
     * Prose, when a sentence comes before it: words, with no option, ending in a word a sentence

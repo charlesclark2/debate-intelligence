@@ -220,7 +220,7 @@ def pull(
         return
     if not cli.output.is_json:
         cli.output.success(command_name(ctx), payload, display=display)
-    failure = _pull_failure(summary, payload)
+    failure = _pull_failure(summary, payload, bucket_mode=bracket.bucket_mode)
     cli.output.failure(failure, command=command_name(ctx))
     raise typer.Exit(code=failure.exit_code)
 
@@ -410,7 +410,9 @@ def _backlog_sentence(record: SyncRunRecord | None) -> str:
     return f" Carried from the previous run: {record.backlog_carried} deferred.{growing}"
 
 
-def _pull_failure(summary: RunSummary, payload: dict[str, JsonValue]) -> CommandFailure:
+def _pull_failure(
+    summary: RunSummary, payload: dict[str, JsonValue], *, bucket_mode: bool = False
+) -> CommandFailure:
     """What an incomplete run reports: the stages that failed, and the whole summary.
 
     Its exit code is `3` when every failure behind a stage that had to finish is one a retry may
@@ -435,13 +437,13 @@ def _pull_failure(summary: RunSummary, payload: dict[str, JsonValue]) -> Command
         message=f"{did_not_complete} — {named}",
         exit_code=exit_code,
         details=payload,
-        hint=_hint_for(failed, retryable=exit_code is ExitCode.RETRIEVAL_FAILURE),
+        hint=_hint_for(failed, retryable=exit_code is ExitCode.RETRIEVAL_FAILURE, bucket_mode=bucket_mode),
         panel_message=f"{did_not_complete}: {', '.join(str(record.stage) for record in failed)}",
         panel_details=every_value_in_full(panel),
     )
 
 
-def _hint_for(failed: list[StageRecord], *, retryable: bool) -> str:
+def _hint_for(failed: list[StageRecord], *, retryable: bool, bucket_mode: bool = False) -> str:
     """What to do about the failed stages: the fix a stage names, or else how to run it again.
 
     A stage a store refused carries its own fix, a permission on this machine or a grant the AWS

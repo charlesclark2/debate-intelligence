@@ -286,7 +286,7 @@ async def test_a_run_with_one_of_each_names_each_caselist_its_own_command(instal
         f"`{PUBLISH_ONLY_THE_WEEKLY}` publishes the parsed store as this run rebuilt it from every copy "
         f"of the suppression list, and rebuilds nothing. `{REBUILD_OPENEV}` publishes a caselist's "
         "parsed store: it parses nothing already parsed, rebuilds the aggregates and uploads what the "
-        "bucket lacks. The next pull that imports into that caselist does the same; "
+        "bucket lacks. The next pull does the same; "
         "`caselist pull --publish-pending` does not."
     )
     assert parse_notification(watched).fix_command == f"{PUBLISH_ONLY_THE_WEEKLY}; {REBUILD_OPENEV}"
@@ -339,7 +339,7 @@ async def test_two_caselists_whose_publish_alone_is_owed_are_named_together(
     assert str(stage(watched.summary, SyncStage.PARSE)["hint"]).endswith(
         f"`{PUBLISH_ONLY_THE_WEEKLY}` and `{PUBLISH_ONLY_OPENEV}` each publish the parsed store as this "
         "run rebuilt it from every copy of the suppression list, and rebuild nothing. The next pull "
-        "that imports into that caselist does the same; `caselist pull --publish-pending` does not."
+        "does the same; `caselist pull --publish-pending` does not."
     )
     assert parse_notification(watched).fix_command == f"{PUBLISH_ONLY_THE_WEEKLY}; {PUBLISH_ONLY_OPENEV}"
 

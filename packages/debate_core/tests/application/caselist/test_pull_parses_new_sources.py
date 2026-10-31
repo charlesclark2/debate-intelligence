@@ -115,8 +115,8 @@ finish (`v1-e34-t31`). This installation's list is one copy, read whole, so ever
 
 PUBLISH_ONLY_FIX: Final = (
     f"`{PUBLISH_ONLY}` publishes the parsed store as this run rebuilt it from every copy of the "
-    "suppression list, and rebuilds nothing. The next pull that imports into that caselist does the "
-    "same; `caselist pull --publish-pending` does not."
+    "suppression list, and rebuilds nothing. The next pull does the same; "
+    "`caselist pull --publish-pending` does not."
 )
 
 COUNTS_OF_THE_FIRST_PARSE = (

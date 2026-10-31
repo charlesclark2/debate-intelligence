@@ -131,7 +131,7 @@ THE_PENDING_WORK_FILE_NEEDS_A_PERSON = (
 PUBLISH_THE_PARSED_STORE = (
     f"`debate-research caselist parse --caselist {CASELIST} --publish-only` publishes the parsed store "
     "as this run rebuilt it from every copy of the suppression list, and rebuilds nothing. The next "
-    "pull that imports into that caselist does the same; `caselist pull --publish-pending` does not."
+    "pull does the same; `caselist pull --publish-pending` does not."
 )
 """The parse stage's hint when its rebuild read every copy of the list and its publish failed
 (`v1-e34-t31`): the caselist by name, and `--publish-only`, since only the publish is owed."""

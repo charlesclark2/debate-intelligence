@@ -332,7 +332,7 @@ THE_LONGEST_HINTS = (
     "`debate-research caselist parse --caselist hspf26 --publish` and "
     "`debate-research caselist parse --caselist openev --publish` each publish a caselist's parsed "
     "store: each parses nothing already parsed, rebuilds the aggregates and uploads what the bucket "
-    "lacks. The next pull that imports into that caselist does the same; "
+    "lacks. The next pull does the same; "
     "`caselist pull --publish-pending` does not."
 )
 """Since `v1-e34-t31` the parse stage's fix names each caselist owed with its own command."""

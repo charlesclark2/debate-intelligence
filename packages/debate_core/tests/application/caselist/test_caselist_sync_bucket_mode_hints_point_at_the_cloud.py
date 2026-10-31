@@ -118,8 +118,8 @@ THE_FAILURE_RATE_HINT_ON_THE_MAC: Final = (
 
 THE_NEWER_TABLE_HINT_IN_THE_CLOUD: Final = (
     f"The occurrence table of {CASELIST} {VERSION} in the bucket is stamped {NEWER}, and the cloud "
-    f"run's image's fingerprint version is {BUILD}. The next cloud run that imports into {CASELIST} on "
-    f"an image whose fingerprint version is {NEWER} or later rebuilds and publishes it: a new image is "
+    f"run's image's fingerprint version is {BUILD}. The next cloud run on an image whose fingerprint "
+    f"version is {NEWER} or later rebuilds and publishes it: a new image is "
     'built and applied as caselist-cloud-run.md, "A new image, later" says, after the PM\'s word; never '
     "a rebuild or a publish from the operator's Mac."
 )

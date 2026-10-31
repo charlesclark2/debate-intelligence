@@ -23,6 +23,21 @@ file again. `files suggest --caselist <slug> --position <id>` writes a draft rec
 landscape's most-read cards: `status: draft`, which `files build` builds only with `--allow-draft`.
 Neither ever writes inside a git working tree. This page is about the recipe itself (`v1-e33-t01`).
 
+## Drafting a counterplan file
+
+When the position is a counterplan in the topic's taxonomy (`kind: cp`), `files suggest` drafts it the
+way a CP file is built (`v1-e33-t11`). Its first block opens with a slot for the counterplan's text,
+`- analytic: "[the counterplan text: write it here]"`, which you replace with the text your team
+reads. The draft never fills it from another team's file or from the landscape report's CP texts.
+Nothing checks that you replaced it: `files build` on a `ready` recipe still holding it builds it as
+written, so read it over before you build. A block whose heading names another position, such as a
+topicality block that sat in the same 1NC, is left out with its cards, and the command's table and
+`--json` (`other_positions_left_out`) count the blocks and cards it left out. A block whose heading
+names no position stays. A block whose heading names a plank or mechanism of the plan (an
+affirmative's alias or tag keyword in the taxonomy, or a plank label such as `Plank 2`) stays, with
+the comment `# Check this block against the affirmative's plan` above it: its cards may make sense
+only against a plan that has that plank. Any other position's draft is written as before.
+
 ## A recipe holds no evidence
 
 There is no field for a card's text or its cite, and there never will be. A card is its

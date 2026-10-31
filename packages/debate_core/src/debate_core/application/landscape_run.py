@@ -382,6 +382,8 @@ class LandscapeRunResult:
     aff source read none (`v1-e32-t30`)."""
     taxonomy: Taxonomy | None = field(default=None, repr=False)
     """The taxonomy the report counted under, for a reader of :attr:`report` (`files suggest`)."""
+    overrides: OverrideRules | None = field(default=None, repr=False)
+    """The coach's heading overrides the report placed under, so `files suggest` places a heading alike."""
     cards: tuple[LandscapeCard, ...] = field(default=(), repr=False)
     """Every card the report ranked from, with its cluster and its headings as the matcher reads them."""
     bundle_files: Mapping[str, str] = field(default_factory=dict[str, str], repr=False)
@@ -633,6 +635,7 @@ class LandscapeRunService:
             analytic_texts=texts,
             plan_texts=affs.plan_texts,
             taxonomy=taxonomy,
+            overrides=overrides,
             cards=cards,
             bundle_files={name: bundle.files[name] for name in BUNDLE_FILES},
         )

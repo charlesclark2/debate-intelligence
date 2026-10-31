@@ -49,7 +49,10 @@ from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.suppression import RecordedSuppressionList
 from debate_core.application.file_recipes import RecipeResolver, load_recipe
 from debate_core.application.file_suggest_service import (
+    CHECK_AGAINST_THE_PLAN,
+    CP_TEXT_SLOT,
     FileSuggestService,
+    OtherPositionsLeftOut,
     SuggestRefused,
     SuggestRequest,
     SuggestResult,
@@ -101,6 +104,11 @@ CARDS: Final = {
     "capital": ("Political capital is finite", "Okafor 26", "capital"),
     "drain": ("The plan drains capital", "Lindgren 25", "drain"),
     "agenda": ("Losing hurts the agenda", "Mbatha 26", "agenda"),
+    "fiat": ("Fifty states can act together", "Halvorsen 26", "fiat"),
+    "solvency": ("States act faster", "Nakamura 26", "solvency"),
+    "usfg": ("Only the federal government acts", "Pereira 25", "usfg"),
+    "budgets": ("Budgets need one federal payer", "Oyelaran 25", "budgets"),
+    "waivers": ("Waivers take years to win", "Brannigan 26", "waivers"),
 }
 
 
@@ -118,8 +126,13 @@ class Team:
 QX, ZALU, BECO = Team("Maple Grove", "QX"), Team("Cedar Hollow", "ZaLu"), Team("Northgate", "BeCo")
 XY, MNPR, RQ = Team("Westfield", "XY"), Team("Riverbend", "MnPr"), Team("Lakeside", "RQ")
 
+Heading = str | tuple[str, ...]
+"""A card's heading under `1NC`, or its whole heading path."""
+
+PlantedFile = tuple[str, str, tuple[Team, ...], tuple[tuple[Heading, str], ...]]
+
 #: (file, snapshot, teams disclosing it, cards as (heading, card name)).
-FILES: Final[tuple[tuple[str, str, tuple[Team, ...], tuple[tuple[str, str], ...]], ...]] = (
+FILES: Final[tuple[PlantedFile, ...]] = (
     ("alpha", "2026-09-15", (QX, ZALU), (("Politics DA", "capital"), ("Politics DA", "drain"))),
     ("bravo", "2026-09-08", (BECO,), (("Politics DA", "capital"), ("Politics Links", "drain"))),
     ("charlie", "2026-09-08", (XY,), (("Politics Links", "drain"), ("Politics Links", "agenda"))),
@@ -185,7 +198,8 @@ def plant(
     root: Path,
     *,
     on_record: Sequence[Team] = (QX, ZALU, BECO, XY, MNPR, RQ),
-    files: Sequence[tuple[str, str, tuple[Team, ...], tuple[tuple[str, str], ...]]] = FILES,
+    files: Sequence[PlantedFile] = FILES,
+    taxonomy: str = TAXONOMY,
 ) -> World:
     """The table above under `root`. Only the teams in `on_record` have their disclosures recorded."""
     data_dir = root / "data"
@@ -197,7 +211,11 @@ def plant(
         digest = store.source(
             name,
             [
-                PlantedCard(("1NC", heading), tag=CARDS[card][0], short_cite=CARDS[card][1])
+                PlantedCard(
+                    heading if isinstance(heading, tuple) else ("1NC", heading),
+                    tag=CARDS[card][0],
+                    short_cite=CARDS[card][1],
+                )
                 for heading, card in cards
             ],
             disclosures=[(snapshot, team.path(name)) for team in teams],
@@ -213,7 +231,7 @@ def plant(
     config_dir = root / "config"
     (config_dir / "taxonomies").mkdir(parents=True)
     (config_dir / "topics.yaml").write_text(TOPICS, encoding="utf-8")
-    (config_dir / "taxonomies" / f"{TOPIC}.yaml").write_text(TAXONOMY, encoding="utf-8")
+    (config_dir / "taxonomies" / f"{TOPIC}.yaml").write_text(taxonomy, encoding="utf-8")
     return World(root=root, data_dir=data_dir, config_dir=config_dir, digests=digests, caselists=caselists)
 
 
@@ -471,3 +489,230 @@ def test_the_ranks_and_counts_are_the_ones_the_landscape_report_lists_in_top_car
     listed = [(one.rank, one.teams_reading) for one in report.top_cards if one.position_id == "politics-da"]
     suggested = world.suggest(position="politics-da", top=10).cards
     assert sorted((one.rank, one.teams_reading) for one in suggested) == listed == [(1, 5), (2, 4), (3, 1)]
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e33-t11: any other position's draft is byte for byte what it was before counterplans had their own
+# ------------------------------------------------------------------------------------------------
+
+
+def test_a_draft_that_is_not_a_counterplans_is_byte_for_byte_as_before(world: World) -> None:
+    """Written by hand from the table at the top, as `v1-e33-t03` wrote politics-da's draft."""
+    chosen = lower_digest_team("alpha", QX, ZALU)
+    alpha = (
+        f'              caselist: "{CASELIST}"\n'
+        f'              source_sha256: "{world.digests["alpha"]}"\n'
+        "              element_index: {index}\n"
+        '              side: "NEG"\n'
+        f'              school: "{chosen.school}"\n'
+        f'              team_code: "{chosen.code}"\n'
+        '              tournament: "Lantern Classic"\n'
+        '              round: "Round 1"\n'
+    )
+    expected = (
+        "# Draft recipe from the synthfile26 landscape through 2026-09-15: the 3 most-read\n"
+        "# card(s) of politics-da, by the number of teams that read each. Each card is pinned to the\n"
+        "# occurrence a build would choose. Edit the headings and order, add your own cards and analytics,\n"
+        "# write your own tags, then set status: ready. Written by `debate-research files suggest`.\n"
+        "schema_version: 1\n"
+        'title: "Politics DA: most-read cards"\n'
+        f"topic: {TOPIC}\n"
+        "format: POLICY\n"
+        f"caselist: {CASELIST}\n"
+        "position: politics-da\n"
+        "side: NEG\n"
+        f"fingerprint_version: {FINGERPRINT_VERSION}\n"
+        "status: draft\n"
+        "structure:\n"
+        '  - pocket: "Politics DA"\n'
+        "    blocks:\n"
+        '      - block: "politics da"\n'
+        "        items:\n"
+        "          # rank 1: read by 5 teams through 2026-09-15\n"
+        f"          - fingerprint: {fingerprint_of('capital')}\n"
+        "            pin:\n" + alpha.format(index=0) + '      - block: "politics links"\n'
+        "        items:\n"
+        "          # rank 2: read by 4 teams through 2026-09-15\n"
+        f"          - fingerprint: {fingerprint_of('drain')}\n"
+        "            pin:\n"
+        + alpha.format(index=3)
+        + "          # rank 3: read by 1 team through 2026-09-15\n"
+        f"          - fingerprint: {fingerprint_of('agenda')}\n"
+        "            pin:\n"
+        f'              caselist: "{CASELIST}"\n'
+        f'              source_sha256: "{world.digests["charlie"]}"\n'
+        "              element_index: 3\n"
+    )
+    result = world.suggest(position="politics-da", top=10)
+    assert result.path.read_bytes() == expected.encode("utf-8")
+    assert result.other_positions is None
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e33-t11: a counterplan's draft opens with a slot for its text, holds no block another position's
+# heading places, and marks the blocks whose heading names a plank or mechanism of the plan
+# ------------------------------------------------------------------------------------------------
+
+CP_TAXONOMY: Final = f"""\
+schema_version: 1
+topic_id: {TOPIC}
+taxonomy_version: 1.0.0
+event: POLICY
+positions:
+  - {{id: states-cp, label: States CP, kind: cp, side: neg, aliases: [states cp]}}
+  - {{id: t-usfg, label: T USFG, kind: t, side: neg, aliases: [t usfg]}}
+  - {{id: single-payer-aff, label: Single payer, kind: aff, side: aff, aliases: [single payer],
+     tag_keywords: [global budgets]}}
+"""
+
+T1, T2, T3 = Team("Elm Ridge", "AbCd"), Team("Foxmoor", "EfGh"), Team("Granite Bay", "IjKl")
+T4, T5, T6, T7 = (
+    Team("Harlow", "MnOp"),
+    Team("Ivywood", "QrSt"),
+    Team("Juniper", "UvWx"),
+    Team("Kestrel", "YzAb"),
+)
+
+STATES: Final = ("1NC", "States CP")
+T_USFG: Final = ("1NC", "T USFG")
+
+#: Seven teams' 1NCs on 09-08, one file each.
+CP_FILES: Final[tuple[PlantedFile, ...]] = (
+    (
+        "kilo",
+        "2026-09-08",
+        (T1,),
+        (
+            (STATES, "fiat"),
+            ((*STATES, "Solvency"), "solvency"),
+            (STATES, "usfg"),
+            ((*STATES, "Global Budgets"), "budgets"),
+            ((*STATES, "Plank 2 Waivers"), "waivers"),
+        ),
+    ),
+    (
+        "lima",
+        "2026-09-08",
+        (T2,),
+        (
+            (STATES, "fiat"),
+            ((*STATES, "Solvency"), "solvency"),
+            (STATES, "usfg"),
+            ((*STATES, "Global Budgets"), "budgets"),
+        ),
+    ),
+    ("mike", "2026-09-08", (T3,), ((STATES, "fiat"), ((*STATES, "Solvency"), "solvency"), (STATES, "usfg"))),
+    (
+        "november",
+        "2026-09-08",
+        (T4,),
+        ((STATES, "fiat"), ((*STATES, "Solvency"), "solvency"), (T_USFG, "usfg")),
+    ),
+    ("oscar", "2026-09-08", (T5,), ((STATES, "fiat"), (T_USFG, "usfg"))),
+    ("papa", "2026-09-08", (T6,), ((T_USFG, "fiat"), (T_USFG, "usfg"))),
+    ("quebec", "2026-09-08", (T7,), ((T_USFG, "usfg"),)),
+)
+"""Read under states-cp: `fiat` by T1-T5 (5 teams), `solvency` by T1-T4 (4; `Solvency` places nothing,
+so `States CP` above it places it), `usfg` by T1-T3 (3), `budgets` by T1-T2 (2) and `waivers` by T1 (1).
+
+* `fiat`'s copies sit five under `states cp` and one under `t usfg`: its block is `states cp`.
+* `usfg`'s sit three under `states cp` and four under `t usfg`, which places t-usfg: its block is another
+  position's, the coach's T-USFG block, and is left out of the CP's draft with its one card.
+* `solvency`'s block heading places nothing, and stays.
+* `global budgets` holds single-payer-aff's tag keyword, a mechanism of the plan; `plank 2 waivers` opens
+  with a plank label as `v1-e32-t16` reads one. Both are marked for the coach to check against the plan.
+
+Read under t-usfg, a T and not a counterplan: `usfg` by T4-T7 (4) and `fiat` by T6 (1), whose block is
+`states cp`, another position's heading, which a T's draft keeps as it always has.
+"""
+
+
+@pytest.fixture
+def cp_world(tmp_path: Path) -> World:
+    return plant(tmp_path, on_record=(T1, T2, T3, T4, T5, T6, T7), files=CP_FILES, taxonomy=CP_TAXONOMY)
+
+
+def test_a_counterplans_draft_opens_its_first_block_with_the_cp_text_slot(cp_world: World) -> None:
+    result = cp_world.suggest(position="states-cp")
+    (first_block, first_items), *_ = items_of(result.path.read_text(encoding="utf-8"))
+    assert first_block == "states cp"
+    assert first_items[0] == {"analytic": "[the counterplan text: write it here]"}
+    assert first_items[1]["fingerprint"] == fingerprint_of("fiat")
+
+
+def test_the_cp_text_slot_is_the_drafts_only_analytic_and_no_team_wrote_it(cp_world: World) -> None:
+    text = cp_world.suggest(position="states-cp").path.read_text(encoding="utf-8")
+    analytics = [item["analytic"] for _, items in items_of(text) for item in items if "analytic" in item]
+    assert analytics == [CP_TEXT_SLOT]
+    for tag, cite, _ in CARDS.values():
+        assert tag not in text and cite not in text
+
+
+def test_a_block_another_positions_heading_places_is_left_out_with_its_cards(cp_world: World) -> None:
+    result = cp_world.suggest(position="states-cp")
+    text = result.path.read_text(encoding="utf-8")
+    assert [block for block, _ in items_of(text)] == [
+        "states cp",
+        "solvency",
+        "global budgets",
+        "plank 2 waivers",
+    ]
+    assert fingerprint_of("usfg") not in text
+    assert result.other_positions == OtherPositionsLeftOut(blocks=1, cards=1)
+    assert [card.rank for card in result.cards] == [1, 2, 4, 5]
+    assert result.left_out == ()
+
+
+def test_a_block_whose_heading_places_nothing_stays_in_a_counterplans_draft(cp_world: World) -> None:
+    text = cp_world.suggest(position="states-cp").path.read_text(encoding="utf-8")
+    assert ("solvency", [fingerprint_of("solvency")]) in [
+        (block, [item.get("fingerprint") for item in items]) for block, items in items_of(text)
+    ]
+
+
+def test_blocks_naming_a_plank_or_mechanism_of_the_plan_are_marked_and_no_others(cp_world: World) -> None:
+    lines = cp_world.suggest(position="states-cp").path.read_text(encoding="utf-8").splitlines()
+    blocks = {line.strip(): index for index, line in enumerate(lines) if line.strip().startswith("- block:")}
+    above = {block: lines[index - 1].strip() for block, index in blocks.items()}
+    assert list(above) == [
+        '- block: "states cp"',
+        '- block: "solvency"',
+        '- block: "global budgets"',
+        '- block: "plank 2 waivers"',
+    ]
+    assert above['- block: "global budgets"'] == above['- block: "plank 2 waivers"'] == CHECK_AGAINST_THE_PLAN
+    assert CHECK_AGAINST_THE_PLAN not in (above['- block: "states cp"'], above['- block: "solvency"'])
+    assert sum(line.strip() == CHECK_AGAINST_THE_PLAN for line in lines) == 2
+
+
+def test_a_counterplans_draft_still_validates_and_loads(cp_world: World) -> None:
+    text = cp_world.suggest(position="states-cp").path.read_text(encoding="utf-8")
+    jsonschema.validate(yaml.safe_load(text), yaml.safe_load(SCHEMA.read_text(encoding="utf-8")))
+    loaded = load_recipe(text)
+    assert loaded.ok, loaded.errors
+
+
+def test_a_draft_of_a_position_that_is_not_a_counterplan_keeps_another_positions_block(
+    cp_world: World,
+) -> None:
+    result = cp_world.suggest(position="t-usfg")
+    text = result.path.read_text(encoding="utf-8")
+    assert [(block, [item.get("fingerprint") for item in items]) for block, items in items_of(text)] == [
+        ("t usfg", [fingerprint_of("usfg")]),
+        ("states cp", [fingerprint_of("fiat")]),
+    ]
+    assert CP_TEXT_SLOT not in text and CHECK_AGAINST_THE_PLAN not in text
+    assert result.other_positions is None
+
+
+def test_a_counterplan_whose_every_card_is_in_another_positions_block_is_refused(tmp_path: Path) -> None:
+    """T5 reads `usfg` under `States CP`, and T6 and T7 under `T USFG`: its block is t-usfg's."""
+    files: tuple[PlantedFile, ...] = (
+        ("oscar", "2026-09-08", (T5,), ((STATES, "usfg"),)),
+        ("papa", "2026-09-08", (T6,), ((T_USFG, "usfg"),)),
+        ("quebec", "2026-09-08", (T7,), ((T_USFG, "usfg"),)),
+    )
+    built = plant(tmp_path, on_record=(T5, T6, T7), files=files, taxonomy=CP_TAXONOMY)
+    with pytest.raises(SuggestRefused, match="another position"):
+        built.suggest(position="states-cp")
+    assert not (built.files_dir / "recipes").exists()

@@ -50,7 +50,7 @@ spec:
         and reports what it left out; a non-CP draft is byte for byte as before; tests shown
         failing first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

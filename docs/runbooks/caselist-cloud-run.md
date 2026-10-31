@@ -912,6 +912,12 @@ AWS session, and its working copy ends with its task;`, where a Mac's run says i
 fetched", and a manifest owed again is said without "the publish after the login uploads this
 machine's copy" ([A manifest published again](#a-manifest-published-again)).
 
+Since `v1-e40-t28` the run's record and details say the same. Every stage reason and hint that says
+the session was not usable ends with the fix line's words, `the PM looks into the cloud run's task
+role, which gave the run no AWS session (…)`, where a run on the Mac, or a bucket-mode command run by
+hand on the Mac, names `aws sso login --profile <profile>`. The run tells the two apart by bucket mode
+inside an ECS task, which only the run task is.
+
 **What it means.** A cloud run's AWS session is its task role's (`debate-dev-caselist-run`), which
 ECS renews for as long as the task runs. The Mac's SSO session ran out after hours; the role's
 should not. A run that found none points at the role, its policies or the run's task definition, and
@@ -1033,6 +1039,56 @@ person: send the PM its run's id.
 **Never run `caselist pull --publish-pending` on the operator's Mac** for it. It would upload the
 Mac's own copy of the manifest, which is not the cloud run's. A run on an image built before
 `v1-e40-t25` still names that command as its fix; the rule holds for that email too.
+
+## A failed or stopped run
+
+When a cloud run stops on an error before its stages, or a stage fails beyond the publish alone or
+the parse alone (a failed import beside a failed publish, a failed download, a failed report stage),
+the alert email (`caselist pull failed: …` or `caselist pull finished with a failed stage`) has this
+fix line since `v1-e40-t28`:
+
+> Fix: the next cloud run takes up what this run did not finish, from the run state saved in the bucket: the weekly run, or one started by hand (caselist-cloud-run.md, "A failed or stopped run"); never a publish from the operator's Mac
+
+A failed-stage email ends `What the bucket confirmed is kept; the cloud run's working copy ends with
+its task.`, where a run on the Mac says `What was captured is kept.`: an archive the cloud run
+downloaded and did not import, and a snapshot it captured and did not publish, ended with its task
+(ADR-0020 (3), "What is not saved"). The run's own output, in its log, ends with the fix line's words
+after `In bucket mode`, or after a stage's own fix, after `Then in bucket mode`.
+
+**What happens next.** The next run, the Wednesday one or one started by hand, restores the bucket's
+run state and does what this one did not. An archive this run lost it downloads again, within the
+day's downloads; a week whose bundle was not saved it redoes, as in
+[A failed publish stage](#a-failed-publish-stage).
+
+**What to do: usually nothing.** An email titled `will be retried` failed on something the next run
+may not meet. One titled `needs a person` or `retried once fixed`, or one that carries a hint, goes
+to the PM with the run's id: the hint is what has to be fixed before the next run helps. A run by
+hand is
+[Step 8's "One run by hand"](#step-8--the-seed-bucket-mode-and-one-run-by-hand-at-the-cutover-after-v1-e40-t04).
+
+**Not `caselist pull` on the operator's Mac** for a cloud run's failure. Which machine runs the week
+is [caselist-cutover.md](caselist-cutover.md)'s, and falling back to the Mac is the PM's decision. A
+run on an image built before `v1-e40-t28` still names `debate-research caselist pull` as its fix;
+the rule holds for that email too.
+
+## A backlog growing
+
+When the archives a cloud run's daily download cap deferred have grown for two runs in a row, the
+email `caselist backlog growing` has this fix line since `v1-e40-t28`:
+
+> Fix: the next cloud run fetches more of what the daily download cap deferred, once the day's downloads reset: the weekly run, or one started by hand (caselist-cloud-run.md, "A backlog growing"); never a publish from the operator's Mac
+
+A run on the Mac names `debate-research caselist pull (again tomorrow, when the day's downloads
+reset)` instead.
+
+**What it means.** OpenCaselist allows five bulk downloads a day, and a run defers what they do not
+cover. The day's downloads are counted in the download ledger, a state file the bucket keeps, so a
+run started by hand on the same day fetches nothing more.
+
+**What to do: usually nothing.** Each Wednesday's run fetches more, and nothing deferred is lost
+while it waits. If a caselist cannot wait, ask the PM for a run by hand on a later day
+([Step 8's "One run by hand"](#step-8--the-seed-bucket-mode-and-one-run-by-hand-at-the-cutover-after-v1-e40-t04)).
+A run on an image built before `v1-e40-t28` still names the pull again tomorrow as its fix.
 
 ## The deadline, and stopping a run
 

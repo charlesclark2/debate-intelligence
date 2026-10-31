@@ -251,6 +251,7 @@ from debate_core.application.settings import (
 from debate_core.application.snapshot_service import SnapshotService
 from debate_core.application.structured_output import StructuredOutputGuard
 from debate_core.application.sync_runs import (
+    CLOUD_NO_SESSION_CURE,
     SYNC_RUN_LOG_FILENAME,
     SyncRunHistory,
     SyncRunLog,
@@ -381,6 +382,11 @@ def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+def _ecs_task_metadata() -> str:
+    """This ECS task's metadata address, without a trailing `/`, or `""` outside ECS (`v1-e40-t04`)."""
+    return os.environ.get(_ECS_METADATA_VARIABLE, "").rstrip("/")
+
+
 class _PortClock:
     """:meth:`ServiceContainer.clock` as the :class:`~debate_core.application.ports.providers.Clock` port."""
 
@@ -418,7 +424,8 @@ MODEL_CASSETTES_DIRECTORY: Final = "model-cassettes"
 the data directory, never committed, and under its retention and removal."""
 
 _ECS_METADATA_VARIABLE: Final = "ECS_CONTAINER_METADATA_URI_V4"
-"""Set by ECS in every task's containers: how the run lock tells the cloud run from the Mac."""
+"""Set by ECS in every task's containers: how the run lock tells the cloud run from the Mac, and the S3
+adapters' login hint does too (`v1-e40-t28`)."""
 
 _EVERYDAY_PROFILE_SETTING: Final = "storage.s3.aws_profile"
 _REMOVAL_PROFILE_SETTING: Final = "DEBATE_REMOVAL_PROFILE"
@@ -1025,6 +1032,7 @@ class ServiceContainer:
             client=self._s3_client(profile=s3.aws_profile, profile_setting=_EVERYDAY_PROFILE_SETTING),
             profile=s3.aws_profile,
             profile_setting=_EVERYDAY_PROFILE_SETTING,
+            login_hint=self._s3_login_hint,
         )
         return VersionDirectoryRetention(place, parser_version=parser_version)
 
@@ -1240,6 +1248,7 @@ class ServiceContainer:
                 client=client,
                 profile=storage.s3.aws_profile,
                 profile_setting=_EVERYDAY_PROFILE_SETTING,
+                login_hint=self._s3_login_hint,
                 multipart_threshold_bytes=storage.s3.multipart_threshold_bytes,
             )
 
@@ -1339,6 +1348,7 @@ class ServiceContainer:
                 bucket=str(storage.s3.bucket),
                 profile=storage.s3.aws_profile,
                 profile_setting=_EVERYDAY_PROFILE_SETTING,
+                login_hint=self._s3_login_hint,
                 client=self._s3_client(
                     profile=storage.s3.aws_profile, profile_setting=_EVERYDAY_PROFILE_SETTING
                 ),
@@ -1383,6 +1393,7 @@ class ServiceContainer:
                 bucket=str(storage.s3.bucket),
                 profile=storage.s3.aws_profile,
                 profile_setting=_EVERYDAY_PROFILE_SETTING,
+                login_hint=self._s3_login_hint,
                 client=self._s3_client(
                     profile=storage.s3.aws_profile, profile_setting=_EVERYDAY_PROFILE_SETTING
                 ),
@@ -1599,7 +1610,7 @@ class ServiceContainer:
             endpoint_url=s3.endpoint_url,
             ignore_configured_endpoints=self._ignores_configured_endpoints,
         )
-        metadata = os.environ.get(_ECS_METADATA_VARIABLE, "").rstrip("/")
+        metadata = _ecs_task_metadata()
         return BucketRunLock(
             store=S3LockObject(
                 bucket=str(s3.bucket),
@@ -1607,6 +1618,7 @@ class ServiceContainer:
                 client=client,
                 profile=s3.aws_profile,
                 profile_setting=_EVERYDAY_PROFILE_SETTING,
+                login_hint=self._s3_login_hint,
             ),
             environment=settings.environment.value,
             clock=self.clock(),
@@ -1705,6 +1717,21 @@ class ServiceContainer:
         settings = self.settings
         return settings.caselist.run_state is RunStateMode.BUCKET and bool(settings.storage.s3.bucket)
 
+    @property
+    def _s3_login_hint(self) -> str | None:
+        """What the everyday profile's S3 adapters name for a session that is not usable (`v1-e40-t28`).
+
+        In the cloud run, its task role's cure,
+        :data:`~debate_core.application.sync_runs.CLOUD_NO_SESSION_CURE`. The cloud run is told from an
+        operator's hand run by what the code already knows: bucket mode (:attr:`_in_bucket_mode`), and
+        an ECS task, which ECS marks with `ECS_CONTAINER_METADATA_URI_V4` in every container it starts,
+        as the run lock tells its holder. Only the run task is both; the login task is not in bucket
+        mode. Anything else, local mode or a bucket-mode command an operator runs on the Mac, gives
+        `None`: the adapters' own `aws sso login`. The takedown profile's adapters are given none
+        anywhere: `DEBATE_REMOVAL_PROFILE` is an SSO profile an operator signs in to.
+        """
+        return CLOUD_NO_SESSION_CURE if self._in_bucket_mode and _ecs_task_metadata() else None
+
     def bucket_write_guard(self) -> BucketWriteGuard:
         """What every command that writes to this environment's bucket enters first (`v1-e40-t04`).
 
@@ -1754,6 +1781,7 @@ class ServiceContainer:
             client=self._s3_client(profile=storage.s3.aws_profile, profile_setting=_EVERYDAY_PROFILE_SETTING),
             profile=storage.s3.aws_profile,
             profile_setting=_EVERYDAY_PROFILE_SETTING,
+            login_hint=self._s3_login_hint,
             multipart_threshold_bytes=storage.s3.multipart_threshold_bytes,
         )
 

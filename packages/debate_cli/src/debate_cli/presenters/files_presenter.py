@@ -9,6 +9,11 @@ failed. Nothing here decides an outcome: the build service decided it.
 Counts, digests, paths of the files written, the place in the recipe of each card a problem is about,
 and each check's PASS, WARN or FAIL. Never card text, a school or a team code: no result holds one.
 
+`files check` and `files build` follow the checks table with one line per WARN or FAIL result, in the
+`.quality.md`'s words and order (:func:`~debate_core.evidence.file_checks.report.finding_line`), and
+`--json` carries the same results under `quality.findings`, each shaped as the `.quality.json`'s
+`results` entries are (`v1-e33-t12`). A file with no WARN or FAIL prints the table alone.
+
 ## Exit codes
 
 * `0`: built (or checked) and every check passed or only warned; a draft was written; every file was
@@ -40,7 +45,7 @@ from debate_core.application.file_build_service import (
 )
 from debate_core.application.file_publish_service import PublishOutcome, PublishResult, PublishStatus
 from debate_core.application.file_suggest_service import SuggestResult
-from debate_core.evidence.file_checks.report import CheckStatus, FileQualityReport
+from debate_core.evidence.file_checks.report import CheckStatus, FileQualityReport, finding_line
 
 __all__ = [
     "Rendered",
@@ -356,6 +361,7 @@ def _quality_payload(report: FileQualityReport) -> dict[str, JsonValue]:
             for one in report.checks
         ],
         "failing_checks": [str(one.check) for one in report.checks if one.status is CheckStatus.FAIL],
+        "findings": [one.model_dump(mode="json") for one in report.findings],
     }
 
 
@@ -367,7 +373,15 @@ def _checks_table(report: FileQualityReport, *, title: str, caption: str | None)
         ],
         title=title,
         caption=caption,
+        lines_below=_findings_lines(report),
     )
+
+
+def _findings_lines(report: FileQualityReport) -> list[str]:
+    """Each WARN and FAIL under a heading, as `.quality.md` words them; nothing for a clean file."""
+    if not report.findings:
+        return []
+    return ["Failures and warnings:", *(f"  {finding_line(one)}" for one in report.findings)]
 
 
 def _quality_failure(

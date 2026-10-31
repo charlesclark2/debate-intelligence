@@ -11,7 +11,9 @@ counts them.
 A report sits beside the built file and may be passed around more freely than the file itself. It
 names a card by its position in the file and its fingerprint, a check by its name, and a heading by
 the coach's own heading text (the recipe's, which the sidecar records); a message says *which field*
-differs and never what it says. The Markdown names a card by position and fingerprint prefix.
+differs and never what it says. The Markdown names a card by position and fingerprint prefix, and
+`files check` and `files build` print its failures and warnings in the same words (:func:`finding_line`,
+`v1-e33-t12`).
 
 ## The schema
 
@@ -22,7 +24,7 @@ differs and never what it says. The Markdown names a card by position and finger
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from enum import StrEnum
 from typing import Any, Final, Literal, Self
 
@@ -42,6 +44,7 @@ __all__ = [
     "CheckSummary",
     "FileQualityReport",
     "QualityCheck",
+    "finding_line",
     "quality_report_names",
     "render_file_quality_report_schema",
     "render_markdown",
@@ -206,6 +209,11 @@ class FileQualityReport(DomainModel):
             **fields,
         )
 
+    @property
+    def findings(self) -> tuple[CheckResult, ...]:
+        """Every WARN and FAIL result, in the report's order: what `.quality.md` lists last."""
+        return tuple(result for result in self.results if result.status is not CheckStatus.PASS)
+
     def summary(self, check: QualityCheck) -> CheckSummary:
         return next(summary for summary in self.checks if summary.check is check)
 
@@ -222,8 +230,36 @@ def _short(fingerprint: str | None) -> str:
     return f"`{fingerprint[:12]}`" if fingerprint else "-"
 
 
+def _plain_short(fingerprint: str | None) -> str:
+    return fingerprint[:12] if fingerprint else "-"
+
+
 def _cell(text: str) -> str:
     return text.replace("|", "\\|").replace("\n", " ")
+
+
+def _place(result: CheckResult, short: Callable[[str | None], str]) -> str:
+    """Where a result is: `card 6 (f3ef62b7c151), paragraph 7, under Politics DA > Link`; "" for the file."""
+    where: list[str] = []
+    if result.card_position is not None:
+        where.append(f"card {result.card_position} ({short(result.fingerprint)})")
+    if result.paragraph_index is not None:
+        where.append(f"paragraph {result.paragraph_index}")
+    if result.section_path:
+        where.append("under " + " > ".join(result.section_path))
+    return ", ".join(where)
+
+
+def finding_line(result: CheckResult) -> str:
+    """One WARN or FAIL as `files check` and `files build` print it: the `.quality.md`'s line, plain.
+
+    `WARN cite-present card 6 (f3ef62b7c151): the card has no cite`, and for a result about the whole
+    file `FAIL sidecar: <message>`.
+    """
+    where = _place(result, _plain_short)
+    place = f" {where}" if where else ""
+    message = result.message.replace("\n", " ")
+    return f"{result.status} {result.check}{place}: {message}"
 
 
 def render_markdown(report: FileQualityReport) -> str:
@@ -279,19 +315,12 @@ def render_markdown(report: FileQualityReport) -> str:
                 cells.append(str(_worst(statuses)) if statuses else "-")
             lines.append(f"| {position} | {_short(fingerprint)} | " + " | ".join(cells) + " |")
 
-    findings = [result for result in report.results if result.status is not CheckStatus.PASS]
     lines += ["", "## Failures and warnings", ""]
-    if not findings:
+    if not report.findings:
         lines.append("None.")
-    for result in findings:
-        where: list[str] = []
-        if result.card_position is not None:
-            where.append(f"card {result.card_position} ({_short(result.fingerprint)})")
-        if result.paragraph_index is not None:
-            where.append(f"paragraph {result.paragraph_index}")
-        if result.section_path:
-            where.append("under " + " > ".join(result.section_path))
-        place = f" {', '.join(where)}:" if where else ""
+    for result in report.findings:
+        where = _place(result, _short)
+        place = f" {where}:" if where else ""
         lines.append(f"* **{result.status}** `{result.check}`{place} {_cell(result.message)}")
     return "\n".join(lines) + "\n"
 

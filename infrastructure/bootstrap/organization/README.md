@@ -13,7 +13,7 @@ How to run it: [docs/runbooks/aws-account-baseline.md](../../../docs/runbooks/aw
 | `main.tf` | Data sources for the existing Organization and Identity Center instance, naming locals, pre-apply checks |
 | `identity.tf` | The three permission sets, their policies, and account assignments |
 | `cloudtrail.tf` | Organization trail, its KMS key, and its log bucket |
-| `budgets.tf` | Per-environment budgets, the model spend budget (through [`modules/model_spend_budget`](../../modules/model_spend_budget/)), cost anomaly detection |
+| `budgets.tf` | Per-environment budgets, the model spend budget (through [`modules/model_spend_budget`](../../modules/model_spend_budget/)), the cost allocation tags they filter on (through [`modules/cost_allocation_tags`](../../modules/cost_allocation_tags/)), cost anomaly detection |
 
 ## Operator-only
 

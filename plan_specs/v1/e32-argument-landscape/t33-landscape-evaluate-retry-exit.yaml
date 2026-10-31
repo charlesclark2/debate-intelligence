@@ -41,7 +41,7 @@ spec:
         throttled stop of either command reports `retry_after_seconds` when the cause
         carries it, by tests shown failing first.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

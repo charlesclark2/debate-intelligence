@@ -1494,6 +1494,26 @@ def test_what_runs_when_the_module_is_imported_is_the_whole_file(
     assert f"{CONTAINER_FILE} is read as one file: {reason}" in result.stderr
 
 
+@pytest.mark.parametrize(
+    ("old", "new", "by_part"),
+    [("    MOST = 1\n", "    MOST = 2\n", False), ("        return 1\n", "        return 2\n", True)],
+    ids=["its class body", "its method's code"],
+)
+def test_a_class_beside_the_container_runs_its_body_on_import(
+    workspace: Workspace, old: str, new: str, by_part: bool
+) -> None:
+    setup = {
+        CONTAINER_FILE: CLI_WORLD[CONTAINER_FILE]
+        + "\n\nclass Limits:\n    MOST = 1\n\n    def least(self):\n        return 1\n"
+    }
+    result = described_after(workspace, container_edit(old, new, setup), setup=setup)
+    if by_part:
+        assert_selected(result, EVERY_PART | ALWAYS | READS_SOURCE)
+    else:
+        assert_selected(result, WHOLE_CONTAINER | ALWAYS | READS_SOURCE)
+        assert "is read as one file: it changes what defining Limits runs on import" in result.stderr
+
+
 def test_a_part_module_code_uses_is_the_whole_file(workspace: Workspace) -> None:
     setup = container_edit("MOST = LIMIT\n", "def _most():\n    return LIMIT\n\n\nMOST = _most()\n")
     change = container_edit("    return LIMIT\n", "    return LIMIT + 1\n", setup)

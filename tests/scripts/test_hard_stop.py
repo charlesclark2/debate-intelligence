@@ -148,10 +148,15 @@ def _finish(run: subprocess.Popen[str]) -> tuple[int, str, str, float]:
     try:
         stdout, stderr = run.communicate(timeout=OUTER_TIMEOUT)
     except subprocess.TimeoutExpired:
-        run.kill()
-        run.wait()
         # Whatever the script failed to stop still holds its pipes open, so they never reach end of
         # file; the pid_dir fixture kills those processes.
+        if run.poll() is not None:
+            pytest.fail(
+                f"hard_stop.py exited {run.returncode}, but processes it should have stopped still "
+                f"held its output open {OUTER_TIMEOUT} s later"
+            )
+        run.kill()
+        run.wait()
         pytest.fail(f"hard_stop.py was still running after {OUTER_TIMEOUT} s")
     return run.returncode, stdout, stderr, time.monotonic() - started
 

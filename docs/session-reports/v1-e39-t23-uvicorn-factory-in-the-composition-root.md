@@ -287,3 +287,13 @@ The edge is gone. A parser-only merge now selects 10 API files instead of 25, an
 7. **Merge:** `--partial` once `ci` is green. Then the held dev pilot deploy carries this task,
    v1-e39-t24 and v1-e39-t10's logging. Its `/healthz` through CloudFront closes this task's ac1, and
    v1-e39-t10's journey follows.
+
+## Operator records (recorded by the PM, 2026-10-31)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac1: the image's smoke check passes | NOT RUN | PASS | 2026-10-31, `scripts/tub_deploy.sh dev` from the `tub-deploy-dev` worktree at `origin/dev` `66182c0` (this task's merge, with v1-e39-t24 and v1-e39-t10), as `DebateDevTubDeployer`: exit 0, `{"status":"ok"}` from `/healthz` through CloudFront, the function on `debate-dev-tub@sha256:d807ac0c…`. In `debate-dev-tub-app`, no `Error loading ASGI app factory` in the hour after; the first cold start's `Init Duration: 6589.41 ms` (a new image, not yet cached; earlier inits were about 2 s) |
+
+Every criterion passes, so the Goal is `Succeeded`.

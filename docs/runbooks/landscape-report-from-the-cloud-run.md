@@ -195,15 +195,15 @@ filled the plan-text and analytic-text caches, so the publish parses no source a
 a text the report quotes; about as long as the dry run with a build before it)
 Where: your Mac, in the same window
 ```bash
-if [ "$(date +%u)" = 3 ]; then echo "STOP: it is Wednesday, the cloud run's day"; elif env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif [ ! -d "$COPY" ]; then echo "STOP: no copy at ${COPY}"; elif [ ! -f "$CFG/topics.yaml" ]; then echo "STOP: no topics.yaml in ${CFG}"; else aws sso login --profile debate-dev-evidence && cd "$HOME" && caffeinate -i env DEBATE_ENV=dev debate-research --json landscape report --caselist "$CASELIST" --restored-copy "$COPY" --config-dir "$CFG" --model-mode none --publish > /tmp/landscape-publish.json; echo "exit $?"; python3 -I -c 'import json, sys; e = json.load(open(sys.argv[1])); d = e.get("data") or (e.get("error") or {}).get("details") or {}; p = d.get("publish") or {}; print("code", (e.get("error") or {}).get("code")); print("snapshot", d.get("snapshot"), "model_calls", d.get("model_calls"), "cards", (d.get("counts") or {}).get("cards")); print("uploaded", len(p.get("uploaded") or []), "unchanged", len(p.get("unchanged") or []), "refused", p.get("refused"))' /tmp/landscape-publish.json; fi
+if [ "$(date +%u)" = 3 ]; then echo "STOP: it is Wednesday, the cloud run's day"; elif env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif [ ! -d "$COPY" ]; then echo "STOP: no copy at ${COPY}"; elif [ ! -f "$CFG/topics.yaml" ]; then echo "STOP: no topics.yaml in ${CFG}"; else aws sso login --profile debate-dev-evidence && cd "$HOME" && caffeinate -i env DEBATE_ENV=dev debate-research --json landscape report --caselist "$CASELIST" --restored-copy "$COPY" --config-dir "$CFG" --model-mode none --publish > /tmp/landscape-publish.json; echo "exit $?"; python3 -I -c 'import json, sys; e = json.load(open(sys.argv[1])); d = e.get("data") or (e.get("error") or {}).get("details") or {}; p = d.get("publish") or {}; print("code", (e.get("error") or {}).get("code"), "cause", ((e.get("error") or {}).get("details") or {}).get("cause_code"), "retry_after", ((e.get("error") or {}).get("details") or {}).get("retry_after_seconds")); print("snapshot", d.get("snapshot"), "model_calls", d.get("model_calls"), "cards", (d.get("counts") or {}).get("cards")); print("uploaded", len(p.get("uploaded") or []), "unchanged", len(p.get("unchanged") or []), "refused", p.get("refused"))' /tmp/landscape-publish.json; fi
 ```
-Success looks like `exit 0`, `code None`, the dry run's `snapshot` and `cards`, `model_calls 0`, and
+Success looks like `exit 0`, `code None cause None retry_after None`, the dry run's `snapshot` and `cards`, `model_calls 0`, and
 `uploaded` plus `unchanged` equal to 7, with `uploaded` above zero for a week not published before.
 `RUN_LOCK_HELD`: a run holds the lock; wait and run this block again. In a model run, `MODEL_STAGE_INTERRUPTED`
 with exit `3` means the model was throttled or did not answer (`error.details.cause_code` says which): the
 cards it answered are cached, so run the same block again later and it asks only about the rest
-(`v1-e32-t32`). On exit `3`, wait the `retry_after_seconds` that `error.details` in
-`/tmp/landscape-publish.json` gives, when it gives one, and then run the same block again; Bedrock's
+(`v1-e32-t32`). On exit `3`, wait the `retry_after_seconds` the block prints as `retry_after`, when it is
+not `None`, and then run the same block again; Bedrock's
 throttling states no wait today, so the key is usually absent (`v1-e32-t33`). The same code with exit
 `1` is a refused call: stop and tell the PM. `landscape evaluate` exits the same way when its model stage
 stops: `3` for a throttle or a model that did not answer, `1` for a refused call, both with

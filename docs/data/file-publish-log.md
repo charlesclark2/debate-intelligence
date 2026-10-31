@@ -29,7 +29,7 @@ The three files' prefixes, to the position (each continues with the slug and the
 | `files/nhi/aff/politics-da/` | 5 |
 | `files/space-colonization/neg/` | 5 |
 
-## Prod, 2026-11-01: the first coach-approved file
+## Prod, 2026-10-31: the first coach-approved file
 
 The coach chose one file, read it in Word and approved it. Built from the dev data directory on
 `2026.10.27-docx-7` and published with `DEBATE_ENV=prod` and `--confirm-prod`. Recorded by the PM.

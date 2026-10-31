@@ -290,3 +290,13 @@ destroy is refused before it can zero the budgets.
    * The expected plan is `Plan: 2 to import, 0 to add, 0 to change, 0 to destroy.`
    * This apply comes before any other apply of `bootstrap/organization`, e05-t17's included.
    * Not on a Wednesday.
+
+## Operator records (recorded by the PM, 2026-10-31)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac1 (second half): the plan against the account shows them already Active, read by the PM, and the apply | NOT RUN | PASS | 2026-10-31, from the `cost-allocation-tags-apply` worktree at `origin/dev` `fd9a789`, as `DebateBreakGlassAdmin`: the plan `Plan: 2 to import, 0 to add, 0 to change, 0 to destroy.`, with no error, destroy or replace line; `COSTTAGSPLAN` printed `PLAN OK: two changes, Project imported and Environment imported, each Active; nothing else changes; permission set or assignment changes: 0; budget changes: 0`; read by the PM. Applied: `cost allocation tags in state: 2`, and AWS reads back `Environment Active`, `Project Active`. A plan after the apply: `-detailed-exitcode` 0, `No changes. Your infrastructure matches the configuration.` |
+
+Every criterion passes, so the Goal is `Succeeded`. v1-e05-t19 (the import blocks removed) is ready.

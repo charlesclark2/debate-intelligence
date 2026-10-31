@@ -1,0 +1,79 @@
+# TASK v1-e41-t11-selector-ast-walk-and-container-contract - Test selection no longer reads ast.walk( as a directory walk, and a contract keeps debate_api.container imported one way
+# Epic: E41 — Delivery Tooling Upkeep | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e41-t11-selector-ast-walk-and-container-contract
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+  annotations:
+    debate/title: "Test selection no longer reads ast.walk( as a directory walk, and a contract keeps debate_api.container imported one way"
+spec:
+  # Filed by the PM, 2026-10-31, from v1-e39-t23's Follow-up work 1 and 2 (the PM's review, 2026-10-31).
+  description: >-
+    Two follow-ups of v1-e39-t23. (1) `scripts/affected_tests.py`'s `DIRECTORY_WALK` pattern
+    (`\b(?:rglob|glob|iterdir|walk)\(`) reads `ast.walk(` as a directory walk, so a test that
+    parses one named file and walks its syntax tree is selected by every Python change
+    (`test_card_download_image.py` today). Stop matching `ast.walk(` (and a walk on an `ast`
+    node generally) while `os.walk(`, `Path.walk(` and a bare `.walk(` on a path still match;
+    measure the selection before and after on t20's parser-only merge `387c961`, as v1-e39-t23
+    did. (2) After v1-e39-t23 no module of `debate_api` but the container imports
+    `debate_api.container`. Add a lint-imports `forbidden` contract that keeps it so (every
+    other `debate_api` module may not import it), shown broken by a planted import.
+  priority: 3
+  constraints:
+    packages: [scripts, tests/scripts, pyproject.toml, packages/debate_api/tests]
+    forbidden:
+      - A test file dropped from a selection where a real directory walk reads it
+      - A contract that is not kept on dev's tree
+  context:
+    - kind: TaskRef
+      name: v1-e39-t23-uvicorn-factory-in-the-composition-root
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The selector no longer selects a test for `ast.walk(` alone and still selects one
+        for `os.walk(` and `Path.walk(`, with the 387c961 counts before and after; the new
+        contract is kept on dev's tree and broken by a planted import; tests shown failing
+        first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e41-t11-selector-ast-walk-and-container-contract-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+spec:
+  description: >-
+    Test selection no longer reads ast.walk( as a directory walk, and a contract keeps
+    debate_api.container imported one way.
+  goalRef:
+    name: v1-e41-t11-selector-ast-walk-and-container-contract
+  graph:
+    nodes:
+      - id: selector-ast-walk-and-container-contract
+        kind: Task
+        name: Selector and container contract
+        description: >-
+          Test selection no longer reads ast.walk( as a directory walk, and a contract
+          keeps debate_api.container imported one way.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Selector and container contract tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, -k, affected_tests]
+status:
+  phase: Pending

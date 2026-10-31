@@ -83,7 +83,7 @@ spec:
         states them (cited, never restated, so email and site cannot diverge), the rules
         from the publishing policy, and who owns the list.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

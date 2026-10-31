@@ -312,3 +312,23 @@ plan.
     * ac1's run against dev;
     * the journey;
     * ac2, ac3, ac5's numbers, ac6 and ac7.
+
+## Operator records (recorded by the PM, 2026-10-31)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac1: the dev smoke checks pass against dev (operator-run) | NOT RUN | PASS, with a fault found | 2026-10-31, after the dev deploy of `66182c0`: run as the runbook gives it, `uv run pytest tests/smoke/cloud -m "live and dev"` gave `3 failed`, each `SocketBlockedError: A test tried to use socket.getaddrinfo`: the repository's `--disable-socket` blocks the checks' in-process HTTPS, and tests/smoke's conftest lets a `live` check skip only its own extra block. With `--force-enable-socket`: `3 passed in 3.84s`. validate-dev's `cloud` job runs the same command, and validate-dev has failed on every pre-release since; the fix is v1-e39-t26 (p1). Step 8's checks: `302 private, no-store` to managed login, the six headers, the function URL `{"Message":"Forbidden"} 403` |
+
+ac1's run against dev is recorded. The Goal stays `InProgress` for the journey, ac2, ac3, ac5's numbers, ac6 and ac7.
+
+## PM record, 2026-10-31: promotion item 12 requested
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+The Lambda bandwidth quota (`L-14320ECE`, "Network bandwidth per execution environment", 625 Mbps,
+adjustable) was requested at 1,250 Mbps on 2026-10-31, before the promotion as the PM ruled: request
+`57c67e70…`, `PENDING`, then `CASE_OPENED`. One request covers dev and prod, which share one account.
+The gzip object was 318,115,067 bytes that day, 1.3% above 2026-10-22's, so the growth the item feared
+has not come.

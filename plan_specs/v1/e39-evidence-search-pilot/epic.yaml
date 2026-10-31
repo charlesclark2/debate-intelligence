@@ -620,5 +620,23 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e39-t25-identical-rebuild-skipped-and-newest-records
+    - id: t26
+      kind: Task
+      name: 'The cloud smoke checks reach dev: a check marked live is let through pytest-socket, and validate-dev''s cloud job proves it'
+      description: >-
+        The cloud smoke checks reach dev: a check marked live is let through pytest-socket,
+        and validate-dev's cloud job proves it.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t26-cloud-smoke-checks-reach-dev.yaml
+        goalRef: v1-e39-t26-cloud-smoke-checks-reach-dev
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t26-cloud-smoke-checks-reach-dev reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t26-cloud-smoke-checks-reach-dev
 status:
   phase: Pending

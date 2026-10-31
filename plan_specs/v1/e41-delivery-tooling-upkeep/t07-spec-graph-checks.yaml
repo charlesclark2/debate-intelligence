@@ -45,7 +45,7 @@ spec:
         Succeeded epic with an open task; `task ready` and `task prereqs` refuse an unknown
         prerequisite; dev's spec tree passes; by tests shown failing first.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

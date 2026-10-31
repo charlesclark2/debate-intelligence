@@ -1,0 +1,84 @@
+# TASK v1-e39-t26-cloud-smoke-checks-reach-dev - The cloud smoke checks reach dev: a check marked live is let through pytest-socket, and validate-dev's cloud job proves it
+# Epic: E39 — Team Evidence Search (Student Pilot) | Release: v1.7 (Team evidence search pilot) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e39-t26-cloud-smoke-checks-reach-dev
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+  annotations:
+    debate/title: "The cloud smoke checks reach dev: a check marked live is let through pytest-socket, and validate-dev's cloud job proves it"
+spec:
+  # Filed by the PM, 2026-10-31, from v1-e39-t10's ac1 run against dev (the operator, 2026-10-31).
+  description: >-
+    v1-e39-t10's cloud checks (`tests/smoke/cloud`, marked `live` and `dev`) fail wherever they
+    run for real: `3 failed`, each `pytest_socket.SocketBlockedError: A test tried to use
+    socket.getaddrinfo`. The repository's pytest options include `--disable-socket`, and
+    tests/smoke's conftest (`_sockets_blocked_unless_live`) only skips its own extra block for a
+    `live` check: it never turns pytest-socket back on, and these checks call dev over HTTPS in
+    pytest's own process (the canary tier shells out to the installed CLI, so pytest-socket
+    never sees it). With `--force-enable-socket` the same three checks pass against dev (`3
+    passed in 3.84s`). validate-dev's `cloud` job runs the same command, so validate-dev has
+    failed on every pre-release since v1-e39-t10 merged, and the image deploy takes the newest
+    green one. Make a check marked `live` run with the network on in pytest's process, and every
+    other check exactly as blocked as today, including under `--force-enable-socket`; and add a
+    test that would have caught this: one that runs a `live` check through real pytest with the
+    repository's own options and an in-process loopback server, which t10's tests (the checks
+    called against the app in-process, no socket) could not. Then the driver's cloud tier
+    (`scripts/validate_dev.py cloud`) passes on dev's head; say how the operator confirms it on
+    the next pre-release.
+  priority: 1
+  constraints:
+    packages: [tests/smoke, tests/scripts, scripts, docs/runbooks]
+    forbidden:
+      - A non-live check given the network
+      - A real network call in a test (loopback only)
+      - The cloud job given a secret, token or AWS credential
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A `live` check reaches a loopback server through real pytest with the repository's
+        options while a non-live check is still refused, with and without
+        `--force-enable-socket`, by tests shown failing first; the cloud tier passes against
+        dev (operator, on the next validate-dev run).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e39-t26-cloud-smoke-checks-reach-dev-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+spec:
+  description: >-
+    The cloud smoke checks reach dev: a check marked live is let through pytest-socket, and
+    validate-dev's cloud job proves it.
+  goalRef:
+    name: v1-e39-t26-cloud-smoke-checks-reach-dev
+  graph:
+    nodes:
+      - id: cloud-smoke-checks-reach-dev
+        kind: Task
+        name: Live checks reach the network
+        description: >-
+          The cloud smoke checks reach dev: a check marked live is let through
+          pytest-socket, and validate-dev's cloud job proves it.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Live checks reach the network tests pass
+            command: uv
+            args: [run, pytest, tests/smoke, -k, harness or socket or live]
+status:
+  phase: Pending

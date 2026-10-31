@@ -37,7 +37,7 @@ spec:
         Terraform tests show both tags Active, shown failing first; the plan against the
         account shows them already Active (operator, read by the PM).
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -248,6 +248,7 @@ The export is what lets the list survive losing the Buttondown account entirely.
 - **What:** Buttondown's subscriber export, as a CSV file. In Buttondown: **Subscribers**, then the
   **⋯** menu at the top right, then **Export**.
 - **First taken:** 2026-09-30, by Charlie, into the interim location below.
+- **Last taken:** 2026-10-31, by Charlie. The next is due by 2026-12-01.
 - **Where, interim:** a private folder in Charlie's district Google Drive, shared with nobody. It is
   district-controlled, but only Charlie can reach it, so it does not meet "held by the team" on its
   own.

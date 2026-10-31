@@ -319,5 +319,33 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e41-t10-unknown-env-names-refused-and-newer-stamp-hint
+    - id: ext-v1-e39-t23-uvicorn-factory-in-the-composition-root
+      kind: External
+      name: 'Prerequisite from E39: uvicorn''s app factory lives in the composition root, so app.py stops reaching every adapter'
+      description: >-
+        Cross-epic prerequisite owned by v1-e39-evidence-search-pilot (release v1.7).
+      inputs:
+        goalRef: v1-e39-t23-uvicorn-factory-in-the-composition-root
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t23-uvicorn-factory-in-the-composition-root.yaml
+    - id: t11
+      kind: Task
+      name: 'Test selection no longer reads ast.walk( as a directory walk, and a contract keeps debate_api.container imported one way'
+      description: >-
+        Test selection no longer reads ast.walk( as a directory walk, and a contract keeps
+        debate_api.container imported one way.
+      inputs:
+        specRef: plan_specs/v1/e41-delivery-tooling-upkeep/t11-selector-ast-walk-and-container-contract.yaml
+        goalRef: v1-e41-t11-selector-ast-walk-and-container-contract
+      dependsOn:
+      - ext-v1-e39-t23-uvicorn-factory-in-the-composition-root
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e41-t11-selector-ast-walk-and-container-contract reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e41-t11-selector-ast-walk-and-container-contract
 status:
   phase: Pending

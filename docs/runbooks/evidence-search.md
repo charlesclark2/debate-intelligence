@@ -1395,7 +1395,12 @@ real run, in a window with no leftover `DEBATE_*` override.
     revisit trigger says, before the gzipped index reaches 400,000,000 bytes (about 5 s of cold
     start at the 625 Mbps cap). On 2026-10-22 it was 314,054,035 bytes and growing about 11.6% a
     week, so about three weeks out. AWS takes time to answer, so the request goes in at the
-    promotion. Added by the PM, 2026-10-22, from `v1-e39-t14`'s storage working.
+    promotion. Added by the PM, 2026-10-22, from `v1-e39-t14`'s storage working. **Requested
+    2026-10-31**, ahead of the promotion (PM ruling): quota `L-14320ECE`, "Network bandwidth per
+    execution environment", 625 → 1,250 Mbps, one request for the one account that holds dev and
+    prod; AWS opened a support case for it. The gzip object was 318,115,067 bytes that day. Check
+    it with `aws service-quotas get-requested-service-quota-change --request-id <id>`, the id in
+    `v1-e39-t10`'s report, and tick this item when it reads `APPROVED`.
 
 ## The coach's beta (`v1-e39-t10`)
 

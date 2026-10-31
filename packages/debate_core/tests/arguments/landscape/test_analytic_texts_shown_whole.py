@@ -7,8 +7,9 @@ The PM's context of 2026-11-01, from the coach's read of hspolicy26's report and
 * A CP text ending with no sentence end (a word or a dash), whose next paragraph is an analytic outside a
   card, is continued by the analytics after it, up to the first paragraph that is not one: the shape the
   count found (a plank list with no colon). Never across a heading, a card or another CP text.
-* The digest that groups texts covers the whole text, so a text with its planks and one without are two
-  texts; a text any line of which names a school of the caselist is withheld whole.
+* The PM's review of 2026-10-31: texts are grouped and ranked by their opening paragraph, as before t35, and
+  a group shows the whole text the most of its teams read, with how many read it. Read-back and the school
+  check cover every line of the text shown, and a whole text naming a school is passed over for the next.
 
 Every taxonomy, heading, school and text here is invented, and every expected value is written by hand.
 """
@@ -39,6 +40,7 @@ from debate_core.domain.landscape_classification import OverrideRules, PositionR
 from debate_core.domain.landscape_texts import (
     AnalyticTextKind,
     AnalyticTextReading,
+    QuotedText,
     TextForm,
     TextPlacement,
 )
@@ -119,7 +121,8 @@ def test_a_cp_text_ending_in_a_colon_is_shown_with_the_planks_it_lists() -> None
     found = read(*paragraphs, in_cards=frozenset({5, 6}))
     (stem,) = cp_texts(found)
     assert (stem.element_index, stem.lines) == (2, (3, 4))
-    assert stem.digest == text_digest(f"{STEM} {CLINICS} {PRIZE}")
+    # The whole text is checked on reading again; the opening paragraph is what the text is grouped by.
+    assert (stem.digest, stem.opening_digest) == (text_digest(f"{STEM} {CLINICS} {PRIZE}"), text_digest(STEM))
     # t16's planks are still read and placed as they were.
     assert [(one.element_index, one.form) for one in found.readings if one.kind is PLANK] == [
         (3, TextForm.LIST),
@@ -187,7 +190,7 @@ def test_a_cp_text_ending_with_no_sentence_end_is_joined_to_the_analytics_contin
     (stem,) = cp_texts(found)
     assert stem.lines == (3, 4)
     # Worded alike with the colon text and its planks: one text, whatever the punctuation.
-    assert stem.digest == text_digest(f"{STEM} {CLINICS} {PRIZE}")
+    assert (stem.digest, stem.opening_digest) == (text_digest(f"{STEM} {CLINICS} {PRIZE}"), text_digest(STEM))
     # A continuation is shown, not read as planks: t16's planks are unchanged.
     assert [one for one in found.readings if one.kind is PLANK] == []
     assert quoted(found, *paragraphs) == {
@@ -280,13 +283,14 @@ def test_a_cp_text_is_never_joined_to_the_next_cp_text() -> None:
 # -- what the digest covers ------------------------------------------------------------------------
 
 
-def test_a_cp_text_with_its_planks_and_one_without_are_two_texts() -> None:
+def test_a_cp_text_with_its_planks_and_one_without_open_alike_and_differ_whole() -> None:
     listed = read(p(1, BLOCK, STATES), p(2, ANALYTIC, STEM, STATES), p(3, ANALYTIC, CLINICS, STATES))
     alone = read(p(1, BLOCK, STATES), p(2, ANALYTIC, STEM, STATES), *card(3, "Sample", STATES))
     (with_planks,) = cp_texts(listed)
     (without,) = cp_texts(alone)
+    # One group, by the opening paragraph; two whole texts, by what is checked and shown.
+    assert with_planks.opening_digest == without.opening_digest == without.digest == text_digest(STEM)
     assert with_planks.digest != without.digest
-    assert without.digest == text_digest(STEM)
 
 
 def test_a_whole_text_whose_plank_reads_differently_now_is_not_quoted() -> None:
@@ -323,16 +327,58 @@ def test_a_whole_text_is_its_parts_one_line_each() -> None:
 # -- withholding ---------------------------------------------------------------------------------
 
 
-def test_a_text_any_plank_of_which_names_a_school_is_withheld_whole() -> None:
-    named = whole_text(STEM, [CLINICS, "Let Lakeside Academy host a sample pilot."])
-    plain = whole_text(STEM, [CLINICS, PRIZE])
-    groups = {
-        text_digest(named): TextGroup(teams=frozenset({"YY", "JJ"}), texts=(("a" * 64, 2, named),)),
-        text_digest(plain): TextGroup(teams=frozenset({"QQ"}), texts=(("b" * 64, 2, plain),)),
-    }
-    shown, more, withheld = top_texts("states-cp", CP, groups, limit=3, caselist=SCHOOLS)
-    assert [(row.rank, row.teams, row.text) for row in shown] == [(1, 1, plain)]
+def _group(*copies: tuple[str, str, frozenset[str]]) -> TextGroup:
+    """A group of copies (source, whole text, the teams reading that source), keyed by its opening paragraph."""
+    return TextGroup(
+        teams=frozenset(team for _, _, teams in copies for team in teams),
+        texts=tuple((sha * 32, 2, text) for sha, text, _ in copies),
+        source_teams={sha * 32: teams for sha, _, teams in copies},
+    )
+
+
+PLAIN = whole_text(STEM, [CLINICS, PRIZE])
+NAMED = whole_text(STEM, [CLINICS, "Let Lakeside Academy host a sample pilot."])
+OPEN = whole_text(OPEN_STEM, ["- Expand sample clinics in rural areas", "- Fund a sample research prize"])
+
+
+def test_a_group_shows_the_whole_text_the_most_of_its_teams_read_and_how_many() -> None:
+    group = _group(
+        ("a1", PLAIN, frozenset({"YY", "JJ"})),
+        ("a2", PLAIN, frozenset({"QQ"})),
+        # More copies, fewer teams: copies do not choose the text shown, teams do.
+        ("a3", OPEN, frozenset({"WW"})),
+        ("a4", OPEN, frozenset({"WW"})),
+        ("a5", OPEN, frozenset({"WW"})),
+        ("a6", STEM, frozenset({"KK"})),
+    )
+    shown, more, withheld = top_texts("states-cp", CP, {text_digest(STEM): group}, limit=3, caselist=SCHOOLS)
+    assert [(row.rank, row.teams, row.text_teams, row.text) for row in shown] == [(1, 5, 3, PLAIN)]
+    assert (more, withheld) == (None, 0)
+
+
+def test_a_tie_in_teams_goes_to_the_first_copy_by_source_and_paragraph() -> None:
+    group = _group(("b2", PLAIN, frozenset({"QQ"})), ("b1", OPEN, frozenset({"WW"})))
+    shown, _, _ = top_texts("states-cp", CP, {text_digest(STEM): group}, limit=3, caselist=SCHOOLS)
+    assert [(row.text_teams, row.text) for row in shown] == [(1, OPEN)]
+
+
+def test_a_whole_text_any_plank_of_which_names_a_school_is_passed_over_for_the_next() -> None:
+    group = _group(
+        ("a1", NAMED, frozenset({"YY", "JJ"})),
+        ("a2", NAMED, frozenset({"QQ"})),
+        ("a3", PLAIN, frozenset({"WW"})),
+    )
+    shown, more, withheld = top_texts("states-cp", CP, {text_digest(STEM): group}, limit=3, caselist=SCHOOLS)
+    # The group keeps its teams and its rank; the text shown is the next whole text.
+    assert [(row.rank, row.teams, row.text_teams, row.text) for row in shown] == [(1, 4, 1, PLAIN)]
     assert (more, withheld) == (None, 1)
+
+
+def test_a_group_every_whole_text_of_which_names_a_school_is_withheld() -> None:
+    opening_named = whole_text("Lakeside Academy should:", [CLINICS])
+    group = _group(("a1", NAMED, frozenset({"YY"})), ("a2", opening_named, frozenset({"QQ"})))
+    shown, more, withheld = top_texts("states-cp", CP, {text_digest(STEM): group}, limit=3, caselist=SCHOOLS)
+    assert (shown, more, withheld) == ((), None, 2)
 
 
 # -- the reading's shape ---------------------------------------------------------------------------
@@ -355,10 +401,37 @@ def _reading(**changes: Any) -> AnalyticTextReading:
 
 
 def test_only_a_cp_text_has_lines_after_it_in_file_order() -> None:
-    assert _reading(lines=(3, 5)).lines == (3, 5)
+    opening = {"digest": text_digest(f"{STEM} {CLINICS}"), "opening_digest": text_digest(STEM)}
+    assert _reading(lines=(3, 5), **opening).lines == (3, 5)
     with pytest.raises(ValidationError):
-        _reading(lines=(5, 3))
+        _reading(lines=(5, 3), **opening)
     with pytest.raises(ValidationError):
-        _reading(lines=(2,))
+        _reading(lines=(2,), **opening)
     with pytest.raises(ValidationError):
         _reading(kind=AnalyticTextKind.K_ALTERNATIVE, form=TextForm.SENTENCE, lines=(3,))
+
+
+def test_only_a_cp_text_has_an_opening_digest_and_one_with_lines_must() -> None:
+    whole = text_digest(f"{STEM} {CLINICS}")
+    assert _reading(lines=(3,), digest=whole, opening_digest=text_digest(STEM)).opening_digest == text_digest(
+        STEM
+    )
+    assert _reading(opening_digest=text_digest(STEM)).opening_digest == text_digest(STEM)
+    with pytest.raises(ValidationError):
+        _reading(lines=(3,), digest=whole)
+    with pytest.raises(ValidationError):
+        # With no lines, the text is its opening paragraph.
+        _reading(opening_digest=whole)
+    with pytest.raises(ValidationError):
+        _reading(
+            kind=AnalyticTextKind.K_ALTERNATIVE, form=TextForm.SENTENCE, opening_digest=text_digest(STEM)
+        )
+
+
+def test_a_shown_texts_own_teams_are_never_more_than_its_groups() -> None:
+    assert (
+        QuotedText(position_id="states-cp", kind=CP, rank=1, teams=5, text_teams=3, text=PLAIN).text_teams
+        == 3
+    )
+    with pytest.raises(ValidationError):
+        QuotedText(position_id="states-cp", kind=CP, rank=1, teams=2, text_teams=3, text=PLAIN)

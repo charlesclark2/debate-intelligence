@@ -1,10 +1,11 @@
 """The report's CP texts shown whole, from synthetic files read by the reader itself (`v1-e32-t35` ac1).
 
-`tests/fixtures/landscape/cp_texts_shown_whole` holds seven invented States CP blocks of the synthetic
+`tests/fixtures/landscape/cp_texts_shown_whole` holds invented States CP blocks in seven of the synthetic
 caselist's negative files; its README counts by hand what the report shows of them, and its
-`report_section.md` is that part of report.md, written by hand. Here the files are read by
-`read_analytic_texts` and `read_back_texts`, as a run reads them, and the report is built over the
-synthetic caselist's own rounds.
+`report_section.md` is that part of report.md, written by hand, by the PM's review of 2026-10-31 (texts
+grouped by their opening paragraph, each group showing the whole text the most of its teams read). Here
+the files are read by `read_analytic_texts` and `read_back_texts`, as a run reads them, and the report is
+built over the synthetic caselist's own rounds.
 """
 
 from __future__ import annotations
@@ -97,11 +98,15 @@ def test_the_cp_texts_part_matches_the_hand_written_section() -> None:
     assert report_md[start:end] == (WHOLE / "report_section.md").read_text(encoding="utf-8")
 
 
-def test_a_text_with_its_planks_and_the_text_alone_are_two_ranked_texts() -> None:
+def test_a_group_ranks_by_its_opening_and_shows_the_whole_text_most_of_its_teams_read() -> None:
     texts = LandscapeReportService().build(_inputs(), synthetic_staleness()).texts
     assert texts is not None
     (states,) = [one for one in texts.positions if one.kind is AnalyticTextKind.CP_TEXT]
-    assert [(row.rank, row.teams, row.text) for row in states.texts] == [(1, 4, WHOLE_TEXT), (2, 3, STEM)]
+    # The 4-team whole text names a school and is passed over; the 3-team one shows, with its own count.
+    assert [(row.rank, row.teams, row.text_teams, row.text) for row in states.texts] == [
+        (1, 6, 3, WHOLE_TEXT),
+        (2, 2, 2, "Congress should fund sample clinics."),
+    ]
     assert states.more is None
     coverage = next(one for one in texts.coverage if one.kind is AnalyticTextKind.CP_TEXT)
-    assert (coverage.labels, coverage.counted, coverage.withheld_texts, coverage.unread) == (7, 7, 1, 0)
+    assert (coverage.labels, coverage.counted, coverage.withheld_texts, coverage.unread) == (11, 11, 1, 0)

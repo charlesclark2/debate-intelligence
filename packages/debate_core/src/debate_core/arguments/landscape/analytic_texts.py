@@ -269,6 +269,9 @@ class TextGroup:
     teams: frozenset[object] = field(repr=False)
     texts: tuple[tuple[str, int, str], ...] = field(default=(), repr=False)
     """(source digest, paragraph, text) of each copy read again as it was read."""
+    source_teams: Mapping[str, frozenset[object]] = field(
+        default_factory=dict[str, frozenset[object]], repr=False
+    )
 
 
 @dataclass(frozen=True, slots=True)

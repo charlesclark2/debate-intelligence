@@ -151,6 +151,7 @@ class AnalyticTextReading(DomainModel):
             "or the analytics continuing it (`v1-e32-t35`). Its digest covers them."
         ),
     )
+    opening_digest: Sha256Hex | None = None
 
     @model_validator(mode="after")
     def _check(self) -> Self:
@@ -186,6 +187,7 @@ class QuotedText(DomainModel):
     kind: AnalyticTextKind
     rank: int = Field(ge=1)
     teams: int = Field(ge=0, description="Distinct teams whose files hold it under the position.")
+    text_teams: int | None = None
     text: str = Field(repr=False, description="Word for word, as one of its files holds it.")
 
 

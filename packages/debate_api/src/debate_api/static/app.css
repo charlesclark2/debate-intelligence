@@ -302,6 +302,14 @@ button.secondary { background: #ffffff; color: var(--link); }
 
 .download-off { color: var(--muted); margin: 0; }
 
+/* The pocket name a download's file is given (v1-e39-t24): its label above the field, the limits
+   below it, on a row of its own before the download button. */
+.pocket-name { flex-basis: 100%; }
+
+.pocket-name input { width: 24rem; }
+
+.pocket-name .help { margin: 0.25rem 0 0; }
+
 .cart {
   max-width: 56rem;
   margin: 0.75rem auto 0;

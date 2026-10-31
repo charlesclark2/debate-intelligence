@@ -22,6 +22,7 @@ import jinja2
 import segno
 from fastapi.responses import HTMLResponse
 
+from debate_core.application.card_download import DOWNLOAD_POCKET_DEFAULT, DOWNLOAD_POCKET_MAX_LENGTH
 from debate_core.application.tub.sessions import PendingEnrolment, Session
 
 __all__ = [
@@ -71,8 +72,9 @@ def qr_code_svg(uri: str) -> str:
 
 
 class PageRenderer:
-    """Renders a template with what every page needs: the script and stylesheet, who is signed in, and
-    how many cards the download cart holds (`v1-e39-t08`)."""
+    """Renders a template with what every page needs: the script and stylesheet, who is signed in, how
+    many cards the download cart holds (`v1-e39-t08`), and the default and longest pocket name a
+    download takes (`v1-e39-t24`)."""
 
     def __init__(self, *, app_script: StaticAsset, app_stylesheet: StaticAsset, cart_cap: int) -> None:
         self._environment = jinja2.Environment(
@@ -100,6 +102,8 @@ class PageRenderer:
             role=holder.role.value if holder is not None else None,
             signed_in=isinstance(holder, Session),
             cart_cap=self._cart_cap,
+            pocket_default=DOWNLOAD_POCKET_DEFAULT,
+            pocket_max_length=DOWNLOAD_POCKET_MAX_LENGTH,
             **context,
         )
         return HTMLResponse(page, status_code=status_code)

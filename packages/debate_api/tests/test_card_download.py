@@ -266,9 +266,7 @@ def test_download_cart_has_no_header_line_and_keeps_the_default_pocket(student: 
     assert sections == [(DEFAULT_POCKET, "Downloaded cards")] * 2
 
 
-@pytest.mark.parametrize(
-    "names", [("download",), ("download", "camp download")], ids=["one-card", "cart"]
-)
+@pytest.mark.parametrize("names", [("download",), ("download", "camp download")], ids=["one-card", "cart"])
 def test_download_keeps_the_pocket_the_student_typed(student: Any, names: tuple[str, ...]) -> None:
     response = student.download(*names, pocket="Aff answers to the states CP")
 
@@ -389,8 +387,8 @@ def test_download_body_of_the_longest_cart_and_pocket_name_is_read(student: Any)
 def test_download_card_page_and_cart_offer_the_pocket_name_with_a_label_and_its_limits(student: Any) -> None:
     page = student.browser.get(student.card_path("download")).text
 
-    actions = page.split('<div class="download-actions">')[1].split("</div>")[0]
-    assert "<label for=\"download-pocket\">Pocket name for this card's file</label>" in actions
+    actions = page.split('<div class="download-actions">')[1].split('<div class="download-status"')[0]
+    assert '<label for="download-pocket">Pocket name for this card\'s file</label>' in actions
     assert (
         '<input id="download-pocket" type="text" maxlength="80" autocomplete="off" spellcheck="false" '
         'aria-describedby="download-pocket-help" data-tub-download-pocket>'
@@ -399,8 +397,8 @@ def test_download_card_page_and_cart_offer_the_pocket_name_with_a_label_and_its_
         '<p id="download-pocket-help" class="help">Up to 80 characters. Left blank, the pocket is '
         '"Team evidence search".</p>'
     ) in actions
-    cart = page.split("<section class=\"cart\"")[1].split("</section>")[0]
-    assert "<label for=\"cart-pocket\">Pocket name for the cart's file</label>" in cart
+    cart = page.split('<section class="cart"')[1].split("</section>")[0]
+    assert '<label for="cart-pocket">Pocket name for the cart\'s file</label>' in cart
     assert (
         '<input id="cart-pocket" type="text" maxlength="80" autocomplete="off" spellcheck="false" '
         'aria-describedby="cart-pocket-help" data-tub-cart-pocket>'

@@ -9,12 +9,12 @@ each card's provenance is in the sidecar.
 
 ## No card text goes in
 
-:class:`FileBuildRequest` holds the resolved recipe and the time of the request, and nothing else.
-The resolved recipe names each card by fingerprint and occurrence, and carries the coach's text and
-who disclosed the card, or for a camp card its release record (`v1-e33-t06`); no field of it, or of
-this request, can carry evidence or cite text. The
-writer reads a card's text only from its source's bytes, which it takes from the blob store by the
-occurrence's SHA-256 (the task's first forbidden item).
+:class:`FileBuildRequest` holds the resolved recipe, the time of the request and whether to write the
+header line, and nothing else. The resolved recipe names each card by fingerprint and occurrence, and
+carries the coach's text and who disclosed the card, or for a camp card its release record
+(`v1-e33-t06`); no field of it, or of this request, can carry evidence or cite text. The writer reads
+a card's text only from its source's bytes, which it takes from the blob store by the occurrence's
+SHA-256 (the task's first forbidden item).
 
 ## Nothing partial
 
@@ -114,10 +114,17 @@ class FileBuildRequest:
 
     `built_at` is the request's, never the writer's clock, so the same request builds the same bytes.
     It goes into the sidecar only; the `.docx` carries no time at all.
+
+    `header_line` is whether the file starts with its header analytic. `files build` never names it,
+    so a built file always does. The student search pilot's download asks for none (`v1-e39-t24`): in
+    Verbatim's styles the header and the first pocket put the first card two pages down, and a card
+    the student downloads is never presented as verified with or without it (data-use policy,
+    Attribution rule 4; the card page carries the "not platform-verified" label, E39 gate item 7).
     """
 
     resolved: ResolvedRecipe
     built_at: datetime
+    header_line: bool = True
 
     def __post_init__(self) -> None:
         if self.built_at.tzinfo is None or self.built_at.utcoffset() is None:

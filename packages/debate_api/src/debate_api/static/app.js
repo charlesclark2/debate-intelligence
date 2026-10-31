@@ -22,6 +22,10 @@
 // CSRF token and the body's hash like every POST, and the app checks every one again. The answer is
 // the file, saved through a blob link, or JSON naming the cards it refused, which the student can drop
 // to download the rest. Signing out, or any page without a session, empties the cart.
+//
+// The pocket name (v1-e39-t24). Beside each download button is a field for the file's pocket name; a
+// download sends what it holds as `pocket`, unless it is blank, and the app gives the file's one
+// pocket that name, or "Team evidence search". A name the app refuses is answered with a message.
 "use strict";
 
 (() => {
@@ -206,13 +210,23 @@
     return named ? named[1] : "team-evidence-cards.docx";
   };
 
+  const pocketName = (fromCart) => {
+    const field = place(fromCart ? "[data-tub-cart-pocket]" : "[data-tub-download-pocket]");
+    return field instanceof HTMLInputElement ? field.value : "";
+  };
+
   async function download(cards, where, button, fromCart) {
     if (button) {
       button.disabled = true;
     }
     tell(where, cards.length === 1 ? "Building the file…" : `Building the file of ${cardWords(cards.length)}…`, []);
     try {
-      const body = new TextEncoder().encode(new URLSearchParams({ cards: cards.join(",") }).toString());
+      const fields = { cards: cards.join(",") };
+      const pocket = pocketName(fromCart);
+      if (pocket.trim()) {
+        fields.pocket = pocket;
+      }
+      const body = new TextEncoder().encode(new URLSearchParams(fields).toString());
       const digest = hex(await crypto.subtle.digest("SHA-256", body));
       const response = await fetch("/download", {
         method: "POST",

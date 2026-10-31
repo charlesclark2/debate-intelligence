@@ -66,9 +66,9 @@ v2.3's extension work.
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 16 | 11 | 114 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
-| [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 28 | 20 | 165 |
+| [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 29 | 20 | 166 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 23 | 17 | 84 |
-| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 32 | 14 | 66 |
+| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 34 | 15 | 68 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -493,6 +493,7 @@ Whitefish Bay Debate has a public, mobile-friendly team website: team informatio
 | [The shipped-content checks follow the publishing policy, and a season change is one edit of three files](plan_specs/v1/e37-calendar-and-announcements/t11-content-guards-follow-the-policy.yaml) `v1-e37-t11-content-guards-follow-the-policy` | Succeeded | 0 | 1.0 |
 | [The prod build refuses an image whose consent has lapsed, as it refuses a lapsed name](plan_specs/v1/e37-calendar-and-announcements/t12-stale-image-consent-refused.yaml) `v1-e37-t12-stale-image-consent-refused` | Succeeded | 0 | 1.0 |
 | [A consent entry checked after its season ends is stale to the build, for names and images](plan_specs/v1/e37-calendar-and-announcements/t13-consent-checked-after-the-season-is-stale.yaml) `v1-e37-t13-consent-checked-after-the-season-is-stale` | Succeeded | 1 | 1.0 |
+| [A check dated after the season says so, and the schedule and results use one season end](plan_specs/v1/e37-calendar-and-announcements/t14-season-end-warning-and-one-definition.yaml) `v1-e37-t14-season-end-warning-and-one-definition` | Pending | 1 | 1.0 |
 
 #### [E38 — Team Donations](plan_specs/v1/e38-donations/epic.yaml)
 
@@ -551,7 +552,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [A failed or late cloud run emails the coach](plan_specs/v1/e40-cloud-caselist-run/t05-run-alerts.yaml) `v1-e40-t05-run-alerts` | Succeeded | 1 | 2.0 |
 | [Cut over: the cloud run takes the schedule and the Mac stops](plan_specs/v1/e40-cloud-caselist-run/t06-cutover.yaml) `v1-e40-t06-cutover` | Succeeded | 4 | 2.0 |
 | [The evidence bucket itself refuses an unconditional write of the run lock](plan_specs/v1/e40-cloud-caselist-run/t07-lock-writes-conditional-at-the-bucket.yaml) `v1-e40-t07-lock-writes-conditional-at-the-bucket` | Pending | 1 | 1.0 |
-| [A week a killed run published is parsed by the next run, not left for the next import](plan_specs/v1/e40-cloud-caselist-run/t08-parse-owed.yaml) `v1-e40-t08-parse-owed` | Pending | 1 | 3.0 |
+| [A week a killed run published is parsed by the next run, not left for the next import](plan_specs/v1/e40-cloud-caselist-run/t08-parse-owed.yaml) `v1-e40-t08-parse-owed` | Succeeded | 1 | 3.0 |
 | [The backfile imports run once each in the cloud, not on the operator's machine](plan_specs/v1/e40-cloud-caselist-run/t09-cloud-backfile-import.yaml) `v1-e40-t09-cloud-backfile-import` | InProgress | 2 | 3.0 |
 | [A restored working copy that brings the raw sources a hand prod publish needs](plan_specs/v1/e40-cloud-caselist-run/t10-restore-with-sources.yaml) `v1-e40-t10-restore-with-sources` | Succeeded | 1 | 2.0 |
 | [The dev lock held for good when the weekly run's home moves to prod](plan_specs/v1/e40-cloud-caselist-run/t11-run-home-moved-holder.yaml) `v1-e40-t11-run-home-moved-holder` | Pending | 1 | 2.0 |
@@ -568,7 +569,8 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [In bucket mode the login banner and the parse stage's other hints point at the cloud run, not the operator's Mac](plan_specs/v1/e40-cloud-caselist-run/t22-bucket-mode-hints-point-at-the-cloud.yaml) `v1-e40-t22-bucket-mode-hints-point-at-the-cloud` | Succeeded | 0 | 1.0 |
 | [The leftover search drops its pre-marker list, and a report over a restored copy requires the marker](plan_specs/v1/e40-cloud-caselist-run/t23-restored-copy-marker-required.yaml) `v1-e40-t23-restored-copy-marker-required` | Pending | 1 | 1.0 |
 | [A restore refuses both environments' data directories, not only its own](plan_specs/v1/e40-cloud-caselist-run/t24-restore-refuses-either-data-directory.yaml) `v1-e40-t24-restore-refuses-either-data-directory` | Pending | 1 | 1.0 |
-| [In bucket mode the failed-publish banners and the CLI's next step point at the cloud run, not a publish from the Mac](plan_specs/v1/e40-cloud-caselist-run/t25-remaining-bucket-mode-publish-pending-hints.yaml) `v1-e40-t25-remaining-bucket-mode-publish-pending-hints` | Pending | 1 | 1.0 |
+| [In bucket mode the failed-publish banners and the CLI's next step point at the cloud run, not a publish from the Mac](plan_specs/v1/e40-cloud-caselist-run/t25-remaining-bucket-mode-publish-pending-hints.yaml) `v1-e40-t25-remaining-bucket-mode-publish-pending-hints` | Pending | 2 | 1.0 |
+| [A smoke check reads parses_owed from caselist runs and caselist status](plan_specs/v1/e40-cloud-caselist-run/t26-parses-owed-smoke-check.yaml) `v1-e40-t26-parses-owed-smoke-check` | Pending | 1 | 0.5 |
 
 #### [E41 — Delivery Tooling Upkeep](plan_specs/v1/e41-delivery-tooling-upkeep/epic.yaml)
 
@@ -581,6 +583,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [One hard stop for a session's test runs that kills the whole process group, named by agreement 10](plan_specs/v1/e41-delivery-tooling-upkeep/t05-test-runs-stopped-by-process-group.yaml) `v1-e41-t05-test-runs-stopped-by-process-group` | Succeeded | 1 | 1.0 |
 | [An import change in container.py that loads no new module reaches only the parts using its names](plan_specs/v1/e41-delivery-tooling-upkeep/t06-container-imports-read-by-use.yaml) `v1-e41-t06-container-imports-read-by-use` | Pending | 1 | 2.0 |
 | [The spec validator holds each epic's graph to its tasks' prerequisites, and the task helper refuses a prerequisite it cannot find](plan_specs/v1/e41-delivery-tooling-upkeep/t07-spec-graph-checks.yaml) `v1-e41-t07-spec-graph-checks` | Pending | 1 | 2.0 |
+| [Test selection reads a run-shaped string in an f-string or a comparison, and a shell script's quoted command words](plan_specs/v1/e41-delivery-tooling-upkeep/t08-run-shaped-strings-read-wherever-they-stand.yaml) `v1-e41-t08-run-shaped-strings-read-wherever-they-stand` | Pending | 1 | 2.0 |
 
 
 ## V2

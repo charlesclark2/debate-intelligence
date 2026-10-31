@@ -212,6 +212,7 @@ from debate_cli.panel_summaries import (
     every_value_in_full,
     some_prefixes,
 )
+from debate_cli.parses_owed import parses_owed
 from debate_core.application.caselist.camp_metadata import load_camp_aliases
 from debate_core.application.caselist.import_service import Classification, ImportReport
 from debate_core.application.caselist.later_manifests import LaterManifestsRemeasured
@@ -526,8 +527,9 @@ def status(
     refuse(cli, ctx, no_bucket(settings, writing=False))
 
     report = _run(cli.services.caselist_status().status(caselist, snapshot, residue=True, held_in_inbox=True))
-    payload = status_summary(report, settings)
-    display = _status_table(report, settings)
+    owed, owed_sentence = parses_owed(cli.services, remote=False)
+    payload = {**status_summary(report, settings), "parses_owed": owed}
+    display = _status_table(report, settings, owed_sentence=owed_sentence)
     if report.in_sync:
         cli.output.success(command_name(ctx), payload, display=display)
         return
@@ -1159,7 +1161,9 @@ def _publish_table(report: PublishReport, settings: Settings) -> TableSpec:
     )
 
 
-def _status_table(report: CaselistStatusReport, settings: Settings) -> TableSpec:
+def _status_table(
+    report: CaselistStatusReport, settings: Settings, *, owed_sentence: str | None = None
+) -> TableSpec:
     rows = [
         [
             entry.caselist,
@@ -1198,6 +1202,8 @@ def _status_table(report: CaselistStatusReport, settings: Settings) -> TableSpec
                 *_held_lines(report),
                 *_residue_lines(report),
                 *_held_only_in_bucket_lines(report),
+                # What the runs owe the parsed store (`v1-e40-t08`): not drift, and not part of in sync.
+                *([owed_sentence] if owed_sentence else []),
             ]
         ),
     )

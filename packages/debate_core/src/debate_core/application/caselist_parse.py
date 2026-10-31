@@ -370,6 +370,19 @@ class CaselistParseService:
             suppression=state,
         )
 
+    async def full_parse_owed(self, caselist: str) -> str | None:
+        """The running parser version, when `caselist` has sources and the store has no directory of it.
+
+        What the weekly run asks of every caselist it follows (`v1-e40-t08`): the first run on a new
+        parser version parses each in full before its index stage, rather than leaving it for the
+        next import into the caselist. A caselist with no source owes nothing.
+        """
+        parser_version = self._parser.parser_version
+        names = await self._store.version_directories(caselist)
+        if any(parse_version_directory(name)[0] == parser_version for name in names):
+            return None
+        return parser_version if await enumerate_sources(self._local, caselist) else None
+
     async def _choose_version(
         self, caselist: str, parser_version: str, profile_version: str, *, reparse: bool
     ) -> tuple[str, bool, str | None, tuple[SourceEntry, ...]]:

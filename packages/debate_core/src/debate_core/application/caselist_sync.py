@@ -273,14 +273,28 @@ becomes a download; after `caselist unsuppress` it is one.
 
 ## The parse stage
 
-After the publish stage, the run parses what it imported (`v1-e34-t17`), through
-:class:`CaselistParseStage`, which
+After the publish stage, the run parses what it imported (`v1-e34-t17`) and what earlier runs owe
+(`v1-e40-t08`), through :class:`CaselistParseStage`, which
 :class:`~debate_core.application.caselist_pull_parse.PullParseStage` implements over the parse
-pipeline `caselist parse` runs. A run that imported nothing parses nothing and rebuilds nothing.
+pipeline `caselist parse` runs. A run that imported nothing and owes nothing parses nothing and
+rebuilds nothing.
 
-**Which caselists.** Each caselist a weekly archive or a camp release was imported into, once
-(:func:`caselists_to_parse`). A complete archive names none: its sources are outside the namespaces
-the pipeline enumerates, so a run that imported only one parses nothing.
+**Which caselists.** First each caselist the parse-owed file names that the run follows, in the
+order owed; then each the run finds with no directory of the running parser version; then each a
+weekly archive or a camp release was imported into, once (:func:`caselists_to_parse`). A complete
+archive names none: its sources are outside the namespaces the pipeline enumerates, so a run that
+imported only one parses nothing.
+
+**What is owed** (`v1-e40-t08`, :class:`ParseOwed`). A run killed after its publish stage and before
+its parse left that week published and not parsed, and the next run, finding nothing new, parsed
+nothing. So the publish stage records a parse owed for each snapshot the bucket confirmed, before the
+pending-work file lets the snapshot go, and every later run's parse stage parses the caselists owed,
+whether or not it imports anything. A caselist the run follows, `openev` included, whose parsed store
+has no directory of the running parser version, though it has sources, owes a full parse, recorded
+before it starts. An entry is cleared only when its caselist's parsed store is published complete:
+never at the parse, so a parse whose publish failed is owed still. A caselist owed that the run does
+not follow is left owed, and said. A removal that reaches a snapshot clears its entry. Only an
+environment that publishes owes anything: one with no bucket has nothing to clear an entry by.
 
 **The whole caselist is planned, and its skip key finds what is new.** The stage hands the pipeline
 a caselist, never a snapshot. Every source already parsed under the running parser and profile
@@ -291,17 +305,18 @@ sources and aggregates built from them alone, published as the current store. So
 
 * A caselist whose current version directory holds nothing — never parsed, or the first run after a
   parser or profile version changed — is parsed **in full**, minutes rather than seconds. The
-  summary counts it (`full_parses`), so a full parse is never mistaken for a large week. The runbook
-  has the operator run `caselist parse` by hand after a release that bumps the parser version, so
-  that this does not happen unattended.
+  summary counts it (`full_parses`), so a full parse is never mistaken for a large week. Since
+  `v1-e40-t08` the first run on a new parser version does this for every caselist it follows, before
+  its index stage, so the index it builds is of the new version.
 * A directory a killed run left partly filled is completed: what it recorded is skipped, the rest
   is parsed, and the aggregates are rebuilt from all of it.
-* A caselist the run did not import into is not touched, whatever its directory holds.
+* A caselist the run did not import into and owes nothing is not touched, whatever its directory
+  holds.
 
 **Published where the pull publishes.** With a bucket, each caselist's version directory is then
 copied to it by the publisher `caselist parse --publish` uses, which uploads whatever the bucket
 lacks of the whole directory, so a caselist a previous run could not publish is caught up by the
-next run that imports into it. It is not attempted once a login is known to be missing: the publish
+next run, which still owes its parse. It is not attempted once a login is known to be missing: the publish
 stage pended on one, or the aggregates were just rebuilt from this machine's copy of the suppression
 list alone, which must never be what is published.
 
@@ -319,12 +334,11 @@ pending-work file. Every way it can go wrong is a line in the summary:
   The other caselists are still parsed. A store that did not answer, a refusal and a profile the
   AWS config does not define are true of every caselist still to publish, so the first caselist to
   meet one is the last offered to the bucket (`v1-e29-t09`).
-* *Pending*, when the only thing missing is a login for the parsed store's publish. Unlike the
-  publish stage's, this is in no file: the pending-work file holds snapshots, a parsed store is a
-  version directory, and what is owed is whatever the bucket lacks of the directory on this machine,
-  which the publisher works out again each time. The command the stage names finishes it (below),
-  as does the next pull that imports into that caselist with a session;
-  `caselist pull --publish-pending` does not.
+* *Pending*, when the only thing missing is a login for the parsed store's publish. The pending-work
+  file holds snapshots, a parsed store is a version directory, and what is owed of it is whatever
+  the bucket lacks of the directory on this machine, which the publisher works out again each time;
+  the parse-owed file keeps the caselist owed (`v1-e40-t08`). The command the stage names finishes
+  it (below), as does the next pull with a session; `caselist pull --publish-pending` does not.
 
 **Which command finishes each caselist** (`v1-e34-t31`). Every caselist whose parsed store the
 stage did not publish complete is a :class:`ParsedStoreOwed` in the summary
@@ -348,8 +362,8 @@ banner gives :data:`~debate_core.application.sync_runs.PARSE_COMMAND`.
 ephemeral storage and the parsed store is the cloud run's, so either command, run on the operator's
 Mac, would rebuild the Mac's own working copy and publish it over the cloud run's. The stage's fix,
 its reason when pending and the banners name the cloud cure instead
-(:func:`cloud_parse_cure`): the next cloud run that imports into the caselist, weekly or started by
-hand, restores the bucket's parsed store, parses what it lacks and publishes it
+(:func:`cloud_parse_cure`): the next cloud run, weekly or started by hand, whether or not it imports
+into the caselist, restores the bucket's parsed store, parses what it lacks and publishes it
 (`caselist-cloud-run.md`, "A failed parse stage"). The pull is told it is in bucket mode by the
 composition root (`bucket_mode`); the banners read it from the run's details (`bucket_run`).
 
@@ -663,6 +677,7 @@ __all__ = [
     "INBOX_PARTIAL_DIRECTORY",
     "LOCK_FILENAME",
     "OPENEV_DELIVERIES_FILENAME",
+    "PARSE_OWED_FILENAME",
     "PENDING_WORK_FILENAME",
     "RUN_SUMMARY_SCHEMA_VERSION",
     "SKIP_TODAY_SECONDS",
@@ -692,7 +707,11 @@ __all__ = [
     "OpenEvSelection",
     "ParseStageCounts",
     "ParsedCaselist",
+    "FullParseOwed",
+    "ParseOwed",
+    "ParseOwedUnreadable",
     "ParsedStoreOwed",
+    "ParsesOwed",
     "PendingSnapshot",
     "PendingWork",
     "PendingWorkUnreadable",
@@ -722,6 +741,7 @@ __all__ = [
     "inbox_files",
     "openev_id_of_inbox_name",
     "parse_command",
+    "parses_owed_sentence",
     "read_volume",
     "remove_state_file",
     "run_pull",
@@ -754,6 +774,9 @@ INBOX_PARTIAL_DIRECTORY: Final = ".partial"
 
 LOCK_FILENAME: Final = "caselist-sync.lock"
 PENDING_WORK_FILENAME: Final = "caselist-sync-pending.json"
+PARSE_OWED_FILENAME: Final = "caselist-sync-parse-owed.json"
+"""The parses this machine's runs owe (`v1-e40-t08`). See :class:`ParseOwed`."""
+
 DOWNLOAD_LEDGER_FILENAME: Final = "caselist-sync-download-starts.json"
 """When each bulk download started, for the rolling window. See :class:`DownloadLedger`."""
 
@@ -1662,20 +1685,18 @@ def cloud_parse_cure(caselists: Sequence[str]) -> str:
     """What finishes a bucket-mode run's unpublished parsed stores, as its banner names it (`v1-e40-t18`).
 
     No command: the cloud run owns the parsed store, and a command run on the operator's Mac would
-    rebuild the Mac's own working copy and publish it over the cloud run's. The run parses only the
-    caselists it imports into (:func:`caselists_to_parse`), so the cure is the next cloud run that
-    imports into the caselist, weekly or started by hand. `caselists` empty, as in details a build
-    before `v1-e34-t31` wrote, names the caselist by the stage.
+    rebuild the Mac's own working copy and publish it over the cloud run's. The caselist's parse
+    stays owed until its parsed store is published complete, and every run parses what is owed
+    whether or not it imports into the caselist (`v1-e40-t08`), so the cure is the next cloud run,
+    weekly or started by hand. Until `v1-e40-t08` it was the next cloud run that imported into the
+    caselist. `caselists` empty, as in details a build before `v1-e34-t31` wrote, names the caselist
+    by the stage.
     """
-    named = _or_listed(caselists) if caselists else "a caselist the parse stage names"
+    named = _and_listed(caselists) if caselists else "each caselist the parse stage names"
     return (
-        f"the next cloud run that imports into {named} publishes that caselist's parsed store: the weekly "
-        f"run, or one started by hand ({CLOUD_PARSE_STAGE_RUNBOOK}); never a publish from the operator's Mac"
+        f"the next cloud run publishes the parsed store of {named}: the weekly run, or one started by hand "
+        f"({CLOUD_PARSE_STAGE_RUNBOOK}); never a publish from the operator's Mac"
     )
-
-
-def _or_listed(names: Sequence[str]) -> str:
-    return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} or {names[-1]}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -2144,6 +2165,221 @@ def snapshots_still_owed(
 def _snapshots_named(snapshots: Iterable[PendingSnapshot]) -> str:
     """`<caselist> <snapshot>, …`, as a stage's reason names snapshots."""
     return ", ".join(f"{one.caselist} {one.snapshot}" for one in snapshots)
+
+
+_PARSER_VERSION: Final = re.compile(r"[0-9]{4}\.[0-9]{2}\.[0-9]{2}-[a-z]+-[0-9]+")
+"""A parser version as the parsers name themselves: `2026.10.27-docx-7`."""
+
+
+@dataclass(frozen=True, slots=True)
+class FullParseOwed:
+    """A caselist whose parsed store has no directory of the running parser version (`v1-e40-t08`)."""
+
+    caselist: str
+    parser_version: str
+
+    def as_json(self) -> dict[str, str]:
+        return {"caselist": self.caselist, "parser_version": self.parser_version}
+
+
+@dataclass(frozen=True, slots=True)
+class ParsesOwed:
+    """What the parse-owed file holds: snapshots published and not yet parsed, and full parses owed."""
+
+    snapshots: tuple[PendingSnapshot, ...] = ()
+    full_parses: tuple[FullParseOwed, ...] = ()
+
+    @property
+    def caselists(self) -> tuple[str, ...]:
+        """Each caselist owed, once, in the order owed: the snapshots' first, then the full parses'."""
+        return tuple(dict.fromkeys(one.caselist for one in (*self.snapshots, *self.full_parses)))
+
+    def __bool__(self) -> bool:
+        return bool(self.snapshots or self.full_parses)
+
+    def as_json(self) -> dict[str, object]:
+        return {
+            "full_parses": [one.as_json() for one in self.full_parses],
+            "snapshots": [one.as_json() for one in self.snapshots],
+        }
+
+
+class ParseOwedUnreadable(DomainError):
+    """The parse-owed file is there, and is not what this module writes.
+
+    Never read as nothing owed and never written over, as the pending-work file is not
+    (:class:`PendingWorkUnreadable`): it may name a week nothing else remembers is unparsed. Named by
+    what it is for, never by where it is.
+    """
+
+    def __init__(self, problem: str) -> None:
+        self.problem = problem
+        """What is wrong with it, in words that quote nothing the file holds."""
+        super().__init__(
+            f"the parse-owed file under storage.data_dir could not be read ({problem}), "
+            "so it was left as it is"
+        )
+
+
+class ParseOwed:
+    """The parses this machine's runs owe: published here, not yet parsed and published (`v1-e40-t08`).
+
+    A run killed after its publish stage and before its parse left that week published and not
+    parsed, and the next run, finding nothing new to import, parsed nothing: the parse stage parsed
+    only what its own run imported. So the publish stage records a parse owed for each snapshot the
+    bucket confirms, and the parse stage of every later run parses the caselists owed, whether or not
+    it imports anything. An entry is cleared only when its caselist's parsed store is published
+    complete: a parse that completes and whose publish fails is still owed. A parser version the
+    store has no directory of owes a full parse of the caselist, recorded before it starts, so that
+    a run stopped part-way through it leaves it owed rather than a directory that looks held.
+
+    The file is `{"full_parses": [{"caselist": "<slug>", "parser_version": "<version>"}, ...],
+    "snapshots": [{"caselist": "<slug>", "snapshot": "<name>"}, ...]}`, each snapshot a target
+    `caselist publish` would accept. Caselist slugs, snapshot names and a parser version: never a
+    school, a team code or a path, and :meth:`owe` refuses anything else before it writes. There is
+    no file when nothing is owed. It is a file of its own, not a key of the pending-work file, so
+    that a build before `v1-e40-t08`, which rewrites the pending-work file with the one key it knows,
+    never drops an entry, and never reads one either.
+
+    `on_written` is called with the path after every write or removal: in bucket mode, the save of
+    the file to the bucket (`v1-e40-t04`).
+    """
+
+    def __init__(self, path: Path, *, on_written: Callable[[Path], None] | None = None) -> None:
+        self.path = Path(path)
+        self._on_written = on_written
+
+    def read(self) -> ParsesOwed:
+        """What is owed, in the order it was recorded; nothing when there is no file.
+
+        Raises :class:`ParseOwedUnreadable` for a file that is there and is not, in every entry,
+        what :meth:`owe` writes.
+        """
+        try:
+            text = self.path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return ParsesOwed()
+        except (OSError, UnicodeDecodeError) as failed:
+            raise ParseOwedUnreadable(type(failed).__name__) from failed
+        try:
+            body: object = json.loads(text)
+        except ValueError:
+            raise ParseOwedUnreadable("it is not JSON") from None
+        fields = cast("dict[str, object]", body) if isinstance(body, dict) else {}
+        snapshots, full_parses = fields.get("snapshots"), fields.get("full_parses")
+        if not isinstance(snapshots, list) or not isinstance(full_parses, list):
+            raise ParseOwedUnreadable('it has no "snapshots" and "full_parses" lists')
+        try:
+            return ParsesOwed(
+                snapshots=tuple(
+                    _owed_snapshot(cast("dict[str, object]", one) if isinstance(one, dict) else {})
+                    for one in cast("list[object]", snapshots)
+                ),
+                full_parses=tuple(
+                    _owed_full_parse(cast("dict[str, object]", one) if isinstance(one, dict) else {})
+                    for one in cast("list[object]", full_parses)
+                ),
+            )
+        except ValueError:
+            raise ParseOwedUnreadable(
+                "an entry names a caselist, a snapshot or a parser version that has no place in the store"
+            ) from None
+
+    def owe(
+        self, *, snapshots: Iterable[PendingSnapshot] = (), full_parses: Iterable[FullParseOwed] = ()
+    ) -> None:
+        """Add what is not owed already, after what is. Raises `ValueError`, writing nothing, for an
+        entry that is not a caselist slug with a snapshot name or a parser version."""
+        snapshots, full_parses = tuple(snapshots), tuple(full_parses)
+        for snapshot in snapshots:
+            _owed_snapshot(snapshot.as_json())
+        for full_parse in full_parses:
+            _owed_full_parse(full_parse.as_json())
+        owed = self.read()
+        more = ParsesOwed(
+            snapshots=tuple(dict.fromkeys((*owed.snapshots, *snapshots))),
+            full_parses=tuple(dict.fromkeys((*owed.full_parses, *full_parses))),
+        )
+        if more != owed:
+            self._write(more)
+
+    def clear_caselist(self, caselist: str) -> None:
+        """Clear every entry of `caselist`: its parsed store was just published complete."""
+        owed = self.read()
+        self._clear(owed, lambda one: one.caselist == caselist)
+
+    def clear_snapshots(self, snapshots: Iterable[PendingSnapshot]) -> None:
+        """Clear the entries of `snapshots`: a removal reached them. Full parses owed stay owed."""
+        reached = frozenset(snapshots)
+        owed = self.read()
+        self._clear(owed, lambda one: isinstance(one, PendingSnapshot) and one in reached)
+
+    def _clear(self, owed: ParsesOwed, cleared: Callable[[PendingSnapshot | FullParseOwed], bool]) -> None:
+        left = ParsesOwed(
+            snapshots=tuple(one for one in owed.snapshots if not cleared(one)),
+            full_parses=tuple(one for one in owed.full_parses if not cleared(one)),
+        )
+        if left != owed:
+            self._write(left)
+
+    def _write(self, owed: ParsesOwed) -> None:
+        if not owed:
+            remove_state_file(self.path)
+        else:
+            write_state_file(self.path, owed.as_json())
+        if self._on_written is not None:
+            self._on_written(self.path)
+
+
+def _owed_snapshot(fields: Mapping[str, object]) -> PendingSnapshot:
+    """One snapshot entry, checked: exactly a caselist and a snapshot `caselist publish` accepts."""
+    caselist, snapshot = fields.get("caselist"), fields.get("snapshot")
+    if (
+        set(fields) != {"caselist", "snapshot"}
+        or not isinstance(caselist, str)
+        or not isinstance(snapshot, str)
+    ):
+        raise ValueError("a parse owed names a caselist and a snapshot, and nothing else")
+    try:
+        validate_publish_target(caselist, snapshot)
+    except InvalidPublishTarget as invalid:
+        raise ValueError(str(invalid)) from None
+    return PendingSnapshot(caselist=caselist, snapshot=snapshot)
+
+
+def _owed_full_parse(fields: Mapping[str, object]) -> FullParseOwed:
+    """One full-parse entry, checked: exactly a caselist and a parser version."""
+    caselist, version = fields.get("caselist"), fields.get("parser_version")
+    if (
+        set(fields) != {"caselist", "parser_version"}
+        or not isinstance(caselist, str)
+        or not isinstance(version, str)
+        or _PARSER_VERSION.fullmatch(version) is None
+    ):
+        raise ValueError("a full parse owed names a caselist and a parser version, and nothing else")
+    try:
+        validate_publish_target(caselist, None)
+    except InvalidPublishTarget as invalid:
+        raise ValueError(str(invalid)) from None
+    return FullParseOwed(caselist=caselist, parser_version=version)
+
+
+def parses_owed_sentence(owed: ParsesOwed) -> str | None:
+    """What `caselist runs` and `caselist status` say of the parses owed; `None` when none is."""
+    sentences: list[str] = []
+    if owed.snapshots:
+        sentences.append(
+            f"Parse owed: {_snapshots_named(owed.snapshots)}. The next caselist pull parses and publishes "
+            f"{'them' if len(owed.snapshots) > 1 else 'it'}, whether or not it imports anything."
+        )
+    versions = tuple(dict.fromkeys(one.parser_version for one in owed.full_parses))
+    for version in versions:
+        named = ", ".join(one.caselist for one in owed.full_parses if one.parser_version == version)
+        sentences.append(
+            f"Full parse owed under parser version {version}: {named}. The next caselist pull parses "
+            "and publishes it before it builds the search index."
+        )
+    return " ".join(sentences) or None
 
 
 class DownloadLedger:
@@ -2970,6 +3206,11 @@ class CaselistSyncService:
             is the cloud run's, so a parsed store the stage did not publish is named with the cloud
             cure (:func:`cloud_parse_cure`), never a command that publishes from the operator's
             working copy. The composition root's `_in_bucket_mode`. Off, the default, is local mode.
+        full_parse_owed: Whether a caselist's parsed store has no directory of the running parser
+            version though the caselist has sources, and which version that is (`v1-e40-t08`):
+            :meth:`~debate_core.application.caselist_pull_parse.PullParseStage.full_parse_owed`.
+            The parse stage asks it of every caselist the run follows, `openev` included, and parses
+            each it names in full before the index stage. `None`, the default, asks nothing.
     """
 
     def __init__(
@@ -3004,8 +3245,10 @@ class CaselistSyncService:
         backfile_caselists: Sequence[str] = (),
         working_copy_outlives_the_run: bool = False,
         bucket_mode: bool = False,
+        full_parse_owed: Callable[[str], Awaitable[str | None]] | None = None,
     ) -> None:
         self._source = source
+        self._full_parse_owed = full_parse_owed
         self._working_copy_outlives_the_run = working_copy_outlives_the_run
         self._bucket_mode = bucket_mode
         # A backfile (`v1-e34-t34`) is never pulled, by the weekly run or by hand: refused in `plan`.
@@ -3045,6 +3288,7 @@ class CaselistSyncService:
             on_written=state_written,
         )
         self._pending = PendingWork(self._state_dir / PENDING_WORK_FILENAME, on_written=state_written)
+        self._parse_owed = ParseOwed(self._state_dir / PARSE_OWED_FILENAME, on_written=state_written)
         self._suppression = suppression
         self._deliveries = OpenEvDeliveries(
             self._state_dir / OPENEV_DELIVERIES_FILENAME, on_written=state_written
@@ -3061,6 +3305,11 @@ class CaselistSyncService:
     def pending_work(self) -> PendingWork:
         """The publishes this machine still owes, so a command can report them without a run."""
         return self._pending
+
+    @property
+    def parse_owed(self) -> ParseOwed:
+        """The parses this machine's runs still owe (`v1-e40-t08`)."""
+        return self._parse_owed
 
     async def plan(self, caselists: Sequence[str], *, full_archive: str | None = None) -> SyncPlan:
         """Decide what a run would fetch, using listing calls only and writing nothing.
@@ -3711,7 +3960,7 @@ class CaselistSyncService:
         await self._timed(SyncStage.PUBLISH, tally, lambda: self._publish_stage(tally))
         if self._after_publish is not None:
             await self._after_publish()
-        await self._timed(SyncStage.PARSE, tally, lambda: self._parse_stage(tally))
+        await self._timed(SyncStage.PARSE, tally, lambda: self._parse_stage(plan, tally))
         await self._timed(SyncStage.SEARCH_INDEX, tally, lambda: self._search_index_stage(plan, tally))
         await self._timed(SyncStage.LANDSCAPE, tally, lambda: self._landscape_stage(plan, tally))
         await self._timed(SyncStage.REPORT, tally, lambda: self._report_stage(tally))
@@ -4255,6 +4504,9 @@ class CaselistSyncService:
             )
         published = sources + manifests
         tally.objects_published, tally.manifests_published = published, manifests
+        # A parse owed for each snapshot confirmed, before the pending-work file lets it go
+        # (`v1-e40-t08`): a run killed between the two writes owes the parse, never neither.
+        self._owe_parses(tally.published)
         owed = record_what_is_owed()
 
         reason = f"{published} object(s) published"
@@ -4298,27 +4550,95 @@ class CaselistSyncService:
             f"{manifests} manifest(s)",
         )
 
-    async def _parse_stage(self, tally: _RunTally) -> None:
-        """Parse what this run imported, and publish the parsed store where the run publishes.
+    def _owe_parses(self, confirmed: Sequence[PendingSnapshot]) -> None:
+        """A parse owed for each snapshot the bucket confirmed, where a parse stage parses (`v1-e40-t08`).
+
+        A complete archive owes none, as it names no caselist to parse (:func:`caselists_to_parse`).
+        A parse-owed file that cannot be read is left as it is: the parse stage reads it again and
+        is the one that fails on it.
+        """
+        if self._parse is None:
+            return
+        owed = [one for one in confirmed if full_archive_date(one.snapshot) is None]
+        if not owed:
+            return
+        with contextlib.suppress(ParseOwedUnreadable):
+            self._parse_owed.owe(snapshots=owed)
+
+    async def _full_parses_owed(
+        self, plan: SyncPlan, failures: list[_StageFailure], *, parsed_anyway: Collection[str]
+    ) -> tuple[FullParseOwed, ...]:
+        """Each caselist the run follows, `openev` included, whose parsed store has no directory of
+        the running parser version (`v1-e40-t08`). A check that raised is that caselist's failure.
+
+        `parsed_anyway` is not asked: what the run imported into or owes already is parsed, in full if
+        its directory holds nothing, and its entries keep it owed until its store is published.
+        """
+        if self._full_parse_owed is None:
+            return ()
+        found: list[FullParseOwed] = []
+        for store in search_index_stores(plan.caselists):
+            if store in parsed_anyway:
+                continue
+            try:
+                version = await self._full_parse_owed(store)
+            except Exception as failed:
+                failures.append(self._failure(failed, about=store))
+                continue
+            if version is not None:
+                found.append(FullParseOwed(caselist=store, parser_version=version))
+        return tuple(found)
+
+    async def _parse_stage(self, plan: SyncPlan, tally: _RunTally) -> None:
+        """Parse what this run imported and what earlier runs owe, and publish the parsed store.
 
         See "The parse stage" in this module's docstring. Nothing here can undo or withhold what the
         stages before it did (`v1-e34-t17`): they are finished and written down, this stage writes
         nothing to the pending-work file, and whatever the pipeline raises is caught, a bug
         included, and recorded as a failure of this stage. One caselist's failure does not stop the
         others from being parsed.
+
+        **What is owed comes first** (`v1-e40-t08`): the caselists the parse-owed file names that
+        this run follows, in the order owed, then each the run finds with no directory of the
+        running parser version, then those it imported into. An entry is cleared when its
+        caselist's parsed store is published complete, and at no other point of the stage.
         """
         if self._parse is None:
             tally.record(SyncStage.PARSE, StageOutcome.SKIPPED, _PARSE_TURNED_OFF)
             return
-        caselists = caselists_to_parse(tally.publish_targets)
-        if not caselists:
-            tally.record(
-                SyncStage.PARSE,
-                StageOutcome.SKIPPED,
-                _ONLY_COMPLETE_ARCHIVES if tally.publish_targets else "nothing new was imported",
-            )
-            return
         publishing = self._publisher is not None
+        failures: list[_StageFailure] = []
+        unreadable = False
+        try:
+            parses_owed = self._parse_owed.read()
+        except ParseOwedUnreadable as cannot_read:
+            parses_owed, unreadable = ParsesOwed(), True
+            failures.append(self._failure(cannot_read))
+        followed = search_index_stores(plan.caselists)
+        imported = caselists_to_parse(tally.publish_targets)
+        bumped = await self._full_parses_owed(
+            plan, failures, parsed_anyway={*imported, *parses_owed.caselists}
+        )
+        if bumped and publishing and not unreadable:
+            # Before the parse starts, so that a run stopped part-way leaves the rest owed.
+            try:
+                self._parse_owed.owe(full_parses=bumped)
+            except (DomainError, OSError) as unrecorded:
+                failures.append(self._failure(unrecorded))
+        owed_followed = tuple(one for one in parses_owed.caselists if one in followed)
+        caselists = tuple(dict.fromkeys((*owed_followed, *(one.caselist for one in bumped), *imported)))
+        not_followed = tuple(one for one in parses_owed.caselists if one not in followed)
+        if not caselists:
+            reason = _ONLY_COMPLETE_ARCHIVES if tally.publish_targets else "nothing new was imported"
+            if not_followed:
+                reason += f"; {_left_owed(not_followed)}"
+            if failures:
+                tally.fail(
+                    SyncStage.PARSE, f"{reason}; " + "; ".join(one.sentence for one in failures), failures
+                )
+            else:
+                tally.record(SyncStage.PARSE, StageOutcome.SKIPPED, reason)
+            return
         # Why no login is to be had, once that is known: nothing more is sent to the bucket then.
         no_session = (
             "the publish stage found no AWS session"
@@ -4326,7 +4646,6 @@ class CaselistSyncService:
             else None
         )
         stopped: _StageFailure | None = None
-        failures: list[_StageFailure] = []
         not_published: list[str] = []
         # What finishes each of them, decided from what the stage saw of that caselist (`v1-e34-t31`):
         # `--publish-only` only for a rebuild that read every copy of the list, in a working copy
@@ -4395,6 +4714,12 @@ class CaselistSyncService:
                     )
                 )
                 unpublished(caselist, rebuilt_from_every_copy=every_copy)
+            elif not unreadable:
+                # Published complete: the one point at which what it owed is cleared (`v1-e40-t08`).
+                try:
+                    self._parse_owed.clear_caselist(caselist)
+                except (DomainError, OSError) as uncleared:
+                    failures.append(self._failure(uncleared, about=caselist))
 
         tally.parse = ParseStageCounts(
             caselists=len(parsed_caselists),
@@ -4409,6 +4734,7 @@ class CaselistSyncService:
         )
         tally.parsed_stores_owed = tuple(owed)
         reason = _parse_stage_sentence(tally.parse, publishing=publishing)
+        reason += _what_was_owed(owed_followed, bumped, imported=imported, not_followed=not_followed)
         named = ", ".join(not_published)
         if stopped is not None:
             failures.append(stopped)
@@ -5222,8 +5548,8 @@ def _unpublished_parsed_store_fix(owed: Sequence[ParsedStoreOwed], *, bucket_mod
         return (
             f"The cloud run publishes the parsed store of {_and_listed([one.caselist for one in owed])}, "
             "never the operator's Mac, whose working copy is not the one the cloud run owns: the next "
-            "weekly run that imports into a caselist rebuilds its parsed store and publishes it, and so "
-            f"does a run started by hand that imports into it ({CLOUD_PARSE_STAGE_RUNBOOK})."
+            "weekly run rebuilds it and publishes it, whether or not it imports into the caselist, and "
+            f"so does a run started by hand ({CLOUD_PARSE_STAGE_RUNBOOK})."
         )
     publish_only = [one.command for one in owed if one.publish_only]
     rebuild = [one.command for one in owed if not one.publish_only]
@@ -5319,6 +5645,33 @@ def why_no_search_index_stage(*, bucket_named: bool, refresh_search_index: bool)
     if not bucket_named:
         return _NO_SEARCH_INDEX
     return None
+
+
+def _left_owed(caselists: Sequence[str]) -> str:
+    """Why a parse owed was not made: the run does not follow the caselist (`v1-e40-t08`)."""
+    return f"the parse owed for {', '.join(caselists)} is left owed, as this run does not follow it"
+
+
+def _what_was_owed(
+    owed: Sequence[str],
+    bumped: Sequence[FullParseOwed],
+    *,
+    imported: Sequence[str],
+    not_followed: Sequence[str],
+) -> str:
+    """What the parse stage's sentence adds of what it parsed because it was owed (`v1-e40-t08`)."""
+    said: list[str] = []
+    as_owed = [one for one in owed if one not in imported and one not in {b.caselist for b in bumped}]
+    if as_owed:
+        said.append(f"parsed as owed, with nothing new imported into it: {', '.join(as_owed)}")
+    for version in dict.fromkeys(one.parser_version for one in bumped):
+        named = ", ".join(one.caselist for one in bumped if one.parser_version == version)
+        said.append(
+            f"parsed in full, as the parsed store held no directory of parser version {version}: {named}"
+        )
+    if not_followed:
+        said.append(_left_owed(not_followed))
+    return "".join(f"; {one}" for one in said)
 
 
 def _parse_stage_sentence(counts: ParseStageCounts, *, publishing: bool) -> str:

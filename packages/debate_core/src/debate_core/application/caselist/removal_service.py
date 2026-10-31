@@ -80,6 +80,7 @@ coordinates `landscape report --publish` once the removal is done.
 
 from __future__ import annotations
 
+import contextlib
 import re
 import tempfile
 import uuid
@@ -90,6 +91,7 @@ from typing import Final, Protocol
 
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.inbox_purge import CaselistInbox, InboxPurge, purge_inbox
+from debate_core.application.caselist.publish_plan import snapshot_of_manifest_key
 from debate_core.application.caselist.publish_service import error_code_of
 from debate_core.application.caselist.removal_plan import (
     Disposition,
@@ -112,6 +114,7 @@ from debate_core.application.caselist.suppression import (
     RecordedSuppressionList,
     load_suppression_state,
 )
+from debate_core.application.caselist_sync import ParseOwed, ParseOwedUnreadable, PendingSnapshot
 from debate_core.application.errors import (
     DomainError,
     StoreAccessDenied,
@@ -702,6 +705,9 @@ class CaselistRemovalService:
     """In bucket mode (`v1-e40-t04`): the run's state, restored before a plan and rewritten after a
     removal, its earlier versions then purged. `None` in local mode, where no bundle exists: a local-mode
     command refuses a bucket that holds one (the PM's ruling 3(a))."""
+    parse_owed: ParseOwed | None = None
+    """The parses the runs owe (`v1-e40-t08`): a removal clears the entry of each snapshot it reaches.
+    In bucket mode, the restored file, saved with the other state files by the bundle's rewrite."""
     _access: TakedownAccess | None = field(default=None, init=False)
 
     # --------------------------------------------------------------------------------------
@@ -781,6 +787,7 @@ class CaselistRemovalService:
             await self._delete_local_files(plan, counts)
             await self._delete_local_school_views(plan, counts)
             await self._rewrite_local_manifests(plan, counts)
+            self._clear_parses_owed(plan)
             await self._purge_inbox(plan, counts)
             await self._delete_records(plan, counts)
             await self._rewrite_run_state(access, counts)
@@ -938,6 +945,25 @@ class CaselistRemovalService:
             await self._put_lines(self.local.objects, rewrite)
             counts.manifests_rewritten += 1
             counts.manifest_rows_dropped += rewrite.rows_dropped
+
+    def _clear_parses_owed(self, plan: RemovalPlan) -> None:
+        """The parse owed for each snapshot whose manifest the removal rewrote (`v1-e40-t08`).
+
+        A removal is followed by the rebuild of each caselist it touched, `caselist parse --publish`
+        (`caselist-removal.md`), which parses whatever of the caselist is unparsed. A file that cannot
+        be read is left as it is, for the parse stage to fail on: it never stops a removal.
+        """
+        if self.parse_owed is None:
+            return
+        reached = {
+            PendingSnapshot(caselist=caselist, snapshot=snapshot)
+            for rewrite in plan.manifests
+            for caselist in plan.touched_caselists
+            if (snapshot := snapshot_of_manifest_key(caselist, rewrite.key, full_archives=True)) is not None
+        }
+        if reached:
+            with contextlib.suppress(ParseOwedUnreadable):
+                self.parse_owed.clear_snapshots(reached)
 
     async def _purge_inbox(self, plan: RemovalPlan, counts: _Counts) -> None:
         """The sync's inbox, as planned: after this machine's store, before the records."""

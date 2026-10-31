@@ -135,6 +135,7 @@ from debate_core.application.caselist.publish_plan import InvalidPublishTarget, 
 from debate_core.application.caselist.run_lock import RunLockHeld, RunLockLost
 from debate_core.application.caselist.status_service import CASELIST_DRIFT
 from debate_core.application.caselist_sync import (
+    CLOUD_FAILURE_RATE_RUNBOOK,
     REQUIRED_STAGES,
     DriftKind,
     PendingSnapshot,
@@ -1460,6 +1461,13 @@ def notifications_for(
     return [replace(one, subtitle=where) for one in sent]
 
 
+NOTHING_OWED_FOR_THE_PARSED_STORE: Final = (
+    f"none owed: the parsed store was published ({CLOUD_FAILURE_RATE_RUNBOOK})"
+)
+"""A bucket-mode parse stage's fix line when its details say no parsed store is owed (`v1-e40-t08`):
+a stage over its failure rate that published, whose failures are the PM's to look into."""
+
+
 def parse_commands(details: SyncRunDetails) -> str:
     """What finishes a run's parse stage: each caselist owed, by its own command (`v1-e34-t31`).
 
@@ -1470,11 +1478,17 @@ def parse_commands(details: SyncRunDetails) -> str:
 
     **A bucket-mode run names no command** (`v1-e40-t18`), as its details' `bucket_run` says it was:
     the cloud run owns the parsed store, and a command run on the operator's Mac would publish the
-    Mac's own working copy over it. Its cure is the next cloud run that imports into each caselist
-    owed (:func:`~debate_core.application.caselist_sync.cloud_parse_cure`), whether or not the
-    details name them.
+    Mac's own working copy over it. Its cure is the next cloud run, which parses and publishes what
+    is owed whether or not it imports into the caselist
+    (:func:`~debate_core.application.caselist_sync.cloud_parse_cure`), whether or not the details
+    name the caselists. **Details that say nothing is owed name no cure** (`v1-e40-t08`): a stage
+    over its failure rate whose parsed store was published, whose fix line says so instead. Details
+    with no `parsed_stores_owed` at all, which the cloud image before `v1-e34-t31` writes, cannot say
+    that, and keep the cure.
     """
     if details.bucket_run is not None:
+        if not details.parsed_stores_owed and "parsed_stores_owed" in details.model_fields_set:
+            return NOTHING_OWED_FOR_THE_PARSED_STORE
         return cloud_parse_cure([one.caselist for one in details.parsed_stores_owed])
     if not details.parsed_stores_owed:
         return PARSE_COMMAND

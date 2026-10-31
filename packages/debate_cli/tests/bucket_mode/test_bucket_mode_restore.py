@@ -88,7 +88,7 @@ def test_a_run_on_an_empty_data_directory_parses_and_indexes_what_a_run_on_the_f
     assert world.parsed_digests(empty) == world.parsed_digests(mac_copy)
     restored = on_an_empty_directory["data"]["run_details"]["bucket_run"]["restore"]
     assert restored["parsed_objects"] > 0
-    assert restored["state_files"] == 5
+    assert restored["state_files"] == 6, "the five state files, and the parse-owed file since v1-e40-t08"
     copied_index = world.published_index()
     world.use_bucket(ORIGINAL)
     original_index = world.published_index()
@@ -116,8 +116,12 @@ def test_a_run_on_an_empty_directory_where_the_bucket_holds_no_parsed_store_fetc
 
     assert on_an_empty_directory["exit_code"] == ExitCode.OK, on_an_empty_directory
     assert on_an_empty_directory["data"]["parse"] == on_the_full_directory["data"]["parse"]
-    assert on_an_empty_directory["data"]["parse"]["attempted"] == 7, "all seven of testcl26's sources, afresh"
-    assert on_an_empty_directory["data"]["parse"]["full_parses"] == 1
+    # Every caselist the run follows owes a full parse when the store holds no directory of the running
+    # parser version, openev included, imported into or not (`v1-e40-t08`): the camp file is the eighth.
+    assert on_an_empty_directory["data"]["parse"]["attempted"] == 8, (
+        "all seven of testcl26's sources and openev's one camp file, afresh"
+    )
+    assert on_an_empty_directory["data"]["parse"]["full_parses"] == 2
     assert world.parsed_digests(empty) == world.parsed_digests(mac_copy)
     assert on_an_empty_directory["data"]["run_details"]["bucket_run"]["restore"]["parsed_objects"] == 0
 

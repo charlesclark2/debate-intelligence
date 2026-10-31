@@ -921,8 +921,8 @@ failure rate over the threshold. A run that a build before `v1-e34-t31` recorded
 every copy. See [The parse stage](#the-parse-stage).
 
 A bucket-mode run, the cloud run's, names neither (`v1-e40-t18`): its parsed store is the cloud
-run's, and the next cloud run that imports into the caselist publishes it. Never run either command
-on this Mac for it; see [caselist-cloud-run.md, "A failed parse stage"](caselist-cloud-run.md#a-failed-parse-stage).
+run's, and the next cloud run publishes it, whether or not it imports into the caselist
+(`v1-e40-t08`). Never run either command on this Mac for it; see [caselist-cloud-run.md, "A failed parse stage"](caselist-cloud-run.md#a-failed-parse-stage).
 
 **A login that will not be enough.** When the session expired after a snapshot had already ended
 incomplete on something no later run cures, the login banner adds a sentence:
@@ -1064,9 +1064,19 @@ leave a download, because no caselist has one yet, and the run after that the ne
 After it has published, a run parses what it imported (`v1-e34-t17`). It is the same pipeline
 `debate-research caselist parse` runs ([`parsed-card-store.md`](../data/parsed-card-store.md)):
 
-* **Which caselists.** Each caselist a weekly archive or a camp file was imported into, once. Camp
-  files are the caselist `openev`. A complete archive names none, because its sources are not
-  parsed. A run that imported nothing parses nothing and rebuilds nothing.
+* **Which caselists.** First each caselist a parse is owed for (`v1-e40-t08`), in the order owed,
+  then each caselist a weekly archive or a camp file was imported into, once. Camp files are the
+  caselist `openev`. A complete archive names none, because its sources are not parsed. A run that
+  imported nothing and owes nothing parses nothing and rebuilds nothing.
+* **What is owed.** A publish that the bucket confirms owes a parse of each snapshot it published,
+  written to `caselist-sync-parse-owed.json` in the data directory before the pending-work file lets
+  the snapshot go. A caselist whose parsed store has no directory of the build's parser version
+  owes a full parse, `openev` included, whether or not anything was imported into it. An entry is
+  cleared only when its caselist's parsed store is published complete, so a run killed after its
+  publish, or one whose parsed-store publish failed, leaves the parse to the next run, which makes
+  it even when it imports nothing. A removal that reaches a snapshot clears its entry: the rebuild
+  that follows a removal parses the caselist. `caselist runs` and `caselist status` end with what is
+  owed, and `--json` gives it as `parses_owed`.
 * **What is parsed.** Every source of that caselist not yet parsed under the build's parser and
   profile versions. In an ordinary week that is the week's new sources; everything else is
   `skipped`.
@@ -1206,36 +1216,33 @@ count says so, and the next week of 100 or more is judged.
 ### After a release that bumps the parser version
 
 The stage parses whatever is not parsed under the build's versions. A new parser version starts a
-new version directory, which holds nothing, so the first scheduled run after such a release would
-parse every imported caselist in full: about 30 minutes where it takes 20, with `full_parses` above
-`0`. A caselist that run does not import into, `openev` in most weeks, would stay on the old version
-until a camp file arrives.
+new version directory, which holds nothing. Since `v1-e40-t08` the first scheduled run after such a
+release parses **every caselist it follows in full, `openev` included**, whether or not it imports
+anything into them, and before its search index stage, so the index it builds is of the new version.
+Its parse stage's reason says `parsed in full, as the parsed store held no directory of parser
+version <version>`, and `full_parses` counts them. That run takes about 40 minutes longer than a
+usual Wednesday's: the 2026-10-11 full parse under `2026.10.10-docx-2` took 1,465 s on this Mac for
+11,126 sources, and hspolicy26 alone took 981 s for 4,342 sources on 2026-10-30.
 
-Do the full parse by hand instead, before the agent meets the new build. Install the build on a
-day other than Wednesday morning, or boot the agent out first ([Disabling it](#disabling-it)).
+Each caselist owed a full parse is written down before its parse starts, in the data directory's
+`caselist-sync-parse-owed.json`, and cleared once its parsed store is published complete. A run
+stopped part-way, by the Mac sleeping or by hand, leaves the caselists it did not finish owed, and
+the next run parses them first. `caselist runs` and `caselist status` end with what is owed.
 
-1. See what is due. `To parse` equal to `Sources` means a full parse.
+Doing the full parse by hand before the agent meets the new build is no longer needed. It is still
+allowed, on a day other than Wednesday morning or with the agent booted out first
+([Disabling it](#disabling-it)), if the Wednesday run must stay short:
 
-   ```bash
-   DEBATE_ENV=dev debate-research caselist parse --caselist hsld26 --dry-run
-   ```
+```bash
+aws sso login --profile debate-dev-evidence
+DEBATE_ENV=dev debate-research caselist parse --caselist hsld26 --publish
+DEBATE_ENV=dev debate-research caselist parse --caselist hspf26 --publish
+DEBATE_ENV=dev debate-research caselist parse --caselist hspolicy26 --publish
+DEBATE_ENV=dev debate-research caselist parse --caselist openev --publish
+```
 
-2. Parse and publish each caselist, one at a time, with no pull running. About 30 minutes for all
-   four: that is the 2026-10-11 parse under `2026.10.10-docx-2`, and the 2026-10-10 one took 518 s,
-   352 s, 747 s and 106 s, 28.7 minutes.
-
-   ```bash
-   aws sso login --profile debate-dev-evidence
-   DEBATE_ENV=dev debate-research caselist parse --caselist hsld26 --publish
-   DEBATE_ENV=dev debate-research caselist parse --caselist hspf26 --publish
-   DEBATE_ENV=dev debate-research caselist parse --caselist hspolicy26 --publish
-   DEBATE_ENV=dev debate-research caselist parse --caselist openev --publish
-   ```
-
-3. Reinstall and reload the agent ([Step 2](#step-2--install-the-agent), [Step 3](#step-3--enable-it)).
-
-If this was skipped, nothing is lost: the scheduled run does the full parse itself and says so in
-`full_parses`, and the last line of step 2 catches `openev` up.
+A full parse owed stays written down after a parse by hand: the next run finds the new version's
+directory, parses nothing again, publishes nothing it lacks, and clears it.
 
 ### One data directory for each bucket
 
@@ -1253,8 +1260,8 @@ reason names them. The import and the raw publish are untouched by this; what th
 
 **`caselist pull --publish-pending` does not publish the parsed store.** The pending-work file
 lists snapshots, and a parsed store is a version directory, which the file cannot name. After the
-login, either leave it, because the next run that imports into the caselist with a session
-publishes the whole directory, or publish it now:
+login, either leave it, because the next run with a session publishes the whole directory, whether
+or not it imports into the caselist (`v1-e40-t08`), or publish it now:
 
 ```bash
 aws sso login --profile debate-dev-evidence
@@ -1810,7 +1817,8 @@ parsed store for want of an AWS session. See
   caselist (`v1-e34-t31`): `caselist parse --caselist <slug> --publish-only` where the rebuild read
   every copy of the suppression list and only the publish is owed, and
   `caselist parse --caselist <slug> --publish` where it names that, which rebuilds first. Or leave it
-  to the next run that imports into that caselist.
+  to the next run, which parses and publishes what is owed whether or not it imports into that
+  caselist (`v1-e40-t08`).
 * `CHECKSUM_MISMATCH`: the bucket holds a file of the parsed store with other bytes, which the
   same parser never produces twice at one fingerprint version. A Mac at another fingerprint version
   does: its per-source files carry their own stamp
@@ -1831,8 +1839,10 @@ parsed store for want of an AWS session. See
 * `INTERNAL_ERROR`: the parse crashed. Run `caselist parse --caselist <slug>` by hand to see it,
   and report it.
 
-Running `caselist pull` again does not retry a parse stage: a pull that imports nothing parses
-nothing.
+Running `caselist pull` again retries a parse stage whose parsed store was not published: since
+`v1-e40-t08` the week stays owed in `caselist-sync-parse-owed.json` until its parsed store is
+published complete, and a pull parses what is owed even when it imports nothing. A stage that failed
+over its failure rate and published its store owes nothing, and is not retried.
 
 **`report: failed` with a `hint`, and exit `0`.** Everything was published, and the comparison that
 confirms it was refused. Nothing is lost and nothing waits for a login, but nothing leaves the inbox

@@ -17,7 +17,8 @@ that does not hold the lease.
    with the publisher's message (:class:`RunStateWithheld`) and nothing is installed. There is no
    second copy of the rule. Otherwise the manifests and the database replace this machine's whole.
 2. **The state files** under `reports/sync/state/` (:data:`STATE_FILES`): the run log, its details,
-   the download ledger, the OpenEv deliveries and the pending-work file. A file the bucket does not
+   the download ledger, the OpenEv deliveries, the pending-work file and, since `v1-e40-t08`, the
+   parse-owed file, which a build before it neither restores nor saves. A file the bucket does not
    hold is left as it is. An empty object is the record of a file that was removed (the pending-work
    file is removed when nothing is owed, and nothing here may delete), and removes the local one.
 3. **The published index's manifest**: `current.json` and the manifest it names, into
@@ -80,7 +81,10 @@ from debate_core.application.caselist.suppression import load_suppression_state
 from debate_core.application.caselist_sync import (
     DOWNLOAD_LEDGER_FILENAME,
     OPENEV_DELIVERIES_FILENAME,
+    PARSE_OWED_FILENAME,
     PENDING_WORK_FILENAME,
+    ParseOwed,
+    ParsesOwed,
 )
 from debate_core.application.errors import BlobIntegrityError, DomainError, NotFound
 from debate_core.application.evidence_sync import WithheldManifests
@@ -123,8 +127,12 @@ STATE_FILES: Final = (
     DOWNLOAD_LEDGER_FILENAME,
     OPENEV_DELIVERIES_FILENAME,
     PENDING_WORK_FILENAME,
+    PARSE_OWED_FILENAME,
 )
-"""The data directory's state files a later run needs, by their names there and in the bucket."""
+"""The data directory's state files a later run needs, by their names there and in the bucket.
+
+The parse-owed file is last and new in `v1-e40-t08`: an older build's own list of five is what it
+restores and saves, so it neither reads this file nor writes over it."""
 
 _PARALLEL_DOWNLOADS: Final = 16
 
@@ -375,6 +383,26 @@ class RunState:
 
         await asyncio.gather(*(one(info) for info in listed))
         return counts["fetched"], counts["kept"], counts["bytes"]
+
+    async def parses_owed(self) -> ParsesOwed:
+        """What the bucket's parse-owed file says the cloud run owes, read without restoring (`v1-e40-t08`).
+
+        What `caselist runs --remote` shows. Nothing owed when the bucket holds no such file, or the
+        empty object that records it removed. Raises :class:`ParseOwedUnreadable` as the file's own
+        reader does.
+        """
+        key = state_key(PARSE_OWED_FILENAME)
+        # Listed first, as the restore lists: a read of a missing key under a prefix-conditioned grant
+        # is refused rather than not found.
+        if key not in {info.key for info in await self._bucket.list_objects(STATE_PREFIX)}:
+            return ParsesOwed()
+        self._data_dir.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=self._data_dir, prefix=".run-state-file-") as scratch:
+            landed = Path(scratch) / PARSE_OWED_FILENAME
+            await self._bucket.get_file(key, landed)
+            if landed.stat().st_size == 0:
+                return ParsesOwed()
+            return ParseOwed(landed).read()
 
     # ------------------------------------------------------------------------------------------
     # Raw sources, as the parse needs them

@@ -68,7 +68,7 @@ spec:
         parses and publishes that snapshot though it imports nothing; the cloud cure's hint
         no longer says "that imports into"; by tests shown failing first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

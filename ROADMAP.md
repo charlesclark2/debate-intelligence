@@ -67,7 +67,7 @@ v2.3's extension work.
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 29 | 20 | 166 |
-| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 24 | 18 | 86 |
+| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 24 | 19 | 86 |
 | [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 36 | 19 | 70 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
@@ -530,7 +530,7 @@ Debaters search the team's evidence store from a school Chromebook or at home: a
 | [Open on OpenEv: a camp card links to its camp file](plan_specs/v1/e39-evidence-search-pilot/t16-open-on-openev.yaml) `v1-e39-t16-open-on-openev` | Pending | 1 | 3.0 |
 | [The landscape report and its school view on the pilot, for signed-in team members](plan_specs/v1/e39-evidence-search-pilot/t17-landscape-pages.yaml) `v1-e39-t17-landscape-pages` | Succeeded | 2 | 6.0 |
 | [Backfile seasons searchable on the pilot, without slowing its cold start](plan_specs/v1/e39-evidence-search-pilot/t18-backfiles-in-the-pilot-index.yaml) `v1-e39-t18-backfiles-in-the-pilot-index` | Blocked | 2 | 4.0 |
-| [A rebuilt index identical to the published one records the suppression list it was checked against](plan_specs/v1/e39-evidence-search-pilot/t19-identical-rebuild-records-its-suppression-list.yaml) `v1-e39-t19-identical-rebuild-records-its-suppression-list` | Pending | 1 | 2.0 |
+| [A rebuilt index identical to the published one records the suppression list it was checked against](plan_specs/v1/e39-evidence-search-pilot/t19-identical-rebuild-records-its-suppression-list.yaml) `v1-e39-t19-identical-rebuild-records-its-suppression-list` | Succeeded | 1 | 2.0 |
 | [The pilot API's test world split by surface, so a change selects only the tests it reaches](plan_specs/v1/e39-evidence-search-pilot/t20-api-conftest-split-by-surface.yaml) `v1-e39-t20-api-conftest-split-by-surface` | Succeeded | 1 | 2.0 |
 | [The tub deploy test records each stub call alone, as the caselist run's does](plan_specs/v1/e39-evidence-search-pilot/t21-one-call-recorder-for-deploy-tests.yaml) `v1-e39-t21-one-call-recorder-for-deploy-tests` | Succeeded | 0 | 1.0 |
 | [Smoke checks for tub index build, publish and prune, and a test of P4's shape](plan_specs/v1/e39-evidence-search-pilot/t22-tub-index-commands-smoke-and-p4-shape.yaml) `v1-e39-t22-tub-index-commands-smoke-and-p4-shape` | Succeeded | 1 | 2.0 |

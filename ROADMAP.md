@@ -66,7 +66,7 @@ v2.3's extension work.
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 16 | 11 | 114 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
-| [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 28 | 19 | 165 |
+| [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 28 | 20 | 165 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 23 | 17 | 84 |
 | [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 32 | 13 | 66 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
@@ -492,7 +492,7 @@ Whitefish Bay Debate has a public, mobile-friendly team website: team informatio
 | [A coach's schedule or results edit passes the site's tests without editing a test](plan_specs/v1/e37-calendar-and-announcements/t10-coach-edits-need-no-test-edit.yaml) `v1-e37-t10-coach-edits-need-no-test-edit` | Succeeded | 2 | 3.0 |
 | [The shipped-content checks follow the publishing policy, and a season change is one edit of three files](plan_specs/v1/e37-calendar-and-announcements/t11-content-guards-follow-the-policy.yaml) `v1-e37-t11-content-guards-follow-the-policy` | Succeeded | 0 | 1.0 |
 | [The prod build refuses an image whose consent has lapsed, as it refuses a lapsed name](plan_specs/v1/e37-calendar-and-announcements/t12-stale-image-consent-refused.yaml) `v1-e37-t12-stale-image-consent-refused` | Succeeded | 0 | 1.0 |
-| [A consent entry checked after its season ends is stale to the build, for names and images](plan_specs/v1/e37-calendar-and-announcements/t13-consent-checked-after-the-season-is-stale.yaml) `v1-e37-t13-consent-checked-after-the-season-is-stale` | Pending | 1 | 1.0 |
+| [A consent entry checked after its season ends is stale to the build, for names and images](plan_specs/v1/e37-calendar-and-announcements/t13-consent-checked-after-the-season-is-stale.yaml) `v1-e37-t13-consent-checked-after-the-season-is-stale` | Succeeded | 1 | 1.0 |
 
 #### [E38 — Team Donations](plan_specs/v1/e38-donations/epic.yaml)
 

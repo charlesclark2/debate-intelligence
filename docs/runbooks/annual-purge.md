@@ -498,8 +498,23 @@ retention delete, and no hand `aws s3 rm` is run over any of these prefixes. The
 PM's list, and the inventory goes on marking it `PURGE` each time it is run, which is the check.
 
 **What is deleted now** (the spec's second amendment, as the removal runbook does it after a
-removal): this Mac's local classifier files for the caselist, and the model stage's cassettes. First
-what they hold.
+removal): this Mac's local classifier files for the caselist, and the model stage's cassettes that
+only this caselist names. First what they hold.
+
+**One caselist's cassettes** (`v1-e32-t31`). A cassette is filed under its prompt and its call's key
+(`<data dir>/landscape/model-cassettes/<prompt>/<key>.json`), and names the caselists it was recorded
+or replayed for in its `caselists` list. The caselist is not part of the key: an identical card in two
+caselists is one cassette, and names both. So the block sorts them three ways:
+
+* **its alone**: only this caselist names it, and the delete removes it;
+* **shared**: another caselist names it too, and the delete takes only this name off, keeping the
+  cassette and everything it recorded for the other;
+* **unattributed**: it names no caselist, because it was recorded before `v1-e32-t31`. No caselist's
+  delete removes it; the count goes to the PM.
+
+The block writes its script into the window's scratch directory, and the delete block runs the same
+script. It reads nothing but the cassettes, prints counts and a slug only, and stops, changing
+nothing, on a file it cannot read as a cassette.
 
 **Operator command** (expected runtime seconds; reads only)
 Where: your Mac, in the purge window, with `CASELIST` from the block above
@@ -508,16 +523,88 @@ if grep -qE "^(bucket|bundle|local): ${CASELIST} PURGE" "$PURGE"/inventory-bucke
   DATA_DIR=$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["data"]["settings"]["storage.data_dir"])' "$PURGE/settings.json")
   if [ -d "${DATA_DIR}/landscape/local-classifier/${CASELIST}" ]; then echo "local classifier files: $(find "${DATA_DIR}/landscape/local-classifier/${CASELIST}" -type f | wc -l | tr -d ' ')"; else echo "local classifier files: none"; fi
   if [ -f "${DATA_DIR}/landscape/classifications/${CASELIST}.jsonl" ]; then echo "classified here: yes"; else echo "classified here: no"; fi
-  if [ -d "${DATA_DIR}/landscape/model-cassettes" ]; then echo "cassettes: $(find "${DATA_DIR}/landscape/model-cassettes" -type f -name '*.json' | wc -l | tr -d ' ')"; else echo "cassettes: none"; fi
+  cat > "$PURGE/cassettes.py" <<'CASSETTES'
+import json
+import os
+import re
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+caselist = sys.argv[2]
+action = sys.argv[3]
+slug = re.compile(r"[a-z]+[0-9]{2}")
+filed = re.compile(r"(_embed|_rerank|[A-Za-z0-9][A-Za-z0-9._-]*)/[0-9a-f]{64}\.json")
+if slug.fullmatch(caselist) is None or action not in ("list", "delete"):
+    sys.exit(f"STOP: {caselist} is not a caselist slug, or {action} is neither list nor delete; nothing was changed")
+
+alone, shared, unattributed, others = [], [], [], 0
+documents = {}
+for path in sorted(root.glob("*/*.json")) if root.is_dir() else []:
+    name = path.relative_to(root).as_posix()
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError):
+        document = None
+    named = (document.get("caselists") or []) if isinstance(document, dict) else None
+    readable = isinstance(named, list) and all(isinstance(one, str) and slug.fullmatch(one) for one in named)
+    if filed.fullmatch(name) is None or not readable:
+        sys.exit(f"STOP: {name} is not a cassette this script can read; nothing was changed")
+    documents[name] = document
+    if not named:
+        unattributed.append(name)
+    elif caselist not in named:
+        others += 1
+    elif len(set(named)) == 1:
+        alone.append(name)
+    else:
+        shared.append(name)
+
+
+def write_whole(path, document):
+    partial = path.with_name(f".{path.name}.partial")
+    with partial.open("w", encoding="utf-8") as stream:
+        stream.write(json.dumps(document, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False) + "\n")
+        stream.flush()
+        os.fsync(stream.fileno())
+    os.replace(partial, path)
+    directory = os.open(path.parent, os.O_RDONLY)
+    os.fsync(directory)
+    os.close(directory)
+
+
+if action == "delete":
+    for name in shared:
+        document = documents[name]
+        write_whole(root / name, {**document, "caselists": sorted(set(document["caselists"]) - {caselist})})
+    for name in alone:
+        (root / name).unlink()
+        directory = os.open((root / name).parent, os.O_RDONLY)
+        os.fsync(directory)
+        os.close(directory)
+    print(f"deleted: {len(alone)} cassette(s) only {caselist} named")
+    print(f"withdrawn: {caselist} from {len(shared)} shared cassette(s), kept for their other caselists")
+    print(f"kept: {len(unattributed)} unattributed cassette(s)")
+else:
+    print(f"cassettes of {caselist}: {len(alone)} its alone, {len(shared)} shared, {len(unattributed)} unattributed, {others} of other caselists only")
+CASSETTES
+  python3 -I "$PURGE/cassettes.py" "${DATA_DIR}/landscape/model-cassettes" "$CASELIST" list
 else
   echo "STOP: step 3 marked no ${CASELIST} PURGE"
 fi
 ```
-Success looks like the three lines. A cassette is filed under its prompt and its call's key, not its
-caselist (`<data dir>/landscape/model-cassettes/<prompt>/<key>.json`), so one caselist's recordings
-cannot be told from another's. When `classified here: yes`, the cassettes may hold its cards, and the
-next block deletes them all; the PM is told, since the model evaluation is then recorded again. When
-`no`, the cassettes are kept.
+Success looks like three lines, the last of them the cassette counts, for example:
+
+```text
+local classifier files: none
+classified here: yes
+cassettes of samplecl20: 3 its alone, 1 shared, 0 unattributed, 12 of other caselists only
+```
+
+A data directory with no cassettes prints `0 its alone, 0 shared, 0 unattributed, 0 of other
+caselists only`. A `STOP` line names one cassette file by its prompt and key: tell the PM and delete
+nothing. When `unattributed` is above zero and `classified here: yes`, an unattributed cassette may hold
+this caselist's cards and nothing here deletes it: send the PM the counts.
 
 **Then delete.**
 
@@ -527,14 +614,17 @@ Where: your Mac, in the purge window, straight after the block above
 if grep -qE "^(bucket|bundle|local): ${CASELIST} PURGE" "$PURGE"/inventory-bucket.txt "$PURGE"/inventory-bundle.txt "$PURGE"/inventory-local.txt; then
   DATA_DIR=$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["data"]["settings"]["storage.data_dir"])' "$PURGE/settings.json")
   if [ -d "${DATA_DIR}/landscape/local-classifier/${CASELIST}" ]; then rm -r "${DATA_DIR}/landscape/local-classifier/${CASELIST}" && echo "deleted: the local classifier files of ${CASELIST}"; else echo "nothing to delete: no local classifier files of ${CASELIST}"; fi
-  if [ -f "${DATA_DIR}/landscape/classifications/${CASELIST}.jsonl" ] && [ -d "${DATA_DIR}/landscape/model-cassettes" ]; then rm -r "${DATA_DIR}/landscape/model-cassettes" && echo "deleted: the model cassettes; tell the PM"; else echo "cassettes kept: ${CASELIST} was not classified here, or there are none"; fi
+  python3 -I "$PURGE/cassettes.py" "${DATA_DIR}/landscape/model-cassettes" "$CASELIST" delete
 else
   echo "STOP: step 3 marked no ${CASELIST} PURGE"
 fi
 ```
-Success looks like a `deleted:` or `nothing to delete:` line, and a `deleted:` or `cassettes kept:`
-line. **The check:** the block before this one again prints `local classifier files: none`, and
-`cassettes: none` if they were deleted. A coach sample deleted this way is drawn again with
+Success looks like a `deleted:` or `nothing to delete:` line for the local classifier files, then the
+cassettes' `deleted:`, `withdrawn:` and `kept:` lines, with the counts the block before printed. **The
+check:** the block before this one again prints `local classifier files: none`, and `0 its alone, 0
+shared` for the caselist, with the same `unattributed` count as before. Tell the PM when a cassette was
+deleted, since the model evaluation of this caselist is then recorded again. A coach sample deleted
+this way is drawn again with
 `scripts/compare_local_classifier.py features` and then `sample`; tell the PM if one was waiting to be
 labelled.
 
@@ -827,8 +917,9 @@ around by hand here.
    or holding a path. `caselist remove` does each of these for a takedown only.
 2. **The same for an OpenEv camp release** of a topic year before 2021.
 3. **This Mac's own search-index builds** (`tub-index/`), which only the next local build prunes.
-4. **A caselist's model cassettes**: the cassettes are filed by prompt and key, so one caselist's
-   cannot be deleted alone.
+4. **The model cassettes recorded before `v1-e32-t31`**, which name no caselist: step 4 reports them
+   as unattributed, and no caselist's delete reaches them. Every cassette recorded or replayed since
+   names its caselists, and step 4 deletes one caselist's alone.
 5. **Noncurrent versions under the rest of `reports/`, `uploads/` and `exports/`**, which no profile
    may list, so step 6 cannot check them.
 6. **A working copy restored before the marker is found by its database file**, three levels down: a

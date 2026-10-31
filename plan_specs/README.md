@@ -47,9 +47,16 @@ labels:
 
 * **Inside a task:** `Plan.spec.graph.nodes[].dependsOn` orders the steps.
 * **Between tasks:** the task Goal lists prerequisites in
-  `spec.context: [{kind: TaskRef, name: <task-name>, relation: dependsOn}]`.
-* **Inside an epic:** `epic.yaml`'s Plan is the source of truth for task ordering. Cross-epic
-  prerequisites appear there as `External` nodes.
+  `spec.context: [{kind: TaskRef, name: <task-name>, relation: dependsOn}]`. `scripts/task ready`
+  and `scripts/task start` read only this list. A prerequisite that no task spec declares is never
+  met: `ready` leaves its task out and says why, and `start` refuses it.
+* **Inside an epic:** `epic.yaml`'s Plan draws the same prerequisites as a graph. Each Task node's
+  `dependsOn` names exactly its task's `spec.context` prerequisites: a same-epic one through that
+  task's node, a cross-epic one through an `External` node whose `inputs.goalRef` names it.
+  `scripts/validate_specs.py` refuses a graph edge the context does not list, a context
+  prerequisite the graph does not draw, an `External` node that names a task of the same epic or
+  no task at all, and an `External` node whose task ships in a later release than the epic
+  (`v1-e41-t07`).
 * **Releases** reference their epics as `External` nodes and end in a review `Gate`.
 * **A follow-up task names what it follows from.** A task the PM files from another task's findings
   lists that task in `spec.context`, together with every task its description says must come
@@ -80,7 +87,9 @@ one typed, machine-checkable criterion:
 
 `status.phase` on a task Goal: `Pending → Ready → InProgress → Succeeded` (or `Blocked`,
 `Failed`, `Cancelled`). Update it in the same PR that completes the work. An epic Goal is
-`Succeeded` when all its tasks are; the epic Plan's criteria check that with
+`Succeeded` only when each of its tasks is `Succeeded` or `Cancelled`, and a release Goal only when
+each of its epics is: `scripts/validate_specs.py` refuses one marked `Succeeded` earlier
+(`v1-e41-t07`). The epic Plan's criteria check each task with
 `uv run scripts/validate_specs.py --require-succeeded <task-name>`.
 
 ## Repository conventions assumed by task criteria

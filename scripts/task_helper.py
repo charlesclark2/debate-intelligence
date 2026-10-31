@@ -8,8 +8,10 @@ Kept in Python so the shell script stays small and portable (macOS ships bash 3.
 Every subcommand reads the specs of the checkout it is run from.
 
   info    <task>                 print tab-separated: spec_path, title, epic, release, phase
-  prereqs <task>                 list prerequisites and their phase; exit 1 if any is not Succeeded
-  ready                          list Pending tasks whose prerequisites are all Succeeded
+  prereqs <task>                 list prerequisites and their phase; exit 1 if any is not Succeeded,
+                                 2 if any is not a task spec
+  ready                          list Pending tasks whose prerequisites are all Succeeded; a task with a
+                                 prerequisite that is not a task spec is left out, and stderr says so
   set-phase <task> <phase>       set the task Goal's status.phase in place
   prompt  <task> <worktree>      render the kickoff prompt for the task's Claude session
   prompt-resumed <task> <worktree>
@@ -30,6 +32,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from typing import NoReturn
 
 import yaml
 
@@ -44,7 +47,7 @@ SECTION_HEADING = re.compile(r"^## ", re.M)
 OPEN_ITEM_MARKERS = re.compile(r"NOT RUN|NOT APPLICABLE|PARTIAL|FAIL")
 
 
-def die(msg: str, code: int = 2) -> None:
+def die(msg: str, code: int = 2) -> NoReturn:
     print(msg, file=sys.stderr)
     sys.exit(code)
 
@@ -102,17 +105,28 @@ def cmd_info(task: str) -> None:
     )
 
 
+def unknown_prerequisite(task: str, name: str) -> str:
+    return f"{task}'s spec.context names {name}, which no task spec declares"
+
+
 def cmd_prereqs(task: str) -> None:
     _, g = find(task)
     files = task_files()
     blocked = False
+    unknown = [name for name in prereq_names(g) if name not in files]
     for name in prereq_names(g):
-        ph = phase_of(goal(files[name])) if name in files else "MISSING"
+        if name in unknown:
+            print(f"  UNKNOWN {name} (no task spec declares it)")
+            continue
+        ph = phase_of(goal(files[name]))
         mark = "ok     " if ph == "Succeeded" else "BLOCKED"
         blocked |= ph != "Succeeded"
         print(f"  {mark} {name} ({ph})")
     if not prereq_names(g):
         print("  (no prerequisites)")
+    if unknown:
+        # A prerequisite nobody declares is a spec error, never a met prerequisite (v1-e41-t07).
+        die("\n".join(unknown_prerequisite(task, name) for name in unknown))
     sys.exit(1 if blocked else 0)
 
 
@@ -123,7 +137,16 @@ def cmd_ready() -> None:
     for n, g in goals.items():
         if phase_of(g) not in ("Pending", "Ready"):
             continue
-        if all(phase_of(goals[p]) == "Succeeded" for p in prereq_names(g) if p in goals):
+        unknown = [p for p in prereq_names(g) if p not in goals]
+        if unknown:
+            # Until v1-e41-t07 an unknown prerequisite was skipped, so it counted as met.
+            for p in unknown:
+                print(
+                    f"{n} is not listed: its spec.context names {p}, which no task spec declares",
+                    file=sys.stderr,
+                )
+            continue
+        if all(phase_of(goals[p]) == "Succeeded" for p in prereq_names(g)):
             rows.append(
                 (g["metadata"]["labels"]["debate/release"], n, g["metadata"]["annotations"]["debate/title"])
             )
@@ -435,7 +458,7 @@ def main() -> None:
         "validate-dev-status": (cmd_validate_dev_status, 0),
     }
     if not a or a[0] not in cmds or len(a) - 1 != cmds[a[0]][1]:
-        die(__doc__)
+        die(__doc__ or "usage: task_helper.py <command> ...")
     cmds[a[0]][0](*a[1:])
 
 

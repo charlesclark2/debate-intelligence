@@ -166,7 +166,7 @@ MAX_PLANK_WORDS: Final = 60
 _RULE_VERSION: Final = "analytic-texts-3"
 """Bumped when how a text is found, read or placed changes, so a cached reading is read again. `3`: a CP
 text's digest covers its lines (`v1-e32-t35`)."""
-_OPEN_END: Final = re.compile(r"[\w\-–—]\s*$")
+_OPEN_END: Final = re.compile(r"[\w\-\u2013\u2014]\s*$")
 """A text ending with no sentence end: on a word or a dash (`v1-e32-t35`)."""
 
 _SEPARATOR: Final = r"\s*[:\-\u2013\u2014]\s*(?=\S)"

@@ -198,8 +198,8 @@ def test_a_cp_text_ending_with_no_sentence_end_is_joined_to_the_analytics_contin
 def test_a_cp_text_ending_in_a_dash_is_continued_too() -> None:
     found = read(
         p(1, BLOCK, STATES),
-        p(2, ANALYTIC, "The fifty states should —", STATES),
-        p(3, ANALYTIC, "– expand sample clinics", STATES),
+        p(2, ANALYTIC, "The fifty states should \u2014", STATES),
+        p(3, ANALYTIC, "\u2013 expand sample clinics", STATES),
     )
     (stem,) = cp_texts(found)
     assert stem.lines == (3,)
@@ -303,12 +303,12 @@ def test_a_whole_text_is_read_again_only_with_every_line_even_one_with_no_words(
         p(1, BLOCK, STATES),
         p(2, ANALYTIC, STEM, STATES),
         p(3, ANALYTIC, CLINICS, STATES),
-        p(4, ANALYTIC, "–", STATES),
+        p(4, ANALYTIC, "\u2013", STATES),
     )
     found = read(*paragraphs)
     (stem,) = cp_texts(found)
     assert stem.lines == (3, 4)
-    assert quoted(found, *paragraphs) == {2: f"{STEM}\n{CLINICS}\n–"}
+    assert quoted(found, *paragraphs) == {2: f"{STEM}\n{CLINICS}\n\u2013"}
     assert quoted(found, *paragraphs[:3]) == {}
 
 

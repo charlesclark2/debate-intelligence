@@ -589,3 +589,13 @@ Every other criterion is PASS (the table above). The Goal stays `InProgress`. Si
 review, the only commit is `15a7b92`: documents only, the three timing carts and the refusal check in
 Operator follow-up 4 and the runbook, as the PM's ruling of 2026-10-22 asked, with no re-review
 needed. Step 4's timing (three carts and the refusal check) is also still to run, after the merge.
+
+## Operator records (recorded by the PM, 2026-11-01)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac4, Word with Verbatim and Google Docs | NOT RUN | PASS | 2026-10-31, the operator on dev: a downloaded single card and a cart file open in Word with Verbatim without any issue; a downloaded file opens in Google Docs keeping its formatting, and a copied card pastes into a Google Doc. Each download begins with the file's header line and the pocket "Team evidence search", as built; the operator's preference to drop the header is `v1-e39-t24` |
+
+Every criterion passes, so the Goal is `Succeeded`.

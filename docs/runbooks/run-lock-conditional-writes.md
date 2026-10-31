@@ -174,11 +174,13 @@ Where: `$WT`, the same window
 cd "$WT"
 if env | grep -qE '^(TF_VAR_|TF_WORKSPACE=|TF_DATA_DIR=|TF_CLI_ARGS)'; then echo "STOP: a Terraform override is set in this shell"; else AWS_PROFILE=debate-admin terraform -chdir="infrastructure/envs/${ENVIRONMENT}" init -input=false >/dev/null && AWS_PROFILE=debate-admin terraform -chdir="infrastructure/envs/${ENVIRONMENT}" plan -input=false -no-color -out=run-lock-conditional-writes.tfplan | tee "/tmp/run-lock-conditional-writes-${ENVIRONMENT}-plan.txt" | tail -5; fi
 grep -E '^Plan:|must be replaced|will be destroyed|will be created' "/tmp/run-lock-conditional-writes-${ENVIRONMENT}-plan.txt"
-grep -c 'aws_ssoadmin' "/tmp/run-lock-conditional-writes-${ENVIRONMENT}-plan.txt"
+grep -v -E 'Refreshing state|: Read(ing\.\.\.| complete)' "/tmp/run-lock-conditional-writes-${ENVIRONMENT}-plan.txt" | grep -c 'aws_ssoadmin'
 grep -E '^  # ' "/tmp/run-lock-conditional-writes-${ENVIRONMENT}-plan.txt"
 ```
 Expect `Plan: 0 to add, 1 to change, 0 to destroy.`, no line saying a resource is replaced, destroyed
-or created, then `0`, then exactly one line:
+or created, then `0` (the count leaves out the lines where Terraform only refreshes or reads an
+account assignment, a permission set or the `aws_ssoadmin_instances` data source; the 2026-11-01 dev
+plan's raw count was 26 refresh lines and 2 read lines, and no change), then exactly one line:
 `module.evidence_store.aws_s3_bucket_policy.evidence will be updated in-place`. No `Plan:` line at
 all means the plan failed: read the end of the file. **An account assignment, a permission set, or
 anything but the bucket policy in the plan stops everything**: never apply it, and send the plan to the

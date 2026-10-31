@@ -1,0 +1,73 @@
+# TASK v1-e41-t09-validate-specs-pyright-and-start-refuses-unknown - validate_specs.py is clean under pyright, and task start refuses an unknown prerequisite even under --force
+# Epic: E41 — Delivery Tooling Upkeep | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e41-t09-validate-specs-pyright-and-start-refuses-unknown
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+  annotations:
+    debate/title: "validate_specs.py is clean under pyright, and task start refuses an unknown prerequisite even under --force"
+spec:
+  # Filed by the PM, 2026-11-01, from v1-e41-t07's Follow-up work (the PM's review, 2026-11-01).
+  description: >-
+    `scripts/validate_specs.py` carries 10 pyright errors, each a `str | None` read from YAML;
+    clear them without changing what it accepts. And `scripts/task start --force` still starts a
+    task whose prerequisite no task spec declares: `--force` overrides an unmet prerequisite
+    (exit 1 from `task_helper.py prereqs`), not a spec error (exit 2). Make `start` refuse exit
+    2 under `--force` too, naming the unknown prerequisite.
+  priority: 3
+  constraints:
+    packages: [scripts, tests/scripts]
+    forbidden:
+      - validate_specs.py accepting or refusing anything it did not before
+  context:
+    - kind: TaskRef
+      name: v1-e41-t07-spec-graph-checks
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `pyright scripts/validate_specs.py` is clean with its tests unchanged in what they
+        accept, and `scripts/task start --force` refuses a task with an unknown prerequisite
+        while still starting one with an unmet one, by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e41-t09-validate-specs-pyright-and-start-refuses-unknown-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+spec:
+  description: >-
+    validate_specs.py is clean under pyright, and task start refuses an unknown prerequisite
+    even under --force.
+  goalRef:
+    name: v1-e41-t09-validate-specs-pyright-and-start-refuses-unknown
+  graph:
+    nodes:
+      - id: validate-specs-pyright-and-start-refuses
+        kind: Task
+        name: Validator pyright, start refusal
+        description: >-
+          validate_specs.py is clean under pyright, and task start refuses an unknown
+          prerequisite even under --force.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Validator pyright, start refusal tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, -k, validate_specs or task_helper or task_restart]
+status:
+  phase: Pending

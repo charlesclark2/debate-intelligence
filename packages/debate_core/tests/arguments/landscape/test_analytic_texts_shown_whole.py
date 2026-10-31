@@ -328,7 +328,7 @@ def test_a_whole_text_is_its_parts_one_line_each() -> None:
 
 
 def _group(*copies: tuple[str, str, frozenset[str]]) -> TextGroup:
-    """A group of copies (source, whole text, the teams reading that source), keyed by its opening paragraph."""
+    """A group of copies (source, whole text, that source's teams), keyed by its opening paragraph."""
     return TextGroup(
         teams=frozenset(team for _, _, teams in copies for team in teams),
         texts=tuple((sha * 32, 2, text) for sha, text, _ in copies),

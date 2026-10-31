@@ -57,14 +57,17 @@ the source on a line of its own:
   dash or a capital. It is never joined across a heading, a card or another CP text, and these lines are
   not planks.
 
-Its digest covers the whole text, so a text with its planks and the same text without them are two texts.
+Its digest covers the whole text, which reading it again checks; its opening digest is its first
+paragraph's, which it is grouped by.
 
 ## Showing them (:func:`top_texts`)
 
-Per position, texts are grouped by their normalized words (their digest), ranked by the teams reading
-each, then by digest. A group shows one of its texts word for word, the commonest, the first by source and
-paragraph on a tie. A text naming a school of the caselist, in any of its lines, is withheld and counted
-(:func:`names_a_school`), and a group no text of which could be read again is not shown.
+Per position, texts are grouped by their normalized words (their digest; a CP text's opening paragraph's,
+the PM's review of 2026-10-31), ranked by the teams reading each, then by digest. A group shows one of its
+texts word for word, the commonest, the first by source and paragraph on a tie: for a CP text, the whole
+text the most of the group's teams read, with how many read it. A text naming a school of the caselist, in
+any of its lines, is withheld and counted (:func:`names_a_school`); a CP group falls to its next whole
+text. A group no text of which could be read again is not shown.
 
 Pure and deterministic: no I/O, no model, and nothing returned or logged holds a paragraph's text but
 :func:`read_back_texts`' and :func:`top_texts`' quoted texts, which the report shows.
@@ -132,6 +135,7 @@ __all__ = [
     "section_paragraphs_of",
     "text_digest",
     "whole_text",
+    "whole_texts_by_teams",
     "top_texts",
 ]
 
@@ -264,7 +268,10 @@ class SourceTexts:
 
 @dataclass(frozen=True, slots=True)
 class TextGroup:
-    """One position's texts alike in their words: the teams reading them, and the texts read again."""
+    """One position's texts alike in their words: the teams reading them, and the texts read again.
+
+    A CP text's group is keyed by its opening paragraph and knows each source's teams (`v1-e32-t35`).
+    """
 
     teams: frozenset[object] = field(repr=False)
     texts: tuple[tuple[str, int, str], ...] = field(default=(), repr=False)
@@ -272,6 +279,8 @@ class TextGroup:
     source_teams: Mapping[str, frozenset[object]] = field(
         default_factory=dict[str, frozenset[object]], repr=False
     )
+    """A CP text's: each source's teams reading it, by source digest. With them, the group shows the whole
+    text the most of its teams read (:func:`whole_texts_by_teams`); without, the commonest wording."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -475,6 +484,7 @@ def read_analytic_texts(
                 unit=text.unit,
                 kept=text.element_index in source.in_cards,
                 digest=None if kind is AnalyticTextKind.OVERVIEW else text_digest(words),
+                opening_digest=text_digest(words) if kind is AnalyticTextKind.CP_TEXT else None,
                 placement=where.placement,
                 position_id=where.position_id,
                 role=where.role,
@@ -621,6 +631,7 @@ class _Planks:
                 **stem.model_dump(),
                 "lines": tuple(one.element_index for one in lines),
                 "digest": text_digest(whole),
+                "opening_digest": stem.digest,
             }
         )
 
@@ -752,22 +763,31 @@ def top_texts(
 ) -> tuple[tuple[QuotedText, ...], MoreTexts | None, int]:
     """The position's top `limit` texts, the rest as a count, and how many distinct texts were withheld.
 
-    A group none of whose copies was read again is left out, neither shown nor withheld.
+    A group none of whose copies was read again is left out, neither shown nor withheld. A group knowing its
+    sources' teams (a CP text's, `v1-e32-t35`) shows the first of its whole texts by teams that names no
+    school, with the teams reading it, and each whole text passed over for naming one is withheld; with
+    none left, the group is not shown. Any other group shows its commonest wording, or is withheld.
     """
-    shown: list[tuple[str, TextGroup, str]] = []
+    shown: list[tuple[str, TextGroup, str, int | None]] = []
     withheld = 0
     for digest, group in groups.items():
         if not group.texts:
             continue
-        text = commonest_text(group.texts)
-        if names_a_school(text, caselist):
-            withheld += 1
-            continue
-        shown.append((digest, group, text))
+        candidates = (
+            whole_texts_by_teams(group) if group.source_teams else [(commonest_text(group.texts), None)]
+        )
+        for text, teams in candidates:
+            if names_a_school(text, caselist):
+                withheld += 1
+                continue
+            shown.append((digest, group, text, teams))
+            break
     ranked = sorted(shown, key=lambda one: (-len(one[1].teams), one[0]))
     quoted = tuple(
-        QuotedText(position_id=position_id, kind=kind, rank=rank, teams=len(group.teams), text=text)
-        for rank, (_, group, text) in enumerate(ranked[:limit], start=1)
+        QuotedText(
+            position_id=position_id, kind=kind, rank=rank, teams=len(group.teams), text_teams=teams, text=text
+        )
+        for rank, (_, group, text, teams) in enumerate(ranked[:limit], start=1)
     )
     rest = ranked[limit:]
     more = (
@@ -775,7 +795,7 @@ def top_texts(
             position_id=position_id,
             kind=kind,
             texts=len(rest),
-            teams=len({team for _, group, _ in rest for team in group.teams}),
+            teams=len({team for _, group, _, _ in rest for team in group.teams}),
         )
         if rest
         else None
@@ -797,6 +817,19 @@ def _without_inline_label(kind: AnalyticTextKind, text: str) -> str:
     label = _INLINE_LABELS.get(kind)
     found = label.match(text) if label is not None else None
     return text[found.end() :] if found is not None else text
+
+
+def whole_texts_by_teams(group: TextGroup) -> list[tuple[str, int]]:
+    """A CP text group's whole texts, word for word, with the teams reading each: the most teams first,
+    then the first copy by source and paragraph (`v1-e32-t35`, the PM's review of 2026-10-31)."""
+    teams: dict[str, set[object]] = {}
+    first: dict[str, tuple[str, int]] = {}
+    for sha, index, text in group.texts:
+        teams.setdefault(text, set()).update(group.source_teams.get(sha, ()))
+        first[text] = min(first.get(text, (sha, index)), (sha, index))
+    return [
+        (text, len(teams[text])) for text in sorted(teams, key=lambda text: (-len(teams[text]), first[text]))
+    ]
 
 
 def commonest_text(texts: Sequence[tuple[str, int, str]]) -> str:

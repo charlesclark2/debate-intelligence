@@ -65,8 +65,9 @@ def read_synthetic_analytic_texts(directory: Path) -> AnalyticTextInputs | None:
     A source is named as the fixture names it (`b1`, the digest `b1b1…b1`). A reading's digest is computed
     from its `words`, as the reader computes one, and its `quoted` text, when not null, is what reading the
     source again returns. A plank (`v1-e32-t16`) names its CP text's paragraph (`stem`) and the advantages it
-    solves; a CP text shown whole (`v1-e32-t35`) names the paragraphs of its lines (`lines`). The
-    caselist's schools, a text naming one of which is withheld, are the fixture's.
+    solves; a CP text shown whole (`v1-e32-t35`) names the paragraphs of its lines (`lines`), and a CP text's
+    opening digest, which it is grouped by, is computed from the first line of its `words`. The caselist's
+    schools, a text naming one of which is withheld, are the fixture's.
     """
     path = directory / ANALYTIC_TEXTS_FILE
     if not path.is_file():
@@ -97,6 +98,9 @@ def read_synthetic_analytic_texts(directory: Path) -> AnalyticTextInputs | None:
                     solves=tuple(row.get("solves", ())),
                     solves_other_words=row.get("solves_other_words", 0),
                     lines=tuple(row.get("lines", ())),
+                    opening_digest=(
+                        text_digest(row["words"].split("\n")[0]) if row["kind"] == "CP_TEXT" else None
+                    ),
                 )
             )
             if row.get("quoted") is not None:

@@ -842,9 +842,13 @@ def _texts_sections(report: LandscapeReport) -> list[str]:
 
 def _text_rows(row: QuotedText) -> list[str]:
     """A quoted text's rows: the text on its rank's row and, for a CP text shown whole (`v1-e32-t35`), each
-    line under it on a row of its own, with no rank or teams."""
+    line under it on a row of its own, with no rank or teams. When fewer of the group's teams read the planks
+    shown than its opening, the rank's row says how many do (the PM's review of 2026-10-31)."""
     first, *under = row.text.split("\n") if row.kind is AnalyticTextKind.CP_TEXT else [row.text]
-    return [f"| {row.rank} | {row.teams:,} | {_cell(first)} |", *(f"| | | {_cell(line)} |" for line in under)]
+    teams = f"{row.teams:,}"
+    if under and row.text_teams is not None and row.text_teams < row.teams:
+        teams += f" ({row.text_teams:,} with these planks)"
+    return [f"| {row.rank} | {teams} | {_cell(first)} |", *(f"| | | {_cell(line)} |" for line in under)]
 
 
 def _planks_section(report: LandscapeReport) -> list[str]:

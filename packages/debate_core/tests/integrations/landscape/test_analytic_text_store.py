@@ -118,7 +118,7 @@ def test_a_reading_has_no_field_for_text() -> None:
         "plank_labels",
     }
     # A plank (v1-e32-t16) adds its CP text's paragraph, the advantages' ids and a count, and a CP text shown
-    # whole (v1-e32-t35) the paragraphs of its lines: never words.
+    # whole (v1-e32-t35) the paragraphs of its lines and its opening paragraph's digest: never words.
     assert set(AnalyticTextReading.model_fields) == {
         "kind",
         "form",
@@ -134,6 +134,7 @@ def test_a_reading_has_no_field_for_text() -> None:
         "solves",
         "solves_other_words",
         "lines",
+        "opening_digest",
     }
     with pytest.raises(ValidationError):
         CachedAnalyticTexts.model_validate({**reading("a").model_dump(), "text": "an invented counterplan"})

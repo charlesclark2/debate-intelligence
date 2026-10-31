@@ -119,6 +119,8 @@ def reading(
         unit=unit,
         kept=kept,
         digest=None if text is None else text_digest(text),
+        # A CP text keeps its opening paragraph's digest, its own with no lines (v1-e32-t35).
+        opening_digest=text_digest(text) if kind is CP and text is not None else None,
         placement=placement,
         position_id=position,
         role=role if position is not None else None,

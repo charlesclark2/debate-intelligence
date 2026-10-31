@@ -127,9 +127,39 @@ None. The affected set (434 files) runs in the pull request's `ci` check.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-01
 
 **Notes:**
+
+Three refusals now tell the operator which build to run when an installed build and a checkout drift
+apart, and a value no longer leaks through the settings refusal's exception chain.
+1. **All three criteria pass.**
+   * Red: 17 failed against a skeleton, each at its own assertion. The collection-error attempt was
+     rightly not counted.
+   * Green: each hint is pinned whole, and the node criterion gave 150 passed.
+   * Ten mutants were caught. Mutant 5 survived first because Pydantic shortens a long input, so the
+     long sentinel never appeared whole. Finding that, confirming the leak by hand and shortening the
+     sentinel is exactly the care agreement 8 asks for. The leak it exposed, `from None`, is a real
+     fix.
+2. **Decisions accepted:**
+   * exit 1 for a newer database, which is not a retry;
+   * a `DomainError` subclass beside `MigrationError`, so the CLI needs no special case;
+   * no path in the message;
+   * two reserved patterns, pinned so that adding one is visible;
+   * hints that follow the source;
+   * no value anywhere;
+   * "newer" as the store's own sort order;
+   * a newer parser deciding the hint.
+3. **Follow-ups:** one p3 E41 task in the next PM batch.
+   * **1:** a top-level unknown `DEBATE_*` name in `.env` is silently dropped. It is refused instead,
+     with an explicit allowlist of the legitimate non-field names. It sits next to the forbidden item
+     "accepting an unknown setting", so it is worth closing.
+   * **2:** `files build` tells a store under a newer fingerprint stamp to install the newer build, if
+     fingerprint versions are ordered, as `caselist parse` already knows.
+4. **Closing checks:** the affected set (434 files, through the root conftest's settings import) is
+   left to the PR's `ci` under agreement 10. The changed areas plus the always-run list gave 3,332
+   passed, and the whole-repo checks pass.
+5. **Merge:** once the PR's `ci` is green. It is a plain `scripts/task pr`.

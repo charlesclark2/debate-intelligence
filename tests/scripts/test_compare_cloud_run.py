@@ -22,6 +22,7 @@ What is worth asserting, and why:
 from __future__ import annotations
 
 import ast
+import hashlib
 import json
 import os
 import shutil
@@ -93,6 +94,7 @@ if arguments[:3] == ["tub", "index", "build"]:
     for store in manifest["stores"]:
         store["version_directory"] = "@VERSION@_reparse-2"
     manifest["counts"].update(control.get("index_counts", {}))
+    manifest["suppression"] = control.get("index_suppression", manifest["suppression"])
     manifest["index_id"] = "fedcba9876543210"
     (out / manifest["index_id"]).mkdir(parents=True)
     ok("tub index build", {"directory": str(out / manifest["index_id"]), "manifest": manifest})
@@ -425,3 +427,103 @@ def test_a_scratch_directory_is_never_removed_by_the_script(world: World) -> Non
     assert (world.scratch / "parsed").is_dir()
     assert "rmtree" not in SCRIPT.read_text(encoding="utf-8")
     shutil.rmtree(world.scratch)
+
+
+# ------------------------------------------------------------------------------------------------
+# An identical rebuild under a longer list: the record beside the manifest (v1-e39-t19, ac2)
+# ------------------------------------------------------------------------------------------------
+
+LONGER_LIST: Final = {"entries": 2, "path_holds": 0, "sha256": "f" * 64}
+"""The list both rebuilds read: one entry longer than the manifest's, stopping nothing."""
+
+
+def checked_against(world: World, *, manifest_sha256: str | None = None) -> dict[str, Any]:
+    """A record of the longer list beside the cloud's manifest, as the restore brings it back."""
+    index = world.root / "cloud" / "tub-index" / INDEX_ID
+    manifest = json.loads((index / "manifest.json").read_text(encoding="utf-8"))
+    record = {
+        "record_version": 1,
+        "index_id": INDEX_ID,
+        "manifest_sha256": manifest_sha256
+        or hashlib.sha256((index / "manifest.json").read_bytes()).hexdigest(),
+        "parser_version": VERSION,
+        "stores": manifest["stores"],
+        "snapshot": "2026-10-28",
+        "suppression": LONGER_LIST,
+        "counts": manifest["counts"],
+    }
+    (index / "checked-against.json").write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+    return record
+
+
+def test_a_longer_list_the_manifest_does_not_name_differs_as_at_the_cutover(world: World) -> None:
+    """The cutover's case: the published manifest names the list the index was first built from."""
+    world.control["index_suppression"] = LONGER_LIST
+
+    compared = world.compare()
+
+    assert compared.returncode == 1, compared.stdout + compared.stderr
+    record = world.record.read_text(encoding="utf-8")
+    assert "* index: the suppression lists applied differ" in record
+    assert "| Suppression list applied | 1 entries | 2 entries, another |" in record
+    assert "| Index checked against | its manifest |" in record
+
+
+def test_an_identical_rebuild_under_a_longer_list_agrees_by_the_record_beside_the_manifest(
+    world: World,
+) -> None:
+    world.control["index_suppression"] = LONGER_LIST
+    checked_against(world)
+
+    compared = world.compare()
+
+    assert compared.returncode == 0, compared.stdout + compared.stderr
+    assert "compare: AGREE: 0 difference(s)" in compared.stdout
+    record = world.record.read_text(encoding="utf-8")
+    assert "**Verdict: AGREE.**" in record
+    assert "| Index checked against | the record beside its manifest, `checked-against.json` |" in record
+    assert "| Suppression list applied | 2 entries | 2 entries, the same |" in record
+    assert "Nowhere." in record
+
+
+def test_the_record_beside_the_manifest_is_read_for_the_list_and_still_compared_for_counts(
+    world: World,
+) -> None:
+    """The record says what the cloud's rebuild read: a count it differs from the Mac's in is a difference."""
+    world.control["index_suppression"] = LONGER_LIST
+    world.control["index_counts"] = {"suppressed_occurrences": 1}
+    checked_against(world)
+
+    compared = world.compare()
+
+    assert compared.returncode == 1
+    record = world.record.read_text(encoding="utf-8")
+    assert "* index: suppressed_occurrences, cloud 0, Mac 1" in record
+    assert "the suppression lists applied differ" not in record
+
+
+def test_a_record_beside_another_manifest_is_not_read(world: World) -> None:
+    """A record names its manifest by digest; one naming another says nothing of this one."""
+    world.control["index_suppression"] = LONGER_LIST
+    checked_against(world, manifest_sha256="0" * 64)
+
+    compared = world.compare()
+
+    assert compared.returncode == 1
+    record = world.record.read_text(encoding="utf-8")
+    assert "* index: the suppression lists applied differ" in record
+    assert "| Index checked against | its manifest; the record beside it names another manifest |" in record
+
+
+def test_a_record_that_is_not_json_is_not_read(world: World) -> None:
+    world.control["index_suppression"] = LONGER_LIST
+    (world.root / "cloud" / "tub-index" / INDEX_ID / "checked-against.json").write_text("{", encoding="utf-8")
+
+    compared = world.compare()
+
+    assert compared.returncode == 1
+    record = world.record.read_text(encoding="utf-8")
+    assert (
+        "| Index checked against | its manifest; the record beside it is not one this script reads |"
+        in record
+    )

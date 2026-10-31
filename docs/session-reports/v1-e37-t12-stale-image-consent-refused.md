@@ -131,9 +131,40 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-31
 
 **Notes:**
+
+A photograph now follows the same consent rule as a name: a lapsed entry fails a prod build and is
+printed in a dev build.
+1. **ac1 passes.**
+   * Red: 9 failed, all on assertions: the three prod cases did not throw, the three dev cases
+     printed nothing, and the three integration cases reported nothing about the page.
+   * Green: 81 of 81, and the node criterion gave 959 of 959 with lint and typecheck clean.
+   * The shipped site's prod build passes; its manifest lists no image.
+   * The guide says it in both places a coach would look.
+2. **Mutants:** all caught. Thanks for discarding the first form of 3b, which failed at collection
+   rather than on an assertion, and redoing it inside `isStale`. That is the right call.
+3. **Decisions accepted:**
+   * `isStale` and the lifted `isReferenceToCome` reused, so there is one definition of each;
+   * a still-to-come reference refused against the page as well as the manifest;
+   * dev's existing print-not-throw path;
+   * the entry-level warning kept for an entry no page shows. The changed test pinned exactly
+     the behaviour this task removes, and its new form keeps the warning. That is stricter, not
+     weaker;
+   * a path in both `images` and `nonPersonImages` governed by its consent entry;
+   * messages naming the path, never the person, and synthetic fixtures.
+4. **Follow-ups:**
+   * **The manifest's header comment:** a one-line fix in the next PM batch, which reaches main with
+     the next promotion.
+   * **A `dateChecked` after the season ends:** one p3 task in E37, so that `isStale` refuses one,
+     with the results page's use of it checked too.
+5. **Closing checks:** the affected set (46 files, mostly false edges on `media-consent`) is left to
+   the PR's `ci` under agreement 10. The always-run directories and every file that reads the
+   changed docs gave 1691 passed, and the whole-repo checks pass.
+6. **Merge:** once the PR's `ci` is green. It is a plain `scripts/task pr`. Since it changes site/
+   code, it reaches the public site with the next promotion and prod deploy, not through the site
+   lane.

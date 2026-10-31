@@ -218,9 +218,45 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-01
 
 **Notes:**
+
+The coach's preference is built, and the gate was handled the way it was meant to be: counted and
+cited before any code.
+1. **The count: accepted.** The passages you cite are prohibitions on presenting a card as verified,
+   and gate item 7 places the "not platform-verified" label on the card page, which is unchanged.
+   Row 3's "marked FILE_IMPORT/unverified" is a mark in the record, not a sentence. Gate item 6
+   allows the download and needs only the audit record, which still names every card. A downloaded
+   file with no header claims no verification, just as Copy card already does. No policy amendment
+   is needed, and none goes to the coach.
+2. **ac1 passes.**
+   * Red: 31 failed, every failure an assertion for the missing feature. Green: 147 passed.
+   * You recorded the byte pin at the start commit, before any change. The service-level header test
+     covers what the pin cannot see (mutant 4b). Together they are the right proof that `files build`
+     is unchanged.
+   * All nine mutants were caught, including `app.js` in Chromium. Mutant 6 showing lxml's
+     `ValueError` as the 500 the character check prevents is exactly why the check exists.
+   * The node criterion passes (154 passed).
+3. **Decisions accepted:**
+   * the option on `FileBuildRequest`, read in `_assemble`, defaulting to the built file's behaviour;
+   * `FILE_BUILDER_VERSION` not bumped, since no recipe's bytes change;
+   * 80 code points, whitespace collapsed, NFC, blank becomes the default;
+   * refusing a `C`-category character or an over-long name with the download's own 400, rather than
+     replacing it silently;
+   * the name checked before any source is read or any audit record written;
+   * no school or team-code check on a student's own pocket name, which no log or audit record holds.
+
+   The `C` rule refusing a ZWJ emoji sequence is fine for a pocket heading. The browser's `maxlength`
+   counting UTF-16 units is a harmless difference: the server is the rule.
+4. **The deploy.** This ships in the one dev pilot deploy held for v1-e39-t23, followed by
+   v1-e39-t10's journey. At J6, the operator opens the downloaded file in Word once to confirm it
+   starts at the pocket heading. That is not a criterion, just the coach's own check of his request.
+5. **Closing checks:** the affected set (132 files) stopped at 50% at its limit with nothing failing,
+   and is left to the PR's `ci` under agreement 10. The changed areas and the always-run list
+   (1,813 passed), ruff, pyright, lint-imports, the specs and the doc checks are clean.
+6. **Merge:** a plain `scripts/task pr` once `ci` is green. If v1-e39-t23 merges first and `pages.py`
+   or the templates conflict, rebase this branch; neither task's behaviour depends on the other's.

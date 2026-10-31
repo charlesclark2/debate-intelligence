@@ -1439,13 +1439,13 @@ def imports_by_use(
         read_imports(old.imports or [], old_modules()),
         read_imports(new.imports or [], new_modules()),
     )
-    for module, line in after.loads.items():
-        if module not in before.loads:
-            return f"it loads {module}, which its imports did not load before (line {line})"
-    for module, line in before.loads.items():
-        if module not in after.loads:
-            return f"it no longer loads {module}, which its imports loaded (line {line})"
     if list(before.loads) != list(after.loads):
+        for module, line in after.loads.items():
+            if module not in before.loads:
+                return f"it loads {module}, which its imports did not load before (line {line})"
+        for module, line in before.loads.items():
+            if module not in after.loads:
+                return f"it no longer loads {module}, which its imports loaded (line {line})"
         return "it changes the order in which its imports load modules"
     rebound = frozenset(
         name

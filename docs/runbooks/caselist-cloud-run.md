@@ -819,6 +819,15 @@ Success looks like `Apply complete! Resources: 2 added, 4 changed, 2 destroyed.`
 One `-login-task-changed` email is expected. (Added by the PM, 2026-10-27, from `v1-e31-t31`'s
 review; the PM reads every plan before its apply.)
 
+**A parse stage refused a newer occurrence table.** When the bucket's occurrence table of a caselist
+is stamped by a build with a newer fingerprint version than the run's image, the parse stage leaves
+it as it is and fails on `NEWER_FINGERPRINT_TABLE` (`v1-e34-t29`). Since `v1-e40-t22` its hint names
+both versions and says the next cloud run that imports into the caselist, on an image whose
+fingerprint version is the table's or later, rebuilds and publishes it: a new image, as this section
+says, after the PM's word. An image built before `v1-e40-t22` says instead "install that build for
+the weekly agent", which meant the Mac's agent; the cure is still a new image here. Never rebuild or
+publish the parsed store on the operator's Mac ([A failed parse stage](#a-failed-parse-stage)).
+
 ## A failed parse stage
 
 When the cloud run's parse stage does not publish a caselist's parsed store, the run names no
@@ -852,6 +861,76 @@ cloud run owns. A run on an image built before `v1-e40-t18` (today's is `v1.1.0-
 `caselist parse --caselist <slug> --publish` in its email; the rule holds for that email too, and the
 cure is the one above. (The rule is the PM's, 2026-10-30, from `v1-e34-t31`'s review; `v1-e40-t18`
 made the run say it.)
+
+## A run that found no AWS session
+
+When a cloud run finds no AWS session, its publish or its parse stage waits for a login, and the
+login email (`caselist publish waiting for an AWS login`) has this fix line since `v1-e40-t22`:
+
+> Fix: the PM looks into the cloud run's task role, which gave the run no AWS session (caselist-cloud-run.md, "A run that found no AWS session"); never a login and a publish from the operator's Mac
+
+Its message says what waits, with no command: the snapshots and the run record, the parsed store
+(with the cure of [A failed parse stage](#a-failed-parse-stage)), the report stage's check that was
+cut short, and the search index.
+
+**What it means.** A cloud run's AWS session is its task role's (`debate-dev-caselist-run`), which
+ECS renews for as long as the task runs. The Mac's SSO session ran out after hours; the role's
+should not. A run that found none points at the role, its policies or the run's task definition, and
+that goes to the PM. Send the PM the run's id from the email and the last lines of its log, read as
+the deployer. Read-only:
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, anywhere
+```bash
+aws logs tail debate-dev-caselist-run --profile debate-dev-caselist-run-deployer --region us-east-1 --since 1d | tail -20
+```
+
+**Never run `aws sso login && debate-research caselist pull --publish-pending` on the operator's
+Mac** for a cloud run. It publishes from the working copy of the machine it runs on, and the cloud
+run's working copy ended with its task. A run on an image built before `v1-e40-t22` (today's is
+`v1.1.0-dev.164`) still names that command as its fix; the rule holds for that email too.
+
+## A parse stage over its failure rate
+
+When more of the sources a cloud run's parse stage tried failed than `parse.failure_rate_threshold`
+allows, the stage fails on `PARSE_FAILURE_RATE_EXCEEDED`, and since `v1-e40-t22` its hint reads:
+
+> The cloud run's failed sources are listed in failures.jsonl of the caselist's parsed store in the bucket, once the run has published it, never in the operator's Mac's own store; why they failed is the PM's to look into (caselist-cloud-run.md, "A parse stage over its failure rate").
+
+The stage still publishes the caselist's parsed store. Its `failures.jsonl` holds an entry for each
+source of the current version directory that did not parse: its SHA-256 and the reason, and no
+path, school or team code ([parsed-card-store.md](../data/parsed-card-store.md)). The PM decides
+what is done about them, usually a parser task; the raw evidence is published either way.
+
+**Not `caselist parse --caselist <slug> --failures` on the operator's Mac.** It is read-only, but it
+lists the Mac's own parsed store, which the cloud run never wrote. A run on an image built before
+`v1-e40-t22` still names it.
+
+To send the PM the reasons by count, read the file from the bucket. Read-only. Put the caselist the
+email names in `SLUG`; the first block lists its version directories.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`, a worktree of `dev`
+```bash
+cd "$WT"
+aws sso login --profile debate-dev-evidence
+SLUG='the-caselist-the-email-names'
+BUCKET=$(AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output -raw evidence_bucket_name)
+aws s3 ls "s3://${BUCKET}/parsed/${SLUG}/" --profile debate-dev-evidence
+```
+
+The current directory is the newest generation of the newest parser version: the highest date, and
+its highest `_reparse-N` if it has one. Put it in `VERSION`.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`, in the same shell
+```bash
+VERSION='the-current-directory-the-listing-printed'
+aws s3 cp "s3://${BUCKET}/parsed/${SLUG}/${VERSION}/failures.jsonl" - --profile debate-dev-evidence | grep -oE '"reason": ?"[^"]*"' | sort | uniq -c
+```
+Success looks like one line per reason with its count, the counts adding up to about the number
+the stage's reason gives as failed. Nothing printed means the file is not there: the publish did not
+finish either, and the email's parse stage says so.
 
 ## The deadline, and stopping a run
 

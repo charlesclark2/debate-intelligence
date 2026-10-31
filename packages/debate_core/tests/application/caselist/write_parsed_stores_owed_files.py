@@ -23,7 +23,16 @@ Since `v1-e40-t18`, two runs in bucket mode as the composition root builds it, w
 
 * `cloud_one_of_each_failed`: `one_of_each_failed` in bucket mode. The cloud cure for both.
 * `cloud_pending`: the weekly's rebuild read the run's own copy of the list alone. A pending stage,
-  and a login banner whose parsed-store sentence is the cloud cure.
+  and a login banner whose parsed-store sentence is the cloud cure. Since `v1-e40-t22` its fix is
+  the cloud run's task role.
+
+Since `v1-e40-t22`, two more in bucket mode, with the scripted parse stage of
+`test_caselist_sync_bucket_mode_hints_point_at_the_cloud.py`, one for each of its other hints:
+
+* `cloud_failure_rate`: six of the weekly's ten sources failed, over the threshold. A failed stage
+  whose hint names the failures file the cloud run published.
+* `cloud_newer_table`: the bucket's occurrence table is stamped by a newer build. A failed stage
+  whose hint names a new image.
 """
 
 from __future__ import annotations
@@ -40,6 +49,7 @@ from tests.fixtures.caselist.build_synthetic_archives import build_snapshot_zips
 from debate_core.application.sync_runs import SYNC_RUN_DETAILS_FILENAME, SYNC_RUN_LOG_FILENAME
 from debate_core.integrations.s3 import S3EvidenceObjectStore
 
+from . import test_caselist_sync_bucket_mode_hints_point_at_the_cloud as hints
 from . import test_caselist_sync_names_the_cloud_cure_in_bucket_mode as cloud
 from .test_caselist_sync_names_publish_only_per_caselist import OPENEV, run
 from .test_inbox_retention import CASELIST, Installation
@@ -133,3 +143,19 @@ async def test_cloud_pending(installation: Installation, s3_client: S3Client, ev
     out()
     await cloud.run(installation, bucket_mode=True, local_list_only=[CASELIST])
     keep(installation, s3_client, evidence_bucket, "cloud_pending")
+
+
+async def test_cloud_failure_rate(
+    installation: Installation, s3_client: S3Client, evidence_bucket: str
+) -> None:
+    out()
+    await hints.run(installation, bucket_mode=True, over_the_rate=[CASELIST])
+    keep(installation, s3_client, evidence_bucket, "cloud_failure_rate")
+
+
+async def test_cloud_newer_table(
+    installation: Installation, s3_client: S3Client, evidence_bucket: str
+) -> None:
+    out()
+    await hints.run(installation, bucket_mode=True, newer_table=[CASELIST])
+    keep(installation, s3_client, evidence_bucket, "cloud_newer_table")

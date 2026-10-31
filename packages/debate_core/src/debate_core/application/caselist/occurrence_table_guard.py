@@ -56,6 +56,7 @@ from debate_core.application.ports.parsed_store import OCCURRENCES_NAME, PARSED_
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
 
 __all__ = [
+    "CLOUD_NEW_IMAGE_RUNBOOK",
     "THE_BUCKET",
     "THIS_MACHINES_PARSED_STORE",
     "NewerFingerprintTable",
@@ -71,6 +72,10 @@ __all__ = [
 
 THIS_MACHINES_PARSED_STORE: Final = "this machine's parsed store"
 THE_BUCKET: Final = "the bucket"
+
+CLOUD_NEW_IMAGE_RUNBOOK: Final = 'caselist-cloud-run.md, "A new image, later"'
+"""The runbook section a bucket-mode run's refusal points to (`v1-e40-t22`): how a new image reaches
+the cloud run, the weekly agent's successor."""
 
 _NUMBERED: Final = re.compile(r"(?P<family>.+)-v(?P<number>[1-9][0-9]*)")
 
@@ -100,7 +105,8 @@ class NewerFingerprintTable(DomainError):
     """An occurrence table stamped with a newer fingerprint version than this build's (`v1-e34-t29`).
 
     Raised before anything is written, so the table is as it was. :attr:`fix` is the hint a weekly
-    run's failed stage carries to its summary and its notification.
+    run's failed stage carries to its summary and its notification, and :attr:`cloud_fix` a
+    bucket-mode run's (`v1-e40-t22`).
     """
 
     def __init__(self, *, caselist: str, version: str, store: str, stamped: str, build: str) -> None:
@@ -120,6 +126,23 @@ class NewerFingerprintTable(DomainError):
             f"The occurrence table of {self.caselist} {self.version} in {self.store} is stamped "
             f"{self.stamped}, and this build's fingerprint version is {self.build}. Rebuild and publish "
             f"it with a build at {self.stamped} or later, and install that build for the weekly agent."
+        )
+
+    @property
+    def cloud_fix(self) -> str:
+        """:attr:`fix` for a bucket-mode run: the weekly run is the cloud task's image, not an agent.
+
+        The cure is a new image, through the runbook, and the next cloud run that imports into the
+        caselist on it, as for any parse stage the cloud run did not publish (`v1-e40-t18`). Never a
+        rebuild or a publish on the operator's Mac, which would publish the Mac's working copy.
+        """
+        return (
+            f"The occurrence table of {self.caselist} {self.version} in {self.store} is stamped "
+            f"{self.stamped}, and the cloud run's image's fingerprint version is {self.build}. The next "
+            f"cloud run that imports into {self.caselist} on an image whose fingerprint version is "
+            f"{self.stamped} or later rebuilds and publishes it: a new image is built and applied as "
+            f"{CLOUD_NEW_IMAGE_RUNBOOK} says, after the PM's word; never a rebuild or a publish from the "
+            "operator's Mac."
         )
 
 

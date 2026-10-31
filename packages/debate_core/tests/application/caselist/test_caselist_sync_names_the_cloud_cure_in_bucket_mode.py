@@ -269,8 +269,8 @@ async def test_a_bucket_mode_parse_stage_waiting_for_a_login_names_the_cloud_cur
     assert found["outcome"] == "pending"
     assert (
         f"the parsed store of {CASELIST} is not published, for want of an AWS login (the suppression "
-        f"list's bucket copy needed an AWS login): {THE_WEEKLYS_HINT}"
-    ) in str(found["reason"])
+        f"list's bucket copy needed an AWS login): {THE_WEEKLYS_HINT.removesuffix('.')}; "
+    ) in str(found["reason"]), "the hint, its full stop given to the next sentence's semicolon (`v1-e40-t22`)"
     assert names_no_mac_side_publish(str(found["reason"]))
     message = login_notification(watched).message
     assert message.endswith(f" The parsed store waits too: {THE_WEEKLYS_CURE}.")

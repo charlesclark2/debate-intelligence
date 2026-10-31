@@ -165,6 +165,8 @@ __all__ = [
     "ANOTHER_RUN_HELD_THE_LOCK",
     "ANOTHER_RUN_HELD_THE_LOCK_TITLE",
     "BACKLOG_GROWTH_RUNS",
+    "CLOUD_NO_SESSION_CURE",
+    "CLOUD_NO_SESSION_RUNBOOK",
     "RUN_LOCK_LOST",
     "RUN_LOCK_LOST_TITLE",
     "TOOK_OVER_THE_LOCK",
@@ -876,13 +878,15 @@ def details_for_summary(summary: RunSummary, *, secrets: Sequence[str] = ()) -> 
     )
 
 
-def details_for_failure(error: BaseException, *, run_id: str, secrets: Sequence[str] = ()) -> SyncRunDetails:
+def details_for_failure(
+    error: BaseException, *, run_id: str, secrets: Sequence[str] = (), bucket_mode: bool = False
+) -> SyncRunDetails:
     """The details of a run that raised instead of returning a summary.
 
     Its one failure code is the code the CLI reports the error under, and its hint the fix a stage
-    would have given the same error.
+    would have given the same error, in the same mode (`bucket_mode`, `v1-e40-t22`).
     """
-    hint = fix_for(error)
+    hint = fix_for(error, bucket_mode=bucket_mode)
     return SyncRunDetails(
         run_id=run_id,
         failure_codes=(reported_error_code(error),),
@@ -1127,6 +1131,25 @@ THE_CHECK_WAS_CUT_SHORT: Final = (
     " The report stage's check that the bucket holds what this run published was cut short; "
     "the next pull, or caselist pull --publish-pending after the login, makes it again."
 )
+_THE_CLOUD_CHECK_WAS_CUT_SHORT: Final = (
+    " The report stage's check that the bucket holds what this run published was cut short."
+)
+""":data:`THE_CHECK_WAS_CUT_SHORT` in bucket mode (`v1-e40-t22`), which names no command: the login
+and the publish it names are the operator's Mac's, and the cloud run's are its task role's."""
+
+CLOUD_NO_SESSION_RUNBOOK: Final = 'caselist-cloud-run.md, "A run that found no AWS session"'
+"""The runbook section a bucket-mode login banner points to (`v1-e40-t22`)."""
+
+CLOUD_NO_SESSION_CURE: Final = (
+    "the PM looks into the cloud run's task role, which gave the run no AWS session "
+    f"({CLOUD_NO_SESSION_RUNBOOK}); never a login and a publish from the operator's Mac"
+)
+"""The login banner's fix in bucket mode (`v1-e40-t22`), as its details' `bucket_run` says it was.
+
+A cloud run's AWS session is its task role's, which ECS renews, so a run that found none points at the
+role and goes to the PM. `aws sso login && caselist pull --publish-pending`, local mode's fix, would
+publish snapshots from the working copy of the machine it was run on, never the cloud run's, which
+ended with its task."""
 """What the login banner adds when the report stage is pending and the publish is not (`v1-e34-t26`).
 
 The publish confirmed what it published, and the session then expired while the report stage
@@ -1190,6 +1213,9 @@ def notifications_for(
     **The login banner names what waits** (`v1-e34-t26`): the snapshots owed, when there are any,
     and the run record; and, when the report stage was cut short with the publish already done, the
     check the next pull or `--publish-pending` makes again (:data:`THE_CHECK_WAS_CUT_SHORT`, `v1-e34-t28`).
+    **In bucket mode it names no command** (`v1-e40-t22`), as the details' `bucket_run` says it was:
+    its fix is the cloud run's task role, the PM's (:data:`CLOUD_NO_SESSION_CURE`), and what waits is
+    said without the login and the publishes the operator's Mac would make.
 
     **A manifest owed again, and one that drifted again** (`v1-e34-t26`). A report stage's manifest
     mismatch alone is announced as published again by the next run when the record lists it as
@@ -1355,7 +1381,11 @@ def notifications_for(
                         if owed
                         else "no snapshot waits to be published, only the run record."
                     )
-                    + (THE_CHECK_WAS_CUT_SHORT if report_alone else "")
+                    + (
+                        (_THE_CLOUD_CHECK_WAS_CUT_SHORT if bucket else THE_CHECK_WAS_CUT_SHORT)
+                        if report_alone
+                        else ""
+                    )
                     + (
                         " A person should look as well: before the session expired a snapshot ended "
                         f"incomplete on {', '.join(found_first)}, which the login will not fix."
@@ -1382,14 +1412,18 @@ def notifications_for(
                     )
                     + (_the_parsed_store_waits_too(details) if parse_waits else "")
                     + (
-                        f" The search index {index_waits.index_id} waits too; the next run with a session "
-                        "publishes it, or after the login: "
+                        f" The search index {index_waits.index_id} waits too."
+                        if index_waits is not None and bucket is not None
+                        else f" The search index {index_waits.index_id} waits too; the next run with a "
+                        "session publishes it, or after the login: "
                         + SEARCH_INDEX_PUBLISH_COMMAND.format(environment=record.environment)
                         if index_waits is not None
                         else ""
                     )
                 ),
-                fix_command=f"{aws_login_command} && {PUBLISH_PENDING_COMMAND}",
+                fix_command=CLOUD_NO_SESSION_CURE
+                if bucket is not None
+                else f"{aws_login_command} && {PUBLISH_PENDING_COMMAND}",
             )
         )
     if details.held_by_request:
@@ -1988,8 +2022,11 @@ class SyncRunMonitor:
                 caselists=caselists,
                 secrets=self._secret_values(),
             )
-            stopped = details_for_failure(error, run_id=run_id, secrets=self._secret_values())
-            stopped = stopped.model_copy(update={"bucket_run": bucket_run()})
+            bucket = bucket_run()
+            stopped = details_for_failure(
+                error, run_id=run_id, secrets=self._secret_values(), bucket_mode=bucket is not None
+            )
+            stopped = stopped.model_copy(update={"bucket_run": bucket})
             await self._finish(
                 record,
                 stopped,

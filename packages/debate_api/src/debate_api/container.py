@@ -16,6 +16,10 @@ bundle once with :func:`~debate_api.landscape_markdown.render_bundle`. Routes
 ask `app.state.pilot` for the use cases and never import an adapter (the import contracts and
 `scripts/check_thin_handlers.py` hold them to that).
 
+uvicorn's app factory is here too, :func:`create_app_from_environment` (`v1-e39-t23`), so that
+:mod:`debate_api.app` never imports this module: a test that builds the app with its own services
+then reaches none of the adapters above.
+
 The function's role allows exactly what is built here and nothing more (ADR-0019, The function's
 role): `ssm:GetParameter` on the two parameters, `logs:CreateLogStream` and `logs:PutLogEvents` on
 its audit group, `s3:GetObject` under `reports/tub/search/` for the index, which the holder
@@ -29,6 +33,7 @@ unsigned client, and the OAuth endpoints take the client secret.
 
 from __future__ import annotations
 
+import os
 import tempfile
 import uuid
 from collections.abc import Mapping
@@ -36,6 +41,10 @@ from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
 
+from fastapi import FastAPI
+
+from debate_api.app import create_app
+from debate_api.app_logging import configure_app_logging
 from debate_api.configuration import PilotConfiguration, parse_cookie_keys
 from debate_api.landscape_markdown import render_bundle
 from debate_api.state import PilotServices
@@ -70,7 +79,7 @@ from debate_core.integrations.s3 import (
     build_s3_client,
 )
 
-__all__ = ["INDEX_DIRECTORY_NAME", "build_pilot_services"]
+__all__ = ["INDEX_DIRECTORY_NAME", "build_pilot_services", "create_app_from_environment"]
 
 INDEX_DIRECTORY_NAME = "tub-index"
 """The holder's own directory under the function's `/tmp`, which nothing else writes to."""
@@ -78,6 +87,18 @@ INDEX_DIRECTORY_NAME = "tub-index"
 
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+def create_app_from_environment() -> FastAPI:
+    """The function's app, as uvicorn's `--factory` builds it: its services from this process's environment.
+
+    Building them reads the client secret and the cookie keys from Parameter Store, and refuses to
+    go on if the cookie keys are still Terraform's placeholder
+    (:class:`~debate_api.configuration.CookieKeysNotSet`), so a misconfigured function never starts.
+    It first sends the function's log lines to stderr, its app log (:mod:`debate_api.app_logging`).
+    """
+    configure_app_logging()
+    return create_app(build_pilot_services(os.environ))
 
 
 def build_pilot_services(environ: Mapping[str, str]) -> PilotServices:

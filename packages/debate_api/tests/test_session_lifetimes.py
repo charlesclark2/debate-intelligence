@@ -13,15 +13,19 @@ session ends at the next revalidation: within five minutes.
 from __future__ import annotations
 
 import base64
+import inspect
 import json
 import os
 from datetime import timedelta
-from typing import Any
+from pathlib import Path
+from typing import Any, Final
 
 import pytest
 
 from debate_api.configuration import CookieKeys, CookieKeysNotSet, parse_cookie_keys
 from debate_api.cookies import SESSION_COOKIE, CookieSealer, session_payload
+
+DOCKERFILE: Final = Path(__file__).resolve().parents[1] / "Dockerfile"
 
 
 @pytest.fixture
@@ -262,9 +266,8 @@ def test_two_32_byte_keys_are_accepted() -> None:
 
 
 def test_the_app_refuses_to_start_on_the_placeholder_keys(monkeypatch: pytest.MonkeyPatch) -> None:
-    """`create_app()` as uvicorn calls it, with Parameter Store holding Terraform's placeholder."""
+    """uvicorn's factory as it calls it, with Parameter Store holding Terraform's placeholder."""
     import debate_api.container as container
-    from debate_api.app import create_app
 
     parameters = {
         "/debate-dev-tub/cookie-keys": _keys(placeholder="Not a key."),
@@ -286,4 +289,29 @@ def test_the_app_refuses_to_start_on_the_placeholder_keys(monkeypatch: pytest.Mo
         monkeypatch.setenv(name, value)
 
     with pytest.raises(CookieKeysNotSet, match="placeholder"):
-        create_app()
+        container.create_app_from_environment()
+
+
+def test_the_images_entrypoint_is_the_composition_roots_factory_and_the_app_needs_its_services() -> None:
+    """uvicorn calls what the Dockerfile names with no arguments (`v1-e39-t23`).
+
+    `create_app` takes no default for its services, so the factory has to come from the composition
+    root, and neither module builds an app at import.
+    """
+    from uvicorn.importer import import_from_string
+
+    import debate_api.app as app_module
+    import debate_api.container as container
+
+    [entrypoint] = [
+        line for line in DOCKERFILE.read_text(encoding="utf-8").splitlines() if line.startswith("ENTRYPOINT ")
+    ]
+    arguments = json.loads(entrypoint.removeprefix("ENTRYPOINT "))
+    assert "--factory" in arguments
+    factory = import_from_string(arguments[arguments.index("uvicorn") + 1])
+
+    assert factory is container.create_app_from_environment
+    assert not inspect.signature(factory).parameters
+    assert inspect.signature(app_module.create_app).parameters["services"].default is inspect.Parameter.empty
+    for module in (app_module, container):
+        assert not any(type(value).__name__ == "FastAPI" for value in vars(module).values()), module.__name__

@@ -20,8 +20,8 @@ No other logger's `INFO` is let through. `INFO` is opened one logger at a time, 
 what it logs at that level has been read, so a later `INFO` line elsewhere that named a card or a
 student would stay out of the log rather than depend on a test to notice it.
 
-Only :func:`~debate_api.app.create_app` building the function's own services calls this. A test that
-passes its own services leaves logging as pytest set it.
+Only uvicorn's factory, :func:`~debate_api.container.create_app_from_environment`, calls this. A
+test that builds the app with its own services leaves logging as pytest set it.
 """
 
 from __future__ import annotations

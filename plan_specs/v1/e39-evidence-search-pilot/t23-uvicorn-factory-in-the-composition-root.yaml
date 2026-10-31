@@ -40,7 +40,7 @@ spec:
         its services, and t32's measurement selects fewer API files for a parser change,
         with the collected count unchanged; the image's smoke check passes.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

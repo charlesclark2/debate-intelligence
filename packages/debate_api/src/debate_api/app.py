@@ -7,8 +7,10 @@ fetches the first time a search needs it.
 It is a plain ASGI app with no Lambda code in it. In the image, uvicorn serves it on port 8080
 with its access log off, because an access log line holds the client's address and the query
 string (gate item 4); the Lambda Web Adapter forwards each function URL event to it. uvicorn calls
-:func:`create_app` with `--factory`, which builds the services from the function's environment
-through `debate_api.container`. A test passes its own :class:`~debate_api.state.PilotServices`.
+:func:`debate_api.container.create_app_from_environment` with `--factory`, which builds the services
+from the function's environment and hands them to :func:`create_app`. A test passes its own
+:class:`~debate_api.state.PilotServices`. This module never imports the composition root
+(`v1-e39-t23`), so a test of the app reaches only the adapters its own services name.
 
 What holds for every response:
 
@@ -24,13 +26,11 @@ then the gate (:mod:`debate_api.access`), then the routes and their error handle
 
 from __future__ import annotations
 
-import os
 from collections.abc import Awaitable, Callable
 
 from fastapi import FastAPI, Request, Response
 
 from debate_api.access import RouteAccess, install_gate
-from debate_api.app_logging import configure_app_logging
 from debate_api.cookies import CookieSealer
 from debate_api.errors import install_error_handlers
 from debate_api.pages import PageRenderer, load_app_script, load_app_stylesheet
@@ -48,20 +48,8 @@ async def private_no_store(request: Request, call_next: Callable[[Request], Awai
     return response
 
 
-def create_app(services: PilotServices | None = None) -> FastAPI:
-    """Build the app. With no `services`, build them from this process's environment.
-
-    Building them reads the client secret and the cookie keys from Parameter Store, and refuses to
-    go on if the cookie keys are still Terraform's placeholder
-    (:class:`~debate_api.configuration.CookieKeysNotSet`), so a misconfigured function never starts.
-    It first sends the function's log lines to stderr, its app log (:mod:`debate_api.app_logging`).
-    """
-    if services is None:
-        # Imported here: the composition root builds AWS adapters, which a test never needs.
-        from debate_api.container import build_pilot_services
-
-        configure_app_logging()
-        services = build_pilot_services(os.environ)
+def create_app(services: PilotServices) -> FastAPI:
+    """Build the app over `services`: the function's, from its composition root, or a test's own."""
     app = FastAPI(title="Team evidence search", docs_url=None, redoc_url=None, openapi_url=None)
     script, stylesheet = load_app_script(), load_app_stylesheet()
     app.state.pilot = PilotState(

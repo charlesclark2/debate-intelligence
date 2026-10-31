@@ -146,6 +146,7 @@ from debate_core.application.caselist_sync import (
     append_state_line,
     cloud_parse_cure,
     fix_for,
+    next_cloud_run,
     parse_command,
     remove_state_file,
     write_state_file,
@@ -166,12 +167,16 @@ __all__ = [
     "ANOTHER_RUN_HELD_THE_LOCK",
     "ANOTHER_RUN_HELD_THE_LOCK_TITLE",
     "BACKLOG_GROWTH_RUNS",
+    "CLOUD_BACKLOG_CURE",
+    "CLOUD_BACKLOG_RUNBOOK",
     "CLOUD_FAILED_PUBLISH_RUNBOOK",
+    "CLOUD_FAILED_RUN_RUNBOOK",
     "CLOUD_NO_SESSION_CURE",
     "CLOUD_NO_SESSION_RUNBOOK",
     "CLOUD_PUBLISHED_AGAIN_CURE",
     "CLOUD_PUBLISHED_AGAIN_RUNBOOK",
     "CLOUD_PUBLISH_CURE",
+    "CLOUD_UNFINISHED_RUN_CURE",
     "RUN_LOCK_LOST",
     "RUN_LOCK_LOST_TITLE",
     "TOOK_OVER_THE_LOCK",
@@ -1152,10 +1157,9 @@ and the publish it names are the operator's Mac's, and the cloud run's are its t
 CLOUD_FAILED_PUBLISH_RUNBOOK: Final = 'caselist-cloud-run.md, "A failed publish stage"'
 """The runbook section a bucket-mode failed publish points to (`v1-e40-t25`)."""
 
-CLOUD_PUBLISH_CURE: Final = (
-    "the next cloud run takes up what this run did not publish, from the run state saved in the "
-    f"bucket: the weekly run, or one started by hand ({CLOUD_FAILED_PUBLISH_RUNBOOK}); never a publish "
-    "from the operator's Mac"
+CLOUD_PUBLISH_CURE: Final = next_cloud_run(
+    "takes up what this run did not publish, from the run state saved in the bucket",
+    runbook=CLOUD_FAILED_PUBLISH_RUNBOOK,
 )
 """A failed publish stage's fix in bucket mode (`v1-e40-t25`), as its details' `bucket_run` says it was.
 
@@ -1168,13 +1172,40 @@ That is why this says "takes up" and not "publishes": a week redone may wait for
 CLOUD_PUBLISHED_AGAIN_RUNBOOK: Final = 'caselist-cloud-run.md, "A manifest published again"'
 """The runbook section a bucket-mode manifest owed again points to (`v1-e40-t25`)."""
 
-CLOUD_PUBLISHED_AGAIN_CURE: Final = (
-    "the next cloud run takes up what is owed again, from the run state saved in the bucket: the "
-    f"weekly run, or one started by hand ({CLOUD_PUBLISHED_AGAIN_RUNBOOK}); never a publish from the "
-    "operator's Mac"
+CLOUD_PUBLISHED_AGAIN_CURE: Final = next_cloud_run(
+    "takes up what is owed again, from the run state saved in the bucket",
+    runbook=CLOUD_PUBLISHED_AGAIN_RUNBOOK,
 )
 """:data:`MANIFEST_PUBLISHED_AGAIN_TITLE`'s fix in bucket mode (`v1-e40-t25`), for the same reason as
 :data:`CLOUD_PUBLISH_CURE`."""
+
+CLOUD_FAILED_RUN_RUNBOOK: Final = 'caselist-cloud-run.md, "A failed or stopped run"'
+"""The runbook section a bucket-mode run that stopped, or failed beyond its publish, points to
+(`v1-e40-t28`)."""
+
+CLOUD_UNFINISHED_RUN_CURE: Final = next_cloud_run(
+    "takes up what this run did not finish, from the run state saved in the bucket",
+    runbook=CLOUD_FAILED_RUN_RUNBOOK,
+)
+""":data:`PULL_COMMAND` as a fix in bucket mode (`v1-e40-t28`), as its details' `bucket_run` says it was:
+a run that stopped on an error, and a failed-stage banner whose failed stages are more than the
+publish alone or the parse alone. The CLI's own next step says it too.
+
+`caselist pull` on the operator's Mac is not the cloud run's cure: the cloud run's task has ended,
+and what it captured and did not publish ended with it, the inbox included (ADR-0020 (3), "What is
+not saved"). The next cloud run restores the run state the bucket holds and does the rest, a week
+whose bundle was not saved within the day's downloads, as :data:`CLOUD_PUBLISH_CURE` says."""
+
+CLOUD_BACKLOG_RUNBOOK: Final = 'caselist-cloud-run.md, "A backlog growing"'
+"""The runbook section a bucket-mode backlog banner points to (`v1-e40-t28`)."""
+
+CLOUD_BACKLOG_CURE: Final = next_cloud_run(
+    "fetches more of what the daily download cap deferred, once the day's downloads reset",
+    runbook=CLOUD_BACKLOG_RUNBOOK,
+)
+"""The backlog banner's fix in bucket mode (`v1-e40-t28`), where local mode's is the pull again tomorrow.
+The day's downloads are counted in a state file the bucket keeps, so a cloud run started by hand the same
+day fetches no more."""
 
 _WHAT_THE_BUCKET_CONFIRMED_IS_KEPT: Final = (
     "What the bucket confirmed is kept; the cloud run's working copy ends with its task."
@@ -1198,7 +1229,11 @@ CLOUD_NO_SESSION_CURE: Final = (
 A cloud run's AWS session is its task role's, which ECS renews, so a run that found none points at the
 role and goes to the PM. `aws sso login && caselist pull --publish-pending`, local mode's fix, would
 publish snapshots from the working copy of the machine it was run on, never the cloud run's, which
-ended with its task."""
+ended with its task.
+
+It is also the S3 adapters' login hint in a cloud run (`v1-e40-t28`), which the composition root gives
+them, so that every record reason a cloud run writes for a session that is not usable names the task
+role, and never `aws sso login`."""
 """What the login banner adds when the report stage is pending and the publish is not (`v1-e34-t26`).
 
 The publish confirmed what it published, and the session then expired while the report stage
@@ -1279,6 +1314,13 @@ def notifications_for(
     says it was: a failed publish stage alone (:data:`CLOUD_PUBLISH_CURE`) and a manifest owed again
     (:data:`CLOUD_PUBLISHED_AGAIN_CURE`), never `--publish-pending`, which publishes the working copy
     of the machine it runs on. The titles are unchanged, so :func:`banner_words` is too.
+
+    **No bucket-mode banner names the pull** (`v1-e40-t28`). A run that stopped on an error and a
+    failed-stage banner whose failed stages are more than the publish alone or the parse alone name
+    the next cloud run (:data:`CLOUD_UNFINISHED_RUN_CURE`), and such a banner ends with what the
+    bucket confirmed: an archive the cloud run downloaded and did not import, and a snapshot it
+    captured and did not publish, ended with its task. A growing backlog's fix is the next cloud run
+    once the day's downloads reset (:data:`CLOUD_BACKLOG_CURE`), not the pull again tomorrow.
     """
     where = f"Run {record.run_id} ({record.environment})"
     sent: list[Notification] = []
@@ -1320,7 +1362,7 @@ def notifications_for(
             Notification(
                 title=title,
                 message=f"{where} stopped: {_what_stopped_it(details.failure_codes)}. {verdict}",
-                fix_command=PULL_COMMAND,
+                fix_command=CLOUD_UNFINISHED_RUN_CURE if bucket is not None else PULL_COMMAND,
                 hint=details.hint,
             )
         )
@@ -1361,6 +1403,9 @@ def notifications_for(
         # A cloud run's failed publish: the next cloud run takes it up (`v1-e40-t25`).
         cloud_publish = only_publish and bucket is not None
         only_parse = set(failed) == {str(SyncStage.PARSE)}
+        # And everything else a cloud run did not finish, beyond the parse alone, which has its own
+        # cure and lost nothing it captured (`v1-e40-t28`).
+        cloud_kept = bucket is not None and not only_parse
         said = [details.stage(stage) for stage in failed]
         named = "; ".join(
             f"the {stage} stage failed"
@@ -1379,13 +1424,15 @@ def notifications_for(
             Notification(
                 title=title,
                 message=f"{where}: {named}. {verdict}"
-                + (_WHAT_THE_BUCKET_CONFIRMED_IS_KEPT if cloud_publish else _WHAT_WAS_CAPTURED_IS_KEPT),
+                + (_WHAT_THE_BUCKET_CONFIRMED_IS_KEPT if cloud_kept else _WHAT_WAS_CAPTURED_IS_KEPT),
                 fix_command=CLOUD_PUBLISH_CURE
                 if cloud_publish
                 else PUBLISH_PENDING_COMMAND
                 if only_publish
                 else parse_commands(details)
                 if only_parse
+                else CLOUD_UNFINISHED_RUN_CURE
+                if bucket is not None
                 else PULL_COMMAND,
                 hint=" ".join(hints) or None,
             )
@@ -1519,7 +1566,9 @@ def notifications_for(
                     f"{where}: archives deferred by the daily download cap have grown for "
                     f"{BACKLOG_GROWTH_RUNS} runs in a row ({counts})."
                 ),
-                fix_command=f"{PULL_COMMAND} (again tomorrow, when the day's downloads reset)",
+                fix_command=CLOUD_BACKLOG_CURE
+                if bucket is not None
+                else f"{PULL_COMMAND} (again tomorrow, when the day's downloads reset)",
             )
         )
     # Under the title, the run: short enough that a banner shows it whole (`v1-e34-t23`).

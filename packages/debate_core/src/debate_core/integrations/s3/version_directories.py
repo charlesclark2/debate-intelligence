@@ -52,6 +52,8 @@ class S3VersionDirectories:
         bucket: The environment's evidence bucket.
         profile: The profile the client was built with: always the everyday one, never the takedown's.
         profile_setting: The setting `profile`'s name came from, for a profile the config lacks.
+        login_hint: What a missing or expired session names instead of `aws sso login`, or `None` for
+            that command (`v1-e40-t28`). The composition root gives the cloud run's.
         client: An already-built client. The tests pass moto's.
         region: Used only when `client` is not given.
         threads: Tagging requests in flight at once.
@@ -63,6 +65,7 @@ class S3VersionDirectories:
         bucket: str,
         profile: str | None = None,
         profile_setting: str | None = None,
+        login_hint: str | None = None,
         client: S3Client | None = None,
         region: str | None = None,
         threads: int = DEFAULT_TAGGING_THREADS,
@@ -70,6 +73,7 @@ class S3VersionDirectories:
         self._bucket = bucket
         self._profile = profile
         self._profile_setting = profile_setting
+        self._login_hint = login_hint
         self._threads = threads
         self._client = (
             client
@@ -177,6 +181,7 @@ class S3VersionDirectories:
             s3_key=key or None,
             profile=self._profile,
             profile_setting=self._profile_setting,
+            given_login_hint=self._login_hint,
         )
 
 

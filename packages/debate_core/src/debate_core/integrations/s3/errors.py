@@ -34,6 +34,11 @@ session lasts hours, and the sync of a corpus takes longer than one sitting. So 
 :attr:`~debate_core.application.errors.StoreCredentialsExpired.hint`, and
 `v1-e29-t05-evidence-sync-cli` prints that one line instead of a botocore traceback (its ac4).
 
+A cloud run has no SSO session to log in to: its session is its task role's, which ECS renews. So whoever
+builds an adapter may give it the hint to name instead, :attr:`S3Call.given_login_hint`, and the
+composition root gives the cloud run's (`v1-e40-t28`). Every record reason a run writes for a session
+that is not usable ends with this hint, so it decides what all of them say.
+
 ## Why a profile that is not defined is not an expired session
 
 Because no login fixes it (`v1-e29-t07`). `boto3` raises `ProfileNotFound` when it is asked for a
@@ -238,6 +243,11 @@ class S3Call:
     operator corrects. Passed in by whoever built the adapter; the adapters read no settings.
     """
 
+    given_login_hint: str | None = None
+    """What a missing or expired session names instead of `aws sso login`, when whoever built the adapter
+    gave one (`v1-e40-t28`): the cloud run's task role, which no login renews. Passed in by the
+    composition root, which alone knows what runs the command; the adapters read no settings."""
+
     @property
     def resource(self) -> str:
         """The thing acted on, as a message should name it: `s3://bucket/key`, or just the bucket."""
@@ -245,7 +255,9 @@ class S3Call:
 
     @property
     def login_hint(self) -> str:
-        """The command that refreshes the session, naming the profile when there is one."""
+        """The hint given, or else the command that refreshes the session, naming any profile."""
+        if self.given_login_hint is not None:
+            return self.given_login_hint
         if self.profile:
             return f"aws sso login --profile {self.profile}"
         return "aws sso login (or set AWS_PROFILE to the evidence profile for this environment)"

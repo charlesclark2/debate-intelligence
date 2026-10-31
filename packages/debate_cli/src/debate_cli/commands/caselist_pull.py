@@ -143,7 +143,12 @@ from debate_core.application.caselist_sync import (
     run_pull,
 )
 from debate_core.application.settings import Settings
-from debate_core.application.sync_runs import CLOUD_PUBLISH_CURE, SyncRunDetails, SyncRunRecord
+from debate_core.application.sync_runs import (
+    CLOUD_PUBLISH_CURE,
+    CLOUD_UNFINISHED_RUN_CURE,
+    SyncRunDetails,
+    SyncRunRecord,
+)
 
 __all__ = ["pull", "pull_summary"]
 
@@ -452,9 +457,13 @@ def _hint_for(failed: list[StageRecord], *, retryable: bool, bucket_mode: bool =
 
     In bucket mode a failed publish names the next cloud run (`v1-e40-t25`), never
     `--publish-pending`, which publishes the working copy of the machine it is run on: the cloud
-    run's ends with its task.
+    run's ends with its task. So does every "run the same command again" (`v1-e40-t28`): the
+    command is the cloud task's, which has ended, and what it captured and did not publish, the
+    inbox included, ended with it.
     """
     fixes = list(dict.fromkeys(record.hint for record in failed if record.hint))
+    if fixes and bucket_mode:
+        return " ".join(fixes) + f" Then in bucket mode {CLOUD_UNFINISHED_RUN_CURE}."
     if fixes:
         return " ".join(fixes) + " Then run the same command again: what was captured is kept."
     stages = {record.stage for record in failed}
@@ -464,6 +473,8 @@ def _hint_for(failed: list[StageRecord], *, retryable: bool, bucket_mode: bool =
         if retryable
         else ""
     )
+    if SyncStage.DOWNLOAD in stages and bucket_mode:
+        return f"{again}In bucket mode {CLOUD_UNFINISHED_RUN_CURE}."
     if SyncStage.DOWNLOAD in stages:
         return (
             f"{again}Nothing that did download was lost: it is in the inbox and imported. Run the same "
@@ -473,6 +484,8 @@ def _hint_for(failed: list[StageRecord], *, retryable: bool, bucket_mode: bool =
         return f"{again}In bucket mode {CLOUD_PUBLISH_CURE}."
     if SyncStage.PUBLISH in stages:
         return f"{again}Re-run `caselist pull --publish-pending`: every confirmed source is skipped."
+    if bucket_mode:
+        return f"{again}In bucket mode {CLOUD_UNFINISHED_RUN_CURE}."
     return f"{again}Run the same command again; every stage is idempotent."
 
 

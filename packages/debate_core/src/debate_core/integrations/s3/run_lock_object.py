@@ -66,6 +66,8 @@ class S3LockObject:
         key: The lock's key, `reports/sync/run-lock.json`.
         client: A client of its own, never one the write fence is registered on.
         profile, profile_setting: As for every adapter here: what an error names.
+        login_hint: What a missing or expired session names instead of `aws sso login`, or `None` for
+            that command (`v1-e40-t28`). The composition root gives the cloud run's.
         kms_key_id: The evidence key, to state on each write, or `None` for the bucket's default.
     """
 
@@ -77,6 +79,7 @@ class S3LockObject:
         client: S3Client,
         profile: str | None = None,
         profile_setting: str | None = None,
+        login_hint: str | None = None,
         kms_key_id: str | None = None,
     ) -> None:
         self._bucket = bucket
@@ -84,6 +87,7 @@ class S3LockObject:
         self._client = client
         self._profile = profile
         self._profile_setting = profile_setting
+        self._login_hint = login_hint
         self._kms_key_id = kms_key_id
 
     @property
@@ -153,6 +157,7 @@ class S3LockObject:
             s3_key=self._key,
             profile=self._profile,
             profile_setting=self._profile_setting,
+            given_login_hint=self._login_hint,
         )
 
 

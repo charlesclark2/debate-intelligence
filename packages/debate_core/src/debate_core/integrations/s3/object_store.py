@@ -87,6 +87,8 @@ class S3EvidenceObjectStore:
         profile: A profile in the shared AWS config — this environment's evidence profile.
         profile_setting: The setting `profile`'s name came from, e.g. `"storage.s3.aws_profile"`. It is
             what a profile the AWS config does not define is reported by (`v1-e29-t07`).
+        login_hint: What a missing or expired session names instead of `aws sso login`, or `None` for
+            that command (`v1-e40-t28`). The composition root gives the cloud run's.
         client: An already-built client, so that this store and a snapshot store over the same bucket
             share one. The tests pass moto's.
         kms_key_id: The environment's `evidence_kms_key_arn`, to state the key on each upload instead
@@ -102,6 +104,7 @@ class S3EvidenceObjectStore:
         region: str | None = None,
         profile: str | None = None,
         profile_setting: str | None = None,
+        login_hint: str | None = None,
         client: S3Client | None = None,
         kms_key_id: str | None = None,
         multipart_threshold_bytes: int = DEFAULT_MULTIPART_THRESHOLD_BYTES,
@@ -110,6 +113,7 @@ class S3EvidenceObjectStore:
         self._bucket = bucket
         self._profile = profile
         self._profile_setting = profile_setting
+        self._login_hint = login_hint
         self._kms_key_id = kms_key_id
         self._transfer_config = build_transfer_config(
             multipart_threshold_bytes=multipart_threshold_bytes,
@@ -251,6 +255,7 @@ class S3EvidenceObjectStore:
             s3_key=key or None,
             profile=self._profile,
             profile_setting=self._profile_setting,
+            given_login_hint=self._login_hint,
         )
 
 

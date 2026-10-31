@@ -581,5 +581,24 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e39-t23-uvicorn-factory-in-the-composition-root
+    - id: t24
+      kind: Task
+      name: 'A card or cart download skips the header page, and the student can name its pocket'
+      description: >-
+        A card or cart download skips the header page, and the student can name its pocket.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t24-download-skips-the-header-page-and-names-its-pocket.yaml
+        goalRef: v1-e39-t24-download-skips-the-header-page-and-names-its-pocket
+      dependsOn:
+      - t08
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t24-download-skips-the-header-page-and-names-its-pocket reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t24-download-skips-the-header-page-and-names-its-pocket
 status:
   phase: Pending

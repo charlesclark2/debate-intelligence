@@ -1,0 +1,82 @@
+# TASK v1-e39-t24-download-skips-the-header-page-and-names-its-pocket - A card or cart download skips the header page, and the student can name its pocket
+# Epic: E39 — Team Evidence Search (Student Pilot) | Release: v1.7 (Team evidence search pilot) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e39-t24-download-skips-the-header-page-and-names-its-pocket
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+  annotations:
+    debate/title: "A card or cart download skips the header page, and the student can name its pocket"
+spec:
+  # Filed by the PM, 2026-11-01, from v1-e39-t08's ac4, the operator's preference (2026-11-01).
+  description: >-
+    A downloaded single card or cart file begins with the built file's header line ("Disclosed
+    cards (FILE_IMPORT) from <caselist>, each copied from the file that disclosed it and not
+    verified by this platform.") and the pocket "Team evidence search", which in Verbatim's
+    styles start two pages before the first card. The coach wants downloads to skip the header
+    page, keep the pocket, and let the student name the pocket (default "Team evidence search").
+    Count first: whether the data-use policy (caselist-data-use.md, version 1.19) or the
+    evidence-integrity rules require the "not verified" notice in a downloaded file, citing the
+    passage. If they do, stop and send the PM the options (the notice in the document's
+    properties, in the pocket line, or a policy amendment for the coach to approve) before
+    building. Otherwise build it: the pilot's download leaves the header line out, a pocket
+    title the student types is accepted within limits you state (length, characters, no school
+    or team code checks needed beyond the writer's), and the built-file path (`files build`)
+    keeps its header unchanged.
+  priority: 3
+  constraints:
+    packages: [debate_api, packages/debate_api/tests, debate_core.application, debate_core.integrations, packages/debate_core/tests, docs/guides]
+    forbidden:
+      - A provenance line in a downloaded card (policy 1.11)
+      - A built file (files build) changed
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e39-t08-card-download
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The policy's requirement is counted and cited first; then a downloaded card and cart
+        hold no header line, keep a pocket titled as the student asked or by default, and
+        `files build`'s files are unchanged, by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e39-t24-download-skips-the-header-page-and-names-its-pocket-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+spec:
+  description: >-
+    A card or cart download skips the header page, and the student can name its pocket.
+  goalRef:
+    name: v1-e39-t24-download-skips-the-header-page-and-names-its-pocket
+  graph:
+    nodes:
+      - id: download-skips-the-header-page-and-names
+        kind: Task
+        name: Download header and pocket
+        description: >-
+          A card or cart download skips the header page, and the student can name its
+          pocket.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Download header and pocket tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests, -k, download]
+status:
+  phase: Pending

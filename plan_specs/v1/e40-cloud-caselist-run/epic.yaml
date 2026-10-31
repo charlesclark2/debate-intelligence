@@ -623,5 +623,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e40-t26-parses-owed-smoke-check
+    - id: t27
+      kind: Task
+      name: 'store sync never moves reports/sync/, so a push of pulled copies cannot overwrite the run''s lock or state files'
+      description: >-
+        store sync never moves reports/sync/, so a push of pulled copies cannot overwrite
+        the run's lock or state files.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t27-store-sync-leaves-the-run-state-alone.yaml
+        goalRef: v1-e40-t27-store-sync-leaves-the-run-state-alone
+      dependsOn:
+      - t07
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t27-store-sync-leaves-the-run-state-alone reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t27-store-sync-leaves-the-run-state-alone
 status:
   phase: Pending

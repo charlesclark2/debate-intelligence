@@ -428,3 +428,16 @@ behind it found a real flaw that the deny turns from a silent clobber into a ref
 7. **Closing checks:** the affected set (87 files, path edges only, no Python changed) is left to the
    PR's `ci` under agreement 10. The always-run list and the infrastructure tests pass.
 8. **Merge `--partial`.** ac2 is the operator's, so the Goal stays `InProgress`.
+
+## Operator records (recorded by the PM, 2026-11-01)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac2, dev: before you start, sign-in and the probe before the apply | NOT RUN | PASS | 2026-11-01, from `caselist-credentials-dev` at `origin/dev` `a01f789`: the statement in the checkout (`1`), both users in the tfvars (`2`), aws-cli 2.38.1 with both conditional headers; the two roles signed in. Probe: `lock: free`, `(BadDigest)`, `(BadDigest)`, `(PreconditionFailed)`, lock unchanged `"613066d8a3a1c5464ae12c835d7331a0"` |
+| ac2, dev: the plan, read by the PM, and the apply | NOT RUN | PASS | `Plan: 0 to add, 1 to change, 0 to destroy.`, one resource line, `module.evidence_store.aws_s3_bucket_policy.evidence will be updated in-place`; the plan check `PLAN OK … gains DenyUnconditionalWritesOfTheRunLock and nothing else in it changes; no account assignment or permission set changes`, the statement as specified. The runbook's raw `grep -c aws_ssoadmin` read 26: refresh lines, and 2 lines of the `aws_ssoadmin_instances` data source's read (`Reading...`, `Read complete`), none a change (the PM batch of 2026-11-01 (c) fixes the count). Applied: `0 added, 1 changed, 0 destroyed` |
+| ac2, dev: the probe after the apply, and a conditional take and release | NOT RUN | PASS | Probe: `(BadDigest)` on the scratch key, `(AccessDenied) explicit deny in a resource-based policy` on the lock's blind write, `(PreconditionFailed)` on the conditional one, the lock unchanged. Step 5: the dry run moved nothing (`new 0`, `changed 0`); the push `exit 0`, `applied True | transferred 0`, `state free | released after this block started: True`, the lock written `"613066d8…"` then `"b65d64de8ead64f8e8f0207fbcceeb5b"` |
+| Step 6, the next Wednesday's run | NOT RUN | NOT RUN | Read on Thursday 2026-11-05 from Wednesday 2026-11-04's run on `v1.1.0-dev.164` |
+
+ac2's dev half passes. The Goal stays `InProgress` until step 6 is read on Thursday; prod follows with the pilot's promotion.

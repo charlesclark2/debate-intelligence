@@ -279,5 +279,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e41-t08-run-shaped-strings-read-wherever-they-stand
+    - id: t09
+      kind: Task
+      name: 'validate_specs.py is clean under pyright, and task start refuses an unknown prerequisite even under --force'
+      description: >-
+        validate_specs.py is clean under pyright, and task start refuses an unknown
+        prerequisite even under --force.
+      inputs:
+        specRef: plan_specs/v1/e41-delivery-tooling-upkeep/t09-validate-specs-pyright-and-start-refuses-unknown.yaml
+        goalRef: v1-e41-t09-validate-specs-pyright-and-start-refuses-unknown
+      dependsOn:
+      - t07
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e41-t09-validate-specs-pyright-and-start-refuses-unknown reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e41-t09-validate-specs-pyright-and-start-refuses-unknown
 status:
   phase: Pending

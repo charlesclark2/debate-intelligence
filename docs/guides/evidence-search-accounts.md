@@ -15,6 +15,7 @@ section (d). How it is set up in AWS: [the pilot's runbook](../runbooks/evidence
   - [Every sign-in after that](#every-sign-in-after-that)
   - [The optional backup email](#the-optional-backup-email)
   - [A new phone, a lost phone, a forgotten password](#a-new-phone-a-lost-phone-a-forgotten-password)
+  - [Downloading cards](#downloading-cards)
 - [For the coach](#for-the-coach)
   - [Before you start](#before-you-start)
   - [Adding a student](#adding-a-student)
@@ -89,6 +90,14 @@ sign-in](#your-first-sign-in).
 - **A forgotten password**: there is no "forgot password" link. Ask the coach for a reset.
 - **The sign-in page asks you to set up an authenticator app** when it is not your first sign-in and
   the coach has not just reset your account: tell the coach.
+
+### Downloading cards
+
+**Download .docx** on a card's page saves that card as a Word file, and **Download cart** saves every
+card you added to the cart as one file. The file starts with its pocket heading and then your cards,
+with no header page before them. Type a name in **Pocket name** beside the button to give the pocket
+your own name, up to 80 characters; left blank, it is "Team evidence search". The cards are copied
+from the files teams disclosed and are not checked by the search, as their pages say.
 
 ## For the coach
 

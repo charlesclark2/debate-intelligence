@@ -14,7 +14,12 @@
 <span id="copy-help" class="copy-help">Keeps its formatting.</span>
 <span class="copy-status" data-tub-copy-message role="status"></span>
 <div class="download-actions">
-{% if download_on %}<button type="button" data-tub-download="{{ card_reference }}">Download .docx</button>
+{% if download_on %}<div class="pocket-name">
+<label for="download-pocket">Pocket name for this card's file</label>
+<input id="download-pocket" type="text" maxlength="{{ pocket_max_length }}" autocomplete="off" spellcheck="false" aria-describedby="download-pocket-help" data-tub-download-pocket>
+<p id="download-pocket-help" class="help">Up to {{ pocket_max_length }} characters. Left blank, the pocket is "{{ pocket_default }}".</p>
+</div>
+<button type="button" data-tub-download="{{ card_reference }}">Download .docx</button>
 <button type="button" class="secondary" data-tub-cart-add="{{ card_reference }}">Add to cart</button>
 <div class="download-status" data-tub-download-message role="status"></div>
 {% else %}<p class="download-off">Download is off until the search's next weekly update. Copy card still works.</p>

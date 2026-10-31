@@ -8,6 +8,25 @@ build` calls it: each card copied from its source's own runs and read back, with
 (data-use policy version 1.11, `v1-e33-t08`). Its sidecar is built and never sent; the download's
 `cards-downloaded` audit record names the cards instead.
 
+## No header line, and the student's own pocket (`v1-e39-t24`)
+
+A download asks the writer for no header line (`FileBuildRequest.header_line`): in Verbatim's styles
+the header analytic and the pocket put the first card two pages down. `files build` never asks, so a
+built file keeps its header. Nothing in a download presents a card as verified, with or without the
+header (data-use policy, Attribution rule 4): the card page carries the "Disclosed evidence, not
+platform-verified" label (E39 gate item 7), and Copy card carries no notice either.
+
+The file's one pocket is :data:`DOWNLOAD_POCKET_DEFAULT` unless the student typed a name, which
+:func:`pocket_title` reads: any run of whitespace is one space and the ends are trimmed, the name is
+put in Unicode's composed form (NFC), and a blank one is the default. A name longer than
+:data:`DOWNLOAD_POCKET_MAX_LENGTH` characters, or holding a control, format, private-use, surrogate or
+unassigned character (Unicode's `C` categories: a NUL the XML cannot hold, a right-to-left override or
+a zero-width space that would hide what the heading says), refuses the download before a card is
+looked up (:attr:`DownloadRefusal.UNREADABLE_POCKET`). Everything else is the student's text: the
+writer puts it in one run of the pocket style, and lxml escapes `<`, `>` and `&` as it does for every
+heading. The name is not checked for a school or a team code: it is the student's own, it goes into
+their own file, and the audit record and the logs never hold it.
+
 ## The cart is the browser's, and nothing in it is trusted (the PM's ruling of 2026-10-22)
 
 The session is a signed cookie and holds no cart. The browser keeps the cart and sends it with the
@@ -21,8 +40,10 @@ read. A card on a page rendered before a removal is refused at the download and 
 1. **Download is on.** The lease's index names the parser version every occurrence's element indices
    were found by. When it is not this function's parser, download is switched off
    (:attr:`DownloadRefusal.SWITCHED_OFF`): never failed card by card.
-2. **The cart.** Unreadable (:attr:`DownloadRefusal.UNREADABLE_CART`), empty, or over the card cap
-   (:attr:`DownloadRefusal.TOO_MANY_CARDS`): refused before anything is looked up.
+2. **The cart and the pocket name.** A cart unreadable (:attr:`DownloadRefusal.UNREADABLE_CART`),
+   empty, or over the card cap (:attr:`DownloadRefusal.TOO_MANY_CARDS`), or a pocket name
+   :func:`pocket_title` refuses (:attr:`DownloadRefusal.UNREADABLE_POCKET`): refused before anything
+   is looked up.
 3. **Each card.** Not in the search, or its representative suppressed now; a cite with no evidence
    text; the same card twice. Each is a :class:`RefusedCard` with its place in the cart, and the
    student can drop them and build the rest.
@@ -67,6 +88,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import unicodedata
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -100,6 +122,8 @@ __all__ = [
     "DEFAULT_DOWNLOAD_CARD_CAP",
     "DEFAULT_DOWNLOAD_SOURCE_XML_BYTES",
     "DOWNLOAD_FETCH_MAX_BYTES",
+    "DOWNLOAD_POCKET_DEFAULT",
+    "DOWNLOAD_POCKET_MAX_LENGTH",
     "DocumentSize",
     "DOWNLOAD_FILE_MAX_BYTES",
     "CardDownloadService",
@@ -109,9 +133,11 @@ __all__ = [
     "DownloadedFile",
     "RefusedCard",
     "RefusedCardReason",
+    "UnreadablePocket",
     "WriterFactory",
     "estimated_file_bytes",
     "parse_cart",
+    "pocket_title",
 ]
 
 DEFAULT_DOWNLOAD_CARD_CAP: Final = 8
@@ -154,8 +180,14 @@ _MAX_CART_CHARACTERS: Final = MAX_DOWNLOAD_CARDS * 96
 
 _REFERENCE: Final = re.compile(CARD_REFERENCE_PATTERN)
 
+DOWNLOAD_POCKET_DEFAULT: Final = "Team evidence search"
+"""A download's pocket when the student names none (`v1-e39-t24`)."""
+
+DOWNLOAD_POCKET_MAX_LENGTH: Final = 80
+"""The longest pocket name a student may type, in characters: a heading of a few words, on one or two
+lines of Verbatim's pocket style. The recipe allows 200 for a coach's heading."""
+
 _FILE_TITLE: Final = "Cards from the team evidence search"
-_POCKET: Final = "Team evidence search"
 _BLOCK: Final = "Downloaded cards"
 
 
@@ -194,6 +226,30 @@ def parse_cart(raw: str) -> tuple[CardKey, ...]:
     return tuple(keys)
 
 
+class UnreadablePocket(ValueError):
+    """A pocket name too long, or holding a character a pocket heading should not."""
+
+
+def pocket_title(typed: str | None) -> str:
+    """The pocket a download's file is given for what the student typed: whitespace made single spaces
+    and trimmed, in NFC, or :data:`DOWNLOAD_POCKET_DEFAULT` when that leaves nothing.
+
+    Raises :class:`UnreadablePocket` for a name over :data:`DOWNLOAD_POCKET_MAX_LENGTH` characters, or
+    one holding a character of Unicode's `C` categories (control, format, surrogate, private use,
+    unassigned).
+    """
+    if typed is None:
+        return DOWNLOAD_POCKET_DEFAULT
+    name = " ".join(unicodedata.normalize("NFC", typed).split())
+    if not name:
+        return DOWNLOAD_POCKET_DEFAULT
+    if len(name) > DOWNLOAD_POCKET_MAX_LENGTH:
+        raise UnreadablePocket(f"a pocket name is up to {DOWNLOAD_POCKET_MAX_LENGTH} characters")
+    if any(unicodedata.category(character).startswith("C") for character in name):
+        raise UnreadablePocket("a pocket name holds no control, format or unassigned character")
+    return name
+
+
 class DownloadRefusal(StrEnum):
     """Why a download was not built."""
 
@@ -205,6 +261,9 @@ class DownloadRefusal(StrEnum):
 
     EMPTY_CART = "EMPTY_CART"
     """The cart names no card."""
+
+    UNREADABLE_POCKET = "UNREADABLE_POCKET"
+    """The pocket name the student typed is one :func:`pocket_title` refuses (`v1-e39-t24`)."""
 
     TOO_MANY_CARDS = "TOO_MANY_CARDS"
     """More cards than the cap."""
@@ -388,8 +447,11 @@ class CardDownloadService:
         """Whether this lease's index was built by this function's parser, so its cards can be built."""
         return search.parser_version == self._parser_version
 
-    async def download(self, session: Session, cart: str) -> DownloadedFile | DownloadRefused:
-        """The file for the cards `cart` names, or why not. The audit record is written before it returns.
+    async def download(
+        self, session: Session, cart: str, pocket: str | None = None
+    ) -> DownloadedFile | DownloadRefused:
+        """The file for the cards `cart` names, under the pocket the student typed (:func:`pocket_title`),
+        or why not. The audit record is written before it returns.
 
         Raises :class:`~debate_core.application.search_index_holder.SearchIndexUnavailable` when the
         index or the suppression list cannot be read, and :class:`~debate_core.application.tub.
@@ -399,6 +461,10 @@ class CardDownloadService:
             keys = parse_cart(cart)
         except UnreadableCart:
             return DownloadRefused(DownloadRefusal.UNREADABLE_CART)
+        try:
+            title = pocket_title(pocket)
+        except UnreadablePocket:
+            return DownloadRefused(DownloadRefusal.UNREADABLE_POCKET)
         if not keys:
             return DownloadRefused(DownloadRefusal.EMPTY_CART)
         if len(keys) > self._card_cap:
@@ -426,7 +492,7 @@ class CardDownloadService:
             return DownloadRefused(DownloadRefusal.CARDS_REFUSED, alone)
         if sum(declared.values()) > self._source_xml_bytes:
             return DownloadRefused(DownloadRefusal.SOURCES_TOO_LARGE)
-        built = await self._build(keys, sources, fetched)
+        built = await self._build(keys, sources, fetched, pocket=title)
         if isinstance(built, DownloadRefused):
             return built
         if len(built.docx) > self._file_bytes:
@@ -479,10 +545,12 @@ class CardDownloadService:
         keys: Sequence[CardKey],
         sources: Sequence[CardSource],
         fetched: Mapping[str, bytes | NotFound | BlobIntegrityError],
+        *,
+        pocket: str,
     ) -> BuiltEvidenceFile | DownloadRefused:
-        resolved = self._resolved(sources)
+        resolved = self._resolved(sources, pocket)
         store = _FetchedSources(fetched)
-        result = await self._writer(store).build(FileBuildRequest(resolved, self._clock()))
+        result = await self._writer(store).build(FileBuildRequest(resolved, self._clock(), header_line=False))
         if isinstance(result, BuiltEvidenceFile):
             return result
         by_path = {card.path: position for position, card in enumerate(resolved.cards)}
@@ -501,8 +569,9 @@ class CardDownloadService:
             ),
         )
 
-    def _resolved(self, sources: Sequence[CardSource]) -> ResolvedRecipe:
-        """The cart as a recipe of one pocket and one block, each card pinned to its representative.
+    def _resolved(self, sources: Sequence[CardSource], pocket: str) -> ResolvedRecipe:
+        """The cart as a recipe of one pocket, titled `pocket`, and one block, each card pinned to its
+        representative.
 
         A recipe names one format, caselist and side, which a cart of cards from several stores does
         not have. They go into the sidecar alone, which a download never sends, so the first card's
@@ -523,7 +592,7 @@ class CardDownloadService:
                 "fingerprint_version": FINGERPRINT_VERSION,
                 "structure": [
                     {
-                        "pocket": _POCKET,
+                        "pocket": pocket,
                         "blocks": [
                             {"block": _BLOCK, "items": [{"fingerprint": one} for one in fingerprints]}
                         ],

@@ -30,6 +30,11 @@
 </header>
 {% if signed_in %}<section class="cart" data-tub-cart data-tub-cart-cap="{{ cart_cap }}" aria-label="Download cart" hidden>
 <p><span data-tub-cart-count>No cards</span> in your download cart, up to {{ cart_cap }}.</p>
+<div class="pocket-name">
+<label for="cart-pocket">Pocket name for the cart's file</label>
+<input id="cart-pocket" type="text" maxlength="{{ pocket_max_length }}" autocomplete="off" spellcheck="false" aria-describedby="cart-pocket-help" data-tub-cart-pocket>
+<p id="cart-pocket-help" class="help">Up to {{ pocket_max_length }} characters. Left blank, the pocket is "{{ pocket_default }}".</p>
+</div>
 <button type="button" data-tub-cart-download>Download cart</button>
 <button type="button" class="secondary" data-tub-cart-empty>Empty the cart</button>
 <div class="download-status" data-tub-cart-message role="status"></div>

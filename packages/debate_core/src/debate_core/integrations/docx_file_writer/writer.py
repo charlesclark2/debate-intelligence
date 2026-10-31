@@ -4,7 +4,8 @@
 
 1. **One header line**, an analytic naming the source caselists (and OpenEv, for camp cards) and
    saying the cards are disclosed or camp cards (FILE_IMPORT) and not verified by the platform. A
-   file built from a draft recipe starts it with `DRAFT` (`v1-e33-t03`).
+   file built from a draft recipe starts it with `DRAFT` (`v1-e33-t03`). A request with
+   `header_line=False`, which only the pilot's download sends, leaves it out (`v1-e39-t24`).
 2. **The recipe's headings**: each pocket, hat and block in the profile's `Heading1` to `Heading3`.
 3. **Each card**, copied by :mod:`.run_copier`: its tag (or the coach's override, in the profile's tag
    style), its cite, then its body.
@@ -443,7 +444,7 @@ class DocxEvidenceFileWriter:
             return FileBuildRefusal(tuple(refusals))
 
         by_path = {item.resolved.path: item for item in located}
-        docx, placed = self._write(resolved, by_path, copies, hyperlinks)
+        docx, placed = self._write(resolved, by_path, copies, hyperlinks, header=request.header_line)
         problems = self._read_back(docx, resolved.recipe, located, placed)
         if problems:
             return FileBuildRefusal(
@@ -550,10 +551,12 @@ class DocxEvidenceFileWriter:
         located: Mapping[str, _Located],
         copies: Mapping[str, CopiedCard],
         hyperlinks: HyperlinkTargets,
+        *,
+        header: bool,
     ) -> tuple[bytes, dict[str, int]]:
         """The built file's bytes, and each card's first element index in it."""
         body = _Body(self._profile)
-        placed = self._assemble(resolved, body, located, copies)
+        placed = self._assemble(resolved, body, located, copies, header=header)
         docx = write_package(
             (
                 ("[Content_Types].xml", CONTENT_TYPES),
@@ -573,16 +576,21 @@ class DocxEvidenceFileWriter:
         body: _Body,
         located: Mapping[str, _Located],
         copies: Mapping[str, CopiedCard],
+        *,
+        header: bool,
     ) -> dict[str, int]:
         """Write the whole body; return each card's first element index in the built file.
 
-        A card is its tag, then its paragraphs through the cite and after it, with no provenance line
-        between them (`v1-e33-t08`). Copied paragraphs are appended as copies of their own, so writing
-        a body never takes a paragraph from a :class:`~.run_copier.CopiedCard`.
+        The header line comes first unless `header` is false (`v1-e39-t24`); the pocket, hat and block
+        headings are written either way. A card is its tag, then its paragraphs through the cite and
+        after it, with no provenance line between them (`v1-e33-t08`). Copied paragraphs are appended as
+        copies of their own, so writing a body never takes a paragraph from a
+        :class:`~.run_copier.CopiedCard`.
         """
         recipe = resolved.recipe
         placed: dict[str, int] = {}
-        body.write(StructuralUnit.ANALYTIC, header_line(resolved))
+        if header:
+            body.write(StructuralUnit.ANALYTIC, header_line(resolved))
         for location, item, headings in _walk(recipe):
             for unit, text in headings:
                 body.write(unit, text)

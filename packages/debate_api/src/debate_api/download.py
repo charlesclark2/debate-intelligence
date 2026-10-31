@@ -7,9 +7,11 @@
 `app.js` sends it as it sends every POST, with the session's CSRF token and the body's SHA-256, so the
 gate has checked both before it gets here. The body is `cards=<caselist>/<cluster id>,...`: one
 reference from a card page's *Download .docx*, or the cart the browser keeps in `sessionStorage`
-(the PM's ruling of 2026-10-22: the session cookie holds no cart). What the references mean, and
-every check on them, is :class:`~debate_core.application.card_download.CardDownloadService`'s; this
-module reads the field and writes the words.
+(the PM's ruling of 2026-10-22: the session cookie holds no cart). Since `v1-e39-t24` it may also
+hold `pocket=<name>`, the pocket name the student typed beside the button, which the file's one
+pocket is given in place of "Team evidence search". What the references and the name mean, and every
+check on them, is :class:`~debate_core.application.card_download.CardDownloadService`'s; this module
+reads the fields and writes the words.
 
 ## The answer
 
@@ -37,6 +39,8 @@ from fastapi.responses import JSONResponse
 
 from debate_api.state import pilot_state
 from debate_core.application.card_download import (
+    DOWNLOAD_POCKET_DEFAULT,
+    DOWNLOAD_POCKET_MAX_LENGTH,
     DownloadedFile,
     DownloadRefusal,
     DownloadRefused,
@@ -52,7 +56,7 @@ __all__ = ["DOCX_MEDIA_TYPE", "card_download", "download_file_name", "refusal_an
 DOCX_MEDIA_TYPE: Final = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 _BODY_LIMIT: Final = 4096
-"""A cart of thirty references is about 2,300 bytes urlencoded."""
+"""A cart of thirty references is about 2,300 bytes urlencoded, and the longest pocket name under 1,000."""
 
 _NAME_LIMIT: Final = 80
 _UNAVAILABLE: Final = "The download could not be made right now. Try again in a minute."
@@ -63,6 +67,10 @@ _REFUSALS: Final[Mapping[DownloadRefusal, str]] = {
     ),
     DownloadRefusal.UNREADABLE_CART: "That cart could not be read. Empty the cart and add the cards again.",
     DownloadRefusal.EMPTY_CART: "There is no card to download. Add a card to the cart from its page.",
+    DownloadRefusal.UNREADABLE_POCKET: (
+        f"A pocket name is up to {DOWNLOAD_POCKET_MAX_LENGTH} letters, numbers, spaces and punctuation "
+        f'marks. Change it, or leave it blank for "{DOWNLOAD_POCKET_DEFAULT}".'
+    ),
     DownloadRefusal.CARDS_REFUSED: "Some cards cannot be downloaded.",
     DownloadRefusal.FILE_TOO_LARGE: (
         "These cards would make a file too large to download at once. Download fewer cards at a time."
@@ -97,6 +105,7 @@ _STATUS: Final[Mapping[DownloadRefusal, int]] = {
     DownloadRefusal.SWITCHED_OFF: 503,
     DownloadRefusal.UNREADABLE_CART: 400,
     DownloadRefusal.EMPTY_CART: 400,
+    DownloadRefusal.UNREADABLE_POCKET: 400,
 }
 """A refusal's status; the rest are `409`, the cart as sent cannot be built."""
 
@@ -133,8 +142,9 @@ def refusal_answer(refused: DownloadRefused) -> JSONResponse:
     return JSONResponse(answer, status_code=_STATUS.get(refused.refusal, 409))
 
 
-async def _cart(request: Request) -> str | None:
-    """The body's `cards` field, or `None` for a body no page of the pilot sends."""
+async def _fields(request: Request) -> tuple[str, str | None] | None:
+    """The body's `cards` field and its `pocket` field (`None` when blank or absent), or `None` for a
+    body no page of the pilot sends: too long, more than the two fields, or either field twice."""
     body = await request.body()
     if len(body) > _BODY_LIMIT:
         return None
@@ -142,18 +152,21 @@ async def _cart(request: Request) -> str | None:
         fields = parse_qs(body.decode("utf-8", "replace"), max_num_fields=2)
     except ValueError:
         return None
-    values = fields.get("cards", [""])
-    return values[0] if len(values) == 1 else None
+    cards, pocket = fields.get("cards", [""]), fields.get("pocket", [])
+    if len(cards) != 1 or len(pocket) > 1:
+        return None
+    return cards[0], pocket[0] if pocket else None
 
 
 async def card_download(request: Request) -> Response:
-    """The cards the body names as one `.docx`, or JSON saying why not."""
-    cart = await _cart(request)
-    if cart is None:
+    """The cards the body names as one `.docx` under the pocket it names, or JSON saying why not."""
+    fields = await _fields(request)
+    if fields is None:
         return refusal_answer(DownloadRefused(DownloadRefusal.UNREADABLE_CART))
+    cart, pocket = fields
     session = cast(Session, request.state.holder)
     try:
-        result = await pilot_state(request).services.card_download.download(session, cart)
+        result = await pilot_state(request).services.card_download.download(session, cart, pocket)
     except (SearchIndexUnavailable, AccessNotRecorded):
         return JSONResponse({"message": _UNAVAILABLE}, status_code=503)
     if not isinstance(result, DownloadedFile):

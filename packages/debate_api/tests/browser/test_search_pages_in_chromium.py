@@ -33,6 +33,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Final
 from urllib.parse import parse_qs, urlsplit
+from xml.etree import ElementTree
 
 import pytest
 from axe_playwright_python.sync_playwright import Axe
@@ -600,6 +601,59 @@ def test_a_card_no_longer_in_the_index_is_not_copied_and_says_so(chromebook: Pil
     expect(page.locator("[data-tub-copy-message]")).to_have_text(
         "The search could not be loaded. Try again in a minute."
     )
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e39-t24: a download names its pocket, by keyboard, at each size, axe clean
+# ------------------------------------------------------------------------------------------------
+
+WORD: Final = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+
+
+def downloaded_paragraphs(downloaded: bytes) -> list[str]:
+    with zipfile.ZipFile(io.BytesIO(downloaded)) as archive:
+        root = ElementTree.fromstring(archive.read("word/document.xml"))
+    return ["".join(text.text or "" for text in one.iter(f"{WORD}t")) for one in root.iter(f"{WORD}p")]
+
+
+def test_a_download_and_the_cart_give_the_file_the_pocket_name_typed_beside_them_by_keyboard(
+    pilot: Pilot,
+) -> None:
+    page = pilot.page
+    world = pilot.world
+    page.goto(pilot.origin + world.card_path("download"))
+    pilot.check_page()
+
+    pilot.tab_to("#download-pocket")
+    page.keyboard.type("Neg answers to the K")
+    pilot.tab_to("button[data-tub-download]")
+    with page.expect_download() as downloading:
+        page.keyboard.press("Enter")
+    one = downloaded_paragraphs(Path(downloading.value.path()).read_bytes())
+    expect(page.locator("[data-tub-download-message]")).to_contain_text("Downloaded 1 card.")
+    assert one[:3] == ["Neg answers to the K", "Downloaded cards", "Gabbro ridges slow upland erosion"]
+
+    page.locator("#download-pocket").fill("Neg\u202eK")
+    page.get_by_role("button", name="Download .docx").click()
+    expect(page.locator("[data-tub-download-message]")).to_have_text(
+        "A pocket name is up to 80 letters, numbers, spaces and punctuation marks. Change it, or leave it "
+        'blank for "Team evidence search".'
+    )
+
+    pilot.tab_to("button[data-tub-cart-add]")
+    page.keyboard.press("Enter")
+    expect(page.locator("[data-tub-cart-count]")).to_have_text("1 card")
+    pilot.check_page()
+    pilot.tab_to("#cart-pocket", backwards=True)
+    pilot.tab_to("button[data-tub-cart-download]")
+    with page.expect_download() as downloading:
+        page.keyboard.press("Enter")
+    cart = downloaded_paragraphs(Path(downloading.value.path()).read_bytes())
+    expect(page.locator("[data-tub-cart-message]")).to_contain_text("Downloaded 1 card.")
+    assert cart[:2] == ["Team evidence search", "Downloaded cards"], "a blank name is the default"
+    for text in (one, cart):
+        assert not any("not verified by this platform" in paragraph for paragraph in text)
+    pilot.check_page()
 
 
 # ------------------------------------------------------------------------------------------------

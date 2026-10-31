@@ -68,7 +68,7 @@ v2.3's extension work.
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 29 | 20 | 166 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 24 | 18 | 86 |
-| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 36 | 18 | 70 |
+| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 36 | 19 | 70 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -578,7 +578,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
-| [When a newer build wrote the database or added a setting, the error says so](plan_specs/v1/e41-delivery-tooling-upkeep/t01-newer-build-messages.yaml) `v1-e41-t01-newer-build-messages` | Pending | 2 | 2.0 |
+| [When a newer build wrote the database or added a setting, the error says so](plan_specs/v1/e41-delivery-tooling-upkeep/t01-newer-build-messages.yaml) `v1-e41-t01-newer-build-messages` | Succeeded | 2 | 2.0 |
 | [A CI check that every locked package's licence is one the project accepts](plan_specs/v1/e41-delivery-tooling-upkeep/t02-licence-check-over-the-lock.yaml) `v1-e41-t02-licence-check-over-the-lock` | Pending | 1 | 2.0 |
 | [The docstrings say what the stamped build carries](plan_specs/v1/e41-delivery-tooling-upkeep/t03-stamp-docstrings.yaml) `v1-e41-t03-stamp-docstrings` | Pending | 1 | 0.5 |
 | [The single-interpreter scan leaves site/ out, as the Node project it is](plan_specs/v1/e41-delivery-tooling-upkeep/t04-single-interpreter-scan-leaves-site-out.yaml) `v1-e41-t04-single-interpreter-scan-leaves-site-out` | Pending | 1 | 0.5 |

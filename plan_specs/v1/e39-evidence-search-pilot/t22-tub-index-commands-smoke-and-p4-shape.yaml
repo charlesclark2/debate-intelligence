@@ -35,7 +35,7 @@ spec:
         The three smoke checks pass on the checkout's script and an installed build, each
         shown failing against a break; the P4 shape test fails when the two blocks merge.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

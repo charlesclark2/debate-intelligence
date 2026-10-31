@@ -23,7 +23,7 @@ spec:
     runbook the command.
   priority: 3
   constraints:
-    packages: [debate_core.integrations, debate_core.application, packages/debate_core/tests, docs/runbooks]
+    packages: [debate_core.integrations, debate_core.application, packages/debate_core/tests, docs/runbooks, tests/docs]
     forbidden:
       - A cassette that replays for a call whose recorded values differ
       - A real model call in a test

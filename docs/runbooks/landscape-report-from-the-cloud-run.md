@@ -175,9 +175,13 @@ It prints every hit, the ones accepted before among them. If no line names a tea
 digest the dry run printed, in step 4's second block. If one does, stop and tell the PM that a hit names
 a team, without the line.
 
-**A model run** (`v1-e32-t06`'s LD report, never hspolicy26's proof): the same blocks, with the installed
-build and `CFG` naming a checkout of `dev` that holds the caselist's taxonomy, and `--model-mode live` in
-place of `--model-mode none`. Not `uv run` from a checkout: every block runs from `$HOME`. Then `would_ask` is the number of cards the publish would send to the model and
+**A model run** (`v1-e32-t06`'s LD report, never hspolicy26's proof): steps 3 and 4 run from the
+checkout `CFG` sits in, pulled up to date on `dev` with the caselist's taxonomy. In each of their
+blocks, put `cd "$CFG/../.."` in place of `cd "$HOME"`, `uv run debate-research` in place of
+`debate-research`, and `--model-mode live` in place of `--model-mode none`. The model stage reads its
+prompt from the checkout's `prompts/` and refuses a run outside a checkout, so neither the installed
+build nor a block run from `$HOME` can ask the model. Then `would_ask` is the number of cards the
+publish would send to the model and
 `held_back` the number over `--max-model-items` left for a later run. The PM reads both before the
 publish block runs.
 

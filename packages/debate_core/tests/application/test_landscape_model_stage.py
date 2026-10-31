@@ -7,6 +7,7 @@ school, team, heading, tag and text is invented.
 
 from __future__ import annotations
 
+import dataclasses
 import io
 import json
 from collections.abc import Mapping
@@ -278,6 +279,30 @@ async def test_a_recorded_evaluation_replays_to_the_same_score_with_no_model_beh
         assert not result.meets_target
         assert (result.sent.texts, result.cassettes.texts) == (1, 1)
         assert result.sent.clean and result.cassettes.clean
+
+
+@pytest.mark.anyio
+async def test_the_cassettes_a_stage_records_and_replays_name_each_caselist_it_ran_for(
+    tmp_path: Path, prompts: PromptRegistry
+) -> None:
+    """`v1-e32-t31`: the stage files its calls under the caselist it runs on, and the scan stays clean."""
+    recording = RecordReplayModelRouter(
+        ByTag(FIRST_ANSWERS), mode=ModelMode.RECORD, cassette_dir=tmp_path, environ={}
+    )
+    recorded = await evaluate_labelled_cards(
+        READING, TAXONOMY, LABELLED, stage_over(recording, prompts), cassette_texts=lambda: texts_under(tmp_path)
+    )
+    [cassette] = sorted((tmp_path / CLASSIFY_POSITION_PROMPT_ID).glob("*.json"))
+    assert json.loads(cassette.read_text(encoding="utf-8"))["caselists"] == ["hspolicy99"]
+    assert recorded.cassettes.clean
+
+    replaying = RecordReplayModelRouter(None, mode=ModelMode.REPLAY, cassette_dir=tmp_path)
+    another = dataclasses.replace(READING, caselist="hspolicy98")
+    replayed = await evaluate_labelled_cards(
+        another, TAXONOMY, LABELLED, stage_over(replaying, prompts), cassette_texts=lambda: texts_under(tmp_path)
+    )
+    assert json.loads(cassette.read_text(encoding="utf-8"))["caselists"] == ["hspolicy98", "hspolicy99"]
+    assert (replayed.correct, replayed.cassettes.texts, replayed.cassettes.clean) == (2, 1, True)
 
 
 @pytest.mark.anyio

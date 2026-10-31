@@ -70,6 +70,7 @@ from typing import Any, Final
 
 from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
 
+from debate_core.application.cassette_filing import CassetteFiling
 from debate_core.application.errors import InvalidModelOutput, OutputProblem
 from debate_core.application.model_errors import describe_problems
 from debate_core.application.ports.model_router import ModelRouter
@@ -161,6 +162,18 @@ class CassetteDirectory:
     def rerank_path(self, query: str, documents: Sequence[str]) -> Path:
         """Where the cassette of a `rerank` call is filed."""
         return self.root / _RERANK_DIRECTORY / f"{rerank_key(query, documents)}.json"
+
+    # Filing by caselist -----------------------------------------------------------------------
+
+    def filings(self) -> list[CassetteFiling]:
+        """Every cassette under the directory, by name, with the caselists it names."""
+        return []
+
+    def delete(self, cassette: str) -> None:
+        """Delete the cassette named `cassette` (`<prompt>/<key>.json`)."""
+
+    def withdraw(self, cassette: str, caselist: str) -> None:
+        """Take `caselist` off the caselists of the cassette named `cassette`, keeping all it recorded."""
 
     # Writing ----------------------------------------------------------------------------------
 

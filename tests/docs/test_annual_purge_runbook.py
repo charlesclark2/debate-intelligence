@@ -12,14 +12,24 @@ Every slug, key, version id and date here is invented: no school, team code or r
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import json
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Final
 
 import pytest
+from pydantic import BaseModel
+
+from debate_core.application.cassette_filing import delete_caselist_cassettes, filed_under
+from debate_core.domain.model_contracts import ModelPrompt, TaskClass
+from debate_core.integrations.models.model_mode import ModelMode
+from debate_core.integrations.models.record_replay import CassetteDirectory, RecordReplayModelRouter
+from debate_core.testing.fakes.model_router import ScriptedModelRouter
 
 REPO_ROOT: Final = Path(__file__).resolve().parents[2]
 RUNBOOK: Final = REPO_ROOT / "docs" / "runbooks" / "annual-purge.md"
@@ -381,6 +391,136 @@ def test_sidecars_name_every_caselist_their_cards_cite(tmp_path: Path) -> None:
     ran = run_script("SIDECARS", str(listing))
     assert ran.returncode == 0, ran.stderr
     assert ran.stdout.splitlines() == ["parsed/openev", f"parsed/{CURRENT}"]
+
+
+# --- One caselist's cassettes (v1-e32-t31) ----------------------------------------------------
+
+PURGED_CASELIST: Final = "samplecl20"
+CARDS: Final = {
+    "alone": PURGED_CASELIST,
+    "shared": PURGED_CASELIST,
+    "unattributed": None,
+    "other": CURRENT,
+}
+"""Each invented card, and the caselist it is recorded for; the shared one is replayed by CURRENT too."""
+
+
+class _Sorted(BaseModel):
+    position: str
+
+
+def _prompt(card: str) -> ModelPrompt:
+    return ModelPrompt(
+        prompt_id="example.sort-card", prompt_version="1.0.0", variables={"items": f"the {card} card"}
+    )
+
+
+async def _record_cassettes(root: Path) -> None:
+    for card, caselist in CARDS.items():
+        real = ScriptedModelRouter(model_id="recorded-model")
+        real.enqueue({"position": "states-cp"})
+        router = RecordReplayModelRouter(real, mode=ModelMode.RECORD, cassette_dir=root, environ={})
+        with filed_under(caselist) if caselist is not None else contextlib.nullcontext():
+            await router.generate_structured(TaskClass.HIGH_VOLUME, _prompt(card), _Sorted)
+    replaying = RecordReplayModelRouter(None, mode=ModelMode.REPLAY, cassette_dir=root)
+    with filed_under(CURRENT):
+        await replaying.generate_structured(TaskClass.HIGH_VOLUME, _prompt("shared"), _Sorted)
+
+
+@pytest.fixture
+def cassette_tree(tmp_path: Path) -> Path:
+    """A model-cassettes directory as the router writes one: one cassette per kind the script sorts."""
+    root = tmp_path / "data" / "landscape" / "model-cassettes"
+    asyncio.run(_record_cassettes(root))
+    return root
+
+
+def _tree(root: Path) -> dict[str, bytes]:
+    return {
+        path.relative_to(root).as_posix(): path.read_bytes()
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+    }
+
+
+def _cassettes(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return run_script("CASSETTES", str(root), *args)
+
+
+def test_the_cassette_listing_sorts_one_caselists_cassettes_and_changes_nothing(cassette_tree: Path) -> None:
+    before = _tree(cassette_tree)
+
+    listed = _cassettes(cassette_tree, PURGED_CASELIST, "list")
+
+    assert listed.returncode == 0, listed.stderr
+    assert listed.stdout.splitlines() == [
+        f"cassettes of {PURGED_CASELIST}: 1 its alone, 1 shared, 1 unattributed, 1 of other caselists only"
+    ]
+    assert _tree(cassette_tree) == before
+
+
+def test_the_cassette_delete_does_what_the_application_delete_does(
+    cassette_tree: Path, tmp_path: Path
+) -> None:
+    by_the_application = tmp_path / "by-the-application"
+    shutil.copytree(cassette_tree, by_the_application)
+    done = delete_caselist_cassettes(CassetteDirectory(by_the_application), PURGED_CASELIST)
+
+    deleted = _cassettes(cassette_tree, PURGED_CASELIST, "delete")
+
+    assert deleted.returncode == 0, deleted.stderr
+    assert deleted.stdout.splitlines() == [
+        f"deleted: 1 cassette(s) only {PURGED_CASELIST} named",
+        f"withdrawn: {PURGED_CASELIST} from 1 shared cassette(s), kept for their other caselists",
+        "kept: 1 unattributed cassette(s)",
+    ]
+    assert (len(done.sole), len(done.shared), len(done.unattributed)) == (1, 1, 1)
+    assert _tree(cassette_tree) == _tree(by_the_application)
+    assert len(_tree(cassette_tree)) == 3
+    again = _cassettes(cassette_tree, PURGED_CASELIST, "list")
+    assert "0 its alone, 0 shared, 1 unattributed, 2 of other caselists only" in again.stdout
+
+
+def test_the_cassette_script_stops_on_a_file_it_cannot_read_and_changes_nothing(cassette_tree: Path) -> None:
+    (cassette_tree / "example.sort-card" / f"{'0' * 64}.json").write_text("not json", encoding="utf-8")
+    before = _tree(cassette_tree)
+
+    stopped = _cassettes(cassette_tree, PURGED_CASELIST, "delete")
+
+    assert stopped.returncode == 1
+    assert stopped.stderr.startswith(f"STOP: example.sort-card/{'0' * 64}.json is not a cassette")
+    assert _tree(cassette_tree) == before
+
+
+@pytest.mark.parametrize("caselist", ["../samplecl20", "Maple Grove", ""])
+def test_the_cassette_script_takes_a_caselist_slug_and_nothing_else(
+    cassette_tree: Path, caselist: str
+) -> None:
+    before = _tree(cassette_tree)
+
+    stopped = _cassettes(cassette_tree, caselist, "delete")
+
+    assert stopped.returncode == 1 and stopped.stderr.startswith("STOP:")
+    assert _tree(cassette_tree) == before
+
+
+def test_the_cassette_script_lists_zero_where_there_are_no_cassettes(tmp_path: Path) -> None:
+    listed = _cassettes(tmp_path / "none-here", PURGED_CASELIST, "list")
+
+    assert listed.stdout.splitlines() == [
+        f"cassettes of {PURGED_CASELIST}: 0 its alone, 0 shared, 0 unattributed, 0 of other caselists only"
+    ]
+
+
+def test_step_4_deletes_cassettes_by_caselist_and_never_the_whole_directory() -> None:
+    text = RUNBOOK.read_text(encoding="utf-8")
+    step = text.split("## Step 4 — A caselist the inventory marks PURGE\n", 1)[1].split("\n## ", 1)[0]
+
+    assert '"$CASELIST" list' in step and '"$CASELIST" delete' in step
+    assert (
+        'model-cassettes"; then rm' not in text
+        and 'rm -r "${DATA_DIR}/landscape/model-cassettes"' not in text
+    )
 
 
 # --- The runbook's shape ----------------------------------------------------------------------

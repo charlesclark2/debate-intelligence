@@ -34,7 +34,7 @@ spec:
         A cassette names its caselist, an older cassette still replays, and one caselist's
         cassettes can be listed and deleted alone, by tests shown failing first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

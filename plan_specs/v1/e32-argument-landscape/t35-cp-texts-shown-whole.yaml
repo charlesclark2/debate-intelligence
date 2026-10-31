@@ -50,7 +50,7 @@ spec:
         shape, a plank naming a school withholds the whole text, and the group's digest
         covers what is shown, by synthetic fixtures and tests shown failing first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

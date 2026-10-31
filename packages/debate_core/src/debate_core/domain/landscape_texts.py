@@ -18,6 +18,13 @@ and what the report shows of them (:class:`LandscapeTexts`).
   a label just above it or a card under it name (:attr:`AnalyticTextReading.solves`), never a guess. The
   report groups each CP's planks by the advantage they solve, the top 3 per advantage, with "solves: not
   named" as one more group (:class:`CpPlanks`).
+* **A CP text is shown whole** (`v1-e32-t35`): one ending in a colon with the planks it lists, and one
+  ending with no sentence end with the analytics continuing it, each on a line of its own under it
+  (:attr:`AnalyticTextReading.lines`). Its digest covers every line, so reading it again checks them all.
+  Texts are grouped and ranked by their opening paragraph (:attr:`AnalyticTextReading.opening_digest`),
+  the PM's review of 2026-10-31, and a group shows the whole text the most of its teams read
+  (:attr:`QuotedText.text_teams`); a whole text any line of which names a school is passed over for the
+  next.
 
 ## What is never here
 
@@ -29,6 +36,7 @@ digest, when the report is built.
 from __future__ import annotations
 
 from enum import StrEnum
+from itertools import pairwise
 from typing import Final, Self
 
 from pydantic import Field, model_validator
@@ -139,6 +147,20 @@ class AnalyticTextReading(DomainModel):
         ge=0,
         description="A plank only: cards under it saying `solves` with words no advantage's alias holds.",
     )
+    lines: tuple[int, ...] = Field(
+        default=(),
+        description=(
+            "A CP text only: the paragraphs shown under it, in file order, the planks it lists after a colon "
+            "or the analytics continuing it (`v1-e32-t35`). Its digest covers them."
+        ),
+    )
+    opening_digest: Sha256Hex | None = Field(
+        default=None,
+        description=(
+            "A CP text only: SHA-256 of its opening paragraph's words, what its group is keyed by (the PM's "
+            "review of `v1-e32-t35`); the digest itself when it has no lines."
+        ),
+    )
 
     @model_validator(mode="after")
     def _check(self) -> Self:
@@ -157,6 +179,16 @@ class AnalyticTextReading(DomainModel):
             raise ValueError("a position and its role go together")
         if self.form is TextForm.BY_PLACE and self.kind is not AnalyticTextKind.CP_TEXT:
             raise ValueError("only a CP text is read by its place")
+        if self.lines and self.kind is not AnalyticTextKind.CP_TEXT:
+            raise ValueError("only a CP text has lines under it")
+        if any(earlier >= later for earlier, later in pairwise((self.element_index, *self.lines))):
+            raise ValueError("a CP text's lines come after it, in file order")
+        if self.opening_digest is not None and self.kind is not AnalyticTextKind.CP_TEXT:
+            raise ValueError("only a CP text has an opening digest")
+        if self.lines and self.opening_digest is None:
+            raise ValueError("a CP text with lines keeps its opening paragraph's digest, to be grouped by")
+        if not self.lines and self.opening_digest not in (None, self.digest):
+            raise ValueError("a CP text with no lines is its opening paragraph")
         return self
 
 
@@ -170,6 +202,21 @@ class QuotedText(DomainModel):
     kind: AnalyticTextKind
     rank: int = Field(ge=1)
     teams: int = Field(ge=0, description="Distinct teams whose files hold it under the position.")
+    text_teams: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "A CP text: of the teams, those whose files hold the shown whole text word for word "
+            "(`v1-e32-t35`)."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _check(self) -> Self:
+        if self.text_teams is not None and self.text_teams > self.teams:
+            raise ValueError("a shown text's own teams are some of its group's")
+        return self
+
     text: str = Field(repr=False, description="Word for word, as one of its files holds it.")
 
 

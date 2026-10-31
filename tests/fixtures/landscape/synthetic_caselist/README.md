@@ -191,7 +191,8 @@ by hand from it. Through 2026-09-15:
   `Text:` label) and `b3` (WW, in capitals and without its full stop, so the commoner wording shows): 4
   teams. The second is in `b4` (YY), `b6` (WW) and `b8` (KK), whose copy could not be read again, so KK
   counts and `b4`'s copy shows: 3. The third is in `b5` (ZZ) and `b4` (YY): 2. `b6`'s other text is
-  the 1 more text, read by 1 team.
+  the 1 more text, read by 1 team: it ends in a colon, so it is read whole with the four planks it lists
+  (`lines`, `v1-e32-t35`), and its words and quoted text are the whole text, one line each.
 * **A text naming a school is withheld.** `b5`'s text names `Ashgrove Fictional`, a school of the
   caselist: it is counted and not shown.
 * **A CP no card counts still shows its text.** `b3`'s Courts CP text, though `courts-cp` has no row.

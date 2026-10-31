@@ -492,8 +492,20 @@ add for such a heading places its texts too.
   overview`). Overviews are counted, never quoted: the data-use policy does not list them, and you
   decided on 2026-10-24 to keep it so.
 
+**A CP text is shown whole** (since 2026-11-01): a text ending in a colon ("The fifty states
+should:") is shown with the planks it lists ([below](#a-cps-planks)), and a text that stops with no full
+stop, on a word or a dash, with the analytics right after it, up to the first card, heading or paragraph
+that is not an analytic. That second shape is a plank list written without its colon ("The fifty states
+should" and then "- Expand ..." and "- Fund ..."). Each line is a paragraph of the file, on a row of its
+own under the text's rank in report.md. Nothing is joined across a heading or a card, and a text with no
+actor is shown alone, as its list planks would be.
+
 Each CP and K shows its 3 texts the most teams read, then how many more texts and teams there are.
-Texts worded alike are one text. A text naming a school of the caselist is withheld and counted.
+Texts worded alike are one text, and a text naming a school of the caselist is withheld and counted. A CP
+text is one text with every copy that opens with the same words, and its teams are all the teams reading
+that opening. It shows the whole text, planks included, that the most of those teams read word for word,
+and when its planks are read by fewer of them, the row says so: "12 (1 with these planks)". A whole text
+naming a school in any line is passed over for the next one.
 
 ### A CP's planks
 

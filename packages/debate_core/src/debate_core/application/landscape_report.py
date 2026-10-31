@@ -761,8 +761,13 @@ def _landscape_texts(
                 copies.solves |= set(reading.solves)
                 solves_other_words += reading.solves_other_words
             else:
-                copies = groups[(kind, position.id)].setdefault(reading.digest, _TextCopies())
-            copies.teams |= {team for one in counted if (team := in_range.rounds[one].team) is not None}
+                # A CP text's group is its opening paragraph's (the PM's review of v1-e32-t35).
+                key = reading.opening_digest or reading.digest
+                copies = groups[(kind, position.id)].setdefault(key, _TextCopies())
+            teams = {team for one in counted if (team := in_range.rounds[one].team) is not None}
+            copies.teams |= teams
+            if kind is AnalyticTextKind.CP_TEXT:
+                copies.source_teams.setdefault(sha, set()).update(teams)
             text = inputs.texts.get((sha, reading.element_index))
             if text is None:
                 unread[kind] += 1
@@ -775,7 +780,11 @@ def _landscape_texts(
             position_id,
             kind,
             {
-                digest: TextGroup(teams=frozenset(copies.teams), texts=tuple(copies.texts))
+                digest: TextGroup(
+                    teams=frozenset(copies.teams),
+                    texts=tuple(copies.texts),
+                    source_teams={sha: frozenset(teams) for sha, teams in copies.source_teams.items()},
+                )
                 for digest, copies in by_digest.items()
             },
             limit=limit,
@@ -906,6 +915,8 @@ class _TextCopies:
     texts: list[tuple[str, int, str]] = field(default_factory=list[tuple[str, int, str]])
     solves: set[str] = field(default_factory=set[str])
     """A plank's advantages, as any copy of it names them (`v1-e32-t16`)."""
+    source_teams: dict[str, set[tuple[str, str]]] = field(default_factory=dict[str, set[tuple[str, str]]])
+    """A CP text's: each source's teams, for the whole text its group shows (`v1-e32-t35`)."""
 
 
 def _ranked[RowT: TopCard](

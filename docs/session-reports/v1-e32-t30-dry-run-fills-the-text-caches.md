@@ -196,9 +196,41 @@ None. The affected set ran past two minutes and is the pull request's `ci` check
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-31
 
 **Notes:**
+
+A dry run now keeps what it read in the two text caches, so the publish after it parses no source
+twice. Everything else the old rule covered stays unwritten.
+1. **ac1 passes, as ruled.**
+   * Red: 5 core and 7 CLI tests failed, each on its own assertion: no source re-read, the stale
+     parser version, nothing written, the missing JSON key.
+   * Green: 76 then 90 passed, and the node criterion 310.
+   * The seven mutants were each caught, including both "dry run writes the classification cache
+     or the review queue" forms and both parser-version keys. The narrowed smoke check was shown
+     failing under the no-write mutant too.
+2. **Deviation 1 accepted.** The quote read-back stays: it re-reads only the sources holding a text
+   the report quotes word for word, and caching that would put evidence text in a cache, which is
+   forbidden. On a real caselist the publish still reads those few; that is right, and the
+   docstrings say so.
+3. **Deviation 2 accepted.** Narrowing v1-e40-t17's smoke check was necessary: under the ruled
+   behaviour it would have failed `ci` and dev's push run. It still pins nothing in the copy and no
+   bundle. The PM's next batch records `tests/smoke` in this task's packages.
+4. **Decisions accepted:**
+   * one code path and one atomic writer for the dry run and the publish;
+   * `text_caches` in every run, so steps 3 and 4 can be compared;
+   * the human line per cache, and the bundle line no longer claiming "nothing written";
+   * `files suggest` filling the caches too, within the ruling.
+5. **Follow-ups:**
+   * **The runbook wording:** taken nearly as proposed into the next PM batch, with `text_caches.*.read`
+     added to steps 3 and 4's checks. The same batch fixes the runbook's missing `--config-dir`,
+     which today's proof run found.
+   * **The unused `writes=False` views:** keep them for now. No task.
+6. **Closing checks:** the affected set (119 files) is left to the PR's `ci` under agreement 10. The
+   always-run list plus every landscape, text-cache and smoke file gave 820 passed. Ruff, pyright,
+   lint-imports, the thin handlers and the specs pass.
+7. **Merge:** once the PR's `ci` is green, by Wednesday, so Thursday night's install carries it into
+   Friday's LD run. It is a plain `scripts/task pr`.

@@ -38,7 +38,7 @@ spec:
         season or still to come, a dev build warns, and a consented image builds, by tests
         shown failing first; the guide says so.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

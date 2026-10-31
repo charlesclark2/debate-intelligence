@@ -91,9 +91,10 @@ export function seasonStart(label: string): Date {
 }
 
 /**
- * True when a coach last confirmed the entry before the current season began, which means the
- * start-of-season check has not been run on it yet. A warning rather than a failure: the entry
- * may well still be good, but nobody has looked.
+ * True when the entry's consent is for another season, or a coach last confirmed it before the
+ * current season began, which means the start-of-season check has not been run on it yet. An
+ * entry like this is a warning in itself, since it may well still be good but nobody has looked;
+ * a name or an image a page actually publishes against it is an error (src/lib/publishing-policy.ts).
  */
 export function isStale(entry: { season: string; dateChecked: string }, currentSeason: string): boolean {
   return entry.season !== currentSeason || new Date(entry.dateChecked) < seasonStart(currentSeason)
@@ -119,6 +120,11 @@ export function loadMediaConsent(contentDirectory: string = defaultContentDirect
   return result.data
 }
 
+/** True when a consent reference is still a `[[TBD]]` marker: the office has not supplied it yet. */
+export function isReferenceToCome(reference: string): boolean {
+  return new RegExp(PLACEHOLDER_PATTERN.source).test(reference)
+}
+
 /**
  * The facts the manifest is still waiting for: a consent reference written as a `[[TBD: ...]]`
  * marker because the activities office has not supplied it yet. Each is named by its position
@@ -126,15 +132,14 @@ export function loadMediaConsent(contentDirectory: string = defaultContentDirect
  * (docs/policies/website-publishing.md, Students 10).
  */
 export function consentPlaceholders(consent: MediaConsent): string[] {
-  const unfilled = (reference: string) => new RegExp(PLACEHOLDER_PATTERN.source).test(reference)
   return [
     ...consent.students.flatMap((student, index) =>
-      unfilled(student.consentReference)
+      isReferenceToCome(student.consentReference)
         ? [`${findPlaceholders(student.consentReference)[0] || 'TBD'} (consentReference of student entry ${index + 1})`]
         : [],
     ),
     ...consent.images.flatMap((image) =>
-      unfilled(image.consentReference)
+      isReferenceToCome(image.consentReference)
         ? [`${findPlaceholders(image.consentReference)[0] || 'TBD'} (consentReference of image ${image.path})`]
         : [],
     ),

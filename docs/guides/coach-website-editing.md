@@ -186,7 +186,8 @@ so changing one of them alone fails. In the same edit:
   runs the policy's
   [start-of-season check](../policies/website-publishing.md#consent-renewal-and-the-start-of-season-check)
   and brings each entry up to date before the change is published; until then the site's tests
-  fail on every entry not yet brought up to date.
+  fail on every entry not yet brought up to date, and a prod build refuses every student the site
+  names and every photograph it shows whose entry is not.
 
 The build refuses a date outside the season, which is what catches a typed year left over from
 last season.
@@ -238,7 +239,11 @@ request if the branch changes anything outside `site/`, changes a dependency man
 (`site/package.json`, `site/pnpm-lock.yaml` and the like), or changes nothing: those go through a
 promotion of `dev`. Before it can merge, `validate-dev` builds the commit **for prod**, where the
 publishing-policy and consent guards stop the build on an unfilled consent reference, a `[[TBD]]`
-marker or a name nobody has reviewed, and runs the export checks against that build. The policy's
+marker or a name nobody has reviewed, and runs the export checks against that build. A student's
+name and a photograph follow the same consent rule there: each needs a consent entry for this
+season, checked since the season began, with its reference filled in, and the prod build refuses
+one whose entry is for another season, not yet checked this season, or still waiting for its
+reference. A dev preview prints the same problems and still comes up. The policy's
 [pre-publication checklist](../policies/website-publishing.md#pre-publication-checklist) is in the
 pull request's template, and item 16 is unchanged: anything that names a student needs Charlie to
 have seen it.

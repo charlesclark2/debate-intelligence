@@ -145,14 +145,15 @@ a dev build prints it and carries on**, so the copy can be reviewed with the gap
 | Anything shaped like a phone number | The site publishes none, of anyone |
 | An image with no entry in `media-consent.yaml` | Every image of a person needs a current-season consent reference; every other image needs a line saying nobody is in it |
 | A run of capitalised words that `permittedNamePhrases` cannot cover end to end | A student name cannot reach prod unreviewed. Phrases, not words: reviewing "Blue Valley West High School" must not leave Blue, Valley and West permitted on their own. The full published-names allowlist is `v1-e37-t03` |
-| A named student whose consent entry is from a previous season | The district's form renews annually; consent does not carry over |
+| A named student, or an image a page shows, whose consent entry is for another season, was not checked this season, or (for an image) has a consent reference still to come | The district's form renews annually; consent does not carry over, and a photograph publishes only against a current-season form. Both use `isStale` in `src/lib/media-consent.ts` (`v1-e37-t12`) |
 | A `[[TBD]]` marker | A half-written page is not published |
 | An announcement field with an `unsetNote` rather than a value | An announcement states every fact it lists. A room of "To be announced" is a decision; an empty one is an oversight, and a panel with nothing where the room goes leaves no trace in the copy for the other rules to catch |
 | A script or an iframe from another origin, in the built HTML | The site loads nothing from anyone else |
 
 It **warns**, in every environment, when a consent entry was last checked before the current
 season began. That is the start-of-season check in the policy: the warning makes a lapsed one
-visible without anyone having to remember to look.
+visible without anyone having to remember to look. The entry itself is only a warning; a name or
+an image that a page publishes against it is the error above.
 
 ## Design tokens
 

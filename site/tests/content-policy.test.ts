@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { AnnouncementField, ContentPage, SiteSettings } from '@/lib/content'
 import {
@@ -215,6 +215,73 @@ describe('images and media consent', () => {
   })
 })
 
+/**
+ * A photograph publishes only against a current-season consent form (docs/policies/
+ * website-publishing.md, Photos and media consent 4), so an image a page shows whose entry has
+ * lapsed is an error, as a named student's lapsed entry is: it fails a prod build, and a dev build
+ * prints it with the guard's other problems. Until v1-e37-t12 it was only a warning in both. The
+ * image path and reference are invented.
+ */
+describe('an image whose consent has lapsed', () => {
+  const PATH = '/photos/planted-orientation.jpg'
+  const consented = {
+    path: PATH,
+    consentReference: 'MC-PLANT-001',
+    depicts: '2 team members, both covered',
+    season: CASE_SEASON,
+    dateChecked: '2026-09-18',
+  }
+  const lapses = [
+    [
+      'consent for another season',
+      { season: '2025-26', dateChecked: '2025-09-18' },
+      /references the image \/photos\/planted-orientation\.jpg, whose consent entry is for season 2025-26, checked 2025-09-18/,
+    ],
+    [
+      'consent not checked this season',
+      { dateChecked: '2026-07-04' },
+      /references the image \/photos\/planted-orientation\.jpg, whose consent entry is for season 2026-27, checked 2026-07-04/,
+    ],
+    [
+      'a consent reference still to come',
+      { consentReference: '[[TBD: form reference from the office]]' },
+      /references the image \/photos\/planted-orientation\.jpg, whose consent reference is still to come/,
+    ],
+  ] as const
+
+  function input(entry: typeof consented | Record<string, string>) {
+    return {
+      pages: [pageFrom(`![Two team members at orientation](${PATH})`)],
+      settings,
+      consent: { ...consent, season: CASE_SEASON, images: [{ ...consented, ...entry }] },
+    }
+  }
+
+  it.each(lapses)('fails a prod build on %s', (_case, entry, reason) => {
+    expect(() => enforcePublishingPolicy(input(entry), PROD)).toThrow(PublishingPolicyError)
+    expect(() => enforcePublishingPolicy(input(entry), PROD)).toThrow(reason)
+  })
+
+  it.each(lapses)('lets a dev build come up, printing %s with the problems', (_case, entry, reason) => {
+    const printed = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const report = enforcePublishingPolicy(input(entry), DEV)
+      expect(report.errors.map((error) => error.message).join('\n')).toMatch(reason)
+      const problems = printed.mock.calls
+        .map(([block]) => String(block))
+        .filter((block) => block.startsWith('Publishing policy problems, which will fail a prod build:'))
+      expect(problems.join('\n')).toMatch(reason)
+    } finally {
+      printed.mockRestore()
+    }
+  })
+
+  it('builds a consented, current-season image in prod and in dev', () => {
+    expect(enforcePublishingPolicy(input(consented), PROD).errors).toEqual([])
+    expect(enforcePublishingPolicy(input(consented), DEV).errors).toEqual([])
+  })
+})
+
 describe('named students', () => {
   it('stays quiet about capitalised phrases whose words have all been reviewed', () => {
     expect(unreviewedNames('Email Coach Clark at Whitefish Bay High School.', consent.permittedNamePhrases))
@@ -379,7 +446,11 @@ describe('the start-of-season check', () => {
     expect(isStale({ season: '2025-26', dateChecked: '2026-09-18' }, '2026-27')).toBe(true)
   })
 
-  it('warns, rather than failing, when an entry predates the current season', () => {
+  /**
+   * An entry no page shows. One a page shows is refused instead, as a lapsed name is
+   * ("an image whose consent has lapsed", below, v1-e37-t12).
+   */
+  it('warns, rather than failing, when an entry nothing shows predates the current season', () => {
     const images = [
       {
         path: '/photos/orientation.jpg',
@@ -389,7 +460,7 @@ describe('the start-of-season check', () => {
         dateChecked: '2026-07-04',
       },
     ]
-    const report = check('![Two debaters](/photos/orientation.jpg)', { season: CASE_SEASON, images })
+    const report = check('Nobody is pictured here.', { season: CASE_SEASON, images })
     expect(report.errors).toEqual([])
     expect(report.warnings.map((warning) => warning.message).join('\n')).toMatch(
       /the start-of-season check for 2026-27 has not been recorded/,
@@ -719,6 +790,21 @@ describe('the content this site actually ships', () => {
     ])('refuses an image with %s', (_case, fields, reason) => {
       const copy = shippedContentWith({ 'media-consent.yaml': withImage({ ...consentedImage(seasonYear), ...fields }) })
       expect(imageEntryProblems(copy).join('\n')).toMatch(reason)
+    })
+
+    // The build agrees with the check above once a page shows the image (v1-e37-t12).
+    it.each([
+      ['consent from last season', { season: `'${seasonYear - 1}-${String(seasonYear).slice(2)}'`, dateChecked: `${seasonYear - 1}-09-18` }],
+      ['consent not yet checked this season', { dateChecked: `${seasonYear}-07-04` }],
+      ['a consent reference still to come', { consentReference: "'[[TBD: form reference from the office]]'" }],
+    ])('and the guard refuses a page showing an image with %s', (_case, fields) => {
+      const copy = shippedContentWith({
+        'media-consent.yaml': withImage({ ...consentedImage(seasonYear), ...fields }),
+        'pages/about.md': (source) => `${source.trimEnd()}\n\n![Two team members at orientation](${PLANTED_PATH})\n`,
+      })
+      expect(guardErrors(copy).join('\n')).toMatch(
+        new RegExp(`content/pages/about\\.md: references the image ${PLANTED_PATH}, whose consent`),
+      )
     })
 
     it('refuses an image entry with no consent reference at all', () => {

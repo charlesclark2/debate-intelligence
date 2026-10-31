@@ -6,10 +6,11 @@ tests/smoke must use it: a check that would exercise this checkout's source inst
 moto, respx) stops the run before anything is tested.
 
 **The network is blocked unless a check is marked ``live``** (ac4). In this process, pytest-socket
-is switched on here rather than trusted to the command line. In the CLI's process, which
-pytest-socket never sees, ``network_guard/sitecustomize.py`` refuses every outbound call and logs
-it, and :func:`installed_cli` fails the check afterwards if the log holds anything, even when the
-command caught the refusal and carried on.
+is switched on here rather than trusted to the command line, and switched off here for a ``live``
+check, which the repository's own ``--disable-socket`` would otherwise refuse (v1-e39-t26). In the
+CLI's process, which pytest-socket never sees, ``network_guard/sitecustomize.py`` refuses every
+outbound call and logs it, and :func:`installed_cli` fails the check afterwards if the log holds
+anything, even when the command caught the refusal and carried on.
 
 **A check that declares a stand-in may reach it, and nothing else** (v1-e01-t21). The stand-in
 fixtures (:data:`~tests.smoke.stand_ins.STAND_IN_FIXTURES`) start a server on 127.0.0.1 and an
@@ -152,10 +153,13 @@ def _no_stand_in_outlives_its_check() -> Iterator[None]:
 def _sockets_blocked_unless_live(request: pytest.FixtureRequest) -> Iterator[None]:
     """pytest's own process gets no network either, whatever the command line said (ac4).
 
-    A check that declares a stand-in gets 127.0.0.1 and nothing else (v1-e01-t21).
+    A check that declares a stand-in gets 127.0.0.1 and nothing else (v1-e01-t21). A check marked
+    `live` gets the network, which the repository's `--disable-socket` would otherwise refuse it: the
+    cloud checks call dev with httpx in this process (v1-e39-t26).
     """
     if request.node.get_closest_marker("live") is not None:
-        yield
+        with _network_open():
+            yield
         return
     if STAND_IN_FIXTURES & set(request.fixturenames):
         with _loopback_only():
@@ -166,6 +170,17 @@ def _sockets_blocked_unless_live(request: pytest.FixtureRequest) -> Iterator[Non
         yield
     finally:
         pytest_socket.enable_socket()
+
+
+@contextmanager
+def _network_open() -> Iterator[None]:
+    """pytest-socket switched off for one check, and the socket module put back as it was found."""
+    found = socket.socket, socket.getaddrinfo, socket.gethostbyname
+    pytest_socket.enable_socket()
+    try:
+        yield
+    finally:
+        socket.socket, socket.getaddrinfo, socket.gethostbyname = found  # type: ignore[misc]
 
 
 @contextmanager

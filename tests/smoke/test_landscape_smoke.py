@@ -106,10 +106,14 @@ def test_landscape_report_refuses_an_unknown_caselist_with_exit_2(
     assert not (world.data_dir / "reports").exists()
 
 
-def test_landscape_report_reads_a_restored_copy_and_writes_nothing_on_a_dry_run(
+def test_landscape_report_reads_a_restored_copy_and_writes_only_the_text_caches_on_a_dry_run(
     installed_cli: InstalledCli, world: SyntheticRun, tmp_path: Path
 ) -> None:
-    """`v1-e40-t17`: the data directory stops at 2026-09-08; the copy, parsed by this build, at 09-15."""
+    """`v1-e40-t17`: the data directory stops at 2026-09-08; the copy, parsed by this build, at 09-15.
+
+    Since `v1-e32-t30` a dry run keeps the plan-text and analytic-text caches, in the data directory, and
+    writes nothing else here or in the copy.
+    """
     (world.data_dir / "objects" / "manifests" / "synthetic26" / "2026-09-15.jsonl").unlink()
     copy = plant_synthetic_run(tmp_path / "copy-root").data_dir.resolve()
     parsed = copy / "parsed" / "synthetic26"
@@ -133,6 +137,11 @@ def test_landscape_report_reads_a_restored_copy_and_writes_nothing_on_a_dry_run(
     assert (data["snapshot"], data["restored_copy"], data["written"]) == ("2026-09-15", str(copy), False)
     assert data["classification"]["model"]["would_ask"] == 0
     assert data["counts"]["cards"] == 9
+    assert not (copy / "landscape").exists()
     for directory in (world.data_dir, copy):
-        assert not (directory / "landscape").exists()
         assert not (directory / "reports").exists()
+    kept = world.data_dir / "landscape"
+    assert sorted(path.relative_to(kept).as_posix() for path in kept.rglob("*") if path.is_file()) == [
+        "analytic_texts/synthetic26.jsonl",
+        "plan_texts/synthetic26.jsonl",
+    ]

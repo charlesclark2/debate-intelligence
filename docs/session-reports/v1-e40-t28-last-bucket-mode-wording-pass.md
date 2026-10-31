@@ -355,9 +355,51 @@ Questions for the PM:
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-31
 
 **Notes:**
+
+The last bucket-mode wording pass is done, and done the way a last pass should be: one helper, local
+mode pinned word for word, and no shape changed.
+1. **ac1 passes.**
+   * Red: 25 failed at assertions, with the adapter skeleton in place so that nothing failed on a
+     `TypeError`. Green: the five files, the neighbours (462, 368, 38) and the node criterion (87).
+   * 25 mutants were caught, including 3a: the Mac's bucket-mode hand run is not given the task
+     role's hint.
+   * The before and after for a banner, a CLI line and a record reason show the change exactly.
+2. **Validated against the code.**
+   * `_s3_login_hint` gives `CLOUD_NO_SESSION_CURE` only when the run is in bucket mode and inside an
+     ECS task (`ECS_CONTAINER_METADATA_URI_V4`), the same signal the run lock uses for its holder.
+     So the run task and a hand-started task of the same definition (a backfile import) get the
+     task role's words. The login task (not bucket mode) and a bucket-mode pull on the Mac keep
+     `aws sso login`.
+   * `S3Call.login_hint` returns the given hint first, and its fallbacks are untouched.
+   * `next_cloud_run` is the one sentence t18's, t25's and the new cures share, byte for byte.
+3. **Deviations accepted.**
+   * **1:** the CLI's two other "run the same command again" lines. Both are untrue in a cloud run,
+     and the spec's wording covers all three.
+   * **2:** two runbook sections, "A failed or stopped run" and "A backlog growing", so that each new
+     fix line names a section. No command blocks.
+4. **Decisions accepted:**
+   * "What was captured is kept." replaced by t25's sentence wherever an import or a publish failed,
+     and kept for the parse alone, whose run published what it captured;
+   * "more than the publish alone" read as every banner whose fix was the pull;
+   * "never a publish from the operator's Mac", not "never a pull" (the fallback week stays mine to
+     decide);
+   * the takedown profile given no hint;
+   * no record, details or envelope change.
+5. **Questions:** (a) on all three.
+   * **Q1:** keep the two extra CLI lines.
+   * **Q2:** leave the OpenCaselist login banner. It names no pull, the runbook already flags its
+     wording, and the rule stands: no further wording task unless a run's email shows one.
+   * **Q3:** leave both. If a later task touches `suppression.py` or `caselist_pull.py` anyway, it
+     may take them in passing.
+6. **Closing checks:** the affected set (329 files, the hub modules) is left to the PR's `ci` under
+   agreement 10. The always-run list (653), the bucket-mode lock, restore and parse-owed files,
+   ruff, pyright, lint-imports, thin handlers, the docs checks and the specs are clean.
+7. **Merge:** a plain `scripts/task pr` once `ci` is green. If the PR's `ci` hits the
+   `--disable-socket` fault, that is validate-dev's cloud job, not PR CI. The new words reach a run's
+   email only from an image built after this merges: Monday's, if it lands first.

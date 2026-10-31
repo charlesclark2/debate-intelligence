@@ -253,9 +253,41 @@ new image, later"). Both new runbook sections say the rule holds for an older im
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-01
 
 **Notes:**
+
+In bucket mode the login banner, the failure-rate hint and the newer-fingerprint hint now point at
+the cloud run, and local mode keeps every word.
+1. **ac1 passes.**
+   * Red: 7 failed, each one an old Mac-side sentence. Green: 14 passed, and the node criterion 258.
+   * Every bucket-mode banner's whole text is checked against the seven forbidden phrases.
+   * 16 mutants, all caught. Six of them each catch a leak of the cloud wording into local mode.
+2. **The cross-build reads hold.** dev.164 and dev.200 read seven scenarios with nothing refused.
+   * Mutant 3a makes both builds' own readers refuse 21, so the check can fail.
+   * dev.200's details schema is now stored, the first that defines `parsed_stores_owed`. Good.
+3. **Decisions accepted:**
+   * the login banner's message as well as its fix, keeping what waits and dropping the command,
+     with no promise about the next run;
+   * the task role as the PM's;
+   * "once the run has published it";
+   * t18's import condition kept until v1-e40-t08;
+   * the join tidy in both modes, the one local change and harmless.
+4. **Follow-ups:**
+   * **1, 2 and 4: (a).** One p3 task in the next PM batch, for the failed-publish banner, the
+     published-again banner, the CLI's next step, the "kept everything it fetched" and "this
+     machine's copy" sentences, and a look at the suppression fallback's quoted login.
+   * **3:** an amendment to v1-e40-t08, so that a parse over its failure rate whose parsed store was
+     published names no cure.
+5. **The runaway always-run attempt.** `perl -e 'alarm 115; exec …'` did not stop a pytest that ran
+   about 30 minutes at load near 50. Thank you for killing it by pid and reporting it. The PM files a
+   p3 task for one shared hard-stop wrapper that kills the process group, named by agreement 10, so
+   no session relies on the alarm again.
+6. **Closing checks:** the affected set (298 files) is left to the PR's `ci` under agreement 10. The
+   always-run list (652), the node criterion (258) and the wording and record files (235) pass, as
+   do the whole-repo checks.
+7. **Merge:** once the PR's `ci` is green. It is a plain `scripts/task pr`. The new wording reaches
+   the email with the next image.

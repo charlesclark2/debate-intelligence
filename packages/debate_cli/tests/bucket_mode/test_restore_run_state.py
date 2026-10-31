@@ -10,7 +10,10 @@ directory. The restore must:
 * refuse the data directory itself, a directory inside it or holding it, and one that is not empty,
   before it takes the lock;
 * be refused, like any runner, while another holds the lease, and in local mode or on a bucket never
-  seeded.
+  seeded;
+* leave the marker (`v1-e40-t21`) at the copy's root, naming the environment, the bucket, the time and
+  the build and nothing else, and leave it too when it stops part-way, so the runbooks' cleanup finds
+  what the stop left.
 
 With `--with-sources` (`v1-e40-t10`) it must also fetch exactly the raw sources the restored
 manifests name, or those of the `--snapshot` named, into the copy and nowhere else; stop non-zero when

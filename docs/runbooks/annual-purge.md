@@ -255,19 +255,30 @@ Every block below runs in this window.
 ## Step 1 — No working copy left on this Mac
 
 A working copy restored from a bucket (`caselist restore-run-state`, version 1.18 of the policy) is
-deleted at the end of the step that restored it. This lists every directory that looks like a data
-directory, one holding `debate.sqlite3`, in your home folder and `/tmp`, three levels down, other than
-the dev and prod data directories. Reads only.
+deleted at the end of the step that restored it. Since `v1-e40-t21` the restore writes a marker,
+`debate-research-restored-copy.json`, at the root of every copy it makes, before anything else, so a
+restore that stopped part-way leaves one too. The marker holds the environment, the bucket, the time
+of the restore and the build's tag, and never a school, a caselist or a path. The dev and prod data
+directories never hold one. The block searches your home folder (outside `~/Library` and the Trash)
+and `/tmp`, other than those two data directories, and prints two lists, each ending in its count:
 
-**Operator command** (expected runtime seconds)
+* **restored copies**: every directory holding the marker, at any depth;
+* **restored before the marker**: a directory holding `debate.sqlite3` three levels down or less with
+  no marker. A build before `v1-e40-t21` wrote none, so this is how a copy it restored is seen, for
+  example the hspolicy26 copy restored on dev.200. One restored deeper by such a build is not seen
+  ([What has no command yet](#what-has-no-command-yet), item 6).
+
+Reads only. The search walks your whole home folder: about a minute on the operator's Mac.
+
+**Operator command** (expected runtime about a minute)
 Where: your Mac, in the purge window
 ```bash
-find -H "$HOME" /tmp -maxdepth 3 \( -path "$HOME/Library" -o -path "$HOME/.Trash" \) -prune -o -name debate.sqlite3 -print 2>/dev/null | sed 's|/debate.sqlite3$||' | grep -vxF -e "$HOME/.debate-research/dev" -e "$HOME/.debate-research/prod" > "$PURGE/data-directories.txt"
-cat "$PURGE/data-directories.txt"
-echo "data directories besides dev's and prod's: $(wc -l < "$PURGE/data-directories.txt" | tr -d ' ')"
+find -H "$HOME" /tmp \( -path "$HOME/Library" -o -path "$HOME/.Trash" \) -prune -o -type f -name debate-research-restored-copy.json -print 2>/dev/null | sed 's|/debate-research-restored-copy.json$||' | grep -vxF -e "$HOME/.debate-research/dev" -e "$HOME/.debate-research/prod" | awk '{ print } END { print "restored copies: " NR }'
+find -H "$HOME" /tmp -maxdepth 3 \( -path "$HOME/Library" -o -path "$HOME/.Trash" \) -prune -o -name debate.sqlite3 -print 2>/dev/null | sed 's|/debate.sqlite3$||' | grep -vxF -e "$HOME/.debate-research/dev" -e "$HOME/.debate-research/prod" | while IFS= read -r FOUND; do [ -f "$FOUND/debate-research-restored-copy.json" ] || echo "$FOUND"; done | awk '{ print } END { print "restored before the marker: " NR }'
 ```
-Success looks like `data directories besides dev's and prod's: 0`. Each line above it is a directory a
-step left behind. A `prod-publish-<date>` copy is deleted with the cutover runbook's block,
+Success looks like `restored copies: 0` and `restored before the marker: 0`. Each line above a count is
+a directory a step left behind; the marker in a restored copy says which environment and bucket it came
+from, and when (`cat <directory>/debate-research-restored-copy.json`). A `prod-publish-<date>` copy is deleted with the cutover runbook's block,
 [Deleting the copy](caselist-cutover.md#until-the-promotion-prod-is-published-by-hand); a copy another
 runbook restored, with that runbook's own deleting block. A directory no runbook names: stop, and tell
 the PM its last path part only. Run the block again until it prints `0`, then go on.
@@ -754,7 +765,7 @@ review in step 10. Nothing is deleted: a backfile goes by removal or a later pol
 ## Step 9 — The end of the environment
 
 **No working copy left.** Run [Step 1](#step-1--no-working-copy-left-on-this-mac)'s block again: it
-prints `data directories besides dev's and prod's: 0`. This purge restored nothing, so a directory it
+prints `restored copies: 0` and `restored before the marker: 0`. This purge restored nothing, so a directory it
 lists now was left by something else while the purge ran: deal with it as step 1 says.
 
 **The window's scratch directory** holds listings of keys and counts (slugs, dates, digests and
@@ -820,8 +831,9 @@ around by hand here.
    cannot be deleted alone.
 5. **Noncurrent versions under the rest of `reports/`, `uploads/` and `exports/`**, which no profile
    may list, so step 6 cannot check them.
-6. **A restored working copy is found by its database file**, three levels down: a copy restored
-   deeper is not seen.
+6. **A working copy restored before the marker is found by its database file**, three levels down: a
+   copy a build before `v1-e40-t21` restored deeper is not seen. Every copy restored since carries the
+   marker, which step 1 finds at any depth.
 
 ## References
 

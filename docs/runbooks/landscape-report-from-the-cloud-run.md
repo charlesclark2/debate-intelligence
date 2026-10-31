@@ -205,11 +205,25 @@ is kept for the length of these steps and no longer
 ([data-use policy](../policies/caselist-data-use.md)). This also deletes this runbook's files under
 `/tmp`, which can hold the scan's lines.
 
-**Operator command** (expected runtime under a minute)
+Then it looks for any restored copy left on this Mac, wherever it is, as the annual purge's
+[step 1](annual-purge.md#step-1--no-working-copy-left-on-this-mac) does: by the marker,
+`debate-research-restored-copy.json`, that `caselist restore-run-state` writes at the root of every copy
+since `v1-e40-t21`, at any depth in your home folder and `/tmp`; and, under **restored before the
+marker**, by a `debate.sqlite3` three levels down in a directory without one, which is how a copy an
+older build restored is seen. Neither list includes the dev or prod data directory. The search walks
+your whole home folder: about a minute.
+
+**Operator command** (expected runtime about a minute)
 Where: your Mac, in the window that set `COPY`
 ```bash
 case "$COPY" in "$HOME/.debate-research/landscape-copy-"*) rm -rf "$COPY" && echo "removed ${COPY}" ;; *) echo "STOP: ${COPY} is not a landscape copy" ;; esac
 rm -f /tmp/landscape-restore.json /tmp/landscape-parse-dry-run.json /tmp/landscape-parse.json /tmp/landscape-dry-run.json /tmp/landscape-publish.json
-ls -d "$HOME"/.debate-research/landscape-copy-* 2>/dev/null | wc -l
+find -H "$HOME" /tmp \( -path "$HOME/Library" -o -path "$HOME/.Trash" \) -prune -o -type f -name debate-research-restored-copy.json -print 2>/dev/null | sed 's|/debate-research-restored-copy.json$||' | grep -vxF -e "$HOME/.debate-research/dev" -e "$HOME/.debate-research/prod" | awk '{ print } END { print "restored copies: " NR }'
+find -H "$HOME" /tmp -maxdepth 3 \( -path "$HOME/Library" -o -path "$HOME/.Trash" \) -prune -o -name debate.sqlite3 -print 2>/dev/null | sed 's|/debate.sqlite3$||' | grep -vxF -e "$HOME/.debate-research/dev" -e "$HOME/.debate-research/prod" | while IFS= read -r FOUND; do [ -f "$FOUND/debate-research-restored-copy.json" ] || echo "$FOUND"; done | awk '{ print } END { print "restored before the marker: " NR }'
 ```
-Success looks like `removed …` and then `0`: no landscape copy is left on this Mac.
+Success looks like `removed …`, then `restored copies: 0` and `restored before the marker: 0`: no
+restored copy is left on this Mac. A directory listed above a count is a copy left behind: a landscape
+copy (its name starts `landscape-copy-`) is deleted by setting `COPY` to it and running this block
+again; any other with the deleting block of the runbook that restored it, as the annual purge's step 1
+says. The hspolicy26 copy restored on dev.200, before the marker, is listed under **restored before the
+marker** until it is deleted.

@@ -15,9 +15,10 @@ bucket or arrives with another digest (:mod:`debate_core.application.caselist.ru
 Bucket mode only: it holds the bucket's run lock while it restores, so no runner is part-way through its
 week, and it writes nothing to the bucket but the lock.
 Everything else it writes is under the directory named, which must be new or empty and is never this
-environment's data directory. What it restores, and what it refuses, is
-:mod:`debate_core.application.caselist.run_state_restore`'s. In prod it also needs `--confirm-prod`,
-because holding prod's lock would turn away a scheduled run.
+environment's data directory. The first is a marker naming the directory as a restored copy
+(`debate-research-restored-copy.json`, `v1-e40-t21`), which the runbooks find leftover copies by.
+What it restores, and what it refuses, is :mod:`debate_core.application.caselist.run_state_restore`'s.
+In prod it also needs `--confirm-prod`, because holding prod's lock would turn away a scheduled run.
 
 Exit `0` when the copy is restored; `1` when it is refused or a runner holds the lock, with nothing
 restored. With `--with-sources`, also `1` when a source is missing or mismatched, or there is no room

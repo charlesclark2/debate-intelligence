@@ -91,8 +91,9 @@ from the task's result line: counts only, never a school, team or file name. "Pa
 unsupported and failed sources; "Held" is the sources held by a removal request, summed; the steps are
 restore, download, import, parse, publish and parsed publish, in seconds.
 
-**The cloud dry run** (ac2), `hspolicy25`: not yet run. Its free bytes on the task's volume go here,
-beside the 29,687,044,928 it needs.
+**The cloud dry run** (ac2), `hspolicy25`, 2026-11-01, task definition revision 8 (`v1.1.0-dev.164`):
+`ok`, nothing applied, archive 3,958,272,657 bytes, not yet imported, outside the window. Free bytes on
+the task's volume **105,463,214,080**, beside the 29,687,044,928 it needs.
 
 | Caselist | Date (Chicago) | Revision | Downloaded bytes | Members | Stored | Suppressed | Held | Sources uploaded | Parsed | Cards | Parsed objects uploaded | Steps (s) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|

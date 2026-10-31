@@ -803,5 +803,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e32-t34-landscape-cassettes-command
+    - id: t35
+      kind: Task
+      name: 'A CP text the landscape shows is whole: a text ending in a colon shows its planks, and a text split across paragraphs is joined'
+      description: >-
+        A CP text the landscape shows is whole: a text ending in a colon shows its planks,
+        and a text split across paragraphs is joined.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t35-cp-texts-shown-whole.yaml
+        goalRef: v1-e32-t35-cp-texts-shown-whole
+      dependsOn:
+      - t16
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t35-cp-texts-shown-whole reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t35-cp-texts-shown-whole
 status:
   phase: Pending

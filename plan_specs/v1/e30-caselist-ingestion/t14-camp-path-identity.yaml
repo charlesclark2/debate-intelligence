@@ -25,6 +25,13 @@ spec:
     manifests already require) in every manifest row for a camp file, in both environments, and
     let a removal withdraw one camp path while another holder keeps the bytes. Out of scope:
     caselist files.
+    (PM amendment 2026-11-01.) ac1's real-environment half, Operator follow-up 1, re-derives and
+    publishes `manifests/openev/2026-policy.jsonl` from the Mac's data directory. Since the cutover
+    (2026-10-27) the cloud run holds dev's state and the Mac's directory no longer holds the weeks it ran,
+    so a publish from it would put a stale manifest in the bucket. The re-derive runs on a working copy
+    restored from the dev bucket (`caselist restore-run-state`, as the cutover runbook's "Until the
+    promotion" publishes by hand), never on `~/.debate-research/dev`, outside the Wednesday window and with
+    the lock held; the PM writes the block when it is run. Prod's half follows with the pilot's promotion.
   priority: 3
   constraints:
     packages: [debate_core.application, debate_core.domain, debate_core.integrations.local, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke, docs/runbooks, docs/data]

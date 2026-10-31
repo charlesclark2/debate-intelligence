@@ -1,0 +1,80 @@
+# TASK v1-e39-t25-identical-rebuild-skipped-and-newest-records - The weekly index stage skips an identical rebuild its record already matches, and publish --newest on the current index records instead of republishing
+# Epic: E39 — Team Evidence Search (Student Pilot) | Release: v1.7 (Team evidence search pilot) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e39-t25-identical-rebuild-skipped-and-newest-records
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+  annotations:
+    debate/title: "The weekly index stage skips an identical rebuild its record already matches, and publish --newest on the current index records instead of republishing"
+spec:
+  # Filed by the PM, 2026-11-01, from v1-e39-t19's Follow-up work (the PM's review, 2026-11-01).
+  description: >-
+    Since v1-e39-t19 an identical rebuild writes a `checked-against.json` beside the manifest
+    instead of republishing. But the cloud still rebuilds every week while the restored
+    manifest's suppression digest and the sources disagree: it gets the same id and writes
+    nothing after the first record. Make `SearchIndexRefresh._reusable` treat a restored
+    manifest plus a record that matches the sources as current, so the stage skips the rebuild
+    and says so in its result. And `tub index publish --newest` on the index `current.json`
+    already names republishes it whole (the gzip object and manifest again, the pointer moved),
+    so every environment downloads it again; it records instead, as the weekly stage does, or
+    refuses with a hint when there is nothing to record.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, docs/runbooks]
+    forbidden:
+      - The pointer moved or the gzip object written for an identical index
+      - A key removed or renamed in a --json envelope
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e39-t19-identical-rebuild-records-its-suppression-list
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A weekly stage whose restored record matches the sources skips the rebuild and
+        reports it, and `tub index publish --newest` on the current index writes the record
+        or refuses, never the object, manifest or pointer, by tests shown failing first
+        (object versions counted, as t19 counted them).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e39-t25-identical-rebuild-skipped-and-newest-records-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+spec:
+  description: >-
+    The weekly index stage skips an identical rebuild its record already matches, and publish
+    --newest on the current index records instead of republishing.
+  goalRef:
+    name: v1-e39-t25-identical-rebuild-skipped-and-newest-records
+  graph:
+    nodes:
+      - id: identical-rebuild-skipped-and-newest-rec
+        kind: Task
+        name: Identical rebuild skipped
+        description: >-
+          The weekly index stage skips an identical rebuild its record already matches,
+          and publish --newest on the current index records instead of republishing.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Identical rebuild skipped tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, search_index]
+status:
+  phase: Pending

@@ -1,0 +1,79 @@
+# TASK v1-e40-t28-last-bucket-mode-wording-pass - The last bucket-mode wording pass: banners and the CLI name the next cloud run, and a cloud run's login hint names the task role
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t28-last-bucket-mode-wording-pass
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "The last bucket-mode wording pass: banners and the CLI name the next cloud run, and a cloud run's login hint names the task role"
+spec:
+  # Filed by the PM, 2026-11-01, from v1-e40-t25's Follow-ups 1 and 2 (the PM's review, 2026-11-01).
+  description: >-
+    After v1-e40-t25, four messages still tell a bucket-mode reader to act on this machine: the
+    stopped-run, mixed-failure and backlog banners of the run's email, and the CLI's "run the
+    same command again". In bucket mode each names the next cloud run instead, as t25's hints
+    do. And the S3 adapter's login hint is `aws sso login` whatever runs it, so every record
+    reason a cloud run writes for a missing session tells the task to sign in by hand; the
+    composition root passes the adapter a hint for the run's environment, so a cloud run's
+    reasons name the task role and the cloud runbook's "A run that found no AWS session". Local
+    mode's words are unchanged. This is the last bucket-mode wording task the PM files unless a
+    run's email shows another.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
+    forbidden:
+      - A local-mode message changed
+      - A key removed or renamed in a --json envelope
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e40-t25-remaining-bucket-mode-publish-pending-hints
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        In bucket mode the three banners and the CLI's rerun line name the next cloud run,
+        and a cloud run's missing-session reasons name the task role and the cloud runbook's
+        section; local mode's words are byte for byte as before; tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t28-last-bucket-mode-wording-pass-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    The last bucket-mode wording pass: banners and the CLI name the next cloud run, and a cloud
+    run's login hint names the task role.
+  goalRef:
+    name: v1-e40-t28-last-bucket-mode-wording-pass
+  graph:
+    nodes:
+      - id: last-bucket-mode-wording-pass
+        kind: Task
+        name: Last wording pass
+        description: >-
+          The last bucket-mode wording pass: banners and the CLI name the next cloud run,
+          and a cloud run's login hint names the task role.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Last wording pass tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, bucket_mode]
+status:
+  phase: Pending

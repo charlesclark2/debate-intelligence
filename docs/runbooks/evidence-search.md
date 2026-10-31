@@ -958,6 +958,18 @@ set. Do it all in one terminal window, not on a Wednesday, and not while a cloud
 
 Once: `uv run playwright install chromium`, in `$WT`.
 
+**Once, before J1: the seed's names are no real school's** (PM ruling 2026-11-01). The seed's three
+school names and its tournament are invented; this checks that no disclosed path in this Mac's
+manifests holds any of them. It prints a count, never a path or a name.
+
+**Operator command** (expected runtime seconds)
+Where: any terminal
+```bash
+grep -rliE 'quillfern|ostrander|brindlecote|lanternfield' "$HOME/.debate-research/dev/manifests" | grep -v '/testcl26/' | wc -l
+```
+Success looks like `0`. Anything else: stop and tell the PM, who renames the seed before it reaches
+dev.
+
 ### J1 — Write the seed
 
 **Operator command** (expected runtime seconds; writes one file under your home directory)
@@ -1361,12 +1373,16 @@ real run, in a window with no leftover `DEBATE_*` override.
    cover it.
 5. **Prod's suppression list exists** in the prod bucket, by the check `v1-e39-t07`'s runbook
    section gives. If it does not, create it as that section says before anything is published.
-6. **Prod's parsed store is current.** From the dev data directory, `caselist parse --publish-only`
-   to prod for each store ([the guide](../guides/parsed-store-publish-only.md)); it refuses if
-   prod's suppression list stops anything the aggregates name, and then the store is rebuilt with
-   `--publish` instead.
-7. **Prod's first index**, built and published by `tub index` against prod, and its `current.json`
-   read back.
+6. **Prod's parsed store is current.** Not from the Mac's dev data directory, which since the
+   cutover no longer holds the weeks the cloud ran (PM ruling 2026-11-01, `v1-e39-t10` Q3): from a
+   working copy restored from the dev bucket, published to prod as
+   [the cutover runbook's "Until the promotion"](caselist-cutover.md#until-the-promotion-prod-is-published-by-hand)
+   publishes by hand. It refuses if prod's suppression list stops anything the aggregates name, and
+   then the store is rebuilt with `--publish` instead.
+7. **Prod's first index**, built by `tub index build` from that same restored copy, checked against
+   dev's current manifest as [the journey's J5](#the-signed-in-journey-on-dev) checks it (each
+   store's `occurrences_sha256`, the suppression list's sha256), then published against prod, and its
+   `current.json` read back. The copy is deleted afterwards (data-use policy 1.18).
 8. **`v1-e39-t07`'s prod removal exercise**, with a synthetic source, then the aggregate rebuild its
    runbook section gives, judged by `Sources` equal to `Skipped` and above zero.
 9. **Retire the superseded parsed directories in prod** (`2026.09.20-docx-1`, `2026.10.10-docx-2`,

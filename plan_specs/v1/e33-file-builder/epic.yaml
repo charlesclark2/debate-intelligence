@@ -313,5 +313,45 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e33-t10-sidecar-style-profile-warning
+    - id: t11
+      kind: Task
+      name: 'files suggest drafts a CP file a coach can build on: a CP text slot first, no other position''s blocks, and plank-dependent blocks marked'
+      description: >-
+        files suggest drafts a CP file a coach can build on: a CP text slot first, no other
+        position's blocks, and plank-dependent blocks marked.
+      inputs:
+        specRef: plan_specs/v1/e33-file-builder/t11-suggest-drafts-a-cp-file-a-coach-can-build-on.yaml
+        goalRef: v1-e33-t11-suggest-drafts-a-cp-file-a-coach-can-build-on
+      dependsOn:
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e33-t11-suggest-drafts-a-cp-file-a-coach-can-build-on reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e33-t11-suggest-drafts-a-cp-file-a-coach-can-build-on
+    - id: t12
+      kind: Task
+      name: 'files check and files build name each warned or failed card, its check and why, as the quality report does'
+      description: >-
+        files check and files build name each warned or failed card, its check and why, as
+        the quality report does.
+      inputs:
+        specRef: plan_specs/v1/e33-file-builder/t12-files-check-names-each-warned-card.yaml
+        goalRef: v1-e33-t12-files-check-names-each-warned-card
+      dependsOn:
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e33-t12-files-check-names-each-warned-card reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e33-t12-files-check-names-each-warned-card
 status:
   phase: Pending

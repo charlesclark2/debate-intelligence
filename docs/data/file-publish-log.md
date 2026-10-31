@@ -29,7 +29,20 @@ The three files' prefixes, to the position (each continues with the slug and the
 | `files/nhi/aff/politics-da/` | 5 |
 | `files/space-colonization/neg/` | 5 |
 
-## Prod
+## Prod, 2026-11-01: the first coach-approved file
 
-Not yet published. The first real files are published after the coach approves them (quality
-`PASS`, provenance read), and recorded here.
+The coach chose one file, read it in Word and approved it. Built from the dev data directory on
+`2026.10.27-docx-7` and published with `DEBATE_ENV=prod` and `--confirm-prod`. Recorded by the PM.
+
+| Step | Result |
+|---|---|
+| Build | 8 cards from 3 sources; every check `PASS` but `cite-present`, `WARN` on 4 cards with no short cite (one uncited near-duplicate card was taken out of the recipe first) |
+| Dry run | one `WOULD_PUBLISH` row, bucket `debate-prod-evidence-a7508de8` |
+| Publish | `1 PUBLISHED`, `Warned, not blocked: … cite-present`, exit 0 |
+| Listing | `store ls` lists the prefix's 5 objects, 50.1 KB |
+
+| Topic / side / position / slug | Recipe hash | Objects |
+|---|---|---|
+| `files/policy-2026-27-nhi/neg/states-cp/states-cp-neg/` | `4dbe126dd4c8` | 5 |
+
+Further files are added here as the coach approves them.

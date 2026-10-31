@@ -977,3 +977,12 @@ Added by the PM. Nothing above is changed, and this section is not a review.
   hand-unpacked archives once the evaluation no longer needs them) are the operator's, as before.
   The Goal stays `InProgress` until they are recorded.
 
+## Operator records (recorded by the PM, 2026-11-01)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac5, the corpus health report | NOT RUN | PASS | 2026-10-31, `scripts/parser_corpus_health.py` on the Mac over the hsld26 weekly snapshots and the 2026-27 Policy camp files, parser `2026.10.27-docx-7`: 2,162 of 2,163 distinct `.docx` parsed, **0.9995** (target 0.98, met); the one failure counted by reason (`UNSUPPORTED_FORMAT`); 46 non-`.docx` counted apart. Counts only, read by the PM, committed as `docs/data/parser-corpus-health.md` |
+
+ac5 passes. The Goal stays `InProgress` for ac3, the corrected labels.

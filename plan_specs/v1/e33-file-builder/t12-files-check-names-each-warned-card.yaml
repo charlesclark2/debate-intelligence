@@ -1,0 +1,76 @@
+# TASK v1-e33-t12-files-check-names-each-warned-card - files check and files build name each warned or failed card, its check and why, as the quality report does
+# Epic: E33 Evidence File Builder | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e33-t12-files-check-names-each-warned-card
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e33-file-builder
+  annotations:
+    debate/title: "files check and files build name each warned or failed card, its check and why, as the quality report does"
+spec:
+  # Filed by the PM, 2026-11-01, from the operator's States CP build (2026-10-31).
+  description: >-
+    `files check` and `files build` print only a table of totals per check (`cite-present WARN 0
+    5`). Which card each warning is about, and why, is in the `.quality.md` beside the file, so
+    the operator had to grep that file to learn that one of five warnings was a card with no
+    cite at all while four were only a missing short cite. Print, after the table, one line per
+    WARN or FAIL result as the quality report writes it (`card 6 (f3ef62b7c151): the card has no
+    cite`), and add those results to the `--json` envelope as one additive key. A file with no
+    warnings prints as today.
+  priority: 3
+  constraints:
+    packages: [debate_cli, packages/debate_cli/tests, debate_core.application, packages/debate_core/tests]
+    forbidden:
+      - A key removed or renamed in a --json envelope
+      - A card's tag, cite or text printed
+  context:
+    - kind: TaskRef
+      name: v1-e33-t03-file-build-cli
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `files check` and `files build` list each WARN and FAIL result with its card
+        position, short fingerprint, check and message, and `--json` carries them under one
+        new key, by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e33-t12-files-check-names-each-warned-card-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e33-file-builder
+spec:
+  description: >-
+    files check and files build name each warned or failed card, its check and why, as the
+    quality report does.
+  goalRef:
+    name: v1-e33-t12-files-check-names-each-warned-card
+  graph:
+    nodes:
+      - id: files-check-names-each-warned-card
+        kind: Task
+        name: Warned cards named
+        description: >-
+          files check and files build name each warned or failed card, its check and why,
+          as the quality report does.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Warned cards named tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests, -k, files]
+status:
+  phase: Pending

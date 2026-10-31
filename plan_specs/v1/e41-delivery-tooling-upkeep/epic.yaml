@@ -299,5 +299,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e41-t09-validate-specs-pyright-and-start-refuses-unknown
+    - id: t10
+      kind: Task
+      name: 'An unknown DEBATE_ name in .env is refused, and files build tells a newer-stamped store to install the newer build'
+      description: >-
+        An unknown DEBATE_ name in .env is refused, and files build tells a newer-stamped
+        store to install the newer build.
+      inputs:
+        specRef: plan_specs/v1/e41-delivery-tooling-upkeep/t10-unknown-env-names-refused-and-newer-stamp-hint.yaml
+        goalRef: v1-e41-t10-unknown-env-names-refused-and-newer-stamp-hint
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e41-t10-unknown-env-names-refused-and-newer-stamp-hint reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e41-t10-unknown-env-names-refused-and-newer-stamp-hint
 status:
   phase: Pending

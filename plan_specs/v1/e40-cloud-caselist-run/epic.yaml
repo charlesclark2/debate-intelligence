@@ -643,5 +643,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e40-t27-store-sync-leaves-the-run-state-alone
+    - id: t28
+      kind: Task
+      name: 'The last bucket-mode wording pass: banners and the CLI name the next cloud run, and a cloud run''s login hint names the task role'
+      description: >-
+        The last bucket-mode wording pass: banners and the CLI name the next cloud run, and
+        a cloud run's login hint names the task role.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t28-last-bucket-mode-wording-pass.yaml
+        goalRef: v1-e40-t28-last-bucket-mode-wording-pass
+      dependsOn:
+      - t25
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t28-last-bucket-mode-wording-pass reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t28-last-bucket-mode-wording-pass
 status:
   phase: Pending

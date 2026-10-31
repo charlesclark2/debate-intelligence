@@ -1,0 +1,79 @@
+# TASK v1-e05-t19-cost-allocation-tag-imports-removed - The cost allocation tags' import blocks are removed once both tags are in state
+# Epic: E05 Model Router & Structured LLM Contracts | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e05-t19-cost-allocation-tag-imports-removed
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e05-model-router
+  annotations:
+    debate/title: "The cost allocation tags' import blocks are removed once both tags are in state"
+spec:
+  # Filed by the PM, 2026-11-01, from v1-e05-t18's Follow-up work 1 (the PM's ruling, 2026-11-01).
+  description: >-
+    v1-e05-t18 adopted the `Project` and `Environment` cost allocation tags with two `import`
+    blocks in `infrastructure/bootstrap/organization/budgets.tf`. Once the operator's apply has
+    put both in state, the blocks do nothing in this account, and in a new account they fail the
+    whole root's plan until AWS has listed both keys. Remove them; keep the module call, the two
+    resources and the root's `check` exactly as they are. Update the runbook
+    (`docs/runbooks/aws-account-baseline.md`): step 5's new-account order no longer needs the
+    blocks taken out, and "Applying the cost allocation tags" is recorded as done on its date,
+    with the `COSTTAGSPLAN` check kept for any later plan, where both tags now read as
+    unchanged. Update the structural and plan-check tests to match. Start only when v1-e05-t18
+    is Succeeded.
+  priority: 3
+  constraints:
+    packages: [infrastructure, tests/infrastructure, docs/runbooks]
+    forbidden:
+      - A change to either cost allocation tag resource or the module
+      - An apply from the branch
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e05-t18-cost-allocation-tags-in-terraform
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The two import blocks are gone, the module, resources and check are unchanged, the
+        tests and runbook say the imports are done, and `scripts/terraform_checks.sh`
+        passes; the operator's plan of the root then shows no change to the tags (operator,
+        read by the PM).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e05-t19-cost-allocation-tag-imports-removed-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e05-model-router
+spec:
+  description: >-
+    The cost allocation tags' import blocks are removed once both tags are in state.
+  goalRef:
+    name: v1-e05-t19-cost-allocation-tag-imports-removed
+  graph:
+    nodes:
+      - id: cost-allocation-tag-imports-removed
+        kind: Task
+        name: Import blocks removed
+        description: >-
+          The cost allocation tags' import blocks are removed once both tags are in state.
+        estimatedEffort: 30m
+        acceptanceCriteria:
+          - type: test_passes
+            name: Import blocks removed tests pass
+            command: uv
+            args: [run, pytest, tests/infrastructure, -k, cost_allocation]
+status:
+  phase: Pending

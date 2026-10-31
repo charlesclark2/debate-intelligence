@@ -19,7 +19,9 @@ build and publish one: [docs/guides/search-index.md](../guides/search-index.md).
 The **index id** is the first 16 hex characters of the SQLite file's sha256. The same store gives
 the same bytes, built by the same SQLite and zlib, so a rebuild of an unchanged store has the same
 id. Published, the gzip object and the manifest go to
-`reports/tub/search/<index id>/` and the pointer to `reports/tub/search/current.json`, last
+`reports/tub/search/<index id>/` and the pointer to `reports/tub/search/current.json`, last. A
+rebuild with the published id writes only `reports/tub/search/<index id>/checked-against.json`, what it
+was checked against, and leaves the object, the manifest and the pointer (`v1-e39-t19`)
 ([store layout](../architecture/evidence-store-layout.md#reportstubsearch-the-student-search-pilots-index)).
 
 ## What goes in

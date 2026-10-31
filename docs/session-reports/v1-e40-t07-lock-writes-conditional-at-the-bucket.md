@@ -381,9 +381,50 @@ Within the two minutes I ran the always-run list and the tests that read this ta
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-01
 
 **Notes:**
+
+The bucket now refuses an unconditional write of the run lock and nothing else. The writer inventory
+behind it found a real flaw that the deny turns from a silent clobber into a refusal.
+1. **ac1 passes.**
+   * 15 runs pass; red, 2 failed against the start commit's module.
+   * 21 mutants were caught, with no errors and no skips. Each of the three dev assertions catches a
+     mutant the others let through.
+   * Dropping the four field-by-field assertions that the whole-statement check made redundant is
+     agreement 8 applied properly.
+   * `terraform_checks.sh` passes offline, with no lock file changed.
+2. **The writer inventory is the most valuable part.** Every writer was traced in code with file and
+   line, then measured through botocore: 273 lock writes in the lock suite, every one conditional,
+   and the same in the landscape, prune and backfile paths. The one blind writer, `store sync --push`
+   of a pulled copy, was shown end to end in a throwaway probe and correctly left out of the deny.
+3. **The PM's answers:**
+   * **Question 1: (a).** Apply as is. One follow-up, p2 in the next PM batch: `store sync` never moves
+     `reports/sync/` either way. It also takes the test tying `RUN_LOCK_KEY` to the Terraform literal.
+     The stale state files that the same push overwrites are the bigger risk, and that task fixes
+     both.
+   * **Question 2: (a).** No delete statement. A deleted lock fails closed, and only the break-glass
+     admin can delete it.
+   * **Question 3: (a).** Keep step 5. It shows a conditional write succeeding by the run's own code,
+     within minutes of the apply.
+   * **Question 4:** no. Reading a public documentation page touches nothing of ours, and the spec
+     asks for a citation. The operator rule covers calls to our accounts and services.
+4. **Deviations accepted:** the blind writer reported, not exempted; no edit under `infrastructure/envs/`,
+   since both roots call the module; multipart refused outright.
+5. **Decisions accepted:**
+   * release as a conditional put;
+   * every principal;
+   * the statement compared whole;
+   * a proof that cannot write at the real key and is shown failing before the apply;
+   * the plan check exercised offline against hand-made plans.
+6. **When to apply (ac2), as the PM rules it.** After this merges, on Monday 2026-11-02 or Tuesday
+   2026-11-03, never within the hour before Wednesday's 06:00 run. Wednesday 2026-11-04's run, on the
+   unchanged image dev.164, is then step 6's proof of the deny alone. The parse-owed image
+   (v1-e40-t08) follows on Thursday, with its own plan and apply, so each plan shows one change and
+   the next week's run tests one new thing.
+7. **Closing checks:** the affected set (87 files, path edges only, no Python changed) is left to the
+   PR's `ci` under agreement 10. The always-run list and the infrastructure tests pass.
+8. **Merge `--partial`.** ac2 is the operator's, so the Goal stays `InProgress`.

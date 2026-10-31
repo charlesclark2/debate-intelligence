@@ -1300,8 +1300,8 @@ and 7 ask for come from, and nothing about who searched or for what
   once each time an environment fetches an index: the cold start's index load, the SQLite file's
   bytes, the gzip object's bytes, and what the holder has on `/tmp` at that moment. At a replacement
   that moment is before the old file is deleted, so `<t>` is the peak: both files.
-* `INFO debate_core.application.search_index_holder: search answered in <n> ms, by words` (or
-  `by passage`), once each search, the index already loaded.
+* `INFO debate_core.application.search_index_holder: search answered in <n> ms`, once each search,
+  the index already loaded.
 
 The queries below are CloudWatch Logs Insights queries, read-only, in the console (CloudWatch, Logs
 Insights, log group `debate-dev-tub-app` or `debate-prod-tub-app`, a time range that covers the use).
@@ -1311,8 +1311,8 @@ Insights, log group `debate-dev-tub-app` or `debate-prod-tub-app`, a time range 
 ```text
 fields @timestamp, @message
 | filter @message like /search answered in/
-| parse @message "search answered in * ms, by *" as ms, mode
-| stats count() as searches, pct(ms, 50) as p50_ms, pct(ms, 95) as p95_ms, max(ms) as max_ms by mode
+| parse @message "search answered in * ms" as ms
+| stats count() as searches, pct(ms, 50) as p50_ms, pct(ms, 95) as p95_ms, max(ms) as max_ms
 ```
 
 **The cold-start index load, and `/tmp` at each load:**
@@ -2030,7 +2030,7 @@ beside the button.
 | App log line (`WARNING` unless marked) | What happened | What to do |
 |---|---|---|
 | `search index <id> loaded in <s> s: <n> bytes from a <m>-byte object; <t> bytes in its directory` (`INFO`) | An environment fetched and checked an index, in that time, and has `<t>` bytes on `/tmp` (`v1-e39-t10`) | Nothing; [the app log's measurements](#measuring-the-pilot-from-the-app-log-v1-e39-t10) read it |
-| `search answered in <n> ms, by words` (`INFO`; or `by passage`) | A search was answered in that time | Nothing; the query-time measurement reads it |
+| `search answered in <n> ms` (`INFO`) | A search was answered in that time | Nothing; the query-time measurement reads it |
 | `search index <id> closed and deleted` (`INFO`) | A newer index replaced it, or the environment closed it | Nothing |
 | `the published search index was refused: the pointer is not a search index pointer this build reads` | `current.json` is not a pointer, or names keys outside its own index's directory | Publish again with `tub index publish`. If it says `current.json is not a pointer this build reads ... cannot be compared`, the shrink guard cannot read the current index either: compare the newest index's counts with the last run's `search_index` row, then publish with `--allow-shrink "<reason>"` ([the shrink guard](caselist-scheduled-sync.md#the-shrink-guard)) |
 | `search index <id> was refused: its format version is not 1, the one this build reads` | The index was built by a build whose format this deploy does not read | Deploy the build that wrote it, or rebuild and publish with this one |

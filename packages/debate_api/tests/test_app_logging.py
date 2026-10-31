@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import io
 import logging
+import re
 from collections.abc import Iterator
 from typing import Any, Final
 
@@ -113,7 +114,6 @@ def test_a_search_through_the_app_logs_the_load_and_the_search_time_and_never_th
     assert loaded.startswith(f"INFO {HOLDER}: search index {world.index.index_id} loaded in ")
     assert " bytes in its directory" in loaded
     [answered] = [line for line in lines if "search answered in " in line]
-    assert answered.startswith(f"INFO {HOLDER}: search answered in ")
-    assert answered.endswith(" ms, by words")
+    assert re.fullmatch(rf"INFO {HOLDER}: search answered in \d+ ms", answered), answered
     for word in ("zephyr", "hsld26", "Maple Grove", "debater.one", "q="):
         assert word not in app_log.getvalue(), word

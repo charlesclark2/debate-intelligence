@@ -168,7 +168,7 @@ def test_a_cold_load_logs_its_time_its_file_and_object_bytes_and_the_directory_t
             f"search index {index.index_id} loaded in 1.25 s: {sqlite_bytes} bytes from a "
             f"{object_bytes}-byte object; {sqlite_bytes} bytes in its directory",
         ),
-        (logging.INFO, "search answered in 42 ms, by words"),
+        (logging.INFO, "search answered in 42 ms"),
     ]
     assert timer.unread == 0
 
@@ -203,12 +203,12 @@ def test_at_a_replacement_the_directory_total_is_the_peak_both_files_before_the_
             f"{second_object_bytes}-byte object; {first_bytes + second_bytes} bytes in its directory",
         ),
         (logging.INFO, f"search index {first.index_id} closed and deleted"),
-        (logging.INFO, "search answered in 10 ms, by words"),
+        (logging.INFO, "search answered in 10 ms"),
     ]
     assert sum(path.stat().st_size for path in (tmp_path / "tub-index").iterdir()) == second_bytes
 
 
-def test_a_passage_search_says_so_and_no_line_holds_the_query(
+def test_a_passage_search_logs_its_time_alone_and_no_line_holds_the_query(
     make_holder: Callable[[ScriptedTimer], SearchIndexHolder],
     bucket: InMemorySearchIndexSource,
     tmp_path: Path,
@@ -221,9 +221,9 @@ def test_a_passage_search_says_so_and_no_line_holds_the_query(
     with caplog.at_level(logging.DEBUG), holder.lease() as search:
         search.search("zephyr granite basalt", passage=True)
 
-    assert holder_lines(caplog)[-1] == (logging.INFO, "search answered in 200 ms, by passage")
+    assert holder_lines(caplog)[-1] == (logging.INFO, "search answered in 200 ms")
     logged = " ".join(record.getMessage() for record in caplog.records)
-    for word in ("zephyr", "granite", "basalt", "Maple Grove", "QX", "Lindqvist"):
+    for word in ("zephyr", "granite", "basalt", "passage", "Maple Grove", "QX", "Lindqvist"):
         assert word not in logged, word
 
 

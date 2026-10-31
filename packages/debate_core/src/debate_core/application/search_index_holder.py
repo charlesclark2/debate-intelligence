@@ -79,8 +79,9 @@ what:
   once per index an environment fetches. The time runs from the manifest's read to the reader's open,
   the fetch a cold start or a new pointer waits for. The directory's total is taken before the old
   index is deleted, so at a replacement it is the peak the holder puts on `/tmp`: both SQLite files.
-* `search answered in <n> ms, by words` (or `by passage`), once per search a lease answers, the
-  index already loaded. No query, card, cursor, filter or user is in either line.
+* `search answered in <n> ms`, once per search a lease answers, the index already loaded. Not even
+  the search's mode: a passage search's words could be any word, that one included. No query, card,
+  cursor, filter or user is in either line.
 
 ## What never waits
 
@@ -261,11 +262,7 @@ class ScreenedSearch:
         page = self._service.search(
             query, filters, cursor, passage=passage, is_suppressed=self._is_suppressed
         )
-        logger.info(
-            "search answered in %d ms, by %s",
-            round((self._timer() - started) * 1000),
-            "passage" if passage else "words",
-        )
+        logger.info("search answered in %d ms", round((self._timer() - started) * 1000))
         return page
 
     def card(self, caselist: str, cluster_id: str) -> Card | None:

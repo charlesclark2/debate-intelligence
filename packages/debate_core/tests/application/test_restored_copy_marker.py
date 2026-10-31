@@ -25,11 +25,9 @@ from typing import Any, Final, cast
 
 import pytest
 
-from debate_core.application.caselist import run_state_restore
 from debate_core.application.caselist.run_state import RestoreReport, RunState
 from debate_core.application.caselist.run_state_restore import (
     RESTORED_COPY_MARKER,
-    RestoredCopyMarker,
     RestoreTargetRefused,
     RunStateRestore,
 )
@@ -161,14 +159,28 @@ def test_a_restore_that_stops_part_way_leaves_a_whole_marker_beside_what_it_rest
 def test_a_stop_while_the_marker_is_written_leaves_no_marker_and_nothing_restored(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The other half of "a whole marker or none": the marker lands by a rename, or not at all."""
+    """The other half of "a whole marker or none": a write stopped half-way leaves no half marker.
+
+    The stop comes after half the marker's bytes are on disk, so only a marker written aside and moved
+    into place passes: one written where the runbooks look would be left half-written.
+    """
     world = World(tmp_path)
     copy = tmp_path / "copy"
+    write_text = Path.write_text
 
-    def interrupted(self: RestoredCopyMarker) -> str:
+    def half_then_interrupted(
+        self: Path,
+        data: str,
+        encoding: str | None = None,
+        errors: str | None = None,
+        newline: str | None = None,
+    ) -> int:
+        if self.name != RESTORED_COPY_MARKER:  # pragma: no cover - the restore writes nothing else first
+            return write_text(self, data, encoding, errors, newline)
+        write_text(self, data[: len(data) // 2], encoding, errors, newline)
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(run_state_restore.RestoredCopyMarker, "as_json", interrupted)
+    monkeypatch.setattr(Path, "write_text", half_then_interrupted)
     with pytest.raises(KeyboardInterrupt):
         asyncio.run(world.restore().restore(copy, [CASELIST]))
 

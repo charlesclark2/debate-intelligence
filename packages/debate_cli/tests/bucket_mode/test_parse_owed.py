@@ -208,6 +208,30 @@ def test_owed_caselists_are_parsed_before_the_ones_the_run_imports_into(
     assert owed_here(world.data_dir) is None
 
 
+def test_a_parse_owed_for_a_caselist_the_run_does_not_follow_is_left_owed_and_said(
+    world: World, parses: list[str]
+) -> None:
+    """Its parsed store is not restored, in bucket mode, for a caselist the run does not follow, and a
+    caselist retired since is not the run's to publish: the entry waits for a run that follows it."""
+    world.listing(WEEK_1, WEEK_2)
+    assert world.pull()["exit_code"] == ExitCode.OK
+    other: dict[str, Any] = {
+        "full_parses": [],
+        "snapshots": [{"caselist": "hsld26", "snapshot": "2026-09-08"}],
+    }
+    (world.data_dir / PARSE_OWED_FILE).write_text(json.dumps(other), encoding="utf-8")
+    parses.clear()
+
+    following = world.pull()
+
+    assert following["exit_code"] == ExitCode.OK, following
+    assert parses == []
+    assert stage(following, "parse")["reason"] == (
+        "nothing new was imported; the parse owed for hsld26 is left owed, as this run does not follow it"
+    )
+    assert owed_here(world.data_dir) == other
+
+
 # ------------------------------------------------------------------------------------------------
 # ac3: a parse whose publish failed stays owed, and the next run publishes it; the cure says so
 # ------------------------------------------------------------------------------------------------

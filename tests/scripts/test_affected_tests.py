@@ -1246,6 +1246,276 @@ def test_explain_names_the_factory_and_the_command_a_test_is_reached_through(wor
 
 
 # --------------------------------------------------------------------------------------------
+# A change to container.py itself (v1-e01-t43): a factory's code is that factory's, and anything
+# that runs when the module is imported is the whole file's. Each case commits CLI_WORLD, with any
+# extra files it names, then describes one more commit to container.py.
+# --------------------------------------------------------------------------------------------
+
+CONTAINER_FILE = f"{CLI}/container.py"
+# What reading container.py as one file selects: the app through context.py, every file importing
+# the container, and the wiring check, whose module names the container.
+WHOLE_CONTAINER = ALL_RUNS | {BUILDS_THE_PARSER, WALKS_THE_CONTAINER, READS_THE_WIRING, READS_THE_INDEX}
+# What reaches every part: the reflection, the source reader's caller and the index built by reflection.
+EVERY_PART = {WALKS_THE_CONTAINER, READS_THE_WIRING, READS_THE_INDEX}
+VERIFIED_TESTS = {
+    RUNS["verify"],
+    RUNS["verify, installed"],
+    RUNS["verify, beside prose"],
+    RUNS["caselist help"],
+    RUNS["verify, and remove through a fixture"],
+    RUNS["verify, and index build without tub"],
+}
+REMOVAL_TESTS = {
+    RUNS["remove"],
+    RUNS["remove, installed"],
+    RUNS["remove, by a helper"],
+    RUNS["caselist help"],
+    RUNS["verify, and remove through a fixture"],
+}
+
+
+def container_edit(old: str, new: str, setup: dict[str, str] | None = None) -> dict[str, str]:
+    container = (setup or CLI_WORLD)[CONTAINER_FILE]
+    assert container.count(old) == 1, old
+    return {CONTAINER_FILE: container.replace(old, new)}
+
+
+def described_after(
+    workspace: Workspace, change: dict[str, str], *args: str, setup: dict[str, str] | None = None
+) -> Result:
+    workspace.commit({**CLI_WORLD, **(setup or {})}, "setup")
+    workspace.commit(change, "described")
+    return workspace.run("--diff", "HEAD", *args)
+
+
+def test_a_changed_factory_reaches_only_the_tests_that_ask_for_it(workspace: Workspace) -> None:
+    result = described_after(
+        workspace, container_edit("        return RULES\n", "        return RULES or None\n")
+    )
+    assert_selected(result, VERIFIED_TESTS | EVERY_PART | CANNOT_TELL | ALWAYS | READS_SOURCE)
+    assert f"{CONTAINER_FILE} is read by part. Parts changed: verified." in result.stderr
+
+
+def test_a_changed_helper_reaches_the_tests_of_the_factories_that_call_it(workspace: Workspace) -> None:
+    # `removal` calls `bucket`; nothing asks for `bucket` itself.
+    result = described_after(
+        workspace,
+        container_edit("        return StoreAdapter()\n", "        return StoreAdapter() or None\n"),
+    )
+    assert_selected(result, REMOVAL_TESTS | EVERY_PART | CANNOT_TELL | ALWAYS | READS_SOURCE)
+
+
+def test_a_helper_reaches_its_callers_callers(workspace: Workspace) -> None:
+    # `bucket` calls `_store`, a function beside the class: `removal`'s tests are two calls away.
+    setup = container_edit(
+        "        return StoreAdapter()\n",
+        "        return _store(StoreAdapter)\n",
+    )
+    setup[CONTAINER_FILE] += "\n\ndef _store(kind):\n    return kind()\n"
+    change = container_edit("    return kind()\n", "    return kind() or None\n", setup)
+    result = described_after(workspace, change, setup=setup)
+    assert_selected(result, REMOVAL_TESTS | EVERY_PART | CANNOT_TELL | ALWAYS | READS_SOURCE)
+
+
+@pytest.mark.parametrize(
+    "decorator",
+    ["", "    @property\n"],
+    ids=["a new method", "a new property"],
+)
+def test_a_new_factory_reaches_only_what_names_it(workspace: Workspace, decorator: str) -> None:
+    named = f"{CLI_TESTS}/test_archive.py"
+    setup = {
+        named: "from debate_cli.container import ServiceContainer\n\n\n"
+        "def test_archive():\n    assert ServiceContainer().archive\n"
+    }
+    change = container_edit(
+        "    def removal(self):\n",
+        f"{decorator}    def archive(self):\n        return 1\n\n    def removal(self):\n",
+    )
+    result = described_after(workspace, change, setup=setup)
+    assert_selected(result, {named} | EVERY_PART | ALWAYS | READS_SOURCE)
+
+
+def test_a_comment_reaches_no_part(workspace: Workspace) -> None:
+    result = described_after(
+        workspace, container_edit("        return RULES\n", "        # The rules.\n        return RULES\n")
+    )
+    assert_selected(result, ALWAYS | READS_SOURCE)
+    assert "Parts changed: none: only comments or layout." in result.stderr
+
+
+def test_a_file_naming_the_container_module_is_still_reached_by_the_name(workspace: Workspace) -> None:
+    # It replaces a module constant by its dotted name, and asks for no part.
+    patches = f"{CLI_TESTS}/test_patches_the_container.py"
+    setup = {
+        patches: 'def test_rules(monkeypatch):\n    monkeypatch.setattr("debate_cli.container.RULES", 2)\n'
+    }
+    result = described_after(
+        workspace, container_edit("        return RULES\n", "        return RULES or None\n"), setup=setup
+    )
+    assert_selected(result, {patches} | VERIFIED_TESTS | EVERY_PART | CANNOT_TELL | ALWAYS | READS_SOURCE)
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "reason"),
+    [
+        pytest.param(
+            "from debate_core.verify_rules import RULES\n",
+            "from debate_core.verify_rules import RULES\nfrom debate_core.parser_adapter import Parser\n",
+            "it changes an import (line 3)",
+            id="an import added",
+        ),
+        pytest.param(
+            "from debate_core.verify_rules import RULES\n\n",
+            "from debate_core.verify_rules import RULES as RULE_SET\n\nRULES = RULE_SET\n\n",
+            "it changes an import (line 2)",
+            id="an import renamed",
+        ),
+        pytest.param(
+            "MOST = LIMIT\n",
+            "MOST = LIMIT + 1\n",
+            "it changes a module constant (line 4)",
+            id="a module constant",
+        ),
+        pytest.param(
+            "from debate_core.container_limits import LIMIT\n",
+            '"""The services."""\n\nfrom debate_core.container_limits import LIMIT\n',
+            "it changes the module docstring (line 1)",
+            id="the module docstring",
+        ),
+        pytest.param(
+            "class ServiceContainer:\n",
+            "class ServiceContainer:\n    name = 'services'\n\n",
+            "it changes a class attribute of ServiceContainer (line 8)",
+            id="a class attribute",
+        ),
+        pytest.param(
+            "class ServiceContainer:\n",
+            "class ServiceContainer:\n    def __init__(self):\n        self.cache = {}\n\n",
+            "it changes ServiceContainer.__init__ (line 8)",
+            id="__init__",
+        ),
+        pytest.param(
+            "class ServiceContainer:\n",
+            "@dataclass\nclass ServiceContainer:\n",
+            "it changes ServiceContainer's bases and decorators",
+            id="the container's decorator",
+        ),
+        pytest.param(
+            "    def verified(self):\n",
+            "    @property\n    def verified(self):\n",
+            "it changes what defining verified runs on import",
+            id="a factory's decorator",
+        ),
+        pytest.param(
+            "    def removal(self):\n",
+            "    def removal(self, limit=LIMIT):\n",
+            "it changes what defining removal runs on import",
+            id="a factory's default",
+        ),
+        pytest.param(
+            "    def removal(self):\n",
+            "    @cached\n    def archive(self):\n        return 1\n\n    def removal(self):\n",
+            "the new archive runs code on import",
+            id="a new factory with a decorator that runs code",
+        ),
+        pytest.param(
+            "    def parser(self):\n",
+            "    def docx_parser(self):\n",
+            "it removes or renames parser",
+            id="a factory renamed",
+        ),
+        pytest.param(
+            "    def verified(self):\n        return RULES\n\n",
+            "",
+            "it removes or renames verified",
+            id="a factory removed",
+        ),
+        pytest.param(
+            "    def verified(self):\n        return RULES\n\n    def bucket(self):\n"
+            "        from debate_core.store_adapter import StoreAdapter\n\n        return StoreAdapter()\n\n",
+            "    def bucket(self):\n        from debate_core.store_adapter import StoreAdapter\n\n"
+            "        return StoreAdapter()\n\n    def verified(self):\n        return RULES\n\n",
+            "it moves a part",
+            id="two factories swapped",
+        ),
+        pytest.param(
+            "        return RULES\n",
+            "        global MOST\n        MOST = 2\n        return RULES\n",
+            "verified assigns a module name",
+            id="a factory that assigns a module name",
+        ),
+    ],
+)
+def test_what_runs_when_the_module_is_imported_is_the_whole_file(
+    workspace: Workspace, old: str, new: str, reason: str
+) -> None:
+    result = described_after(workspace, container_edit(old, new))
+    assert_selected(result, WHOLE_CONTAINER | ALWAYS | READS_SOURCE)
+    assert f"{CONTAINER_FILE} is read as one file: {reason}" in result.stderr
+
+
+def test_a_part_module_code_uses_is_the_whole_file(workspace: Workspace) -> None:
+    setup = container_edit("MOST = LIMIT\n", "def _most():\n    return LIMIT\n\n\nMOST = _most()\n")
+    change = container_edit("    return LIMIT\n", "    return LIMIT + 1\n", setup)
+    result = described_after(workspace, change, setup=setup)
+    assert_selected(result, WHOLE_CONTAINER | ALWAYS | READS_SOURCE)
+    assert f"{CONTAINER_FILE} is read by part. Parts changed: _most." in result.stderr
+
+
+def test_a_side_that_does_not_parse_is_the_whole_file(workspace: Workspace) -> None:
+    # The side before: the tree the graph is built from parses, so only the diff can fall back.
+    broken = container_edit("    def parser(self):\n", "    def parser(self:\n")
+    result = described_after(workspace, {CONTAINER_FILE: CLI_WORLD[CONTAINER_FILE]}, setup=broken)
+    assert_selected(result, WHOLE_CONTAINER | ALWAYS | READS_SOURCE)
+    assert f"{CONTAINER_FILE} is read as one file: one side does not parse." in result.stderr
+
+
+def test_a_side_after_that_does_not_parse_is_the_whole_file_over_another_tree(workspace: Workspace) -> None:
+    workspace.commit(CLI_WORLD, "setup")
+    workspace.commit(container_edit("    def parser(self):\n", "    def parser(self:\n"), "described")
+    result = workspace.run("--diff", "HEAD", "--graph", "HEAD~1")
+    assert_selected(result, WHOLE_CONTAINER | ALWAYS | READS_SOURCE)
+    assert f"{CONTAINER_FILE} is read as one file: one side does not parse." in result.stderr
+
+
+def test_a_changed_part_the_graphs_tree_does_not_have_is_the_whole_file(workspace: Workspace) -> None:
+    workspace.commit(CLI_WORLD, "setup")
+    workspace.commit(
+        container_edit(
+            "    def removal(self):\n", "    def archive(self):\n        return 1\n\n    def removal(self):\n"
+        ),
+        "described",
+    )
+    result = workspace.run("--diff", "HEAD", "--graph", "HEAD~1")
+    assert_selected(result, WHOLE_CONTAINER | ALWAYS | READS_SOURCE)
+    assert f"{CONTAINER_FILE} is read as one file: this tree's container has no archive." in result.stderr
+
+
+def test_whole_container_reads_a_change_to_it_as_the_whole_file(workspace: Workspace) -> None:
+    edit = container_edit("        return RULES\n", "        return RULES or None\n")
+    assert_selected(
+        described_after(workspace, edit, "--whole-container"), WHOLE_CONTAINER | ALWAYS | READS_SOURCE
+    )
+
+
+def test_explain_names_the_changed_part_and_the_part_that_calls_it(workspace: Workspace) -> None:
+    result = described_after(
+        workspace,
+        container_edit("        return StoreAdapter()\n", "        return StoreAdapter() or None\n"),
+        "--explain",
+    )
+    reasons = dict(line.split("  <- ", 1) for line in result.stdout.splitlines())
+    assert reasons[RUNS["remove, installed"]] == (
+        "imports tests/smoke/installed.py, which runs debate_cli.app "
+        f"({CLI}/app.py) for `caselist remove` and `caselist unsuppress`, "
+        f"which registers debate_cli.commands.caselist_remove ({CLI}/commands/caselist_remove.py), "
+        f"which asks for debate_cli.container's removal ({CLI}/container.py), "
+        f"which calls debate_cli.container's bucket ({CLI}/container.py), which changed"
+    )
+
+
+# --------------------------------------------------------------------------------------------
 # --run
 # --------------------------------------------------------------------------------------------
 

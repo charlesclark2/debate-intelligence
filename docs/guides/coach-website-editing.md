@@ -241,9 +241,9 @@ promotion of `dev`. Before it can merge, `validate-dev` builds the commit **for 
 publishing-policy and consent guards stop the build on an unfilled consent reference, a `[[TBD]]`
 marker or a name nobody has reviewed, and runs the export checks against that build. A student's
 name and a photograph follow the same consent rule there: each needs a consent entry for this
-season, checked since the season began, with its reference filled in, and the prod build refuses
-one whose entry is for another season, not yet checked this season, or still waiting for its
-reference. A dev preview prints the same problems and still comes up. The policy's
+season, checked during that season (1 August to 31 July), with its reference filled in, and the
+prod build refuses one whose entry is for another season, not checked during this season, or still
+waiting for its reference. A dev preview prints the same problems and still comes up. The policy's
 [pre-publication checklist](../policies/website-publishing.md#pre-publication-checklist) is in the
 pull request's template, and item 16 is unchanged: anything that names a student needs Charlie to
 have seen it.
@@ -597,9 +597,10 @@ Use it when:
 
 **You never write a team-level line yourself.** Leaving `students` out is all it takes. The build
 also switches a named result to the team-level form **by itself** whenever a named student's
-consent entry is not current for the season (a form that lapsed at the start of the season) or
-asks for less than the full name. That is why a reduced-name request or a lapsed form is an edit to
-`site/content/media-consent.yaml` alone: every result naming that student changes with it.
+consent entry is not current for the season (a form that lapsed at the start of the season, or
+a check dated outside the season) or asks for less than the full name. That is why a reduced-name
+request or a lapsed form is an edit to `site/content/media-consent.yaml` alone: every result
+naming that student changes with it.
 
 ### Correct a result
 

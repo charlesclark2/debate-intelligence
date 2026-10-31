@@ -29,6 +29,7 @@ from tests.fixtures.parse_pipeline.build_parse_world import CASELIST, WEEKS, dig
 
 from debate_cli.exit_codes import ExitCode
 from debate_core.application.caselist_pull_parse import PullParseStage
+from debate_core.application.caselist_sync import PublishedParsedStore
 from debate_core.application.errors import StoreUnavailable
 from debate_core.application.sync_runs import SyncRunDetails, SyncRunRecord, notifications_for
 from debate_core.integrations.docx_parser import DebateDocxParser
@@ -212,24 +213,35 @@ def test_owed_caselists_are_parsed_before_the_ones_the_run_imports_into(
 # ------------------------------------------------------------------------------------------------
 
 
+async def refused(self: PullParseStage, caselist: str, version: str) -> Any:
+    """The bucket does not answer: the publish raises."""
+    raise StoreUnavailable("PutObject", f"parsed/{caselist}", "SlowDown")
+
+
+async def unconfirmed(self: PullParseStage, caselist: str, version: str) -> PublishedParsedStore:
+    """The publish ends, and reports an object the bucket did not confirm."""
+    return PublishedParsedStore(uploaded=8, failure_codes=("CHECKSUM_MISMATCH",))
+
+
+@pytest.mark.parametrize(
+    ("failed_publish", "codes"),
+    [(refused, ["STORE_UNAVAILABLE"]), (unconfirmed, ["CHECKSUM_MISMATCH"])],
+    ids=["raised", "reported"],
+)
 def test_a_parse_whose_publish_failed_stays_owed_and_the_next_run_publishes_it_though_it_imports_nothing(
-    world: World, tmp_path: Path, parses: list[str]
+    world: World, tmp_path: Path, parses: list[str], failed_publish: Any, codes: list[str]
 ) -> None:
     seeded(world)
     uninterrupted = an_uninterrupted_week(world, tmp_path)
     world.use(tmp_path / "refused")
     parses.clear()
     with pytest.MonkeyPatch.context() as refusing:
-
-        async def refused(self: PullParseStage, caselist: str, version: str) -> Any:
-            raise StoreUnavailable("PutObject", f"parsed/{caselist}", "SlowDown")
-
-        refusing.setattr(PullParseStage, "publish", refused)
+        refusing.setattr(PullParseStage, "publish", failed_publish)
         pulled = world.pull()
 
     assert pulled["exit_code"] == ExitCode.OK, pulled
     parse = stage(pulled, "parse")
-    assert (parse["outcome"], parse["error_codes"]) == ("failed", ["STORE_UNAVAILABLE"])
+    assert (parse["outcome"], parse["error_codes"]) == ("failed", codes)
     assert parses == [CASELIST], "the premise: the parse itself ran"
     assert owed_in_the_bucket(world) == WEEK_3_OWED, "a parse whose publish failed is still owed"
     assert parse["hint"] == CLOUD_HINT

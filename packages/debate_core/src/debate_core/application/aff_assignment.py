@@ -28,7 +28,9 @@ and returns :func:`build_aff_assignments`' assignments.
 
 Inside a landscape run it is asked through :meth:`AffAssignmentService.assignments` instead, with the
 run's own reading and classifications, so the caselist is neither read nor classified twice and a
-dry run writes nothing (`v1-e32-t05`, wired by the PM's condition of 2026-10-24).
+dry run writes no classification cache or queue (`v1-e32-t05`, wired by the PM's condition of
+2026-10-24). A dry run does write the plan-text cache, so the publish after it parses nothing the dry
+run parsed (`v1-e32-t30`).
 """
 
 from __future__ import annotations
@@ -46,7 +48,7 @@ from debate_core.application.caselist.path_parser import UNKNOWN_SCHOOL, UNKNOWN
 from debate_core.application.errors import DomainError
 from debate_core.application.landscape_report import round_id
 from debate_core.application.landscape_seeding import SeedReading, read_seed_sources
-from debate_core.application.plan_texts import PlanTextRun, PlanTextService
+from debate_core.application.plan_texts import PlanTextCounts, PlanTextRun, PlanTextService
 from debate_core.application.ports.classification_store import ClassificationStore
 from debate_core.application.ports.parsed_store import ParsedStore
 from debate_core.application.ports.suppression import SuppressionList
@@ -120,6 +122,8 @@ class AffAssignmentsForReport:
     assignments: tuple[AffAssignment, ...] = field(repr=False)
     kritikal: KritikalAffInputs | None = field(default=None, repr=False)
     transition: TransitionPlanInputs | None = field(default=None, repr=False)
+    plan_texts: PlanTextCounts | None = None
+    """How the plan texts were read, from their cache or by parsing; None when none were read."""
 
 
 class AffAssignmentService:
@@ -194,7 +198,7 @@ class AffAssignmentService:
         """`v1-e32-t05`'s seam: the affs of a landscape run's reading, from its own classifications.
 
         Only the plan texts are read here, from their cache; `writes` False reads them without writing
-        it, for a dry run.
+        it. A landscape run, a dry run too, asks with `writes` True (`v1-e32-t30`).
         """
         plan_texts = await self._read_plan_texts(reading, taxonomy, writes=writes)
         built = build_aff_assignments(
@@ -209,7 +213,10 @@ class AffAssignmentService:
             transition_plan_texts=plan_texts.transition,
         )
         return AffAssignmentsForReport(
-            assignments=built.assignments, kritikal=built.kritikal, transition=built.transition
+            assignments=built.assignments,
+            kritikal=built.kritikal,
+            transition=built.transition,
+            plan_texts=plan_texts.counts,
         )
 
     async def _read_plan_texts(

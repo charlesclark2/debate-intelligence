@@ -8,11 +8,11 @@ refuses it until the coach marks it ready or builds it with `--allow-draft`.
 
 From the landscape's own counts, through its application layer and never from a published file: a
 dry run of :class:`~debate_core.application.landscape_run.LandscapeRunService` (`v1-e32-t05`), which
-classifies deterministically, calls no model and writes nothing, with `top_cards` set to the
-request's `--top`. Its report's top cards for the position are the rows `top_cards.csv` reports: each
-an E31 cluster, ranked by the distinct teams reading a copy of it under the position, then by cluster
-id. A row shows one card of the cluster, and that card's exact fingerprint is the one the draft
-names.
+classifies deterministically, calls no model and writes nothing but the plan-text and analytic-text
+caches (`v1-e32-t30`), with `top_cards` set to the request's `--top`. Its report's top cards for the
+position are the rows `top_cards.csv` reports: each an E31 cluster, ranked by the distinct teams
+reading a copy of it under the position, then by cluster id. A row shows one card of the cluster,
+and that card's exact fingerprint is the one the draft names.
 
 ## How the draft is laid out
 

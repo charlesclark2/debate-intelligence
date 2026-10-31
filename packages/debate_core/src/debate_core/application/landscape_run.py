@@ -23,7 +23,7 @@ same use case. One run, for one caselist at one weekly snapshot (the newest unle
    nothing: it counts what a run would ask about and hold back.
 4. **Builds** `v1-e32-t03`'s bundle, with `v1-e32-t11`'s CP texts, alternatives, roles of the ballot and
    overview counts when a source of them is wired (the run's reading of each source's own paragraphs,
-   cached as derived fields; a dry run writes no cache), with `v1-e32-t04`'s trends and per-school view
+   cached as derived fields, by a dry run too), with `v1-e32-t04`'s trends and per-school view
    (given each of the caselist's weekly snapshots and the topic `topics.yaml` puts it on, so a trend
    stops at a topic change, and the topic's range, so the report can say whether its history is a full
    topic cycle), with `v1-e32-t09`'s per-round aff assignments when a source of them is wired (until
@@ -44,9 +44,17 @@ and first checks that the store's newest parsed directory of the caselist is of 
 is not is a :class:`ParsedVersionNotInStore`, before anything is read or written
 (:mod:`debate_core.application.landscape_restored_copy`).
 
-A **dry run** writes nothing anywhere: not the cache, not the queue, not the bundle, not the
-acceptance log, not the bucket. It reads all of them and says what a run would do, with each
-planned key and whether it would be uploaded.
+A **dry run** writes nothing but the plan-text and analytic-text caches: not the classification
+cache, not the queue, not the bundle, not the acceptance log, not the bucket, and it asks no model.
+It reads all of them and says what a run would do, with each planned key and whether it would be
+uploaded. The two text caches are the one exception (`v1-e32-t30`, the PM's ruling of 2026-10-31):
+they are keyed on the parser version, so the first report after a parser bump reads every on-topic
+source again, and a dry run that kept none of it left the publish after it to read them all again.
+They hold derived fields and never evidence text, can be rebuilt, and live in the data directory,
+never in a restored copy or a bucket. A dry run writes them through the same seams and writers as a
+run, each cache whole or not at all, so the publish reads them as its own and parses none of those
+sources to fill them. Like every run, it still reads again, in memory, the sources holding a text the
+report quotes, which no cache holds.
 
 ## What it never does
 
@@ -101,6 +109,7 @@ from debate_core.application.landscape_staleness import (
     LandscapeStaleness,
     LandscapeStalenessCheck,
 )
+from debate_core.application.plan_texts import PlanTextCounts
 from debate_core.application.ports.classification_store import CachedClassification, ClassificationStore
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, validate_object_key
 from debate_core.application.ports.parsed_store import ParsedStore, parse_version_directory
@@ -241,8 +250,8 @@ class PositionClassifier(Protocol):
 class AffAssignmentsFromReading(Protocol):
     """`v1-e32-t09`'s per-round affs, built from the same reading and classifications as the report.
 
-    :class:`~debate_core.application.aff_assignment.AffAssignmentService` is the one there is. `writes`
-    is False in a dry run, which writes no cache of its own either.
+    :class:`~debate_core.application.aff_assignment.AffAssignmentService` is the one there is. A run
+    asks it with `writes` True, a dry run too: the plan-text cache is one a dry run fills (`v1-e32-t30`).
     """
 
     async def assignments(
@@ -259,8 +268,8 @@ class AffAssignmentsFromReading(Protocol):
 class AnalyticTextsFromReading(Protocol):
     """`v1-e32-t11`'s CP texts, alternatives, roles of the ballot and overviews, read for the run's reading.
 
-    :class:`~debate_core.application.analytic_texts.AnalyticTextService` is the one there is. `writes` is
-    False in a dry run, which writes no cache of its own either.
+    :class:`~debate_core.application.analytic_texts.AnalyticTextService` is the one there is. A run asks
+    it with `writes` True, a dry run too: the analytic-text cache is one a dry run fills (`v1-e32-t30`).
     """
 
     async def report_inputs(
@@ -368,6 +377,9 @@ class LandscapeRunResult:
     """None when no publish was asked for: `--no-publish`, and a dry run without `--publish`."""
     analytic_texts: AnalyticTextsForReport | None = field(default=None, repr=False)
     """`v1-e32-t11`'s reading of the analytic texts and its counts; None when no source of them is wired."""
+    plan_texts: PlanTextCounts | None = None
+    """How `v1-e32-t09`'s plan texts were read for the aff seam, from their cache or by parsing; None when the
+    aff source read none (`v1-e32-t30`)."""
     taxonomy: Taxonomy | None = field(default=None, repr=False)
     """The taxonomy the report counted under, for a reader of :attr:`report` (`files suggest`)."""
     cards: tuple[LandscapeCard, ...] = field(default=(), repr=False)
@@ -519,13 +531,14 @@ class LandscapeRunService:
         allowed = self._allowed(request)
         if counts.model_items > allowed or (counts.model_held_back and not request.dry_run):
             raise ModelBudgetExceeded(counts.model_items, allowed, counts.model_held_back)
+        # The two text caches are written in a dry run too, and nothing else is (`v1-e32-t30`).
         affs = (
             await self._aff.assignments(
                 reading=reading,
                 through=snapshot,
                 classifications=classified.classifications,
                 taxonomy=taxonomy,
-                writes=not request.dry_run,
+                writes=True,
             )
             if self._aff is not None
             else AffAssignmentsForReport(assignments=())
@@ -538,7 +551,7 @@ class LandscapeRunService:
                 taxonomy=taxonomy,
                 overrides=overrides,
                 actors=self._taxonomies.cp_text_actors(resolved.topic.id),
-                writes=not request.dry_run,
+                writes=True,
             )
             if self._texts is not None
             else None
@@ -618,6 +631,7 @@ class LandscapeRunService:
             scan=scan,
             publish=publish,
             analytic_texts=texts,
+            plan_texts=affs.plan_texts,
             taxonomy=taxonomy,
             cards=cards,
             bundle_files={name: bundle.files[name] for name in BUNDLE_FILES},

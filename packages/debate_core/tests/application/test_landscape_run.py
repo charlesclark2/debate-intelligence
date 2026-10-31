@@ -450,11 +450,12 @@ async def test_the_aff_seam_passes_t09s_assignments_to_the_report(world: Synthet
     assert {one.position_id: one.rounds for one in result.report.positions}["single-payer-aff"] == 2
 
 
-async def test_a_dry_run_asks_the_aff_source_not_to_write(world: SyntheticRun) -> None:
+async def test_a_dry_run_asks_the_aff_source_to_write_its_plan_text_cache(world: SyntheticRun) -> None:
+    # `v1-e32-t30`: the plan-text cache is one of the two a dry run writes, so the publish parses nothing.
     source = _PlanTextFor()
     result = await _run(_service(world, aff_assignments=source), dry_run=True)
 
-    assert [asked[3] for asked in source.asked] == [False]
+    assert [asked[3] for asked in source.asked] == [True]
     assert result.aff_assignments == 1
 
 
@@ -517,6 +518,8 @@ async def test_a_changed_file_is_the_only_one_uploaded_again(
 async def test_a_dry_run_lists_the_planned_uploads_and_writes_nothing(
     world: SyntheticRun, bucket: FsEvidenceObjectStore
 ) -> None:
+    # No text seam is wired here, so nothing at all; with them, nothing but their caches
+    # (test_landscape_dry_run_text_caches.py, `v1-e32-t30`).
     result = await _run(_service(world, bucket=bucket), publish=True, dry_run=True)
 
     assert result.publish is not None
@@ -812,11 +815,12 @@ async def test_the_texts_seam_puts_the_quoted_texts_in_report_md_and_nowhere_els
         assert (STATES_TEXT in written) is (name == "report.md"), name
 
 
-async def test_a_dry_run_asks_the_texts_source_not_to_write(world: SyntheticRun) -> None:
+async def test_a_dry_run_asks_the_texts_source_to_write_its_analytic_text_cache(world: SyntheticRun) -> None:
+    # `v1-e32-t30`: the analytic-text cache is the other cache a dry run writes.
     source = _TextsFor()
     result = await _run(_service(world, analytic_texts=source), dry_run=True)
 
-    assert [asked[3] for asked in source.asked] == [False]
+    assert [asked[3] for asked in source.asked] == [True]
     assert result.report.texts is not None
 
 

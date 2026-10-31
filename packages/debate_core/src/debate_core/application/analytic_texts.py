@@ -144,7 +144,10 @@ class AnalyticTextService:
         self._writes = writes
 
     def without_writes(self) -> AnalyticTextService:
-        """The same reading over a view of the cache that is never written: what a dry run reads with."""
+        """The same reading over a view of the cache that is never written.
+
+        A landscape dry run no longer reads with it: it fills this cache as a run does (`v1-e32-t30`).
+        """
         return AnalyticTextService(
             parser=self._parser, runner=self._runner, store=self._store, local=self._local, writes=False
         )
@@ -295,7 +298,8 @@ class AnalyticTextService:
 
         Every on-topic source of the reading is read, on either side: overviews are counted on both. Each
         heading is placed with its disclosing teams' own names and the caselist's schools taken out.
-        `writes` False reads through a cache that is never written, for a dry run.
+        `writes` False reads through a cache that is never written. A landscape run, a dry run too, asks
+        with `writes` True (`v1-e32-t30`).
         """
         on_topic = {source.sha256: source for source in reading.sources}
         documents = [
@@ -341,7 +345,7 @@ def _to_quote(reading: AnalyticTextReading, taxonomy: Taxonomy) -> bool:
 
 
 class _UnwrittenAnalyticTexts:
-    """The analytic-text cache as it is, read; every write dropped (a landscape dry run)."""
+    """The analytic-text cache as it is, read; every write dropped (`AnalyticTextService.without_writes`)."""
 
     def __init__(self, inner: AnalyticTextStore) -> None:
         self._inner = inner

@@ -449,11 +449,11 @@ def _without_other_positions(
 
 def _directly_under(one: _Ranked) -> MatchItem:
     """A section under `one`'s block heading alone, as the matcher reads a heading directly over a card."""
-    card = one.row
+    source = one.row.source_object_key.rsplit("/", 1)[-1]
     return MatchItem(
-        item_id=section_item_id(card.source_object_key.rsplit("/", 1)[-1], (one.block,)),
+        item_id=section_item_id(source, (one.block,)),
         kind=ItemKind.SECTION,
-        source_sha256=card.source_object_key.rsplit("/", 1)[-1],
+        source_sha256=source,
         first_element_index=None,
         headings=(NormalizedHeading(text=one.block, answer=False),),
         tag=None,

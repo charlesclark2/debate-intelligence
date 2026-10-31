@@ -303,6 +303,15 @@ class PositionMatcher:
         placement = self._placement([NormalizedHeading(text=one, answer=False) for one in headings])
         return None if placement is None else placement.depth
 
+    def heading_position(self, heading: str) -> str | None:
+        """The position `heading` (normalized) places an item directly under it in; None when it places none.
+
+        The override or alias :meth:`place` reads, without a tag: `files suggest` asks it of a block
+        heading (`v1-e33-t11`).
+        """
+        placement = self._placement([NormalizedHeading(text=heading, answer=False)])
+        return None if placement is None else placement.position_id
+
     def heading_candidates(self, heading: str) -> tuple[str, ...]:
         """Positions the review queue offers for an undecided heading: up to three, best first.
 

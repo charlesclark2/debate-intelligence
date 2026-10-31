@@ -76,9 +76,12 @@ from debate_core.domain.landscape_report import LandscapeCard, TopCard
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
 
 __all__ = [
+    "CHECK_AGAINST_THE_PLAN",
+    "CP_TEXT_SLOT",
     "RECIPES_DIRECTORY",
     "LeftOut",
     "FileSuggestService",
+    "OtherPositionsLeftOut",
     "SuggestRefused",
     "SuggestRequest",
     "SuggestResult",
@@ -87,6 +90,14 @@ __all__ = [
 
 RECIPES_DIRECTORY: Final = "recipes"
 """Under the files directory: where a draft goes by default, one directory per topic."""
+
+CP_TEXT_SLOT: Final = "[the counterplan text: write it here]"
+"""The analytic a counterplan's draft opens with, for the coach to replace: never a team's text."""
+
+CHECK_AGAINST_THE_PLAN: Final = (
+    "# Check this block against the affirmative's plan: its heading names a plank or mechanism of it."
+)
+"""The comment above a counterplan draft's block whose heading names a plank or mechanism of the plan."""
 
 #: The disclosure fields a pin adds, a step at a time and the least personal first, while its key
 #: matches more than one disclosure: a school and team code only when nothing else tells them apart.
@@ -141,6 +152,17 @@ class LeftOut:
 
 
 @dataclass(frozen=True, slots=True)
+class OtherPositionsLeftOut:
+    """A counterplan draft's blocks whose heading the position matcher places under another position.
+
+    Left out with their cards, which go nowhere else in the draft.
+    """
+
+    blocks: int
+    cards: int
+
+
+@dataclass(frozen=True, slots=True)
 class SuggestResult:
     path: Path
     caselist: str
@@ -151,6 +173,8 @@ class SuggestResult:
     recipe_hash: str
     cards: tuple[SuggestedCard, ...]
     left_out: tuple[LeftOut, ...] = ()
+    other_positions: OtherPositionsLeftOut | None = None
+    """What a counterplan's draft left out as another position's; None for any other position's draft."""
     text: str = field(default="", repr=False)
 
 

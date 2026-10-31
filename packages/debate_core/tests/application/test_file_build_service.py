@@ -50,6 +50,7 @@ from debate_core.application.file_build_service import (
 )
 from debate_core.application.file_quality_service import CheckedFile, FileQualityService
 from debate_core.application.file_recipes import RecipeErrorCode
+from debate_core.application.file_suggest_service import CP_TEXT_SLOT
 from debate_core.application.ports.evidence_file_writer import (
     BuiltEvidenceFile,
     FileBuildRefusal,
@@ -349,6 +350,20 @@ def test_a_build_writes_the_header_analytic_first_and_the_pocket_after_it(world:
         "Synthetic pocket",
         "Synthetic block",
     ]
+
+
+def test_a_ready_recipe_still_holding_the_cp_text_slot_builds_the_placeholder_as_written(
+    world: World,
+) -> None:
+    """`files suggest`'s counterplan slot (`v1-e33-t11`) is an analytic like any other: nothing refuses it."""
+    (first, _) = world.add(SOURCE_ONE)
+    result = world.build(world.recipe([{"analytic": CP_TEXT_SLOT}, {"fingerprint": first.fingerprint}]))
+
+    assert result.status is BuildStatus.BUILT and result.files is not None
+    with zipfile.ZipFile(result.files.docx) as archive:
+        root = ElementTree.fromstring(archive.read("word/document.xml"))
+    texts = ["".join(text.text or "" for text in paragraph.iter(f"{W}t")) for paragraph in root.iter(f"{W}p")]
+    assert texts[2:4] == ["Synthetic block", CP_TEXT_SLOT]
 
 
 def test_a_build_with_out_dir_writes_there(world: World) -> None:

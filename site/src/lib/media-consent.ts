@@ -90,14 +90,23 @@ export function seasonStart(label: string): Date {
   return new Date(Date.UTC(startYear, 7, 1))
 }
 
+/** 31 July of the second year in the label, the season's last day, a year on from seasonStart. */
+export function seasonEnd(label: string): Date {
+  return new Date(Date.UTC(seasonStart(label).getUTCFullYear() + 1, 6, 31))
+}
+
 /**
- * True when the entry's consent is for another season, or a coach last confirmed it before the
- * current season began, which means the start-of-season check has not been run on it yet. An
- * entry like this is a warning in itself, since it may well still be good but nobody has looked;
- * a name or an image a page actually publishes against it is an error (src/lib/publishing-policy.ts).
+ * True when the entry's consent is for another season, or a coach last confirmed it outside the
+ * current season: before it began, which means the start-of-season check has not been run on it
+ * yet, or after its last day, which no check made in the season can be (v1-e37-t13). An entry
+ * like this is a warning in itself, since it may well still be good but nobody has looked; a
+ * name or an image a page actually publishes against it is an error (src/lib/publishing-policy.ts).
  */
 export function isStale(entry: { season: string; dateChecked: string }, currentSeason: string): boolean {
-  return entry.season !== currentSeason || new Date(entry.dateChecked) < seasonStart(currentSeason)
+  const checked = new Date(entry.dateChecked)
+  return (
+    entry.season !== currentSeason || checked < seasonStart(currentSeason) || checked > seasonEnd(currentSeason)
+  )
 }
 
 export function loadMediaConsent(contentDirectory: string = defaultContentDirectory()): MediaConsent {

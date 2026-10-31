@@ -181,7 +181,7 @@ export function checkPublishingPolicy({
     consent.students.map((student) => [student.publishedName.toLowerCase(), student]),
   )
 
-  // Every consent entry is for the current season and has been checked since the season began.
+  // Every consent entry is for the current season and was last checked within it (isStale).
   // A student's entry is named by its consent reference, never by the name: warnings are printed
   // in every build, and a build log carries no student name (Students 10).
   for (const student of consent.students) {

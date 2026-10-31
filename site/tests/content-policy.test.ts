@@ -16,6 +16,7 @@ import {
   consentedStudentSchema,
   isStale,
   loadMediaConsent,
+  seasonEnd,
   seasonStart,
 } from '@/lib/media-consent'
 import {
@@ -513,6 +514,10 @@ describe("a page's title, description and navigation label", () => {
 describe('the start-of-season check', () => {
   it('treats a season as beginning on 1 August', () => {
     expect(seasonStart('2026-27').toISOString()).toBe('2026-08-01T00:00:00.000Z')
+  })
+
+  it('treats a season as ending on 31 July of its second year', () => {
+    expect(seasonEnd('2026-27').toISOString()).toBe('2027-07-31T00:00:00.000Z')
   })
 
   it('calls an entry stale when it was last checked before the season began', () => {

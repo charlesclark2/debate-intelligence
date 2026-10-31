@@ -238,6 +238,11 @@ class S3Call:
     operator corrects. Passed in by whoever built the adapter; the adapters read no settings.
     """
 
+    given_login_hint: str | None = None
+    """What a missing or expired session names instead of `aws sso login`, when whoever built the adapter
+    gave one (`v1-e40-t28`): the cloud run's task role, which no login renews. Passed in by the
+    composition root, which alone knows what runs the command; the adapters read no settings."""
+
     @property
     def resource(self) -> str:
         """The thing acted on, as a message should name it: `s3://bucket/key`, or just the bucket."""

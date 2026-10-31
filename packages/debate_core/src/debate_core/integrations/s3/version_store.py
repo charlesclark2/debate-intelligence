@@ -48,6 +48,8 @@ class S3EvidenceVersionStore:
         profile: The profile the client was built with, for the `aws sso login` hint.
         profile_setting: The setting `profile`'s name came from, e.g. `"storage.s3.aws_profile"`. It is
             what a profile the AWS config does not define is reported by (`v1-e29-t07`).
+        login_hint: What a missing or expired session names instead of `aws sso login`, or `None` for
+            that command (`v1-e40-t28`). The composition root gives the cloud run's.
         client: An already-built client. The tests pass moto's.
         region: Used only when `client` is not given.
     """
@@ -58,12 +60,14 @@ class S3EvidenceVersionStore:
         bucket: str,
         profile: str | None = None,
         profile_setting: str | None = None,
+        login_hint: str | None = None,
         client: S3Client | None = None,
         region: str | None = None,
     ) -> None:
         self._bucket = bucket
         self._profile = profile
         self._profile_setting = profile_setting
+        self._login_hint = login_hint
         self._client = (
             client
             if client is not None
@@ -161,4 +165,5 @@ class S3EvidenceVersionStore:
             s3_key=key or None,
             profile=self._profile,
             profile_setting=self._profile_setting,
+            given_login_hint=self._login_hint,
         )

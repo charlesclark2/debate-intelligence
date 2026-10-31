@@ -264,9 +264,11 @@ def test_a_local_mode_failed_publish_is_unchanged() -> None:
     assert "cloud" not in banner.text
 
 
-def test_a_bucket_mode_publish_that_failed_beside_another_stage_keeps_its_fix() -> None:
-    """Only a failed publish alone named `--publish-pending`; a failed import beside it names the pull,
-    which this task leaves as it is (the report's Follow-up work)."""
+def test_a_bucket_mode_publish_that_failed_beside_another_stage_names_the_next_cloud_run() -> None:
+    """Only a failed publish alone named `--publish-pending`; a failed import beside it named the pull,
+    which this task left as it was (its report's Follow-up work 1). `v1-e40-t28` changed this test's
+    expectation on purpose: the next cloud run, and what the bucket confirmed, which is what a cloud run
+    keeps. `test_caselist_sync_bucket_mode_banners_name_the_next_cloud_run.py` holds the rest."""
     record = a_record(
         ("download", "completed"), ("import", "failed"), ("publish", "failed"), outcome=SyncRunOutcome.FAILED
     )
@@ -279,8 +281,15 @@ def test_a_bucket_mode_publish_that_failed_beside_another_stage_keeps_its_fix() 
 
     banner = titled(sent_for(record, details), RETRIED)
 
-    assert banner.fix_command == "debate-research caselist pull"
-    assert banner.message.endswith(" What was captured is kept.")
+    assert banner.fix_command == (
+        "the next cloud run takes up what this run did not finish, from the run state saved in the "
+        'bucket: the weekly run, or one started by hand (caselist-cloud-run.md, "A failed or stopped '
+        "run\"); never a publish from the operator's Mac"
+    )
+    assert banner.message.endswith(
+        " What the bucket confirmed is kept; the cloud run's working copy ends with its task."
+    )
+    assert points_at_the_mac(banner.text) == []
 
 
 # ------------------------------------------------------------------------------------------------

@@ -39,6 +39,8 @@ from debate_core.application.caselist.run_lock import (
 )
 from debate_core.application.caselist.suppression import RecordedSuppressionList
 from debate_core.application.caselist_sync import SearchIndexStageReport, StageOutcome
+from debate_core.application.errors import StoreCredentialsExpired
+from debate_core.application.ports.evidence_store import ObjectInfo
 from debate_core.application.ports.parsed_store import OPENEV_STORE
 from debate_core.application.search_index_holder import SearchIndexHolder
 from debate_core.application.search_index_publish import (
@@ -96,6 +98,28 @@ class Clock:
         return self.now
 
 
+class ExpiringUploads:
+    """The S3 adapter, except that uploading one key finds the session expired."""
+
+    def __init__(self, inner: S3EvidenceObjectStore, expires_at: str | None) -> None:
+        self.inner = inner
+        self.expires_at = expires_at
+
+    async def list_objects(self, prefix: str) -> tuple[ObjectInfo, ...]:
+        return await self.inner.list_objects(prefix)
+
+    async def head(self, key: str) -> ObjectInfo:
+        return await self.inner.head(key)
+
+    async def put_file(self, key: str, source: Path) -> ObjectInfo:
+        if key == self.expires_at:
+            raise StoreCredentialsExpired(hint="aws sso login --profile debate-dev-evidence")
+        return await self.inner.put_file(key, source)
+
+    async def get_file(self, key: str, destination: Path) -> ObjectInfo:
+        return await self.inner.get_file(key, destination)
+
+
 @dataclass
 class BucketWorld:
     """One machine's data directory and the stage, over one versioned moto bucket.
@@ -108,6 +132,8 @@ class BucketWorld:
     reads: S3Client
     bucket: str
     writes: S3Client
+    session_expires_at: str | None = None
+    """A key whose upload finds the AWS session expired, as an SSO login that ran out mid-run does."""
 
     def __post_init__(self) -> None:
         self.data_dir = self.root / "data"
@@ -138,7 +164,10 @@ class BucketWorld:
             out=self.out,
             parser_version=PARSER,
             publisher=SearchIndexPublishService(
-                bucket=S3EvidenceObjectStore(bucket=self.bucket, client=self.writes), parser_version=PARSER
+                bucket=ExpiringUploads(
+                    S3EvidenceObjectStore(bucket=self.bucket, client=self.writes), self.session_expires_at
+                ),
+                parser_version=PARSER,
             ),
             bucket=S3EvidenceObjectStore(bucket=self.bucket, client=self.reads),
             reconcile=reconciled,
@@ -438,6 +467,25 @@ def test_index_refresh_writes_no_record_once_the_runs_lease_was_taken(
     assert "the record of what it was checked against was not written" in report.reason
     assert world.versions() == published_once(index_id), "no record, and nothing else, was written"
     assert report.hint is not None and "tub index publish" not in report.hint
+
+
+def test_index_refresh_record_pends_when_the_session_expires_before_it_is_written(world: BucketWorld) -> None:
+    index_id = first_publish(world)
+    world.suppress(STOPS_NOTHING)
+    world.session_expires_at = record_key(index_id)
+
+    pended = world.refresh()
+    world.session_expires_at = None
+    caught_up = world.refresh()
+
+    assert pended.outcome is StageOutcome.PENDING
+    assert (
+        "the record of what it was checked against is not written, for want of an AWS login" in pended.reason
+    )
+    assert "the next run with a session writes it" in pended.reason
+    assert caught_up.outcome is StageOutcome.COMPLETED
+    assert world.builder.builds == 2, "the index built while the session lasted is kept, not rebuilt"
+    assert world.versions() == {**published_once(index_id), record_key(index_id): 1}
 
 
 # ------------------------------------------------------------------------------------------------

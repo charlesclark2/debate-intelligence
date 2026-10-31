@@ -139,6 +139,7 @@ class AnalyticTextReading(DomainModel):
         ge=0,
         description="A plank only: cards under it saying `solves` with words no advantage's alias holds.",
     )
+    lines: tuple[int, ...] = ()
 
     @model_validator(mode="after")
     def _check(self) -> Self:

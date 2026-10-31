@@ -115,6 +115,7 @@ __all__ = [
     "role_of_the_ballot_form",
     "section_paragraphs_of",
     "text_digest",
+    "whole_text",
     "top_texts",
 ]
 
@@ -311,6 +312,10 @@ class AnalyticTextRules:
 def text_digest(text: str) -> str:
     """SHA-256 of `text`'s lowercase words, one space apart: equal for two texts worded alike."""
     return hashlib.sha256(tag_words(text).encode()).hexdigest()
+
+
+def whole_text(text: str, lines: Sequence[str]) -> str:
+    return text
 
 
 def advantage_aliases_in(words: str, aliases: Mapping[str, str]) -> tuple[str, ...]:

@@ -33,8 +33,8 @@ from datetime import date
 from typing import Final, TextIO, cast
 
 from debate_core.application.caselist.evidence_listing import LocalEvidence
-from debate_core.application.errors import DomainError
-from debate_core.application.landscape_model_stage import ModelClassificationStage
+from debate_core.application.errors import DomainError, ProviderError
+from debate_core.application.landscape_model_stage import ModelClassificationStage, ModelStageInterrupted
 from debate_core.application.landscape_seeding import SeedReading, read_seed_sources
 from debate_core.application.landscape_staleness import LandscapeStalenessCheck
 from debate_core.application.ports.evidence_store import EvidenceObjectStore
@@ -115,7 +115,22 @@ class FormatEvaluation:
     """The scan of every batch's prompt input as sent."""
     cassettes: NameScan = field(default_factory=lambda: NameScan(texts=0))
     """The scan of every cassette of the prompt on this machine."""
-    interrupted: str | None = None
+    interrupted_by: ProviderError | None = None
+    """The router error that stopped the stage partway; None when it ran to the end."""
+    unanswered: int = 0
+    """Cards (fingerprints) a stop left unasked; 0 when the stage ran to the end."""
+
+    @property
+    def interrupted(self) -> str | None:
+        """The class of :attr:`interrupted_by`; None when the stage ran to the end."""
+        return type(self.interrupted_by).__name__ if self.interrupted_by is not None else None
+
+    @property
+    def stopped(self) -> ModelStageInterrupted | None:
+        """The stop as a landscape run raises it, so the CLI judges both commands alike (`v1-e32-t33`)."""
+        if self.interrupted_by is None:
+            return None
+        return ModelStageInterrupted(self.interrupted_by, sent=self.asked, unanswered=self.unanswered)
 
     @property
     def accuracy(self) -> float | None:
@@ -239,7 +254,8 @@ async def evaluate_labelled_cards(
         output_tokens=outcome.output_tokens,
         sent=name_scan(outcome.sent_inputs, reading.caselist_names, tournaments),
         cassettes=name_scan(cassette_texts(), reading.caselist_names, tournaments),
-        interrupted=outcome.interrupted,
+        interrupted_by=outcome.interrupted_by,
+        unanswered=len(candidates) - outcome.sent,
     )
 
 

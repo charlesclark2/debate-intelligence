@@ -17,6 +17,7 @@ from typing import Any
 import pytest
 from pydantic import BaseModel
 
+from debate_core.application.errors import ProviderError, ProviderRateLimited
 from debate_core.application.landscape_model_evaluation import (
     EvaluationRefused,
     LabelledCard,
@@ -367,6 +368,54 @@ async def test_a_labelled_card_the_store_no_longer_holds_is_not_found(prompts: P
     )
 
     assert (result.labelled, result.found) == (5, 4)
+
+
+class StopsAfterTheFirstCall(ByTag):
+    def __init__(self, answers: Mapping[str, tuple[str | None, float]], stop: ProviderError) -> None:
+        super().__init__(answers)
+        self.stop = stop
+
+    async def generate_structured[OutputT: BaseModel](
+        self,
+        task_class: TaskClass,
+        prompt: ModelPrompt,
+        schema: type[OutputT],
+        params: ModelParams | None = None,
+    ) -> ModelResponse[OutputT]:
+        if self.calls:
+            raise self.stop
+        return await super().generate_structured(task_class, prompt, schema, params)
+
+
+@pytest.mark.anyio
+async def test_an_evaluation_the_model_stopped_keeps_the_error_and_the_cards_not_asked(
+    prompts: PromptRegistry,
+) -> None:
+    """`v1-e32-t33`: one card a call, so the first card is answered and the throttle stops the other three."""
+    stop = ProviderRateLimited("bedrock", "recorded-model: ThrottlingException", retry_after_seconds=20.0)
+    stage = ModelClassificationStage(
+        StructuredOutputGuard(StopsAfterTheFirstCall(BETTER_ANSWERS, stop), prompts),
+        ParsedStoreCardTexts(InMemoryParsedStore()),
+        batch_size=1,
+    )
+
+    result = await evaluate_labelled_cards(READING, TAXONOMY, LABELLED, stage)
+
+    assert (result.interrupted_by, result.interrupted) == (stop, "ProviderRateLimited")
+    assert (result.asked, result.unanswered) == (1, 3)
+    stopped = result.stopped
+    assert stopped is not None
+    assert (stopped.cause, stopped.sent, stopped.unanswered) == (stop, 1, 3)
+    assert (stopped.cause_code, stopped.retry_after_seconds) == ("PROVIDER_RATE_LIMITED", 20.0)
+
+
+@pytest.mark.anyio
+async def test_an_evaluation_that_ran_to_the_end_has_no_stop(prompts: PromptRegistry) -> None:
+    result = await evaluate_labelled_cards(
+        READING, TAXONOMY, LABELLED, stage_over(ByTag(BETTER_ANSWERS), prompts)
+    )
+
+    assert (result.interrupted_by, result.unanswered, result.stopped) == (None, 0, None)
 
 
 ROWS = [

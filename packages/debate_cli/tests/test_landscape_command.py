@@ -536,6 +536,49 @@ def test_a_landscape_model_stage_stopped_by_a_refused_call_exits_1_with_the_caus
     )
 
 
+#: The keys a stopped stage puts in `error.details` (`v1-e32-t32`); `retry_after_seconds` joins them
+#: only when the cause is a rate limit that said how long to wait (`v1-e32-t33`).
+STOP_KEYS = {"error", "cause_code", "sent", "unanswered"}
+
+#: A stop as the Bedrock adapter raises each cause, its code, and the wait it stated. Bedrock's
+#: throttling states none today, so the first case is a rate limit from a provider that sends one.
+STOPS_A_RETRY_MAY_CURE = [
+    (
+        ProviderRateLimited("bedrock", "fake-model: ThrottlingException", retry_after_seconds=12.5),
+        "PROVIDER_RATE_LIMITED",
+        12.5,
+    ),
+    (ProviderRateLimited("bedrock", "fake-model: ThrottlingException"), "PROVIDER_RATE_LIMITED", None),
+    (
+        ModelUnavailableError("bedrock", "fake-model", "ServiceUnavailableException"),
+        "PROVIDER_UNAVAILABLE",
+        None,
+    ),
+]
+STOPS_A_RETRY_MAY_CURE_IDS = ["throttled-with-a-wait", "throttled-without-one", "model-unavailable"]
+
+
+@pytest.mark.parametrize(
+    ("stop", "cause_code", "wait"), STOPS_A_RETRY_MAY_CURE, ids=STOPS_A_RETRY_MAY_CURE_IDS
+)
+def test_a_throttled_landscape_model_stage_says_how_long_to_wait_only_when_the_cause_does(
+    world: SyntheticRun,
+    stopping_router: _StopsAfterTheFirstCall,
+    stop: ProviderError,
+    cause_code: str,
+    wait: float | None,
+) -> None:
+    """`retry_after_seconds` is left out, not null, when the cause stated no wait (`v1-e32-t33`)."""
+    stopping_router.stop = stop
+
+    result = _replay(world)
+
+    assert result.exit_code == ExitCode.RETRIEVAL_FAILURE, result.output
+    details = _error(result)["details"]
+    assert set(details) == STOP_KEYS | ({"retry_after_seconds"} if wait is not None else set())
+    assert (details["cause_code"], details.get("retry_after_seconds")) == (cause_code, wait)
+
+
 def test_a_rerun_after_a_throttled_landscape_model_stage_asks_only_about_the_cards_not_cached(
     world: SyntheticRun, stopping_router: _StopsAfterTheFirstCall
 ) -> None:
@@ -1638,3 +1681,160 @@ def test_evaluate_record_is_refused_while_the_policy_leaves_question_four_open(
     assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
     assert _error(result)["code"] == "MODEL_USE_NOT_YET_ALLOWED"
     assert asked == []
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e32-t33: an evaluation the model stopped partway is judged by its stop, as a report's is
+#
+# The stub evaluation meets the bar on the cards it was answered about, so before this task the stop
+# went unnoticed (exit 0); stopped below the bar it read as a verdict (exit 1, EVALUATION_BELOW_BAR).
+# A cause on RETRYABLE_PROVIDER_FAILURES exits 3, a refused or unclassified one 1. `error.details`
+# keeps every key of the evaluation's summary and adds the stop's.
+# ------------------------------------------------------------------------------------------------
+
+#: `landscape evaluate`'s summary keys, written out from `evaluation_summary`: none is removed or renamed.
+EVALUATION_KEYS = {
+    "caselist",
+    "event",
+    "topic_id",
+    "taxonomy_version",
+    "prompt_version",
+    "snapshot",
+    "labelled",
+    "found",
+    "asked",
+    "calls",
+    "counted",
+    "correct",
+    "accuracy",
+    "target",
+    "meets_target",
+    "placed_below_threshold",
+    "placed_labelled_none",
+    "refused",
+    "input_tokens",
+    "output_tokens",
+    "interrupted",
+    "scan",
+}
+
+
+def _stopped(stop: ProviderError, **changes: Any) -> FormatEvaluation:
+    """Stopped after 12 of the 30 labelled cards, the 12 answered meeting the bar."""
+    return _evaluated(
+        **{"interrupted_by": stop, "asked": 12, "unanswered": 18, "counted": 10, "correct": 9, **changes}
+    )
+
+
+@pytest.mark.parametrize(
+    ("stop", "cause_code", "wait"), STOPS_A_RETRY_MAY_CURE, ids=STOPS_A_RETRY_MAY_CURE_IDS
+)
+def test_evaluate_stopped_by_a_retryable_cause_exits_3_with_the_causes_code(
+    world: SyntheticRun,
+    sample_files: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    stop: ProviderError,
+    cause_code: str,
+    wait: float | None,
+) -> None:
+    _stub_evaluation(monkeypatch, _stopped(stop))
+
+    result = evaluate(world, sample_files)
+
+    assert result.exit_code == ExitCode.RETRIEVAL_FAILURE, result.output
+    error = _error(result)
+    assert (error["code"], error["exit_code"]) == ("MODEL_STAGE_INTERRUPTED", 3)
+    details = error["details"]
+    assert set(details) == EVALUATION_KEYS | STOP_KEYS | (
+        {"retry_after_seconds"} if wait is not None else set()
+    )
+    assert (details["cause_code"], details["error"], details["sent"], details["unanswered"]) == (
+        cause_code,
+        type(stop).__name__,
+        12,
+        18,
+    )
+    assert (details["interrupted"], details["asked"], details["meets_target"]) == (
+        type(stop).__name__,
+        12,
+        True,
+    )
+    assert details.get("retry_after_seconds") == wait
+
+
+@pytest.mark.parametrize(
+    ("stop", "cause_code"),
+    [
+        (
+            ModelAccessDenied("bedrock", "fake-model", "AccessDeniedException: not granted"),
+            "MODEL_ACCESS_DENIED",
+        ),
+        (
+            ModelRequestRejected("bedrock", "fake-model", "ValidationException", "temperature is refused"),
+            "MODEL_REQUEST_REJECTED",
+        ),
+        (ProviderError("bedrock", "a failure nobody classified"), "PROVIDER_ERROR"),
+    ],
+    ids=["access-denied", "request-rejected", "unclassified"],
+)
+def test_evaluate_stopped_by_a_refused_or_unclassified_cause_exits_1_with_the_causes_code(
+    world: SyntheticRun,
+    sample_files: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    stop: ProviderError,
+    cause_code: str,
+) -> None:
+    _stub_evaluation(monkeypatch, _stopped(stop))
+
+    result = evaluate(world, sample_files)
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    error = _error(result)
+    assert (error["code"], error["exit_code"], error["details"]["cause_code"]) == (
+        "MODEL_STAGE_INTERRUPTED",
+        1,
+        cause_code,
+    )
+    assert set(error["details"]) == EVALUATION_KEYS | STOP_KEYS
+
+
+def test_evaluate_throttled_below_the_bar_is_judged_by_its_stop_not_the_bar(
+    world: SyntheticRun, sample_files: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _stub_evaluation(monkeypatch, _stopped(ProviderRateLimited("bedrock", "ThrottlingException"), correct=5))
+
+    result = evaluate(world, sample_files)
+
+    assert result.exit_code == ExitCode.RETRIEVAL_FAILURE, result.output
+    assert (_error(result)["code"], _error(result)["details"]["meets_target"]) == (
+        "MODEL_STAGE_INTERRUPTED",
+        False,
+    )
+
+
+def test_evaluate_completed_below_the_bar_exits_1_with_no_stop_in_its_details(
+    world: SyntheticRun, sample_files: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _stub_evaluation(monkeypatch, _evaluated(correct=16))
+
+    result = evaluate(world, sample_files)
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    error = _error(result)
+    assert (error["code"], error["exit_code"]) == ("EVALUATION_BELOW_BAR", 1)
+    assert set(error["details"]) == EVALUATION_KEYS
+
+
+def test_evaluate_throttled_with_a_name_in_a_cassette_exits_1_for_the_scan(
+    world: SyntheticRun, sample_files: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A name the scan found is a verdict a retry does not change, so it decides before the stop."""
+    named = _stopped(
+        ProviderRateLimited("bedrock", "ThrottlingException"), cassettes=NameScan(texts=2, team_codes=1)
+    )
+    _stub_evaluation(monkeypatch, named)
+
+    result = evaluate(world, sample_files)
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    assert _error(result)["code"] == "EVALUATION_BELOW_BAR"

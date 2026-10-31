@@ -202,7 +202,13 @@ Success looks like `exit 0`, `code None`, the dry run's `snapshot` and `cards`, 
 `RUN_LOCK_HELD`: a run holds the lock; wait and run this block again. In a model run, `MODEL_STAGE_INTERRUPTED`
 with exit `3` means the model was throttled or did not answer (`error.details.cause_code` says which): the
 cards it answered are cached, so run the same block again later and it asks only about the rest
-(`v1-e32-t32`). The same code with exit `1` is a refused call: stop and tell the PM. `STORE_CREDENTIALS_EXPIRED`: run it
+(`v1-e32-t32`). On exit `3`, wait the `retry_after_seconds` that `error.details` in
+`/tmp/landscape-publish.json` gives, when it gives one, and then run the same block again; Bedrock's
+throttling states no wait today, so the key is usually absent (`v1-e32-t33`). The same code with exit
+`1` is a refused call: stop and tell the PM. `landscape evaluate` exits the same way when its model stage
+stops: `3` for a throttle or a model that did not answer, `1` for a refused call, both with
+`MODEL_STAGE_INTERRUPTED`, and `1` with `EVALUATION_BELOW_BAR` for an evaluation that ran to the end
+under the bar. `STORE_CREDENTIALS_EXPIRED`: run it
 again, which signs in first. A scan refusal (exit `1`, `refused` naming the scan) means hits the dry run
 did not show: read them as step 3 says, then the next block.
 

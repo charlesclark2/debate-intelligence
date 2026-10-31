@@ -46,7 +46,13 @@ from dataclasses import dataclass, field
 from typing import Final, Protocol
 
 from debate_core.application.cassette_filing import filed_under
-from debate_core.application.errors import DomainError, OutputProblem, ProviderError, error_code_of
+from debate_core.application.errors import (
+    DomainError,
+    OutputProblem,
+    ProviderError,
+    ProviderRateLimited,
+    error_code_of,
+)
 from debate_core.application.model_errors import ModelOutputError, ValidationPolicy
 from debate_core.application.ports.parsed_store import ParsedStore
 from debate_core.application.structured_output import StructuredOutputGuard
@@ -121,6 +127,9 @@ class ModelStageInterrupted(DomainError):
     (`v1-e32-t32`): a throttled call or a model that did not answer is retryable, and the cards already
     answered are cached, so the next run asks only about the rest; a refused call is a verdict.
     `cause_code` is the cause's error code (`PROVIDER_RATE_LIMITED`), reported beside this error's own.
+    `retry_after_seconds` is set only when the cause is a rate limit that said how long to wait
+    (`v1-e32-t33`), so the `--json` envelope carries the key exactly when there is a wait to quote,
+    and never as null for a cause that has no such idea.
     """
 
     def __init__(self, cause: ProviderError, *, sent: int, unanswered: int) -> None:
@@ -135,6 +144,8 @@ class ModelStageInterrupted(DomainError):
         self.cause_code = error_code_of(cause)
         self.sent = sent
         self.unanswered = unanswered
+        if isinstance(cause, ProviderRateLimited) and cause.retry_after_seconds is not None:
+            self.retry_after_seconds = cause.retry_after_seconds
 
 
 class CardTexts(Protocol):

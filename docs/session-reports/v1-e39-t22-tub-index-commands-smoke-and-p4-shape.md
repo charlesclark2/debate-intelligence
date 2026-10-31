@@ -159,9 +159,35 @@ the new checks against the published pre-release after merge.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-01
 
 **Notes:**
+
+The three `tub index` commands now have smoke checks run as a process against the S3 stand-in, and
+P4's two-block shape is held by a test.
+1. **ac1 passes.**
+   * The smoke checks run on the checkout's script (3 passed) and on a stamped, installed build, with
+     the version check proving the harness ran that build (4 passed).
+   * Seven breaks were each caught by the check aimed at them, and an eighth on the installed build.
+   * Removing both `--confirm` checks, so that the smoke check is what catches an unconfirmed
+     deletion, is the right way to make that break mean something.
+   * The P4 test fails on a merge, a swap and an `&&` chain.
+2. **Decisions accepted:**
+   * a parsed store the build makes from two hand-checked structural fixtures, giving two distinct
+     indexes;
+   * bucket mode, with the lock seeded free and checked free after;
+   * the deletes checked as signed by the takedown profile;
+   * the prose check between P4's blocks.
+3. **The Wednesday branch is accepted as built.** It asserts the refusal and an unchanged listing,
+   never a skip, and it was run both ways in the session. The deletion and the wrong-code refusal
+   stay pinned every day by the in-process tests.
+4. **Follow-up, a dev-only clock: no task.** A setting that moves the build's clock would let a
+   build step past the cloud-run-day guard, which is a safety rule. The smoke harness is not reason
+   enough to add one, even for dev. One night in seven checking the refusal is acceptable.
+5. **Closing checks:** the affected set ran whole within the limit (50 files, 2,153 passed), and the
+   whole-repo checks pass.
+6. **Merge:** once the PR's `ci` is green. It is a plain `scripts/task pr`. Validate-dev runs the new
+   checks against the next pre-release.

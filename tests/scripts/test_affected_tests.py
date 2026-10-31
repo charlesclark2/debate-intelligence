@@ -2012,6 +2012,35 @@ def test_a_file_that_names_a_name_of_the_container_is_reached_by_that_name(
     assert_selected(result, expected)
 
 
+@pytest.mark.parametrize(
+    ("replacement", "expected"),
+    [
+        pytest.param(
+            ("    return kind()\n", "    return kind() or None\n"),
+            {f"{CLI_TESTS}/test_patches_store.py"} | BUCKET_PART,
+            id="the function it names",
+        ),
+        pytest.param(
+            ("        return RULES\n", "        return RULES or None\n"), VERIFIED_PART, id="another part"
+        ),
+    ],
+)
+def test_a_string_naming_a_function_beside_the_container_reaches_that_part(
+    workspace: Workspace, replacement: tuple[str, str], expected: set[str]
+) -> None:
+    setup = container_setup(
+        ("        return StoreAdapter()\n", "        return _store(StoreAdapter)\n"),
+        files={
+            f"{CLI_TESTS}/test_patches_store.py": (
+                "def test_store(monkeypatch):\n"
+                '    monkeypatch.setattr("debate_cli.container._store", lambda kind: None)\n'
+            )
+        },
+    )
+    setup[CONTAINER_FILE] += "\n\ndef _store(kind):\n    return kind()\n"
+    assert_selected(described_by_use(workspace, setup, replacement), expected)
+
+
 def test_explain_names_the_rebound_name_a_part_and_a_file_use(workspace: Workspace) -> None:
     setup = container_setup(files=NAMERS)
     change = {CONTAINER_FILE: edited(setup[CONTAINER_FILE], REBIND_RULES)}

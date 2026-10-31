@@ -15,11 +15,13 @@ from pathlib import Path
 
 import pytest
 
+from debate_core.application.errors import DomainError
 from debate_core.integrations.local import sqlite_db
 from debate_core.integrations.local.sqlite_db import (
     DATABASE_FILENAME,
     MINIMUM_SQLITE_VERSION,
     SCHEMA_VERSION_TABLE,
+    DatabaseFromNewerBuild,
     Migration,
     MigrationError,
     SqliteDatabase,
@@ -158,15 +160,42 @@ def test_a_fresh_database_records_every_migration_it_ran(tmp_path: Path) -> None
         connection.close()
 
 
-def test_a_database_from_a_newer_build_is_refused(tmp_path: Path) -> None:
+def test_a_database_from_a_newer_build_is_refused_naming_both_schema_versions_and_the_fix(
+    tmp_path: Path,
+) -> None:
+    """Its own code and a hint naming both versions (v1-e41-t01), and still a `MigrationError`.
+
+    The message and the hint are written out whole. Neither names the file: the CLI prints both,
+    and the data directory's path carries the home directory (v1-e01-t25).
+    """
     with SqliteDatabase.open(tmp_path) as database:
         database.connection.execute(
             f"INSERT INTO {SCHEMA_VERSION_TABLE} (version, name, applied_at) "
             "VALUES (9999, 'something this build has never heard of', '2030-01-01T00:00:00+00:00')"
         )
+    newest = load_migrations()[-1].version
 
-    with pytest.raises(MigrationError, match="written by a newer build"):
+    with pytest.raises(DatabaseFromNewerBuild) as refused:
         SqliteDatabase.open(tmp_path)
+
+    error = refused.value
+    assert isinstance(error, MigrationError) and isinstance(error, DomainError)
+    assert (error.database_version, error.build_version) == (9999, newest)
+    assert str(error) == (
+        f"this data directory's database is at schema version 9999, and this build reads schema "
+        f"versions up to {newest}: a newer build migrated it"
+    )
+    assert error.hint == (
+        f"Schema version 9999 is newer than this build's {newest}, and an older schema cannot read a "
+        "newer database safely. Sync this checkout (`scripts/task sync <task>`, or `git pull` and "
+        "`uv sync --all-packages`), or install the newer build, then run the command again."
+    )
+    assert str(tmp_path) not in str(error) + error.hint
+    connection = sqlite3.connect(tmp_path / DATABASE_FILENAME)
+    try:
+        assert read_schema_version(connection) == 9999, "refusing it changes nothing in the file"
+    finally:
+        connection.close()
 
 
 # --------------------------------------------------------------------------------------------

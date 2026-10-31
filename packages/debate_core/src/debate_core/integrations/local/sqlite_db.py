@@ -40,13 +40,21 @@ in order, each in its own transaction, and records it. Opening a database is the
 the first open creates the schema, every later open with no new migration files does nothing.
 
 A database whose recorded version is *higher* than any migration this build ships raises
-:class:`MigrationError` rather than being used. That is the case where an older build opens a file
-a newer one wrote, and reading it under the old schema would be worse than refusing.
+:class:`DatabaseFromNewerBuild`, a :class:`MigrationError`, rather than being used. That is the case
+where an older build opens a file a newer one wrote, and reading it under the old schema would be
+worse than refusing.
 
 :class:`MigrationError` is not a :class:`~debate_core.application.errors.DomainError`, on purpose.
 It cannot reach a use case: it is raised while the composition root is opening the database, before
 any port exists to raise it across, and a service catching `DomainError` should not be catching
-"this build cannot read this file".
+"this build cannot read this file". A broken migration file or a SQLite too old for the schema is a
+defect in the build or the machine, and the CLI reports it as one: exit `70`.
+
+:class:`DatabaseFromNewerBuild` is the one exception, and is a `DomainError` too (`v1-e41-t01`). It
+is not a defect: the operator ran a newer build against the same data directory, and the fix (sync
+the checkout, or install the newer build) is theirs. As a `DomainError` the CLI reports it under its
+own code with the message and hint it carries, and exits `1`. The reason for keeping `MigrationError`
+out still holds for it: nothing has a port when it is raised.
 """
 
 from __future__ import annotations
@@ -62,8 +70,11 @@ from pathlib import Path
 from types import TracebackType
 from typing import Final, Self
 
+from debate_core.application.errors import DomainError
+
 __all__ = [
     "DATABASE_FILENAME",
+    "DatabaseFromNewerBuild",
     "MINIMUM_SQLITE_VERSION",
     "SCHEMA_VERSION_TABLE",
     "Migration",
@@ -110,6 +121,37 @@ class MigrationError(RuntimeError):
     :class:`~debate_core.application.errors.DomainError` hierarchy: nothing has a port yet when
     this is raised, so no use case can be expected to handle it.
     """
+
+
+class DatabaseFromNewerBuild(MigrationError, DomainError):
+    """The database is at a schema version above every migration this build ships (`v1-e41-t01`).
+
+    A newer build migrated it: every checkout and installed build on one machine shares the data
+    directory, so a command from a newer one leaves the database where an older one cannot follow.
+    Still a :class:`MigrationError`, and also a
+    :class:`~debate_core.application.errors.DomainError`, which is how the CLI reports it under its
+    own code, `DATABASE_FROM_NEWER_BUILD`, with its message and :attr:`hint`, and exits `1`: running
+    the same command again meets the same database, so the fix is the operator's, never a retry.
+    Neither the message nor the hint names the file, because the CLI prints both and the data
+    directory's path carries the home directory (`v1-e01-t25`).
+    """
+
+    def __init__(self, *, database_version: int, build_version: int) -> None:
+        self.database_version = database_version
+        """The schema version the database records."""
+        self.build_version = build_version
+        """The newest schema version this build's migrations reach."""
+        self.hint = (
+            f"Schema version {database_version} is newer than this build's {build_version}, and an older "
+            "schema cannot read a newer database safely. Sync this checkout (`scripts/task sync <task>`, "
+            "or `git pull` and `uv sync --all-packages`), or install the newer build, then run the "
+            "command again."
+        )
+        """What to do about it, naming both versions."""
+        super().__init__(
+            f"this data directory's database is at schema version {database_version}, and this build "
+            f"reads schema versions up to {build_version}: a newer build migrated it"
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -208,16 +250,15 @@ def _split_statements(sql: str, filename: str) -> tuple[str, ...]:
     return statements
 
 
-def apply_migrations(
-    connection: sqlite3.Connection, *, database_label: str = "this database"
-) -> tuple[Migration, ...]:
+def apply_migrations(connection: sqlite3.Connection) -> tuple[Migration, ...]:
     """Bring a database up to the newest migration and return the ones that were applied.
 
     Idempotent: applies only migrations whose version is above the recorded one, each inside its
     own transaction with its `schema_version` row, so an interrupted run leaves the database at the
     last migration that fully succeeded and the next open resumes from there.
 
-    Raises :class:`MigrationError` if the database records a version this build does not ship.
+    Raises :class:`DatabaseFromNewerBuild`, a :class:`MigrationError`, if the database records a
+    version this build does not ship.
     """
     connection.execute(
         f"CREATE TABLE IF NOT EXISTS {SCHEMA_VERSION_TABLE} ("
@@ -230,11 +271,7 @@ def apply_migrations(
     known = load_migrations()
     newest = known[-1].version if known else 0
     if current > newest:
-        raise MigrationError(
-            f"{database_label} holds schema version {current}, but this build ships migrations up "
-            f"to {newest}. It was written by a newer build of debate_core; upgrade rather than "
-            "downgrade, because an older schema cannot read a newer database safely."
-        )
+        raise DatabaseFromNewerBuild(database_version=current, build_version=newest)
 
     applied: list[Migration] = []
     for migration in known:
@@ -308,7 +345,7 @@ class SqliteDatabase:
         connection.row_factory = sqlite3.Row
         try:
             _apply_pragmas(connection)
-            apply_migrations(connection, database_label=str(path))
+            apply_migrations(connection)
         except BaseException:
             connection.close()
             raise

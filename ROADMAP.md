@@ -60,7 +60,7 @@ v2.3's extension work.
 
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
-| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 59 | 52 | 258 |
+| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 59 | 53 | 258 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 109 | 90 | 499 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 62 | 49 | 290 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 16 | 11 | 114 |
@@ -135,7 +135,7 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 | [The planted-break check runs the tests nearest a break by what reads it, not by path](plan_specs/v1/e01-repo-foundation/t40-planted-break-nearest-ordering.yaml) `v1-e01-t40-planted-break-nearest-ordering` | Succeeded | 1 | 1.0 |
 | [The pull request's smoke tier reads the bundled profiles, as the installed build does](plan_specs/v1/e01-repo-foundation/t41-pr-smoke-reads-the-bundled-profiles.yaml) `v1-e01-t41-pr-smoke-reads-the-bundled-profiles` | Succeeded | 1 | 2.0 |
 | [Coverage measured in the test parts and combined, so the push run is never held by one unsplit job](plan_specs/v1/e01-repo-foundation/t42-coverage-measured-in-the-parts.yaml) `v1-e01-t42-coverage-measured-in-the-parts` | Succeeded | 1 | 2.0 |
-| [A change to container.py reaches only the tests of the parts it changes](plan_specs/v1/e01-repo-foundation/t43-container-diff-read-part-by-part.yaml) `v1-e01-t43-container-diff-read-part-by-part` | Pending | 0 | 2.0 |
+| [A change to container.py reaches only the tests of the parts it changes](plan_specs/v1/e01-repo-foundation/t43-container-diff-read-part-by-part.yaml) `v1-e01-t43-container-diff-read-part-by-part` | Succeeded | 0 | 2.0 |
 | [A test that mentions debate-research inside a longer message is not read as running the app](plan_specs/v1/e01-repo-foundation/t44-cli-mention-in-a-message-is-prose.yaml) `v1-e01-t44-cli-mention-in-a-message-is-prose` | Pending | 0 | 1.0 |
 | [The docstrings say what the stamped build carries](plan_specs/v1/e01-repo-foundation/t45-stamp-docstrings.yaml) `v1-e01-t45-stamp-docstrings` | Pending | 0 | 0.5 |
 | [The single-interpreter scan leaves site/ out, as the Node project it is](plan_specs/v1/e01-repo-foundation/t46-single-interpreter-scan-leaves-site-out.yaml) `v1-e01-t46-single-interpreter-scan-leaves-site-out` | Pending | 0 | 0.5 |

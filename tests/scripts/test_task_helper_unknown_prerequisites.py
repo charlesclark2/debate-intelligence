@@ -17,7 +17,6 @@ import sys
 from pathlib import Path
 
 import pytest
-
 from tests.scripts.spec_graph_tree import E01_T01, E01_T02, E02_T01, SpecTree, baseline
 
 HELPER = Path(__file__).resolve().parents[2] / "scripts" / "task_helper.py"
@@ -45,7 +44,9 @@ def test_ready_lists_tasks_whose_prerequisites_are_succeeded(tree: SpecTree, tmp
     assert result.stdout == f"v1.0\t{E01_T02}\tsecond-step\nv1.1\t{E02_T01}\tlater-step\n"
 
 
-def test_ready_leaves_out_a_task_with_an_unknown_prerequisite_and_says_why(tree: SpecTree, tmp_path: Path) -> None:
+def test_ready_leaves_out_a_task_with_an_unknown_prerequisite_and_says_why(
+    tree: SpecTree, tmp_path: Path
+) -> None:
     tree.epic("e01").task("t02").context.append(UNKNOWN)
     result = run_helper(tree, tmp_path, "ready")
     assert result.returncode == 0
@@ -78,5 +79,7 @@ def test_prereqs_refuses_an_unknown_prerequisite_by_name(tree: SpecTree, tmp_pat
     tree.epic("e01").task("t02").context.append(UNKNOWN)
     result = run_helper(tree, tmp_path, "prereqs", E01_T02)
     assert result.returncode == 2
-    assert result.stdout == f"  ok      {E01_T01} (Succeeded)\n  UNKNOWN {UNKNOWN} (no task spec declares it)\n"
+    assert (
+        result.stdout == f"  ok      {E01_T01} (Succeeded)\n  UNKNOWN {UNKNOWN} (no task spec declares it)\n"
+    )
     assert result.stderr == f"{E01_T02}'s spec.context names {UNKNOWN}, which no task spec declares\n"

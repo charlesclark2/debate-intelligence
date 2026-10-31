@@ -123,7 +123,11 @@ def goal(name: str, title: str, kind: str, release: str, phase: str, epic: str |
     return {
         "apiVersion": API,
         "kind": "Goal",
-        "metadata": {"name": name, "labels": labels(kind, release, epic), "annotations": {"debate/title": title}},
+        "metadata": {
+            "name": name,
+            "labels": labels(kind, release, epic),
+            "annotations": {"debate/title": title},
+        },
         "spec": {
             "description": title,
             "acceptanceCriteria": [{"id": "ac1", "description": "It is done."}],
@@ -156,7 +160,11 @@ def release_documents(version: str, phase: str, epics: list[str]) -> list[dict]:
         "status": {"phase": "Pending"},
     }
     nodes = [{"id": f"epic-{e}", "kind": "External", "name": e, "inputs": {"goalRef": e}} for e in epics]
-    return [goal(name, f"{version} release", "release", version, phase), gate, plan(name, "release", version, nodes)]
+    return [
+        goal(name, f"{version} release", "release", version, phase),
+        gate,
+        plan(name, "release", version, nodes),
+    ]
 
 
 def epic_documents(epic: Epic, task_epics: dict[str, Epic]) -> list[dict]:
@@ -189,7 +197,9 @@ def epic_documents(epic: Epic, task_epics: dict[str, Epic]) -> list[dict]:
             "kind": "External",
             "name": f"Prerequisite {prereq}",
             "inputs": {"goalRef": prereq},
-            "description": f"Owned by {task_epics[prereq].name}." if prereq in task_epics else "Owned elsewhere.",
+            "description": f"Owned by {task_epics[prereq].name}."
+            if prereq in task_epics
+            else "Owned elsewhere.",
         }
         for prereq, ext_id in external_ids.items()
     ]
@@ -203,6 +213,8 @@ def task_documents(epic: Epic, task: Task) -> list[dict]:
     name = epic.task_name(task)
     document = goal(name, task.slug, "task", epic.release, task.phase, epic.name)
     if task.context:
-        document["spec"]["context"] = [{"kind": "TaskRef", "name": p, "relation": "dependsOn"} for p in task.context]
+        document["spec"]["context"] = [
+            {"kind": "TaskRef", "name": p, "relation": "dependsOn"} for p in task.context
+        ]
     node = {"id": "do-it", "kind": "Task", "name": "Do it", "acceptanceCriteria": criteria("it")}
     return [document, plan(name, "task", epic.release, [node], epic.name)]

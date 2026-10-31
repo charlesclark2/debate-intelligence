@@ -17,7 +17,6 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
-
 from tests.scripts.spec_graph_tree import (
     E01_EPIC,
     E01_T01,
@@ -64,7 +63,9 @@ def test_the_baseline_tree_passes(tree: SpecTree, tmp_path: Path) -> None:
     assert errors(tree, tmp_path) == []
 
 
-def test_an_epic_whose_tasks_are_succeeded_or_cancelled_may_be_succeeded(tree: SpecTree, tmp_path: Path) -> None:
+def test_an_epic_whose_tasks_are_succeeded_or_cancelled_may_be_succeeded(
+    tree: SpecTree, tmp_path: Path
+) -> None:
     tree.epic("e01").phase = "Succeeded"
     tree.epic("e01").task("t02").phase = "Cancelled"
     assert errors(tree, tmp_path) == []
@@ -127,7 +128,9 @@ def test_a_cross_epic_prerequisite_missing_from_the_graph_is_refused(tree: SpecT
     ]
 
 
-def test_a_prerequisite_whose_external_node_is_there_but_unused_is_refused(tree: SpecTree, tmp_path: Path) -> None:
+def test_a_prerequisite_whose_external_node_is_there_but_unused_is_refused(
+    tree: SpecTree, tmp_path: Path
+) -> None:
     epic = tree.epic("e02")
     epic.task("t01").graph = []
     epic.externals.append(E01_T01)
@@ -180,7 +183,8 @@ def test_an_edge_to_a_later_release_is_refused_in_the_graph_as_in_the_context(
         "which ships in a later release (v1.1) than this epic (v1.0)"
     ) in found
     assert (
-        f"plan_specs/v1/e01-foundation/t02-second-step.yaml: prerequisite {E02_T01} ships in a later release (v1.1)"
+        f"plan_specs/v1/e01-foundation/t02-second-step.yaml: "
+        f"prerequisite {E02_T01} ships in a later release (v1.1)"
     ) in found
 
 
@@ -190,7 +194,9 @@ def test_an_edge_to_a_later_release_is_refused_in_the_graph_as_in_the_context(
 
 
 @pytest.mark.parametrize("open_phase", ["Pending", "Ready", "InProgress", "Blocked", "Failed"])
-def test_a_succeeded_epic_with_an_open_task_is_refused(tree: SpecTree, tmp_path: Path, open_phase: str) -> None:
+def test_a_succeeded_epic_with_an_open_task_is_refused(
+    tree: SpecTree, tmp_path: Path, open_phase: str
+) -> None:
     tree.epic("e01").phase = "Succeeded"
     tree.epic("e01").task("t02").phase = open_phase
     assert errors(tree, tmp_path) == [

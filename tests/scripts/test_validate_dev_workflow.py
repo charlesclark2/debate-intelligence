@@ -185,7 +185,7 @@ def test_a_failed_libreoffice_install_fails_the_step(tmp_path: Path) -> None:
     assert "soffice --version" not in log.read_text(encoding="utf-8")
 
 
-@pytest.mark.parametrize("job", ["resolve", "smoke", "slow", "image"])
+@pytest.mark.parametrize("job", ["resolve", "smoke", "slow", "cloud", "image"])
 def test_the_jobs_that_run_the_validated_commits_code_hold_no_write_permission(job: str) -> None:
     permissions = jobs()[job]["permissions"]
 
@@ -419,9 +419,110 @@ def test_conclude_waits_for_the_image_job_and_reports_its_result() -> None:
     conclude = jobs()["conclude"]
     _, post = step_named(conclude, "Post success on the installed commit")
 
-    assert conclude["needs"] == ["resolve", "smoke", "slow", "image"]
+    assert conclude["needs"] == ["resolve", "smoke", "slow", "cloud", "image"]
     assert post["env"]["IMAGE_RESULT"] == "${{ needs.image.result }}"
-    assert 'set -- "$@" --job "image=$IMAGE_RESULT"' in post["run"]
+    assert '--job "image=$IMAGE_RESULT"' in post["run"]
+
+
+# --------------------------------------------------------------------------------------------
+# cloud: dev's pilot through CloudFront, with no account and no secret (v1-e39-t10 ac1, ac4)
+# --------------------------------------------------------------------------------------------
+
+CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+CLOUD_CHECKS = REPO_ROOT / "tests" / "smoke" / "cloud"
+
+
+def test_the_cloud_job_runs_the_drivers_cloud_tier_from_the_validated_commit() -> None:
+    cloud = jobs()["cloud"]
+    [checkout] = [s for s in cloud["steps"] if s.get("uses", "").startswith("actions/checkout@")]
+    _, run = step_named(cloud, "Run pytest tests/smoke/cloud")
+
+    assert cloud["needs"] == "resolve"
+    assert cloud["runs-on"] == "ubuntu-24.04"
+    assert checkout["with"] == {"ref": "${{ env.REQUESTED_SHA }}", "persist-credentials": False}
+    assert run["run"] == (
+        'python3 scripts/validate_dev.py cloud --sha "$REQUESTED_SHA" '
+        '--work-dir "$RUNNER_TEMP/validate-dev-cloud"'
+    )
+    assert "continue-on-error" not in yaml.safe_dump(cloud)
+
+
+def test_the_cloud_job_holds_no_secret_no_token_and_no_aws_credential() -> None:
+    """ac4: validate-dev's pilot checks need no account and no stored secret; nothing could sign in."""
+    cloud = jobs()["cloud"]
+    written = yaml.safe_dump(cloud)
+
+    assert cloud["permissions"] == {"contents": "read"}
+    for word in ("secrets.", "GH_TOKEN", "GITHUB_TOKEN", "github.token", "id-token", "aws", "AWS_", "TOTP"):
+        assert word not in written, word
+    assert all("env" not in step for step in cloud["steps"]), "no step of the cloud job is given anything"
+    assert "env" not in cloud
+
+
+def test_no_job_in_validate_dev_reads_a_secret_or_asks_for_an_oidc_token() -> None:
+    """So no job can reach AWS or the pilot's accounts, and validate-dev holds no TOTP seed (ac4)."""
+    flow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    written = yaml.safe_dump(flow)
+
+    assert "secrets." not in written
+    assert "id-token" not in written
+
+
+def selected(marker_expression: str, *paths: Path) -> list[str]:
+    """The node ids pytest selects from `paths` for `marker_expression`, collected, never run."""
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "--collect-only",
+            "-q",
+            "-n",
+            "0",
+            "-p",
+            "no:randomly",
+            "-m",
+            marker_expression,
+            *map(str, paths),
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert completed.returncode in (0, 5), completed.stdout + completed.stderr
+    return [line for line in completed.stdout.splitlines() if "::" in line]
+
+
+def ci_marker_expression() -> str:
+    """The `-m` of ci.yml's pytest steps, read from the workflow, not restated."""
+    test = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))["jobs"]["test"]
+    expressions = {
+        step["run"].split('-m "', 1)[1].split('"', 1)[0]
+        for step in test["steps"]
+        if "pytest" in step.get("run", "") and '-m "' in step.get("run", "")
+    }
+    [expression] = expressions
+    return expression
+
+
+def test_pr_ci_and_every_other_tier_select_none_of_the_cloud_checks_and_the_cloud_tier_all() -> None:
+    """The spec forbids smoke checks in PR CI. Collected here with the expressions as written."""
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    import validate_dev as driver
+
+    cloud = selected(driver.CLOUD.marker_expression, CLOUD_CHECKS)
+    assert len(cloud) == 3, cloud
+    assert all(node.startswith("tests/smoke/cloud/") for node in cloud), cloud
+    for expression in (
+        ci_marker_expression(),
+        driver.RECORDED.marker_expression,
+        driver.LIVE_CANARY.marker_expression,
+        driver.SLOW.marker_expression,
+    ):
+        assert selected(expression, CLOUD_CHECKS) == [], expression
+    assert driver.CLOUD.paths == ("tests/smoke/cloud",)
 
 
 # --------------------------------------------------------------------------------------------
@@ -429,7 +530,7 @@ def test_conclude_waits_for_the_image_job_and_reports_its_result() -> None:
 # --------------------------------------------------------------------------------------------
 
 SITE_JOBS = ("site-resolve", "site", "site-conclude")
-PRERELEASE_JOBS = ("resolve", "smoke", "slow", "image", "conclude")
+PRERELEASE_JOBS = ("resolve", "smoke", "slow", "cloud", "image", "conclude")
 
 
 def test_site_only_is_a_dispatch_input_that_defaults_to_off() -> None:
@@ -450,7 +551,7 @@ def test_the_pre_release_path_runs_only_without_site_only_and_the_site_path_only
 
     assert set(every) == {*PRERELEASE_JOBS, *SITE_JOBS}
     assert every["resolve"]["if"] == "inputs.site_only != true"
-    for job in ("smoke", "slow", "image"):
+    for job in ("smoke", "slow", "cloud", "image"):
         assert every[job]["needs"] == "resolve", job  # skipped with it
     assert every["conclude"]["if"] == "always() && inputs.site_only != true"
     assert every["site-resolve"]["if"] == "inputs.site_only == true"

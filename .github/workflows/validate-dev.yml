@@ -26,6 +26,15 @@
 #             test errors, and the tier fails (PM ruling 2026-10-21, v1-e39-t06 Q1). For the same
 #             reason it pulls the pilot function's arm64 base image, the one scripts/tub_deploy.sh
 #             --print-base-image names, for the SQLite checks that run inside it (v1-e01-t34);
+#   cloud     checks out the same commit and runs tests/smoke/cloud -m "live and dev" from source:
+#             the student search pilot in dev, https://tub.dev.wfbdebate.com/, through CloudFront,
+#             with no account (v1-e39-t10): /healthz, the 302 to managed login for a page asked for
+#             without a session, the content-hashed app.js and app.css with their immutable cache
+#             header, and CloudFront's Content-Security-Policy on every answer. It holds no secret,
+#             no AWS credential and no TOTP seed, and signs nothing in; the signed-in journey is the
+#             operator's (scripts/tub_dev_journey.py, docs/runbooks/evidence-search.md). It checks
+#             what dev serves, whichever commit was last deployed there, so a pilot down in dev
+#             turns the status red;
 #   image     builds the weekly cloud run's image from the same pre-release, as the operator's
 #             scripts/caselist_run_deploy.sh --dry-run builds it (v1-e40-t03, ADR-0020 (1)): for
 #             linux/arm64, natively on GitHub's arm64 runner, checked offline by
@@ -87,6 +96,8 @@
 # VALIDATE_DEV_LIVE set to `true`; it never calls OpenCaselist (tests/smoke/test_live_canary.py).
 #
 # SECURITY. Permissions are contents: read, statuses: write and issues: write, and nothing else.
+# No job reads a secret (`secrets.` appears nowhere here) or requests an OIDC token, so no job can
+# reach AWS or sign in to the pilot.
 # statuses: write is held only by `resolve` and `conclude`, and issues: write only by `conclude`,
 # which run this workflow's own copy of the driver; the jobs that run the validated commit's tests
 # hold contents: read alone, and the driver withholds GH_TOKEN from pytest, so the code under test
@@ -174,7 +185,8 @@ env:
 jobs:
   resolve:
     name: find the pre-release and mark the commit pending
-    # Every trigger but a site-only dispatch. smoke, slow and image need this job, so they skip with it.
+    # Every trigger but a site-only dispatch. smoke, slow, cloud and image need this job, so they skip
+    # with it.
     if: inputs.site_only != true
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -288,6 +300,29 @@ jobs:
         id: slow
         run: python3 scripts/validate_dev.py slow --sha "$REQUESTED_SHA" --work-dir "$RUNNER_TEMP/validate-dev-slow"
 
+  cloud:
+    name: check the student search pilot in dev through CloudFront, with no account
+    needs: resolve
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.REQUESTED_SHA }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10.2.0 # setup-uv publishes no major-version tag
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Install Python from .python-version
+        run: uv python install
+      - name: Install the locked workspace
+        run: uv sync --locked --all-packages
+      - name: Run pytest tests/smoke/cloud -m "live and dev" against dev's pilot
+        run: python3 scripts/validate_dev.py cloud --sha "$REQUESTED_SHA" --work-dir "$RUNNER_TEMP/validate-dev-cloud"
+
   image:
     name: build the run image from the pre-release and pull against stand-ins inside it
     needs: resolve
@@ -335,7 +370,7 @@ jobs:
 
   conclude:
     name: post the final validate-dev status
-    needs: [resolve, smoke, slow, image]
+    needs: [resolve, smoke, slow, cloud, image]
     if: always() && inputs.site_only != true
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -360,11 +395,12 @@ jobs:
           RESOLVE_RESULT: ${{ needs.resolve.result }}
           SMOKE_RESULT: ${{ needs.smoke.result }}
           SLOW_RESULT: ${{ needs.slow.result }}
+          CLOUD_RESULT: ${{ needs.cloud.result }}
           IMAGE_RESULT: ${{ needs.image.result }}
         run: |
           set -- --sha "$REQUESTED_SHA"
           set -- "$@" --job "resolve=$RESOLVE_RESULT" --job "smoke=$SMOKE_RESULT" --job "slow=$SLOW_RESULT"
-          set -- "$@" --job "image=$IMAGE_RESULT"
+          set -- "$@" --job "cloud=$CLOUD_RESULT" --job "image=$IMAGE_RESULT"
           if [ -n "$TAG" ]; then set -- "$@" --tag "$TAG"; fi
           if [ -n "$INSTALLED_SHA" ]; then set -- "$@" --installed-sha "$INSTALLED_SHA"; fi
           if [ -n "$SMOKE_COMMIT" ]; then set -- "$@" --smoke-commit "$SMOKE_COMMIT"; fi
@@ -394,6 +430,7 @@ jobs:
           RESOLVE_RESULT: ${{ needs.resolve.result }}
           SMOKE_RESULT: ${{ needs.smoke.result }}
           SLOW_RESULT: ${{ needs.slow.result }}
+          CLOUD_RESULT: ${{ needs.cloud.result }}
           IMAGE_RESULT: ${{ needs.image.result }}
         run: |
           {
@@ -404,7 +441,7 @@ jobs:
             echo "| Requested commit | \`${REQUESTED_SHA}\` |"
             echo "| Pre-release | ${TAG:-none found} |"
             echo "| Installed build reported | \`${INSTALLED_SHA:-nothing}\` |"
-            echo "| Jobs | resolve ${RESOLVE_RESULT}, smoke ${SMOKE_RESULT}, slow ${SLOW_RESULT}, image ${IMAGE_RESULT} |"
+            echo "| Jobs | resolve ${RESOLVE_RESULT}, smoke ${SMOKE_RESULT}, slow ${SLOW_RESULT}, cloud ${CLOUD_RESULT}, image ${IMAGE_RESULT} |"
             echo "| Live canary tier | ${LIVE} |"
             echo "| Status posted by this run | ${POST_STATUS} |"
           } >> "$GITHUB_STEP_SUMMARY"

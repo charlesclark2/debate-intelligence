@@ -29,6 +29,11 @@ Subcommands, in the order .github/workflows/validate-dev.yml runs them:
     could only skip. It runs on the operator's Mac before any promotion that changes the parser
     (v1-e31-t05). So is anything marked ``operator_data``, which needs data only the operator's
     machine holds, such as the tub's own search index (v1-e01-t34).
+``cloud``
+    From a checkout of the same commit, run dev's cloud smoke checks,
+    ``tests/smoke/cloud -m "live and dev"``: the student search pilot through CloudFront, with no
+    account and no secret (v1-e39-t10). They check what dev serves, so a pilot that is down in dev
+    turns the status red; the workflow holds no AWS credential and nothing to sign in with.
 ``conclude``
     Post the final state. ``success`` only when every job succeeded, the installed build reported
     the requested commit, and both test trees were that commit; ``success`` is posted on the commit
@@ -322,6 +327,8 @@ class Tier:
 RECORDED = Tier("recorded", "not live and not in_process", ("tests/smoke",))
 LIVE_CANARY = Tier("live canary", "live and canary", ("tests/smoke",))
 SLOW = Tier("slow", "slow and not live and not eval and not operator_data")
+CLOUD = Tier("dev cloud", "live and dev", ("tests/smoke/cloud",))
+"""What dev serves, through CloudFront, with no account: the student search pilot's checks (v1-e39-t10)."""
 
 
 @dataclass(frozen=True)
@@ -582,12 +589,14 @@ def smoke(
 
 
 # --------------------------------------------------------------------------------------------
-# slow: the offline slow tier, from the source at the same commit
+# slow and cloud: a tier from the source at the same commit
 # --------------------------------------------------------------------------------------------
 
 
 @dataclass
-class SlowReport:
+class SourceTierReport:
+    """A tier run from a checkout of the commit: the slow tier, or dev's cloud checks."""
+
     sha: str
     tests_commit: str
     tier: dict[str, object] = field(default_factory=dict)
@@ -598,18 +607,20 @@ class SlowReport:
         return not self.problems
 
 
-def slow(
-    sha: str, work: Path, *, pytest_command: Sequence[str] = PYTEST, tier: Tier = SLOW, cwd: Path = REPO_ROOT
-) -> SlowReport:
+def tier_from_source(
+    sha: str, work: Path, tier: Tier, *, pytest_command: Sequence[str] = PYTEST, cwd: Path = REPO_ROOT
+) -> SourceTierReport:
+    """Run `tier` from this checkout, refusing first if the checkout is not `sha`."""
     require_sha(sha)
-    report = SlowReport(sha=sha, tests_commit=tree_commit(cwd))
+    report = SourceTierReport(sha=sha, tests_commit=tree_commit(cwd))
     if report.tests_commit != sha:
         report.problems.append(
-            f"the slow tier would run {report.tests_commit}, not {sha}; check out the validated commit"
+            f"the {tier.name} tier would run {report.tests_commit}, not {sha}; check out the validated commit"
         )
         return report
     environment = environment_for_tests(os.environ)
-    result = run_tier(tier, work / "junit-slow.xml", environment, pytest_command=pytest_command, cwd=cwd)
+    junit = work / f"junit-{tier.name.replace(' ', '-')}.xml"
+    result = run_tier(tier, junit, environment, pytest_command=pytest_command, cwd=cwd)
     report.tier = {
         "name": result.name,
         "exit_code": result.exit_code,
@@ -617,6 +628,19 @@ def slow(
     }
     report.problems.extend(result.problems)
     return report
+
+
+def slow(
+    sha: str, work: Path, *, pytest_command: Sequence[str] = PYTEST, tier: Tier = SLOW, cwd: Path = REPO_ROOT
+) -> SourceTierReport:
+    return tier_from_source(sha, work, tier, pytest_command=pytest_command, cwd=cwd)
+
+
+def cloud(
+    sha: str, work: Path, *, pytest_command: Sequence[str] = PYTEST, tier: Tier = CLOUD, cwd: Path = REPO_ROOT
+) -> SourceTierReport:
+    """Dev's cloud smoke checks, which need no account and no secret (v1-e39-t10)."""
+    return tier_from_source(sha, work, tier, pytest_command=pytest_command, cwd=cwd)
 
 
 # --------------------------------------------------------------------------------------------
@@ -635,8 +659,9 @@ class Conclusion:
 REQUIRED_JOBS = ("resolve", "smoke", "slow")
 
 #: What a success says of a job the workflow reports beyond the required three: the run image's,
-#: built from the same pre-release and pulled against the stand-ins inside it (v1-e40-t03).
-REPORTED_JOB_WORDS = {"image": "the run image built and checked"}
+#: built from the same pre-release and pulled against the stand-ins inside it (v1-e40-t03), and the
+#: cloud job's, dev's pilot checked through CloudFront with no account (v1-e39-t10).
+REPORTED_JOB_WORDS = {"image": "the run image built and checked", "cloud": "dev pilot up"}
 
 
 def conclude(
@@ -870,6 +895,12 @@ def build_parser() -> argparse.ArgumentParser:
     slow_parser.add_argument("--sha", required=True)
     work_options(slow_parser)
 
+    cloud_parser = sub.add_parser(
+        "cloud", help="run dev's cloud smoke checks, which need no account, from a checkout of the commit"
+    )
+    cloud_parser.add_argument("--sha", required=True)
+    work_options(cloud_parser)
+
     conclude_parser = sub.add_parser("conclude", help="post the final validate-dev status")
     conclude_parser.add_argument("--sha", required=True, help="the commit that was asked to be validated")
     conclude_parser.add_argument("--tag")
@@ -916,7 +947,7 @@ def build_parser() -> argparse.ArgumentParser:
     site_conclude_parser.add_argument("--github-output", default=os.environ.get("GITHUB_OUTPUT"))
     status_options(site_conclude_parser)
 
-    run_parser = sub.add_parser("run", help="resolve, smoke, slow and conclude in one process")
+    run_parser = sub.add_parser("run", help="resolve, smoke, slow, cloud and conclude in one process")
     run_parser.add_argument("--sha", required=True)
     run_parser.add_argument("--tag")
     run_parser.add_argument("--live", action="store_true")
@@ -953,11 +984,11 @@ def main(argv: list[str] | None = None, *, github: GitHub | None = None) -> int:
                 {"installed_sha": report.installed_commit, "tests_commit": report.tests_commit},
             )
             return finish("smoke", report.problems)
-        if args.command == "slow":
-            slow_report = slow(args.sha, work_dir(args))
-            write_report(args.report, slow_report)
-            write_outputs(args.github_output, {"tests_commit": slow_report.tests_commit})
-            return finish("slow", slow_report.problems)
+        if args.command in ("slow", "cloud"):
+            source_report = (slow if args.command == "slow" else cloud)(args.sha, work_dir(args))
+            write_report(args.report, source_report)
+            write_outputs(args.github_output, {"tests_commit": source_report.tests_commit})
+            return finish(args.command, source_report.problems)
         if args.command == "tier-report":
             # pytest's exit status was the step's own; this judges what the report holds.
             return finish(args.name, TierResult(args.name, 0, read_junit(args.junit)).problems)
@@ -1044,6 +1075,7 @@ def command_run(args: argparse.Namespace, client: GitHub) -> int:
         jobs["smoke"] = "success" if smoke_report.passed else "failure"
         slow_report = slow(args.sha, work / "slow")
         jobs["slow"] = "success" if slow_report.passed else "failure"
+        jobs["cloud"] = "success" if cloud(args.sha, work / "cloud").passed else "failure"
     conclusion = conclude(
         args.sha,
         tag=tag,

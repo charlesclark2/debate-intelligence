@@ -34,8 +34,19 @@ skip.
 |---|---|---|---|---|
 | **Recorded** | `tests/smoke -m "not live and not in_process"` | the installed pre-release (`DEBATE_SMOKE_BIN`) | every validate-dev run; must finish well inside 5 minutes | none, enforced (below) |
 | **Slow** | `-m "slow and not live and not eval and not operator_data"` over the whole suite | this checkout's source, at the validated commit | every validate-dev run | none: pytest-socket, as in `ci` |
+| **Dev cloud** | `tests/smoke/cloud -m "live and dev"` | the student search pilot deployed in dev, `https://tub.dev.wfbdebate.com/`, through CloudFront | every validate-dev run (its `cloud` job) | eight `GET` requests to the pilot, none signed in; no account, no secret, no AWS credential |
 | **Live canary** | `tests/smoke -m "live and canary"` | the installed pre-release | only when validate-dev is dispatched with `live: true` or the repository variable `VALIDATE_DEV_LIVE` is `true` | a handful of polite calls under the dev budget; **never OpenCaselist** |
 | **In-process** | `-m in_process` | this checkout's source, inside pytest's process | every PR, in `ci` | none |
+
+The **dev cloud** tier (`v1-e39-t10`) checks what dev serves, whichever commit was last deployed
+there: `/healthz`, the `302` to managed login for a page asked for without a session, the
+content-hashed `app.js` and `app.css` with their immutable cache header, and CloudFront's
+Content-Security-Policy on every answer. The checks are in
+[`cloud/pilot_checks.py`](cloud/pilot_checks.py), and
+`packages/debate_api/tests/test_cloud_smoke_checks.py` runs each against the real app, whole and
+broken, on every pull request that changes either. No check signs in: validate-dev holds no TOTP
+seed. The signed-in journey is the operator's `scripts/tub_dev_journey.py`
+([the runbook](../../docs/runbooks/evidence-search.md#the-signed-in-journey-on-dev)).
 
 The recorded tier includes the checks that need S3 or OpenCaselist. They reach **stand-ins**, local
 servers on loopback, and nothing else (below, and [Adding a stand-in](#adding-a-stand-in)).
@@ -146,7 +157,7 @@ check after which one is still running. [`test_stand_ins.py`](test_stand_ins.py)
 | `live` | Needs the network or a deployed environment. Excluded by default; the network guard is off for it. |
 | `canary` | Part of validate-dev's opt-in live canary tier. Always together with `live`. |
 | `in_process` | Drives the CLI inside pytest's own process (`CliRunner`, moto, respx), or tests the harness. `ci` runs it; validate-dev's recorded tier does not, because it would be testing the source. |
-| `dev`, `prod` | A live check aimed at that environment. |
+| `dev`, `prod` | A live check aimed at that environment. `live` and `dev` together under `cloud/` is validate-dev's dev cloud tier. |
 | `slow` | Takes more than a few seconds. Out of `ci`, in validate-dev's slow tier. |
 
 ## The checks

@@ -43,7 +43,7 @@ spec:
         and a cloud run's missing-session reasons name the task role and the cloud runbook's
         section; local mode's words are byte for byte as before; tests shown failing first.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

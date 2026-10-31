@@ -158,8 +158,10 @@ def _sockets_blocked_unless_live(request: pytest.FixtureRequest) -> Iterator[Non
     cloud checks call dev with httpx in this process (v1-e39-t26).
     """
     if request.node.get_closest_marker("live") is not None:
-        with _network_open():
-            yield
+        # Nothing to undo afterwards: pytest-socket opens the socket module after every check and
+        # decides afresh as the next one is set up, and a plain check blocks itself below.
+        pytest_socket.enable_socket()
+        yield
         return
     if STAND_IN_FIXTURES & set(request.fixturenames):
         with _loopback_only():
@@ -170,17 +172,6 @@ def _sockets_blocked_unless_live(request: pytest.FixtureRequest) -> Iterator[Non
         yield
     finally:
         pytest_socket.enable_socket()
-
-
-@contextmanager
-def _network_open() -> Iterator[None]:
-    """pytest-socket switched off for one check, and the socket module put back as it was found."""
-    found = socket.socket, socket.getaddrinfo, socket.gethostbyname
-    pytest_socket.enable_socket()
-    try:
-        yield
-    finally:
-        socket.socket, socket.getaddrinfo, socket.gethostbyname = found  # type: ignore[misc]
 
 
 @contextmanager

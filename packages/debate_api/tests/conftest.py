@@ -57,7 +57,7 @@ from datetime import UTC, date, datetime, timedelta
 from functools import cache, partial
 from pathlib import Path
 from typing import Any, Final
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, quote_plus, urlsplit
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -1426,15 +1426,18 @@ class DownloadWorld(SearchWorld):
         cards: str | None = None,
         browser: TestClient | None = None,
         csrf_token: str | None = None,
+        pocket: str | None = None,
     ) -> Any:
-        """POST `/download` as `app.js` sends it, for the named cards (or a `cards` field as given)."""
+        """POST `/download` as `app.js` sends it, for the named cards (or a `cards` field as given), with
+        the `pocket` field the student typed, urlencoded, when one is given (`v1-e39-t24`)."""
         field = cards if cards is not None else ",".join(self.card_reference(name) for name in names)
         token = csrf_token
         if token is None:
             session = self.session_cookie(browser)
             assert session is not None, "sign a student in first"
             token = session.csrf_token
-        return self.post("/download", {"cards": field}, csrf_token=token, browser=browser)
+        fields = {"cards": field} if pocket is None else {"cards": field, "pocket": quote_plus(pocket)}
+        return self.post("/download", fields, csrf_token=token, browser=browser)
 
 
 class LandscapeWorld(PilotWorld):

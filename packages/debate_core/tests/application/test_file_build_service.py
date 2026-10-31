@@ -29,11 +29,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import zipfile
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final
+from xml.etree import ElementTree
 
 import pytest
 import yaml
@@ -76,6 +78,7 @@ from debate_core.testing.file_builder import (
 PARSER: Final = DebateDocxParser()
 BUILT_AT: Final = datetime(2026, 10, 24, 12, 0, tzinfo=UTC)
 CASELIST: Final = "hspolicy26"
+W: Final = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 OLD_PARSER: Final = "2026.10.18-docx-4"
 OLD_FINGERPRINTS: Final = "card-fingerprint-v3"
 OTHER_PROFILE: Final = "2026.11.02-verbatim-2"
@@ -329,6 +332,23 @@ def test_a_build_writes_the_docx_its_sidecar_and_a_pass_report_and_counts_what_i
     assert (result.counts.cards_placed, result.counts.sources_used, result.counts.tag_overrides) == (3, 2, 1)
     assert result.counts.analytics == 1
     assert result.unattributed == ()
+
+
+def test_a_build_writes_the_header_analytic_first_and_the_pocket_after_it(world: World) -> None:
+    """`v1-e39-t24` lets the pilot's download leave the header line out; `files build` never does."""
+    (first, _) = world.add(SOURCE_ONE)
+    result = world.build(world.recipe([{"fingerprint": first.fingerprint}]))
+
+    assert result.files is not None
+    with zipfile.ZipFile(result.files.docx) as archive:
+        root = ElementTree.fromstring(archive.read("word/document.xml"))
+    texts = ["".join(text.text or "" for text in paragraph.iter(f"{W}t")) for paragraph in root.iter(f"{W}p")]
+    assert texts[:3] == [
+        f"Disclosed cards (FILE_IMPORT) from {CASELIST}, each copied from the file that disclosed it and "
+        "not verified by this platform.",
+        "Synthetic pocket",
+        "Synthetic block",
+    ]
 
 
 def test_a_build_with_out_dir_writes_there(world: World) -> None:

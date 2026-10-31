@@ -5,6 +5,8 @@ message, and dropping it to build the rest), ac3 (download off on a parser misma
 per download), ac5 (a cart too large for the buffered response is refused before building), ac6 and
 ac7 (no provenance line; a camp card from its `raw/openev/2026` store) and ac8 (a card suppressed
 after its page was rendered, and an audit record that cannot be written, both refuse the download).
+Since `v1-e39-t24` a download has no header line, and its pocket is the one the student typed, within
+the limits `card_download.pocket_title` states, or "Team evidence search".
 
 Every download goes through the real app, the real index holder and the real E33 writer, over the
 synthetic sources of `conftest.py` in recording stores; no test reaches a network. What a file must
@@ -19,6 +21,7 @@ import re
 import zipfile
 from datetime import date, timedelta
 from typing import Any, Final, cast
+from urllib.parse import quote_plus
 from xml.etree import ElementTree
 
 import pytest
@@ -177,16 +180,17 @@ def test_download_of_one_card_through_the_route_re_parses_as_its_source(student:
     }
 
 
-def test_download_of_one_card_holds_no_provenance_line_and_the_header_without_its_old_sentence(
-    student: Any,
-) -> None:
+def test_download_of_one_card_holds_no_provenance_line_and_no_header_line(student: Any) -> None:
+    """Since `v1-e39-t24` the file starts at its pocket: the built file's header analytic, which put the
+    first card two pages down in Verbatim's styles, is left out of a download."""
     response = student.download("download")
 
-    assert paragraphs(response.content) == [CASELIST_HEADER, *HEADINGS, *DOWNLOAD_PARAGRAPHS]
+    assert paragraphs(response.content) == [*HEADINGS, *DOWNLOAD_PARAGRAPHS]
     text = "\n".join(paragraphs(response.content))
     for word in PROVENANCE_WORDS:
         assert word not in text, word
     assert "below its cite" not in text
+    assert CASELIST_HEADER not in text and "FILE_IMPORT" not in text and "not verified" not in text
 
 
 def test_download_sends_the_docx_alone_and_never_its_sidecar(student: Any) -> None:
@@ -230,12 +234,183 @@ def test_download_cart_with_a_camp_card_reads_it_from_raw_openev_2026_with_no_pr
         CASELIST_STORE: [student.sources()["disclosed"].sha256],
         CAMP_STORE: [student.sources()["camp"].sha256],
     }
-    assert paragraphs(response.content) == [MIXED_HEADER, *HEADINGS, *DOWNLOAD_PARAGRAPHS, *CAMP_PARAGRAPHS]
+    assert paragraphs(response.content) == [*HEADINGS, *DOWNLOAD_PARAGRAPHS, *CAMP_PARAGRAPHS]
+    assert MIXED_HEADER not in paragraphs(response.content)
     camp = reparsed(student, response.content).cards[1]
     assert (camp.tag, camp.full_cite, camp.evidence_text) == tuple(CAMP_PARAGRAPHS)
     text = "\n".join(paragraphs(response.content))
     for word in PROVENANCE_WORDS:
         assert word not in text, word
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e39-t24: no header line, and the pocket the student names
+# ------------------------------------------------------------------------------------------------
+
+DEFAULT_POCKET: Final = "Team evidence search"
+
+POCKET_REFUSED: Final = (
+    "A pocket name is up to 80 letters, numbers, spaces and punctuation marks. Change it, or leave it "
+    'blank for "Team evidence search".'
+)
+
+
+def test_download_cart_has_no_header_line_and_keeps_the_default_pocket(student: Any) -> None:
+    response = student.download("download", "download second")
+
+    assert response.status_code == 200, response.text
+    texts = paragraphs(response.content)
+    assert texts[:2] == HEADINGS
+    assert "FILE_IMPORT" not in "\n".join(texts) and "not verified" not in "\n".join(texts)
+    sections = [card.section_path for card in reparsed(student, response.content).cards]
+    assert sections == [(DEFAULT_POCKET, "Downloaded cards")] * 2
+
+
+@pytest.mark.parametrize(
+    "names", [("download",), ("download", "camp download")], ids=["one-card", "cart"]
+)
+def test_download_keeps_the_pocket_the_student_typed(student: Any, names: tuple[str, ...]) -> None:
+    response = student.download(*names, pocket="Aff answers to the states CP")
+
+    assert response.status_code == 200, response.text
+    texts = paragraphs(response.content)
+    assert texts[:2] == ["Aff answers to the states CP", "Downloaded cards"]
+    assert DEFAULT_POCKET not in texts
+    sections = {card.section_path for card in reparsed(student, response.content).cards}
+    assert sections == {("Aff answers to the states CP", "Downloaded cards")}
+    assert [record.cards for record in downloads(student)] == [
+        tuple(student.card_reference(name) for name in names)
+    ]
+
+
+@pytest.mark.parametrize(
+    ("typed", "pocket"),
+    [
+        ("", DEFAULT_POCKET),
+        ("   ", DEFAULT_POCKET),
+        ("\u3000\t\n", DEFAULT_POCKET),
+        ("  Aff   answers\tto the\nK  ", "Aff answers to the K"),
+        ("Neg\u2028K", "Neg K"),
+        ("Cafe\u0301 K", "Caf\u00e9 K"),
+        ("<b>Neg</b> & K", "<b>Neg</b> & K"),
+        ("\u201cFem IR\u201d \u2014 1NC \u2605", "\u201cFem IR\u201d \u2014 1NC \u2605"),
+        ("x" * 80, "x" * 80),
+        ("  " + "x" * 80 + "  ", "x" * 80),
+    ],
+    ids=[
+        "empty",
+        "spaces",
+        "other-whitespace",
+        "runs-of-whitespace",
+        "line-separator",
+        "decomposed-accent",
+        "markup-written-as-text",
+        "quotes-dash-symbol",
+        "eighty-characters",
+        "eighty-inside-spaces",
+    ],
+)
+def test_download_pocket_name_is_normalised_and_a_blank_one_is_the_default(
+    student: Any, typed: str, pocket: str
+) -> None:
+    """Whitespace of any kind is one space and the ends are trimmed; the name is NFC; blank is the
+    default. Markup is the student's text, which the writer escapes like any other heading."""
+    response = student.download("download", pocket=typed)
+
+    assert response.status_code == 200, response.text
+    assert paragraphs(response.content)[0] == pocket
+    (card,) = reparsed(student, response.content).cards
+    assert card.section_path == (pocket, "Downloaded cards")
+
+
+@pytest.mark.parametrize(
+    "typed",
+    [
+        "x" * 81,
+        "Neg\x00K",
+        "Neg\x07K",
+        "Neg\x7fK",
+        "Neg\u202eK",
+        "Neg\u200bK",
+        "Neg\u00adK",
+        "Neg\ue000K",
+        "Neg\uffffK",
+    ],
+    ids=[
+        "eighty-one-characters",
+        "nul",
+        "bell",
+        "delete",
+        "right-to-left-override",
+        "zero-width-space",
+        "soft-hyphen",
+        "private-use",
+        "noncharacter",
+    ],
+)
+def test_download_pocket_name_a_file_should_not_hold_is_refused_with_the_forms_message(
+    student: Any, typed: str
+) -> None:
+    """Over 80 characters, or a control, format, private-use or unassigned character (Unicode's `C`
+    categories): refused before a card is looked up, with a message the download shows, never a 500."""
+    response = student.download("download", pocket=typed)
+
+    assert response.status_code == 400, response.headers["content-type"]
+    assert response.json() == {"message": POCKET_REFUSED}
+    assert student.built == []
+    assert source_reads(student) == {CASELIST_STORE: [], CAMP_STORE: []}
+    assert downloads(student) == []
+
+
+def test_download_pocket_named_twice_in_one_body_is_refused_unread(student: Any) -> None:
+    body = f"cards={student.card_reference('download')}&pocket=Neg&pocket=Aff"
+
+    response = _post_body(student, body)
+
+    assert response.status_code == 400
+    assert source_reads(student) == {CASELIST_STORE: [], CAMP_STORE: []}
+
+
+def test_download_body_of_the_longest_cart_and_pocket_name_is_read(student: Any) -> None:
+    """Thirty references, urlencoded as `app.js` sends them, and eighty four-byte characters fit the
+    body limit: the cart is read and refused for its size, not for an unreadable body."""
+    cart = quote_plus(",".join(f"hsld26/{number:064x}" for number in range(30)))
+    body = f"cards={cart}&pocket={quote_plus(chr(0x1D11E) * 80)}"
+
+    response = _post_body(student, body)
+
+    assert len(body.encode()) < 4096
+    assert (response.status_code, response.json()["message"]) == (
+        409,
+        "A download holds up to 8 cards. Remove some from the cart and try again.",
+    )
+
+
+def test_download_card_page_and_cart_offer_the_pocket_name_with_a_label_and_its_limits(student: Any) -> None:
+    page = student.browser.get(student.card_path("download")).text
+
+    actions = page.split('<div class="download-actions">')[1].split("</div>")[0]
+    assert "<label for=\"download-pocket\">Pocket name for this card's file</label>" in actions
+    assert (
+        '<input id="download-pocket" type="text" maxlength="80" autocomplete="off" spellcheck="false" '
+        'aria-describedby="download-pocket-help" data-tub-download-pocket>'
+    ) in actions
+    assert (
+        '<p id="download-pocket-help" class="help">Up to 80 characters. Left blank, the pocket is '
+        '"Team evidence search".</p>'
+    ) in actions
+    cart = page.split("<section class=\"cart\"")[1].split("</section>")[0]
+    assert "<label for=\"cart-pocket\">Pocket name for the cart's file</label>" in cart
+    assert (
+        '<input id="cart-pocket" type="text" maxlength="80" autocomplete="off" spellcheck="false" '
+        'aria-describedby="cart-pocket-help" data-tub-cart-pocket>'
+    ) in cart
+    assert (
+        '<p id="cart-pocket-help" class="help">Up to 80 characters. Left blank, the pocket is '
+        '"Team evidence search".</p>'
+    ) in cart
+    assert cart.index("cart-pocket") < cart.index("data-tub-cart-download")
+    assert actions.index("download-pocket") < actions.index("data-tub-download=")
 
 
 # ------------------------------------------------------------------------------------------------
@@ -373,7 +548,7 @@ def test_cart_without_its_refused_card_builds_the_rest(student: Any) -> None:
 
     assert rest == ["download", "camp download"]
     assert response.status_code == 200
-    assert paragraphs(response.content) == [MIXED_HEADER, *HEADINGS, *DOWNLOAD_PARAGRAPHS, *CAMP_PARAGRAPHS]
+    assert paragraphs(response.content) == [*HEADINGS, *DOWNLOAD_PARAGRAPHS, *CAMP_PARAGRAPHS]
 
 
 def test_cart_with_a_card_whose_source_is_lost_names_it(student: Any) -> None:
@@ -614,7 +789,7 @@ def test_download_without_the_suppressed_card_builds_the_rest(student: Any) -> N
     response = student.download("camp download")
 
     assert response.status_code == 200
-    assert paragraphs(response.content)[3:] == CAMP_PARAGRAPHS
+    assert paragraphs(response.content)[2:] == CAMP_PARAGRAPHS
 
 
 def test_download_whose_audit_record_cannot_be_written_is_refused_and_sends_no_file(student: Any) -> None:
@@ -835,7 +1010,7 @@ def test_cart_without_the_card_whose_own_file_is_too_large_builds_the_rest(tight
     assert {card["reason"] for card in refused} == {TOO_LARGE_ALONE}
     response = tight.download("camp download")
     assert response.status_code == 200
-    assert paragraphs(response.content)[3:] == CAMP_PARAGRAPHS
+    assert paragraphs(response.content)[2:] == CAMP_PARAGRAPHS
 
 
 def test_cart_whose_sources_only_add_up_past_the_budget_keeps_the_sources_message(tight: Any) -> None:

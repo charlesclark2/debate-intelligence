@@ -325,9 +325,58 @@ def test_assembly_says_the_cards_are_disclosed_and_unverified_and_never_verified
 
 
 def test_assembly_takes_no_card_text_through_its_api() -> None:
-    """ac2: the request is a resolved recipe and a time; nothing reachable from it can hold card text."""
-    assert [field.name for field in dataclasses.fields(FileBuildRequest)] == ["resolved", "built_at"]
+    """ac2: the request is a resolved recipe, a time and whether to write the header line (`v1-e39-t24`);
+    nothing reachable from it can hold card text."""
+    fields = {field.name: field for field in dataclasses.fields(FileBuildRequest)}
+    assert list(fields) == ["resolved", "built_at", "header_line"]
+    assert (fields["header_line"].type, fields["header_line"].default) == ("bool", True)
     assert list(inspect.signature(EvidenceFileWriter.build).parameters) == ["self", "request"]
+
+
+def test_assembly_without_the_header_line_starts_at_the_first_pocket_and_reads_back(
+    parser: DebateDocxParser, standard: Built, built_at: datetime
+) -> None:
+    """`v1-e39-t24`: the pilot's download asks for no header line. Everything after it is as a build
+    with one writes it, and the cards still read back as their sources and fill the sidecar."""
+    writer = DocxEvidenceFileWriter(snapshots=standard.world.snapshots, parser=parser)
+    result = asyncio.run(writer.build(FileBuildRequest(standard.resolved, built_at, header_line=False)))
+
+    assert isinstance(result, BuiltEvidenceFile), result
+    assert _paragraphs(result.docx) == _paragraphs(standard.file.docx)[1:]
+    assert _paragraphs(result.docx)[0] == ("Heading1", "Synthetic pocket")
+    parsed = _reparse(parser, result.docx)
+    assert [card.section_path for card in parsed.cards] == [
+        card.section_path for card in _reparse(parser, standard.file.docx).cards
+    ]
+    assert [section.unit.value for section in parsed.sections].count("ANALYTIC") == 1
+    assert [entry.recipe_path for entry in result.manifest.cards] == [
+        entry.recipe_path for entry in standard.file.manifest.cards
+    ]
+
+
+#: The standard file as `files build` wrote it at d643a2e, the commit `v1-e39-t24` started from, before
+#: the request had a `header_line` option. Its paragraphs are written out by hand in
+#: test_assembly_writes_the_recipe_in_order_in_the_profiles_styles; these hashes hold the rest.
+STANDARD_DOCX_SHA256 = "a6d297128b2b65c37b87c186fa0510d66b0f0306bced7b1088be60f59d602c97"
+STANDARD_DOCUMENT_XML_SHA256 = "1f49d8eacdd4d219fdc07c6dfb02ae3a0cfe9a9b1f49b742277b725520732de6"
+
+
+def test_deterministic_a_files_build_writes_the_bytes_it_wrote_before_the_downloads_option(
+    parser: DebateDocxParser, standard: Built, built_at: datetime
+) -> None:
+    """`v1-e39-t24` gave the download its own option; a request that does not name it, as `files build`
+    sends one, builds the file it always built, byte for byte."""
+    with zipfile.ZipFile(BytesIO(standard.file.docx)) as archive:
+        document = archive.read("word/document.xml")
+    assert hashlib.sha256(document).hexdigest() == STANDARD_DOCUMENT_XML_SHA256
+    assert hashlib.sha256(standard.file.docx).hexdigest() == STANDARD_DOCX_SHA256
+    named = asyncio.run(
+        DocxEvidenceFileWriter(snapshots=standard.world.snapshots, parser=parser).build(
+            FileBuildRequest(standard.resolved, built_at, header_line=True)
+        )
+    )
+    assert isinstance(named, BuiltEvidenceFile)
+    assert named.docx == standard.file.docx
     assert list(inspect.signature(DocxEvidenceFileWriter.__init__).parameters) == [
         "self",
         "snapshots",

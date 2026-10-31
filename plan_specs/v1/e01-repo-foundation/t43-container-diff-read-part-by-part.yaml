@@ -33,7 +33,7 @@ spec:
         collected count unchanged; a module-level edit still selects the whole file; tests
         shown failing first.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -18,7 +18,7 @@ a human operator. **No step in this runbook is ever run by CI or by an agent ses
 | Human access | IAM Identity Center only. No IAM users for people, no long-lived access keys |
 | Permission sets | `DebateBreakGlassAdmin`, `DebateMaintainer`, `DebateReadOnly` |
 | Audit | One organization-wide, multi-region CloudTrail with log-file validation |
-| Cost | Per-environment monthly budgets, the model spend budget ([below](#the-model-spend-budget)), and a Cost Anomaly Detection monitor |
+| Cost | Per-environment monthly budgets, the model spend budget ([below](#the-model-spend-budget)), a Cost Anomaly Detection monitor, and the `Project` and `Environment` cost allocation tags they filter on, kept Active ([below](#the-cost-allocation-tags)) |
 | CLI profiles | `debate-dev` and `debate-prod`, used by `debate-research store` (`v1-e29-t05`) |
 
 Terraform for this baseline lives in
@@ -126,7 +126,8 @@ terraform apply baseline.tfplan
 
 Expected runtime: about 2–4 minutes. It creates roughly 25 resources: three permission sets with
 their policy attachments and account assignments, the CloudTrail KMS key and log bucket with its
-policies, the organization trail, three budgets, and the anomaly monitor and subscription.
+policies, the organization trail, three budgets, the anomaly monitor and subscription, and (once
+AWS has seen the keys, step 5) the two cost allocation tags.
 
 `terraform.tfvars` holds your email and Identity Center user names and is gitignored. Do not
 commit it, and do not put account ids in any committed file.
@@ -142,15 +143,26 @@ Notes on the apply:
   intentional. To genuinely retire the trail, remove the `DenyLogDeletion` statement in a
   reviewed change first.
 
-## Step 5 — Activate the cost allocation tags (after the apply)
+## Step 5 — The cost allocation tags
 
 Every budget and the anomaly monitor filters on the `Project` and `Environment` tags. Until those
 tags are activated for billing they report **$0**, and a budget that always reads zero never
 alerts.
 
-**This step cannot come earlier.** A tag key only becomes activatable once AWS has seen a
-resource carrying it, so the keys do not exist until step 4 has created the tagged resources, and
-they can take up to 24 hours to appear afterwards.
+Terraform keeps both Active:
+[`modules/cost_allocation_tags`](../../infrastructure/modules/cost_allocation_tags/), called from
+`budgets.tf` (`v1-e05-t18`). In this account they were activated by hand on 2026-10-30, and the
+root's two `import` blocks adopt them into state without changing them; see
+[applying the cost allocation tags](#applying-the-cost-allocation-tags). Destroying either resource
+sets its tag Inactive again, so a plan that destroys one is never applied.
+
+**In a new account, this cannot happen in step 4.** A tag key only becomes activatable once AWS has
+seen a resource carrying it, so the keys do not exist until step 4 has created the tagged resources,
+and they can take up to 24 hours to appear afterwards. While the `import` blocks are in `budgets.tf`,
+a plan in an account where AWS has not yet seen both keys fails with `Cannot import non-existent
+remote object`. In a new account, take the two `import` blocks out of your copy of `budgets.tf`
+for step 4. That apply creates everything else and fails on the two tags. Once the check below lists
+both keys, plan and apply again.
 
 Check whether the keys have surfaced yet:
 
@@ -160,15 +172,9 @@ aws ce list-cost-allocation-tags \
   --output text
 ```
 
-Empty output means AWS has not surfaced them yet - wait and retry. Once both appear, activate them:
-
-```bash
-aws ce update-cost-allocation-tags-status --cost-allocation-tags-status \
-  TagKey=Project,Status=Active TagKey=Environment,Status=Active
-```
-
-Or in the console: Billing and Cost Management -> Cost allocation tags -> User-defined cost
-allocation tags -> select `Project` and `Environment` -> **Activate**.
+Empty output means AWS has not surfaced them yet - wait and retry. Never activate them by hand in
+the console or with `aws ce update-cost-allocation-tags-status` once Terraform manages them: the
+apply is what activates them, and a hand change shows as drift in the next plan.
 
 Activation is not retroactive: spend from before activation is never attributed to these tags, so
 the first days of budget figures will read low. Do not treat that as the budgets being broken.
@@ -677,6 +683,199 @@ ahead, since it can include part of today). An actual spend of `0.0` while Cost 
 above zero means AWS Budgets does not match the filter the way Cost Explorer does: stop and send the
 output to the PM. Both at zero means no model call has been billed this month yet: read again after
 one has. Record the figures in the task's report.
+
+## The cost allocation tags
+
+The `Project` and `Environment` cost allocation tags are Active, and
+[`modules/cost_allocation_tags`](../../infrastructure/modules/cost_allocation_tags/) keeps them
+that way, so a reset shows in the next plan instead of silently zeroing the budgets. Spec:
+[`v1-e05-t18-cost-allocation-tags-in-terraform`](../../plan_specs/v1/e05-model-router/t18-cost-allocation-tags-in-terraform.yaml).
+Step 5 says how a new account gets there.
+
+### Applying the cost allocation tags
+
+From a worktree of its own at `origin/dev`, never in the main checkout, and never on a Wednesday,
+like [the model spend budget](#applying-a-change-to-the-budget). This root also holds the permission
+sets and the budgets, so the plan check below refuses any change but the two tags. The order: the
+worktree, the sign-in, the tfvars, the plan, the check, **the PM's read**, the apply.
+
+Both tags were already Active (the operator's hand change of 2026-10-30), so the two `import` blocks
+in `budgets.tf` adopt them: the plan reads each tag from AWS and shows it imported with nothing to
+change, and the apply writes only Terraform's state. It makes no call that changes a tag.
+
+**Shell variables**, used by every block below.
+
+```bash
+MAIN="$HOME/Documents/debate/debate-intelligence-tool/debate-intelligence"
+WT="$HOME/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/cost-allocation-tags-apply"
+```
+
+**Once: the worktree.** It is created detached, from the main checkout's repository, without
+switching the main checkout's branch.
+
+```bash
+git -C "$MAIN" fetch origin
+test -d "$WT" || git -C "$MAIN" worktree add --detach "$WT" origin/dev
+```
+
+**Every time: the worktree at `origin/dev`, with the module merged.**
+
+```bash
+cd "$WT" || echo "STOP: the worktree is missing: $WT"
+git fetch origin
+git switch --detach origin/dev
+test -f infrastructure/modules/cost_allocation_tags/main.tf && echo "ok: $(pwd) at origin/dev $(git rev-parse --short HEAD), cost_allocation_tags merged" || echo "NOT MERGED: origin/dev has no v1-e05-t18"
+git status --porcelain | grep -v 'terraform.tfvars' | head -3
+```
+Success looks like `ok: <the worktree> at origin/dev <commit>, cost_allocation_tags merged`, and
+nothing after it. `NOT MERGED` means the pull request has not merged into `dev`: stop and wait.
+
+**Sign in, and confirm the identity the plan runs as**, `debate-admin`, as for the budget. The block
+prints the role's name, not its account.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`
+```bash
+cd "$WT"
+aws sso login --sso-session debate
+aws sts get-caller-identity --profile debate-admin --query Arn --output text | cut -d/ -f2
+```
+Success looks like a name starting `AWSReservedSSO_DebateBreakGlassAdmin`.
+
+**The tfvars.** The root's `terraform.tfvars` lives in the main checkout and is gitignored. The
+block copies it into the worktree unchanged, and prints a count, never an address.
+
+**Operator command** (expected runtime under a minute)
+Where: `$WT`
+```bash
+cd "$WT"
+TFVARS="$MAIN/infrastructure/bootstrap/organization/terraform.tfvars"
+if ! test -f "$TFVARS"; then
+  echo "STOP: no terraform.tfvars in the main checkout's organization root: $TFVARS"
+else
+  cp "$TFVARS" infrastructure/bootstrap/organization/terraform.tfvars
+  echo "model_budget_notification_emails lines: $(grep -c '^model_budget_notification_emails' infrastructure/bootstrap/organization/terraform.tfvars)"
+fi
+```
+Success looks like `model_budget_notification_emails lines: 1` and no `STOP` line. `0` means the
+model spend budget's tfvars block was never run: run it first, then this one again.
+
+**The plan**, saved to a file, so what the apply applies is exactly what the PM read. The block
+refuses a Wednesday, a Terraform override and AWS keys in the shell (keys in the environment win
+over `AWS_PROFILE`).
+
+**Operator command** (expected runtime ~2 min)
+Where: `$WT`
+```bash
+cd "$WT"
+ORG=infrastructure/bootstrap/organization
+PLAN_TXT=/tmp/cost-allocation-tags-plan.txt
+rm -f "$PLAN_TXT" "$ORG/cost-allocation-tags.tfplan"
+if [ "$(date +%A)" = "Wednesday" ]; then
+  echo "STOP: it is Wednesday, the cloud run's day; plan on another day"
+elif env | grep -qE '^(TF_VAR_|TF_WORKSPACE=|TF_DATA_DIR=|TF_CLI_ARGS|AWS_ACCESS_KEY_ID=|AWS_SECRET_ACCESS_KEY=|AWS_SESSION_TOKEN=)'; then
+  echo "STOP: a Terraform override or AWS keys are set in this shell"
+elif ! grep -q '^model_budget_notification_emails' "$ORG/terraform.tfvars"; then
+  echo "STOP: terraform.tfvars has no model_budget_notification_emails; run the tfvars block again"
+else
+  AWS_PROFILE=debate-admin terraform -chdir="$ORG" init -input=false -no-color | tail -1
+  AWS_PROFILE=debate-admin terraform -chdir="$ORG" plan -input=false -no-color -out=cost-allocation-tags.tfplan > "$PLAN_TXT" 2>&1
+  tail -3 "$PLAN_TXT"
+fi
+grep -E '^Plan:|^Error:|will be destroyed|must be replaced' "$PLAN_TXT"
+```
+
+**What to read, and what stops you.** The `grep` prints exactly
+`Plan: 2 to import, 0 to add, 0 to change, 0 to destroy.`, and no `Error:`, `will be destroyed` or
+`must be replaced` line. Any `to change` above `0` stops you: a tag found Inactive (someone reset it
+after 2026-10-30) or drift elsewhere in the root, and the PM decides before anything is applied.
+`Cannot import non-existent remote object` means AWS no longer lists that key. No `Plan:` line at all
+means the plan failed or was refused: read the end of the file. Don't judge the plan by counting
+`aws_ssoadmin` lines in the text: `Refreshing state...` and read lines name every permission set the
+root reads, and they inflate a text count. The check below counts change entries in the plan's JSON
+instead.
+
+**The plan checked against exactly that shape.** `PLAN OK` only when the plan's change entries are
+the two tags, each imported with nothing to change (or, in an account where import blocks are gone,
+created), each `Active`, and nothing else. A change entry is any resource with an action other than
+`no-op` or `read`, or one being imported. It counts permission set, account assignment and budget
+entries among them by type, and prints no account id and no address.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`
+```bash
+cd "$WT"
+AWS_PROFILE=debate-admin terraform -chdir=infrastructure/bootstrap/organization show -json cost-allocation-tags.tfplan > /tmp/cost-allocation-tags-plan.json
+python3 -I - /tmp/cost-allocation-tags-plan.json <<'COSTTAGSPLAN'
+import json, sys
+plan = json.load(open(sys.argv[1]))
+tags = {
+    'module.cost_allocation_tags.aws_ce_cost_allocation_tag.this["Project"]': "Project",
+    'module.cost_allocation_tags.aws_ce_cost_allocation_tag.this["Environment"]': "Environment",
+}
+entries = [
+    c for c in plan.get("resource_changes", [])
+    if c["change"]["actions"] not in (["no-op"], ["read"]) or c["change"].get("importing")
+]
+grants = sum(1 for c in entries if c["type"].startswith("aws_ssoadmin_"))
+budgets = sum(1 for c in entries if c["type"].startswith("aws_budgets_"))
+problems = []
+others = sorted(c["address"] + " " + "/".join(c["change"]["actions"]) for c in entries if c["address"] not in tags)
+if others:
+    problems.append("other changes: " + ", ".join(others))
+how = []
+for address, key in tags.items():
+    found = [c for c in entries if c["address"] == address]
+    if len(found) != 1:
+        problems.append("the %s tag is in the plan %d times, not once" % (key, len(found)))
+        continue
+    change = found[0]["change"]
+    actions = change["actions"]
+    importing = change.get("importing")
+    after = change.get("after") or {}
+    if actions == ["no-op"] and importing and importing.get("id") == key:
+        how.append(key + " imported")
+    elif actions == ["create"] and not importing:
+        how.append(key + " created")
+    else:
+        problems.append("the %s tag is %s%s, not imported unchanged or created" % (key, "/".join(actions), " on import" if importing else ""))
+    if (after.get("tag_key"), after.get("status")) != (key, "Active"):
+        problems.append("the %s tag is planned as %s %s" % (key, after.get("tag_key"), after.get("status")))
+counts = "permission set or assignment changes: %d; budget changes: %d" % (grants, budgets)
+if problems:
+    print("PLAN NOT OK: " + " | ".join(problems) + " | " + counts)
+else:
+    print("PLAN OK: two changes, %s, each Active; nothing else changes; %s" % (" and ".join(how), counts))
+COSTTAGSPLAN
+```
+Success looks like one line, `PLAN OK: two changes, Project imported and Environment imported, each
+Active; nothing else changes; permission set or assignment changes: 0; budget changes: 0`.
+`PLAN NOT OK` names what differs: send it to the PM and do not apply. A tag found Inactive reads
+`the Environment tag is update on import, not imported unchanged or created`. The plan check and
+the plan's text both go to the PM, who reads them before the apply.
+
+**The apply.** Only after the PM's word on the plan, the same day, and not on a Wednesday. It then
+lists the two tags in state and reads their status back from AWS.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`
+```bash
+cd "$WT"
+ORG=infrastructure/bootstrap/organization
+if [ "$(date +%A)" = "Wednesday" ]; then
+  echo "STOP: it is Wednesday, the cloud run's day; apply on another day"
+elif env | grep -qE '^(TF_VAR_|TF_WORKSPACE=|TF_DATA_DIR=|TF_CLI_ARGS|AWS_ACCESS_KEY_ID=|AWS_SECRET_ACCESS_KEY=|AWS_SESSION_TOKEN=)'; then
+  echo "STOP: a Terraform override or AWS keys are set in this shell"
+else
+  AWS_PROFILE=debate-admin terraform -chdir="$ORG" apply -input=false -no-color cost-allocation-tags.tfplan | tail -3
+  echo "cost allocation tags in state: $(AWS_PROFILE=debate-admin terraform -chdir="$ORG" state list | grep -c '^module\.cost_allocation_tags\.aws_ce_cost_allocation_tag\.this')"
+  aws ce list-cost-allocation-tags --profile debate-admin --tag-keys Project Environment --query 'CostAllocationTags[].[TagKey,Status]' --output text | sort
+fi
+```
+Success looks like `Apply complete! Resources: 2 imported, 0 added, 0 changed, 0 destroyed.`, then
+`cost allocation tags in state: 2`, then `Environment Active` and `Project Active`. A state count of
+`0` means the apply did not run. `Saved plan is stale` means something changed in between: go back to
+the plan. Never `-target`, and never change the tags in the console afterwards.
 
 ## Recurring checks
 

@@ -2,9 +2,9 @@
 #
 # The account also carries unrelated personal projects, so the environment budgets and the anomaly
 # monitor filter on a cost allocation tag: without that filter these numbers would report someone
-# else's spend. Those tags must be activated in Billing, which can only happen after this applies (a
-# tag key is activatable only once AWS has seen a resource carrying it) - see the runbook. Until they
-# are, these budgets report zero, which is the failure mode the test alert in the runbook catches.
+# else's spend. Those tags report spend only while they are Active as cost allocation tags, which
+# modules/cost_allocation_tags below keeps them (v1-e05-t18). Were they inactive, these budgets would
+# report zero, which is the failure mode the test alert in the runbook catches.
 #
 # The model spend budget is the exception: model charges carry no cost allocation tag, so it filters
 # on the services and usage types they are billed under instead (modules/model_spend_budget).
@@ -83,6 +83,38 @@ module "model_spend_budget" {
 moved {
   from = aws_budgets_budget.bedrock_monthly
   to   = module.model_spend_budget.aws_budgets_budget.model_spend
+}
+
+# The Project and Environment cost allocation tags the budgets and the anomaly monitor filter on, kept
+# Active. The operator activated both by hand on 2026-10-30, before this module existed.
+module "cost_allocation_tags" {
+  source = "../../modules/cost_allocation_tags"
+}
+
+# Both tags were already Active when this module arrived, so they are imported rather than created:
+# the plan reads each tag's status from AWS and shows it imported with nothing to change, which is
+# how the PM sees they are Active before the apply. A tag found Inactive would show as updated to
+# Active instead, and the runbook's plan check refuses that until the PM has read it.
+#
+# Inert once the tags are in state. In a new account they fail the plan until AWS has seen both keys
+# (up to 24 hours after the first tagged resource): the runbook's step 5.
+import {
+  to = module.cost_allocation_tags.aws_ce_cost_allocation_tag.this["Project"]
+  id = "Project"
+}
+
+import {
+  to = module.cost_allocation_tags.aws_ce_cost_allocation_tag.this["Environment"]
+  id = "Environment"
+}
+
+# The monitor's tag key is a variable; the module's keys are fixed. If they ever differ, the monitor
+# filters on a key nothing keeps Active and reads $0.
+check "anomaly_monitor_tag_is_kept_active" {
+  assert {
+    condition     = contains(module.cost_allocation_tags.tag_keys, var.project_tag_key)
+    error_message = "The cost anomaly monitor filters on user:${var.project_tag_key}, which modules/cost_allocation_tags does not keep Active, so the monitor reads $0."
+  }
 }
 
 # Budgets only fire against a threshold somebody guessed in advance. Anomaly detection catches

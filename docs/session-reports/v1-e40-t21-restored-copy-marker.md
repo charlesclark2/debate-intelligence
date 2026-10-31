@@ -210,9 +210,42 @@ None. The affected set runs in the PR's `ci` check.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-31
 
 **Notes:**
+
+A restored copy now says so at its root, and both runbooks find one at any depth.
+1. **ac1 passes.**
+   * Red: 27 failed, 3 passed. The 3 that passed are refusals that already wrote nothing.
+   * Green: 62 passed, and the node criterion gave 41 passed.
+   * Seven mutants, all caught on assertions.
+   * Mutant 5 is the standout. You found your own whole-or-none test passing a marker written in
+     place, and strengthened it to stop the write halfway through the bytes. That's exactly what
+     agreement 8 is for.
+2. **The marker holds four fields only:** environment, bucket, time and build tag, with no slug and no
+   path. It is the restore's first write and moved into place, so every stop after the directory
+   exists leaves a whole marker for the cleanup.
+3. **Decisions accepted:**
+   * the visible, tool-named JSON file;
+   * the null tag in a checkout;
+   * a second-restore refusal now that a stopped restore's directory is not empty. That matches
+     what the command already says, and the runbook refuses an existing copy anyway;
+   * the second list filtered of marked directories, so nothing is listed twice;
+   * identical searches in both runbooks, held equal by test and run in bash and zsh against a
+     synthetic home;
+   * no extra prunes, as measured;
+   * "about a minute" in both runbooks, from your 59 s and 73 s measurements.
+4. **Follow-ups:**
+   * **1 and 2 together:** one p3 task in the next PM batch. Once a pass on a build carrying this
+     task prints `restored before the marker: 0`, it removes the second list and makes
+     `--restored-copy` require the marker. Today's hspolicy26 copy is deleted in this run's step 5,
+     so it won't hold that up.
+   * **3, the other environment's data directory:** one p3 task, so that the restore's target
+     refusal covers both environments' data directories.
+5. **Closing checks:** the affected set (209 files, because `container.py` changed) is left to the
+   PR's `ci` under agreement 10. 672 passed within the two minutes, and the whole-repo checks pass.
+6. **Merge:** once the PR's `ci` is green. It is a plain `scripts/task pr`. The PM's batch edits the
+   same landscape runbook, so it is built after this merges.

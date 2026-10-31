@@ -104,7 +104,7 @@ spec:
         (PM amendment 2026-10-21) A file whose quality status is not PASS is refused before
         any upload, and a warning alone never blocks, by tests shown failing first.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

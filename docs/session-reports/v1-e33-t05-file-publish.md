@@ -492,3 +492,13 @@ to 3 give it:
 
 Recorded in `docs/data/file-publish-log.md`. The prod half waits for the coach's first approved real
 files, so the Goal stays `InProgress`.
+
+## Operator records (recorded by the PM, 2026-11-01)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac5, prod: the first coach-approved real file | NOT RUN | PASS | 2026-11-01. The coach chose `policy-2026-27-nhi/states-cp-neg` (a States CP neg file from `files suggest`, reworked by the coach, status `ready`), rebuilt it on `2026.10.27-docx-7` after a local re-parse of hspolicy26 (0 failed), read it in Word, and removed one uncited near-duplicate card. The build: 8 cards from 3 sources, every check `PASS` but `cite-present` `WARN` (4 cards with no short cite). The prod dry run: one `WOULD_PUBLISH` row to `debate-prod-evidence-a7508de8`. The publish: `1 PUBLISHED`, `Warned, not blocked: states-cp-neg: cite-present`, exit 0; `store ls` lists the prefix's five objects, 50.1 KB. Recorded in `docs/data/file-publish-log.md` |
+
+Both halves of ac5 pass and every other criterion passed in the session, so the Goal is `Succeeded`.

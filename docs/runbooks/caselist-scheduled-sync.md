@@ -1831,8 +1831,9 @@ parsed store for want of an AWS session. See
   stage's reason and the notification's hint name both versions and the store. Install a build at
   the newer version for the agent ([Reinstalling the agent](#reinstalling-the-agent)), then run
   `caselist parse --caselist <slug> --publish` from it to parse what the refused runs imported.
-  Until then every pull that imports into the caselist fails its parse stage the same way, and still
-  imports and publishes. `caselist parse` by hand and its `--publish` are refused by the same
+  Until then every pull fails its parse stage the same way for that caselist, whatever it imports: a
+  refused caselist stays owed (`v1-e40-t08`), so each pull parses it again. Each pull still imports
+  and publishes. `caselist parse` by hand and its `--publish` are refused by the same
   rule, with exit `1`, and an equal or older stamp is rebuilt and published as before. `store sync`
   moves nothing under `parsed/` either way (`v1-e29-t12`), so it is no way round the refusal and
   no way to publish the parsed store. Never delete the table to get past it.

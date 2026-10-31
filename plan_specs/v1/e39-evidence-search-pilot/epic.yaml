@@ -600,5 +600,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e39-t24-download-skips-the-header-page-and-names-its-pocket
+    - id: t25
+      kind: Task
+      name: 'The weekly index stage skips an identical rebuild its record already matches, and publish --newest on the current index records instead of republishing'
+      description: >-
+        The weekly index stage skips an identical rebuild its record already matches, and
+        publish --newest on the current index records instead of republishing.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t25-identical-rebuild-skipped-and-newest-records.yaml
+        goalRef: v1-e39-t25-identical-rebuild-skipped-and-newest-records
+      dependsOn:
+      - t19
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t25-identical-rebuild-skipped-and-newest-records reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t25-identical-rebuild-skipped-and-newest-records
 status:
   phase: Pending

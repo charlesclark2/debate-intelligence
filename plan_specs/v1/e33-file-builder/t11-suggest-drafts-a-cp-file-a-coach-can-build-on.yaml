@@ -1,0 +1,86 @@
+# TASK v1-e33-t11-suggest-drafts-a-cp-file-a-coach-can-build-on - files suggest drafts a CP file a coach can build on: a CP text slot first, no other position's blocks, and plank-dependent blocks marked
+# Epic: E33 Evidence File Builder | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e33-t11-suggest-drafts-a-cp-file-a-coach-can-build-on
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e33-file-builder
+  annotations:
+    debate/title: "files suggest drafts a CP file a coach can build on: a CP text slot first, no other position's blocks, and plank-dependent blocks marked"
+spec:
+  # Filed by the PM, 2026-11-01, from the coach's States CP draft of 2026-10-31 (e33-t05's prod file).
+  description: >-
+    The coach drafted a States CP neg file from `files suggest --caselist hspolicy26 --position
+    <the states CP>` and had to rework it by hand before it could be built: (1) it held a block
+    headed by another position (T-USFG), because the commonest heading over some of the
+    cluster's copies was a topicality block in the same 1NC; (2) it had no place for the
+    counterplan's text, which every CP file opens with; (3) it kept blocks whose cards only make
+    sense against a particular affirmative's planks (a preemption block, a waiver block) with
+    nothing to warn the coach. Make a CP position's draft (a position the taxonomy marks as a
+    counterplan) open with an analytic slot for the CP text, a placeholder the coach replaces
+    (`[the counterplan text: ...]`), never a text copied from a team's file. Leave out a block
+    whose heading the position matcher places under another position, and count what was left
+    out in the command's result. Mark a block whose heading names a plank or a mechanism of the
+    plan with a comment saying the coach should check it against the affirmative's plan; say
+    what you match on (the topic config's plank words, or headings v1-e32-t16 reads as planks)
+    and show its counts on the hspolicy26 store before choosing (counts only). The non-CP
+    positions' drafts are unchanged.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.arguments, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, docs/guides]
+    forbidden:
+      - A team's CP text, tag or card text written into a draft
+      - A non-CP position's draft changed
+      - A real disclosed file in a fixture
+  context:
+    - kind: TaskRef
+      name: v1-e33-t03-file-build-cli
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A CP position's draft opens with a placeholder CP text slot, holds no block another
+        position's heading places, marks the plank-dependent blocks it names with a comment,
+        and reports what it left out; a non-CP draft is byte for byte as before; tests shown
+        failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e33-t11-suggest-drafts-a-cp-file-a-coach-can-build-on-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e33-file-builder
+spec:
+  description: >-
+    files suggest drafts a CP file a coach can build on: a CP text slot first, no other
+    position's blocks, and plank-dependent blocks marked.
+  goalRef:
+    name: v1-e33-t11-suggest-drafts-a-cp-file-a-coach-can-build-on
+  graph:
+    nodes:
+      - id: suggest-drafts-a-cp-file-a-coach-can-bui
+        kind: Task
+        name: CP draft structure
+        description: >-
+          files suggest drafts a CP file a coach can build on: a CP text slot first, no
+          other position's blocks, and plank-dependent blocks marked.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: CP draft structure tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, suggest]
+status:
+  phase: Pending

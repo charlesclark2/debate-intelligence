@@ -58,7 +58,8 @@ spec:
   priority: 1
   constraints:
     # PM amendment 2026-10-21: validate-dev's wiring and its test.
-    packages: [tests/smoke, scripts, docs/runbooks, docs/data, packages/debate_api, .github/workflows, tests/scripts]
+    # PM ruling 2026-11-01 (Q1 a): the holder's log lines (ac5) are debate_core.application's.
+    packages: [tests/smoke, scripts, docs/runbooks, docs/data, packages/debate_api, .github/workflows, tests/scripts, debate_core.application, packages/debate_core/tests]
     forbidden:
       - A real student's name, username or feedback quoted with an identity
       - Real disclosed files in the dev seed

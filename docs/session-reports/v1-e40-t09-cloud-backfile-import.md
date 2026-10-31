@@ -311,3 +311,13 @@ an operator script, and a plan check that passes only that one sentence.
 the PM reading the plan, then the dry run outside the window. The four imports wait for the
 operator's return. The PR merges `--partial`, with the Goal `InProgress`, until ac2 and ac3. No
 re-review is needed.
+
+## Operator records (recorded by the PM, 2026-11-01)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac2, the dry run on Fargate in dev | NOT RUN | PASS | 2026-11-01, `hspolicy25`, a task of `debate-dev-caselist-run` revision 8 (image `sha256:81656bbf…`, `v1.1.0-dev.164`), started by hand from `caselist-credentials-dev`: stopped `EssentialContainerExited`, exit `0`; the result line `"status": "ok"`, `"applied": false`, `"archive_bytes": 3958272657`, `"already_imported": false`, `"backfile_downloads_left": 1`, `"inside_no_import_window": false`, `"required_bytes": 29687044928`, `"free_bytes": 105463214080`, `"enough": true`. Recorded in `docs/data/caselist-backfile-seasons.md` |
+
+ac2 passes. The Goal stays `InProgress` for ac3, the four imports: `hspolicy25` after Monday 2026-11-02's image apply, then one a day outside the no-import window.

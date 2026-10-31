@@ -1,0 +1,76 @@
+# TASK v1-e41-t10-unknown-env-names-refused-and-newer-stamp-hint - An unknown DEBATE_ name in .env is refused, and files build tells a newer-stamped store to install the newer build
+# Epic: E41 — Delivery Tooling Upkeep | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e41-t10-unknown-env-names-refused-and-newer-stamp-hint
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+  annotations:
+    debate/title: "An unknown DEBATE_ name in .env is refused, and files build tells a newer-stamped store to install the newer build"
+spec:
+  # Filed by the PM, 2026-11-01, from v1-e41-t01's Follow-ups 1 and 2 (the PM's review, 2026-11-01).
+  description: >-
+    Two leftovers of v1-e41-t01. (1) A top-level `DEBATE_*` name in `.env` that is no setting is
+    dropped without a word, beside the forbidden item "accepting an unknown setting". Refuse it,
+    naming it and never its value, with an explicit allowlist of the legitimate non-field names
+    (say which they are and why, from the code that reads them). (2) `files build` over a store
+    whose occurrence table carries a newer fingerprint stamp than this build's tells the
+    operator to re-parse, which a newer table refuses; when fingerprint versions are ordered, as
+    `caselist parse` already knows, it says to install the newer build instead.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests]
+    forbidden:
+      - A setting's value printed or logged
+      - A name that is read today refused
+  context:
+    - kind: TaskRef
+      name: v1-e41-t01-newer-build-messages
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        An unknown top-level `DEBATE_*` name in `.env` is refused by name while every
+        allowlisted name still loads, and `files build` over a newer-stamped store names the
+        newer build, by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e41-t10-unknown-env-names-refused-and-newer-stamp-hint-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+spec:
+  description: >-
+    An unknown DEBATE_ name in .env is refused, and files build tells a newer-stamped store to
+    install the newer build.
+  goalRef:
+    name: v1-e41-t10-unknown-env-names-refused-and-newer-stamp-hint
+  graph:
+    nodes:
+      - id: unknown-env-names-refused-and-newer-stam
+        kind: Task
+        name: Newer-build leftovers
+        description: >-
+          An unknown DEBATE_ name in .env is refused, and files build tells a
+          newer-stamped store to install the newer build.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Newer-build leftovers tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, settings or fingerprint]
+status:
+  phase: Pending

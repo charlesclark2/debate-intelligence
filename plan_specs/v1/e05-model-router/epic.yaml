@@ -452,5 +452,24 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e05-t18-cost-allocation-tags-in-terraform
+    - id: t19
+      kind: Task
+      name: 'The cost allocation tags'' import blocks are removed once both tags are in state'
+      description: >-
+        The cost allocation tags' import blocks are removed once both tags are in state.
+      inputs:
+        specRef: plan_specs/v1/e05-model-router/t19-cost-allocation-tag-imports-removed.yaml
+        goalRef: v1-e05-t19-cost-allocation-tag-imports-removed
+      dependsOn:
+      - t18
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e05-t19-cost-allocation-tag-imports-removed reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e05-t19-cost-allocation-tag-imports-removed
 status:
   phase: Pending

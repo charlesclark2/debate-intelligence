@@ -115,6 +115,7 @@ reports/sync/run-lock.json                              which runner may write t
 reports/sync/state/caselist-sync-download-starts.json   the run's download ledger, and its other state
 reports/tub/search/3f9a0c1d2e4b5a69/search-index.sqlite.gz  one build of the search pilot's index
 reports/tub/search/3f9a0c1d2e4b5a69/manifest.json       what that build is and was built from
+reports/tub/search/3f9a0c1d2e4b5a69/checked-against.json  what an identical rebuild last checked it against
 reports/tub/search/current.json                         which build the pilot serves; written last
 uploads/wfb/sha256/7c/2b/7c2b90ab…33ef                  a coach's own file (V2)
 exports/wfb/2026-09-15T18-04Z-selection.zip             a bulk download (gone within a day)
@@ -153,7 +154,9 @@ lock through the everyday profile, as it writes rewritten manifests.
 SQLite file's sha256: the SQLite file gzipped, and its manifest. Then, last, it writes `current.json`,
 which names that build's object and manifest by key and sha256. The pilot's function reads
 `current.json` and follows it, so a publish stopped part-way leaves the previous build current and
-whole. The SQLite file and the manifest are described in
+whole. A rebuild identical to the published build re-uploads nothing and leaves the pointer: it writes
+`checked-against.json` beside the manifest, recording the suppression list and stores it was checked
+against (`v1-e39-t19`). The SQLite file and the manifest are described in
 [docs/data/search-index.md](../data/search-index.md).
 
 Unlike the rest of `reports/`, the index holds card text, and in stored provenance columns, never

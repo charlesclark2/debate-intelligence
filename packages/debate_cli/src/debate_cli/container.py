@@ -198,8 +198,10 @@ from debate_core.application.caselist_card_stats import CaselistCardStatsService
 from debate_core.application.caselist_parse import CaselistParseService
 from debate_core.application.caselist_pull_parse import PullParseStage
 from debate_core.application.caselist_sync import (
+    PARSE_OWED_FILENAME,
     CaselistSyncService,
     FullArchiveRotation,
+    ParseOwed,
     why_no_search_index_stage,
 )
 from debate_core.application.evidence_profiles import (
@@ -1415,7 +1417,18 @@ class ServiceContainer:
             clock=clock,
             environment=settings.environment.value,
             run_state=self.removal_run_state(),
+            # A removal that reaches a snapshot clears its parse owed (`v1-e40-t08`); in bucket mode
+            # the restored file, which the removal's save of the state files then saves.
+            parse_owed=self.parse_owed(),
         )
+
+    def parse_owed(self) -> ParseOwed:
+        """The parses this machine's runs owe, in the data directory (`v1-e40-t08`).
+
+        What `caselist status` and `caselist runs` read, and a removal clears from. The pull builds
+        its own over the same file, with the bucket-mode save as it is written.
+        """
+        return ParseOwed(self.settings.storage.data_dir / PARSE_OWED_FILENAME)
 
     def removal_run_state(self) -> RunState | None:
         """The run's state a removal restores first and rewrites last, in bucket mode only (`v1-e40-t04`)."""
@@ -1801,6 +1814,14 @@ class ServiceContainer:
             suppression = LocalFallbackSuppressionList(
                 self.suppression_list(), local=self.local_suppression_list()
             )
+        parse_stage = (
+            PullParseStage(
+                parse=self._build_caselist_parse(suppression),
+                publisher=self.parsed_publisher() if settings.storage.s3.bucket else None,
+            )
+            if caselist.parse_imported_sources
+            else None
+        )
         return CaselistSyncService(
             source=self.opencaselist_client(),
             archive_importer=CaselistImportService(
@@ -1823,12 +1844,10 @@ class ServiceContainer:
             # The pipeline over the very list above, so that a read of it that fell back to this
             # machine's copy is one the run sees, and the parsed store's publisher only where the
             # run publishes at all.
-            parse=PullParseStage(
-                parse=self._build_caselist_parse(suppression),
-                publisher=self.parsed_publisher() if settings.storage.s3.bucket else None,
-            )
-            if caselist.parse_imported_sources
-            else None,
+            parse=parse_stage,
+            # Every caselist the run follows is asked whether its store lacks this parser version's
+            # directory, and parsed in full before the index stage if so (`v1-e40-t08`).
+            full_parse_owed=parse_stage.full_parse_owed if parse_stage is not None else None,
             search_index=self._pull_search_index(event_for_caselist)
             if why_no_search_index_stage(
                 bucket_named=bool(settings.storage.s3.bucket),

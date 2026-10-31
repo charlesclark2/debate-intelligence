@@ -48,6 +48,14 @@ Two columns after the outcome, from the same details:
 Both say `not recorded` for a run with no details. `--json` gives the verdict as `verdict`, `retry`
 or `person`, or `null` when there is none or no details.
 
+## What the runs owe (`v1-e40-t08`)
+
+The caption ends by saying which parses are owed, from the parse-owed file: this machine's, or with
+`--remote` the bucket's, which is the cloud run's. A week a run published and did not parse and
+publish the parsed store of, and a caselist owed a full parse under a new parser version, both of
+which the next `caselist pull` does whether or not it imports anything. `--json` gives the file's
+entries as `parses_owed`, or `null` when the file cannot be read.
+
 ## The banner's own words (`v1-e34-t26`)
 
 Two banners put words of their own beside the verdict, and the `Verdict` cell shows them after it, in
@@ -69,6 +77,7 @@ import typer
 from debate_cli.context import cli_context, command_name
 from debate_cli.exit_codes import codes_exit_as_a_retrieval_failure
 from debate_cli.output import JsonValue, TableSpec
+from debate_cli.parses_owed import parses_owed
 from debate_core.application.sync_runs import RecordedRun, SyncRunHistory, SyncRunRecord, banner_words
 
 __all__ = ["runs"]
@@ -92,12 +101,14 @@ def runs(
     days = history.days_since_last_run(records, now)
     overdue = history.overdue(records, now)
     source = "bucket" if remote else "local log"
+    owed, owed_sentence = parses_owed(cli.services, remote=remote)
     payload: dict[str, JsonValue] = {
         "environment": settings.environment.value,
         "source": source,
         "days_since_last_run": days,
         "overdue": overdue,
         "runs": [_run_as_json(run) for run in recorded],
+        "parses_owed": owed,
     }
     cli.output.success(
         command_name(ctx),
@@ -116,7 +127,9 @@ def runs(
             ),
             rows=[_row(run) for run in recorded],
             title=f"caselist pull runs ({settings.environment.value}, {source}, last {last})",
-            caption=_caption(history, days, overdue) + _parse_sentence(records[0] if records else None),
+            caption=_caption(history, days, overdue)
+            + _parse_sentence(records[0] if records else None)
+            + (f" {owed_sentence}" if owed_sentence else ""),
         ),
     )
 

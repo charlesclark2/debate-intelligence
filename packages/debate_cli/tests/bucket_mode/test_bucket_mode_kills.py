@@ -109,21 +109,18 @@ def an_uninterrupted_week(world: World, tmp_path: Path) -> dict[str, str]:
     return left
 
 
-LATE_ONLY_UNDER: Final = ("parsed/", "reports/tub/search/")
-"""What a kill may leave late: the parse and the index of the week the killed run had published."""
-
-
 def the_next_run_finishes_the_week(
     world: World, tmp_path: Path, *, uninterrupted: dict[str, str]
 ) -> dict[str, Any]:
     """The next run takes over and finishes; the bucket then ends as an uninterrupted run leaves it.
 
-    One thing may be late, never lost, exactly as on the Mac: a run killed after its publish stage
-    saved the bundle leaves that week's sources imported and published but not parsed, and the next
-    run, finding nothing new, parses nothing (the parse stage parses what its own run imported). The
-    week is parsed by the next pull that imports into the caselist, or by hand with the fix the
-    run's reason names. Both halves are shown: the difference is under `parsed/` and the index
-    alone, and the by-hand catch-up closes it.
+    Nothing is late any more (`v1-e40-t08`). A run killed after its publish stage saved the bundle
+    leaves that week's sources imported and published but not parsed, and until `v1-e40-t08` the
+    next run, finding nothing new, parsed nothing: the week waited for the next import into the
+    caselist, or for `caselist parse --publish` by hand. The publish now leaves a parse owed in the
+    run's state files, saved to the bucket as it is written, and the next run parses and publishes
+    it though it imports nothing. So the bucket ends as an uninterrupted run leaves it with no
+    by-hand catch-up, under `parsed/` and the index as everywhere else.
     """
     world.use(tmp_path / "next")
     following = world.pull()
@@ -133,14 +130,7 @@ def the_next_run_finishes_the_week(
     assert bundle.startswith("saved, "), bundle
     now = evidence(world)
     late = {key for key in set(now) | set(uninterrupted) if now.get(key) != uninterrupted.get(key)}
-    assert all(key.startswith(LATE_ONLY_UNDER) for key in late), sorted(late)
-    if late:
-        assert following["data"]["parse"] is None, "late only when the next run had nothing to parse"
-        parsed = world.run("caselist", "parse", "--caselist", "testcl26", "--publish")
-        assert parsed["exit_code"] == ExitCode.OK, parsed
-        built = world.run("tub", "index", "build", "--caselist", "testcl26", "--caselist", "openev")
-        assert built["exit_code"] == ExitCode.OK, built
-        assert world.run("tub", "index", "publish", "--env", "dev", "--newest")["exit_code"] == ExitCode.OK
+    assert not late, f"nothing is left late: {sorted(late)}"
     assert evidence(world) == uninterrupted, "the bucket ends as a run that was never interrupted leaves it"
     return following
 

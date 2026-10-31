@@ -833,27 +833,32 @@ publish the parsed store on the operator's Mac ([A failed parse stage](#a-failed
 When the cloud run's parse stage does not publish a caselist's parsed store, the run names no
 command (`v1-e40-t18`). The stage's hint, in the run's details and in the alert email, reads:
 
-> The cloud run publishes the parsed store of `<slug>`, never the operator's Mac, whose working copy is not the one the cloud run owns: the next weekly run that imports into a caselist rebuilds its parsed store and publishes it, and so does a run started by hand that imports into it (caselist-cloud-run.md, "A failed parse stage").
+> The cloud run publishes the parsed store of `<slug>`, never the operator's Mac, whose working copy is not the one the cloud run owns: the next weekly run rebuilds it and publishes it, whether or not it imports into the caselist, and so does a run started by hand (caselist-cloud-run.md, "A failed parse stage").
 
 The email's fix line reads:
 
-> Fix: the next cloud run that imports into `<slug>` publishes that caselist's parsed store: the weekly run, or one started by hand (caselist-cloud-run.md, "A failed parse stage"); never a publish from the operator's Mac
+> Fix: the next cloud run publishes the parsed store of `<slug>`: the weekly run, or one started by hand (caselist-cloud-run.md, "A failed parse stage"); never a publish from the operator's Mac
 
-Two caselists are named together (`hspolicy26 and openev` in the hint, `hspolicy26 or openev` in the
-fix line). A parse stage that waited for a login says the same in its reason, and the login email
-ends `The parsed store waits too:` and the fix line's words.
+Two caselists are named together (`hspolicy26 and openev`). A parse stage that waited for a login
+says the same in its reason, and the login email ends `The parsed store waits too:` and the fix
+line's words. An image built before `v1-e40-t08` adds that the run must import something into the
+caselist; on such an image that was the condition, and since it is not.
 
 **What to do: usually nothing.** The raw evidence of the week is published; only its parsed store is
 late, and the search index stays at the week before (the index stage is skipped after a failed
-parse). The next Wednesday run that imports into the caselist restores the bucket's parsed store,
-parses every source it lacks, the failed week's among them, rebuilds the aggregates and publishes it.
-
-**The run parses only the caselists it imports into.** A caselist with nothing new on Wednesday
-waits for the next week that has something: for `openev`, the next camp file. A run started by hand
-cures a caselist under the same condition, so one started straight after the failed run finds nothing
-new and parses nothing. If the caselist cannot wait for its next import, ask the PM; a run by hand is
+parse). The week's parse stays owed, in the run's state files, until its parsed store is published
+complete (`v1-e40-t08`). The next run, the Wednesday one or one started by hand, restores the
+bucket's parsed store, parses every source it lacks, the failed week's among them, rebuilds the
+aggregates and publishes it, **whether or not it imports anything into the caselist**. If the
+caselist cannot wait for Wednesday, ask the PM; a run by hand is
 [Step 8's "One run by hand"](#step-8--the-seed-bucket-mode-and-one-run-by-hand-at-the-cutover-after-v1-e40-t04)
-(the network, then the start, then the watch).
+(the network, then the start, then the watch). `caselist runs --remote` on the Mac ends its caption
+with what the cloud run owes (`Parse owed: <slug> <snapshot>.`), read from the bucket's
+`reports/sync/state/caselist-sync-parse-owed.json`.
+
+**A stage over its failure rate that published its parsed store owes nothing.** Its email's fix line
+is `none owed: the parsed store was published` and the section below; the failures are the PM's to
+look into ([A parse stage over its failure rate](#a-parse-stage-over-its-failure-rate)).
 
 **Never run `caselist parse --caselist <slug> --publish` on the operator's Mac**, nor `--publish-only`.
 There it rebuilds the Mac's own, older working copy and publishes that over the parsed store the
@@ -861,6 +866,36 @@ cloud run owns. A run on an image built before `v1-e40-t18` (today's is `v1.1.0-
 `caselist parse --caselist <slug> --publish` in its email; the rule holds for that email too, and the
 cure is the one above. (The rule is the PM's, 2026-10-30, from `v1-e34-t31`'s review; `v1-e40-t18`
 made the run say it.)
+
+
+## A new image with a new parser version
+
+The first cloud run on an image whose parser version the bucket's parsed store has no directory of
+parses **every caselist it follows in full, `openev` included**, before its search index stage, and
+builds the index from the new version (`v1-e40-t08`). Before it, that run's index stage failed for
+want of a directory of the new version, and the operator re-parsed by hand from a restored copy.
+That is no longer needed. The run's parse stage reason says `parsed in full, as the parsed store
+held no directory of parser version <version>`, and its counts give `full_parses`.
+
+**How long it takes.** No cloud run has parsed in full yet, so this is from the Mac's figures. The
+2026-10-11 full parse under `2026.10.10-docx-2` took 1,465 s for 11,126 sources, parse, rebuild and
+publish; on 2026-10-30 hspolicy26 alone took 981 s for 4,342 sources, 1.6 times its 2,657 sources
+and 611 s of 2026-10-11. With every caselist grown alike, a full parse is about 2,400 s, 40 minutes,
+on the Mac. The task's 8 vCPU are not measured against the Mac; at one to three times as slow it is
+40 minutes to 2 hours, beside the restore (about 8 minutes for 15,000 parsed objects), the raw
+sources the parse fetches from `raw/`, and the index build. That is inside the run's 6-hour deadline
+([The deadline, and stopping a run](#the-deadline-and-stopping-a-run)), and the run records itself,
+so the late-run alarm, which counts recorded runs over seven days, is not near.
+
+**When one run does not finish it.** Each caselist owed is written down in
+`reports/sync/state/caselist-sync-parse-owed.json` before its parse starts, published as soon as
+its parse ends, and only then cleared. A run stopped at the deadline, or by hand, leaves the
+caselists it did not publish owed, and the next run, the Wednesday one or one started by hand,
+parses them first. A caselist whose parse was cut short starts again: its working copy went with the
+task. The index stays at the old version until a run parses and publishes every caselist owed; the
+index stage is skipped after a failed parse, and the old index stays current meanwhile.
+`caselist runs --remote` on the Mac ends with `Full parse owed under parser version <version>:` and
+the caselists still owed.
 
 ## A run that found no AWS session
 

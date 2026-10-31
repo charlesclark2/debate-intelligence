@@ -5,9 +5,11 @@ caselist whose parsed store it did not publish complete. Run on the operator's M
 rebuilds the Mac's own, older working copy and publishes it over the parsed store the cloud run
 owns. Now a bucket-mode run names the cloud cure instead, in the stage's fix text (its hint, or its
 reason when pending), in the failed-stage banner, in the login banner and in what the run records:
-the next cloud run that imports into the caselist, weekly or started by hand, publishes it. The run
-parses only the caselists it imports into, so that is the cure, and `caselist-cloud-run.md`'s "A
-failed parse stage" says so. Local mode keeps `v1-e34-t31`'s command for each caselist.
+the next cloud run, weekly or started by hand, publishes it. Since `v1-e40-t08` the caselist's parse
+stays owed until its parsed store is published complete, and every run parses what is owed whether
+or not it imports into the caselist, so the cure no longer says "that imports into"; until then the
+run parsed only the caselists it imported into. `caselist-cloud-run.md`'s "A failed parse stage" says
+so. Local mode keeps `v1-e34-t31`'s command for each caselist.
 
 Bucket mode is told two ways, each from what is already known: the pull from the composition root
 (`bucket_mode`, the container's `_in_bucket_mode`), and the banners from what the run records, its
@@ -71,36 +73,35 @@ REPO_ROOT: Final = Path(__file__).resolve().parents[5]
 CLOUD_RUNBOOK: Final = REPO_ROOT / "docs" / "runbooks" / "caselist-cloud-run.md"
 
 THE_WEEKLYS_CURE: Final = (
-    f"the next cloud run that imports into {CASELIST} publishes that caselist's parsed store: the weekly "
-    'run, or one started by hand (caselist-cloud-run.md, "A failed parse stage"); never a publish from '
-    "the operator's Mac"
+    f"the next cloud run publishes the parsed store of {CASELIST}: the weekly run, or one started by hand "
+    '(caselist-cloud-run.md, "A failed parse stage"); never a publish from the operator\'s Mac'
 )
 """The banner's fix for the weekly caselist's parsed store, in bucket mode."""
 
 THE_WEEKLYS_HINT: Final = (
     f"The cloud run publishes the parsed store of {CASELIST}, never the operator's Mac, whose working "
-    "copy is not the one the cloud run owns: the next weekly run that imports into a caselist rebuilds "
-    "its parsed store and publishes it, and so does a run started by hand that imports into it "
+    "copy is not the one the cloud run owns: the next weekly run rebuilds it and publishes it, whether "
+    "or not it imports into the caselist, and so does a run started by hand "
     '(caselist-cloud-run.md, "A failed parse stage").'
 )
 """The stage's fix text for the same, in bucket mode."""
 
 BOTH_CURE: Final = (
-    f"the next cloud run that imports into {CASELIST} or openev publishes that caselist's parsed store: "
-    'the weekly run, or one started by hand (caselist-cloud-run.md, "A failed parse stage"); never a '
-    "publish from the operator's Mac"
+    f"the next cloud run publishes the parsed store of {CASELIST} and openev: the weekly run, or one "
+    'started by hand (caselist-cloud-run.md, "A failed parse stage"); never a publish from the '
+    "operator's Mac"
 )
 BOTH_HINT: Final = (
     f"The cloud run publishes the parsed store of {CASELIST} and openev, never the operator's Mac, whose "
-    "working copy is not the one the cloud run owns: the next weekly run that imports into a caselist "
-    "rebuilds its parsed store and publishes it, and so does a run started by hand that imports into "
-    'it (caselist-cloud-run.md, "A failed parse stage").'
+    "working copy is not the one the cloud run owns: the next weekly run rebuilds it and publishes it, "
+    "whether or not it imports into the caselist, and so does a run started by hand "
+    '(caselist-cloud-run.md, "A failed parse stage").'
 )
 
 CURE_THAT_NAMES_NO_CASELIST: Final = (
-    "the next cloud run that imports into a caselist the parse stage names publishes that caselist's "
-    'parsed store: the weekly run, or one started by hand (caselist-cloud-run.md, "A failed parse '
-    "stage\"); never a publish from the operator's Mac"
+    "the next cloud run publishes the parsed store of each caselist the parse stage names: the weekly "
+    'run, or one started by hand (caselist-cloud-run.md, "A failed parse stage"); never a publish from '
+    "the operator's Mac"
 )
 """For bucket-mode details that name no caselist: what a build before `v1-e34-t31` wrote."""
 
@@ -345,8 +346,14 @@ def test_the_runbook_section_the_run_names_says_what_the_run_now_says() -> None:
     assert "\n## A failed parse stage\n" in text, "the section the cure names"
     section = " ".join(text.split("\n## A failed parse stage\n", 1)[1].split("\n## ", 1)[0].split())
 
-    assert "the next weekly run that imports into a caselist rebuilds its parsed store" in section
-    assert "a run started by hand that imports into it" in section
+    assert "that imports into" not in section, (
+        "v1-e40-t08: the next run parses what is owed, whatever it imports"
+    )
+    assert (
+        "the next weekly run rebuilds it and publishes it, whether or not it imports into the caselist"
+        in section
+    )
+    assert "and so does a run started by hand" in section
     assert "Never run `caselist parse --caselist <slug> --publish` on the operator's Mac" in section
     assert "#step-8--the-seed-bucket-mode-and-one-run-by-hand-at-the-cutover-after-v1-e40-t04" in section
     assert (

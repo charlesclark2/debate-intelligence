@@ -163,7 +163,7 @@ def test_the_copy_holds_the_runs_state_and_the_data_directory_and_the_bucket_are
     assert restored["exit_code"] == ExitCode.OK, restored
     data = restored["data"]
     assert data["manifests"] == len(list((live / "objects" / "manifests").rglob("*.jsonl"))) > 0
-    assert data["state_files"] == list(STATE_FILES), "the seed saved all five, an absent one as empty"
+    assert data["state_files"] == list(STATE_FILES), "the seed saved every state file, an absent one as empty"
     assert data["parsed_objects"] > 0
     assert data["index_id"] == world.published_index()["index_id"]
     assert data["caselists"] == [CASELIST]

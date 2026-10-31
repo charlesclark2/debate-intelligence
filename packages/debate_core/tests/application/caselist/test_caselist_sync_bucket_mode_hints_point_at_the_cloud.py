@@ -107,6 +107,10 @@ THE_FAILURE_RATE_HINT_IN_THE_CLOUD: Final = (
     "bucket, once the run has published it, never in the operator's Mac's own store; why they failed is "
     'the PM\'s to look into (caselist-cloud-run.md, "A parse stage over its failure rate").'
 )
+NOTHING_OWED_AFTER_THE_FAILURE_RATE: Final = (
+    'none owed: the parsed store was published (caselist-cloud-run.md, "A parse stage over its failure rate")'
+)
+"""The banner's fix line for a stage over its failure rate whose parsed store was published: no cure."""
 THE_FAILURE_RATE_HINT_ON_THE_MAC: Final = (
     "`debate-research caselist parse --caselist <slug> --failures` lists the sources that failed, "
     "with their reasons."
@@ -300,6 +304,11 @@ async def test_a_bucket_mode_parse_stage_over_its_failure_rate_points_at_the_clo
     assert points_at_the_mac(banner.text) == []
     [told] = [one for one in details_line(installation)["stages"] if one["stage"] == "parse"]
     assert told["hint"] == THE_FAILURE_RATE_HINT_IN_THE_CLOUD
+    # Its parsed store was published, so nothing is owed and no cure is named (`v1-e40-t08`, the PM's
+    # amendment of 2026-11-01, from `v1-e40-t22`'s Follow-up 3).
+    assert details_line(installation)["parsed_stores_owed"] == [], "the premise: the store was published"
+    assert banner.fix_command == NOTHING_OWED_AFTER_THE_FAILURE_RATE
+    assert "next cloud run" not in banner.text
 
 
 async def test_a_local_mode_parse_stage_over_its_failure_rate_still_names_the_failures_listing(

@@ -6,8 +6,9 @@ directory is the operator's. In bucket mode it is not: the cloud run's working c
 task's ephemeral storage, and the parsed store a later run or `caselist restore-run-state` restores
 is the bucket's, not the one the failed publish left. Nor is any `caselist parse` command the cure in
 bucket mode: run on the operator's Mac, it publishes the Mac's own working copy over the parsed
-store the cloud run owns (`v1-e40-t18`). The stage names the cloud cure instead: the next cloud run
-that imports into the caselist. The composition root tells the pull which mode it is in, and
+store the cloud run owns (`v1-e40-t18`). The stage names the cloud cure instead: the next cloud run,
+which since `v1-e40-t08` parses and publishes what is owed whether or not it imports into the
+caselist. The composition root tells the pull which mode it is in, and
 `packages/debate_core/tests/application/caselist/test_caselist_sync_names_the_cloud_cure_in_bucket_mode.py`
 holds the stage and the banners to it. The last test here runs the whole command in bucket mode.
 """
@@ -34,14 +35,14 @@ World = Any
 WEEK_1, WEEK_2, WEEK_3 = (week.snapshot for week in WEEKS)
 
 CLOUD_CURE: Final = (
-    f"the next cloud run that imports into {CASELIST} publishes that caselist's parsed store: the weekly "
-    'run, or one started by hand (caselist-cloud-run.md, "A failed parse stage"); never a publish from '
-    "the operator's Mac"
+    f"the next cloud run publishes the parsed store of {CASELIST}: the weekly run, or one started by hand "
+    '(caselist-cloud-run.md, "A failed parse stage"); never a publish from the operator\'s Mac'
 )
+"""Without "that imports into" since `v1-e40-t08`: the next run parses what is owed whatever it imports."""
 CLOUD_HINT: Final = (
     f"The cloud run publishes the parsed store of {CASELIST}, never the operator's Mac, whose working "
-    "copy is not the one the cloud run owns: the next weekly run that imports into a caselist rebuilds "
-    "its parsed store and publishes it, and so does a run started by hand that imports into it "
+    "copy is not the one the cloud run owns: the next weekly run rebuilds it and publishes it, whether "
+    "or not it imports into the caselist, and so does a run started by hand "
     '(caselist-cloud-run.md, "A failed parse stage").'
 )
 

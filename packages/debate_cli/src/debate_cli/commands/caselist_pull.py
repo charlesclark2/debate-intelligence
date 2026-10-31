@@ -62,7 +62,7 @@ every copy of the suppression list and only the publish is owed, and `--publish`
 first, where the aggregates may come from the run's own copy of the list alone, which is never
 published, or the rebuild did not finish. `--publish-pending` is neither: it completes the snapshot
 publishes an earlier run deferred, never a parsed store's. A bucket-mode run, the cloud run's, names
-no command (`v1-e40-t18`): the next cloud run that imports into the caselist publishes it, and
+no command (`v1-e40-t18`): the next cloud run publishes it, whatever it imports (`v1-e40-t08`), and
 nothing is published from the operator's Mac (`docs/runbooks/caselist-cloud-run.md`, "A failed
 parse stage").
 
@@ -143,7 +143,7 @@ from debate_core.application.caselist_sync import (
     run_pull,
 )
 from debate_core.application.settings import Settings
-from debate_core.application.sync_runs import SyncRunDetails, SyncRunRecord
+from debate_core.application.sync_runs import CLOUD_PUBLISH_CURE, SyncRunDetails, SyncRunRecord
 
 __all__ = ["pull", "pull_summary"]
 
@@ -220,7 +220,7 @@ def pull(
         return
     if not cli.output.is_json:
         cli.output.success(command_name(ctx), payload, display=display)
-    failure = _pull_failure(summary, payload)
+    failure = _pull_failure(summary, payload, bucket_mode=bracket.bucket_mode)
     cli.output.failure(failure, command=command_name(ctx))
     raise typer.Exit(code=failure.exit_code)
 
@@ -410,7 +410,9 @@ def _backlog_sentence(record: SyncRunRecord | None) -> str:
     return f" Carried from the previous run: {record.backlog_carried} deferred.{growing}"
 
 
-def _pull_failure(summary: RunSummary, payload: dict[str, JsonValue]) -> CommandFailure:
+def _pull_failure(
+    summary: RunSummary, payload: dict[str, JsonValue], *, bucket_mode: bool = False
+) -> CommandFailure:
     """What an incomplete run reports: the stages that failed, and the whole summary.
 
     Its exit code is `3` when every failure behind a stage that had to finish is one a retry may
@@ -435,18 +437,22 @@ def _pull_failure(summary: RunSummary, payload: dict[str, JsonValue]) -> Command
         message=f"{did_not_complete} — {named}",
         exit_code=exit_code,
         details=payload,
-        hint=_hint_for(failed, retryable=exit_code is ExitCode.RETRIEVAL_FAILURE),
+        hint=_hint_for(failed, retryable=exit_code is ExitCode.RETRIEVAL_FAILURE, bucket_mode=bucket_mode),
         panel_message=f"{did_not_complete}: {', '.join(str(record.stage) for record in failed)}",
         panel_details=every_value_in_full(panel),
     )
 
 
-def _hint_for(failed: list[StageRecord], *, retryable: bool) -> str:
+def _hint_for(failed: list[StageRecord], *, retryable: bool, bucket_mode: bool = False) -> str:
     """What to do about the failed stages: the fix a stage names, or else how to run it again.
 
     A stage a store refused carries its own fix, a permission on this machine or a grant the AWS
     profile lacks, and that comes first: running the command again before it is made changes
     nothing.
+
+    In bucket mode a failed publish names the next cloud run (`v1-e40-t25`), never
+    `--publish-pending`, which publishes the working copy of the machine it is run on: the cloud
+    run's ends with its task.
     """
     fixes = list(dict.fromkeys(record.hint for record in failed if record.hint))
     if fixes:
@@ -463,6 +469,8 @@ def _hint_for(failed: list[StageRecord], *, retryable: bool) -> str:
             f"{again}Nothing that did download was lost: it is in the inbox and imported. Run the same "
             "command again — an archive already held is not fetched twice."
         )
+    if SyncStage.PUBLISH in stages and bucket_mode:
+        return f"{again}In bucket mode {CLOUD_PUBLISH_CURE}."
     if SyncStage.PUBLISH in stages:
         return f"{again}Re-run `caselist pull --publish-pending`: every confirmed source is skipped."
     return f"{again}Run the same command again; every stage is idempotent."

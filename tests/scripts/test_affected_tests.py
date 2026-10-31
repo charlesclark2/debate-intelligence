@@ -1336,6 +1336,45 @@ def test_a_new_factory_reaches_only_what_names_it(workspace: Workspace, decorato
     assert_selected(result, {named} | EVERY_PART | ALWAYS | READS_SOURCE)
 
 
+@pytest.mark.parametrize(
+    ("postponed", "by_part"),
+    [(False, False), (True, True)],
+    ids=["evaluated when defined", "postponed by the __future__ import"],
+)
+def test_an_annotation_on_a_new_factory_runs_on_import_unless_postponed(
+    workspace: Workspace, postponed: bool, by_part: bool
+) -> None:
+    future = "from __future__ import annotations\n\n" if postponed else ""
+    setup = {CONTAINER_FILE: future + CLI_WORLD[CONTAINER_FILE]}
+    change = container_edit(
+        "    def removal(self):\n",
+        "    def archive(self) -> Limit:\n        return 1\n\n    def removal(self):\n",
+        setup,
+    )
+    result = described_after(workspace, change, setup=setup)
+    if by_part:
+        assert_selected(result, EVERY_PART | ALWAYS | READS_SOURCE)
+    else:
+        assert_selected(result, WHOLE_CONTAINER | ALWAYS | READS_SOURCE)
+        assert "is read as one file: the new archive runs code on import" in result.stderr
+
+
+def test_a_file_that_runs_the_container_module_is_reached_by_any_part(workspace: Workspace) -> None:
+    # A console script whose module is the container: the test that runs it names no module.
+    runs_it = "tests/runs_the_cli/test_container_script.py"
+    cli_project = (
+        BASE["packages/debate_cli/pyproject.toml"] + 'debate-container = "debate_cli.container:main"\n'
+    )
+    setup = {
+        "packages/debate_cli/pyproject.toml": cli_project,
+        runs_it: 'import subprocess\n\n\ndef test_it():\n    subprocess.run(["debate-container"])\n',
+    }
+    result = described_after(
+        workspace, container_edit("        return RULES\n", "        return RULES or None\n"), setup=setup
+    )
+    assert_selected(result, {runs_it} | VERIFIED_TESTS | EVERY_PART | CANNOT_TELL | ALWAYS | READS_SOURCE)
+
+
 def test_a_comment_reaches_no_part(workspace: Workspace) -> None:
     result = described_after(
         workspace, container_edit("        return RULES\n", "        # The rules.\n        return RULES\n")

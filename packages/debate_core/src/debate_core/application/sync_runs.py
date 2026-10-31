@@ -146,6 +146,7 @@ from debate_core.application.caselist_sync import (
     append_state_line,
     cloud_parse_cure,
     fix_for,
+    next_cloud_run,
     parse_command,
     remove_state_file,
     write_state_file,
@@ -1152,10 +1153,9 @@ and the publish it names are the operator's Mac's, and the cloud run's are its t
 CLOUD_FAILED_PUBLISH_RUNBOOK: Final = 'caselist-cloud-run.md, "A failed publish stage"'
 """The runbook section a bucket-mode failed publish points to (`v1-e40-t25`)."""
 
-CLOUD_PUBLISH_CURE: Final = (
-    "the next cloud run takes up what this run did not publish, from the run state saved in the "
-    f"bucket: the weekly run, or one started by hand ({CLOUD_FAILED_PUBLISH_RUNBOOK}); never a publish "
-    "from the operator's Mac"
+CLOUD_PUBLISH_CURE: Final = next_cloud_run(
+    "takes up what this run did not publish, from the run state saved in the bucket",
+    runbook=CLOUD_FAILED_PUBLISH_RUNBOOK,
 )
 """A failed publish stage's fix in bucket mode (`v1-e40-t25`), as its details' `bucket_run` says it was.
 
@@ -1168,10 +1168,9 @@ That is why this says "takes up" and not "publishes": a week redone may wait for
 CLOUD_PUBLISHED_AGAIN_RUNBOOK: Final = 'caselist-cloud-run.md, "A manifest published again"'
 """The runbook section a bucket-mode manifest owed again points to (`v1-e40-t25`)."""
 
-CLOUD_PUBLISHED_AGAIN_CURE: Final = (
-    "the next cloud run takes up what is owed again, from the run state saved in the bucket: the "
-    f"weekly run, or one started by hand ({CLOUD_PUBLISHED_AGAIN_RUNBOOK}); never a publish from the "
-    "operator's Mac"
+CLOUD_PUBLISHED_AGAIN_CURE: Final = next_cloud_run(
+    "takes up what is owed again, from the run state saved in the bucket",
+    runbook=CLOUD_PUBLISHED_AGAIN_RUNBOOK,
 )
 """:data:`MANIFEST_PUBLISHED_AGAIN_TITLE`'s fix in bucket mode (`v1-e40-t25`), for the same reason as
 :data:`CLOUD_PUBLISH_CURE`."""

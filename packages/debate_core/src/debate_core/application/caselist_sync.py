@@ -739,6 +739,7 @@ __all__ = [
     "fix_for",
     "full_archive_of_inbox_name",
     "inbox_files",
+    "next_cloud_run",
     "openev_id_of_inbox_name",
     "parse_command",
     "parses_owed_sentence",
@@ -1681,6 +1682,21 @@ CLOUD_FAILURE_RATE_RUNBOOK: Final = 'caselist-cloud-run.md, "A parse stage over 
 the cloud run's failures are, and that why they failed is the PM's."""
 
 
+def next_cloud_run(does: str, *, runbook: str) -> str:
+    """A bucket-mode cure, in the words every one of them shares (`v1-e40-t28`): what the next cloud run
+    `does`, that it is the weekly run or one started by hand, the `runbook` section that says more, and
+    that nothing is published from the operator's Mac.
+
+    One sentence for every banner and hint that names the cloud run instead of a command on this
+    machine: the parse stage's (:func:`cloud_parse_cure`, `v1-e40-t18`), the publish's and a manifest's
+    owed again (`v1-e40-t25`), and a failed or stopped run's and a growing backlog's (`v1-e40-t28`).
+    """
+    return (
+        f"the next cloud run {does}: the weekly run, or one started by hand ({runbook}); never a publish "
+        "from the operator's Mac"
+    )
+
+
 def cloud_parse_cure(caselists: Sequence[str]) -> str:
     """What finishes a bucket-mode run's unpublished parsed stores, as its banner names it (`v1-e40-t18`).
 
@@ -1693,10 +1709,7 @@ def cloud_parse_cure(caselists: Sequence[str]) -> str:
     by the stage.
     """
     named = _and_listed(caselists) if caselists else "each caselist the parse stage names"
-    return (
-        f"the next cloud run publishes the parsed store of {named}: the weekly run, or one started by hand "
-        f"({CLOUD_PARSE_STAGE_RUNBOOK}); never a publish from the operator's Mac"
-    )
+    return next_cloud_run(f"publishes the parsed store of {named}", runbook=CLOUD_PARSE_STAGE_RUNBOOK)
 
 
 @dataclass(frozen=True, slots=True)

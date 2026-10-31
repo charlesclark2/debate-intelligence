@@ -1101,7 +1101,8 @@ class ContainerOutline:
     module_code: list[tuple[str, str]] = field(default_factory=list)
     uses: dict[str, set[str]] = field(default_factory=dict)  # part -> every name its code mentions
     reads_on_import: set[str] = field(default_factory=set)  # names code run on import mentions
-    binds_on_import: set[str] = field(default_factory=set)  # module names bound other than by an import
+    # Module names a definition binds; module code's own are among the names it mentions.
+    binds_on_import: set[str] = field(default_factory=set)
     computed_reads: bool = False  # it reads module names by a name it computes (`globals()`)
 
 
@@ -1161,11 +1162,6 @@ def outline_container(text: str | None) -> ContainerOutline | str:
                 runs.append(statement.test)  # `TYPE_CHECKING` itself is read on import
         else:
             runs_on_import((what_runs(statement, None), ast.dump(statement)), statement)
-            outline.binds_on_import |= {
-                node.id
-                for node in ast.walk(statement)
-                if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store)
-            }
     outline.binds_on_import.add(CONTAINER_CLASS)
     for name, defined in definitions.items():
         outline.code[name] = dump_all(defined)

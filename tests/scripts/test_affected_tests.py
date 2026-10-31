@@ -1548,16 +1548,29 @@ def test_a_comment_reaches_no_part(workspace: Workspace) -> None:
     assert "Parts changed: none: only comments or layout." in result.stderr
 
 
-def test_a_file_naming_the_container_module_is_still_reached_by_the_name(workspace: Workspace) -> None:
-    # It replaces a module constant by its dotted name, and asks for no part.
-    patches = f"{CLI_TESTS}/test_patches_the_container.py"
+def test_a_file_naming_the_container_module_another_way_is_still_reached_by_the_name(
+    workspace: Workspace,
+) -> None:
+    # The module alone, and a dotted name built at run time: neither says which name it reads.
+    imports_it = f"{CLI_TESTS}/test_imports_the_container_by_name.py"
+    builds_a_name = f"{CLI_TESTS}/test_builds_a_container_name.py"
     setup = {
-        patches: 'def test_rules(monkeypatch):\n    monkeypatch.setattr("debate_cli.container.RULES", 2)\n'
+        imports_it: (
+            'import importlib\n\n\ndef test_it():\n    importlib.import_module("debate_cli.container")\n'
+        ),
+        builds_a_name: (
+            "def test_it(monkeypatch):\n"
+            '    for name in ("RULES", "LIMIT"):\n'
+            '        monkeypatch.setattr(f"debate_cli.container.{name}", 2)\n'
+        ),
     }
     result = described_after(
         workspace, container_edit("        return RULES\n", "        return RULES or None\n"), setup=setup
     )
-    assert_selected(result, {patches} | VERIFIED_TESTS | EVERY_PART | CANNOT_TELL | ALWAYS | READS_SOURCE)
+    assert_selected(
+        result,
+        {imports_it, builds_a_name} | VERIFIED_TESTS | EVERY_PART | CANNOT_TELL | ALWAYS | READS_SOURCE,
+    )
 
 
 @pytest.mark.parametrize(
@@ -1566,13 +1579,13 @@ def test_a_file_naming_the_container_module_is_still_reached_by_the_name(workspa
         pytest.param(
             "from debate_core.verify_rules import RULES\n",
             "from debate_core.verify_rules import RULES\nfrom debate_core.parser_adapter import Parser\n",
-            "it changes an import (line 3)",
+            "it loads debate_core.parser_adapter, which its imports did not load before (line 3)",
             id="an import added",
         ),
         pytest.param(
             "from debate_core.verify_rules import RULES\n\n",
             "from debate_core.verify_rules import RULES as RULE_SET\n\nRULES = RULE_SET\n\n",
-            "it changes an import (line 2)",
+            "it changes a module constant (line 4)",
             id="an import renamed",
         ),
         pytest.param(
@@ -1737,6 +1750,310 @@ def test_explain_names_the_changed_part_and_the_part_that_calls_it(workspace: Wo
         f"which asks for debate_cli.container's removal ({CLI}/container.py), "
         f"which calls debate_cli.container's bucket ({CLI}/container.py), which changed"
     )
+
+
+# --------------------------------------------------------------------------------------------
+# container.py's imports read by use, and `debate_cli.container.X` strings (v1-e41-t06)
+# --------------------------------------------------------------------------------------------
+
+# A second name in each module the container imports at the top, so an import can rebind a name
+# without loading anything new.
+MORE_NAMES = {
+    f"{CORE}/verify_rules.py": "RULES = 1\nSTRICT_RULES = 2\n",
+    f"{CORE}/container_limits.py": "LIMIT = 1\nLEAST = 0\n",
+}
+VERIFIED_PART = VERIFIED_TESTS | EVERY_PART | CANNOT_TELL | ALWAYS | READS_SOURCE
+# `bucket`'s tests: `removal` calls it.
+BUCKET_PART = REMOVAL_TESTS | EVERY_PART | CANNOT_TELL | ALWAYS | READS_SOURCE
+# `parser` is asked for by `files build` and `tub index build`, and by the test that builds it.
+PARSER_PART = (
+    {BUILDS_THE_PARSER, RUNS["files"], RUNS["files build help"], RUNS["tub index build"]}
+    | EVERY_PART
+    | CANNOT_TELL
+    | ALWAYS
+    | READS_SOURCE
+)
+NO_PART = ALWAYS | READS_SOURCE
+WHOLE = WHOLE_CONTAINER | ALWAYS | READS_SOURCE
+RULES_IMPORT = "from debate_core.verify_rules import RULES\n"
+
+
+def edited(text: str, *replacements: tuple[str, str]) -> str:
+    for old, new in replacements:
+        assert text.count(old) == 1, old
+        text = text.replace(old, new)
+    return text
+
+
+def container_setup(*replacements: tuple[str, str], files: dict[str, str] | None = None) -> dict[str, str]:
+    """`MORE_NAMES`, with the container edited and any other files beside it."""
+    return {
+        **MORE_NAMES,
+        CONTAINER_FILE: edited(CLI_WORLD[CONTAINER_FILE], *replacements),
+        **(files or {}),
+    }
+
+
+def described_by_use(workspace: Workspace, setup: dict[str, str], *replacements: tuple[str, str]) -> Result:
+    change = {CONTAINER_FILE: edited(setup[CONTAINER_FILE], *replacements)}
+    return described_after(workspace, change, setup=setup)
+
+
+@pytest.mark.parametrize(
+    ("replacements", "expected", "rebound"),
+    [
+        pytest.param(
+            [(RULES_IMPORT, "from debate_core.verify_rules import STRICT_RULES as RULES\n")],
+            VERIFIED_PART,
+            "RULES",
+            id="a name bound to another name of the same module",
+        ),
+        pytest.param(
+            [(RULES_IMPORT, "from debate_core.verify_rules import RULES, STRICT_RULES\n")],
+            NO_PART,
+            "STRICT_RULES",
+            id="a name added that no part uses",
+        ),
+        pytest.param(
+            [
+                (RULES_IMPORT, "import debate_core.verify_rules\n"),
+                ("        return RULES\n", "        return debate_core.verify_rules.RULES\n"),
+            ],
+            VERIFIED_PART,
+            "RULES, debate_core",
+            id="import a.b loads a, as from a.b import c does",
+        ),
+    ],
+)
+def test_an_import_that_loads_no_new_module_reaches_the_parts_using_the_names_it_rebinds(
+    workspace: Workspace, replacements: list[tuple[str, str]], expected: set[str], rebound: str
+) -> None:
+    result = described_by_use(workspace, container_setup(), *replacements)
+    assert_selected(result, expected)
+    assert f"Its imports load the same modules and rebind {rebound}," in result.stderr
+
+
+def test_a_name_removed_that_a_part_still_uses_reaches_that_parts_tests(workspace: Workspace) -> None:
+    asks_strict = f"{CLI_TESTS}/test_strict.py"
+    setup = container_setup(
+        (RULES_IMPORT, "from debate_core.verify_rules import RULES, STRICT_RULES\n"),
+        (
+            "    def removal(self):\n",
+            "    def strict(self):\n        return STRICT_RULES\n\n    def removal(self):\n",
+        ),
+        files={
+            asks_strict: "from debate_cli.container import ServiceContainer\n\n\n"
+            "def test_strict():\n    assert ServiceContainer().strict()\n"
+        },
+    )
+    result = described_by_use(
+        workspace, setup, ("from debate_core.verify_rules import RULES, STRICT_RULES\n", RULES_IMPORT)
+    )
+    assert_selected(result, {asks_strict} | EVERY_PART | ALWAYS | READS_SOURCE)
+
+
+TYPE_CHECKING_IMPORT = "from typing import TYPE_CHECKING\n"
+STORE_ADAPTER_IMPORT = "from debate_core.store_adapter import StoreAdapter\n"
+
+
+@pytest.mark.parametrize(
+    ("added", "by_use"),
+    [
+        (f"\nif TYPE_CHECKING:\n    {STORE_ADAPTER_IMPORT}", True),
+        (STORE_ADAPTER_IMPORT, False),
+    ],
+    ids=["for the type checker only", "at run time"],
+)
+def test_an_import_for_the_type_checker_loads_nothing(workspace: Workspace, added: str, by_use: bool) -> None:
+    # `bucket` imports StoreAdapter itself; nothing at the top loads its module.
+    setup = container_setup(
+        ("from debate_core.container_limits", f"{TYPE_CHECKING_IMPORT}from debate_core.container_limits")
+    )
+    result = described_by_use(workspace, setup, (RULES_IMPORT, RULES_IMPORT + added))
+    if by_use:
+        assert_selected(result, BUCKET_PART)
+    else:
+        assert_selected(result, WHOLE)
+        assert (
+            f"{CONTAINER_FILE} is read as one file: it loads debate_core.store_adapter, which its imports "
+            "did not load before (line 4)."
+        ) in result.stderr
+
+
+def test_an_import_inside_a_part_is_that_parts(workspace: Workspace) -> None:
+    result = described_by_use(
+        workspace,
+        container_setup(),
+        (
+            "        from debate_core.parser_adapter import Parser\n",
+            "        from debate_core.store_adapter import StoreAdapter as Parser\n",
+        ),
+    )
+    assert_selected(result, PARSER_PART)
+    assert f"{CONTAINER_FILE} is read by part. Parts changed: parser." in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("setup_replacements", "replacements", "reason"),
+    [
+        pytest.param(
+            [],
+            [(RULES_IMPORT, RULES_IMPORT + "from debate_core import store_adapter\n")],
+            "it loads debate_core.store_adapter, which its imports did not load before (line 3)",
+            id="a module loaded by from a import b",
+        ),
+        pytest.param(
+            [],
+            [(RULES_IMPORT, "from debate_core.container_limits import LIMIT as RULES\n")],
+            "it no longer loads debate_core.verify_rules, which its imports loaded (line 2)",
+            id="a module no longer loaded",
+        ),
+        pytest.param(
+            [],
+            [
+                (
+                    "from debate_core.container_limits import LIMIT\n" + RULES_IMPORT,
+                    RULES_IMPORT + "from debate_core.container_limits import LIMIT\n",
+                )
+            ],
+            "it changes the order in which its imports load modules",
+            id="the same modules loaded in another order",
+        ),
+        pytest.param(
+            [],
+            [("import LIMIT\n", "import LEAST as LIMIT\n")],
+            "it rebinds LIMIT, which code run on import uses",
+            id="a name module code uses",
+        ),
+        pytest.param(
+            [("MOST = LIMIT\n", 'MOST = LIMIT\n__all__ = ["RULES"]\n')],
+            [(RULES_IMPORT, "from debate_core.verify_rules import STRICT_RULES as RULES\n")],
+            "it rebinds RULES, which code run on import uses",
+            id="a name __all__ lists",
+        ),
+        pytest.param(
+            [("MOST = LIMIT\n", "MOST = LIMIT\n\n\ndef _rules():\n    return RULES\n")],
+            [(RULES_IMPORT, "from debate_core.verify_rules import RULES, STRICT_RULES as _rules\n")],
+            "it rebinds _rules, which module code binds too",
+            id="a name a function beside the container binds too",
+        ),
+        pytest.param(
+            [("MOST = LIMIT\n", "MOST = LIMIT\n\n\ndef _named(name):\n    return globals()[name]\n")],
+            [(RULES_IMPORT, "from debate_core.verify_rules import STRICT_RULES as RULES\n")],
+            "it rebinds RULES, and the module reads names by a name it computes",
+            id="a module that reads its names by a computed name",
+        ),
+        pytest.param(
+            [("MOST = LIMIT\n", "MOST = LIMIT\n\nfrom debate_core.parser_adapter import Parser\n")],
+            [(RULES_IMPORT, "from debate_core.verify_rules import RULES, STRICT_RULES\n")],
+            "it changes an import (line 2)",
+            id="an import below module code, so imports are module code",
+        ),
+        pytest.param(
+            [],
+            [(RULES_IMPORT, "from debate_core.verify_rules import *\n")],
+            "it changes an import (line 2)",
+            id="a star import, which binds names it does not list",
+        ),
+    ],
+)
+def test_an_import_read_by_use_is_still_the_whole_file_when_it_loads_or_runs_something_else(
+    workspace: Workspace,
+    setup_replacements: list[tuple[str, str]],
+    replacements: list[tuple[str, str]],
+    reason: str,
+) -> None:
+    result = described_by_use(workspace, container_setup(*setup_replacements), *replacements)
+    assert_selected(result, WHOLE)
+    assert f"{CONTAINER_FILE} is read as one file: {reason}" in result.stderr
+
+
+IMPORTS_RULES = f"{CLI_TESTS}/test_imports_rules.py"
+PATCHES_RULES = f"{CLI_TESTS}/test_patches_rules.py"
+PATCHES_VERIFIED = f"{CLI_TESTS}/test_patches_verified.py"
+NAMERS = {
+    # Imports a name the container imports.
+    IMPORTS_RULES: "from debate_cli.container import RULES\n\n\ndef test_rules():\n    assert RULES\n",
+    # Replaces that name, and a part, by their dotted names: neither imports anything from the CLI.
+    PATCHES_RULES: 'def test_rules(monkeypatch):\n    monkeypatch.setattr("debate_cli.container.RULES", 2)\n',
+    PATCHES_VERIFIED: (
+        "def test_verified(monkeypatch):\n"
+        '    monkeypatch.setattr("debate_cli.container.ServiceContainer.verified", lambda self: 2)\n'
+    ),
+}
+REBIND_RULES = (RULES_IMPORT, "from debate_core.verify_rules import STRICT_RULES as RULES\n")
+
+
+@pytest.mark.parametrize(
+    ("replacement", "expected"),
+    [
+        pytest.param(
+            ("        return RULES\n", "        return RULES or None\n"),
+            {PATCHES_VERIFIED} | VERIFIED_PART,
+            id="a changed part",
+        ),
+        pytest.param(
+            ("        return StoreAdapter()\n", "        return StoreAdapter() or None\n"),
+            BUCKET_PART,
+            id="another changed part",
+        ),
+        pytest.param(
+            REBIND_RULES,
+            {IMPORTS_RULES, PATCHES_RULES, PATCHES_VERIFIED} | VERIFIED_PART,
+            id="a rebound name",
+        ),
+        pytest.param(("MOST = LIMIT\n", "MOST = LIMIT + 1\n"), set(NAMERS) | WHOLE, id="the whole file"),
+    ],
+)
+def test_a_file_that_names_a_name_of_the_container_is_reached_by_that_name(
+    workspace: Workspace, replacement: tuple[str, str], expected: set[str]
+) -> None:
+    result = described_by_use(workspace, container_setup(files=NAMERS), replacement)
+    assert_selected(result, expected)
+
+
+def test_explain_names_the_rebound_name_a_part_and_a_file_use(workspace: Workspace) -> None:
+    setup = container_setup(files=NAMERS)
+    change = {CONTAINER_FILE: edited(setup[CONTAINER_FILE], REBIND_RULES)}
+    result = described_after(workspace, change, "--explain", setup=setup)
+    reasons = dict(line.split("  <- ", 1) for line in result.stdout.splitlines())
+    assert reasons[RUNS["verify, installed"]] == (
+        "imports tests/smoke/installed.py, which runs debate_cli.app "
+        f"({CLI}/app.py) for `verify`, "
+        f"which registers debate_cli.commands.verify ({CLI}/commands/verify.py), "
+        f"which asks for debate_cli.container's verified ({CLI}/container.py), "
+        "which uses RULES, which an import rebinds"
+    )
+    assert reasons[IMPORTS_RULES] == (
+        f"uses RULES, which an import rebinds, from debate_cli.container ({CLI}/container.py), which changed"
+    )
+    assert reasons[PATCHES_RULES] == (
+        f"names RULES, which an import rebinds, in debate_cli.container ({CLI}/container.py), which changed"
+    )
+
+
+@pytest.mark.parametrize(
+    ("change", "whole_container", "expected"),
+    [
+        pytest.param(
+            REBIND_RULES, False, {IMPORTS_RULES, PATCHES_RULES, PATCHES_VERIFIED} | VERIFIED_PART, id="by use"
+        ),
+        pytest.param(REBIND_RULES, True, set(NAMERS) | WHOLE, id="by use, --whole-container"),
+        # A module a part's import brings: the part's tests, and the file replacing that part.
+        pytest.param(None, False, {PATCHES_VERIFIED} | VERIFIED_PART, id="through a part"),
+        pytest.param(None, True, VERIFIED_PART, id="through a part, --whole-container"),
+    ],
+)
+def test_whole_container_reads_imports_and_container_names_as_before(
+    workspace: Workspace, change: tuple[str, str] | None, whole_container: bool, expected: set[str]
+) -> None:
+    setup = container_setup(files=NAMERS)
+    if change is None:
+        described = {f"{CORE}/verify_rules.py": MORE_NAMES[f"{CORE}/verify_rules.py"] + "# changed\n"}
+    else:
+        described = {CONTAINER_FILE: edited(setup[CONTAINER_FILE], change)}
+    flags = ("--whole-container",) if whole_container else ()
+    assert_selected(described_after(workspace, described, *flags, setup=setup), expected)
 
 
 # --------------------------------------------------------------------------------------------

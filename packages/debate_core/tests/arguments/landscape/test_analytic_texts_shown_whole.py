@@ -217,6 +217,30 @@ def test_a_continuation_ends_at_the_first_paragraph_that_is_not_an_analytic() ->
     assert stem.lines == (3,)
 
 
+def test_a_continuation_ends_at_an_analytic_over_60_words() -> None:
+    found = read(
+        p(1, BLOCK, STATES),
+        p(2, ANALYTIC, OPEN_STEM, STATES),
+        p(3, ANALYTIC, "- Expand sample clinics", STATES),
+        p(4, ANALYTIC, "This is why " + " ".join(["sample"] * 60) + " works", STATES),
+        p(5, ANALYTIC, "- Fund a sample prize", STATES),
+    )
+    (stem,) = cp_texts(found)
+    assert stem.lines == (3,)
+
+
+def test_a_cp_text_with_no_actor_is_not_continued() -> None:
+    # As a list plank's actor is its CP text's, a continuation's is too: a labelled text with no actor is
+    # shown alone.
+    found = read(
+        p(1, BLOCK, STATES),
+        p(2, ANALYTIC, "Text: The sample panel should", STATES),
+        p(3, ANALYTIC, "- expand sample clinics", STATES),
+    )
+    (stem,) = cp_texts(found)
+    assert (stem.form, stem.lines) == (TextForm.INLINE, ())
+
+
 @pytest.mark.parametrize(
     ("label", "after", "in_cards"),
     [
@@ -271,6 +295,21 @@ def test_a_whole_text_whose_plank_reads_differently_now_is_not_quoted() -> None:
     assert quoted(found, *edited) == {}
     # And a line no longer in the file is no whole text either.
     assert quoted(found, p(2, ANALYTIC, STEM, STATES)) == {}
+
+
+def test_a_whole_text_is_read_again_only_with_every_line_even_one_with_no_words() -> None:
+    # A line of no words leaves the digest as it is, so its paragraph's absence is checked on its own.
+    paragraphs = (
+        p(1, BLOCK, STATES),
+        p(2, ANALYTIC, STEM, STATES),
+        p(3, ANALYTIC, CLINICS, STATES),
+        p(4, ANALYTIC, "–", STATES),
+    )
+    found = read(*paragraphs)
+    (stem,) = cp_texts(found)
+    assert stem.lines == (3, 4)
+    assert quoted(found, *paragraphs) == {2: f"{STEM}\n{CLINICS}\n–"}
+    assert quoted(found, *paragraphs[:3]) == {}
 
 
 def test_a_whole_text_is_its_parts_one_line_each() -> None:

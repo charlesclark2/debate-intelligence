@@ -18,6 +18,10 @@ and what the report shows of them (:class:`LandscapeTexts`).
   a label just above it or a card under it name (:attr:`AnalyticTextReading.solves`), never a guess. The
   report groups each CP's planks by the advantage they solve, the top 3 per advantage, with "solves: not
   named" as one more group (:class:`CpPlanks`).
+* **A CP text is shown whole** (`v1-e32-t35`): one ending in a colon with the planks it lists, and one
+  ending with no sentence end with the analytics continuing it, each on a line of its own under it
+  (:attr:`AnalyticTextReading.lines`). Its digest covers every line, so a text with its planks and one
+  without are two texts, and a text any line of which names a school is withheld whole.
 
 ## What is never here
 
@@ -29,6 +33,7 @@ digest, when the report is built.
 from __future__ import annotations
 
 from enum import StrEnum
+from itertools import pairwise
 from typing import Final, Self
 
 from pydantic import Field, model_validator
@@ -139,7 +144,13 @@ class AnalyticTextReading(DomainModel):
         ge=0,
         description="A plank only: cards under it saying `solves` with words no advantage's alias holds.",
     )
-    lines: tuple[int, ...] = ()
+    lines: tuple[int, ...] = Field(
+        default=(),
+        description=(
+            "A CP text only: the paragraphs shown under it, in file order, the planks it lists after a colon "
+            "or the analytics continuing it (`v1-e32-t35`). Its digest covers them."
+        ),
+    )
 
     @model_validator(mode="after")
     def _check(self) -> Self:
@@ -158,6 +169,10 @@ class AnalyticTextReading(DomainModel):
             raise ValueError("a position and its role go together")
         if self.form is TextForm.BY_PLACE and self.kind is not AnalyticTextKind.CP_TEXT:
             raise ValueError("only a CP text is read by its place")
+        if self.lines and self.kind is not AnalyticTextKind.CP_TEXT:
+            raise ValueError("only a CP text has lines under it")
+        if any(earlier >= later for earlier, later in pairwise((self.element_index, *self.lines))):
+            raise ValueError("a CP text's lines come after it, in file order")
         return self
 
 

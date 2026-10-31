@@ -99,7 +99,13 @@ from debate_core.domain.landscape_report import (
     TopCard,
 )
 from debate_core.domain.landscape_schools import SchoolRow, SchoolView
-from debate_core.domain.landscape_texts import QUOTED_KINDS, AnalyticTextKind, CpPlanks, TextCoverage
+from debate_core.domain.landscape_texts import (
+    QUOTED_KINDS,
+    AnalyticTextKind,
+    CpPlanks,
+    QuotedText,
+    TextCoverage,
+)
 from debate_core.domain.landscape_trends import (
     WINDOW_DAYS,
     LandscapeTrends,
@@ -825,13 +831,20 @@ def _texts_sections(report: LandscapeReport) -> list[str]:
                 "| Rank | Teams | Text |",
                 "|---|---|---|",
             ]
-            lines += [f"| {row.rank} | {row.teams:,} | {_cell(row.text)} |" for row in position.texts]
+            lines += [line for row in position.texts for line in _text_rows(row)]
             lines.append("")
             if position.more is not None:
                 more = position.more
                 noun = "text" if more.texts == 1 else "texts"
                 lines += [f"And {more.texts:,} more {noun}, read by {_count(more.teams, 'team')}.", ""]
     return lines
+
+
+def _text_rows(row: QuotedText) -> list[str]:
+    """A quoted text's rows: the text on its rank's row and, for a CP text shown whole (`v1-e32-t35`), each
+    line under it on a row of its own, with no rank or teams."""
+    first, *under = row.text.split("\n") if row.kind is AnalyticTextKind.CP_TEXT else [row.text]
+    return [f"| {row.rank} | {row.teams:,} | {_cell(first)} |", *(f"| | | {_cell(line)} |" for line in under)]
 
 
 def _planks_section(report: LandscapeReport) -> list[str]:

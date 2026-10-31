@@ -470,10 +470,12 @@ async def test_a_sources_planks_and_their_counts_are_read_and_cached(world: Worl
         run.planks_refused_by_guard,
     )
     quoted = await service.quote(CASELIST, [source], run, PLANK_TAXONOMY)
+    # The CP text ending in a colon is quoted whole, with the planks it lists (v1-e32-t35); the labelled text
+    # with no actor lists none.
     assert sorted(quoted.texts.values()) == [
         "Expand sample clinics.",
         "Fund a sample prize.",
-        "The fifty states should:",
+        "The fifty states should:\nExpand sample clinics.\nFund a sample prize.",
         "The sample panel should:",
     ]
     # Words and counts only: no plank's words in the cache.

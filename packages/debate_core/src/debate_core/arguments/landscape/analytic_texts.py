@@ -43,11 +43,27 @@ A text belongs to the position its section is placed under: the nearest placed h
 placed heading is kept as unplaced and never guessed: under headings that place nothing (`1NC`, `OFF`), or
 under no heading at all. A text read by its place is only ever one placed under a CP the team reads.
 
+## A CP text whole (`v1-e32-t35`, the PM's context of 2026-11-01)
+
+A CP text is shown with the lines under it that make it whole (:func:`whole_text`), each a paragraph of
+the source on a line of its own:
+
+* **ending in a colon**, the planks it lists, as `v1-e32-t16` reads them (:class:`_Planks`): none when it
+  fails the actor guard;
+* **ending with no sentence end** (a word or a dash), the analytics right after it, outside a card and of
+  at most :data:`MAX_PLANK_WORDS` words each, up to the first paragraph that is not one, when it passes
+  the actor guard. An advantage's alias alone is passed over, as t16's label is. This is the shape the
+  count over hspolicy26 found: a plank list with no colon, each plank a second analytic opening with a
+  dash or a capital. It is never joined across a heading, a card or another CP text, and these lines are
+  not planks.
+
+Its digest covers the whole text, so a text with its planks and the same text without them are two texts.
+
 ## Showing them (:func:`top_texts`)
 
 Per position, texts are grouped by their normalized words (their digest), ranked by the teams reading
 each, then by digest. A group shows one of its texts word for word, the commonest, the first by source and
-paragraph on a tie. A text naming a school of the caselist is withheld and counted
+paragraph on a tie. A text naming a school of the caselist, in any of its lines, is withheld and counted
 (:func:`names_a_school`), and a group no text of which could be read again is not shown.
 
 Pure and deterministic: no I/O, no model, and nothing returned or logged holds a paragraph's text but
@@ -147,8 +163,11 @@ MAX_WORDS_BEFORE_SHOULD: Final = 12
 MAX_BY_PLACE_WORDS: Final = 120
 MAX_PLANK_WORDS: Final = 60
 """A list plank's limit (the PM's ruling 1 of 2026-10-25)."""
-_RULE_VERSION: Final = "analytic-texts-2"
-"""Bumped when how a text is found, read or placed changes, so a cached reading is read again."""
+_RULE_VERSION: Final = "analytic-texts-3"
+"""Bumped when how a text is found, read or placed changes, so a cached reading is read again. `3`: a CP
+text's digest covers its lines (`v1-e32-t35`)."""
+_OPEN_END: Final = re.compile(r"[\w\-–—]\s*$")
+"""A text ending with no sentence end: on a word or a dash (`v1-e32-t35`)."""
 
 _SEPARATOR: Final = r"\s*[:\-\u2013\u2014]\s*(?=\S)"
 _CP_INLINE: Final = re.compile(
@@ -315,7 +334,14 @@ def text_digest(text: str) -> str:
 
 
 def whole_text(text: str, lines: Sequence[str]) -> str:
-    return text
+    """A CP text shown whole (`v1-e32-t35`): its words, then each line under it, one line each.
+
+    With lines, each part's runs of spaces and breaks become one space, so each line of the whole text is
+    one paragraph of the source; with none, the text is as it was read.
+    """
+    if not lines:
+        return text
+    return "\n".join(" ".join(part.split()) for part in (text, *lines))
 
 
 def advantage_aliases_in(words: str, aliases: Mapping[str, str]) -> tuple[str, ...]:
@@ -499,7 +525,10 @@ def read_analytic_texts(
     for stem in sorted(
         (one for one in found if one.kind is AnalyticTextKind.CP_TEXT), key=lambda one: one.element_index
     ):
-        found += planks.of(stem, cp_paragraphs)
+        listed, lines = planks.of(stem, cp_paragraphs)
+        found += listed
+        if lines:
+            found[found.index(stem)] = planks.whole(stem, lines)
     return SourceTexts(
         readings=tuple(sorted(found, key=lambda one: (one.label_element_index, one.element_index, one.kind))),
         refused_by_guard=refused,
@@ -518,6 +547,9 @@ class _Planks:
     alias is a label naming the plank after it. Later in the block, up to its next heading or CP text,
     each `should` analytic past the guard and each paragraph opening with a plank label is a separate
     plank, named also by the cards under it. A plank is placed where its CP text is.
+
+    It also finds the lines a CP text is shown whole with (`v1-e32-t35`): its list planks, or the analytics
+    continuing a text that ends with no sentence end.
     """
 
     def __init__(
@@ -537,11 +569,11 @@ class _Planks:
         self.refused_by_guard = 0
         self.labels = 0
 
-    def of(self, stem: AnalyticTextReading, cp_paragraphs: Collection[int]) -> list[AnalyticTextReading]:
-        text = self._written[self._at[stem.element_index]].text
-        words = (
-            _without_inline_label(AnalyticTextKind.CP_TEXT, text) if stem.form is TextForm.INLINE else text
-        )
+    def of(
+        self, stem: AnalyticTextReading, cp_paragraphs: Collection[int]
+    ) -> tuple[list[AnalyticTextReading], list[SectionParagraph]]:
+        """The CP text's planks, and the lines it is shown whole with."""
+        words = self._words(stem)
         listing = words.rstrip().endswith(":")
         guarded = passes_actor_guard(words, self._rules.actors)
         listed: list[tuple[SectionParagraph, SectionParagraph | None]] = []
@@ -572,7 +604,44 @@ class _Planks:
             listed = []
         found = [self._reading(stem, one, TextForm.LIST, label, ()) for one, label in listed]
         found += [self._reading(stem, one, TextForm.SEPARATE, None, tags) for one, tags in separate]
-        return found
+        if listed:
+            return found, [one for one, _ in listed]
+        if guarded and _OPEN_END.search(words):
+            return found, self._continuing(stem, cp_paragraphs)
+        return found, []
+
+    def whole(self, stem: AnalyticTextReading, lines: Sequence[SectionParagraph]) -> AnalyticTextReading:
+        """The CP text with its lines, its digest over the whole text."""
+        whole = whole_text(self._words(stem), [one.text for one in lines])
+        return AnalyticTextReading.model_validate(
+            {
+                **stem.model_dump(),
+                "lines": tuple(one.element_index for one in lines),
+                "digest": text_digest(whole),
+            }
+        )
+
+    def _words(self, stem: AnalyticTextReading) -> str:
+        text = self._written[self._at[stem.element_index]].text
+        return _without_inline_label(AnalyticTextKind.CP_TEXT, text) if stem.form is TextForm.INLINE else text
+
+    def _continuing(
+        self, stem: AnalyticTextReading, cp_paragraphs: Collection[int]
+    ) -> list[SectionParagraph]:
+        """The analytics right after a CP text, outside a card and of at most 60 words each, up to the first
+        paragraph that is not one; an advantage's alias alone is passed over."""
+        lines: list[SectionParagraph] = []
+        for one in self._written[self._at[stem.element_index] + 1 :]:
+            if (
+                one.unit is not StructuralUnit.ANALYTIC
+                or one.element_index in self._source.in_cards
+                or one.element_index in cp_paragraphs
+                or len(tag_words(one.text).split()) > MAX_PLANK_WORDS
+            ):
+                break
+            if not self._is_alias_label(one):
+                lines.append(one)
+        return lines
 
     def _is_alias_label(self, one: SectionParagraph) -> bool:
         form = normalize_source_heading(one.text, self._names, self._caselist).text
@@ -639,7 +708,9 @@ def read_back_texts(
     """Each wanted text word for word, by paragraph, when its paragraph still hashes to the digest kept.
 
     A paragraph is found by its element index and must hash to the reading's digest, so nothing is shown
-    from a paragraph other than the one that was read. An overview, which keeps no digest, is never read.
+    from a paragraph other than the one that was read. A CP text with lines is read whole, every line from
+    its own paragraph, and the whole must hash to the digest (`v1-e32-t35`). An overview, which keeps no
+    digest, is never read.
     """
     by_index = {one.element_index: one for one in paragraphs}
     texts: dict[int, str] = {}
@@ -653,6 +724,10 @@ def read_back_texts(
             text = _without_inline_label(one.kind, paragraph.text)
         else:
             text = paragraph.text
+        under = [by_index[index].text for index in one.lines if index in by_index]
+        if len(under) < len(one.lines):
+            continue
+        text = whole_text(text, under)
         if text_digest(text) == one.digest:
             texts[one.element_index] = text
     return texts

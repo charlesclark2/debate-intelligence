@@ -16,6 +16,7 @@ are ones an installed build reads, and the reverse.
 | `run_log_written_by_a_schema_3_build.jsonl`, `run_summary_schema_3.json` | A build before `v1-e34-t13` | Kept by that task; see `test_pull_stage_failure_codes.py` |
 | `details_schema_before_parsed_stores_owed.json` | `v1.1.0-dev.155` (`76b53e7`), the Mac's installed build at the cutover, and `b0cf40f`, the commit on `dev` that `v1-e34-t31` started from | `SyncRunDetails.model_json_schema()`, byte for byte the same from both: what those builds read a run's details with. It allows a key it does not define and refuses one of its own keys with another type. `test_caselist_sync_names_publish_only_per_caselist.py` holds the details this build writes to it |
 | `record_schema_of_the_cloud_image.json` | `v1.1.0-dev.164` (`03b23e2`), the cloud run's image deployed on 2026-10-29 (`v1-e40-t18`) | `SyncRunRecord.model_json_schema()` by that build. It differs from `record_schema_of_the_start_commit.json` only in two descriptions, and is byte for byte what `v1.1.0-dev.155` and `650a655`, the commit `v1-e40-t18` started from, print. Its `SyncRunDetails.model_json_schema()` is byte for byte `details_schema_before_parsed_stores_owed.json`, so that file stands for it too. `test_caselist_sync_names_the_cloud_cure_in_bucket_mode.py` holds the bucket-mode records and details this build writes to both |
+| `details_schema_of_the_macs_installed_build.json` | `v1.1.0-dev.200` (`761b571`), the Mac's installed build on 2026-10-31, `v1-e40-t18`'s merge (`v1-e40-t22`) | `SyncRunDetails.model_json_schema()` by that build: the first stored details schema that defines `parsed_stores_owed`. Byte for byte what `7272af9`, the commit `v1-e40-t22` started from, prints. dev.200's record schema is byte for byte `record_schema_of_the_cloud_image.json`, so that file stands for it. `test_caselist_sync_bucket_mode_hints_point_at_the_cloud.py` holds the bucket-mode records and details of its three hints to both builds' schemas |
 
 The scenarios are the functions of `run_record_scenarios.py`, which gives each build the same
 run to record, so the same file runs against either source. Two things keep that true after
@@ -107,6 +108,15 @@ line printed the details schema that was compared with `details_schema_before_pa
 git archive v1.1.0-dev.164 packages/debate_core/src | tar -x -C "${DEV164}"
 PYTHONPATH="${DEV164}/packages/debate_core/src" "${CHECKOUT}/.venv/bin/python" -c 'import json,sys; from debate_core.application.sync_runs import SyncRunRecord; sys.stdout.write(json.dumps(SyncRunRecord.model_json_schema(), indent=2, sort_keys=True) + "\n")'
 PYTHONPATH="${DEV164}/packages/debate_core/src" "${CHECKOUT}/.venv/bin/python" -c 'import json,sys; from debate_core.application.sync_runs import SyncRunDetails; sys.stdout.write(json.dumps(SyncRunDetails.model_json_schema(), indent=2, sort_keys=True) + "\n")'
+```
+
+The Mac's installed build's details schema (`v1-e40-t22`), the same way. `DEV200` is its exported
+source; the record schema it printed by the first line's code with `SyncRunRecord` was compared with
+`record_schema_of_the_cloud_image.json`:
+
+```bash
+git archive v1.1.0-dev.200 packages/debate_core/src | tar -x -C "${DEV200}"
+PYTHONPATH="${DEV200}/packages/debate_core/src" "${CHECKOUT}/.venv/bin/python" -c 'import json,sys; from debate_core.application.sync_runs import SyncRunDetails; sys.stdout.write(json.dumps(SyncRunDetails.model_json_schema(), indent=2, sort_keys=True) + "\n")'
 ```
 
 ## When these may change

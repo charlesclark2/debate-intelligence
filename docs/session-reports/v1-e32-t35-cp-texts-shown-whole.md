@@ -444,3 +444,48 @@ one re-read of every on-topic source at the first dry run on this build.
 * **The row's note** appears only when the shown text has planks and fewer of the group's teams read
   them. With no planks shown, the note would only count punctuation variants, and the golden report's
   rows would change for nothing.
+
+## PM review (second, of the re-work)
+
+**Verdict:** ACCEPTED
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:** PM (Claude), 2026-10-31
+
+**Notes:**
+
+The re-work does what point 2 asked. The re-measure shows the coach will see the same CPs, ranks and
+team counts as before t35, each now shown whole.
+1. **The grouping.**
+   * Groups are keyed on `opening_digest` and ranked by distinct teams.
+   * The shown text is the whole text the most of the group's teams read, falling through past any
+     that names a school.
+   * The checks stay on every line shown: 3a, checked on the stem only, is caught by the read-back
+     test.
+   * `text_teams` is never more than the group's teams, and the model enforces it.
+   * The note appears only when planks are shown and fewer teams read them, so the golden rows don't
+     move.
+2. **Red against a skeleton:** 11 failed, all on the new rules. The 17 first-round tests passed
+   unchanged.
+3. **Mutants:** 3a, 3b, 14, 15 and 16 were all caught, with first-round mutants 4 to 13 still caught.
+4. **The re-measure.** The Advantage CP is back at 12 teams, showing one whole text with 6 planks
+   (`12 (1 with these planks)`). States CP rank 1 keeps its 9 teams and shows the planks 7 of them
+   read. Rank 3, the group the coach read cut short, now shows a whole text. Distinct groups and
+   coverage are unchanged. The store was untouched (mtimes and sizes).
+5. **Decisions accepted:**
+   * the count on the report model, since the bundle has no JSON file and the CLI's `--json` carries
+     counts only, so no field is added there;
+   * "exact" meaning word for word;
+   * the withheld counting;
+   * the rules version left at `analytic-texts-3`, so the operator re-reads once.
+6. **Deviations 1 and 2:** the PM's next batch amends the spec: "no capital" comes out, and ac1's
+   "the group's digest covers what is shown" becomes "the checks cover what is shown; a CP group is its
+   opening paragraph's". It also adds the runbook clause ("or readings of older rules").
+7. **Closing checks:** the node criterion (138), the neighbours (343), ruff, pyright, lint-imports, the
+   links and the specs are clean. The affected set (143 files) stopped at 43% at its limit with nothing
+   failing, under heavy load, and is left to the PR's `ci` under agreement 10.
+8. **Merge:** a plain `scripts/task pr` once `ci` is green. The next hspolicy26 republish, from a
+   restored copy via the cloud-run landscape runbook, re-reads every on-topic source once at step 3's
+   dry run, which takes the long end of its estimate. It is best run after Wednesday's run, when the
+   stores are docx-7.
+

@@ -50,15 +50,15 @@ guard or unread, and 1 text withheld for naming a school.
 
 ## What each part tells apart
 
-* **The planks dropped** (a colon text shown alone): no whole text has a line. The group shows the
-  opening alone; nothing is passed over, since only the opening is checked.
+* **The planks dropped** (a colon text keeps no lines): the six colon copies are the opening alone, read
+  by all 6 teams, and that is the text shown, with no planks.
 * **A plank naming a school shown** (the school check on the first line only): the 4-team text is
   shown, with `Birchmoor`.
-* **The read-back or school check on the opening only** (3a): see the unit tests; here, the same as the
-  last.
-* **Grouping on the whole text** (3b): the three whole texts are three groups, so rank 1 has 3 teams,
-  and the 1-team text is a third row.
+* **Grouping on the whole text**: the colon list and the dash continuation have the same words, so they
+  are one group of 4 teams (YY, JJ, QQ, WW), and rank 1 says 4 teams; the named text's group is withheld.
 * **The text shown chosen by copies, not teams**: once the named text is passed over, the 3-copy,
   1-team text is shown.
 * **No fall-through** (a group withheld when its commonest whole text names a school): only the
   Congress text is shown.
+* **The read-back checked on the opening only** is not seen here, since every file reads back as it was
+  read: the unit tests change a plank between the reading and the read-back.

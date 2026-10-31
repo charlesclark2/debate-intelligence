@@ -146,9 +146,34 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-01
 
 **Notes:**
+
+The validator now refuses the drift the dependency audit cleaned up, and the task helper no longer
+counts an unknown prerequisite as met.
+1. **ac1 passes.**
+   * Red: 20 failed and 8 passed, the 8 being the clean trees and baselines, every failure an
+     assertion. Green: 28 passed.
+   * Dev's tree at `a01f789` passes every new check, with nothing outside this task changed.
+   * Nine mutants were caught. You discarded mutant 5's first form, which crashed rather than listing
+     the task, and redid it with the old filter restored. That is the right standard.
+2. **Decisions accepted:**
+   * release Goals checked over their epics;
+   * External nodes that name no task, or a task of their own epic, refused;
+   * messages filed against the epic file, naming which side lacks the name and how to draw it;
+   * `ready` warning and exiting 0, because of `scripts/task`'s `set -e` capture;
+   * `prereqs` exiting 2 for a spec error, apart from 1 for not yet Succeeded;
+   * empty contexts not refused, since a root task has none. The README's follow-up rule stays a
+     review rule, and the PM follows it.
+3. **Follow-ups:** one p3 E41 task in the next PM batch.
+   * The 10 pyright errors in `validate_specs.py`.
+   * `scripts/task start` refusing an unknown prerequisite even under `--force`. `--force` overrides
+     an unmet prerequisite, not a spec error, so `start` should tell exit 2 from exit 1.
+4. **Closing checks:** the affected set ran whole within the limit (48 files, 2,185 passed). pyright
+   over CI's scope and over task_helper.py is clean, and the whole-repo checks pass.
+5. **Merge:** once the PR's `ci` is green. It is a plain `scripts/task pr`. From then on a batch that
+   breaks the graph is refused by `validate_specs.py` before it reaches dev.

@@ -33,13 +33,24 @@ the bucket. Every other write goes to the named directory: :class:`RunStateResto
 inside it nor holding it. A copy restored over another store would mix the two, and its newest
 parsed generation, which a later parse or publish reads, could be the other store's.
 
+**The marker** (`v1-e40-t21`). The restore's first write to the directory is
+:data:`RESTORED_COPY_MARKER` at its root: the environment, the bucket, the time of the restore and the
+build's tag, never a caselist, a school or a path. The annual purge and the landscape runbook find a
+leftover copy by it at any depth. It is written whole or not at all, before anything is restored, so a
+restore that stops part-way, a source missing or no room for the sources among the reasons, leaves it
+beside what it restored. A refusal before the lock is taken, or by the lock, writes no directory at
+all. The data directory is refused, so it never holds one.
+
 **What is logged** is counts. The directory is the operator's own path, and never logged.
 """
 
 from __future__ import annotations
 
+import json
+import tempfile
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final
 
@@ -54,15 +65,24 @@ from debate_core.application.caselist.suppression import RecordedSuppressionList
 from debate_core.application.errors import DomainError
 
 __all__ = [
+    "RESTORED_COPY_MARKER",
     "RESTORE_COMMAND",
     "RestoreTargetRefused",
     "RestoredCopy",
+    "RestoredCopyMarker",
     "RunStateRestore",
     "restore_target_refusal",
 ]
 
 RESTORE_COMMAND: Final = "caselist restore-run-state"
 """The command the lock's holder names while the restore holds it."""
+
+RESTORED_COPY_MARKER: Final = "debate-research-restored-copy.json"
+"""The file at the root of every copy a restore makes, saying the directory is a restored copy (`v1-e40-t21`).
+
+No file of a data directory is named after the tool, so the name cannot collide with one. The annual
+purge's step 1 and the landscape runbook's last step find leftover copies by it, at any depth.
+"""
 
 
 class RestoreTargetRefused(DomainError):
@@ -108,6 +128,28 @@ class RestoredCopy:
     """The raw sources fetched with `--with-sources`; `None` without it."""
 
 
+@dataclass(frozen=True, slots=True)
+class RestoredCopyMarker:
+    """What the marker says: where the copy came from, when, and by which build. Never a name or a path."""
+
+    environment: str
+    bucket: str
+    restored_at: datetime
+    build_tag: str | None
+    """The release tag of the build that restored the copy; `None` from a source checkout."""
+
+    def as_json(self) -> str:
+        return json.dumps(
+            {
+                "environment": self.environment,
+                "bucket": self.bucket,
+                "restored_at": self.restored_at.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "build_tag": self.build_tag,
+            },
+            indent=2,
+        )
+
+
 class RunStateRestore:
     """The restore into a named directory. See the module docstring.
 
@@ -117,6 +159,10 @@ class RunStateRestore:
         sources_in: The raw sources of a copy restored into a given directory (`--with-sources`).
         live_data_dir: This environment's own data directory, which is refused.
         parsed_version: The parsed store's version directory this build reads.
+        environment: This environment's name, for the marker.
+        bucket: The bucket restored from, for the marker.
+        build_tag: This build's release tag, for the marker; `None` from a source checkout.
+        clock: Now, in UTC: the marker's time of the restore.
     """
 
     def __init__(
@@ -127,12 +173,20 @@ class RunStateRestore:
         sources_in: Callable[[Path], RestoredSources],
         live_data_dir: Path,
         parsed_version: str,
+        environment: str,
+        bucket: str,
+        build_tag: str | None,
+        clock: Callable[[], datetime],
     ) -> None:
         self._state_in = state_in
         self._suppression_in = suppression_in
         self._sources_in = sources_in
         self._live_data_dir = Path(live_data_dir)
         self._parsed_version = parsed_version
+        self._environment = environment
+        self._bucket = bucket
+        self._build_tag = build_tag
+        self._clock = clock
 
     def refusal(self, target: Path) -> str | None:
         """Why `target` is refused, or `None`: see :func:`restore_target_refusal`."""
@@ -160,6 +214,7 @@ class RunStateRestore:
             raise RestoreTargetRefused(refusal)
         directory = target.expanduser().resolve()
         directory.mkdir(parents=True, exist_ok=True)
+        self._mark(directory)
         state = self._state_in(directory)
         report = await state.restore(caselists, parsed_version=self._parsed_version)
         # The copy's own list starts empty, so reconciling writes only the copy: the bucket's holds
@@ -180,3 +235,20 @@ class RunStateRestore:
             suppression_entries=len(await suppression.entries()),
             sources=fetched,
         )
+
+    def _mark(self, directory: Path) -> None:
+        """Write :data:`RESTORED_COPY_MARKER` before anything is restored, so a stop leaves it too.
+
+        It lands as the restore's other files do, written in a scratch directory inside the copy and
+        moved into place: the copy holds the whole marker or none.
+        """
+        marker = RestoredCopyMarker(
+            environment=self._environment,
+            bucket=self._bucket,
+            restored_at=self._clock(),
+            build_tag=self._build_tag,
+        )
+        with tempfile.TemporaryDirectory(dir=directory, prefix=".restored-copy-marker-") as scratch:
+            landed = Path(scratch) / RESTORED_COPY_MARKER
+            landed.write_text(marker.as_json() + "\n", encoding="utf-8")
+            landed.replace(directory / RESTORED_COPY_MARKER)

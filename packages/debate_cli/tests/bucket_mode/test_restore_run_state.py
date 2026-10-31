@@ -10,7 +10,10 @@ directory. The restore must:
 * refuse the data directory itself, a directory inside it or holding it, and one that is not empty,
   before it takes the lock;
 * be refused, like any runner, while another holds the lease, and in local mode or on a bucket never
-  seeded.
+  seeded;
+* leave the marker (`v1-e40-t21`) at the copy's root, naming the environment, the bucket, the time and
+  the build and nothing else, and leave it too when it stops part-way, so the runbooks' cleanup finds
+  what the stop left.
 
 With `--with-sources` (`v1-e40-t10`) it must also fetch exactly the raw sources the restored
 manifests name, or those of the `--snapshot` named, into the copy and nowhere else; stop non-zero when
@@ -33,10 +36,11 @@ from typing import Any, Final
 import pytest
 from tests.fixtures.parse_pipeline.build_parse_world import CASELIST, WEEKS
 
+from debate_cli.build_info import BuildInfo
 from debate_cli.exit_codes import ExitCode
 from debate_core.application.caselist.run_lock import RUN_LOCK_KEY
 from debate_core.application.caselist.run_state import STATE_FILES
-from debate_core.application.caselist.run_state_restore import RESTORE_COMMAND
+from debate_core.application.caselist.run_state_restore import RESTORE_COMMAND, RESTORED_COPY_MARKER
 from debate_core.application.caselist.suppression import SUPPRESSION_LIST_KEY
 from debate_core.application.ports.suppression import ReasonCode, SuppressionAction, SuppressionEntry
 from debate_core.application.search_index_refresh import RESTORED_INDEX_MARKER
@@ -179,6 +183,33 @@ def test_the_copy_holds_the_runs_state_and_the_data_directory_and_the_bucket_are
 
     assert files(live) == live_before, "the data directory is left exactly as it was"
     assert without_the_lock(world.everything()) == bucket_before, "the lock is the only object written"
+
+
+def test_the_copy_carries_the_marker_naming_the_environment_bucket_time_and_build_and_nothing_else(
+    world: World, tmp_path: Path
+) -> None:
+    """`v1-e40-t21`: the runbooks find a leftover copy by this file, at any depth."""
+    live = seeded(world)
+    world.monkeypatch.setattr(
+        "debate_cli.container.current_build_info",
+        lambda: BuildInfo(
+            version="1.8.0", channel="dev", commit=None, tag="v1.8.0-dev.201", built_at=None, run_id=None
+        ),
+    )
+    copy = tmp_path / "deeper" / "than" / "three" / "levels" / f"landscape-copy-{CASELIST}"
+
+    restored = restore(world, copy)
+
+    assert restored["exit_code"] == ExitCode.OK, restored
+    text = (copy / RESTORED_COPY_MARKER).read_text(encoding="utf-8")
+    assert json.loads(text) == {
+        "environment": "dev",
+        "bucket": world.bucket,
+        "restored_at": at(world.clock.now),
+        "build_tag": "v1.8.0-dev.201",
+    }
+    assert CASELIST not in text and str(tmp_path) not in text
+    assert list(live.rglob(RESTORED_COPY_MARKER)) == [], "the data directory never carries one"
 
 
 def test_the_restore_holds_the_lock_while_it_reads_and_leaves_it_free(world: World, tmp_path: Path) -> None:
@@ -351,7 +382,7 @@ def test_it_is_refused_while_the_cloud_run_holds_the_lock_and_restores_nothing(
     assert refused["error"]["code"] == "RUN_LOCK_HELD", refused["error"]
     assert OTHER_RUN in refused["error"]["message"]
     assert world.everything() == before
-    assert not copy.exists() or not any(copy.iterdir()), "nothing restored"
+    assert not copy.exists() or not any(copy.iterdir()), "nothing restored, so no copy for a cleanup to find"
 
 
 @WITH_AND_WITHOUT_SOURCES
@@ -526,6 +557,7 @@ def test_a_named_source_missing_from_the_bucket_and_not_suppressed_stops_the_com
     assert "not a copy to publish from" in error["message"]
     assert "holds what was restored before the stop" in said
     assert later[0] not in blobs_in(copy)
+    assert (copy / RESTORED_COPY_MARKER).is_file(), "what the stop left is found by the cleanup"
     assert files(live) == live_before
     assert world.lock()["state"] == "free"
 
@@ -551,6 +583,7 @@ def test_bytes_that_are_not_the_digest_named_stop_the_command_and_none_of_them_i
     assert stopped["error"]["details"]["mismatched"] == 1
     assert victim not in blobs_in(copy)
     assert hashlib.sha256(other).hexdigest() not in files(copy).values(), "no file in the copy keeps them"
+    assert (copy / RESTORED_COPY_MARKER).is_file(), "what the stop left is found by the cleanup"
     assert world.lock()["state"] == "free"
 
 
@@ -567,6 +600,7 @@ def test_a_disk_without_room_for_the_sources_is_refused_before_any_fetch(
     assert refused["error"]["code"] == "TOO_LITTLE_ROOM_FOR_SOURCES", refused
     assert "Fetching " in said, "the count and bytes are said before the refusal"
     assert blobs_in(copy) == {}
+    assert (copy / RESTORED_COPY_MARKER).is_file(), "what the refusal left is found by the cleanup"
     assert world.lock()["state"] == "free"
 
 

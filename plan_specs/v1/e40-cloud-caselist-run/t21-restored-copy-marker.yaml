@@ -34,7 +34,7 @@ spec:
         A restored copy holds the marker, and the runbooks' leftover checks find a copy at
         any depth by it, by tests shown failing first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

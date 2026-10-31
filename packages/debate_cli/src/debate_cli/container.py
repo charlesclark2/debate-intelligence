@@ -149,6 +149,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, cast
 
+from debate_cli.build_info import current_build_info
 from debate_cli.exit_codes import codes_exit_as_a_retrieval_failure
 from debate_core.application.aff_assignment import AffAssignmentService
 from debate_core.application.analytic_texts import AnalyticTextService
@@ -1664,6 +1665,10 @@ class ServiceContainer:
             sources_in=sources_in,
             live_data_dir=self.settings.storage.data_dir,
             parsed_version=DebateDocxParser().parser_version,
+            environment=self.settings.environment.value,
+            bucket=self.settings.storage.s3.bucket or "",
+            build_tag=current_build_info().tag,
+            clock=self.clock(),
         )
 
     def bucket_run(self) -> BucketRun:

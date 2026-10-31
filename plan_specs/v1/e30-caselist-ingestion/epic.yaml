@@ -303,6 +303,7 @@ spec:
       dependsOn:
       - t03
       - t04
+      - t06
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e30-t08-import-metadata-defects reports phase Succeeded
@@ -312,6 +313,14 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e30-t08-import-metadata-defects
+    - id: ext-v1-e34-t07-suppressed-downloads
+      kind: External
+      name: 'Prerequisite from E34: The sync does not re-download a file it has been told to remove'
+      description: >-
+        Cross-epic prerequisite owned by v1-e34-caselist-sync (release v1.1).
+      inputs:
+        goalRef: v1-e34-t07-suppressed-downloads
+        specRef: plan_specs/v1/e34-caselist-sync/t07-suppressed-downloads.yaml
     - id: t09
       kind: Task
       name: A removal leaves no removed bytes in the inbox
@@ -323,6 +332,7 @@ spec:
         goalRef: v1-e30-t09-removal-purges-inbox
       dependsOn:
       - t07
+      - ext-v1-e34-t07-suppressed-downloads
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e30-t09-removal-purges-inbox reports phase Succeeded
@@ -656,6 +666,14 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e30-t25-store-sync-withholding
+    - id: ext-v1-e31-t15-zip-guard-and-exporter-quirks
+      kind: External
+      name: 'Prerequisite from E31: The zip guard judges only the parts it reads, and exporter quirks are decided'
+      description: >-
+        Cross-epic prerequisite owned by v1-e31-debate-file-parsing (release v1.1).
+      inputs:
+        goalRef: v1-e31-t15-zip-guard-and-exporter-quirks
+        specRef: plan_specs/v1/e31-debate-file-parsing/t15-zip-guard-and-exporter-quirks.yaml
     - id: t26
       kind: Task
       name: 'A .cmir file is imported as CMIR, and every rename-into-place writer fsyncs its directory'
@@ -667,6 +685,7 @@ spec:
         goalRef: v1-e30-t26-cmir-extension-and-directory-fsync
       dependsOn:
       - t23
+      - ext-v1-e31-t15-zip-guard-and-exporter-quirks
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e30-t26-cmir-extension-and-directory-fsync reports phase Succeeded

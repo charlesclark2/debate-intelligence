@@ -774,23 +774,6 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e01-t32-test-selection-reach-round-three
-    - id: t33
-      kind: Task
-      name: 'When a newer build wrote the database or added a setting, the error says so'
-      description: >-
-        When a newer build wrote the database or added a setting, the error says so.
-      inputs:
-        specRef: plan_specs/v1/e01-repo-foundation/t33-newer-build-messages.yaml
-        goalRef: v1-e01-t33-newer-build-messages
-      acceptanceCriteria:
-      - type: command_succeeds
-        name: Task spec v1-e01-t33-newer-build-messages reports phase Succeeded
-        command: uv
-        args:
-        - run
-        - scripts/validate_specs.py
-        - --require-succeeded
-        - v1-e01-t33-newer-build-messages
     - id: t34
       kind: Task
       name: 'validate-dev is green again, and a red one is seen'
@@ -849,23 +832,6 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e01-t36-prerelease-superseded-commit
-    - id: t37
-      kind: Task
-      name: 'A CI check that every locked package''s licence is one the project accepts'
-      description: >-
-        A CI check that every locked package's licence is one the project accepts.
-      inputs:
-        specRef: plan_specs/v1/e01-repo-foundation/t37-licence-check-over-the-lock.yaml
-        goalRef: v1-e01-t37-licence-check-over-the-lock
-      acceptanceCriteria:
-      - type: command_succeeds
-        name: Task spec v1-e01-t37-licence-check-over-the-lock reports phase Succeeded
-        command: uv
-        args:
-        - run
-        - scripts/validate_specs.py
-        - --require-succeeded
-        - v1-e01-t37-licence-check-over-the-lock
     - id: t38
       kind: Task
       name: 'A pull request into dev runs the tests its changes reach; a push to dev and a pull request into main run them all'
@@ -992,6 +958,9 @@ spec:
       inputs:
         specRef: plan_specs/v1/e01-repo-foundation/t44-cli-mention-in-a-message-is-prose.yaml
         goalRef: v1-e01-t44-cli-mention-in-a-message-is-prose
+      dependsOn:
+      - t39
+      - t43
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e01-t44-cli-mention-in-a-message-is-prose reports phase Succeeded
@@ -1001,39 +970,5 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e01-t44-cli-mention-in-a-message-is-prose
-    - id: t45
-      kind: Task
-      name: 'The docstrings say what the stamped build carries'
-      description: >-
-        The docstrings say what the stamped build carries.
-      inputs:
-        specRef: plan_specs/v1/e01-repo-foundation/t45-stamp-docstrings.yaml
-        goalRef: v1-e01-t45-stamp-docstrings
-      acceptanceCriteria:
-      - type: command_succeeds
-        name: Task spec v1-e01-t45-stamp-docstrings reports phase Succeeded
-        command: uv
-        args:
-        - run
-        - scripts/validate_specs.py
-        - --require-succeeded
-        - v1-e01-t45-stamp-docstrings
-    - id: t46
-      kind: Task
-      name: 'The single-interpreter scan leaves site/ out, as the Node project it is'
-      description: >-
-        The single-interpreter scan leaves site/ out, as the Node project it is.
-      inputs:
-        specRef: plan_specs/v1/e01-repo-foundation/t46-single-interpreter-scan-leaves-site-out.yaml
-        goalRef: v1-e01-t46-single-interpreter-scan-leaves-site-out
-      acceptanceCriteria:
-      - type: command_succeeds
-        name: Task spec v1-e01-t46-single-interpreter-scan-leaves-site-out reports phase Succeeded
-        command: uv
-        args:
-        - run
-        - scripts/validate_specs.py
-        - --require-succeeded
-        - v1-e01-t46-single-interpreter-scan-leaves-site-out
 status:
   phase: Pending

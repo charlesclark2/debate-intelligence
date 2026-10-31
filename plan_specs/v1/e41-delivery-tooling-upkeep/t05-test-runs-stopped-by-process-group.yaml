@@ -1,0 +1,78 @@
+# TASK v1-e41-t05-test-runs-stopped-by-process-group - One hard stop for a session's test runs that kills the whole process group, named by agreement 10
+# Epic: E41 — Delivery Tooling Upkeep | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e41-t05-test-runs-stopped-by-process-group
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+  annotations:
+    debate/title: "One hard stop for a session's test runs that kills the whole process group, named by agreement 10"
+spec:
+  # Filed by the PM, 2026-11-01, from v1-e40-t22's report and v1-e01-t43's (the PM's reviews, 2026-11-01).
+  description: >-
+    Sessions bound their test runs with `perl -e 'alarm 115; exec @ARGV' ...`. Under
+    pytest-xdist the alarm did not always stop the run: v1-e40-t22's always-run attempt ran
+    about 30 minutes at load near 50 before it was killed by pid, slowing every concurrent
+    session, and v1-e01-t43 wrote its own wrapper that kills the run's process group. Add one
+    script under `scripts/` that runs a command in its own process group, kills the group after
+    a given number of seconds (TERM, then KILL), reports that it did, and exits non-zero. Name
+    it in working agreement 10 and in the session prompt's time-limit line, in place of the perl
+    alarm.
+  priority: 3
+  constraints:
+    packages: [scripts, tests/scripts, docs/process]
+    forbidden:
+      - A worker process left running after the limit
+      - Network access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e01-t43-container-diff-read-part-by-part
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The script stops a command and every process it started (an xdist-like tree of
+        children and grandchildren) within a few seconds of its limit, exits non-zero saying
+        so, passes a command that finishes in time through with its exit code, and agreement
+        10 and the session prompt name it, by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e41-t05-test-runs-stopped-by-process-group-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+spec:
+  description: >-
+    One hard stop for a session's test runs that kills the whole process group, named by
+    agreement 10.
+  goalRef:
+    name: v1-e41-t05-test-runs-stopped-by-process-group
+  graph:
+    nodes:
+      - id: test-runs-stopped-by-process-group
+        kind: Task
+        name: Process-group hard stop
+        description: >-
+          One hard stop for a session's test runs that kills the whole process group,
+          named by agreement 10.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Process-group hard stop tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, -k, hard_stop]
+status:
+  phase: Pending

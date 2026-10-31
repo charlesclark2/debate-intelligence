@@ -1,16 +1,16 @@
-# TASK v1-e01-t45-stamp-docstrings - The docstrings say what the stamped build carries
-# Epic: E01 Repository & Delivery Foundation | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+# TASK v1-e41-t03-stamp-docstrings - The docstrings say what the stamped build carries
+# Epic: E41 — Delivery Tooling Upkeep | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Goal
 metadata:
-  name: v1-e01-t45-stamp-docstrings
+  name: v1-e41-t03-stamp-docstrings
   namespace: debate-intelligence
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.0
-    debate/epic: v1-e01-repo-foundation
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
   annotations:
     debate/title: "The docstrings say what the stamped build carries"
 spec:
@@ -21,12 +21,17 @@ spec:
     `debate_core/evidence/format_profile.py` and `debate_cli/build_info.py`. Make each say what
     `scripts/stamp_build.py` bundles (profiles, routing files, the pricing file) and where the
     rest is read from.
+    (PM note 2026-11-01, the dependency audit.) Moved from E01 as `v1-e01-t45-stamp-docstrings`, unstarted: E01 belongs
+    to the released v1.0, and this task's prerequisites ship later.
   priority: 3
   constraints:
     packages: [debate_core.application, debate_core.evidence, debate_cli]
     forbidden:
       - A behaviour change
-  context: []
+  context:
+    - kind: TaskRef
+      name: v1-e05-t12-installed-build-carries-model-pricing
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-
@@ -37,18 +42,18 @@ status:
 apiVersion: planspec.io/v1alpha1
 kind: Plan
 metadata:
-  name: v1-e01-t45-stamp-docstrings-plan
+  name: v1-e41-t03-stamp-docstrings-plan
   namespace: debate-intelligence
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.0
-    debate/epic: v1-e01-repo-foundation
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
 spec:
   description: >-
     The docstrings say what the stamped build carries.
   goalRef:
-    name: v1-e01-t45-stamp-docstrings
+    name: v1-e41-t03-stamp-docstrings
   graph:
     nodes:
       - id: stamp-docstrings

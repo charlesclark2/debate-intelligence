@@ -1,16 +1,16 @@
-# TASK v1-e01-t46-single-interpreter-scan-leaves-site-out - The single-interpreter scan leaves site/ out, as the Node project it is
-# Epic: E01 Repository & Delivery Foundation | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+# TASK v1-e41-t04-single-interpreter-scan-leaves-site-out - The single-interpreter scan leaves site/ out, as the Node project it is
+# Epic: E41 — Delivery Tooling Upkeep | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Goal
 metadata:
-  name: v1-e01-t46-single-interpreter-scan-leaves-site-out
+  name: v1-e41-t04-single-interpreter-scan-leaves-site-out
   namespace: debate-intelligence
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.0
-    debate/epic: v1-e01-repo-foundation
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
   annotations:
     debate/title: "The single-interpreter scan leaves site/ out, as the Node project it is"
 spec:
@@ -23,12 +23,17 @@ spec:
     treats `site/pnpm-lock.yaml` as another ecosystem's. Add `site/` to the scan's permitted
     directories, with a test that a Python version under `site/` is not reported and one under
     `scripts/` still is.
+    (PM note 2026-11-01, the dependency audit.) Moved from E01 as `v1-e01-t46-single-interpreter-scan-leaves-site-out`, unstarted: E01 belongs
+    to the released v1.0, and this task's prerequisites ship later.
   priority: 3
   constraints:
     packages: [tests/architecture]
     forbidden:
       - A Python version outside site/ left unreported
-  context: []
+  context:
+    - kind: TaskRef
+      name: v1-e36-t12-prod-build-before-main
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-
@@ -40,18 +45,18 @@ status:
 apiVersion: planspec.io/v1alpha1
 kind: Plan
 metadata:
-  name: v1-e01-t46-single-interpreter-scan-leaves-site-out-plan
+  name: v1-e41-t04-single-interpreter-scan-leaves-site-out-plan
   namespace: debate-intelligence
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.0
-    debate/epic: v1-e01-repo-foundation
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
 spec:
   description: >-
     The single-interpreter scan leaves site/ out, as the Node project it is.
   goalRef:
-    name: v1-e01-t46-single-interpreter-scan-leaves-site-out
+    name: v1-e41-t04-single-interpreter-scan-leaves-site-out
   graph:
     nodes:
       - id: single-interpreter-scan-leaves-site-out

@@ -88,7 +88,7 @@ spec:
         `s3:DeleteObject` or `s3:DeleteObjectVersion`. Both tests are shown failing first,
         against code and a policy that do not meet them, and the red run is in the report.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

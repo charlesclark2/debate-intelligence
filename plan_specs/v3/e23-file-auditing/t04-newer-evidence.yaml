@@ -44,6 +44,9 @@ spec:
     - kind: TaskRef
       name: v3-e23-t05-audit-report-ui
       relation: dependsOn
+    - kind: TaskRef
+      name: v1-e08-t04-argument-need-expansion
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-

@@ -578,3 +578,11 @@ Added by the PM. Nothing above is changed, and this section is not a review.
 | The pilot check | NOT RUN | NOT RUN | The operator's, at `tub.dev.wfbdebate.com/landscape/hspolicy26`: no Harms row in any link-chain table, and the Costs advantage's table read for the newer snapshot's own counts |
 
 The Goal was already `Succeeded`; the pilot check is recorded here when it is read.
+
+## PM record, 2026-11-01
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+**The pilot check, read.** The operator signed in at `tub.dev.wfbdebate.com/landscape/hspolicy26` on
+2026-10-31, after the republish of 2026-10-30: no "Harms" row appears in any link-chain table. The
+Costs advantage's Teams column was not read.

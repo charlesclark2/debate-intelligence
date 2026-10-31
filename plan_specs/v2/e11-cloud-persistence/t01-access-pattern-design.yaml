@@ -25,6 +25,9 @@ spec:
     output is documentation plus key-builder functions and item-shape tests; it deliberately excludes
     ArgumentTable and OpponentTable (V3), OpenSearch mappings (E15) and library folders/tags (E17-t01,
     which must extend this design rather than fork it). Deviations from §7 get an ADR.
+    (PM amendment 2026-11-01, Charlie's ruling in the dependency audit.) Blocked until Charlie says V2
+    starts. Every other V2 and V3 task depends on this one or on another held with it, so the ready list
+    stays V1's until then.
   priority: 1
   constraints:
     packages: [docs/data, debate_core.integrations]
@@ -59,7 +62,7 @@ spec:
         Charlie reviews and approves the design; any deviation from §7's recommended split is captured
         as an ADR.
 status:
-  phase: Pending
+  phase: Blocked
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

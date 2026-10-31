@@ -38,6 +38,9 @@ spec:
     publishes it whether or not it imports into the caselist. When this ships, v1-e40-t18's cure no
     longer needs "that imports into a caselist": drop it from `cloud_parse_cure`'s hint and fix line,
     from the banners' tests and from `caselist-cloud-run.md`'s "A failed parse stage".
+    (PM amendment 2026-11-01, from v1-e40-t22's Follow-up 3.) A parse stage that ran over its failure
+    rate but published its parsed store owes nothing, so it names no cure: today it gets v1-e40-t18's
+    "the next cloud run that imports into …" line, where local mode gives `PARSE_COMMAND`.
   priority: 2
   constraints:
     packages: [debate_core.application, debate_core.integrations, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, docs/runbooks]

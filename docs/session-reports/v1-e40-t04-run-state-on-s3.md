@@ -701,3 +701,13 @@ The largest task in E40, built as the accepted plan said, and checked hard.
 **The PR** merges `--partial`, with the phase `InProgress`. Nothing is applied before the cutover.
 The PM sets the Goal `Succeeded` once t06's step 4 has seeded dev and the bucket-mode task
 definition is applied. After this merges, `v1-e32-t13`'s removal work can start.
+
+## Operator records (recorded by the PM, 2026-11-01)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| Operator follow-ups 1 to 4 (the seed, the image and plan, the run by hand) | NOT RUN | PASS | Run at the cutover and recorded in `v1-e40-t06`'s report (PM records of 2026-10-25 and 2026-10-26): the Mac's agent unloaded; the seed's plan `applied false … manifests 50`, then `applied true`, with the bundle and the five state files checked back; a new image (`v1.1.0-dev.155`) and the plan `2 to add, 4 to change, 2 to destroy`, read by the PM and applied; the run by hand `20261026T040426Z` with its `bucket_run` details `"bundle": "saved, …"`, `"took_over": null`, `"lock_lost": false`, and the lock `free` after it. A second runner was refused with `RUN_LOCK_HELD` during that run |
+
+Every criterion passes, so the Goal is `Succeeded`. It was left `InProgress` only because these steps were recorded under the cutover, not here (the PM's dependency audit, 2026-11-01). That held `v1-e40-t07` and `v1-e40-t08` back.

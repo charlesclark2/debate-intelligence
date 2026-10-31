@@ -25,7 +25,13 @@ spec:
     packages: [scripts, tests/scripts]
     forbidden:
       - A test that runs the app left unselected
-  context: []
+  context:
+    - kind: TaskRef
+      name: v1-e01-t39-container-builds-integrations-lazily
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e01-t43-container-diff-read-part-by-part
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-

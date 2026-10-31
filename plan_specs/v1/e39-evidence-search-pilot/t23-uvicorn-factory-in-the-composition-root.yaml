@@ -29,7 +29,10 @@ spec:
     forbidden:
       - A behaviour change in the running pilot
       - Network or AWS access in any test
-  context: []
+  context:
+    - kind: TaskRef
+      name: v1-e39-t20-api-conftest-split-by-surface
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-

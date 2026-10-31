@@ -1,0 +1,75 @@
+# TASK v1-e41-t06-container-imports-read-by-use - An import change in container.py that loads no new module reaches only the parts using its names
+# Epic: E41 — Delivery Tooling Upkeep | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e41-t06-container-imports-read-by-use
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+  annotations:
+    debate/title: "An import change in container.py that loads no new module reaches only the parts using its names"
+spec:
+  # Filed by the PM, 2026-11-01, from v1-e01-t43's PM question 1 (b) and Follow-up 3 (the PM's review, 2026-11-01).
+  description: >-
+    v1-e01-t43 reads a container.py change by part, but any change to a top-level import is the
+    whole file, so four of the six measured merges, v1-e40-t21's among them, stay whole. When
+    the set of modules the container's top-level imports load is the same on both sides, nothing
+    new runs on import and only names are rebound: read such a change by the parts that use the
+    names it binds. An import that loads a module not loaded before stays the whole file. Also
+    read a `"debate_cli.container.X"` string (a `monkeypatch.setattr` target) as reaching part
+    `X`, or the whole file when `X` is an import, instead of every part.
+  priority: 3
+  constraints:
+    packages: [scripts, tests/scripts]
+    forbidden:
+      - A test that reaches a changed part left unselected
+  context:
+    - kind: TaskRef
+      name: v1-e01-t43-container-diff-read-part-by-part
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        t43's six merges re-measured: af7052e's edit alone selects fewer files, an import
+        loading a new module is still the whole file, and a `debate_cli.container.X` string
+        reaches part `X`; every after-list is a subset of before; tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e41-t06-container-imports-read-by-use-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+spec:
+  description: >-
+    An import change in container.py that loads no new module reaches only the parts using its
+    names.
+  goalRef:
+    name: v1-e41-t06-container-imports-read-by-use
+  graph:
+    nodes:
+      - id: container-imports-read-by-use
+        kind: Task
+        name: Imports by use
+        description: >-
+          An import change in container.py that loads no new module reaches only the parts
+          using its names.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Imports by use tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, -k, affected]
+status:
+  phase: Pending

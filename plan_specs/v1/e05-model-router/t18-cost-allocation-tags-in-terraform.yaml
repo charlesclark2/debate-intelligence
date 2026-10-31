@@ -27,7 +27,10 @@ spec:
     forbidden:
       - A permission set or account assignment changed
       - Network or AWS access in any test
-  context: []
+  context:
+    - kind: TaskRef
+      name: v1-e05-t16-bedrock-budget-alarm
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-

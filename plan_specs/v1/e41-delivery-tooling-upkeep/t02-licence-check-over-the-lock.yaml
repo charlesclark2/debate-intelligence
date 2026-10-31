@@ -1,16 +1,16 @@
-# TASK v1-e01-t37-licence-check-over-the-lock - A CI check that every locked package's licence is one the project accepts
-# Epic: E01 Repository & Delivery Foundation | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+# TASK v1-e41-t02-licence-check-over-the-lock - A CI check that every locked package's licence is one the project accepts
+# Epic: E41 — Delivery Tooling Upkeep | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Goal
 metadata:
-  name: v1-e01-t37-licence-check-over-the-lock
+  name: v1-e41-t02-licence-check-over-the-lock
   namespace: debate-intelligence
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.0
-    debate/epic: v1-e01-repo-foundation
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
   annotations:
     debate/title: "A CI check that every locked package's licence is one the project accepts"
 spec:
@@ -23,13 +23,18 @@ spec:
     over `uv.lock` that reads each locked package's declared licence from its installed
     metadata, offline, and fails on one not accepted, naming the package. GPL-only and AGPL are
     never accepted. It runs in CI.
+    (PM note 2026-11-01, the dependency audit.) Moved from E01 as `v1-e01-t37-licence-check-over-the-lock`, unstarted: E01 belongs
+    to the released v1.0, and this task's prerequisites ship later.
   priority: 3
   constraints:
     packages: [scripts, tests/scripts, config, .github/workflows, docs/process]
     forbidden:
       - A network call in the check
       - Accepting a GPL-only or AGPL licence
-  context: []
+  context:
+    - kind: TaskRef
+      name: v1-e04-t04-content-extraction
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-
@@ -46,18 +51,18 @@ status:
 apiVersion: planspec.io/v1alpha1
 kind: Plan
 metadata:
-  name: v1-e01-t37-licence-check-over-the-lock-plan
+  name: v1-e41-t02-licence-check-over-the-lock-plan
   namespace: debate-intelligence
   labels:
     planspec.io/kind: task
     debate/major-version: v1
-    debate/release: v1.0
-    debate/epic: v1-e01-repo-foundation
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
 spec:
   description: >-
     Commit an allowlist with pinned exceptions and check the lock against it in CI.
   goalRef:
-    name: v1-e01-t37-licence-check-over-the-lock
+    name: v1-e41-t02-licence-check-over-the-lock
   graph:
     nodes:
       - id: licence-check

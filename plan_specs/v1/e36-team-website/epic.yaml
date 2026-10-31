@@ -295,6 +295,7 @@ spec:
         goalRef: v1-e36-t10-export-checks-in-ci
       dependsOn:
       - t05
+      - t01
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e36-t10-export-checks-in-ci reports phase Succeeded

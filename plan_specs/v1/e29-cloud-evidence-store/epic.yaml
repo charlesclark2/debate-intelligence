@@ -308,6 +308,14 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e29-t10-retention-rule-and-grant-loose-ends
+    - id: ext-v1-e30-t25-store-sync-withholding
+      kind: External
+      name: 'Prerequisite from E30: store sync pushes no manifest the publisher withholds, and junk beside a held link does not keep its row'
+      description: >-
+        Cross-epic prerequisite owned by v1-e30-caselist-ingestion (release v1.1).
+      inputs:
+        goalRef: v1-e30-t25-store-sync-withholding
+        specRef: plan_specs/v1/e30-caselist-ingestion/t25-store-sync-withholding.yaml
     - id: t11
       kind: Task
       name: 'store sync says why it skipped what it skipped'
@@ -316,6 +324,8 @@ spec:
       inputs:
         specRef: plan_specs/v1/e29-cloud-evidence-store/t11-store-sync-skip-reasons.yaml
         goalRef: v1-e29-t11-store-sync-skip-reasons
+      dependsOn:
+      - ext-v1-e30-t25-store-sync-withholding
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e29-t11-store-sync-skip-reasons reports phase Succeeded
@@ -325,6 +335,14 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e29-t11-store-sync-skip-reasons
+    - id: ext-v1-e34-t29-newer-fingerprint-table-guard
+      kind: External
+      name: 'Prerequisite from E34: An older build never rewrites or publishes an occurrence table stamped with a newer fingerprint version'
+      description: >-
+        Cross-epic prerequisite owned by v1-e34-caselist-sync (release v1.1).
+      inputs:
+        goalRef: v1-e34-t29-newer-fingerprint-table-guard
+        specRef: plan_specs/v1/e34-caselist-sync/t29-newer-fingerprint-table-guard.yaml
     - id: t12
       kind: Task
       name: 'store sync stops moving the parsed store, which caselist parse --publish publishes'
@@ -333,6 +351,8 @@ spec:
       inputs:
         specRef: plan_specs/v1/e29-cloud-evidence-store/t12-store-sync-skips-parsed.yaml
         goalRef: v1-e29-t12-store-sync-skips-parsed
+      dependsOn:
+      - ext-v1-e34-t29-newer-fingerprint-table-guard
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e29-t12-store-sync-skips-parsed reports phase Succeeded

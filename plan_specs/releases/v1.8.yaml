@@ -1,5 +1,5 @@
 # RELEASE v1.8 — Weekly caselist run in the cloud
-# Major version: V1. Epics: E40
+# Major version: V1. Epics: E40, E41
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Goal
@@ -24,6 +24,9 @@ spec:
   - id: epic-e40
     description: >-
       Epic E40 (Weekly Caselist Run in the Cloud) goal is Succeeded.
+  - id: epic-e41
+    description: >-
+      Epic E41 (Delivery Tooling Upkeep) goal is Succeeded.
   - id: tagged
     description: >-
       Release tag v1.8.0 is pushed and CHANGELOG.md has a v1.8 section.
@@ -75,6 +78,12 @@ spec:
       inputs:
         goalRef: v1-e40-cloud-caselist-run
         specRef: plan_specs/v1/e40-cloud-caselist-run/epic.yaml
+    - id: e41
+      kind: External
+      name: Epic E41 — Delivery Tooling Upkeep
+      inputs:
+        goalRef: v1-e41-delivery-tooling-upkeep
+        specRef: plan_specs/v1/e41-delivery-tooling-upkeep/epic.yaml
     - id: tag-release
       kind: Task
       name: Tag and publish v1.8.0
@@ -82,6 +91,7 @@ spec:
         Update CHANGELOG.md, bump package versions, create the git tag, and publish release notes.
       dependsOn:
       - e40
+      - e41
       acceptanceCriteria:
       - type: command_succeeds
         name: Release tag exists

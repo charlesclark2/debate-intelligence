@@ -513,14 +513,14 @@ async def test_the_cloud_image_and_the_macs_build_read_every_record_and_details_
     installation: Installation, s3_client: S3Client, evidence_bucket: str, scenario: Any
 ) -> None:
     """Against what those builds validate with, each printed by its own code (`stored_run_records/`),
-    as `v1-e40-t22`'s are. A run that lost its session publishes neither, and leaves them local."""
-    watched = await scenario(installation, bucket_mode=True)
+    as `v1-e40-t22`'s are. The login scenario's session expires at the report stage's comparison
+    alone, so its record reaches the bucket too."""
+    await scenario(installation, bucket_mode=True)
 
     record = record_line(installation)
     details = details_line(installation)
-    if watched.pulled.record is not None and watched.pulled.record.outcome != SyncRunOutcome.PUBLISH_PENDING:
-        assert bucket_objects(s3_client, evidence_bucket, "reports/sync-runs/") == [record]
-        assert bucket_objects(s3_client, evidence_bucket, "reports/sync-run-details/") == [details]
+    assert bucket_objects(s3_client, evidence_bucket, "reports/sync-runs/") == [record]
+    assert bucket_objects(s3_client, evidence_bucket, "reports/sync-run-details/") == [details]
     jsonschema.validate(record, stored_schema("record_schema_of_the_cloud_image.json"))
     assert all(set(one) == {"stage", "outcome", "reason"} for one in record["stages"])
     for name in (

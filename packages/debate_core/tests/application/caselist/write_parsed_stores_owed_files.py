@@ -33,6 +33,15 @@ Since `v1-e40-t22`, two more in bucket mode, with the scripted parse stage of
   whose hint names the failures file the cloud run published.
 * `cloud_newer_table`: the bucket's occurrence table is stamped by a newer build. A failed stage
   whose hint names a new image.
+
+Since `v1-e40-t25`, three more in bucket mode, through the runs of
+`test_caselist_sync_bucket_mode_publish_hints_point_at_the_cloud.py`, one for each banner it moved:
+
+* `cloud_failed_publish`: the bucket did not answer the publish. A failed stage whose banner names
+  the next cloud run.
+* `cloud_published_again`: the report stage found week one's manifest differs, and owed it again.
+* `cloud_login_owed_again`: the same, and the session expired at week two's comparison. A login
+  banner.
 """
 
 from __future__ import annotations
@@ -50,6 +59,7 @@ from debate_core.application.sync_runs import SYNC_RUN_DETAILS_FILENAME, SYNC_RU
 from debate_core.integrations.s3 import S3EvidenceObjectStore
 
 from . import test_caselist_sync_bucket_mode_hints_point_at_the_cloud as hints
+from . import test_caselist_sync_bucket_mode_publish_hints_point_at_the_cloud as publish_hints
 from . import test_caselist_sync_names_the_cloud_cure_in_bucket_mode as cloud
 from .test_caselist_sync_names_publish_only_per_caselist import OPENEV, run
 from .test_inbox_retention import CASELIST, Installation
@@ -159,3 +169,27 @@ async def test_cloud_newer_table(
     out()
     await hints.run(installation, bucket_mode=True, newer_table=[CASELIST])
     keep(installation, s3_client, evidence_bucket, "cloud_newer_table")
+
+
+async def test_cloud_failed_publish(
+    installation: Installation, s3_client: S3Client, evidence_bucket: str
+) -> None:
+    out()
+    await publish_hints.a_publish_the_bucket_refused(installation, bucket_mode=True)
+    keep(installation, s3_client, evidence_bucket, "cloud_failed_publish")
+
+
+async def test_cloud_published_again(
+    installation: Installation, s3_client: S3Client, evidence_bucket: str
+) -> None:
+    out()
+    await publish_hints.a_manifest_owed_again(installation, bucket_mode=True)
+    keep(installation, s3_client, evidence_bucket, "cloud_published_again")
+
+
+async def test_cloud_login_owed_again(
+    installation: Installation, s3_client: S3Client, evidence_bucket: str
+) -> None:
+    out()
+    await publish_hints.a_manifest_owed_again_and_the_session_expired(installation, bucket_mode=True)
+    keep(installation, s3_client, evidence_bucket, "cloud_login_owed_again")

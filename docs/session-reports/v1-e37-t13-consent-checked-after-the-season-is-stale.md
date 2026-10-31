@@ -151,9 +151,35 @@ the report.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-01
 
 **Notes:**
+
+A consent check dated after its season ends is now stale to the build, for names and images alike,
+through `isStale`.
+1. **ac1 passes.**
+   * Red: 6 failed, every one an assertion. Green: 157 passed, and the node criterion 969.
+   * The 31 July boundary builds and 1 August is stale. The boundary test, not the prod cases,
+     catches the off-by-one mutant, as you note.
+   * All four mutants were caught.
+   * The shipped results are byte-identical before and after, and the shipped prod build passes.
+2. **Decisions accepted:**
+   * `seasonEnd` derived from `seasonStart`, so the label is parsed once;
+   * messages left as they are;
+   * results.ts falling back to the team-level form, never refusing;
+   * t11's independent shipped-manifest checks kept under agreement 6;
+   * the guide's two sentences.
+3. **Follow-ups:**
+   * **1, the manifest's header comment:** the PM's next batch extends the comment its batch of
+     2026-10-31 rewrote, with your wording for a check outside the season. It reaches main with the
+     next promotion.
+   * **2 and 3:** one p3 E37 task, covering the warning that names a check dated after the season
+     and one season-end definition for the schedule's and the results' range checks.
+4. **Closing checks:** the pytest affected set (42 files, mostly incidental edges) is left to the PR's
+   `ci` under agreement 10. The site's own suite, typecheck and lint, the always-run files and the
+   whole-repo checks pass.
+5. **Merge:** once the PR's `ci` is green. It is a plain `scripts/task pr`. Like any site/ code
+   change, it goes live with the next promotion.

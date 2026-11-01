@@ -375,3 +375,13 @@ A careful bucket-mode form that follows `remove`'s pattern where it should and t
 7. **Merge:** `scripts/task pr --partial` once `ci` is green, after `scripts/task sync`: v1-e40-t29
    merged with no conflict. ac2 then runs outside the window, and not while a backfile import holds
    the lock.
+
+## Operator records (recorded by the PM, 2026-11-01)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac2 | Operator follow-up | PASS | 2026-11-01, from the `caselist-credentials-dev` worktree at `5d20ecb`, into a separate working copy. Dry run, `2026-policy`: Michigan 40 → 34, Michigan Classic 0 → 5, MNDI 0 → 1, every other camp unchanged; 105 files, 6 changed (0 titles, 0 warnings), 6 camp-file records to correct, 106 rows given their upstream identity; the run lock not taken. The run (`--execute`): `status` ok, `applied` true, `rows` 105, `rows_changed` 6, `camp_files_updated` 6, `manifest_published` uploaded, `bundle_saved` true, no error code. The check (the dry run again): `rows_changed` 0, `camp_files_updated` 0, `manifest_changed` false |
+
+ac2 passes, so the Goal is `Succeeded` in this batch. `2026-ld` (3 files, all `UNKNOWN`, 2 reworded warnings) was dry-run only and left alone, by the PM's ruling. Wednesday's run carries the new camps into the occurrence rows and the index; the cards link once dev's function is redeployed past `babccae`.

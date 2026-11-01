@@ -394,5 +394,24 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e41-t13-image-plan-check-known-revision-rule
+    - id: t14
+      kind: Task
+      name: 'A bounded run that starts a Docker container stops that container too'
+      description: >-
+        A bounded run that starts a Docker container stops that container too.
+      inputs:
+        specRef: plan_specs/v1/e41-delivery-tooling-upkeep/t14-hard-stop-stops-a-named-container.yaml
+        goalRef: v1-e41-t14-hard-stop-stops-a-named-container
+      dependsOn:
+      - t05
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e41-t14-hard-stop-stops-a-named-container reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e41-t14-hard-stop-stops-a-named-container
 status:
   phase: Pending

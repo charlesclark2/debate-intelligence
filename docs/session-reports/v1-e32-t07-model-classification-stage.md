@@ -499,3 +499,22 @@ logging in us-east-1, us-east-2 and us-west-2 (the operator's check, 2026-11-01)
 coach accepted them without a written no-training term, which neither AWS's Bedrock pages nor the AWS
 Service Terms state. ac5's live run over the newest hspolicy26 snapshot may now be scheduled; ac4
 still needs the coach-labelled 60-item set and its cassettes.
+
+## PM note: the first recorded evaluation (2026-11-01)
+
+Added by the PM. Nothing above is changed, and this is not a review.
+
+The operator's `landscape evaluate --model-mode record` on hspolicy26 (snapshot 2026-10-20, taxonomy
+1.4.0, prompt 1.0.0), counts only:
+
+* labelled 47, found 47, asked 47 in 4 calls; one call's structured output failed validation;
+* refused `NO_POSITION` 8, placed below the threshold 1;
+* counted 38, correct 14: **36.8%** against the 85% bar; 4 of the counted were labelled none;
+* 30,460 input and 3,881 output tokens;
+* the scan: prompt inputs 3 texts, 3 naming a school, 0 a team code, 3 a tournament; cassettes
+  3 texts, 3 naming a school, 3 a team code, 3 a tournament. Exit 1, `EVALUATION_BELOW_BAR`.
+
+**The PM's ruling:** no more live model runs until this is diagnosed. The LD evaluation and ac5's
+first live run wait. The cassettes are kept, because the diagnosis replays them.
+`v1-e32-t39-model-evaluation-diagnosis` (p2) is filed in this batch; the fix is filed from its
+findings. This task stays `InProgress`.

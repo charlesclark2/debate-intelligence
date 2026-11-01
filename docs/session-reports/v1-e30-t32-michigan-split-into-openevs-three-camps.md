@@ -306,3 +306,13 @@ was right not to hand the operator a refile that the next cloud run would undo.
    specs are clean.
 9. **Merge:** `scripts/task pr --partial` once `ci` is green, because ac2's dev refile waits for the
    bucket-mode re-import task and its operator run.
+
+## Operator records (recorded by the PM, 2026-11-01)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac2, dev's existing files refiled without a download | Code PASS; the dev refile waited for ruling 1 (`v1-e40-t34`) | PASS | 2026-11-01, from the `caselist-credentials-dev` worktree at `5d20ecb`, into a separate working copy. Dry run, `2026-policy`: Michigan 40 → 34, Michigan Classic 0 → 5, MNDI 0 → 1, every other camp unchanged; 105 files, 6 changed (0 titles, 0 warnings), 6 camp-file records to correct, 106 rows given their upstream identity; the run lock not taken. The run (`--execute`): `status` ok, `applied` true, `rows` 105, `rows_changed` 6, `camp_files_updated` 6, `manifest_published` uploaded, `bundle_saved` true, no error code. The check (the dry run again): `rows_changed` 0, `camp_files_updated` 0, `manifest_changed` false |
+
+ac2 passes in dev, so the Goal is `Succeeded` in this batch. The 34 files naming only Michigan stay Michigan and unlinked, as the count ruled.

@@ -33,9 +33,22 @@ spec:
     The task starts after the weekly run of 2026-11-04 has pulled the first weekend of
     tournaments on it, and seeds from that run's state through v1-e40-t17's restored copy
     (the operator's data directory stopped at the cutover).
+    (PM amendment 2026-11-01, the coach's word of 2026-11-01, superseding the hsld26 range above.)
+    For hsld26 the topic follows the tournament, not the snapshot alone. De-extinction covers the
+    Florida Blue Key Speech and Debate Tournament (October 30 to November 1, 2026) and every tournament
+    starting on or after Friday 2026-11-06. Every other tournament starting before 2026-11-06 is space
+    colonization. So the weekly snapshot of 2026-11-03 (the run of 2026-11-04) holds both topics, and
+    a later snapshot can hold a late disclosure from an earlier tournament. Tournament names are
+    public and may be written in `config/landscape/topics.yaml`. Count first, before any rule, in
+    counts only: what the stored rounds carry to decide by (a tournament name, a round or tournament
+    date); how many of the 2026-11-03 snapshot's hsld26 disclosures are Florida Blue Key's; and how
+    many disclosures in snapshots from 2026-11-10 name a tournament from before 2026-11-06. Then send
+    the PM the rule's form before building it: for example, a per-tournament entry beside the date
+    ranges, and what a disclosure naming no tournament resolves to. The loader change it needs is this
+    task's, and every earlier snapshot still resolves as it does today.
   priority: 2
   constraints:
-    packages: [config/landscape, scripts, debate_core.arguments, tests/config]
+    packages: [config/landscape, scripts, debate_core.arguments, debate_core.application, debate_core.integrations, packages/debate_core/tests, tests/config, docs/guides]
     forbidden:
       - Debater names, team codes or initials anywhere in taxonomy YAML or seeding fixtures
       - Hardcoding caselist slugs or topic wording in Python code (config only)

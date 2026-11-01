@@ -236,6 +236,7 @@ from debate_core.application.ports.evidence_store import EvidenceObjectStore, Ob
 from debate_core.application.ports.model_router import RoutingConfigError
 from debate_core.application.ports.notifier import Notifier, NullNotifier
 from debate_core.application.ports.suppression import SuppressionList
+from debate_core.application.review_queue_order import ReviewQueueOrdering
 from debate_core.application.search_index_build import SearchIndexBuildService
 from debate_core.application.search_index_prune import SearchIndexPrune
 from debate_core.application.search_index_publish import SearchIndexPublishService
@@ -632,12 +633,17 @@ class ServiceContainer:
         `v1-e32-t11`'s :class:`~debate_core.application.analytic_texts.AnalyticTextService`, which reads
         every on-topic source's paragraphs through the same worker pool, caching derived fields under the
         data directory, and reads again only the texts the report quotes.
+
+        **The review queue's order** (`v1-e32-t26`): the queue is ordered by the local proxy model kept
+        under the data directory beside `v1-e32-t21`'s feature table, checked against the parsed store
+        and suppression list the run reads, and in today's order when there is none that stands.
         """
         from debate_core.integrations.docx_parser import DebateDocxParser
         from debate_core.integrations.landscape.analytic_text_store import LocalAnalyticTextStore
         from debate_core.integrations.landscape.classification_store import (
             LANDSCAPE_DIRECTORY,
             LocalClassificationStore,
+            LocalQueueOrderModelStore,
         )
         from debate_core.integrations.landscape.plan_text_store import LocalPlanTextStore
         from debate_core.integrations.landscape.yaml_taxonomy_repository import YamlTaxonomyRepository
@@ -698,6 +704,11 @@ class ServiceContainer:
             stale_after_days=settings.caselist.stale_after_days,
             backfile_caselists=settings.caselist.backfile_caselists,
             parser_version=None if restored_copy is None else DebateDocxParser().parser_version,
+            queue_order=ReviewQueueOrdering(
+                models=LocalQueueOrderModelStore(data_dir),
+                parsed_store=LocalParsedStore(cards_dir),
+                suppression=suppression,
+            ),
         )
 
     def landscape_evaluation(self, *, config_dir: Path, record: bool) -> LandscapeModelEvaluationService:

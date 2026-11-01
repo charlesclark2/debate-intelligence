@@ -110,6 +110,8 @@ def test_classify_prints_counts_and_a_second_run_is_all_cache_hits(
         "Review queue: 5 items (2 cards, 1 under no heading) under 1 headings; 1 rows written, "
         "0 headings left out as used by too few teams.",
         f"Wrote the review queue to {queue}.",
+        f"Review queue order: off, today's order kept: no review-order model is trained for {CASELIST} on "
+        f"{TOPIC} (`scripts/compare_local_classifier.py train-queue-order`).",
         "Cache: 7 distinct keys, 0 hits (0.0%), 7 placed (0 cached results refused); written.",
     ]
     assert queue.read_text(encoding="utf-8").splitlines()[1] == "fed key,false,2,2,1,1,2,,"

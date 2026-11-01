@@ -4,8 +4,8 @@
 Headings and tags place about half of a caselist's cards. This measures whether TF-IDF word and
 short-phrase weights with a logistic regression
 (:mod:`~debate_core.arguments.landscape.local_classifier`), trained on this machine from the cards
-they place, could place the rest. Nothing is wired: the report, the matcher and the review queue are
-untouched. Four commands:
+they place, could place the rest. Nothing is wired into placement: the report and the matcher are
+untouched. Five commands:
 
 * **`features`** reads the caselist's parsed card store as it stood at a snapshot (the newest weekly
   one unless `--snapshot` names one), places every card as `v1-e32-t02` does, without its cache, and
@@ -20,11 +20,17 @@ untouched. Four commands:
   label: a CSV of each card's tag and headings with an empty `position` column, and beside it the
   sampled cards' ids and predictions, which the CSV does not show.
 * **`score-sample`** reads the coach's labelled CSV and scores both models' predictions on it.
+* **`train-queue-order`** (`v1-e32-t26`) trains the proxy as `compare` does, with the same seed and
+  the same nine tenths, and writes its weights with the confidence from which its held-out precision
+  stays at 90%, t21's threshold, as the review queue's order model. From the next `classify` or
+  `landscape report` run the queue is ordered by its confidence and shows its position as a
+  suggestion at or above that threshold. It places no card.
 
 Every file is written under `<data dir>/landscape/local-classifier/<caselist>/`, and nowhere else:
 they are derived from the caselist's cards, so they follow the data directory's retention and are
-never committed. `compare`, `sample` and `score-sample` refuse a feature table whose sources a
-removal has since reached; `features` builds it again from the store, which no longer holds them.
+never committed. `compare`, `sample`, `score-sample` and `train-queue-order` refuse a feature table
+whose sources a removal has since reached; `features` builds it again from the store, which no longer
+holds them. A run refuses the order model on the same check.
 
 Every command refuses to start when a `DEBATE_*` variable is set or a `caselist pull` is running.
 Read-only for every store; it starts no worker process.
@@ -34,6 +40,7 @@ Read-only for every store; it starts no worker process.
     uv run python scripts/compare_local_classifier.py sample --caselist hspolicy26
     uv run python scripts/compare_local_classifier.py score-sample --caselist hspolicy26 \\
         --labels ~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample.csv
+    uv run python scripts/compare_local_classifier.py train-queue-order --caselist hspolicy26
 """
 
 from __future__ import annotations
@@ -62,6 +69,7 @@ from debate_core.application.local_classifier_comparison import (
     read_feature_table,
     sources_no_longer_live,
 )
+from debate_core.application.review_queue_order import QueueOrderModelFile, model_file_text
 from debate_core.arguments.landscape.local_classifier import (
     DEFAULT_MINIMUM_FEATURE_TEAMS,
     DEFAULT_SEED,
@@ -84,6 +92,7 @@ from debate_core.arguments.landscape.local_classifier import (
 from debate_core.arguments.landscape.review_queue import DEFAULT_REVIEW_THRESHOLD
 from debate_core.domain.landscape import Taxonomy
 from debate_core.integrations.file_streaming import atomic_replacement
+from debate_core.integrations.landscape.classification_store import LocalQueueOrderModelStore
 from debate_core.integrations.landscape.yaml_taxonomy_repository import YamlTaxonomyRepository
 from debate_core.integrations.local import BLOB_DIRECTORY, FsEvidenceObjectStore
 from debate_core.integrations.local.parsed_store import LocalParsedStore
@@ -562,6 +571,69 @@ async def _score_sample(arguments: argparse.Namespace) -> int:
 
 
 # ------------------------------------------------------------------------------------------------
+# train-queue-order
+# ------------------------------------------------------------------------------------------------
+
+
+def _recorded_proxy_threshold(directory: Path, topic_id: str) -> float | None:
+    """The proxy's threshold the coach sample recorded, when `sample` wrote one under `directory`."""
+    _, items_path = sample_paths(directory, topic_id)
+    if not items_path.is_file():
+        return None
+    with items_path.open(encoding="utf-8") as stream:
+        return read_sample(stream).thresholds.get(STRATIFIED_BY)
+
+
+async def _train_queue_order(arguments: argparse.Namespace) -> int:
+    started = time.perf_counter()
+    directory, table, taxonomy = await _live_table(arguments)
+    comparison = compare(
+        taxonomy,
+        table.rows,
+        seed=arguments.seed,
+        minimum_teams=arguments.minimum_teams,
+        without_placing_headings=MODELS[STRATIFIED_BY],
+    )
+    model = comparison.classifier.queue_order_model(comparison.threshold)
+    location = await LocalQueueOrderModelStore(
+        _outside_the_repository(arguments.data_dir, "--data-dir")
+    ).write(
+        table.caselist,
+        table.topic_id,
+        model_file_text(
+            QueueOrderModelFile(
+                caselist=table.caselist,
+                version=table.version,
+                topic_id=table.topic_id,
+                taxonomy_version=table.taxonomy_version,
+                through=table.through,
+                seed=comparison.seed,
+                trained_cards=comparison.trained_cards,
+                sources=tuple(sorted(table.sources)),
+                suppressed_at_build=table.suppressed_at_build,
+                model=model,
+            )
+        ),
+    )
+    threshold = "none reaches it" if comparison.threshold is None else f"{comparison.threshold:.3f}"
+    print(
+        f"Trained the {STRATIFIED_BY} model on {comparison.trained_cards} labelled cards of "
+        f"{comparison.documents - comparison.held_out_documents} documents ({comparison.classes} positions, "
+        f"{comparison.features} features; seed {comparison.seed})."
+    )
+    print(
+        f"Its confidence at {TARGET_PRECISION:.0%} held-out precision, from which it suggests: {threshold}."
+    )
+    recorded = _recorded_proxy_threshold(directory, table.topic_id)
+    if recorded is not None:
+        same = "the same" if recorded == comparison.threshold else "a different one: the table has changed"
+        print(f"The coach sample recorded {recorded:.3f} for the {STRATIFIED_BY} model: {same}.")
+    print(f"Wrote the review queue's order model to {location}. It orders the queue and places no card.")
+    print(f"Runtime {time.perf_counter() - started:.1f} s.")
+    return 0
+
+
+# ------------------------------------------------------------------------------------------------
 
 
 def main(
@@ -583,6 +655,7 @@ def main(
         ("compare", "Train, measure on the held-out tenth, and count what it would place."),
         ("sample", "Write 60 unplaced cards for the coach to label."),
         ("score-sample", "Score both models on the coach's labels."),
+        ("train-queue-order", "Train the proxy and write it as the review queue's order model."),
     ):
         command = commands.add_parser(name, help=help_text)
         command.add_argument("--caselist", required=True, help="The caselist slug.")
@@ -605,7 +678,7 @@ def main(
                 default=DEFAULT_REVIEW_THRESHOLD,
                 help=f"A placement less sure than this is no label. Default: {DEFAULT_REVIEW_THRESHOLD}.",
             )
-        elif name in ("compare", "sample"):
+        elif name in ("compare", "sample", "train-queue-order"):
             command.add_argument("--seed", type=int, default=DEFAULT_SEED, help=f"Default: {DEFAULT_SEED}.")
             command.add_argument(
                 "--minimum-teams",
@@ -616,7 +689,13 @@ def main(
         else:
             command.add_argument("--labels", type=Path, required=True, help="The coach's labelled CSV.")
     arguments = parser.parse_args(argv)
-    runs = {"features": _features, "compare": _compare, "sample": _sample, "score-sample": _score_sample}
+    runs = {
+        "features": _features,
+        "compare": _compare,
+        "sample": _sample,
+        "score-sample": _score_sample,
+        "train-queue-order": _train_queue_order,
+    }
     try:
         refuse_an_unsafe_environment(os.environ if environ is None else environ, processes)
         return asyncio.run(runs[arguments.command](arguments))

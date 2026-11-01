@@ -12,8 +12,10 @@ how the operator classifies a snapshot and turns the coach's review into overrid
   are cached under `<data dir>/landscape/classifications/`, and the review queue's CSV is written to
   `<data dir>/landscape/review/<caselist>/<topic id>-review-queue.csv`. It prints counts only: cards
   by method, the unplaced share, the queue's size, the cache's hits and the runtime. With
-  `--show-unplaced N` it also prints the queue's first N headings with their counts. It exits 1 when
-  it read no source, so an empty store never looks like a run.
+  `--show-unplaced N` it also prints the queue's first N headings with their counts. The queue is
+  ordered by the local proxy model when the caselist has one that stands (`v1-e32-t26`), with its
+  suggestions, and kept in today's order otherwise; a line says which and why. It exits 1 when it read
+  no source, so an empty store never looks like a run.
 * **`apply-decisions`** reads a review queue CSV whose `decision` column the coach filled (a
   position id, or `none` for a heading that names no position) and writes the topic's overrides to
   `config/landscape/overrides/<topic id>.yaml`, refusing a decision naming no position of the
@@ -49,13 +51,17 @@ from debate_core.application.position_classification import (
     ClassificationRun,
     PositionClassificationService,
 )
+from debate_core.application.review_queue_order import ReviewQueueOrdering
 from debate_core.arguments.landscape.review_queue import (
     DEFAULT_MINIMUM_REVIEW_TEAMS,
     DEFAULT_REVIEW_THRESHOLD,
     apply_decisions,
     read_decisions_csv,
 )
-from debate_core.integrations.landscape.classification_store import LocalClassificationStore
+from debate_core.integrations.landscape.classification_store import (
+    LocalClassificationStore,
+    LocalQueueOrderModelStore,
+)
 from debate_core.integrations.landscape.yaml_taxonomy_repository import (
     OVERRIDE_DIRECTORY,
     YamlTaxonomyRepository,
@@ -109,6 +115,8 @@ def _print_run(run: ClassificationRun, seconds: float, show_unplaced: int) -> No
         f"{queue.left_out_below_minimum_teams} headings left out as used by too few teams."
     )
     print(f"Wrote the review queue to {run.review_queue_location}.")
+    if run.review_queue_order is not None:
+        print(run.review_queue_order)
     print(
         f"Cache: {counts.lookups} distinct keys, {counts.hits} hits ({_share(counts.hits, counts.lookups)}), "
         f"{counts.misses} placed ({counts.refused_cached} cached results refused); "
@@ -116,9 +124,14 @@ def _print_run(run: ClassificationRun, seconds: float, show_unplaced: int) -> No
     )
     for row in run.review_queue.rows[:show_unplaced]:
         answer = " (answer)" if row.answer else ""
+        suggested = (
+            f"; suggested: {row.suggested_position} (accept or override it in `decision`)"
+            if row.suggested_position
+            else ""
+        )
         print(
             f"  unplaced: {row.normalized_heading}{answer}: {row.teams} teams, {row.documents} documents, "
-            f"{row.cards} cards; candidates {', '.join(row.candidate_positions) or 'none'}"
+            f"{row.cards} cards; candidates {', '.join(row.candidate_positions) or 'none'}{suggested}"
         )
     print(f"Runtime {seconds:.1f} s.")
 
@@ -139,12 +152,13 @@ async def _classify(arguments: argparse.Namespace) -> int:
     resolved = repository.resolve(arguments.caselist, snapshot)
     if resolved is None or resolved.taxonomy is None:
         raise Refused(f"topics.yaml puts {arguments.caselist} on {snapshot} on no topic with a taxonomy")
+    suppression = RecordedSuppressionList(local_suppression_list_file(data_dir))
     reading = await read_seed_sources(
         store=LocalParsedStore(data_dir),
         local=LocalEvidence(
             objects=objects, blobs=blobs, object_path_for=objects.path_for, blob_path_for=blobs.path_for
         ),
-        suppression=RecordedSuppressionList(local_suppression_list_file(data_dir)),
+        suppression=suppression,
         topic=resolved.topic,
         caselist=arguments.caselist,
         version=arguments.version,
@@ -162,6 +176,11 @@ async def _classify(arguments: argparse.Namespace) -> int:
         store=LocalClassificationStore(data_dir),
         review_threshold=arguments.threshold,
         minimum_review_teams=arguments.minimum_review_teams,
+        queue_order=ReviewQueueOrdering(
+            models=LocalQueueOrderModelStore(data_dir),
+            parsed_store=LocalParsedStore(data_dir),
+            suppression=suppression,
+        ),
     )
     run = await service.classify(reading)
     _print_run(run, time.perf_counter() - started, arguments.show_unplaced)

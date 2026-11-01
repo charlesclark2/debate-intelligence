@@ -116,6 +116,7 @@ from debate_core.application.ports.parsed_store import ParsedStore, parse_versio
 from debate_core.application.ports.suppression import SuppressionList
 from debate_core.application.ports.taxonomy_repository import TaxonomyRepository
 from debate_core.application.position_classification import ClassificationRun, PositionClassificationService
+from debate_core.application.review_queue_order import ReviewQueueOrdering
 from debate_core.application.sync_runs import SyncRunLog
 from debate_core.arguments.landscape.analytic_texts import CounterplanActors
 from debate_core.arguments.landscape.review_queue import DEFAULT_REVIEW_THRESHOLD, ReviewRow
@@ -437,6 +438,7 @@ class LandscapeRunService:
         max_model_items: int = DEFAULT_MAX_MODEL_ITEMS,
         backfile_caselists: Sequence[str] = (),
         parser_version: str | None = None,
+        queue_order: ReviewQueueOrdering | None = None,
     ) -> None:
         self._taxonomies = taxonomies
         # Never classified, never a per-school view (data-use policy 1.17, `v1-e34-t34`).
@@ -460,6 +462,7 @@ class LandscapeRunService:
         self._threshold = review_threshold
         self._max_model_items = max_model_items
         self._parser_version = parser_version
+        self._queue_order = queue_order
 
     def _classifier_for(self, store: ClassificationStore, request: LandscapeRunRequest) -> PositionClassifier:
         """The classifier for `request`: stage one alone under `none`, with the model stage otherwise."""
@@ -476,7 +479,11 @@ class LandscapeRunService:
             if request.dry_run:
                 stage = stage.planning()
         return PositionClassificationService(
-            taxonomies=self._taxonomies, store=store, review_threshold=self._threshold, model_stage=stage
+            taxonomies=self._taxonomies,
+            store=store,
+            review_threshold=self._threshold,
+            model_stage=stage,
+            queue_order=self._queue_order,
         )
 
     def _allowed(self, request: LandscapeRunRequest) -> int:
@@ -836,5 +843,7 @@ class _ReadOnlyClassifications:
     async def replace(self, caselist: str, entries: Sequence[CachedClassification]) -> None:
         return None
 
-    async def write_review_queue(self, caselist: str, topic_id: str, rows: Sequence[ReviewRow]) -> str:
+    async def write_review_queue(
+        self, caselist: str, topic_id: str, rows: Sequence[ReviewRow], *, suggestions: bool = False
+    ) -> str:
         return DRY_RUN_QUEUE_LOCATION

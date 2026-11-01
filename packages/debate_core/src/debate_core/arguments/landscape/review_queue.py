@@ -11,10 +11,15 @@ positions whose tag keywords the cards under it carry; never another heading's o
 ## What the queue's CSV holds
 
 Normalized headings, counts and candidate position ids, and an empty `decision` column for the coach.
-Nothing else: no path, file name, school, team code or tag. A heading fewer than `minimum_teams`
-teams use (two by default, the rule seeding follows) is left out and only counted, since such a
-heading can point at the one team that wrote it. The file is written to the local data directory,
-never to the repository.
+Nothing else: no path, file name, school, team code or tag. When the local proxy model ordered the
+queue (`v1-e32-t26`, :mod:`~debate_core.arguments.landscape.queue_order`), its rows come most surely
+guessed first and a `suggested_position` column stands before `decision`: the proxy's position for a
+row it is sure enough of, blank for the rest. It is a suggestion only, and the coach's `decision` is
+what is read back. Without the model the file is as it was, column for column.
+
+A heading fewer than `minimum_teams` teams use (two by default, the rule seeding follows) is left
+out and only counted, since such a heading can point at the one team that wrote it. The file is
+written to the local data directory, never to the repository.
 
 ## A decision
 
@@ -54,6 +59,7 @@ __all__ = [
     "DECISION_NO_POSITION",
     "DEFAULT_MINIMUM_REVIEW_TEAMS",
     "DEFAULT_REVIEW_THRESHOLD",
+    "ORDERED_REVIEW_QUEUE_COLUMNS",
     "REVIEW_QUEUE_COLUMNS",
     "AppliedDecisions",
     "Decision",
@@ -91,6 +97,9 @@ REVIEW_QUEUE_COLUMNS: Final = (
     "decision",
 )
 
+ORDERED_REVIEW_QUEUE_COLUMNS: Final = (*REVIEW_QUEUE_COLUMNS[:-1], "suggested_position", "decision")
+"""The columns of a queue the local proxy model ordered: its suggestion just before the coach's decision."""
+
 
 def needs_review(result: ClassificationResult, threshold: float = DEFAULT_REVIEW_THRESHOLD) -> bool:
     """True when nothing placed the item, or the position it was placed under is below `threshold`.
@@ -127,6 +136,12 @@ class ReviewRow:
     neg_teams: int
     cards: int
     candidate_positions: tuple[str, ...]
+    proxy_confidence: float | None = None
+    """How surely the local proxy model puts the row's cards under one position, when it ordered the queue
+    (`v1-e32-t26`); None when it did not, or cannot score the row."""
+    suggested_position: str | None = None
+    """The proxy's position for the row, shown only at or above its threshold: a suggestion the coach
+    accepts or overrides in `decision`, never a placement."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -225,11 +240,16 @@ def _candidates(own: Sequence[str], from_tags: Counter[str]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(ranked))[:_CANDIDATE_LIMIT]
 
 
-def write_review_queue_csv(rows: Iterable[ReviewRow], stream: TextIO) -> None:
-    """The rows under a header of :data:`REVIEW_QUEUE_COLUMNS`, each with an empty `decision`."""
+def write_review_queue_csv(rows: Iterable[ReviewRow], stream: TextIO, *, suggestions: bool = False) -> None:
+    """The rows under a header of :data:`REVIEW_QUEUE_COLUMNS`, each with an empty `decision`.
+
+    With `suggestions`, for a queue the local proxy model ordered, the header is
+    :data:`ORDERED_REVIEW_QUEUE_COLUMNS` and each row's suggestion, or a blank, stands before `decision`.
+    """
     writer = csv.writer(stream)
-    writer.writerow(REVIEW_QUEUE_COLUMNS)
+    writer.writerow(ORDERED_REVIEW_QUEUE_COLUMNS if suggestions else REVIEW_QUEUE_COLUMNS)
     for row in rows:
+        suggested = [row.suggested_position or ""] if suggestions else []
         writer.writerow(
             [
                 row.normalized_heading,
@@ -240,6 +260,7 @@ def write_review_queue_csv(rows: Iterable[ReviewRow], stream: TextIO) -> None:
                 row.neg_teams,
                 row.cards,
                 ";".join(row.candidate_positions),
+                *suggested,
                 "",
             ]
         )

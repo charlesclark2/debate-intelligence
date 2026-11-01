@@ -27,7 +27,12 @@ parsed sources on the topic, with their disclosing teams):
    topic's results under any other taxonomy version and, with a model stage, under any other prompt
    version: a prompt version bump misses only MODEL results;
 6. builds the review queue from the items nothing placed or placed below the threshold, and writes its
-   CSV to the data directory.
+   CSV to the data directory. Built with a
+   :class:`~debate_core.application.review_queue_order.ReviewQueueOrdering` (`v1-e32-t26`), it orders
+   the queue by the local proxy model's confidence when the caselist has a model that stands, with its
+   suggestions, and otherwise leaves it in today's order; either way the run carries one line saying
+   which and why. The model reads only the queued cards and places none of them: every classification
+   and count is the same with it or without it.
 
 It returns every item's :class:`~debate_core.domain.landscape_classification.PositionClassification`
 for the report, with counts for the run's summary.
@@ -56,8 +61,16 @@ from debate_core.application.ports.classification_store import (
     ClassificationStore,
 )
 from debate_core.application.ports.taxonomy_repository import TaxonomyRepository
+from debate_core.application.review_queue_order import ReviewQueueOrdering
 from debate_core.arguments.landscape.matcher import MatchItem, PositionMatcher, read_items
 from debate_core.arguments.landscape.model_stage import ModelCandidate, places_nothing, sent_headings
+from debate_core.arguments.landscape.queue_order import (
+    Prediction,
+    QueueOrderModel,
+    card_features,
+    order_review_queue,
+    row_scores,
+)
 from debate_core.arguments.landscape.review_queue import (
     DEFAULT_MINIMUM_REVIEW_TEAMS,
     DEFAULT_REVIEW_THRESHOLD,
@@ -161,6 +174,11 @@ class ClassificationRun:
     review_queue: ReviewQueue = field(repr=False)
     review_queue_location: str = field(repr=False)
     counts: ClassificationCounts
+    review_queue_order: str | None = None
+    """The one line on the queue's order: by the local proxy model, or today's and why (`v1-e32-t26`);
+    None when the service was built without a :class:`ReviewQueueOrdering`."""
+    review_queue_ordered: bool = False
+    """Whether the local proxy model ordered the queue."""
 
 
 class PositionClassificationService:
@@ -174,6 +192,7 @@ class PositionClassificationService:
         review_threshold: float = DEFAULT_REVIEW_THRESHOLD,
         minimum_review_teams: int = DEFAULT_MINIMUM_REVIEW_TEAMS,
         model_stage: ModelClassificationStage | None = None,
+        queue_order: ReviewQueueOrdering | None = None,
     ) -> None:
         if not 0.0 <= review_threshold <= 1.0:
             raise ValueError(f"the review threshold is between 0 and 1; got {review_threshold}")
@@ -182,6 +201,7 @@ class PositionClassificationService:
         self._threshold = review_threshold
         self._minimum_review_teams = minimum_review_teams
         self._model_stage = model_stage
+        self._queue_order = queue_order
 
     async def classify(self, reading: SeedReading) -> ClassificationRun:
         taxonomy = self._taxonomies.taxonomy(reading.topic_id)
@@ -219,6 +239,7 @@ class PositionClassificationService:
         model = await self._model_stage_run(reading, taxonomy, names, read, cached, refused, written)
         classifications: list[PositionClassification] = []
         queued: list[QueuedItem] = []
+        queued_reads: list[_Read] = []
         by_kind: dict[ItemKind, Counter[str]] = {ItemKind.SECTION: Counter(), ItemKind.CARD: Counter()}
         below = counted = 0
         for one in read:
@@ -240,6 +261,7 @@ class PositionClassificationService:
                         tag_candidates=matcher.tag_candidates(item),
                     )
                 )
+                queued_reads.append(one)
         stage = self._model_stage
         kept = {
             key: entry
@@ -262,7 +284,22 @@ class PositionClassificationService:
         queue = build_review_queue(
             queued, heading_candidates=matcher.heading_candidates, minimum_teams=self._minimum_review_teams
         )
-        location = await self._store.write_review_queue(reading.caselist, reading.topic_id, queue.rows)
+        order: str | None = None
+        ordered = False
+        if self._queue_order is not None:
+            loaded = await self._queue_order.load(reading.caselist, reading.topic_id, taxonomy)
+            order = loaded.note
+            if loaded.model is not None:
+                ordered = True
+                predictions = _queue_predictions(loaded.model, queued_reads, matcher, names, reading)
+                queue = order_review_queue(queue, row_scores(queued, predictions), loaded.model.suggest_from)
+        location = (
+            await self._store.write_review_queue(
+                reading.caselist, reading.topic_id, queue.rows, suggestions=True
+            )
+            if ordered
+            else await self._store.write_review_queue(reading.caselist, reading.topic_id, queue.rows)
+        )
         outcome = model.outcome
         return ClassificationRun(
             caselist=reading.caselist,
@@ -297,6 +334,8 @@ class PositionClassificationService:
                 model_output_tokens=outcome.output_tokens,
                 model_interrupted_by=outcome.interrupted_by,
             ),
+            review_queue_order=order,
+            review_queue_ordered=ordered,
         )
 
     async def _model_stage_run(
@@ -354,6 +393,32 @@ class PositionClassificationService:
         return _ModelPlacements(
             stage.prompt_version, found, outcome=outcome, candidates=len(candidates), hits=hits
         )
+
+
+def _queue_predictions(
+    model: QueueOrderModel,
+    queued: Sequence[_Read],
+    matcher: PositionMatcher,
+    names: CaselistNames,
+    reading: SeedReading,
+) -> list[Prediction | None]:
+    """The proxy's guess for each queued card, read as t21's feature table reads it; None for a section.
+
+    Cards read alike are scored once.
+    """
+    codes = code_words(reading.caselist_names)
+    scored: dict[tuple[str, ...], Prediction | None] = {}
+    found: list[Prediction | None] = []
+    for one in queued:
+        if one.item.kind is not ItemKind.CARD:
+            found.append(None)
+            continue
+        own = [name for team in one.source.teams for name in team.names if name.strip()]
+        tokens = model.tokens(card_features(one.item, own, names, matcher, codes))
+        if tokens not in scored:
+            scored[tokens] = model.predict(tokens)
+        found.append(scored[tokens])
+    return found
 
 
 def model_candidate(

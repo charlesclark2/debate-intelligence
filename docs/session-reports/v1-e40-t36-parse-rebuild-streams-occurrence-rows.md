@@ -230,9 +230,56 @@ restart clears it), say so and the session will write the block again.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-01
 
 **Notes:**
+
+Accepted as built, with the Goal `InProgress` until the whole-store byte check is recorded. The
+best thing in this report is that it corrects the premise. The cards cost about 85 MiB per 250
+sources; the near-duplicate clusterer's `CutIndex` is what dominates. The PM's straight line to
+13 GB (from t31's reading) was wrong, and finding that is worth as much as the streaming.
+
+1. **ac1:**
+   * **Byte identity is proven well.** The six synthetic stores are checked against an oracle that
+     itself matches the start commit's real code. They include a cluster across sources, an
+     abbreviated link, stopped disclosures and sources, camp paths and a removal. 250 real
+     `hspolicy26` sources give equal SHA-256 values for all three aggregates. The Hypothesis test
+     ties `CardPlacer` to the old one-list `place`.
+   * **Memory:** the counting test and the `tracemalloc` test both fail against the start commit's
+     real code (136 cards alive; 980,149 bytes of growth). The wording holds: no card is held past
+     its source.
+   * **Mutant 4b** first survived, then was caught once a near copy named a live cluster. That is
+     the kind of gap mutation testing is for, and you closed it properly.
+2. **The rulings on your three questions:**
+   * **Q1, (c).** The run task stays at 32 GB for now. By your figures, tonight's hspolicy25 attempt
+     on revision 12 (old code) needs roughly 18 GB of `CutIndex` plus about 4.7 GB of cards, which
+     is likely to fit. Its step and memory lines are the season measurement. The compact `CutIndex`
+     (shingles as 64-bit hashes in sorted arrays, word lists dropped once their shingles are made)
+     is filed by the PM as a new E40 task, proven byte-identical on the occurrence table. Every hash
+     match is confirmed by comparing the strings, so a collision cannot change a cluster. It is p2,
+     raised to p1 if tonight's import dies in the rebuild.
+   * **Q2, (a).** Keep both documents, cross-referenced. t31 is now merged, so after the sync this
+     task adds a dated note to `docs/data/caselist-parse-memory.md`: its straight-line 13 GB figure
+     and its "end of reading" reading are superseded by `caselist-rebuild-memory.md`. Drop the
+     "not yet on dev" wording from yours.
+   * **Q3, (a).** Accepted as built. The streaming is worth having on its own (about 1.3 GB at the
+     whole store, and no list of rows or whole table held while writing), and it is proven apart
+     from a clusterer change.
+3. **The deviations are accepted:** the one line in `debate_cli/container.py`, the fake's
+   annotation, the new document, and the whole-store check left to the operator.
+4. **The new `ValueError`** for a document naming a source other than its file is accepted: before,
+   its cards were filed under the wrong source. The whole-store run is its real-data test. If it
+   refuses there, stop and send the PM the count.
+5. **Closing checks:** the affected set (408 files) is left to the PR's `ci` under agreement 10. The
+   bounded groups (2,585, 499, 138 and 176 passed), ruff, pyright, lint-imports, thin handlers,
+   command blocks and the specs are clean.
+6. **Spec:** write the rulings in as a dated "(PM amendment 2026-11-01, from the measurement)"
+   paragraph. ac1's purpose (a season's rebuild that fits) moves to the clusterer task. The rest of
+   ac1 is unchanged, and the Goal stays `InProgress`.
+7. **The whole-store check gates any image carrying this task, not the merge.** The operator runs the
+   block whenever it suits, and before Thursday's image apply if that image carries this commit. The
+   PM records the result in a batch and sets the Goal `Succeeded` if the three digests match.
+8. **Merge:** `scripts/task pr --partial` once `ci` is green.

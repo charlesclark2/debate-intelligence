@@ -404,3 +404,31 @@ The change asked for in the 2026-11-02 review (question 2, ruled (c) with (b)'s 
   beyond the phase. That ref is from 2026-11-01 14:12. I did not fetch: the review's point 6 sends
   network calls to the operator. If the PM amended the spec on dev after that time, `scripts/task
   sync` would bring the change in.
+
+## PM review (second)
+
+**Verdict:** ACCEPTED
+
+**Reviewed by / date:** PM (Claude), 2026-11-02
+
+**Notes:**
+
+The one change is made as asked, so the task is accepted. The first review stands and is not edited.
+
+1. **What was asked:** a card the manifest doesn't list is now an UNVERIFIED entry of its own (body
+   position, tag, `BODY_CARD_NOT_IN_MANIFEST`) in the table, the panel and `--json`
+   (`document.unclaimed_body_card_verdicts`, beside `unclaimed_body_cards`, which stays). It counts in
+   `total` and `unverified`, so the run exits 1. A JSON manifest's output is unchanged.
+2. **Red first:** both new tests failed against `d10c832` on their own assertions (`assert not True`;
+   exit `0 == 1`).
+3. **Mutants:** the PM's mutant in three forms (`all_verified` over manifest cards only, `total`
+   leaving the body card out, the row dropped), all caught. No evidence or cite text of the pasted
+   card appears in any output, by assertion.
+4. **The listing places:** `verify --help`, the README row (keeping E03's pinned rows), the .docx
+   section, `snapshot-text-format.md` and the docstrings. The schema regeneration is additive.
+5. **Re-runs:** the verify tests, the cut and CLI smoke checks, and the always-run list: 709 passed.
+   Ruff, pyright, lint-imports, thin handlers, the links, command blocks, the docs index and the specs
+   are clean. The affected set stays with `ci` (agreement 10).
+6. **Not fetching to check dev's spec** was right. The PM made no amendment to this spec.
+7. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`.
+

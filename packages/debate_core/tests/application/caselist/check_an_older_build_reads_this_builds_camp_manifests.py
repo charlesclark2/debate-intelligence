@@ -71,7 +71,9 @@ ADDED = ("openev_id", "upstream_path_sha256", "openev_camp_word")
 def _source() -> str:
     import debate_core
 
-    return Path(debate_core.__file__).parents[4].name
+    package = Path(debate_core.__file__).parent
+    # An installed build is named by where it is installed; a source checkout by its directory.
+    return str(package) if package.parent.name == "site-packages" else package.parents[3].name
 
 
 def _by_path(lines: list[str]) -> dict[str, str]:

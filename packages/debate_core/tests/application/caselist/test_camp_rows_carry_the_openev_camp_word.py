@@ -25,14 +25,16 @@ import pytest
 from tests.fixtures.openev.build_synthetic_openev import DOCUMENT_BODIES
 
 from debate_core.application.caselist.manifest import read_manifest_lines
+from debate_core.application.caselist.openev_import_service import OpenEvImportService
 from debate_core.application.caselist.openev_manifest import (
     CAMP_FIELDS,
     openev_manifest_key,
     read_recorded_release,
 )
+from debate_core.application.caselist_sync import OPENEV_DELIVERIES_FILENAME, OpenEvDeliveries
 from debate_core.application.ports.caselist_source import OpenEvFile
 from debate_core.domain.caselist import Event
-from debate_core.integrations.local import FsEvidenceObjectStore
+from debate_core.integrations.local import FsEvidenceObjectStore, FsSnapshotStore
 from debate_core.integrations.opencaselist.models import OpenEvRecord
 
 from .camp_manifest_scenario import MANIFEST_NAME, STORED
@@ -181,3 +183,24 @@ async def test_rows_written_before_carry_no_word_and_still_read(
 
 def release_lines_of(written_by: str) -> list[str]:
     return (STORED / written_by / MANIFEST_NAME).read_text(encoding="utf-8").splitlines()
+
+
+async def test_a_re_derive_of_the_release_keeps_each_rows_word_as_the_pull_wrote_it(
+    world: RemovalWorld,
+) -> None:
+    """`caselist reimport-openev-metadata` derives camp, lab, title and warnings again, and no word."""
+    await pull(world, listed_source())
+    importer = OpenEvImportService(
+        caselists=world.repository, blobs=FsSnapshotStore(world.data_dir), suppression=world.suppression()
+    )
+
+    report = await importer.reimport_metadata(
+        year=YEAR,
+        event=Event.POLICY,
+        recorded_manifest=local_lines(world),
+        upstream_paths=OpenEvDeliveries(world.data_dir / OPENEV_DELIVERIES_FILENAME).upstream_paths(),
+    )
+
+    assert {path: row.get(CAMP_WORD) for path, row in members(list(report.manifest_lines)).items()} == (
+        EXPECTED_WORDS
+    )

@@ -72,7 +72,7 @@ from debate_core.integrations.landscape.classification_store import (
 from debate_core.integrations.landscape.yaml_taxonomy_repository import YamlTaxonomyRepository
 from debate_core.integrations.local import BLOB_DIRECTORY, FsEvidenceObjectStore
 from debate_core.integrations.local.parsed_store import LocalParsedStore
-from debate_core.integrations.models.prompt_registry import PromptRegistry, load_prompt_file
+from debate_core.integrations.models.prompt_registry import PromptRegistry
 from debate_core.testing.fakes.model_router import ScriptedModelResponse, ScriptedModelRouter
 from debate_core.testing.fakes.suppression import empty_suppression_list
 from debate_core.testing.landscape_store import PlantedCard, PlantedCaselist
@@ -920,31 +920,19 @@ async def test_model_a_second_run_over_an_unchanged_snapshot_makes_no_model_call
     assert second.classifications == first.classifications
 
 
-def bumped(registry: PromptRegistry, tmp_path: Path) -> PromptRegistry:
-    """The committed prompts and `landscape.classify_position` at 1.1.0, the same text under a new version."""
-    text = (MODEL_REPOSITORY / "prompts" / "landscape" / "classify_position.md").read_text(encoding="utf-8")
-    text = text.replace("version: 1.0.0\nstatus:", "version: 1.1.0\nstatus:", 1).replace(
-        "changelog:\n",
-        "changelog:\n  - version: 1.1.0\n    date: 2026-10-26\n    summary: A test's bump.\n",
-        1,
-    )
-    path = tmp_path / "classify_position@1.1.0.md"
-    path.write_text(text, encoding="utf-8")
-    return PromptRegistry([*registry.prompts, load_prompt_file(path)])
-
-
 @pytest.mark.anyio
 async def test_model_a_prompt_version_bump_asks_again_about_model_results_only(
     tmp_path: Path, prompts: PromptRegistry, placements: list[str]
 ) -> None:
+    """Cached under 1.0.0, asked again under the committed 1.1.0 (`v1-e32-t40`'s bump)."""
     repo = repository(taxonomy())
     data = tmp_path / "data"
-    await model_run(data, repo, stage(AnsweringRouter(), prompts), FIRST, SECOND, THIRD)
+    await model_run(
+        data, repo, stage(AnsweringRouter(), prompts, prompt_version="1.0.0"), FIRST, SECOND, THIRD
+    )
     placements.clear()
     router = AnsweringRouter()
-    again = await model_run(
-        data, repo, stage(router, bumped(prompts, tmp_path), prompt_version="1.1.0"), FIRST, SECOND, THIRD
-    )
+    again = await model_run(data, repo, stage(router, prompts), FIRST, SECOND, THIRD)
 
     assert placements == []
     assert router.tags == [LEFTOVER_TAGS]

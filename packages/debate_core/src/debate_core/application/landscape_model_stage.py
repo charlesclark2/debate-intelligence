@@ -104,7 +104,7 @@ logger = logging.getLogger(__name__)
 CLASSIFY_POSITION_PROMPT_ID: Final = "landscape.classify_position"
 """The registered prompt the stage runs (`prompts/landscape/classify_position.md`)."""
 
-CLASSIFY_POSITION_VERSION: Final = "1.0.0"
+CLASSIFY_POSITION_VERSION: Final = "1.1.0"
 """The version of :data:`CLASSIFY_POSITION_PROMPT_ID` a stage runs unless it is built with another."""
 
 CLASSIFICATION_TASK_CLASS: Final = TaskClass.HIGH_VOLUME

@@ -26,6 +26,7 @@ from debate_core.application.landscape_model_evaluation import (
 )
 from debate_core.application.landscape_model_stage import (
     CLASSIFY_POSITION_PROMPT_ID,
+    CLASSIFY_POSITION_VERSION,
     ModelClassificationStage,
     ParsedStoreCardTexts,
     model_use_gate,
@@ -33,11 +34,13 @@ from debate_core.application.landscape_model_stage import (
 from debate_core.application.landscape_seeding import SeedReading
 from debate_core.application.ports.parsed_store import DocumentRecord, SourceEntry
 from debate_core.application.structured_output import StructuredOutputGuard
+from debate_core.arguments.landscape.model_stage import ModelCandidate, ModelItem, prompt_variables
 from debate_core.arguments.landscape.seeding import SeedCard, SeedSource, SeedTeam
 from debate_core.domain.caselist import Side
 from debate_core.domain.landscape import Taxonomy
-from debate_core.domain.landscape_classification import card_item_id
+from debate_core.domain.landscape_classification import RATIONALE_LIMIT, card_item_id
 from debate_core.domain.model_contracts import ModelParams, ModelPrompt, ModelResponse, TaskClass
+from debate_core.integrations.models.errors import MissingFixtureError
 from debate_core.integrations.models.model_mode import ModelMode
 from debate_core.integrations.models.prompt_registry import PromptRegistry
 from debate_core.integrations.models.record_replay import RecordReplayModelRouter
@@ -595,3 +598,85 @@ def test_the_coach_sample_is_joined_to_its_cards_by_row() -> None:
 def test_a_coach_sample_that_cannot_be_scored_is_refused_by_row(csv_text: str, refused: str) -> None:
     with pytest.raises(EvaluationRefused, match=refused):
         read_coach_sample(io.StringIO(csv_text), ROWS, TAXONOMY)
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e32-t40: prompt 1.1.0 names the argument a card is read as, with each position's side and
+# description, and states the rationale limit. A request of 1.0.0 is never served after the bump.
+# ------------------------------------------------------------------------------------------------
+
+DESCRIBED = Taxonomy.model_validate(
+    {
+        **TAXONOMY.model_dump(mode="json"),
+        "positions": [
+            {
+                **position.model_dump(mode="json", exclude_defaults=True),
+                "description": f"What {position.id} says.",
+            }
+            for position in TAXONOMY.positions
+        ],
+    }
+)
+
+
+def test_the_stage_runs_classify_position_1_1_0_as_released() -> None:
+    assert CLASSIFY_POSITION_VERSION == "1.1.0"
+    stage = stage_over(ByTag(FIRST_ANSWERS), PromptRegistry.load(REPOSITORY / "prompts"))
+    assert stage.prompt_version == "1.1.0"
+
+
+def test_prompt_1_1_0_reads_the_argument_not_the_subject_with_sides_descriptions_and_the_limit(
+    prompts: PromptRegistry,
+) -> None:
+    registered = prompts.get(CLASSIFY_POSITION_PROMPT_ID, "1.1.0")
+    assert registered.spec.status.value == "released"
+    item = ModelItem(
+        candidate=ModelCandidate(
+            fingerprint="f" * 64,
+            source_sha256=SHA,
+            first_element_index=0,
+            headings=(),
+            tag="the cliff nears",
+            short_cite=None,
+            own_names=(),
+        ),
+        excerpt=None,
+    )
+    rendered = prompts.render(
+        ModelPrompt(
+            prompt_id=CLASSIFY_POSITION_PROMPT_ID,
+            prompt_version="1.1.0",
+            variables=prompt_variables(DESCRIBED, [item]),
+        )
+    )
+    system = " ".join((rendered.system or "").split())
+
+    assert "the argument the card is read as in a round, not the subject it is about" in system
+    assert f"at most {RATIONALE_LIMIT} characters" in system
+    for word in ("side", "description"):
+        assert f"a {word}" in system or f"its {word}" in system
+    for position in DESCRIBED.active_positions:
+        assert f'"description": "What {position.id} says."' in rendered.system
+        assert f'"side": "{position.side.value}"' in rendered.system
+    assert "tournaments" in " ".join(rendered.user.split())
+
+
+@pytest.mark.anyio
+async def test_a_cassette_recorded_under_1_0_0_is_never_served_to_the_stage_after_the_bump(
+    tmp_path: Path, prompts: PromptRegistry
+) -> None:
+    recording = RecordReplayModelRouter(
+        ByTag(FIRST_ANSWERS), mode=ModelMode.RECORD, cassette_dir=tmp_path, environ={}
+    )
+    old = ModelClassificationStage(
+        StructuredOutputGuard(recording, prompts),
+        ParsedStoreCardTexts(InMemoryParsedStore()),
+        prompt_version="1.0.0",
+    )
+    await evaluate_labelled_cards(READING, TAXONOMY, LABELLED, old)
+    [stale] = sorted((tmp_path / CLASSIFY_POSITION_PROMPT_ID).glob("*.json"))
+    assert json.loads(stale.read_text(encoding="utf-8"))["request"]["prompt"]["prompt_version"] == "1.0.0"
+
+    replaying = RecordReplayModelRouter(None, mode=ModelMode.REPLAY, cassette_dir=tmp_path)
+    with pytest.raises(MissingFixtureError, match="1.1.0"):
+        await evaluate_labelled_cards(READING, TAXONOMY, LABELLED, stage_over(replaying, prompts))

@@ -443,7 +443,7 @@ def test_replay_runs_the_model_stage_on_the_unplaced_cards_and_counts_it(
     assert data["classification"]["cards_by_method"] == {"ALIAS": 7, "MODEL": 2}
     model = data["classification"]["model"]
     assert (model["prompt_version"], model["asked"], model["held_back"], model["refused"]) == (
-        "1.0.0",
+        "1.1.0",
         2,
         0,
         {},
@@ -699,7 +699,7 @@ def test_the_container_builds_the_model_stage_from_the_committed_prompt(world: S
 
     assert (built.prompt_id, built.prompt_version, built.max_items) == (
         "landscape.classify_position",
-        "1.0.0",
+        "1.1.0",
         7,
     )
 

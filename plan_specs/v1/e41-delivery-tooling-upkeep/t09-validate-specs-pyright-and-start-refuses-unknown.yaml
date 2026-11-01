@@ -37,7 +37,7 @@ spec:
         accept, and `scripts/task start --force` refuses a task with an unknown prerequisite
         while still starting one with an unmet one, by tests shown failing first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

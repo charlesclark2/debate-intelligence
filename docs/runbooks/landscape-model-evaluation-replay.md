@@ -30,11 +30,17 @@ issue or a commit (`docs/policies/caselist-data-use.md`). The counts of hits, by
 
 ## 1. Go to a checkout
 
-Run it from a source checkout (the model stage reads `prompts/`), on the Mac that holds the cassettes:
-this task's worktree until it merges, and afterwards a worktree of `dev`.
+Run it from a source checkout (the model stage reads `prompts/`), on the Mac that holds the cassettes.
+A checkout replays only what was recorded under the prompt version and the scrub it holds:
+
+* since `v1-e32-t40`, prompt 1.1.0 with every disclosing team's names taken out, recorded by
+  [the record runbook](landscape-model-evaluation-record.md), from a worktree of `dev`, or `v1-e32-t40`'s
+  until it merges;
+* the first recording, under 1.0.0, only from a checkout of `dev` at `28d4c88` (`v1-e32-t39`'s merge) or
+  earlier. A later checkout asks for 1.1.0 and stops with `MISSING_FIXTURE_ERROR`.
 
 ```bash
-cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t39-model-evaluation-diagnosis
+cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t40-model-stage-reads-the-argument-not-the-subject
 ```
 
 ## 2. The counts, as JSON
@@ -52,7 +58,7 @@ What to read:
 * An evaluation under the bar exits `1` with `error.code` `EVALUATION_BELOW_BAR`, and the counts are in
   `error.details`; one that meets it exits `0`, with them in `data`. `labelled`, `found` and `asked` are
   above zero, and `breakdown.outcomes` sums to `labelled`.
-* `MISSING_FIXTURE` means a request differs from every recorded one: the labels, the snapshot, the
+* `MISSING_FIXTURE_ERROR` means a request differs from every recorded one: the labels, the snapshot, the
   parsed store or the taxonomy changed since the recording. No model was called. Stop; the evaluation
   has to be recorded again, which waits on the PM.
 * This output holds counts and taxonomy ids only, so it may be pasted into a session.

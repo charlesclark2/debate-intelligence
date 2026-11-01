@@ -33,16 +33,19 @@ its cause, so the command can tell a stop a retry may cure from a refusal (`v1-e
 
 The data-use policy lets a model read the real corpus only once its open question 4, the provider's
 no-training and no-retention terms and the account's logging check, is recorded as answered. A live run
-is refused until the policy's own table says so: the gate reads the policy's open-questions row 4, and a
-row still marked `Open`, or no policy to read, refuses.
+is refused until the policy's own table says so: the gate reads row 4 of the table under the policy's
+`## Open questions` heading, and a status still marked open, or no policy, heading, table or row to read,
+refuses. Before `v1-e32-t37` it read the policy's first row numbered 4, which is the clause register's.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 from collections import Counter
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
+from itertools import dropwhile, takewhile
 from typing import Final, Protocol
 
 from debate_core.application.cassette_filing import filed_under
@@ -118,6 +121,20 @@ stand for 14,413 of the 58,299 cards stage one left unplaced or below the thresh
 
 POLICY_QUESTION: Final = 4
 """The data-use policy's open question a live run waits on: the provider's no-retention terms."""
+
+_OPEN_QUESTIONS_HEADING: Final = re.compile(r"#{1,6}\s+Open questions\s*#*\s*", re.IGNORECASE)
+"""The policy's `## Open questions` heading: only its table's question 4 counts (`v1-e32-t37`)."""
+
+_ANY_HEADING: Final = re.compile(r"#{1,6}\s")
+
+_CELL_BORDER: Final = re.compile(r"(?<!\\)\|")
+"""A table row's unescaped `|`: an escaped `\\|` belongs to its cell."""
+
+_STILL_OPEN: Final = re.compile(r"(?<![0-9a-z-])(?:re-?)?open(?:ed)?(?![0-9a-z-])", re.IGNORECASE)
+"""A status word that leaves the question open: `open` (the policy's `**Open**` marker among them), `opened`,
+`reopened` or `re-opened`, as a whole word. A hyphen joins a word, so `open-questions` and `open-source` are
+not `open`, nor are `OpenEv` and `OpenCaselist`; `_open_` and `**Open**` are. Matching fails toward refusing:
+a reopened question is open, and `no longer open` refuses too (`v1-e32-t37`)."""
 
 
 class ModelStageInterrupted(DomainError):
@@ -366,27 +383,52 @@ def _as_output_problems(answers: ModelPositionAnswers, size: int) -> tuple[Outpu
     )
 
 
+def _cells(row: str) -> list[str]:
+    """A Markdown table row's cells, stripped, without its outer borders."""
+    return [cell.strip() for cell in _CELL_BORDER.split(row.removeprefix("|").removesuffix("|"))]
+
+
 def model_use_gate(policy_text: str | None) -> str | None:
     """Why a live model run over the real corpus may not start, or None when the policy allows it.
 
     `policy_text` is `docs/policies/caselist-data-use.md`, or None when there is none to read. The
-    gate reads the row of the policy's open-questions table for question :data:`POLICY_QUESTION`; a row
-    whose status still says `Open`, or no such row, refuses.
+    gate finds the policy's `## Open questions` heading, the first table under it (before the next
+    heading), that table's `Status` column, and the row whose first cell is :data:`POLICY_QUESTION`.
+    Rows numbered 4 in other tables, such as the clause register's, are not read (`v1-e32-t37`). A
+    status with an open word in it (:data:`_STILL_OPEN`), an empty status, or any of those missing
+    refuses.
     """
     if policy_text is None:
         return (
             "the data-use policy (docs/policies/caselist-data-use.md) is not in this checkout, so whether "
             f"its open question {POLICY_QUESTION} is answered cannot be read; run live from a source checkout"
         )
-    row = next(
-        (line for line in policy_text.splitlines() if line.startswith(f"| {POLICY_QUESTION} |")),
-        None,
-    )
+    unread = f"so its open question {POLICY_QUESTION} cannot be read; a live run waits on it"
+    lines = [line.strip() for line in policy_text.splitlines()]
+    heading = next((at for at, line in enumerate(lines) if _OPEN_QUESTIONS_HEADING.fullmatch(line)), None)
+    if heading is None:
+        return f"the data-use policy has no `## Open questions` heading, {unread}"
+    section = takewhile(lambda line: not _ANY_HEADING.match(line), lines[heading + 1 :])
+    table = [
+        _cells(line)
+        for line in takewhile(
+            lambda line: line.startswith("|"), dropwhile(lambda line: not line.startswith("|"), section)
+        )
+    ]
+    if not table:
+        return f"the data-use policy has no table under its `## Open questions` heading, {unread}"
+    columns = [cell.casefold() for cell in table[0]]
+    if "status" not in columns:
+        return f"the data-use policy's open-questions table has no Status column, {unread}"
+    row = next((cells for cells in table[1:] if cells[0] == str(POLICY_QUESTION)), None)
     if row is None:
-        return f"the data-use policy has no open question {POLICY_QUESTION} to read; a live run waits on it"
-    cells = [cell.strip() for cell in row.strip().strip("|").split("|")]
-    status = cells[2] if len(cells) > 2 else ""
-    if "open" in status.casefold() or not status:
+        return (
+            f"the data-use policy's open-questions table has no question {POLICY_QUESTION}; "
+            "a live run waits on it"
+        )
+    at = columns.index("status")
+    status = row[at] if at < len(row) else ""
+    if not status or _STILL_OPEN.search(status):
         return (
             f"the data-use policy records open question {POLICY_QUESTION} (the model provider's no-training "
             "and no-retention terms, and the account's logging check) as still open; a live run over the "

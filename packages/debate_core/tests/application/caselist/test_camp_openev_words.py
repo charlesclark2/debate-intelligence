@@ -29,7 +29,11 @@ def table(openev: object) -> CampAliases:
 
 
 def test_the_packaged_table_holds_the_words_the_operator_confirmed() -> None:
-    """Written by hand from the operator's checks of 2026-10-31: a word only for a page that opened."""
+    """Written by hand from the operator's checks of 2026-10-31: a word only for a page that opened.
+
+    Michigan's three camps from OpenEv's 2026 Files By Camp list, read by the PM the same day
+    (`v1-e30-t32`). A bare `Michigan` has none.
+    """
     assert dict(load_camp_aliases().openev_words) == {
         "CNDI": "CNDI",
         "DDI": "DDI",
@@ -39,6 +43,9 @@ def test_the_packaged_table_holds_the_words_the_operator_confirmed() -> None:
         "Harvard": "HDC",
         "JDI": "JDI",
         "Mean Green": "MGC",
+        "Michigan Classic": "UMC",
+        "Michigan7": "UM7",
+        "MNDI": "MNDI",
         "MSDI": "MSDI",
         "NHSI": "NHSI",
         "UTNIF": "UTNIF",

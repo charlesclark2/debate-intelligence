@@ -1,0 +1,432 @@
+# Argument and need query expansion for federated search (v1-e08-t04-argument-need-expansion).
+#
+# `debate-research search "<query>" --argument <argument> --need <need>` asks the search providers
+# the queries below instead of the bare query. Each argument lists, for every need, the templates
+# it expands into: {query} is what the debater typed, {topic} the topic (from --topic, the topic
+# preset at the bottom of this file, or otherwise the query itself), and {bill} the agenda item a
+# politics DA is about, which only the request can give. A template naming a variable the request
+# did not give is skipped, so every pair keeps at least one template that names only {query} and
+# {topic}. No template names a current event: what changes week to week is a variable.
+#
+# Windows: each need has a default recency window, and a template may set its own. A search with
+# its own --since keeps it. `any` means any age.
+#
+# Loaded and validated by debate_core.application.query_expansion.load_argument_taxonomy; a mistake
+# fails the load naming the field. Raise taxonomy_version on every change. Every entry says
+# `review: awaiting_coach_review` until the coach has read it and changed it to `coach_reviewed`.
+#
+# Ids: an argument the Policy landscape taxonomy also counts (config/landscape/taxonomies/) uses the
+# landscape's id, and says so in landscape_id. The spelling in the task spec is an alias
+# (econ-da -> economy-da, ptx -> politics-da, elections -> midterms-da).
+schema_version: 1
+taxonomy_version: 1.0.0
+
+variables:
+  query: What the debater typed as the search query.
+  topic: >-
+    What the topic is about: --topic, or the topic preset's value, or otherwise the query.
+  bill: >-
+    The agenda item a politics DA says the plan trades off with, as the request names it. Never
+    written into a template, because it changes from week to week.
+
+needs:
+  - id: uniqueness
+    label: Uniqueness
+    description: Where things stand now, before the plan or action.
+    aliases: [uq, u]
+    recency_days: 14
+  - id: link
+    label: Link
+    description: How the plan or action sets the argument off.
+    aliases: [l]
+    recency_days: 180
+  - id: internal-link
+    label: Internal link
+    description: The step that connects the link to the impact.
+    aliases: [il]
+    recency_days: 365
+  - id: impact
+    label: Impact
+    description: What happens in the end, and why it matters. Older scholarship is fine.
+    aliases: [i, impacts]
+    recency_days: any
+  - id: answers
+    label: Answers (AT)
+    description: Evidence answering the other side's version of the argument.
+    aliases: [at, a2, answers-to]
+    recency_days: 365
+
+arguments:
+
+  # ---------------------------------------------------------------------------------------------
+  # Policy: disadvantages
+  # ---------------------------------------------------------------------------------------------
+
+  - id: politics-da
+    label: Politics DA
+    kind: da
+    formats: [POLICY]
+    aliases: [ptx, politics, ptx-da]
+    landscape_id: politics-da
+    review: awaiting_coach_review
+    templates:
+      uniqueness:
+        - {text: "{query} vote count Senate", recency_days: 7}
+        - {text: "{query} likely to pass Congress", recency_days: 7}
+        - {text: "{bill} whip count", recency_days: 7}
+      link:
+        - {text: "{query} political capital", recency_days: 60}
+        - {text: "{query} partisan fight Congress", recency_days: 60}
+        - {text: "{query} unpopular with voters", recency_days: 60}
+      internal-link:
+        - {text: "political capital key to the president's agenda {query}"}
+        - {text: "{bill} needs presidential political capital"}
+      impact:
+        - {text: "{query} fails consequences"}
+        - {text: "{bill} fails impact"}
+      answers:
+        - {text: "winners win political capital {query}"}
+        - {text: "political capital theory wrong {query}"}
+
+  - id: midterms-da
+    label: Midterms DA
+    kind: da
+    formats: [POLICY]
+    aliases: [elections, elections-da]
+    landscape_id: midterms-da
+    review: awaiting_coach_review
+    note: >-
+      The landscape's id. The 2026 midterms are on 3 November; after them this DA is about the next
+      election. Coach: keep the name, or rename it to elections-da with midterms as an alias?
+    templates:
+      uniqueness:
+        - {text: "{topic} midterms polling", recency_days: 7}
+        - {text: "{query} election forecast", recency_days: 7}
+      link:
+        - {text: "{query} voters election impact", recency_days: 60}
+        - {text: "{topic} issue swing voters", recency_days: 60}
+      internal-link:
+        - {text: "{query} turnout swing voters"}
+        - {text: "{query} control of Congress"}
+      impact:
+        - {text: "{query} control of Congress consequences"}
+        - {text: "divided government consequences"}
+      answers:
+        - {text: "{query} will not affect elections"}
+        - {text: "{query} low issue salience voters"}
+
+  - id: economy-da
+    label: Economy DA
+    kind: da
+    formats: [POLICY]
+    aliases: [econ-da, econ, economy]
+    landscape_id: economy-da
+    review: awaiting_coach_review
+    templates:
+      uniqueness:
+        - {text: "{query} economic growth forecast"}
+        - {text: "{query} recession risk"}
+      link:
+        - {text: "{query} cost economy"}
+        - {text: "{topic} economic impact"}
+      internal-link:
+        - {text: "{query} business investment"}
+        - {text: "{query} consumer spending"}
+      impact:
+        - {text: "economic decline causes war"}
+        - {text: "{query} economic decline impact"}
+      answers:
+        - {text: "{query} economy resilient"}
+        - {text: "economic decline does not cause war"}
+
+  - id: spending-da
+    label: Spending DA
+    kind: da
+    formats: [POLICY]
+    aliases: [spending, fiscal-da]
+    review: awaiting_coach_review
+    note: >-
+      The NHI landscape has no Spending DA; its closest positions are debt-da and budgets-advantage.
+      Coach: keep it separate, or fold it into debt-da?
+    templates:
+      uniqueness:
+        - {text: "{query} federal spending debate Congress"}
+        - {text: "Congress spending restraint {query}"}
+      link:
+        - {text: "{query} cost federal budget"}
+        - {text: "{query} CBO cost estimate"}
+      internal-link:
+        - {text: "federal deficit raises interest rates"}
+        - {text: "{query} deficit spending tradeoff"}
+      impact:
+        - {text: "national debt crisis consequences"}
+        - {text: "{query} deficit impact"}
+      answers:
+        - {text: "{query} pays for itself savings"}
+        - {text: "deficit spending sustainable"}
+
+  - id: federalism-da
+    label: Federalism DA
+    kind: da
+    formats: [POLICY]
+    aliases: [federalism]
+    landscape_id: federalism-da
+    review: awaiting_coach_review
+    templates:
+      uniqueness:
+        - {text: "states lead {query} policy"}
+        - {text: "{query} state innovation federalism"}
+      link:
+        - {text: "{query} federal preemption states"}
+        - {text: "{query} federal government overrides state authority"}
+      internal-link:
+        - {text: "federal preemption spills over federalism"}
+        - {text: "{query} federalism precedent other policy areas"}
+      impact:
+        - {text: "federalism laboratories of democracy"}
+        - {text: "federalism key to democracy {query}"}
+      answers:
+        - {text: "{query} federal action consistent with federalism"}
+        - {text: "federalism resilient to preemption"}
+
+  # ---------------------------------------------------------------------------------------------
+  # Policy: advantage areas
+  # ---------------------------------------------------------------------------------------------
+
+  - id: heg
+    label: Heg
+    kind: advantage
+    formats: [POLICY]
+    aliases: [hegemony, heg-advantage]
+    review: awaiting_coach_review
+    note: >-
+      Heg is read as an advantage and as a DA impact; the NHI landscape counts no heg position.
+    templates:
+      uniqueness:
+        - {text: "US global leadership decline {query}"}
+        - {text: "US military readiness {query}"}
+      link:
+        - {text: "{query} US military readiness"}
+        - {text: "{query} US global leadership"}
+      internal-link:
+        - {text: "US economic strength key to hegemony"}
+        - {text: "{query} US soft power"}
+      impact:
+        - {text: "US hegemony prevents great power war"}
+        - {text: "US primacy deters conflict"}
+      answers:
+        - {text: "US hegemony unsustainable"}
+        - {text: "{query} heg resilient"}
+
+  - id: economy-advantage
+    label: Economy advantage
+    kind: advantage
+    formats: [POLICY]
+    aliases: [econ-advantage, econ-adv]
+    landscape_id: economy-advantage
+    review: awaiting_coach_review
+    templates:
+      uniqueness:
+        - {text: "{query} costs hurting the economy"}
+        - {text: "{topic} costs workers employers"}
+      link:
+        - {text: "{topic} boosts economic growth"}
+        - {text: "{query} economic benefits"}
+      internal-link:
+        - {text: "{query} labor market mobility"}
+        - {text: "{query} productivity"}
+      impact:
+        - {text: "economic growth prevents conflict"}
+        - {text: "{query} economic growth impact"}
+      answers:
+        - {text: "{topic} hurts the economy"}
+        - {text: "{query} economic costs"}
+
+  - id: pandemics-advantage
+    label: Pandemics advantage
+    kind: advantage
+    formats: [POLICY]
+    aliases: [pandemics, pandemic-advantage]
+    landscape_id: pandemics-advantage
+    review: awaiting_coach_review
+    templates:
+      uniqueness:
+        - {text: "{query} pandemic preparedness gaps"}
+        - {text: "pandemic risk rising {query}"}
+      link:
+        - {text: "{topic} pandemic response"}
+        - {text: "{query} uninsured delay care disease spread"}
+      internal-link:
+        - {text: "uninsured avoid care disease spread"}
+        - {text: "{query} disease surveillance"}
+      impact:
+        - {text: "pandemic extinction risk"}
+        - {text: "{query} pandemic deaths"}
+      answers:
+        - {text: "{topic} does not solve pandemics"}
+        - {text: "pandemic extinction unlikely"}
+
+  - id: inequality-advantage
+    label: Inequality advantage
+    kind: advantage
+    formats: [POLICY]
+    aliases: [inequality]
+    landscape_id: inequality-advantage
+    review: awaiting_coach_review
+    templates:
+      uniqueness:
+        - {text: "{query} health disparities"}
+        - {text: "{query} inequality rising"}
+      link:
+        - {text: "{topic} reduces inequality"}
+        - {text: "{query} closes coverage gaps"}
+      internal-link:
+        - {text: "health inequality life expectancy gap"}
+        - {text: "{query} health inequality"}
+      impact:
+        - {text: "inequality undermines democracy"}
+        - {text: "{query} inequality structural violence"}
+      answers:
+        - {text: "{topic} fails to reduce disparities"}
+        - {text: "{query} inequality persists"}
+
+  # ---------------------------------------------------------------------------------------------
+  # LD framing. The November-December de-extinction resolution is not committed yet (v1-e32-t06),
+  # so these templates take {topic} from the request until then.
+  # ---------------------------------------------------------------------------------------------
+
+  - id: util
+    label: Util
+    kind: framework
+    formats: [LD]
+    aliases: [utilitarianism, consequentialism]
+    review: awaiting_coach_review
+    templates:
+      uniqueness:
+        - {text: "{topic} current outcomes"}
+        - {text: "{query} status quo trends"}
+      link:
+        - {text: "{topic} consequences"}
+        - {text: "{query} costs and benefits"}
+      internal-link:
+        - {text: "{query} aggregate welfare"}
+        - {text: "{topic} long term effects"}
+      impact:
+        - {text: "utilitarianism justification ethics"}
+        - {text: "consequentialism defense moral theory"}
+      answers:
+        - {text: "utilitarianism critique aggregation"}
+        - {text: "{query} consequences unpredictable"}
+
+  - id: deontology
+    label: Deontology
+    kind: framework
+    formats: [LD]
+    aliases: [kant, kantianism, deont]
+    review: awaiting_coach_review
+    templates:
+      uniqueness:
+        - {text: "{topic} rights now"}
+        - {text: "{query} consent autonomy"}
+      link:
+        - {text: "{topic} treats people as means"}
+        - {text: "{query} rights duties ethics"}
+      internal-link:
+        - {text: "{query} moral duty"}
+        - {text: "{topic} autonomy dignity"}
+      impact:
+        - {text: "Kantian ethics justification"}
+        - {text: "categorical imperative defense"}
+      answers:
+        - {text: "deontology ignores consequences critique"}
+        - {text: "Kantian ethics fails"}
+
+  - id: structural-violence
+    label: Structural violence
+    kind: framework
+    formats: [LD, PF]
+    aliases: [sv]
+    review: awaiting_coach_review
+    note: >-
+      Also listed for PF, which has no active teams this season: generic framing for the coach's
+      review, not built out.
+    templates:
+      uniqueness:
+        - {text: "{query} structural inequality"}
+        - {text: "{topic} marginalized communities"}
+      link:
+        - {text: "{topic} effect on marginalized communities"}
+        - {text: "{query} disproportionate impact"}
+      internal-link:
+        - {text: "{query} structural violence"}
+        - {text: "structural inequality causes premature death"}
+      impact:
+        - {text: "structural violence framework prioritize"}
+        - {text: "structural violence outweighs extinction"}
+      answers:
+        - {text: "structural violence framing critique"}
+        - {text: "extinction outweighs structural violence"}
+
+  - id: theory
+    label: Theory
+    kind: theory
+    formats: [LD]
+    aliases: [ld-theory]
+    review: awaiting_coach_review
+    note: >-
+      The Policy landscape's generic-theory is Policy-only and collects theory headings, so it is
+      not mapped here.
+    templates:
+      uniqueness:
+        - {text: "{query} debate norms"}
+        - {text: "{topic} debate interpretation"}
+      link:
+        - {text: "{query} interpretation abuse debate"}
+        - {text: "{query} debate ground"}
+      internal-link:
+        - {text: "debate education portable skills"}
+        - {text: "{query} debate fairness"}
+      impact:
+        - {text: "debate fairness intrinsic value"}
+        - {text: "debate education value"}
+      answers:
+        - {text: "reasonability competing interpretations debate"}
+        - {text: "{query} theory frivolous"}
+
+  # ---------------------------------------------------------------------------------------------
+  # PF: no active teams this season. Generic framing only, for the coach's review.
+  # ---------------------------------------------------------------------------------------------
+
+  - id: cost-benefit
+    label: Cost-benefit
+    kind: framework
+    formats: [PF]
+    aliases: [cba, cost-benefit-analysis]
+    review: awaiting_coach_review
+    note: >-
+      PF has no active teams this season: generic framing for the coach's review, not built out.
+    templates:
+      uniqueness:
+        - {text: "{topic} current costs benefits"}
+        - {text: "{query} status quo"}
+      link:
+        - {text: "{query} costs benefits evidence"}
+        - {text: "{topic} effects"}
+      internal-link:
+        - {text: "{query} probability magnitude"}
+        - {text: "{topic} timeframe effects"}
+      impact:
+        - {text: "cost benefit analysis weighing"}
+        - {text: "{query} cost benefit analysis"}
+      answers:
+        - {text: "cost benefit analysis critique"}
+        - {text: "{query} benefits overstated"}
+
+# What a topic gives its variables. Each value is taken word for word from the topic's resolution in
+# config/landscape/topics.yaml; a test checks it. LD's de-extinction topic is added when
+# v1-e32-t06 commits its resolution.
+topics:
+  - id: policy-2026-27-nhi
+    format: POLICY
+    variables:
+      topic: national health insurance

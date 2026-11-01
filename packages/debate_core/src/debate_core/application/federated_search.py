@@ -3,7 +3,7 @@
 :class:`FederatedSearchService` runs a search's four stages (expand, fan_out, normalize, rank; see
 :mod:`debate_core.application.federated_search_types`) and stores the result. This module owns the
 fan_out stage, :class:`FanOutStage`, and the rule that turns its per-call record into the search's
-status, :func:`search_status`. Deduplication, ranking and query expansion are sibling tasks
+status, :func:`search_status`. Query expansion, deduplication and ranking are sibling tasks
 (v1-e08-t02 to t04) and default to stages that change nothing.
 
 ## Fan-out
@@ -40,7 +40,7 @@ failed) makes the search PARTIAL, because the search did not get everything it a
 
 ## Storage
 
-The search record, every call's record (the raw per-provider results) and the ranking, if a rank
+The search record (with the expansion, when the expand stage made one), every call's record (the raw per-provider results) and the ranking, if a rank
 stage produced one, go through :class:`~debate_core.application.ports.SearchRepository` after the
 last stage, so a search can be reloaded by its id, audited and replayed. Times come from the
 injected :class:`~debate_core.application.ports.Clock`; the deadline itself is the event loop's,
@@ -279,6 +279,7 @@ class FederatedSearchService:
             filters=request.filters,
             provider_set=selected_providers(request, enabled),
             status=search_status(state.provider_statuses),
+            expansion=state.expansion,
             created_at=created_at,
             updated_at=self._clock.now(),
         )

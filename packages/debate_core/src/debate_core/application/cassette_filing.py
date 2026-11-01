@@ -18,9 +18,11 @@ is not part of the match. A cassette instead names, beside the request and respo
    reported as unattributed and never deleted by a caselist.
 4. A delete takes the listing's :attr:`~CaselistCassettes.confirmation` (`v1-e32-t34`), the code
    `debate-research landscape cassettes` prints on its dry run, as `caselist retire` and `tub index
-   prune` print theirs. It is a digest of the caselist and of every cassette the delete would change, its
-   sole and its shared ones, so a code read before the model stage recorded another of them, or read
-   for another caselist, is refused with :class:`CassetteDeleteRefused` before anything changes.
+   prune` print theirs. It is a digest of every cassette the delete would change, its sole and its shared
+   ones, so a code read before the model stage recorded another of them, or read for another caselist,
+   is refused with :class:`CassetteDeleteRefused` before anything changes. The caselist's slug is not
+   in it: two caselists' codes agree only when neither names a cassette alone and both share the same
+   ones, and then either code takes this caselist's name off those cassettes, which is what its own does.
 
 No school, team code or path goes into a cassette: only the caselist's slug, which
 :func:`filed_under` refuses unless it is one.
@@ -128,8 +130,8 @@ class CaselistCassettes:
 
     @property
     def confirmation(self) -> str:
-        """The code :func:`delete_caselist_cassettes` takes: a digest of the caselist and what it changes."""
-        shown = {"caselist": self.caselist, "sole": list(self.sole), "shared": list(self.shared)}
+        """The code :func:`delete_caselist_cassettes` takes: a digest of the cassettes it changes."""
+        shown = {"sole": list(self.sole), "shared": list(self.shared)}
         return hashlib.sha256(json.dumps(shown, sort_keys=True).encode()).hexdigest()[:CONFIRMATION_LENGTH]
 
 

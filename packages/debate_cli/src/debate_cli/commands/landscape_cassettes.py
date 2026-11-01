@@ -33,8 +33,8 @@ do to each, and prints a confirmation code:
 * **other caselists only**: untouched.
 
 `--delete --confirm <code>` lists again and acts only if that listing's code is the one given: the code
-is a digest of the caselist and every cassette the delete would change, so a cassette recorded since the
-dry run, or a code another caselist's dry run printed, is refused, exit `1`, `CONFIRMATION_MISMATCH`. In
+is a digest of every cassette the delete would change, so a cassette recorded since the dry run, or a
+code another caselist's dry run printed, is refused, exit `1`, `CONFIRMATION_MISMATCH`. In
 prod, `--delete` also needs `--confirm-prod`. This is `caselist retire`'s pattern (and `tub index
 prune`'s), with `--delete` for its `--execute`.
 

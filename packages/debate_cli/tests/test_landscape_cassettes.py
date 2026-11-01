@@ -236,6 +236,7 @@ def test_the_delete_removes_only_the_caselists_own_and_keeps_shared_and_unattrib
     assert result.exit_code == ExitCode.OK, result.output
     data = envelope_of(result)["data"]
     assert data["deleted"] is True
+    assert data["confirmation"] is None, "a code is spent by its delete"
     assert data["cassettes"] == COUNTS
     assert [path.exists() for path in cassettes["sole"]] == [False, False, False]
     for path, before in shared_before.items():

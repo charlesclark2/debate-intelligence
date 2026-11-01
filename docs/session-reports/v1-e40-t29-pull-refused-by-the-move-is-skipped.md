@@ -203,9 +203,45 @@ None. The affected set (304 files) runs in the pull request's `ci` check.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-01
 
 **Notes:**
+
+The right answer to the question the PM asked first, whether `skipped` exists, shaped the whole
+task, and the cross-build check shows why the record had to stay as it is.
+1. **ac1 passes.**
+   * Red: 4 failed at assertions. The four that passed are the before-and-after guards: the record
+     earlier builds read, a runner's hold pinned word for word, another home, and local mode.
+   * The CLI test was red too.
+   * Green: 9, plus 216 neighbours, and the node criterion passes (9). All of it runs through
+     `run_pull`, a real monitor, a real `BucketRunLock` on moto, and t11's own `RunHomeMove.move()`.
+2. **Mutants:** all 13 are caught, the PM's five (4 and 5 in forms) plus eight on the new readers.
+   Mutant 5 was also run under the earlier builds, which drop the planted record. That is the
+   evidence for deviation 1.
+3. **Deviation 1: accepted.** The record stays `failed` / `RunHomeMoved`, which every installed build
+   reads, and the skip lives in the details, written only when set. Every reader this build has says
+   skipped. The PM's next batch amends the spec to the session's wording.
+4. **The readers table is what the PM asked for:**
+   * the late-run alarm cannot count or trip on it, since a refused pull carries no run record in
+     its envelope and a Mac pull writes no cloud log;
+   * the caption and landscape staleness are unchanged, with the latter noted as follow-up 2.
+5. **Decisions accepted:**
+   * the exit code unchanged, pinned by t11;
+   * only `RunHomeMoved` skips;
+   * one notice in both modes, since the fix doesn't differ by mode;
+   * the wording, with no hint and a fix line saying nothing needs a person;
+   * `prod` taken from t11's `NEW_HOME`.
+6. **Follow-ups, the PM's rulings:**
+   * **1, `redact` mangling apostrophes:** one p3 E40 task in the next batch. Count first how many
+     stored messages `_QUOTED_PATH` mangles beyond t11's, since any message with two apostrophes
+     around a run of text may be hit. Then narrow the pattern without letting a real quoted path
+     through.
+   * **2, landscape staleness counting lock refusals:** one p3 task in the next batch, so a lock
+     refusal (held, moved) is not reported as a run that stopped before its stages.
+7. **Closing checks:** the affected set (304 files through `sync_runs.py`) is left to the PR's `ci`
+   under agreement 10. The 52 files naming the changed readers (964), the always-run list (374),
+   ruff, pyright, lint-imports, thin handlers, the doc checks and the specs are clean.
+8. **Merge:** a plain `scripts/task pr` once `ci` is green. No operator step follows.

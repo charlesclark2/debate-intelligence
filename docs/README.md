@@ -29,6 +29,7 @@ regenerates it on `dev` ([`v1-e01-t16`](../plan_specs/v1/e01-repo-foundation/t16
 | [data/debate-file-style-survey.md](data/debate-file-style-survey.md) | Which Word styles real team, caselist and camp `.docx` files use, and the share of files per template family |
 | [data/evidence-search-pilot.md](data/evidence-search-pilot.md) | The student search pilot's evidence: early sessions, the promotion checklist, the beta and the go or no-go |
 | [data/file-publish-log.md](data/file-publish-log.md) | Every operator publish of built files to the evidence buckets: keys, counts and statuses, no team codes (v1-e33-t05) |
+| [data/landscape-model-evaluation.md](data/landscape-model-evaluation.md) | The landscape model stage's evaluations against the coach's labels, broken down: counts and taxonomy ids only |
 | [data/landscape/first-run-policy.md](data/landscape/first-run-policy.md) | Counts from the first Policy argument landscape reports on hspolicy26 (`v1-e32-t05`): classification coverage, review queue and scan; aggregates only |
 | [data/openev-release-manifest.md](data/openev-release-manifest.md) | The camp release manifest's member-row fields, including OpenEv's own camp word from the pull's listing |
 | [data/parsed-card-store.md](data/parsed-card-store.md) | Layout and record shapes of the parsed card store that caselist parse writes |
@@ -66,6 +67,7 @@ regenerates it on `dev` ([`v1-e01-t16`](../plan_specs/v1/e01-repo-foundation/t16
 | [runbooks/caselist-scheduled-sync.md](runbooks/caselist-scheduled-sync.md) | Installing, enabling, watching and disabling the weekly `caselist pull` launchd agent |
 | [runbooks/evidence-search.md](runbooks/evidence-search.md) | Standing up the student evidence search pilot in dev and prod: applies, deploys, cookie keys, CLI-only settings, SES access and the school IT request |
 | [runbooks/evidence-store.md](runbooks/evidence-store.md) | Applying the dev and prod evidence buckets and checking the operator and takedown credentials |
+| [runbooks/landscape-model-evaluation-replay.md](runbooks/landscape-model-evaluation-replay.md) | Replaying a recorded landscape model evaluation, broken down card by card, with no model call |
 | [runbooks/landscape-report-from-the-cloud-run.md](runbooks/landscape-report-from-the-cloud-run.md) | Publishing a caselist's landscape report from the weeks the cloud run pulled: restore a copy, parse it, dry run, publish, delete the copy |
 | [runbooks/parsed-store-retention.md](runbooks/parsed-store-retention.md) | Retiring superseded parsed-store version directories in both buckets and on this machine, and undoing it |
 | [runbooks/run-lock-conditional-writes.md](runbooks/run-lock-conditional-writes.md) | Applying the evidence bucket's deny of an unconditional write of the run lock, and proving it without disturbing the lock |

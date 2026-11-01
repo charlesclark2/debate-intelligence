@@ -41,15 +41,20 @@ gets three things more, and every other position's draft is as it was:
   nowhere else in the draft. A heading that places nothing stays. The result counts what was left out
   (:class:`OtherPositionsLeftOut`).
 * **Except an affirmative-side one, marked (`v1-e33-t13`).** A block whose heading places an aff or an
-  advantage (:data:`_AFFIRMATIVE_SIDE_KINDS`) stays, with :data:`CHECK_AGAINST_THE_PLAN` above it: in a
-  CP file it is often the counterplan's solvency for that advantage. It keeps its cards in rank order
-  and its place in the draft, by its most-read card, like any block that stays. A block any other kind
-  places (a DA, another CP, a K, a T, a theory argument, or LD's and PF's kinds) is still left out. The
-  result counts what was kept this way (:class:`AffirmativeSideKept`).
+  advantage (:data:`_AFFIRMATIVE_SIDE_KINDS`) stays, with :data:`CHECK_AGAINST_THE_AFFIRMATIVE` above it
+  (`v1-e33-t14`): in a CP file it is often the counterplan's solvency for that advantage. It keeps its
+  cards in rank order and its place in the draft, by its most-read card, like any block that stays. A
+  block any other kind places (a DA, another CP, a K, a T, a theory argument, or LD's and PF's kinds) is
+  still left out. The result counts what was kept this way (:class:`AffirmativeSideKept`).
 * **Blocks that depend on the plan, marked.** A block whose heading names a plank or mechanism of the
   plan gets the comment :data:`CHECK_AGAINST_THE_PLAN` above it, and stays. A heading names one when it
   holds, as whole words, an alias or tag keyword of one of the taxonomy's affirmatives (each is one plan,
-  named by its mechanism), or opens with a plank label as `v1-e32-t16` reads one (`plank 2 ...`).
+  named by its mechanism), or opens with a plank label as `v1-e32-t16` reads one (`plank 2 ...`), or holds
+  one of the coach's plan-mechanism words for the topic, or its plural
+  (:func:`~debate_core.application.plan_mechanism_words.holds_a_mechanism_word`, `v1-e33-t14`). A topic
+  with no word list is marked by the other two alone.
+* **One comment a block.** A block both rules mark, one whose heading places an advantage and names a
+  mechanism of the plan, has the plank comment alone.
 
 ## How each card is pinned
 
@@ -90,6 +95,7 @@ from debate_core.application.file_recipes import (
     recipe_hash,
 )
 from debate_core.application.landscape_run import LandscapeRunRequest, LandscapeRunResult, LandscapeRunService
+from debate_core.application.plan_mechanism_words import holds_a_mechanism_word
 from debate_core.application.ports.caselist import CaselistRepository
 from debate_core.application.ports.parsed_store import OPENEV_STORE, ParsedStore
 from debate_core.application.ports.suppression import SuppressionList
@@ -105,6 +111,7 @@ from debate_core.evidence.file_checks.placeholders import CP_TEXT_SLOT
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
 
 __all__ = [
+    "CHECK_AGAINST_THE_AFFIRMATIVE",
     "CHECK_AGAINST_THE_PLAN",
     "AffirmativeSideKept",
     "CP_TEXT_SLOT",
@@ -125,8 +132,14 @@ RECIPES_DIRECTORY: Final = "recipes"
 CHECK_AGAINST_THE_PLAN: Final = (
     "# Check this block against the affirmative's plan: its heading names a plank or mechanism of a plan."
 )
-"""The comment above a counterplan draft's block whose heading names a plank or mechanism of the plan, or
-whose heading places an aff or an advantage (`v1-e33-t13`)."""
+"""The comment above a counterplan draft's block whose heading names a plank or mechanism of the plan."""
+
+CHECK_AGAINST_THE_AFFIRMATIVE: Final = (
+    "# Check this block against the affirmative's plan: its heading names an affirmative or one of its "
+    "advantages."
+)
+"""The comment above a counterplan draft's block whose heading places an aff or an advantage (`v1-e33-t13`),
+and names no plank or mechanism of the plan (`v1-e33-t14`)."""
 
 #: The disclosure fields a pin adds, a step at a time and the least personal first, while its key
 #: matches more than one disclosure: a school and team code only when nothing else tells them apart.
@@ -199,7 +212,8 @@ class OtherPositionsLeftOut:
 class AffirmativeSideKept:
     """A counterplan draft's blocks whose heading the position matcher places under an aff or an advantage.
 
-    Kept with their cards, each with :data:`CHECK_AGAINST_THE_PLAN` above it (`v1-e33-t13`).
+    Kept with their cards, each with :data:`CHECK_AGAINST_THE_AFFIRMATIVE` above it (`v1-e33-t13`), or
+    :data:`CHECK_AGAINST_THE_PLAN` when its heading also names a plank or mechanism of the plan.
     """
 
     blocks: int
@@ -324,7 +338,8 @@ class FileSuggestService:
             kept,
             pins,
             counterplan=counterplan,
-            marked=(affirmative_side | _naming_the_plan(run, kept)) if counterplan else frozenset(),
+            naming_the_plan=_naming_the_plan(run, kept) if counterplan else frozenset(),
+            affirmative_side=affirmative_side,
         )
         loaded = load_recipe(text)
         if loaded.recipe is None:
@@ -502,14 +517,19 @@ def _directly_under(one: _Ranked) -> MatchItem:
 
 
 def _naming_the_plan(run: LandscapeRunResult, kept: Sequence[_Ranked]) -> frozenset[str]:
-    """The block headings of `kept` that name a plank or mechanism of the plan."""
+    """The block headings of `kept` that name a plank or mechanism of the plan.
+
+    A plank label, an affirmative's alias or tag keyword, or one of the coach's plan-mechanism words.
+    """
     if run.taxonomy is None:
         raise AssertionError("a landscape run reports the taxonomy it counted under")
     words = _plan_words(run.taxonomy)
     return frozenset(
         one.block
         for one in kept
-        if plank_words(one.block) != one.block or any(f" {phrase} " in f" {one.block} " for phrase in words)
+        if plank_words(one.block) != one.block
+        or any(f" {phrase} " in f" {one.block} " for phrase in words)
+        or holds_a_mechanism_word(one.block, run.plan_mechanism_words)
     )
 
 
@@ -604,12 +624,14 @@ def _render(
     pins: Mapping[str, Mapping[str, Any]],
     *,
     counterplan: bool,
-    marked: frozenset[str],
+    naming_the_plan: frozenset[str],
+    affirmative_side: frozenset[str],
 ) -> str:
     """The draft's YAML, written by hand so each card carries its read count as a comment.
 
-    A counterplan's first block opens with :data:`CP_TEXT_SLOT`, and each block in `marked` (one naming
-    the plan or one an aff or an advantage places) has :data:`CHECK_AGAINST_THE_PLAN` above it.
+    A counterplan's first block opens with :data:`CP_TEXT_SLOT`. A block in `naming_the_plan` has
+    :data:`CHECK_AGAINST_THE_PLAN` above it, and any other in `affirmative_side` (one an aff or an
+    advantage places) :data:`CHECK_AGAINST_THE_AFFIRMATIVE`: one comment a block.
     """
     through = run.snapshot.isoformat()
     lines = [
@@ -635,8 +657,10 @@ def _render(
         if one.block != block:
             first = block is None
             block = one.block
-            if block in marked:
+            if block in naming_the_plan:
                 lines.append(f"      {CHECK_AGAINST_THE_PLAN}")
+            elif block in affirmative_side:
+                lines.append(f"      {CHECK_AGAINST_THE_AFFIRMATIVE}")
             lines += [f"      - block: {_quoted(block)}", "        items:"]
             if counterplan and first:
                 lines += [

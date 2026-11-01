@@ -34,14 +34,27 @@ written, so read it over before you build. A block whose heading names another p
 topicality block that sat in the same 1NC, is left out with its cards, and the command's table and
 `--json` (`other_positions_left_out`) count the blocks and cards it left out. A block whose heading
 names no position stays. A block whose heading names a plank or mechanism of the plan (an
-affirmative's alias or tag keyword in the taxonomy, or a plank label such as `Plank 2`) stays, with
-the comment `# Check this block against the affirmative's plan` above it: its cards may make sense
-only against a plan that has that plank. A block whose heading names an affirmative or one of its
-advantages is not left out but kept, where its most-read card puts it and with the same comment above
+affirmative's alias or tag keyword in the taxonomy, a plank label such as `Plank 2`, or one of your
+plan-mechanism words for the topic) stays, with the comment `# Check this block against the
+affirmative's plan: its heading names a plank or mechanism of a plan.` above it: its cards may make
+sense only against a plan that has that plank. A block whose heading names an affirmative or one of its
+advantages is not left out but kept, where its most-read card puts it, with the comment `# Check this
+block against the affirmative's plan: its heading names an affirmative or one of its advantages.` above
 it, because in a CP file it is often the counterplan's solvency for that advantage; the table and
 `--json` (`affirmative_side_kept`) count those blocks and cards, and a block naming any other kind of
-position (a DA, another CP, a K, a T) is still left out (`v1-e33-t13`). Any other position's draft is
-written as before.
+position (a DA, another CP, a K, a T) is still left out (`v1-e33-t13`). A block both describe has the
+first comment only. Any other position's draft is written as before.
+
+**The plan-mechanism words are yours to edit** (`v1-e33-t14`), in
+`config/landscape/plan_mechanisms/<topic id>.yaml`, beside the topic's other landscape files, for
+example [`policy-2026-27-nhi.yaml`](../../config/landscape/plan_mechanisms/policy-2026-27-nhi.yaml),
+seeded with `preempt`, `preemption`, `waiver` and `waive`. Add a word when you meet a block of a CP
+draft that depends on the plan and was not marked. Each word is lowercase letters, with single hyphens
+between them (`pre-empt`), 3 to 32 characters, and listed once. A word marks a block whose heading holds
+it as a whole word, or its plural with `s` or `es`: `waiver` marks a block headed `Waivers`, but `waive`
+does not mark `Waiver`, and `preempt` does not mark `Preemption`, so list each form you mean. A topic
+with no file is drafted as before. `uv run pytest tests/config` checks your edit; nothing else reads the
+file, so it needs no refill and no taxonomy bump.
 
 ## A recipe holds no evidence
 

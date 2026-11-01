@@ -9,6 +9,7 @@ The directory holds the coach's files::
     config/landscape/plan_texts/<topic id>.yaml        when a plan text names the resolutional aff
     config/landscape/analytic_texts/<topic id>.yaml    the actors a CP text read by its place names
     config/landscape/kritikal_affs/<topic id>.yaml     the K-aff position and its K families
+    config/landscape/plan_mechanisms/<topic id>.yaml   the words for a plan's mechanisms a CP draft marks
 
 :meth:`YamlTaxonomyRepository.load` reads every file at once and checks each on its own (the
 models in :mod:`debate_core.domain.landscape`) and against the others:
@@ -23,6 +24,8 @@ models in :mod:`debate_core.domain.landscape`) and against the others:
 * a plan-text file's `topic_id` is its file's stem, the topic has a taxonomy, and the aff it names
   is an active aff of it (`v1-e32-t09`);
 * an analytic-text file's `topic_id` is its file's stem and the topic has a taxonomy (`v1-e32-t11`);
+* so is a plan-mechanism file's, whose words are lowercase letters and hyphens, none listed twice
+  (`v1-e33-t14`); a topic with no such file has no words, and is not refused;
 * a mapping that gives one key twice is an error rather than YAML's silent "last one wins", which
   would drop a coach's first list of aliases without a word.
 
@@ -41,6 +44,7 @@ from typing import Any, Final
 import yaml
 from pydantic import ValidationError
 
+from debate_core.application.plan_mechanism_words import PlanMechanismWords
 from debate_core.application.ports.taxonomy_repository import (
     NoTaxonomyForTopic,
     ResolvedTopic,
@@ -57,12 +61,14 @@ __all__ = [
     "KRITIKAL_AFF_DIRECTORY",
     "GENERIC_FILE",
     "OVERRIDE_DIRECTORY",
+    "PLAN_MECHANISM_DIRECTORY",
     "PLAN_TEXT_DIRECTORY",
     "TAXONOMY_DIRECTORY",
     "TOPICS_FILE",
     "YamlTaxonomyRepository",
     "load_analytic_text_file",
     "load_override_file",
+    "load_plan_mechanism_file",
     "load_taxonomy_file",
     "load_topic_map",
     "read_config_file",
@@ -75,6 +81,7 @@ OVERRIDE_DIRECTORY: Final = "overrides"
 PLAN_TEXT_DIRECTORY: Final = "plan_texts"
 ANALYTIC_TEXT_DIRECTORY: Final = "analytic_texts"
 KRITIKAL_AFF_DIRECTORY: Final = "kritikal_affs"
+PLAN_MECHANISM_DIRECTORY: Final = "plan_mechanisms"
 GENERIC_FILE: Final = f"{GENERIC_TOPIC_ID}.yaml"
 
 
@@ -167,6 +174,19 @@ def load_kritikal_aff_file(path: Path) -> KritikalAffConfig:
     return config
 
 
+def load_plan_mechanism_file(path: Path) -> PlanMechanismWords:
+    """Read and check one plan-mechanism file on its own; its `topic_id` must be the file's stem."""
+    try:
+        words = PlanMechanismWords.model_validate(read_config_file(path))
+    except ValidationError as error:
+        raise TaxonomyConfigError(str(path), str(error)) from error
+    if words.topic_id != path.stem:
+        raise TaxonomyConfigError(
+            str(path), f"its topic_id is {words.topic_id}, but the file is named for {path.stem}"
+        )
+    return words
+
+
 def load_override_file(path: Path) -> OverrideRules:
     """Read and check one overrides file on its own; its `topic_id` must be the file's stem."""
     try:
@@ -213,6 +233,7 @@ class YamlTaxonomyRepository:
         plan_texts: Mapping[str, ResolutionalPlanWords] | None = None,
         analytic_texts: Mapping[str, CounterplanActors] | None = None,
         kritikal_affs: Mapping[str, KritikalAffConfig] | None = None,
+        plan_mechanisms: Mapping[str, PlanMechanismWords] | None = None,
     ) -> None:
         self._topic_map = topic_map
         self._taxonomies = dict(taxonomies)
@@ -220,6 +241,7 @@ class YamlTaxonomyRepository:
         self._plan_texts = dict(plan_texts or {})
         self._analytic_texts = dict(analytic_texts or {})
         self._kritikal_affs = dict(kritikal_affs or {})
+        self._plan_mechanisms = dict(plan_mechanisms or {})
 
     @classmethod
     def load(cls, directory: Path) -> YamlTaxonomyRepository:
@@ -271,6 +293,7 @@ class YamlTaxonomyRepository:
             _load_plan_texts(directory / PLAN_TEXT_DIRECTORY, merged),
             _load_analytic_texts(directory / ANALYTIC_TEXT_DIRECTORY, merged),
             _load_kritikal_affs(directory / KRITIKAL_AFF_DIRECTORY, merged),
+            _load_plan_mechanisms(directory / PLAN_MECHANISM_DIRECTORY, merged),
         )
 
     def topic_map(self) -> TopicMap:
@@ -301,6 +324,11 @@ class YamlTaxonomyRepository:
         if topic_id not in self._taxonomies:
             raise NoTaxonomyForTopic(topic_id)
         return self._kritikal_affs.get(topic_id)
+
+    def plan_mechanism_words(self, topic_id: str) -> PlanMechanismWords | None:
+        if topic_id not in self._taxonomies:
+            raise NoTaxonomyForTopic(topic_id)
+        return self._plan_mechanisms.get(topic_id)
 
     def resolve(self, caselist: str, snapshot: date) -> ResolvedTopic | None:
         found = self._topic_map.resolve(caselist, snapshot)
@@ -391,4 +419,25 @@ def _load_kritikal_affs(directory: Path, taxonomies: Mapping[str, Taxonomy]) -> 
         except ValueError as error:
             raise TaxonomyConfigError(str(path), str(error)) from error
         found[config.topic_id] = config
+    return found
+
+
+def _load_plan_mechanisms(
+    directory: Path, taxonomies: Mapping[str, Taxonomy]
+) -> dict[str, PlanMechanismWords]:
+    """Every plan-mechanism file, each for a topic with a taxonomy."""
+    paths = sorted(directory.iterdir()) if directory.is_dir() else []
+    found: dict[str, PlanMechanismWords] = {}
+    for path in paths:
+        if path.suffix != ".yaml":
+            raise TaxonomyConfigError(
+                str(path), "a plan-mechanism file ends in .yaml; this one would be skipped"
+            )
+        words = load_plan_mechanism_file(path)
+        if words.topic_id not in taxonomies:
+            raise TaxonomyConfigError(
+                str(path),
+                f"no topic in {TOPICS_FILE} gives {words.topic_id} a taxonomy, so nothing reads it",
+            )
+        found[words.topic_id] = words
     return found

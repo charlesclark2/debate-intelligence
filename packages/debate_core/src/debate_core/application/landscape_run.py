@@ -384,6 +384,9 @@ class LandscapeRunResult:
     """The taxonomy the report counted under, for a reader of :attr:`report` (`files suggest`)."""
     overrides: OverrideRules | None = field(default=None, repr=False)
     """The coach's heading overrides the report placed under, so `files suggest` places a heading alike."""
+    plan_mechanism_words: tuple[str, ...] = field(default=(), repr=False)
+    """The coach's words for the topic's plan mechanisms, which `files suggest` marks a CP draft's block by
+    (`v1-e33-t14`); empty when the topic has no such file. No count reads them."""
     cards: tuple[LandscapeCard, ...] = field(default=(), repr=False)
     """Every card the report ranked from, with its cluster and its headings as the matcher reads them."""
     bundle_files: Mapping[str, str] = field(default_factory=dict[str, str], repr=False)
@@ -547,6 +550,7 @@ class LandscapeRunService:
         )
         assignments = affs.assignments
         overrides = self._taxonomies.overrides(resolved.topic.id)
+        mechanisms = self._taxonomies.plan_mechanism_words(resolved.topic.id)
         texts = (
             await self._texts.report_inputs(
                 reading=reading,
@@ -636,6 +640,7 @@ class LandscapeRunService:
             plan_texts=affs.plan_texts,
             taxonomy=taxonomy,
             overrides=overrides,
+            plan_mechanism_words=mechanisms.words if mechanisms is not None else (),
             cards=cards,
             bundle_files={name: bundle.files[name] for name in BUNDLE_FILES},
         )

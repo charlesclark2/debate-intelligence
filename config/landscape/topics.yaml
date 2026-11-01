@@ -13,7 +13,7 @@ topics:
     resolution: >-
       Resolved: The United States federal government should establish national health insurance
       in the United States.
-    taxonomy_version: 1.4.0
+    taxonomy_version: 1.4.1
     caselists:
       - caselist: hspolicy26
         from: 2026-07-01

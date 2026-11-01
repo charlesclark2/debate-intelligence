@@ -18,9 +18,13 @@
 # names two or more teams use (its session report, hspolicy26 through 2026-10-20), each name its own
 # one form until the coach merges, renames or drops them. A position with a list shows only the coach's
 # names; the others keep t14's rule. docs/guides/landscape-taxonomy.md says how to edit a list.
+# 1.4.1 (2026-11-01, v1-e32-t40, for the coach's review): a one-line description drafted for every
+# position that had none, generic.yaml's Policy positions with them (generic 1.1.1). The model stage
+# sends each position with its side and description. Drafts until the coach approves or corrects them
+# (the task's session report holds the review sheet); no count moves, so a patch.
 schema_version: 1
 topic_id: policy-2026-27-nhi
-taxonomy_version: 1.4.0
+taxonomy_version: 1.4.1
 event: POLICY
 positions:
 
@@ -29,6 +33,7 @@ positions:
     label: Single payer
     kind: aff
     side: aff
+    description: A plan for one public insurer that pays for everyone's care, with no narrower mechanism named.
     aliases: [single payer, aff single payer, single payer aff, singlepayer]
 
   # Single payer's mechanisms, from the coach's plan-text answers: a card under single payer whose tag
@@ -40,54 +45,63 @@ positions:
     label: Global budgets
     kind: aff
     side: aff
+    description: A single payer plan that pays hospitals a fixed yearly budget instead of paying per service.
     parent: single-payer-aff
     tag_keywords: [global budget, global budgets, global budgeting, global operating budget, global operating budgets]
   - id: single-public-authority-aff
     label: Single public authority
     kind: aff
     side: aff
+    description: A single payer plan run by one public authority that collects and pays out the money.
     parent: single-payer-aff
     tag_keywords: [public authority, financing authority]
   - id: medicare-for-all-aff
     label: Medicare for all
     kind: aff
     side: aff
+    description: A single payer plan that extends Medicare to everyone (Medicare for All).
     parent: single-payer-aff
     tag_keywords: [medicare for all, improved medicare, m4a, "3069", medicaid for all]
   - id: lower-payment-rates-aff
     label: Lower payment rates
     kind: aff
     side: aff
+    description: A single payer plan whose mechanism is lower rates paid to doctors, hospitals and drug makers.
     parent: single-payer-aff
     tag_keywords: [lower payment rates]
   - id: value-based-reimbursement-aff
     label: Value-based reimbursement
     kind: aff
     side: aff
+    description: A single payer plan that pays providers for patient outcomes rather than for the number of services.
     parent: single-payer-aff
     tag_keywords: [value based reimbursement, value based payments, value based payment, value based healthcare, value based care]
   - id: disparate-impact-enforcement-aff
     label: Disparate impact enforcement
     kind: aff
     side: aff
+    description: A single payer plan that enforces disparate impact rules against discrimination in care.
     parent: single-payer-aff
     tag_keywords: [disparate impact]
   - id: degrowth-aff
     label: Degrowth
     kind: aff
     side: aff
+    description: A single payer plan defended as a move toward degrowth, away from an economy built on growth.
     parent: single-payer-aff
     tag_keywords: [degrowth]
   - id: prescription-drug-coverage-aff
     label: Prescription drug coverage
     kind: aff
     side: aff
+    description: A single payer plan centred on covering prescription drugs.
     parent: single-payer-aff
     tag_keywords: [prescription drug, covering pharmaceuticals]
   - id: nanomedicine-coverage-aff
     label: Nanomedicine coverage
     kind: aff
     side: aff
+    description: A single payer plan that covers nanomedicine treatments.
     parent: single-payer-aff
     tag_keywords: [nanomedicine, nanomedical]
 
@@ -96,65 +110,78 @@ positions:
     label: Resolutional NHI
     kind: aff
     side: aff
+    description: A plan that enacts the resolution's national health insurance as worded, with no narrower mechanism.
   - id: public-option-aff
     label: Public option
     kind: aff
     side: aff
+    description: A plan for a government insurance plan anyone can buy, alongside private insurers.
     tag_keywords: [public option, federal employees health benefits]
   - id: ucc-aff
     label: UCC
     kind: aff
     side: aff
+    description: A plan for universal catastrophic coverage, insuring everyone against large costs with a sliding-scale deductible.
     tag_keywords: [ucc, universal catastrophic coverage, catastrophic health insurance, sliding scale]
   - id: indigenous-aff
     label: Indigenous
     kind: aff
     side: aff
+    description: A plan for the health insurance of Indigenous peoples, such as reforming the Indian Health Service.
     tag_keywords: [indigenous]
   - id: reproductive-health-aff
     label: Reproductive health
     kind: aff
     side: aff
+    description: A plan that covers reproductive care, including abortion, for example by ending the Hyde Amendment.
     tag_keywords: [reproductive, hyde amendment]
   - id: tiered-nhi-aff
     label: Tiered NHI
     kind: aff
     side: aff
+    description: A plan for national health insurance in tiers, a basic public level with further levels above it.
     tag_keywords: [tiered national health insurance]
   - id: incarceration-aff
     label: Incarceration
     kind: aff
     side: aff
+    description: A plan that extends health insurance to people in prison or jail.
     tag_keywords: [incarcerated, incarceration, correctional]
   - id: voucher-aff
     label: Vouchers
     kind: aff
     side: aff
+    description: A plan that gives people vouchers to buy private insurance.
     tag_keywords: [voucher]
   - id: medicaid-expansion-aff
     label: Medicaid expansion
     kind: aff
     side: aff
+    description: A plan that expands Medicaid to more people or to every state.
     tag_keywords: [medicaid expansion]
   - id: aca-reform-aff
     label: ACA reform
     kind: aff
     side: aff
+    description: A plan that reforms or builds on the Affordable Care Act's marketplaces and subsidies.
     tag_keywords: [affordable care act]
   - id: childrens-coverage-aff
     label: Children's coverage
     kind: aff
     side: aff
+    description: A plan that insures every child.
     tag_keywords: [for all children]
   - id: eco-nhi-aff
     label: Ecological NHI
     kind: aff
     side: aff
+    description: A plan for national health insurance tied to ecological health, such as climate or environmental care.
     tag_keywords: [ecological, green national health insurance, sustainable national health insurance]
   - id: human-enhancement-aff
     label: Human enhancement
     kind: aff
     side: aff
+    description: A plan that covers human enhancement technologies beyond treating illness.
     tag_keywords: [human enhancement]
 
   # The kritikal affirmative (v1-e32-t17): one position for every K aff, named by no heading or tag
@@ -169,6 +196,7 @@ positions:
     label: Costs advantage
     kind: advantage
     side: aff
+    description: The plan lowers health care costs, and the impact is what lower costs save, such as household budgets.
     aliases: [adv costs, costs adv, advantage costs, costs advantage, adv cost, cost advantage, cost adv, costs]
     # The seed: v1-e32-t14's names two or more teams use here, teams (documents) beside each.
     scenarios:
@@ -179,11 +207,13 @@ positions:
     label: Coverage advantage
     kind: advantage
     side: aff
+    description: The plan insures the uninsured or underinsured, and the impact is the lives coverage saves.
     aliases: [adv coverage, coverage adv, coverage advantage, advantage coverage, coverage]
   - id: disease-advantage
     label: Disease advantage
     kind: advantage
     side: aff
+    description: The plan improves the treatment or prevention of a disease, and the impact is that disease's toll.
     aliases: [adv disease, disease advantage, advantage disease, disease adv, disease]
     # The seed: v1-e32-t14's names two or more teams use here, teams (documents) beside each.
     scenarios:
@@ -194,6 +224,7 @@ positions:
     label: Inequality advantage
     kind: advantage
     side: aff
+    description: The plan reduces health or economic inequality, and inequality is the impact.
     aliases: [adv inequality, inequality adv, advantage inequality, inequality advantage, inequality]
     # The seed: v1-e32-t14's names two or more teams use here, teams (documents) beside each.
     scenarios:
@@ -203,6 +234,7 @@ positions:
     label: Economy advantage
     kind: advantage
     side: aff
+    description: The plan strengthens the economy as a whole, and an economic collapse or recession is the impact.
     aliases: [adv economy, advantage economy, economy advantage, economy adv, adv econ, econ adv, econ advantage, economy, econ]
     # The seed: v1-e32-t14's names two or more teams use here, teams (documents) beside each.
     scenarios:
@@ -212,56 +244,67 @@ positions:
     label: Growth advantage
     kind: advantage
     side: aff
+    description: The plan raises the rate of economic growth, through productivity, entrepreneurship or labour mobility.
     aliases: [adv growth, growth adv, growth advantage, advantage growth, growth]
   - id: bioterror-advantage
     label: Bioterror advantage
     kind: advantage
     side: aff
+    description: The plan readies the health system for a bioterror attack, and the attack's casualties are the impact.
     aliases: [adv bioterror, bioterror advantage, bioterror adv, advantage bioterror, bioterror]
   - id: budgets-advantage
     label: Budgets advantage
     kind: advantage
     side: aff
+    description: The plan relieves state or federal budgets of health spending.
     aliases: [adv budgets, advantage budgets, budgets adv, budgets advantage, budgets]
   - id: stagnation-advantage
     label: Stagnation advantage
     kind: advantage
     side: aff
+    description: The plan ends secular stagnation, the claim that the economy is stuck in long-term slow growth.
     aliases: [adv stagnation, stagnation adv, advantage stagnation, stagnation]
   - id: access-advantage
     label: Access advantage
     kind: advantage
     side: aff
+    description: The plan improves access to care, such as rural hospitals, clinics and providers.
     aliases: [adv access, access adv, advantage access, access advantage, access]
   - id: innovation-advantage
     label: Innovation advantage
     kind: advantage
     side: aff
+    description: The plan speeds medical innovation, and the treatments it produces are the impact.
     aliases: [adv innovation, advantage innovation, innovation adv, innovation advantage, innovation]
   - id: data-advantage
     label: Data advantage
     kind: advantage
     side: aff
+    description: The plan creates one shared health data system, for records, research or tracking disease.
     aliases: [adv data, advantage data, data advantage, data adv]
   - id: pandemics-advantage
     label: Pandemics advantage
     kind: advantage
     side: aff
+    description: The plan improves preparedness for and response to a natural pandemic.
     aliases: [adv pandemics, pandemics adv, pandemics advantage, pandemics]
   - id: pharma-advantage
     label: Pharma advantage
     kind: advantage
     side: aff
+    description: The plan lowers drug prices or changes the drug industry, as a benefit of the plan.
     aliases: [adv pharma, pharma adv, advantage pharma]
   - id: sustainability-advantage
     label: Sustainability advantage
     kind: advantage
     side: aff
+    description: The plan makes the health system environmentally sustainable, cutting its emissions or waste.
     aliases: [sustainability]
   - id: biotech-advantage
     label: Biotech advantage
     kind: advantage
     side: aff
+    description: The plan strengthens the biotech industry or the country's lead in biotech.
     aliases: [biotech]
 
   # Disadvantages
@@ -269,6 +312,7 @@ positions:
     label: Midterms DA
     kind: da
     side: neg
+    description: The plan changes who wins the midterm elections, and that result causes the impact.
     aliases: [midterms da, da midterms, midterms disad, midterms]
     # The seed: v1-e32-t14's names two or more teams use here, teams (documents) beside each.
     scenarios:
@@ -284,6 +328,7 @@ positions:
     label: Pharma DA
     kind: da
     side: neg
+    description: The plan cuts drug makers' profits, so drug research and the biotech lead decline.
     aliases: [pharma da, da pharma]
     # The seed: v1-e32-t14's names two or more teams use here, teams (documents) beside each.
     scenarios:
@@ -294,6 +339,7 @@ positions:
     label: Economy DA
     kind: da
     side: neg
+    description: The plan hurts the economy through its costs, taxes or lost jobs, and a recession is the impact.
     aliases: [econ da, da econ, economy da, da economy]
     # The seed: v1-e32-t14's names two or more teams use here, teams (documents) beside each.
     not_scenarios: [decline, econ]
@@ -301,6 +347,7 @@ positions:
     label: IRS DA
     kind: da
     side: neg
+    description: The plan overloads the IRS with running it, which trades off with its enforcement work, such as tracking terrorist financing.
     aliases: [irs da, da irs, irs tradeoff da, da irs tradeoff]
     # The seed: v1-e32-t14's names two or more teams use here, teams (documents) beside each.
     scenarios:
@@ -310,16 +357,19 @@ positions:
     label: Stocks DA
     kind: da
     side: neg
+    description: The plan crashes health sector stocks or the stock market.
     aliases: [stocks da, da stocks, stock market da, da stock market]
   - id: rates-da
     label: Rates DA
     kind: da
     side: neg
+    description: The plan's spending or borrowing raises interest rates, and higher rates cause the impact.
     aliases: [rates da, da rates, interest rates da]
   - id: capital-flight-da
     label: Capital flight DA
     kind: da
     side: neg
+    description: The plan's taxes or costs drive capital and investors out of the country.
     aliases: [capital flight da, da capital flight]
     # The seed: v1-e32-t14's names two or more teams use here, teams (documents) beside each.
     scenarios:
@@ -329,16 +379,19 @@ positions:
     label: Federalism DA
     kind: da
     side: neg
+    description: A federal program takes health policy from the states, and the loss of federalism is the impact.
     aliases: [federalism da, da federalism]
   - id: hhs-da
     label: HHS DA
     kind: da
     side: neg
+    description: The plan overloads the Department of Health and Human Services, which trades off with its other work.
     aliases: [hhs da, da hhs]
   - id: court-clog-da
     label: Court clog DA
     kind: da
     side: neg
+    description: The plan sets off lawsuits that clog the courts and delay other rulings.
     aliases: [court clog da, da court clog, clog da, da clog]
     # The seed: v1-e32-t14's names two or more teams use here, teams (documents) beside each.
     scenarios:
@@ -348,47 +401,56 @@ positions:
     label: Taxes DA
     kind: da
     side: neg
+    description: The taxes that pay for the plan cause the impact, economic or political.
     aliases: [taxes da, da taxes]
   - id: permitting-reform-da
     label: Permitting reform DA
     kind: da
     side: neg
+    description: Passing the plan costs the votes or time that permitting reform needs in Congress.
     aliases: [permitting reform da, da permitting reform]
   - id: unions-da
     label: Unions DA
     kind: da
     side: neg
+    description: The plan replaces union-negotiated health benefits, which weakens unions.
     aliases: [unions da, da unions]
   - id: doctors-da
     label: Doctors DA
     kind: da
     side: neg
+    description: The plan cuts doctors' pay or freedom, which causes a doctor shortage.
     aliases: [doctors da, da doctors]
   - id: medical-devices-da
     label: Medical devices DA
     kind: da
     side: neg
+    description: The plan cuts the medical device industry's revenue, so device innovation declines.
     aliases: [medical devices da, da medical devices, da devices, devices da]
     not_scenarios: [augmentation, augmentation innovation key]
   - id: innovation-da
     label: Innovation DA
     kind: da
     side: neg
+    description: The plan cuts the profits that fund medical innovation, so innovation declines.
     aliases: [innovation da, da innovation]
   - id: debt-da
     label: Debt DA
     kind: da
     side: neg
+    description: The plan's cost adds to the national debt, and a debt crisis is the impact.
     aliases: [debt]
   - id: ai-da
     label: AI DA
     kind: da
     side: neg
+    description: The plan takes funding or attention from artificial intelligence, harming AI development or leadership.
     aliases: [ai]
   - id: democracy-da
     label: Democracy DA
     kind: da
     side: neg
+    description: The plan weakens democracy, through backlash, polarization or concentrated power.
     aliases: [democracy]
 
   # Counterplans and PICs
@@ -396,66 +458,79 @@ positions:
     label: States CP
     kind: cp
     side: neg
+    description: The fifty states, not the federal government, enact the plan.
     aliases: [states cp, cp states, states counterplan, states]
   - id: nhs-cp
     label: NHS CP
     kind: cp
     side: neg
+    description: The federal government runs the health care providers itself, a national health service, instead of insuring care.
     aliases: [nhs cp, cp nhs]
   - id: advantage-cp
     label: Advantage CP
     kind: cp
     side: neg
+    description: The negative solves the affirmative's advantages with a different policy, without the plan.
     aliases: [adv cp, advantage cp]
   - id: courts-cp
     label: Courts CP
     kind: cp
     side: neg
+    description: The courts, not Congress, bring about the plan's change.
     aliases: [courts cp, cp courts]
   - id: public-option-cp
     label: Public option CP
     kind: cp
     side: neg
+    description: A public option beside private insurance, instead of the affirmative's plan.
     aliases: [public option cp, cp public option]
   - id: smokers-pic
     label: Smokers PIC
     kind: cp
     side: neg
+    description: The plan, except that smokers are excluded from coverage.
     aliases: [smokers pic, pic smokers, cp smokers, cp smokers pic]
   - id: taxes-pic
     label: Taxes PIC
     kind: cp
     side: neg
+    description: The plan, paid for without the tax the affirmative uses.
     aliases: [taxes pic, pic taxes]
   - id: sex-offenders-pic
     label: Sex offenders PIC
     kind: cp
     side: neg
+    description: The plan, except that sex offenders are excluded from some coverage.
     aliases: [sex offenders pic, pic sex offenders]
   - id: vouchers-cp
     label: Vouchers CP
     kind: cp
     side: neg
+    description: Vouchers to buy private insurance, instead of the affirmative's plan.
     aliases: [vouchers cp, cp vouchers]
   - id: delay-cp
     label: Delay CP
     kind: cp
     side: neg
+    description: The plan, enacted after a delay.
     aliases: [delay cp, cp delay]
   - id: optional-legislation-cp
     label: Optional legislation CP
     kind: cp
     side: neg
+    description: The plan passed as legislation that states or people may opt into, rather than as a mandate.
     aliases: [optional legislation cp, cp optional legislation]
   - id: religious-freedom-cp
     label: Religious freedom CP
     kind: cp
     side: neg
+    description: The plan, with an exemption for religious objectors.
     aliases: [religious freedom cp, cp religious freedom]
   - id: ucf-cp
     label: UCF CP
     kind: cp
     side: neg
+    description: A universal coverage fund that pays for care, instead of the affirmative's plan.
     aliases: [ucf cp, cp ucf]
 
   # Kritiks
@@ -463,16 +538,19 @@ positions:
     label: Disability K
     kind: k
     side: neg
+    description: The affirmative treats disability as something to cure or prevent; the alternative rejects that view.
     aliases: [disability k, k disability]
   - id: debility-k
     label: Debility K
     kind: k
     side: neg
+    description: The affirmative ignores debility, the slow wearing down of whole populations that rights and coverage do not reach.
     aliases: [debility k, k debility]
   - id: trump-k
     label: Trump K
     kind: k
     side: neg
+    description: The affirmative's plan or its framing props up, or is taken over by, the Trump administration.
     aliases: [trump k]
 
   # Topicality
@@ -480,34 +558,41 @@ positions:
     label: T-NHI
     kind: t
     side: neg
+    description: The affirmative's plan is not national health insurance as the negative defines the term.
     aliases: [t nhi, topicality nhi]
   - id: multipayer-t
     label: T-multi-payer
     kind: t
     side: neg
+    description: National health insurance means a system with more than one payer, so a single payer plan is not topical.
     aliases: [t multipayer, t multi payer]
   - id: single-payer-t
     label: T-single payer
     kind: t
     side: neg
+    description: National health insurance means single payer, so a plan that keeps private insurers is not topical.
     aliases: [t single payer]
   - id: no-single-payer-t
     label: T-no single payer
     kind: t
     side: neg
+    description: Single payer is not national health insurance, so a single payer plan is not topical.
     aliases: [t no single payer, t no singlepayer]
   - id: establish-t
     label: T-establish
     kind: t
     side: neg
+    description: Establish means create a new program, so a plan that expands or reforms an existing one is not topical.
     aliases: [t establish]
   - id: should-t
     label: T-should
     kind: t
     side: neg
+    description: Should means immediate and certain, so a plan that is delayed or conditional is not topical.
     aliases: [t should]
   - id: comprehensive-t
     label: T-comprehensive
     kind: t
     side: neg
+    description: National health insurance must be comprehensive, so a plan covering one group or one service is not topical.
     aliases: [t comprehensive]

@@ -39,6 +39,11 @@ Messages are where such a thing could hide, so they get two treatments:
   error classes' docstrings); :func:`redact` is the backstop. It removes the caselist_token and any
   other registered secret, URL query strings, and anything path-shaped — quoted or not — because a
   disclosure's path is exactly `School/TeamCode/School-TeamCode-Side-Tournament-Round.docx`.
+* In bucket mode an expired login's message is what was refused alone, without the Mac's "Run
+  `debate-research caselist auth login` again" (`v1-e40-t35`,
+  :func:`~debate_core.application.caselist_sync.message_for`): `caselist runs --json` shows it, and
+  the cloud run's cure is the Wednesday login, never a login by hand. Still a string, as every build
+  reads it.
 
 ## What the record cannot hold: a run's details (`v1-e34-t19`)
 
@@ -151,6 +156,7 @@ from debate_core.application.caselist_sync import (
     append_state_line,
     cloud_parse_cure,
     fix_for,
+    message_for,
     next_cloud_run,
     parse_command,
     remove_state_file,
@@ -770,10 +776,10 @@ def hint_for_a_record(hint: str, *, secrets: Iterable[str] = ()) -> str:
     return text
 
 
-def _error_message(error: BaseException, secrets: Sequence[str]) -> str | None:
-    """A `DomainError`'s message, redacted; nothing at all for any other exception."""
+def _error_message(error: BaseException, secrets: Sequence[str], *, bucket_mode: bool) -> str | None:
+    """A `DomainError`'s message in this mode (:func:`message_for`), redacted; nothing for any other."""
     if isinstance(error, DomainError):
-        return redact(str(error), secrets=secrets)
+        return redact(message_for(error, bucket_mode=bucket_mode), secrets=secrets)
     return None
 
 
@@ -862,8 +868,13 @@ def record_for_failure(
     mode: RunMode,
     caselists: Sequence[str] = (),
     secrets: Sequence[str] = (),
+    bucket_mode: bool = False,
 ) -> SyncRunRecord:
-    """The record of a run that raised instead of returning a summary."""
+    """The record of a run that raised instead of returning a summary.
+
+    Its message is the one the error gives in this mode (`bucket_mode`, `v1-e40-t35`): in bucket mode
+    an expired login's names no login by hand.
+    """
     return SyncRunRecord(
         run_id=run_id,
         environment=environment,
@@ -873,7 +884,7 @@ def record_for_failure(
         outcome=SyncRunOutcome.FAILED,
         caselists=tuple(caselists),
         error_class=type(error).__name__,
-        error_message=_error_message(error, secrets),
+        error_message=_error_message(error, secrets, bucket_mode=bucket_mode),
     )
 
 
@@ -2289,6 +2300,7 @@ class SyncRunMonitor:
             summary = await pull()
         except Exception as error:
             run_id = started.astimezone(UTC).strftime(_RUN_ID_FORMAT)
+            bucket = bucket_run()
             record = record_for_failure(
                 error,
                 run_id=run_id,
@@ -2298,8 +2310,8 @@ class SyncRunMonitor:
                 mode=mode,
                 caselists=caselists,
                 secrets=self._secret_values(),
+                bucket_mode=bucket is not None,
             )
-            bucket = bucket_run()
             stopped = details_for_failure(
                 error, run_id=run_id, secrets=self._secret_values(), bucket_mode=bucket is not None
             )

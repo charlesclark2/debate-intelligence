@@ -442,6 +442,11 @@ class BackfileImportService:
         self._monotonic = monotonic
         self._memory = memory
 
+    @property
+    def bucket_mode(self) -> bool:
+        """Whether it runs in bucket mode, which decides what an expired login prints (`v1-e40-t35`)."""
+        return self._bucket_mode
+
     # ------------------------------------------------------------------------------------------
     # The dry run
     # ------------------------------------------------------------------------------------------

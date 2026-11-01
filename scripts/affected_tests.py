@@ -112,7 +112,9 @@ working tree's uncommitted and untracked files, and selects every test file one 
     class, is read as a file, as before.
 * **Source readers.** A test that walks a directory and parses the Python it finds there
   (`ast.parse` with a glob, `rglob`, `iterdir` or `walk`) reads source as data, so any changed
-  Python file selects it.
+  Python file selects it. A `walk` on a name the file binds to the ast module, `ast.walk(tree)`,
+  walks a syntax tree, not a folder, and does not count (v1-e41-t11); a bare `walk(`, or one on a
+  name bound to anything else as well, still does.
 * **Categories.** Any Markdown file, and anything under `docs/`, selects the documentation checks
   (`tests/docs/`, the command-block and docs-index tests), because they read every tracked
   Markdown file. `plan_specs/` selects `tests/specs/`. `infrastructure/` is checked by
@@ -250,7 +252,19 @@ WILDCARD = re.compile(r"[*?\[{<%]")
 LARGEST_SEARCHED_FILE = 2_000_000
 
 SOURCE_READER = re.compile(r"\bast\.parse\(")
-DIRECTORY_WALK = re.compile(r"\b(?:rglob|glob|iterdir|walk)\(")
+DIRECTORY_LISTING = re.compile(r"\b(?:rglob|glob|iterdir)\(")
+# A `walk(` call and the plain name it is called on, if any: `os` in `os.walk(`, none in `walk(`,
+# `Path(root).walk(` or `self.ast.walk(` (v1-e41-t11).
+WALK_CALL = re.compile(r"(?:(?<![\w.])([A-Za-z_]\w*)\s*\.\s*)?\bwalk\(")
+# Statements and patterns that bind the name they carry: `def name`, `except E as name`, `case name`.
+BINDS_ITS_NAME = (
+    ast.FunctionDef,
+    ast.AsyncFunctionDef,
+    ast.ClassDef,
+    ast.ExceptHandler,
+    ast.MatchAs,
+    ast.MatchStar,
+)
 MODULE_FLAG = re.compile(r"""(?:["']-m["']\s*,\s*["']|-m\s+)([A-Za-z_][\w.]*)""")
 # How a string holds a console script's name as prose rather than as a run of it (v1-e01-t44).
 PATH_SEPARATORS = ("/", "\\")
@@ -2599,8 +2613,46 @@ def source_readers(tree: Tree, layout: Layout) -> set[str]:
     return {
         test
         for test in layout.test_files
-        if SOURCE_READER.search(tree.texts.get(test, "")) and DIRECTORY_WALK.search(tree.texts.get(test, ""))
+        if SOURCE_READER.search(tree.texts.get(test, "")) and walks_a_directory(tree, test)
     }
+
+
+def walks_a_directory(tree: Tree, path: str) -> bool:
+    """Whether a file lists a folder, or may: every `walk(` but one on a name bound to the ast module.
+
+    `ast.walk(tree)` walks a syntax tree (v1-e41-t11). A name counts as the ast module only when
+    `import ast` or `import ast as name` is the one thing in the file that binds it, so a parameter,
+    an assignment or another import of that name, a bare `walk(` (ast's or os's), a walk on an
+    attribute and a file that does not parse all still count as listing a folder.
+    """
+    text = tree.texts.get(path, "")
+    if DIRECTORY_LISTING.search(text):
+        return True
+    receivers = {match.group(1) for match in WALK_CALL.finditer(text)}  # None: no plain name
+    return bool(receivers - ast_module_names(tree.syntax(path)))
+
+
+def ast_module_names(syntax: ast.Module | None) -> set[str]:
+    """The names a module binds to the ast module and to nothing else."""
+    if syntax is None:
+        return set()
+    aliases: set[str] = set()
+    bound_otherwise: set[str] = set()
+    for node in ast.walk(syntax):
+        if isinstance(node, ast.Import | ast.ImportFrom):
+            for alias in node.names:
+                name = alias.asname or alias.name.split(".")[0]
+                is_ast = isinstance(node, ast.Import) and alias.name == "ast"
+                (aliases if is_ast else bound_otherwise).add(name)
+        elif isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Load):
+            bound_otherwise.add(node.id)
+        elif isinstance(node, ast.arg):
+            bound_otherwise.add(node.arg)
+        elif isinstance(node, BINDS_ITS_NAME) and node.name:
+            bound_otherwise.add(node.name)
+        elif isinstance(node, ast.MatchMapping) and node.rest:
+            bound_otherwise.add(node.rest)
+    return aliases - bound_otherwise
 
 
 class Walk:

@@ -160,8 +160,8 @@ def test_importing_the_module_builds_no_app() -> None:
 class _Imports(ast.NodeVisitor):
     """Every module a file imports, at any depth.
 
-    A visitor rather than a walk over the tree: `scripts/affected_tests.py` reads a test that
-    parses Python and calls a walk as one that reads every Python file.
+    A visitor because, until v1-e41-t11, `scripts/affected_tests.py` read a test that parses Python
+    and calls `ast.walk` as one that reads every Python file. It no longer does.
     """
 
     def __init__(self) -> None:
@@ -176,7 +176,8 @@ class _Imports(ast.NodeVisitor):
 
 def test_the_app_module_never_imports_the_composition_root() -> None:
     """Not even inside a function (`v1-e39-t23`): to the test selector, every test that builds the app
-    would then reach every adapter the function wires, the parser, the writer, Cognito and S3 among them."""
+    would then reach every adapter the function wires, the parser, the writer, Cognito and S3 among them.
+    Since v1-e41-t11 a lint-imports contract holds every other debate_api module to the same rule."""
     import debate_api.app as module
 
     imports = _Imports()

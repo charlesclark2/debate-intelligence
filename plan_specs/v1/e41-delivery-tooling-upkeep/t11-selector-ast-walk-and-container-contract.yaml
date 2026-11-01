@@ -43,7 +43,7 @@ spec:
         contract is kept on dev's tree and broken by a planted import; tests shown failing
         first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

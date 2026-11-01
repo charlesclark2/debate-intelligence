@@ -683,5 +683,62 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e40-t29-pull-refused-by-the-move-is-skipped
+    - id: t30
+      kind: Task
+      name: 'The run task gets 32 GB, so a full re-parse or a backfile import is not killed for memory'
+      description: >-
+        The run task gets 32 GB, so a full re-parse or a backfile import is not killed for
+        memory.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t30-run-task-memory-fits-a-full-parse.yaml
+        goalRef: v1-e40-t30-run-task-memory-fits-a-full-parse
+      dependsOn:
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t30-run-task-memory-fits-a-full-parse reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t30-run-task-memory-fits-a-full-parse
+    - id: t31
+      kind: Task
+      name: 'A parse worker over its share of memory fails its file, not the whole run'
+      description: >-
+        A parse worker over its share of memory fails its file, not the whole run.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t31-parse-worker-memory-ceiling.yaml
+        goalRef: v1-e40-t31-parse-worker-memory-ceiling
+      dependsOn:
+      - t30
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t31-parse-worker-memory-ceiling reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t31-parse-worker-memory-ceiling
+    - id: t32
+      kind: Task
+      name: 'A backfile import logs each step as it ends, so a task killed part-way shows how far it got'
+      description: >-
+        A backfile import logs each step as it ends, so a task killed part-way shows how far
+        it got.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t32-backfile-import-logs-each-step.yaml
+        goalRef: v1-e40-t32-backfile-import-logs-each-step
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t32-backfile-import-logs-each-step reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t32-backfile-import-logs-each-step
 status:
   phase: Pending

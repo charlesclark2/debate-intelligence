@@ -1,0 +1,83 @@
+# TASK v1-e40-t31-parse-worker-memory-ceiling - A parse worker over its share of memory fails its file, not the whole run
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t31-parse-worker-memory-ceiling
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "A parse worker over its share of memory fails its file, not the whole run"
+spec:
+  # Filed by the PM, 2026-10-31, from the hspolicy25 import of 2026-10-31, killed for memory.
+  description: >-
+    `ProcessPoolParseRunner` replaces a worker that dies, but when the task as a whole runs out
+    of memory the kernel kills the container, and the run or import is lost with nothing
+    recorded (2026-10-31: the `hspolicy25` import, exit 137). Measure first, read-only and
+    counts only: on the Mac's raw sources, each source's size against the parse's peak resident
+    memory for the largest few hundred sources, and the main process's growth over a parse of a
+    few thousand, as an operator block if it runs past two minutes; record the distribution in
+    `docs/data`. Then give each worker a ceiling (on Linux, a resource limit set in the worker
+    before it parses; say what macOS does with it), from a setting such as
+    `parse.worker_memory_mb`, unset meaning none, so that a source over it fails as a
+    `WorkerFailure` with its own reason, is recorded like the time limit's, and the run goes on.
+    The cloud task sets the ceiling from its memory and worker count, leaving room for the main
+    process. If the main process is what grows, say so and stop: that is a different fix.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, infrastructure, docs/data, docs/runbooks]
+    forbidden:
+      - A real source's text, name or path in the report or a test
+      - Network or AWS access in a test
+      - A ceiling that refuses a source the measurement shows fits
+  context:
+    - kind: TaskRef
+      name: v1-e40-t30-run-task-memory-fits-a-full-parse
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The measurement is recorded in `docs/data`, counts and sizes only, before any rule.
+    - id: ac2
+      description: >-
+        A worker over its ceiling ends as a `WorkerFailure` naming memory, the source is
+        recorded as failed, and the next source parses, by a test with a synthetic
+        memory-hungry parser; unset, there is no ceiling; tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t31-parse-worker-memory-ceiling-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    A parse worker over its share of memory fails its file, not the whole run.
+  goalRef:
+    name: v1-e40-t31-parse-worker-memory-ceiling
+  graph:
+    nodes:
+      - id: parse-worker-memory-ceiling
+        kind: Task
+        name: Worker memory ceiling
+        description: >-
+          A parse worker over its share of memory fails its file, not the whole run.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Worker memory ceiling tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, parse_worker]
+status:
+  phase: Pending

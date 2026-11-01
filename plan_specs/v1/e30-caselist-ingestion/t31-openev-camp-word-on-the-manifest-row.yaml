@@ -1,0 +1,73 @@
+# TASK v1-e30-t31-openev-camp-word-on-the-manifest-row - The pull keeps OpenEv's own camp word on a camp file's manifest row
+# Epic: E30 Caselist Evidence Ingestion | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e30-t31-openev-camp-word-on-the-manifest-row
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+  annotations:
+    debate/title: "The pull keeps OpenEv's own camp word on a camp file's manifest row"
+spec:
+  # Filed by the PM, 2026-10-31, from v1-e39-t28's count (the PM's ruling, 2026-10-31).
+  description: >-
+    OpenEv's address for a camp's page is `https://opencaselist.com/openev/<year>/<camp>`, where
+    the camp is OpenEv's own word for it. The pull sees that word (`OpenEvFile.camp`, from the
+    API listing) and stores it nowhere: the store keeps the importer's canonical camp from
+    `camp_aliases.yaml`, which v1-e39-t28 found is often not OpenEv's word, and maps through a
+    hand-filled table instead. Keep the listing's camp word on the release manifest row the pull
+    writes for each file, beside the `openev_id` v1-e30-t14 added, checked as one address word.
+    Say whether the deployed search function's manifest reader is affected (it reads the index's
+    manifest, not these rows). A later task can join it into the index, as v1-e39-t16 joins the
+    id, and prefer it to the table.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, packages/debate_core/tests, docs/data]
+    forbidden:
+      - Network access in a test (recorded listings only)
+      - A camp word that is not one address word stored
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A file the pull imports has the listing's camp word on its manifest row, a word that
+        is not one address word is not stored, rows written before carry none and still
+        read, by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e30-t31-openev-camp-word-on-the-manifest-row-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+spec:
+  description: >-
+    The pull keeps OpenEv's own camp word on a camp file's manifest row.
+  goalRef:
+    name: v1-e30-t31-openev-camp-word-on-the-manifest-row
+  graph:
+    nodes:
+      - id: openev-camp-word-on-the-manifest-row
+        kind: Task
+        name: Camp word on the row
+        description: >-
+          The pull keeps OpenEv's own camp word on a camp file's manifest row.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Camp word on the row tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, openev]
+status:
+  phase: Pending

@@ -1,0 +1,72 @@
+# TASK v1-e34-t35-token-missing-hint-on-the-mac - A Mac run stopped for a missing token says to log in again
+# Epic: E34 Caselist Sync | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e34-t35-token-missing-hint-on-the-mac
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+  annotations:
+    debate/title: "A Mac run stopped for a missing token says to log in again"
+spec:
+  # Filed by the PM, 2026-10-31, from v1-e34-t33's follow-up (the PM's review, 2026-10-31).
+  description: >-
+    A run stopped by `CASELIST_TOKEN_MISSING` reads `stopped: an error recorded as
+    CASELIST_TOKEN_MISSING` with `caselist pull` as its fix. On the Mac the fix is `caselist
+    auth login`. In the cloud it is the Wednesday login (the renew task), so the code's handling
+    there stays as it is. Outside bucket mode, give it the hint and the words a stopped run uses
+    (`fix_for`, `_WHAT_STOPPED_A_RUN`); in bucket mode, change nothing, and test both.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, packages/debate_core/tests, docs/runbooks]
+    forbidden:
+      - A change to the cloud run's notice for this code
+      - Network or AWS access in a test
+  context:
+    - kind: TaskRef
+      name: v1-e34-t33-keychain-errors-named
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Outside bucket mode a run stopped for a missing token names `caselist auth login`
+        and has its own words; in bucket mode the notice is unchanged; by tests shown
+        failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e34-t35-token-missing-hint-on-the-mac-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+spec:
+  description: >-
+    A Mac run stopped for a missing token says to log in again.
+  goalRef:
+    name: v1-e34-t35-token-missing-hint-on-the-mac
+  graph:
+    nodes:
+      - id: token-missing-hint-on-the-mac
+        kind: Task
+        name: Token missing hint
+        description: >-
+          A Mac run stopped for a missing token says to log in again.
+        estimatedEffort: 30m
+        acceptanceCriteria:
+          - type: test_passes
+            name: Token missing hint tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, token_missing]
+status:
+  phase: Pending

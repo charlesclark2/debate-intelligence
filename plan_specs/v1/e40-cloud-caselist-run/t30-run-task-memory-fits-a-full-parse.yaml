@@ -1,0 +1,100 @@
+# TASK v1-e40-t30-run-task-memory-fits-a-full-parse - The run task gets 32 GB, so a full re-parse or a backfile import is not killed for memory
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t30-run-task-memory-fits-a-full-parse
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "The run task gets 32 GB, so a full re-parse or a backfile import is not killed for memory"
+spec:
+  # Filed by the PM, 2026-10-31, from the hspolicy25 import of 2026-10-31, killed for memory.
+  description: >-
+    The first cloud backfile import (`hspolicy25`, run task definition revision 10,
+    `v1.1.0-dev.251`) started 2026-10-31 21:32 Chicago and was killed at 22:43: ECS recorded
+    `OutOfMemoryError: container killed due to memory usage`, exit 137, on the run task's 8 vCPU
+    and 16 GB with `DEBATE_PARSE__WORKERS=8`. It wrote no log line first, so the step is not
+    known; at 71 minutes the parse is the likeliest. Wednesday 2026-11-04's weekly run is the
+    first full re-parse in the cloud (`docx-7`, about 15,000 sources, the same 8 workers). The
+    Mac's `docx-6` re-parse ran 6 workers on an 18 GB machine that can swap and compress memory;
+    a Fargate task can do neither. ADR-0020's 16 GB was the smallest size Fargate allows at 8
+    vCPU, not a measured need. Change the run task's memory in
+    `infrastructure/modules/caselist_run/run_task.tf` to 32 GB (32768), keep 8 vCPU and 8
+    workers, and leave the login task as it is. Cite AWS's page for the sizes Fargate allows at
+    8 vCPU, and quote AWS's Fargate pricing page, never memory, for what the extra memory adds
+    to a weekly run and to an import. Add a plan check for this change, as
+    `ops/caselist_run/check_image_plan.py` checks an image's (a mode of it or a sibling): the
+    run task definition replaced with the new memory and nothing else changed in it, the two
+    schedules and the scheduler policies pointed at the new revision, the login task definition
+    unchanged, and never an account assignment or a permission set; state the exact `Plan:` line
+    it expects. ADR-0020's memory paragraph gets a dated amendment recording the kill.
+    `caselist-cloud-run.md` gets the apply as operator blocks (plan, the check, the apply read
+    by the PM), with the rule: never on a Wednesday, and before 2026-11-04 06:00 Chicago so
+    Wednesday's run has it. No image is needed: the task definition keeps its digest.
+  priority: 1
+  constraints:
+    packages: [infrastructure, ops, tests/scripts, docs/adr, docs/runbooks, tests/docs]
+    forbidden:
+      - An apply in the session
+      - AWS access in a session or a test
+      - A price written from memory
+      - Any change to an account assignment, a permission set or the login task
+  context:
+    - kind: TaskRef
+      name: v1-e40-t03-run-image-and-schedule
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The run task's memory is 32 GB in Terraform, with its vCPU, workers and image
+        unchanged, and `terraform validate` passes.
+    - id: ac2
+      description: >-
+        The plan check passes a synthetic plan of exactly this change and refuses one that
+        also changes the image, the login task, an assignment or a permission set, by tests
+        shown failing first.
+    - id: ac3
+      description: >-
+        The operator's plan prints the expected `Plan:` line and the check prints OK, read
+        by the PM, and the apply before 2026-11-04 leaves the schedule on a revision with 32
+        GB (operator, recorded by the PM).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t30-run-task-memory-fits-a-full-parse-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    The run task gets 32 GB, so a full re-parse or a backfile import is not killed for memory.
+  goalRef:
+    name: v1-e40-t30-run-task-memory-fits-a-full-parse
+  graph:
+    nodes:
+      - id: run-task-memory-fits-a-full-parse
+        kind: Task
+        name: Run task memory
+        description: >-
+          The run task gets 32 GB, so a full re-parse or a backfile import is not killed
+          for memory.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Run task memory tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, -k, plan_check]
+status:
+  phase: Pending

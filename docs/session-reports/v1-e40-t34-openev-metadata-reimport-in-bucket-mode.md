@@ -330,9 +330,48 @@ Paste-ready:
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-01
 
 **Notes:**
+
+A careful bucket-mode form that follows `remove`'s pattern where it should and tightens it where
+`remove` is loose: the dry run checks an unseeded bucket and a moved home.
+1. **ac1 passes.**
+   * Red over a refuse-nothing skeleton: 19 failed, all at assertions.
+   * Green: 28, and the node criterion passes.
+   * All six of the PM's mutants (4 in two forms) and the two extras are caught. Mutant 6 is caught
+     by a check that no `raw/` object is ever fetched.
+   * The dry run's test holds every version of every key unchanged, the lock included.
+2. **ac2 is the operator's,** after the merge, outside the no-import window. The Goal stays
+   `InProgress`.
+3. **Questions, the PM's rulings:**
+   * **1: (a).** Leave `2026-ld`: it moves no camp, and a warnings-only rewrite is churn.
+   * **2: (a).** Prod's refile waits for the run's home to move to prod. Then this command with
+     `--execute --confirm-prod` does it, with no hand publish from a stale copy.
+4. **Deviations accepted:**
+   * **1:** the node run under the time limit.
+   * **2:** `remove`'s dry run restores into the data directory, so this matches it, and the runbook
+     gives both blocks a working-copy directory of their own.
+   * **3:** no smoke check.
+   * **4:** local mode unchanged.
+5. **Decisions accepted:**
+   * the backfile import's window rule reused, Wednesdays included;
+   * one lock hold, with the bundle-changed check still asked;
+   * the window asked again inside the lock;
+   * the dry run reading the lock without taking it;
+   * the suppression list's two copies read as one;
+   * a release already right changes nothing;
+   * the CLI's prod refusal;
+   * `blobs_missing` explained in its caption;
+   * no local path in the JSON;
+   * the bucket form moved out of `commands/` for the architecture rule.
+6. **Closing checks:** the affected set (157 files) is left to the PR's `ci` under agreement 10, after
+   its one failure was found and fixed (`95494d4`). The reimport selection (28), architecture with the
+   runbook test (281), the always-run list (375), the local form's smoke checks (14), ruff, pyright
+   over the whole repository, lint-imports, thin handlers, the doc checks and the specs are clean.
+7. **Merge:** `scripts/task pr --partial` once `ci` is green, after `scripts/task sync`: v1-e40-t29
+   merged with no conflict. ac2 then runs outside the window, and not while a backfile import holds
+   the lock.

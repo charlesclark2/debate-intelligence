@@ -2628,11 +2628,7 @@ def walks_a_directory(tree: Tree, path: str) -> bool:
     text = tree.texts.get(path, "")
     if DIRECTORY_LISTING.search(text):
         return True
-    receivers = {match.group(1) for match in WALK_CALL.finditer(text)}
-    if not receivers:
-        return False
-    if None in receivers:
-        return True
+    receivers = {match.group(1) for match in WALK_CALL.finditer(text)}  # None: no plain name
     return bool(receivers - ast_module_names(tree.syntax(path)))
 
 

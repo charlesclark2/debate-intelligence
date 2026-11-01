@@ -41,6 +41,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HELPER="$SCRIPT_DIR/task_helper.py"
 
 die()  { printf 'error: %s\n' "$*" >&2; exit 1; }
+die_with() { local code="$1"; shift; printf 'error: %s\n' "$*" >&2; exit "$code"; }
 info() { printf '==> %s\n' "$*"; }
 warn() { printf 'warning: %s\n' "$*" >&2; }
 has()  { command -v "$1" >/dev/null 2>&1; }
@@ -301,13 +302,22 @@ cmd_start() {
   IFS=$'\t' read -r spec title _ <<< "$info_line"
 
   info "Prerequisites"
-  if ! helper "$wt" prereqs "$task"; then
-    if [ "$force" -eq 1 ]; then
-      warn "starting despite unmet prerequisites (--force)"
-    else
-      die "prerequisites are not Succeeded on origin/dev; nothing was created (override with --force)"
-    fi
-  fi
+  # prereqs exits 1 for a prerequisite not yet Succeeded, which --force overrides, and 2 for one no
+  # task spec declares, which it never does (v1-e41-t09). `if !` would lose the code, and a bare
+  # call would stop the script under set -e, so it is caught with ||.
+  local prereqs_status=0
+  helper "$wt" prereqs "$task" || prereqs_status=$?
+  case "$prereqs_status" in
+    0) ;;
+    1)
+      if [ "$force" -eq 1 ]; then
+        warn "starting despite unmet prerequisites (--force)"
+      else
+        die "prerequisites are not Succeeded on origin/dev; nothing was created (override with --force)"
+      fi ;;
+    2) die_with 2 "$task's spec.context names a prerequisite no task spec declares (above); --force does not override that. Fix the spec on dev; nothing was created" ;;
+    *) die_with "$prereqs_status" "task_helper.py prereqs exited $prereqs_status; nothing was created" ;;
+  esac
 
   helper "$wt" set-phase "$task" InProgress
   local report; report="$(helper "$wt" new-report "$task")"

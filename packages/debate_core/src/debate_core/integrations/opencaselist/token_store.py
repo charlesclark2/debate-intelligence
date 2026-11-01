@@ -23,6 +23,18 @@ The file backend **refuses to read a file anyone but the owner can read**. A tok
 group- or world-readable may already have been read, and quietly carrying on would hide that; the
 operator is told to log in again instead.
 
+## When the keychain refuses (`v1-e34-t33`)
+
+`keyring`'s macOS backend raises a bare `KeyringError` for most of what the keychain answers, with a
+message that can quote a path, so the CLI reported a refused keychain as a bug and nobody could
+read why afterwards. The backend chains the Security framework's error, whose first argument is
+the OSStatus, and :class:`KeyringTokenBackend` reads that, never the message: a locked keychain under
+launchd, no keychain open, a prompt answered no and a refused program are each a
+:class:`~debate_core.application.ports.caselist_session.KeychainFailure` with its own code and hint.
+`NoKeyringError`, `keyring` with no backend at all, is :class:`KeyringUnavailable`. Anything else is
+raised as `keyring` raised it. A missing item reads as no token; deleting one is no error either,
+even when it goes between the read and the delete.
+
 ## What is stored
 
 A small JSON document: the token, when it was stored, when the API says it expires, and when a
@@ -53,6 +65,14 @@ from pydantic import SecretStr
 
 from debate_core.application.durable_files import fsync_directory
 from debate_core.application.errors import DomainError
+from debate_core.application.ports.caselist_session import (
+    KeychainDenied,
+    KeychainFailure,
+    KeychainInteractionNotAllowed,
+    KeychainOperation,
+    KeychainRefusedProgram,
+    NoKeychain,
+)
 from debate_core.application.settings import CaselistTokenBackend
 from debate_core.integrations.opencaselist.redaction import register_secret
 
@@ -271,16 +291,93 @@ class KeyringTokenBackend:
         self._keyring = keyring if keyring is not None else _system_keyring()
 
     def read(self) -> str | None:
-        return self._keyring.get_password(KEYRING_SERVICE, self._account)
+        try:
+            return self._keyring.get_password(KEYRING_SERVICE, self._account)
+        except Exception as refused:
+            named = _named_keychain_failure(refused, "read")
+            if named is None:
+                raise
+            raise named from None
 
     def write(self, value: str) -> None:
-        self._keyring.set_password(KEYRING_SERVICE, self._account, value)
+        try:
+            self._keyring.set_password(KEYRING_SERVICE, self._account, value)
+        except Exception as refused:
+            named = _named_keychain_failure(refused, "store")
+            if named is None:
+                raise
+            raise named from None
 
     def delete(self) -> bool:
         if self.read() is None:
             return False
-        self._keyring.delete_password(KEYRING_SERVICE, self._account)
+        try:
+            self._keyring.delete_password(KEYRING_SERVICE, self._account)
+        except Exception as refused:
+            if _os_status(refused) == _ITEM_NOT_FOUND:
+                # Gone between the read and the delete: another process deleted it first.
+                return False
+            named = _named_keychain_failure(refused, "delete")
+            if named is None:
+                raise
+            raise named from None
         return True
+
+
+_ITEM_NOT_FOUND: Final = -25300
+"""`errSecItemNotFound`. `keyring` reads it as no password, and raises it on a delete."""
+
+_KEYCHAIN_FAILURES: Final[dict[int, type[KeychainFailure]]] = {
+    -25308: KeychainInteractionNotAllowed,  # errSecInteractionNotAllowed
+    -25291: NoKeychain,  # errSecNotAvailable
+    -25294: NoKeychain,  # errSecNoSuchKeychain
+    -25307: NoKeychain,  # errSecNoDefaultKeychain
+    -128: KeychainDenied,  # errSecUserCanceled; keyring's KeychainDenied
+    -25293: KeychainRefusedProgram,  # errSecAuthFailed; keyring's SecAuthFailure
+    -67030: KeychainRefusedProgram,  # errSecCSInfoPlistFailed; keyring's SecAuthFailure
+}
+"""The macOS OSStatus answers a person can act on, and the failure each is reported as (`v1-e34-t33`).
+
+From Security.framework's SecBase.h and CSCommon.h, as `keyring`'s macOS backend passes them on. Any
+other answer is raised as `keyring` raised it: an error nobody modelled.
+"""
+
+
+def _os_status(error: BaseException) -> int | None:
+    """The OSStatus `keyring`'s macOS backend chained a keychain error from, or `None`.
+
+    The backend raises its own error `from` the Security framework's, whose first argument is the
+    status (keyring/backends/macOS/api.py, `Error.raise_for_status`). Only an `int` there counts:
+    a message is never read, even one that holds a number.
+    """
+    try:
+        from keyring.errors import KeyringError
+    except ImportError:  # pragma: no cover - keyring ships with the opencaselist extra
+        return None
+    cause = error.__cause__
+    if not isinstance(error, KeyringError) or cause is None or not cause.args:
+        return None
+    status = cause.args[0]
+    return status if type(status) is int else None
+
+
+def _named_keychain_failure(error: BaseException, operation: KeychainOperation) -> DomainError | None:
+    """What `error`, raised by the keychain on `operation`, is reported as; `None` to raise it as it is.
+
+    `keyring` raising `NoKeyringError` has no keychain at all to use, which is
+    :class:`KeyringUnavailable`. The rest is told apart by its OSStatus alone.
+    """
+    try:
+        from keyring.errors import NoKeyringError
+    except ImportError:  # pragma: no cover - keyring ships with the opencaselist extra
+        return None
+    if isinstance(error, NoKeyringError):
+        return KeyringUnavailable()
+    status = _os_status(error)
+    if status is None:
+        return None
+    failure = _KEYCHAIN_FAILURES.get(status)
+    return failure(operation, status) if failure is not None else None
 
 
 def _system_keyring() -> KeyringLike:

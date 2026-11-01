@@ -1883,6 +1883,28 @@ If it happens immediately after a fresh login, **stop** and do not retry: access
 suspended, which is the site's right (policy clause 10), and the next step is to contact the
 maintainer, not to work around it.
 
+**The keychain refused the token store** (`v1-e34-t33`). The run failed with exit `1`, and the
+banner says `needs a person` with the fix as its hint. It usually stops at the first request, which
+reads the token; met later, when a request that worked stamps the token, it fails that stage with
+the same code and hint. `caselist auth status`
+in Terminal meets the same refusal and prints the same code and hint, with the keychain's OSStatus
+under `details`. The keychain's own message is never printed or recorded, since it can quote a
+path; the code is chosen from the OSStatus alone. Before `v1-e34-t33` each of these was
+`INTERNAL_ERROR`, "a bug in debate-research" (the run of 2026-10-21).
+
+| Code | OSStatus | What happened | Fix |
+|---|---|---|---|
+| `KEYCHAIN_INTERACTION_NOT_ALLOWED` | -25308 | The keychain needed a person, to be unlocked or to allow this program, and a run under launchd cannot ask | The Mac must be logged in, not only switched on, with its login keychain unlocked. If it is, run `debate-research caselist auth status` once in Terminal and choose Always Allow |
+| `NO_KEYCHAIN` | -25291, -25294, -25307 | No keychain was open: nobody was logged in | The Mac must be logged in, not only switched on. Then `caselist auth status` checks the token is there |
+| `KEYCHAIN_DENIED` | -128 | The keychain asked to be unlocked, or whether this program may use the item, and was told no. The two answer the same OSStatus, so they share the code | Run `caselist auth status` in Terminal, unlock the keychain and choose Always Allow; or set `caselist.token_backend = "file"` and log in again with `debate-research caselist auth login` |
+| `KEYCHAIN_REFUSED_PROGRAM` | -25293, -67030 | The keychain could not confirm this program, or its own password | In Keychain Access, allow this build on the item `debate-research.opencaselist`, or delete the item and log in again; or the file backend, as above |
+| `KEYRING_UNAVAILABLE` | none | `keyring` found no keychain backend at all | Set `DEBATE_CASELIST__TOKEN_BACKEND=file` and log in again |
+
+`CASELIST_TOKEN_MISSING` is a keychain with no item for the environment: log in again with
+`debate-research caselist auth login`. `caselist auth logout` of a token that is already gone
+succeeds and says there was nothing to delete. Any other OSStatus is still `INTERNAL_ERROR`; run
+the command again by hand with `--verbose` to see the keychain's message, and report it.
+
 **A download failed.** What did download is imported, up to the first week that did not arrive,
 and leaves the inbox once the bucket confirms it; a newer week of the same caselist waits in the inbox behind it rather than being
 imported out of order. With exit `3` nothing needs doing: the next scheduled run fetches the missing week and

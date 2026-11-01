@@ -18,7 +18,7 @@ import json
 import os
 import shutil
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
@@ -67,13 +67,18 @@ async def test_this_source_reads_a_manifest_carrying_cmir(
     rows = read_manifest_file(objects.path_for(manifest_key(CASELIST, SNAPSHOT)))
     (cmir_row,) = [json.loads(row) for row in rows if json.loads(row).get("path") == CMIR_PATH]
 
+    stats = CaselistCardStatsService(build_fake_caselist_repository())
+    # This build places cards given one at a time (`v1-e40-t36`); an earlier build takes them all.
+    placing: dict[str, Any] = (
+        {"card_placer": stats.placer} if hasattr(stats, "placer") else {"place_cards": stats.place}
+    )
     parse = CaselistParseService(
         local=local,
         store=LocalParsedStore(data_dir),
         parser=DebateDocxParser(),
         runner=InProcessParseRunner(),
         suppression=empty_suppression_list(),
-        place_cards=CaselistCardStatsService(build_fake_caselist_repository()).place,
+        **placing,
         failure_rate_threshold=0.5,
         failure_rate_minimum_sources=1,
     )

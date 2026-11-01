@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 
 from debate_core.application.ports.parsed_store import (
     DocumentRecord,
@@ -80,7 +80,7 @@ class InMemoryParsedStore:
         *,
         index: Sequence[SourceEntry],
         failures: Sequence[SourceEntry],
-        occurrences: Sequence[OccurrenceRecord],
+        occurrences: Iterable[OccurrenceRecord],
     ) -> None:
         self.aggregates[(caselist, version)] = (tuple(index), tuple(failures), tuple(occurrences))
 

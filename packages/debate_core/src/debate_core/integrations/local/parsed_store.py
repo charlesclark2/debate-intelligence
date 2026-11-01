@@ -42,7 +42,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from pathlib import Path
 from typing import Final
 
@@ -232,14 +232,22 @@ class LocalParsedStore:
         *,
         index: Sequence[SourceEntry],
         failures: Sequence[SourceEntry],
-        occurrences: Sequence[OccurrenceRecord],
+        occurrences: Iterable[OccurrenceRecord],
     ) -> None:
         await self._refuse_old_version(caselist, version, parse_version_directory(version)[0])
         directory = self._root / caselist / version
-        self._write_lines(directory / INDEX_NAME, index)
-        self._write_lines(directory / FAILURES_NAME, failures)
-        table = self._write_lines(directory / OCCURRENCES_NAME, occurrences)
-        camp_paths = _camp_path_records(occurrences, table)
+        carrying: dict[tuple[str, str, str], OccurrenceRecord] = {}
+        # The table is written first, row by row as `occurrences` makes them, and put in place after
+        # the index and the failures file: the order they always were, and a row that fails to build
+        # leaves all three as they were (`v1-e40-t36`).
+        with (
+            refused_as_access_denied("write", _ROLE),
+            atomic_replacement(directory / OCCURRENCES_NAME) as incoming,
+        ):
+            table = _stream_lines(incoming, _noting_camp_paths(occurrences, carrying))
+            self._write_lines(directory / INDEX_NAME, index)
+            self._write_lines(directory / FAILURES_NAME, failures)
+        camp_paths = _camp_path_records(carrying, table)
         if camp_paths:
             self._write_lines(directory / CAMP_PATHS_NAME, camp_paths)
         else:
@@ -268,11 +276,9 @@ class LocalParsedStore:
             )
 
     def _write_lines(self, path: Path, records: Iterable[StoreRecord]) -> str:
-        """Write `records` whole, one per line; the SHA-256 of the bytes written."""
-        content = "".join(f"{_render(record)}\n" for record in records).encode("utf-8")
+        """Replace `path` with `records`, one per line; the SHA-256 of the bytes written."""
         with refused_as_access_denied("write", _ROLE), atomic_replacement(path) as incoming:
-            incoming.write_bytes(content)
-        return hashlib.sha256(content).hexdigest()
+            return _stream_lines(incoming, records)
 
     def _read_lines[RecordT: StoreRecord](
         self, model: type[RecordT], path: Path
@@ -298,24 +304,47 @@ class LocalParsedStore:
             raise UnreadableParsedStore(relative, number, kind) from error
 
 
-def _camp_path_records(occurrences: Sequence[OccurrenceRecord], table_sha256: str) -> list[CampPathRecord]:
-    """One line per camp path of each camp file in each release the table's rows carry."""
-    records: dict[tuple[str, str, str], CampPathRecord] = {}
+def _stream_lines(path: Path, records: Iterable[StoreRecord]) -> str:
+    """Write `records` to `path` one per line as they come; the SHA-256 of the bytes written.
+
+    The same bytes as the whole file rendered at once, without holding it (`v1-e40-t36`).
+    """
+    digest = hashlib.sha256()
+    with path.open("wb") as stream:
+        for record in records:
+            line = f"{_render(record)}\n".encode()
+            digest.update(line)
+            stream.write(line)
+    return digest.hexdigest()
+
+
+def _noting_camp_paths(
+    occurrences: Iterable[OccurrenceRecord], carrying: dict[tuple[str, str, str], OccurrenceRecord]
+) -> Iterator[OccurrenceRecord]:
+    """`occurrences` as they are written, noting in `carrying` the first row to carry each camp path."""
     for row in occurrences:
         for path in row.camp_path_disclosures:
-            key = (row.snapshot, row.source_sha256, path)
-            if key not in records:
-                records[key] = CampPathRecord(
-                    caselist=row.caselist,
-                    snapshot=row.snapshot,
-                    source_sha256=row.source_sha256,
-                    parser_version=row.parser_version,
-                    profile_version=row.profile_version,
-                    fingerprint_version=row.fingerprint_version,
-                    camp_path_disclosure=path,
-                    occurrence_table_sha256=table_sha256,
-                )
-    return [records[key] for key in sorted(records)]
+            carrying.setdefault((row.snapshot, row.source_sha256, path), row)
+        yield row
+
+
+def _camp_path_records(
+    carrying: dict[tuple[str, str, str], OccurrenceRecord], table_sha256: str
+) -> list[CampPathRecord]:
+    """One line per camp path of each camp file in each release the table's rows carry."""
+    return [
+        CampPathRecord(
+            caselist=row.caselist,
+            snapshot=snapshot,
+            source_sha256=source_sha256,
+            parser_version=row.parser_version,
+            profile_version=row.profile_version,
+            fingerprint_version=row.fingerprint_version,
+            camp_path_disclosure=path,
+            occurrence_table_sha256=table_sha256,
+        )
+        for (snapshot, source_sha256, path), row in sorted(carrying.items(), key=lambda item: item[0])
+    ]
 
 
 def _camp_paths_of(path: Path, table_sha256: str) -> dict[tuple[str, str], tuple[str, ...]]:

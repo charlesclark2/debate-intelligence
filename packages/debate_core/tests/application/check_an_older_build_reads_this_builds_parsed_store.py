@@ -91,6 +91,8 @@ def parse_service(data_dir: Path) -> CaselistParseService:
             parser=DebateDocxParser(),
             runner=InProcessParseRunner(),
             suppression=suppression(data_dir),
+            # This build places cards given one at a time (`v1-e40-t36`); an earlier build takes them all.
+            card_placer=getattr(CaselistCardStatsService(build_fake_caselist_repository()), "placer", None),
             place_cards=CaselistCardStatsService(build_fake_caselist_repository()).place,
             failure_rate_threshold=1.0,
             failure_rate_minimum_sources=1,

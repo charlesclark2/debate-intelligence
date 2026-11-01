@@ -263,7 +263,7 @@ def parse_service(
         parser=parser or DebateDocxParser(),
         runner=runner or InProcessParseRunner(),
         suppression=installation.suppression or empty_suppression_list(),
-        place_cards=CaselistCardStatsService(build_fake_caselist_repository()).place,
+        card_placer=CaselistCardStatsService(build_fake_caselist_repository()).placer,
         failure_rate_threshold=threshold,
         failure_rate_minimum_sources=minimum,
     )

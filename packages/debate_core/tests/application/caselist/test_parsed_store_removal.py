@@ -79,7 +79,7 @@ def parse_service(world: RemovalWorld) -> CaselistParseService:
         parser=DebateDocxParser(),
         runner=InProcessParseRunner(),
         suppression=world.suppression(),
-        place_cards=CaselistCardStatsService(build_fake_caselist_repository()).place,
+        card_placer=CaselistCardStatsService(build_fake_caselist_repository()).placer,
         failure_rate_threshold=1.0,
         failure_rate_minimum_sources=1,
     )

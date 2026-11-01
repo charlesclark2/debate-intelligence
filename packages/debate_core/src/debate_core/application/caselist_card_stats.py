@@ -80,9 +80,11 @@ from debate_core.evidence.near_duplicates import (
 
 __all__ = [
     "CardPlacement",
+    "CardPlacer",
     "CaselistCardReport",
     "CaselistCardStatsService",
     "CardTotals",
+    "ClusterPlacement",
     "ClusterSummary",
     "UnreadableParsedCards",
     "fingerprint_thresholds",
@@ -220,6 +222,19 @@ class CardPlacement:
     membership: ClusterMembership
 
 
+@dataclass(frozen=True, slots=True)
+class ClusterPlacement:
+    """A card's fingerprint and the cluster it was placed in, without the card (`v1-e40-t36`).
+
+    What :class:`CardPlacer` gives for each card, in the order it was given them: what the parse
+    pipeline writes its occurrence rows from, so that it never holds a caselist's cards at once.
+    """
+
+    fingerprint: str
+    cluster_id: str
+    membership: ClusterMembership
+
+
 class CaselistCardStatsService:
     """Builds the occurrence table for one caselist and summarises it."""
 
@@ -276,40 +291,95 @@ class CaselistCardStatsService:
         card, each in exactly one cluster. Cluster ids do not depend on the order of `cards`, and a
         full card's cluster does not depend on which abbreviated cards are present.
         """
-        fingerprints = [card_fingerprint(card).exact_fingerprint for card in cards]
-        bodies: dict[str, str] = {}
-        for card, fingerprint in zip(cards, fingerprints, strict=True):
-            if card.completeness is CardCompleteness.FULL:
-                bodies.setdefault(fingerprint, card.evidence_text)
-        clusters = cluster_near_duplicates(bodies, self._thresholds)
+        placer = self.placer()
+        for card in cards:
+            placer.add(card)
+        return [
+            CardPlacement(card, placed.fingerprint, placed.cluster_id, placed.membership)
+            for card, placed in zip(cards, placer.placements(), strict=True)
+        ]
 
-        copies: Counter[tuple[str, str | None]] = Counter()
+    def placer(self) -> CardPlacer:
+        """A :class:`CardPlacer` with this service's thresholds and markers, given no card yet."""
+        return CardPlacer(self._thresholds, self._markers)
+
+    async def _disclosures(self, caselist: str, snapshot: date | None) -> dict[str, list[Disclosure]]:
+        by_source: defaultdict[str, list[Disclosure]] = defaultdict(list)
+        cursor: str | None = None
+        while True:
+            page = await self._caselists.list_disclosures(
+                caselist=caselist, limit=_DISCLOSURE_PAGE, cursor=cursor
+            )
+            for disclosure in page.items:
+                if snapshot is None or disclosure.snapshot <= snapshot:
+                    by_source[disclosure.source_sha256].append(disclosure)
+            if page.next_cursor is None:
+                return dict(by_source)
+            cursor = page.next_cursor
+
+
+class CardPlacer:
+    """:meth:`CaselistCardStatsService.place`, given the cards one at a time (`v1-e40-t36`).
+
+    No card can be placed before every card of the caselist has been seen, because a cluster spans
+    sources, but placing them reads little of each card. :meth:`add` keeps, of every card, its
+    fingerprint, and of an abbreviated or cite-only card its link key
+    (:func:`~debate_core.evidence.abbreviated_links.abbreviation_anchor`); of the full cards, the
+    body of the first with each fingerprint, which the clusterer reads, and a count of copies per
+    fingerprint and short cite, which the linker weighs. Never a cite, a tag or a formatting span.
+    So what it holds grows by a fingerprint per card and by the text of each distinct full body,
+    and the parse pipeline (`v1-e31-t06`) can read a caselist's cards source by source and keep
+    none of them.
+
+    The linker compares an abbreviated card with a full card's body words. Those are taken from the
+    first body with the full card's fingerprint, which is the SHA-256 of the body under the
+    normalization :func:`~debate_core.evidence.near_duplicates.matching_words` reads words through,
+    so every full card with one fingerprint has the same words.
+    """
+
+    def __init__(self, thresholds: NearDuplicateThresholds, markers: tuple[str, ...] | None) -> None:
+        self._thresholds = thresholds
+        self._markers = markers
+        self._fingerprints: list[str] = []
+        self._known: dict[str, str] = {}
+        """Each fingerprint seen, to itself: the cards that share one hold one string."""
+        self._anchors: dict[int, AbbreviationAnchor | None] = {}
+        """The link key of each card that is not full, by its position; `None` when it has none."""
+        self._bodies: dict[str, str] = {}
+        self._copies: Counter[tuple[str, str | None]] = Counter()
+
+    def add(self, card: ParsedCard) -> None:
+        """Take the next card, keeping only what placing it reads."""
+        fingerprint = card_fingerprint(card).exact_fingerprint
+        fingerprint = self._known.setdefault(fingerprint, fingerprint)
+        if card.completeness is CardCompleteness.FULL:
+            self._bodies.setdefault(fingerprint, card.evidence_text)
+            self._copies[(fingerprint, short_cite_key(card.short_cite))] += 1
+        else:
+            self._anchors[len(self._fingerprints)] = abbreviation_anchor(card, self._markers)
+        self._fingerprints.append(fingerprint)
+
+    def placements(self) -> list[ClusterPlacement]:
+        """One placement per card given, in the order given: steps 1 to 3 of this module's docstring."""
+        clusters = cluster_near_duplicates(self._bodies, self._thresholds)
+        words: dict[str, tuple[str, ...]] = {}
         full_by_cite: defaultdict[str | None, dict[str, FullCardWords]] = defaultdict(dict)
-        for card, fingerprint in zip(cards, fingerprints, strict=True):
-            if card.completeness is CardCompleteness.FULL:
-                copies[(fingerprint, short_cite_key(card.short_cite))] += 1
-        for card, fingerprint in zip(cards, fingerprints, strict=True):
-            if card.completeness is CardCompleteness.FULL:
-                key = short_cite_key(card.short_cite)
-                if fingerprint not in full_by_cite[key]:
-                    full_by_cite[key][fingerprint] = FullCardWords(
-                        clusters[fingerprint],
-                        key,
-                        tuple(matching_words(card.evidence_text)),
-                        copies[(fingerprint, key)],
-                    )
+        for (fingerprint, key), copies in self._copies.items():
+            if fingerprint not in words:
+                words[fingerprint] = tuple(matching_words(self._bodies[fingerprint]))
+            full_by_cite[key][fingerprint] = FullCardWords(
+                clusters[fingerprint], key, words[fingerprint], copies
+            )
 
         # An abbreviated card links to a full card's cluster, or failing that is grouped with the
         # other abbreviated cards that matched no full card, or failing that is its own cluster.
         linked: dict[int, str] = {}
         keys: defaultdict[str, set[AbbreviationAnchor]] = defaultdict(set)
         not_grouped: set[str] = set()
-        for position, (card, fingerprint) in enumerate(zip(cards, fingerprints, strict=True)):
-            if card.completeness is CardCompleteness.FULL:
-                continue
-            anchor = abbreviation_anchor(card, self._markers)
+        for position, anchor in self._anchors.items():
             if anchor is None:
                 continue
+            fingerprint = self._fingerprints[position]
             matches = matching_full_cards(anchor, full_by_cite[anchor.short_cite_key].values())
             cluster = link_abbreviated(anchor, matches)
             if cluster is not None:
@@ -327,38 +397,24 @@ class CaselistCardStatsService:
             }
         )
 
-        placed: list[CardPlacement] = []
-        for position, (card, fingerprint) in enumerate(zip(cards, fingerprints, strict=True)):
-            if card.completeness is CardCompleteness.FULL:
+        placed: list[ClusterPlacement] = []
+        for position, fingerprint in enumerate(self._fingerprints):
+            if position not in self._anchors:
                 placed.append(
-                    CardPlacement(card, fingerprint, clusters[fingerprint], ClusterMembership.NEAR_DUPLICATE)
+                    ClusterPlacement(fingerprint, clusters[fingerprint], ClusterMembership.NEAR_DUPLICATE)
                 )
             elif position in linked:
                 placed.append(
-                    CardPlacement(card, fingerprint, linked[position], ClusterMembership.ABBREVIATED_LINK)
+                    ClusterPlacement(fingerprint, linked[position], ClusterMembership.ABBREVIATED_LINK)
                 )
             elif fingerprint in groups:
                 # Every unlinked card with this text goes with it, so identical text never splits.
                 placed.append(
-                    CardPlacement(card, fingerprint, groups[fingerprint], ClusterMembership.ABBREVIATED_LINK)
+                    ClusterPlacement(fingerprint, groups[fingerprint], ClusterMembership.ABBREVIATED_LINK)
                 )
             else:
-                placed.append(CardPlacement(card, fingerprint, fingerprint, ClusterMembership.UNLINKED))
+                placed.append(ClusterPlacement(fingerprint, fingerprint, ClusterMembership.UNLINKED))
         return placed
-
-    async def _disclosures(self, caselist: str, snapshot: date | None) -> dict[str, list[Disclosure]]:
-        by_source: defaultdict[str, list[Disclosure]] = defaultdict(list)
-        cursor: str | None = None
-        while True:
-            page = await self._caselists.list_disclosures(
-                caselist=caselist, limit=_DISCLOSURE_PAGE, cursor=cursor
-            )
-            for disclosure in page.items:
-                if snapshot is None or disclosure.snapshot <= snapshot:
-                    by_source[disclosure.source_sha256].append(disclosure)
-            if page.next_cursor is None:
-                return dict(by_source)
-            cursor = page.next_cursor
 
 
 def _card_order(card: ParsedCard) -> tuple[str, int, date, str]:

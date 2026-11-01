@@ -945,7 +945,7 @@ class ServiceContainer:
                 timeout_seconds=parse.per_file_timeout_seconds,
             ),
             suppression=suppression,
-            place_cards=self.caselist_card_stats().place,
+            card_placer=self.caselist_card_stats().placer,
             failure_rate_threshold=parse.failure_rate_threshold,
             failure_rate_minimum_sources=parse.failure_rate_minimum_sources,
             # Bucket mode (`v1-e40-t04`): raw sources a restored copy lacks come from the bucket.

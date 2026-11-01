@@ -412,13 +412,17 @@ class _NoCardEditsYet:
 
 
 def _committed_root(what: str) -> Path:
-    """Where the committed `config/` and `prompts/` are read: an installed build's bundled copy, else the
-    source checkout around the working directory, as the settings are; refused when there is neither."""
-    root = bundled_config_root() or find_repository_root()
+    """Where `cut` reads the committed format profiles and prompts: an installed build's bundled copy,
+    or the source checkout this code is running from; refused when there is neither.
+
+    Not the checkout around the working directory, as the settings' profiles are: a prompt is rendered by
+    the code beside it, so a run from another directory still reads the prompts of the code that runs.
+    """
+    root = bundled_config_root() or find_repository_root(_PACKAGE_DIRECTORY)
     if root is None:
         raise ConfigurationError(
-            f"{what} is read from the copy an installed build carries, or from a source checkout, and "
-            "this run has neither; reinstall the build, or run from a checkout",
+            f"{what} is read from the copy an installed build carries, or from the source checkout the "
+            "code runs from, and this run has neither; reinstall the build",
             field=what,
         )
     return root
@@ -551,6 +555,9 @@ MODEL_CASSETTES_DIRECTORY: Final = "model-cassettes"
 """Beside the classification cache: cassettes of the landscape model stage's calls on real cards
 (`v1-e32-t07`). They hold scrubbed excerpts of real evidence, so they are derived corpus data: kept under
 the data directory, never committed, and under its retention and removal."""
+
+_PACKAGE_DIRECTORY: Final = Path(__file__).resolve().parent
+"""This package's directory: inside the source checkout it was installed from, when it was."""
 
 _ECS_METADATA_VARIABLE: Final = "ECS_CONTAINER_METADATA_URI_V4"
 """Set by ECS in every task's containers: how the run lock tells the cloud run from the Mac."""
@@ -1284,8 +1291,9 @@ class ServiceContainer:
         :func:`~debate_core.evidence.docx_renderer.render_cards_docx`.
 
         The prompts are read from the committed `prompts/`: an installed build's bundled copy
-        (`scripts/stamp_build.py`), or the source checkout's. A run with neither is refused before
-        anything is fetched, as is a format profile directory that does not load.
+        (`scripts/stamp_build.py`), or that of the source checkout this code runs from. A run with
+        neither is refused before anything is fetched, as is a format profile directory that does not
+        load.
 
         Crossref's transport is the network in every real run. A test registers its own under
         `"crossref_transport"` before the command runs, as `fetch`'s tests do for the fetcher.
@@ -1376,7 +1384,7 @@ class ServiceContainer:
     def format_profiles(self) -> dict[str, ResolvedFormatProfile]:
         """The card format profiles by name (`v1-e06-t03`), from the committed `config/format_profiles`.
 
-        An installed build reads its bundled copy and a source checkout its own, as the settings do. A
+        An installed build reads its bundled copy, and a source checkout the copy beside its code. A
         directory that is missing or does not load is a
         :class:`~debate_core.application.settings.ConfigurationError` naming the problem.
         """

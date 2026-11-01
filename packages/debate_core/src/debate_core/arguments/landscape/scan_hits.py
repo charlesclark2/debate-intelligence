@@ -18,9 +18,11 @@ logs or writes. Only :func:`hit_counts`, by kind and field, may be written down.
 
 from __future__ import annotations
 
+import contextlib
+import dataclasses
 import json
 from collections import Counter
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Final, cast
@@ -36,6 +38,7 @@ __all__ = [
     "cassette_hits",
     "hit_counts",
     "input_batch_hits",
+    "mark_counts",
     "repair_cassette_hits",
 ]
 
@@ -72,6 +75,13 @@ class HitField(StrEnum):
 
 
 _ITEM_FIELDS: Final = {"tag": HitField.TAG, "cite": HitField.CITE, "excerpt": HitField.EXCERPT}
+
+_PROMPT_KEYS: Final = frozenset(
+    tag_words(
+        "item headings under_an_answer_heading tag cite excerpt id kind label side parent description"
+    ).split()
+)
+"""The words of the keys of a card and of a position as `prompt_variables` writes them."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,6 +142,11 @@ class ScanHit:
     """A :attr:`HitKind.TOURNAMENT` hit whose words are a school or team code of the caselist."""
     in_taxonomy: bool = False
     """The matched words are words of the committed taxonomy too: vocabulary, not only a name."""
+    json_key: bool = False
+    """Every matched word is a word of a JSON key of the text (`tag`, `item`...): structure, not content."""
+    in_input: bool = False
+    """The matched words occur in the cards the text sent (their heading paths, tags, cites and
+    excerpts; a repair cassette's repaired prompt): a rationale or metadata hit marked so repeats them."""
 
 
 def _matches(words: Sequence[str], phrase: str) -> Iterator[int]:
@@ -171,6 +186,39 @@ def _across(text_label: str, whole: str, found: list[ScanHit], names: ScanNames)
     ]
 
 
+def _key_words(value: object) -> set[str]:
+    """The words of every key of a JSON value, and of the JSON a string in it holds."""
+    found: set[str] = set()
+    if isinstance(value, dict):
+        for key, inner in cast(dict[str, object], value).items():
+            found |= set(tag_words(key).split()) | _key_words(inner)
+    elif isinstance(value, list):
+        for inner in cast(list[object], value):
+            found |= _key_words(inner)
+    elif isinstance(value, str) and value.startswith(("[", "{")):
+        with contextlib.suppress(json.JSONDecodeError):
+            found |= _key_words(json.loads(value))
+    return found
+
+
+def _marked(hits: list[ScanHit], *, keys: Collection[str], sent: str) -> list[ScanHit]:
+    """`hits` with :attr:`ScanHit.json_key` and :attr:`ScanHit.in_input` set, against one text's keys
+    and the words of the cards it sent."""
+    padded = f" {sent} "
+    return [
+        dataclasses.replace(
+            hit,
+            json_key=all(word in keys for word in hit.matched.split()),
+            in_input=f" {hit.matched} " in padded,
+        )
+        for hit in hits
+    ]
+
+
+def _sent_words(items: object) -> str:
+    return " ".join(tag_words(value) for _, value in _fields_of_items(items))
+
+
 def _fields_of_items(value: object) -> Iterator[tuple[HitField, str]]:
     """The free-text fields of a batch's `items` variable: each card's heading path, tag, cite, excerpt."""
     try:
@@ -197,7 +245,11 @@ def input_batch_hits(text_label: str, items: str, names: ScanNames) -> list[Scan
     found = [
         hit for where, value in _fields_of_items(items) for hit in _hits_in(text_label, where, value, names)
     ]
-    return found + _across(text_label, items, found, names)
+    return _marked(
+        found + _across(text_label, items, found, names),
+        keys=_PROMPT_KEYS | _key_words(items),
+        sent=_sent_words(items),
+    )
 
 
 def _leaves(value: object) -> Iterator[str]:
@@ -255,17 +307,17 @@ def cassette_hits(text_label: str, cassette: str, names: ScanNames) -> list[Scan
     document = _document(cassette)
     if document is None:
         return _hits_in(text_label, HitField.ACROSS_FIELDS, cassette, names)
+    keys = _PROMPT_KEYS | _key_words(document)
     variables = _variables(document)
+    items = variables.pop("items", None)
     found = [
-        hit
-        for where, value in _fields_of_items(variables.pop("items", None))
-        for hit in _hits_in(text_label, where, value, names)
+        hit for where, value in _fields_of_items(items) for hit in _hits_in(text_label, where, value, names)
     ]
     positions = variables.pop("positions", None)
     if isinstance(positions, str):
         found += _hits_in(text_label, HitField.TAXONOMY, positions, names)
     found += _rationale_and_metadata(text_label, document, names)
-    return found + _across(text_label, cassette, found, names)
+    return _marked(found + _across(text_label, cassette, found, names), keys=keys, sent=_sent_words(items))
 
 
 def repair_cassette_hits(text_label: str, cassette: str, names: ScanNames) -> list[ScanHit]:
@@ -277,14 +329,17 @@ def repair_cassette_hits(text_label: str, cassette: str, names: ScanNames) -> li
     document = _document(cassette)
     if document is None:
         return _hits_in(text_label, HitField.ACROSS_FIELDS, cassette, names)
+    keys = _PROMPT_KEYS | _key_words(document)
     variables = _variables(document)
     found: list[ScanHit] = []
+    repaired: list[str] = []
     for key in ("failed_system", "failed_user"):
         value = variables.pop(key, None)
         if isinstance(value, str):
             found += _hits_in(text_label, HitField.REPAIRED_PROMPT, value, names)
+            repaired.append(tag_words(value))
     found += _rationale_and_metadata(text_label, document, names)
-    return found + _across(text_label, cassette, found, names)
+    return _marked(found + _across(text_label, cassette, found, names), keys=keys, sent=" ".join(repaired))
 
 
 def _rationale_and_metadata(text_label: str, document: dict[str, object], names: ScanNames) -> list[ScanHit]:
@@ -297,6 +352,17 @@ def _rationale_and_metadata(text_label: str, document: dict[str, object], names:
     for leaf in _leaves(document):
         found += _hits_in(text_label, HitField.METADATA, leaf, names)
     return found
+
+
+def mark_counts(hits: Iterable[ScanHit]) -> dict[str, dict[str, int]]:
+    """By field, how many hits carry each mark: counts only, which may be written down."""
+    found: dict[str, Counter[str]] = {}
+    for hit in hits:
+        marks = found.setdefault(hit.where.value, Counter())
+        marks["hits"] += 1
+        for name in ("team_name", "in_taxonomy", "json_key", "in_input"):
+            marks[name] += getattr(hit, name)
+    return {where: dict(marks) for where, marks in sorted(found.items())}
 
 
 def hit_counts(hits: Iterable[ScanHit]) -> dict[str, dict[str, int]]:

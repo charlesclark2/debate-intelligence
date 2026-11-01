@@ -2383,6 +2383,11 @@ def test_evaluate_breakdown_json_counts_the_hits_and_holds_none_of_their_words(
         "by_kind_and_field": {"school": {"model rationale": 1}},
         "tournament_hits_naming_a_team": 0,
         "in_taxonomy": 0,
+        "json_key": 0,
+        "in_input": 0,
+        "marks_by_field": {
+            "model rationale": {"hits": 1, "team_name": 0, "in_taxonomy": 0, "json_key": 0, "in_input": 0}
+        },
     }
     leaked = [PLANTED_HIT.matched, PLANTED_HIT.before, PLANTED_HIT.after, "quillfeather"]
     assert not any(words in result.output for words in leaked)

@@ -208,7 +208,7 @@ from debate_core.arguments.landscape.evaluation_breakdown import (
     weighted_accuracy,
 )
 from debate_core.arguments.landscape.model_stage import NameScan
-from debate_core.arguments.landscape.scan_hits import ScanHit, hit_counts
+from debate_core.arguments.landscape.scan_hits import ScanHit, hit_counts, mark_counts
 from debate_core.domain.landscape_trends import LandscapeTrends, TrendLabel
 
 __all__ = [
@@ -546,6 +546,9 @@ def _hits_json(hits: tuple[ScanHit, ...]) -> dict[str, JsonValue]:
         "by_kind_and_field": counts,
         "tournament_hits_naming_a_team": sum(hit.team_name for hit in hits),
         "in_taxonomy": sum(hit.in_taxonomy for hit in hits),
+        "json_key": sum(hit.json_key for hit in hits),
+        "in_input": sum(hit.in_input for hit in hits),
+        "marks_by_field": {where: dict(marks) for where, marks in mark_counts(hits).items()},
     }
 
 
@@ -639,8 +642,10 @@ def _hit_lines(result: EvaluationBreakdown) -> list[str]:
     for number, hit in enumerate(hits, start=1):
         marked = " (a team's name)" if hit.team_name else ""
         vocabulary = " (a taxonomy word)" if hit.in_taxonomy else ""
+        key = " (a JSON key)" if hit.json_key else ""
+        sent = " (in the cards sent)" if hit.in_input else ""
         lines.append(
-            f"  {number}. {hit.text} | {hit.where.value} | {hit.kind.value}{marked}{vocabulary} | "
+            f"  {number}. {hit.text} | {hit.where.value} | {hit.kind.value}{marked}{vocabulary}{key}{sent} | "
             f"... {hit.before} [{hit.matched}] {hit.after} ..."
         )
     return lines

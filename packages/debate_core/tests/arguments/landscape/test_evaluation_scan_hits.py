@@ -29,6 +29,7 @@ from debate_core.arguments.landscape.scan_hits import (
     cassette_hits,
     hit_counts,
     input_batch_hits,
+    mark_counts,
     repair_cassette_hits,
 )
 from debate_core.arguments.landscape.source_headings import CaselistNames
@@ -242,3 +243,38 @@ def test_evaluation_scan_hit_counts_are_by_kind_and_field_and_withhold_the_words
     }
     shown_repr = "".join(map(repr, hits)) + repr(SCAN_NAMES)
     assert "cedar" not in shown_repr and "harbor" not in shown_repr
+
+
+def test_evaluation_scan_marks_a_school_whose_name_is_a_key_of_the_prompt_input() -> None:
+    """A school named like a key of the input's JSON is in every batch: structure, not a card's words."""
+    names = ScanNames.of({"Cite": ("CI",)}, ("Cite", "CI"), taxonomy_text=POSITIONS)
+    sent = items_sent("Spending tradeoff")
+
+    hits = input_batch_hits("input batch 1", sent, names)
+
+    assert {(hit.where, hit.kind, hit.matched, hit.json_key, hit.in_input) for hit in hits} == {
+        (HitField.ACROSS_FIELDS, HitKind.SCHOOL, "cite", True, False),
+        (HitField.ACROSS_FIELDS, HitKind.TOURNAMENT, "cite", True, False),
+    }
+    assert name_scan([sent], {"Cite": ("CI",)}, ("Cite", "CI")).schools == 1
+
+
+def test_evaluation_scan_marks_a_rationale_hit_that_repeats_the_cards_sent() -> None:
+    """A rationale repeating a tournament its heading carried is marked; a school it was not sent is not."""
+    text = cassette(
+        items_sent("Spending tradeoff", headings=("Harbor Classic budget",)),
+        "the harbor classic file, as cedar ridge reads it",
+    )
+
+    rationale = [
+        hit for hit in cassette_hits("cassette 1", text, SCAN_NAMES) if hit.where is HitField.RATIONALE
+    ]
+
+    assert {(hit.kind, hit.matched, hit.in_input, hit.json_key) for hit in rationale} == {
+        (HitKind.TOURNAMENT, "harbor classic", True, False),
+        (HitKind.SCHOOL, "cedar ridge", False, False),
+        (HitKind.TOURNAMENT, "cedar ridge", False, False),
+    }
+    assert mark_counts(rationale) == {
+        "model rationale": {"hits": 3, "team_name": 1, "in_taxonomy": 0, "json_key": 0, "in_input": 1}
+    }

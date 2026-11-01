@@ -6,35 +6,37 @@
 | Spec | [`plan_specs/v1/e39-evidence-search-pilot/t28-openev-link-goes-to-the-camps-page.yaml`](../../plan_specs/v1/e39-evidence-search-pilot/t28-openev-link-goes-to-the-camps-page.yaml) |
 | Epic / release | `v1-e39-evidence-search-pilot` / `v1.7` |
 | Branch | `task/v1-e39-t28-openev-link-goes-to-the-camps-page` |
-| Session status | BLOCKED <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | PARTIAL <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
-The count came first (ac1) and it met the spec's stop condition. The stored `camp` is not OpenEv's
-address word: it is the importer's canonical camp name from
-`packages/debate_core/src/debate_core/application/caselist/camp_aliases.yaml`. 14 of the 15 stored
-values are that table's canonical names, and the 15th is `UNKNOWN`. Of the three words the operator
-confirmed, only UTNIF is a stored value. HDC and UM7 are neither stored values nor words of any of the
-106 manifest paths, and the alias table spells neither one. Nothing else the Mac holds records
-OpenEv's own folder word for these files either. So, as the spec and the PM's context say, **no link
-was built**. Nothing outside this report changed. Choosing the camp's address word is the PM's call,
-and it may need a format change: the [question](#questions-for-the-pm) gives the options. The
-phase stays `InProgress`, with ac2 not built and ac3 left to the operator after a merge.
+A camp card's page now links to its camp's page on OpenEv, `https://opencaselist.com/openev/<year>/<word>`,
+labelled *Find on OpenEv: <camp> <year> camp page*, in a new tab with no opener and no referrer. The
+count came first (ac1). It showed the stored camp is the alias table's canonical name, not OpenEv's
+word, so the session stopped and asked. The PM ruled the same evening, and the ruling is written into
+the spec as a dated amendment. `camp_aliases.yaml` gains an `openev` section, a canonical camp to
+OpenEv's word, filled only with words the operator confirmed. The link maps the stored camp through
+it and takes the year, from 2013 to the current season plus one. The season rule moved into
+`debate_core.domain.season`, and the backfile command imports it unchanged. **With the table as
+committed (UTNIF alone), 2 of the 102 camp files with cards link.** The id-based address is gone,
+and the format and the stored OpenEv id are unchanged. The tests were shown failing first (30, all at
+assertions) and 18 mutants were caught. ac3, the coach's check on dev after the merge, is the
+operator's, so the Goal stays `InProgress`.
 
 ## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
-| `openev-link-goes-to-the-camps-page` (Camp page link) | NOT STARTED | Stopped at the count, as the spec says: "No index format change, unless the count shows the stored camp is not the address's word, in which case stop and report" |
+| `openev-link-goes-to-the-camps-page` (Camp page link) | DONE | After the PM's ruling. Its criterion passes |
 
 ## Acceptance criteria
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| ac1, "Counts first: the distinct camp values, how many are one address word, and how many of the 102 camp files with cards get a link, recorded in the report with no camp named beyond the three confirmed" | PASS | [The count](#the-count-first), below. Two read-only scripts in the session's scratch directory, run with `/usr/bin/python3 -I` in 0.46 s. They print counts only, plus yes/no for the three confirmed words |
-| ac2, "A camp card whose stored camp is one address word … links to `https://opencaselist.com/openev/<year>/<camp>` … by tests shown failing first" | NOT RUN | Not built: the count shows the stored camp is not the address's word, the spec's condition to stop and report. A link built from the stored value now would point 96 of the 98 linkable camp files at an address that has not been confirmed |
-| ac3, "After dev's function is deployed with this task, the coach opens one camp card's link on dev and it lands on that camp's page" | NOT RUN | The operator's, after a merge, and no link exists to open |
-| Node criterion "Camp page link tests pass" (`uv run pytest packages/debate_core/tests/domain -k source_link`) | NOT RUN | Nothing changed for it to test. As things stand it would pass on t16's code, which is not this task's link, so its green would mean nothing |
+| ac1, "Counts first: the distinct camp values, how many are one address word, and how many of the 102 camp files with cards get a link, recorded in the report with no camp named beyond the three confirmed" | PASS | [The count](#the-count-first). 15 distinct values, 12 one word besides `UNKNOWN`, 98 linkable under the first rule. Under the amended rule, with the committed table, **2 of 102** ([the link count](#how-many-link)). The PM's ruling: "ac1 stands as done" |
+| ac2, "A camp card whose stored camp has an OpenEv word in `camp_aliases.yaml` and whose year is in OpenEv's archive links to `https://opencaselist.com/openev/<year>/<word>` … in a new tab with no opener and no referrer, with a label that says it opens the camp's page; any other camp card has none; the id-based address is gone; a disclosed card is unchanged; by tests shown failing first" | PASS | [Red](#red-first): 30 failed at assertions against a refuse-everything skeleton. Green: 246 passed. [Mutants](#mutants): 18 of 18 caught. `git grep -E "OPENEV_FILE_URL\|openev_file_url"` over `packages` finds nothing |
+| ac3, "After dev's function is deployed with this task, the coach opens one camp card's link on dev and it lands on that camp's page, which lists the card's file (operator, recorded by the PM)" | NOT RUN | It needs this branch merged and dev's function deployed: [operator follow-up 1](#operator-follow-ups) |
+| Node criterion "Camp page link tests pass" (`uv run pytest packages/debate_core/tests/domain -k source_link`) | PASS | `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest packages/debate_core/tests/domain -k source_link -q`: see [What was run](#what-was-run-before-this-report) |
 
 ## The count first
 
@@ -65,128 +67,219 @@ confirmed camps that are not UTNIF cannot be reached by any stored value. The al
 several spellings into one canonical name, which OpenEv may file as more than one camp. A link built
 from the stored value would be right for 2 files and unconfirmed for 96.
 
+## The PM's ruling, and the amendment
+
+The count's question went to the PM (option (a), the twelve addresses opened by the operator, then
+(b), a word per camp in the alias table). Ruling, 2026-10-31: (b), filled by (a). Each canonical camp
+gets an optional OpenEv word, and only words the operator confirms are filled. `UNKNOWN` never links.
+The archive runs to the current season plus one, with the season rule moved into the domain and
+`debate_cli` added to the packages. No format change. Written into the spec's description as a
+dated "(PM amendment 2026-10-31, from the count.)" paragraph, with ac2's wording and the packages,
+in `015f887`. `validate_specs.py` passed, and the parsed description was printed to check the
+paragraph is text.
+
+## The link
+
+* **Address:** `https://opencaselist.com/openev/<year>/<word>` (`OPENEV_CAMP_PAGE_TEMPLATE`). The word
+  is `camp_aliases.yaml`'s `openev` entry for the stored camp. The year is the occurrence's
+  `camp_year`. Nothing else is read: not the title, the event, `openev_id` or the request.
+* **No link** for:
+  * a camp with no word;
+  * `UNKNOWN`, whatever the table says;
+  * a word that is not one address word (`[A-Za-z0-9]+`, matched whole) or is `UNKNOWN`;
+  * a year that is not an integer, or is outside 2013 to `current_season_start(today) + 1`;
+  * an occurrence past the provenance limit.
+* **Today** is the app's clock, `services.clock().date()`, so tests set it.
+* **Label:** *Find on OpenEv: <camp> <year> camp page*, with the stored camp, the name the card's
+  provenance line already shows. It says the link opens the camp's page, not the file.
+* **Disclosed cards** are unchanged: the camp branch is chosen by the `openev` store alone. The results
+  page shows no link.
+* **The table** refuses, at load, an `openev` section that is:
+  * not a mapping;
+  * naming something that is not a camp of the table, or `UNKNOWN` even when listed as a camp;
+  * giving a word that is not one address word;
+  * giving one word to two camps.
+
+  The refusal stops the importer and the app's start, never a link. Matching never reads the
+  section: the same path parses the same with or without it (a test).
+* **The stored `openev_id`** is kept, unchanged, for a later per-file link, which would need the file's
+  path too. The index format is unchanged, and t16's join still writes the id.
+
+### How many link
+
+Counted by the real rule (`source_link` over each of the 102 camp files with cards, from the Mac's
+`caselist_camp_files`, read-only), with the packaged table: **2 of the 102 link, from 1 camp**
+(UTNIF). The other 100 have no word yet.
+
+## Red first
+
+The tests were committed with a skeleton (`52ba2b9`) in which the camp link returns `None` and the
+table reads no words, with every signature and field in place:
+
+```text
+.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest -p no:randomly -n 0 -q --tb=line <the six test files>
+30 failed, 152 passed in 6.13s
+```
+
+Every failure was at its assertion: 16 asserts, and 14 refusals that did not raise. None was an
+error or a crash. The 152 that passed are the disclosed-card, season and existing tests, which the
+skeleton does not touch. Green after `0b642af`: 246 passed in 3.13s (the same files plus
+`test_camp_metadata.py`).
+
+## Mutants
+
+Run by a scratch script that applies one mutant, runs the four covering test files
+(`test_search_source_links.py`, `test_camp_openev_words.py`, `test_search_pages_find_on_openev.py`,
+`test_search_pages_follow_ups.py`) with `-n 0 -p no:randomly`, and restores the file from `HEAD`.
+These tests use no Hypothesis, but each run still set `HYPOTHESIS_STORAGE_DIRECTORY` to a new empty
+directory (agreement 8). The tree was clean after both halves.
+
+| Mutant | Caught by | Failed |
+|---|---|---|
+| 1, the link built from the title | the domain link tests | 14 |
+| 1b, the title's first word when it is one | the same | 27 |
+| 2, the event in the address | the same | 13 |
+| 3a, a word with a space linked (the link's check removed) | `test_a_word_that_is_not_one_address_word_has_no_link` | 6 |
+| 3b, a word with a space accepted (the table's check removed) | `test_a_section_that_is_not_camps_to_words_is_refused` | 4 |
+| 4a, a year past the season plus one linked | the year test, and the page's clock test | 3 |
+| 4b, a year before 2013 linked | the year test (2012) | 1 |
+| 4c, the season counted from the machine's date, not the app's clock | the year test, and the page's clock test | 3 |
+| 4d, only the current season, not plus one | the year test | 4 |
+| 5, the link kept past the provenance limit | `test_a_camp_card_past_the_provenance_limit_has_no_link[its camp still held]` | 1 |
+| 6, a referrer sent (`rel="noopener"`) | the page tests' exact markup | 5 |
+| 7, a disclosed card given an OpenEv link | `test_a_disclosed_card_never_links_to_openev_whatever_it_holds` | 1 |
+| 8, a camp with no table word linked (`get(camp, camp)`) | `test_a_camp_with_no_word_in_the_table_has_no_link` | 3 |
+| 9a, UNKNOWN linked (the link's check removed) | `test_unknown_never_links_whatever_the_table_says`, and its page test | 3 |
+| 9b, UNKNOWN given a word (the table's check removed) | `test_unknown_gets_no_word_even_when_a_table_lists_it_as_a_camp` | 1 |
+| 10, the stored camp used directly, bypassing the table | the domain link tests | 16 |
+| 11, the page passes no words | the page tests | 5 |
+| 12, two camps given one word (the table's check removed) | the refusal test's shared-word case | 1 |
+
+All 18 failed at assertions (or a refusal not raised), none at collection. 9b was a survivor before
+it had a test: the "not a camp of the table" check masked the `UNKNOWN` check, since no test table
+listed `UNKNOWN` as a camp. Its test was added in `f8f1706`, before the counted run.
+
 ## Files changed
 
-* `docs/session-reports/v1-e39-t28-openev-link-goes-to-the-camps-page.md`: this report.
+* `packages/debate_core/src/debate_core/domain/`:
+  * `search_source_links.py`: the camp-page link, `OPENEV_CAMP_PAGE_TEMPLATE`,
+    `OPENEV_ARCHIVE_FIRST_YEAR`, `OPENEV_CAMP_WORD_PATTERN`, `openev_camp_page_url`, and the docstring's
+    t16 section rewritten. `OPENEV_FILE_URL_TEMPLATE` and `openev_file_url` are gone.
+  * `season.py` (new): the season rule.
+  * `evidence_search.py`, `search_index.py`: docstrings on what `openev_id` is still for.
+* `packages/debate_core/src/debate_core/application/caselist/`:
+  * `camp_metadata.py`: `CampAliases.openev_words` and the section's checks.
+  * `camp_aliases.yaml`: the `openev` section, with UTNIF's word and how to add one.
+* `packages/debate_api/src/debate_api/`: `state.py` (`PilotServices.openev_camp_words`), `container.py`
+  (loads the packaged table), `search_pages.py` (passes the words and the clock's date).
+* `packages/debate_cli/src/debate_cli/commands/caselist_backfile.py`: imports the season rule.
+* Tests, new: `test_season.py`, `test_camp_openev_words.py`, `test_search_pages_find_on_openev.py`
+  (t16's `test_search_pages_open_on_openev.py`, renamed and rewritten), and one CLI test. Changed: [the
+  list below](#existing-tests-that-changed).
+* Docs:
+  * `docs/data/search-index.md`: the link and the count.
+  * `docs/runbooks/evidence-search.md`: format 3's step 3 check is done, and camp cards link from the
+    function's deploy.
+  * `docs/runbooks/caselist-cloud-run.md`: the hold is removed.
+* The spec: the PM's amendment.
 
-Nothing else. `OPENEV_FILE_URL_TEMPLATE`, t16's tests, the docs and the runbooks are unchanged. The
-`caselist-cloud-run.md` hold on images carrying t16 **stays**: the year-page link is still the only
-link in the code, and no stored camp file has an id, so it still shows nowhere.
+### Existing tests that changed
+
+| Test | Change | Why |
+|---|---|---|
+| `test_search_source_links.py`, t16's OpenEv section | Replaced by the camp-page tests | The id-based link is gone |
+| The same file's disclosed-card tests | Call `source_link` through a `linked` helper passing the words and a date | Both arguments are required, so a missed wiring fails loudly |
+| `test_search_pages_open_on_openev.py` | Renamed `test_search_pages_find_on_openev.py` and rewritten | The link, its label and its source changed |
+| t16's `test_on_a_format_two_index_no_camp_card_links` | **Now `test_on_a_format_two_index_the_camp_card_links_too`, on purpose** | Camp and year are in every format, so format 2 shows the link |
+| t16's `test_a_camp_card_whose_index_row_has_no_openev_id_shows_no_link` | Replaced by the no-word and `UNKNOWN` page tests | An id no longer decides the link |
+| `test_search_pages_follow_ups.py`: the camp-card no-link test | Renamed `…without_an_openev_word_for_its_camp` | The default test world's table has no words, which is now the reason |
+| `packages/debate_api/tests/conftest.py`: `PilotWorld` | Takes `openev_camp_words`, empty by default | `PilotServices` requires the field |
+| `test_caselist_backfile_survey.py` | One test added: the command's rule is the domain's | The move keeps one copy |
 
 ## Deviations from the spec
 
-1. **Stopped at ac1, as the spec allows.** The spec says "No index format change, unless the count
-   shows the stored camp is not the address's word, in which case stop and report", and the PM's
-   context adds "then the camp needs its own column, which is a format change and the PM's call". The
-   count shows exactly that, so ac2, the docs, the runbook edits and the mutants were not started.
+1. **The session stopped at the count before the ruling**, as the spec said to. The PM's ruling is
+   now the spec's amendment ([above](#the-pms-ruling-and-the-amendment)).
+2. **The OpenEv words are one top-level `openev:` section** (`camp: word`), not a key inside each
+   camp's entry, which is a list of spellings. That keeps the `camps` section's shape and the
+   importer's reading of it unchanged. Each canonical camp still gets at most one optional word.
+3. **Outside `constraints.packages`:** one test in `packages/debate_cli/tests/`, which pins that the
+   backfile command reads the domain's rule. The amendment added `debate_cli`, not its tests
+   directory.
 
 ## Decisions and assumptions
 
-These are for whichever task builds the link once the PM has ruled. None was built here.
-
-* **`UNKNOWN` gets no link.** It is one word of capitals, so the spec's "one address word" rule alone
-  would link `/openev/2026/UNKNOWN`. That is 1 of the 102 files.
-* **The current season is `current_season_start`**, the repository's only rule for it
-  (`packages/debate_cli/src/debate_cli/commands/caselist_backfile.py`: the season starts on 1 August).
-  It lives in `debate_cli`, so the link in `debate_core.domain` needs it moved into the domain, for
-  example a small `debate_core/domain/season.py` that the CLI imports. That touches `debate_cli`,
-  which is outside this spec's packages. The card page has the date through `services.clock()`.
-* **That rule refuses the next topic year for about two months.** OpenEv's camps publish a topic
-  year's files in June and July, before the season the rule counts starts on 1 August. Under the
-  rule, a 2027 camp file imported in July 2027 would get no link until 1 August. The PM may prefer
-  "up to the current season plus one".
-* **No network call, and the published dev index was not read.** The local stores answered the
-  question, and every local index agrees with them.
-
-## Questions for the PM
-
-Paste-ready:
-
-> **v1-e39-t28, one question. The stored camp is not OpenEv's address word.**
->
-> Counted read-only on the Mac. The 102 camp files with cards (all `2026-policy`) are stored under 15
-> camp values: 14 are canonical names from `camp_aliases.yaml`, the 15th is `UNKNOWN`. 12 are one
-> address word, which would give 98 of the 102 files a link. Of the confirmed words, only **UTNIF**
-> (2 files) is a stored value. **HDC and UM7 are neither stored values nor words in any of the 106
-> manifest paths, and the table spells neither.** The hand import's paths have no `<camp>` folder,
-> and nothing on the Mac keeps the API listing's own `camp` field (`OpenEvFile.camp`). So no stored
-> value is known to be OpenEv's folder word except UTNIF. Under the spec's rule, the link would be
-> right for 2 files and unconfirmed for 96.
->
-> Options:
->
-> **(a) Measure, then decide. No code.** The operator prints the 12 addresses the rule would build
-> (operator follow-up 1; the terminal only, never the report) and opens each one signed in. They tell
-> the PM how many land on a camp page that lists files. If all 12 do, t28 goes ahead as written, with
-> `UNKNOWN` refused. If some do not, choose from (b) to (d) for those camps.
->
-> **(b) An OpenEv word for each canonical camp, in the alias table. No format change.** Each camp in
-> `camp_aliases.yaml` gains an optional `openev:` word, filled once a season from OpenEv's sidebar.
-> The link maps the stored camp through it, and a camp without one gets no link. This covers the 102
-> hand-imported files. A canonical camp that gathers spellings OpenEv files as two camps gets no
-> `openev:` word, so no link. t28's rule becomes "camp, through the table, and year".
->
-> **(c) A new index column for OpenEv's own camp word, from the listing's `camp`. Format 4.** The pull
-> writes `OpenEvFile.camp` onto the manifest row, and the build joins it as t16 joins `openev_id`.
-> This is exact for every file the pull imports from now on, but gives **none of the 102**
-> hand-imported files a link, and it is a manifest and format change with t16's deploy order.
->
-> **(d) Drop the camp link from the pilot.**
->
-> **Recommendation: (a), then (b) for any camp it does not confirm.** (a) is twelve pages and no code,
-> and it may show most canonical names already work. (b) is the only option that reaches this
-> season's 102 files, and it needs no format change or deploy order. (c) is the right long-term source
-> for pulled files, and can come later beside (b) if the table drifts.
->
-> Either way, two choices for the amended spec: `UNKNOWN` gets no link (it is one word), and "the
-> current season" is `current_season_start` (1 August) moved into the domain. That touches
-> `debate_cli`. It refuses a new topic year's camp files in June and July, so "current season plus
-> one" may be better.
+* **The label uses the stored camp** (the card's provenance line already shows it), and the address
+  uses the table's word.
+* **`today` is the app's clock**, passed in. The domain reads no clock, and a page test moves the
+  clock to show the bound follows it (mutant 4c).
+* **The table is loaded once, when the function starts**, through the same packaged
+  `camp_aliases.yaml` the importer reads. It is already in the wheel and in the API's import graph,
+  through `card_download` and `openev_manifest`. A malformed section stops the start.
+* **No smoke check names the link.** t16 added none either. The link is checked live by ac3.
+* **The affected set is 396 test files**, mostly because any edit to `camp_aliases.yaml` reaches every
+  test that imports `camp_metadata` (328 for the yaml alone, measured). That is past two minutes, so it
+  is left to the pull request's `ci` (agreement 10). [What was run](#what-was-run-before-this-report)
+  instead.
 
 ## Operator follow-ups
 
-1. **Only if the PM chooses (a): open the addresses the rule would build.** This reads the Mac's
-   caselist database read-only and prints one address per one-word stored camp. The words are camp
-   names, so they stay in the terminal: report only the counts to the PM.
+1. **ac3, after the merge: deploy dev's function, then the coach opens one camp card's link.** The
+   deploy is [Moving the index to format 3](../runbooks/evidence-search.md#moving-the-index-to-format-3),
+   step 1, from `$WT`, the checkout on `dev` after the merge. First the rehearsal, which calls no AWS:
 
-   **Operator command** (expected runtime under a second)
-   Where: your Mac, anywhere
+   **Operator command** (expected runtime ~3 min)
+   Where: `$WT`
    ```bash
-   python3 -I -c 'import os, re, sqlite3; db = sqlite3.connect("file:" + os.path.expanduser("~/.debate-research/dev/debate.sqlite3") + "?mode=ro", uri=True); camps = sorted({(year, camp) for year, camp in db.execute("select year, camp from caselist_camp_files") if re.fullmatch("[A-Za-z0-9]+", camp) and camp != "UNKNOWN"}); print("\n".join(f"https://opencaselist.com/openev/{year}/{camp}" for year, camp in camps) or "STOP: no camp in the store")'
+   cd "$WT"
+   git pull --ff-only
+   uv sync --all-packages
+   scripts/tub_deploy.sh dev --dry-run
    ```
-   Success looks like 12 lines, each `https://opencaselist.com/openev/2026/<word>` (the session ran it
-   and counted 12 well-formed lines without printing them). Open each one in a browser signed in to
-   openCaselist. Tell the PM how many of the 12 open a camp's page that lists files, and how many open
-   something else (an empty page, a year page or an error).
+   Success looks like the image built and the script stopping before the push. Then the deploy:
 
-2. **ac3** stays the operator's after whichever task builds the link merges: deploy dev's function
-   (`evidence-search.md`, Moving the index to format 3, step 1), then the coach opens one camp card's
-   link on dev. Not listed as a block here, because no link exists yet.
+   **Operator command** (expected runtime ~3 min; changes dev's function)
+   Where: `$WT`
+   ```bash
+   cd "$WT"
+   scripts/tub_deploy.sh dev
+   ```
+   Success looks like `{"status":"ok"}` and `Deployed <sha> to dev`, where `<sha>` holds this task's
+   merge. Then the coach signs in on dev and opens a camp card from a camp the table has a word for
+   (UTNIF's, as committed). They check that it shows *Find on OpenEv: <camp> 2026 camp page*, and they
+   open it. **Report back to the PM:** whether it landed on that camp's OpenEv page and the page lists
+   the card's file (yes or no, and what it showed if not).
 
 ## Follow-up work
 
-* **The camp-page link itself**, once the PM rules: t28 continued with an amended spec, or a new task
-  for (b) or (c).
-* **`OpenEvFile.camp` is seen by the pull and stored nowhere** (E30 or E34). Whatever the ruling, a
-  pulled file's own OpenEv camp is the one exact source of the address word. Keeping it on the
-  manifest row costs little and is what (c) needs.
+* **Keeping the pull's `OpenEvFile.camp` on the manifest row** goes into the PM's next batch as a p3
+  task (the PM's ruling). It is the exact source of the word for files the pull imports.
+* **More words:** any camp whose page the operator confirms later is one line in `camp_aliases.yaml`'s
+  `openev` section and the packaged-table test's expected value, in a small task.
 
 ## What was run before this report
 
+Every test run was bounded with `.venv/bin/python scripts/hard_stop.py 115`, with CI's markers
+(`-m "not slow and not live"`) and `-n auto` unless noted.
+
 | Command | Result |
 |---|---|
-| `/usr/bin/python3 -I <scratch>/count_camps.py` | The counts above, in 0.46 s |
-| `/usr/bin/python3 -I <scratch>/count_confirmed.py` | HDC 0 and UM7 0 (paths naming it, files stored under it); UTNIF 2 and 2 |
-| `.venv/bin/python -I -c …` (stored values against the alias table's keys) | 15 stored, 14 canonical names, `UNKNOWN` present |
-| Operator follow-up 1's command, piped to a line count | 12 lines, 12 well-formed |
-| `git diff HEAD origin/dev -- plan_specs/v1/e39-evidence-search-pilot/` | Only the start commit's phase: no PM amendment since the branch started |
-| A count of the manifest paths' folders | 105 rows with a folder, 1 distinct folder, 0 folders that are a camp spelling or a confirmed word |
-| `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python scripts/affected_tests.py --run` | 35 test files (the always-run list and the report and spec readers; only this report changed): **1667 passed in 92.45 s**, pytest exited 0 after 94 s |
-| `uv run --frozen ruff check .`, `ruff format --check .` | All checks passed; 1729 files already formatted |
-| `uv run --frozen lint-imports` | 20 kept, 0 broken |
-| pyright | Not run: no Python changed |
-| `scripts/check_command_blocks.py --base origin/dev`, `scripts/check_links.py`, `scripts/docs_index.py --check-descriptions` | OK: no `#` comments in 636 blocks (this report among them); 3232 links and anchors OK; 61 documents described |
-| `uv run scripts/validate_specs.py` | OK: 549 files, 41 epics, 486 tasks, 22 releases. The Goal stays `InProgress` |
+| The count scripts (`count_camps.py`, `count_confirmed.py`, `/usr/bin/python3 -I`) | [The count](#the-count-first), 0.46 s |
+| `count_linked.py` (`source_link` over the 102 files, the packaged table, `.venv/bin/python -I`) | 2 linked, 100 not, 1 camp |
+| `uv run scripts/affected_tests.py` (the list only) | **396 test files**: past two minutes, so not run and left to the pull request's `ci` (agreement 10). Within the limit instead: |
+| The always-run list (`tests/architecture tests/specs`, the CLI's `test_app.py`, `test_help_rendering.py`, `test_container_factories.py`), plus `packages/debate_core/tests/domain` and `test_caselist_backfile_survey.py` | 1513 passed in 26.63s |
+| `packages/debate_api/tests` | 1102 passed in 8.15s |
+| `packages/debate_core/tests/application/caselist` | 1759 passed in 73.25s |
+| `packages/debate_core/tests/application`, caselist apart | 2948 passed in 16.43s |
+| The other tests that read the changed docs or the alias table: `packages/debate_cli/tests/bucket_mode`, `test_search_index_sqlite_features.py`, `test_camp_names_in_openev_files.py`, `tests/docs/test_backfile_import_plan_check.py` | 290 passed in 112.09s, at a load average near 16 |
+| `tests/scripts/test_caselist_run_image_plan_check.py` | 41 passed in 1.48s |
+| Two earlier batches that combined those runs | Stopped by `hard_stop` at 115 s, with no failure before the stop. Split and rerun as above |
+| The node criterion, `pytest packages/debate_core/tests/domain -k source_link -q` | 77 passed in 3.88s |
+| `uv run --frozen ruff check .`, `ruff format --check .` | All checks passed; 1732 files already formatted |
+| `uv run --frozen pyright` (the whole repository) | 0 errors, 0 warnings |
+| `uv run --frozen lint-imports`, `scripts/check_thin_handlers.py` | 20 kept, 0 broken; 70 handlers within 25 statements |
+| `scripts/check_links.py`, `scripts/check_command_blocks.py --base origin/dev`, `scripts/docs_index.py --check-descriptions` | OK |
+| `uv run scripts/validate_specs.py` | OK (after the amendment, and again at the end). The Goal stays `InProgress` for ac3 |
 
 ## PM review
 

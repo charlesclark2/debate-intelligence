@@ -121,9 +121,36 @@ None. The affected set (about 4 minutes) is the pull request's `ci` check's, und
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-31
 
 **Notes:**
+
+The cause of the identity failures is now on screen, which was the point.
+1. **ac1 passes.**
+   * Red on a signature-only skeleton: 4 failed, all at assertions. The no-profile test passed at
+     red because it pins behaviour that already existed, and the report says so.
+   * Green: 24, then 820 over the changed areas. The node criterion passes (48).
+   * All nine mutants are caught at the intended assertions, the PM's five among them (3 and 4 each
+     in several forms).
+2. **The publish refusal carrying the sidecar's warnings: accepted, parser warning included.**
+   * A sidecar from another parser causes the same identity failures and leaves the coach with the
+     same blank, so narrowing it to the profile warning would only hide a cause.
+   * The PM read `_quality_refusal`: it adds only the `sidecar` check's WARN messages, which name
+     versions and never a path or a card.
+3. **Decisions accepted:**
+   * the wording, which mirrors the parser warning and gives the identity explanation once;
+   * a sidecar with no profile stays the existing FAIL (the field has been required since t02), now
+     pinned by two tests;
+   * no new field on the quality report, since `.quality.json` travels with published files;
+   * the synthetic file made by rewriting the sidecar and moving one card's bound;
+   * the publish test as a dry run, with no moto.
+4. **Follow-up (publish printing the warned checks' finding lines):** folded into `v1-e33-t16`
+   (publish names an older quality report) by the PM's next batch. It is the same service and the
+   same reader.
+5. **Closing checks:** the affected set (91 files, about 4 minutes) is left to the PR's `ci` under
+   agreement 10. The changed areas, the files smoke checks and the always-run list (820), ruff,
+   pyright, lint-imports, thin handlers and the specs are clean.
+6. **Merge:** a plain `scripts/task pr` once `ci` is green. No operator step follows.

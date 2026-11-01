@@ -228,9 +228,38 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-31
 
 **Notes:**
+
+Both halves are done, and the contract finding is the more valuable one: written the obvious way, the
+contract would have been kept forever and guarded nothing.
+1. **The selector.**
+   * An unnamed Python change selects 30 → 20 files. You read each of the ten that leave by hand,
+     and none lists a folder.
+   * The planted `os.walk` and path-variable `.walk()` rejoin (20 → 22).
+   * On `387c961`: 259 → 253 files, 10 → 9 API files, six leaving, none joining.
+   * Deviation 2 is right, and you showed why: `test_card_download_image.py` leaves the
+     every-change set but stays on `387c961` through the parser module its assertion names.
+   * The rule fails toward more tests in every case you list: a bare `walk(`, an attribute, an
+     expression, a rebound name, a file that does not parse.
+2. **The contract.** Your probe table is the evidence that matters.
+   * `["debate_api"]` is kept vacuously.
+   * `debate_api.**` misses an import in the package's `__init__`.
+   * Only `as_packages = false` with both sources breaks in every case.
+
+   The committed planted cases make mutant 4 (a mistyped module, kept vacuously) fail, which is the
+   check that the contract names a real module. lint-imports now reports 20 kept.
+3. **Red then green** for both. Seven mutants, all caught at assertions. Dropping the two early
+   returns no mutant could see, and re-measuring after, is agreement 8 applied properly.
+4. **Deviation 1:** `tests/architecture/test_import_contracts.py` was needed, because the suite
+   refuses a contract with no planted case. The PM's next batch adds `tests/architecture` to the
+   spec's packages, with the ruling.
+5. **Closing checks:** the affected set (39 files) stopped at about 94% at its limit with nothing
+   failing, and is left to the PR's `ci` under agreement 10. The selector and CI-selection tests
+   (230), the always-run list (392), ruff, CI's pyright, lint-imports, thin handlers, the specs and
+   the doc checks are clean.
+6. **Merge:** a plain `scripts/task pr` once `ci` is green.

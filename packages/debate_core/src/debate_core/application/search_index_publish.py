@@ -52,6 +52,14 @@ the reason and what it passed are in the publish's result and its log line. They
 manifest or the pointer: the deployed function reads both with `extra="forbid"`, so a new field
 would make it refuse the index (PM ruling 2026-10-22). The weekly stage never passes a reason.
 
+## The index `current.json` already names (`v1-e39-t19`, `v1-e39-t25`)
+
+Is never uploaded again by the weekly stage or by `--newest`
+(:meth:`~SearchIndexPublishService.publish_newest`): what a rebuild of it was checked against is
+written beside its manifest instead, `checked-against.json`
+(:meth:`~SearchIndexPublishService.record_checked_against`), and only when it differs from what is
+recorded there already. `--index` publishes the directory it names whole, as it always has.
+
 Nothing here deletes. Pruning superseded versions is `v1-e39-t07`'s, under the removal credential.
 """
 
@@ -161,8 +169,8 @@ class SearchIndexAlreadyCurrent(DomainError):
             "list changes, and `--index <directory>` publishes another index you name."
         )
         super().__init__(
-            f"index {index_id} is already current: current.json names it, and it is recorded as checked against "
-            "what this build of it read. Nothing was written, and current.json is as it was"
+            f"index {index_id} is already current: current.json names it, and it is recorded as checked "
+            "against what this build of it read. Nothing was written, and current.json is as it was"
         )
 
 
@@ -645,8 +653,24 @@ class SearchIndexPublishService:
     async def publish_newest(
         self, directory: Path, *, allow_shrink: str | None = None
     ) -> PublishedSearchIndex | RecordedCheck:
-        """`tub index publish --newest`: :meth:`publish`, unless `current.json` already names the index."""
-        return await self.publish(directory, allow_shrink=allow_shrink)
+        """`tub index publish --newest`: :meth:`publish`, unless `current.json` already names the index.
+
+        Then nothing of the index is uploaded again and the pointer is not moved, so no environment
+        downloads an unchanged index (`v1-e39-t25`). What this build of it was built from is recorded
+        beside its manifest (:meth:`record_checked_against`), or, when that is what it is already
+        recorded as checked against, :class:`SearchIndexAlreadyCurrent` is raised and nothing is
+        written. :meth:`check` comes first either way, so a directory publish refuses, a restored
+        manifest without its files among them, is refused here too.
+        """
+        reason = _shrink_reason(allow_shrink)
+        manifest = self.check(directory)
+        current, unreadable = await self._current_for(manifest, reason)
+        if current is None or current.index_id != manifest.index_id:
+            return await self._upload(directory, manifest, current, unreadable, reason)
+        recorded = await self.record_checked_against(manifest, current)
+        if recorded is None:
+            raise SearchIndexAlreadyCurrent(manifest.index_id)
+        return recorded
 
     async def _current_for(
         self, manifest: SearchIndexManifest, reason: str | None

@@ -76,7 +76,14 @@ from debate_core.application.search_index_refresh import SEARCH_INDEX_DIRECTORY,
 from debate_core.application.settings import Environment, Settings
 from debate_core.domain.search_index import DEFAULT_PROVENANCE_LIMIT
 
-__all__ = ["DEFAULT_OUT_DIRECTORY", "build", "build_summary", "publish", "publish_summary", "recorded_summary"]
+__all__ = [
+    "DEFAULT_OUT_DIRECTORY",
+    "build",
+    "build_summary",
+    "publish",
+    "publish_summary",
+    "recorded_summary",
+]
 
 DEFAULT_OUT_DIRECTORY = SEARCH_INDEX_DIRECTORY
 """Where `build` writes when `--out` is not given: `<data_dir>/tub-index`, where the weekly run's
@@ -174,9 +181,11 @@ def publish(
     published = run_holding_the_bucket_lock(
         cli,
         "tub index publish",
-        lambda: service.publish_newest(index, allow_shrink=allow_shrink)
-        if newest
-        else service.publish(index, allow_shrink=allow_shrink),
+        lambda: (
+            service.publish_newest(index, allow_shrink=allow_shrink)
+            if newest
+            else service.publish(index, allow_shrink=allow_shrink)
+        ),
     )
     if isinstance(published, RecordedCheck):
         cli.output.success(command_name(ctx), recorded_summary(published), display=_recorded_table(published))

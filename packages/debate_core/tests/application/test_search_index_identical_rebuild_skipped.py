@@ -28,8 +28,14 @@ from typing import Final
 
 import pytest
 
-from debate_core.application.caselist.run_lock import CLOCK_SKEW_MARGIN, LEASE, RUN_LOCK_KEY, BucketRunLock
-from debate_core.application.caselist.run_lock import HolderKind, RunLockLost
+from debate_core.application.caselist.run_lock import (
+    CLOCK_SKEW_MARGIN,
+    LEASE,
+    RUN_LOCK_KEY,
+    BucketRunLock,
+    HolderKind,
+    RunLockLost,
+)
 from debate_core.application.caselist_sync import StageOutcome
 from debate_core.application.ports.parsed_store import OPENEV_STORE
 from debate_core.application.search_index_publish import (
@@ -52,8 +58,16 @@ from debate_core.integrations.s3 import S3EvidenceObjectStore
 from debate_core.integrations.s3.run_lock_object import S3LockObject
 
 from .test_caselist_sync_run_state import run_state
-from .test_search_index_refresh_checked_against import CAMP_TEXTS, STOPS_NOTHING, BucketWorld, Locked
-from .test_search_index_refresh_checked_against import first_publish, key, published_once, record_key
+from .test_search_index_refresh_checked_against import (
+    CAMP_TEXTS,
+    STOPS_NOTHING,
+    BucketWorld,
+    Locked,
+    first_publish,
+    key,
+    published_once,
+    record_key,
+)
 from .test_search_index_refresh_checked_against import locked as locked  # noqa: F401 - a fixture
 from .test_search_index_refresh_checked_against import world as world  # noqa: F401 - a fixture
 from .test_search_index_stage import PARSER, STORES, suppression_of, write_store
@@ -114,7 +128,9 @@ def test_search_index_stage_skips_the_rebuild_a_restored_record_matches_and_writ
     assert report.outcome is StageOutcome.SKIPPED
     assert report.counts is not None
     assert (report.counts.index_id, report.counts.built, report.counts.published) == (index_id, False, False)
-    assert report.counts.documents == 2, "the record's count: one caselist card stopped, one kept, one camp card"
+    assert report.counts.documents == 2, (
+        "the record's count: one caselist card stopped, one kept, one camp card"
+    )
     assert (
         f"unchanged since {index_id}, which {CHECKED_AGAINST_NAME} beside its restored manifest says was "
         "checked against these sources, so it is not rebuilt"
@@ -220,9 +236,10 @@ def test_search_index_stage_a_restored_record_naming_another_manifest_is_not_tru
         suppression=sources.suppression_list,
         counts=restored.counts,
     )
-    assert planted.manifest_sha256 != hashlib.sha256(
-        (directory / SEARCH_INDEX_MANIFEST_NAME).read_bytes()
-    ).hexdigest()
+    assert (
+        planted.manifest_sha256
+        != hashlib.sha256((directory / SEARCH_INDEX_MANIFEST_NAME).read_bytes()).hexdigest()
+    )
     (directory / CHECKED_AGAINST_NAME).write_bytes(planted.to_json_bytes())
 
     report = world.refresh()
@@ -339,7 +356,9 @@ def test_publish_newest_writes_the_record_under_the_runs_lock(locked: Locked) ->
     result = asyncio.run(publisher(world).publish_newest(directory))
 
     assert isinstance(result, RecordedCheck)
-    assert locked.lock_versions() == before + 1, "the record's write renewed the lease, and nothing else wrote"
+    assert locked.lock_versions() == before + 1, (
+        "the record's write renewed the lease, and nothing else wrote"
+    )
     assert world.versions() == {**published_once(index_id), record_key(index_id): 1}
 
 

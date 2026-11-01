@@ -203,3 +203,13 @@ repository's own options. That test fails at the start commit with the operator'
    deploy. The first validate-dev run on a pre-release with this branch is ac1's last part. Once its
    cloud job is green (`== dev cloud tier: passed`), the PM records it and sets the Goal. That run's
    release is then green, and Monday's deploy takes it.
+
+## Operator records (recorded by the PM, 2026-10-31)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac1, last part: the cloud tier passes against dev on the next validate-dev run | NOT RUN | PASS | validate-dev run `41255710332` on `a21bb68` (the ROADMAP refresh after this task's merge `f58eb04`; pre-release `v1.1.0-dev.251`): green, every job `success`, the cloud job included. The three runs before it (on `caf1708` and `31e533e`, before the merge) failed on the cloud job alone, every other job passing |
+
+Every criterion passes, so the Goal is `Succeeded`. `v1.1.0-dev.251` is the release Monday 2026-11-02's image deploy is pinned to.

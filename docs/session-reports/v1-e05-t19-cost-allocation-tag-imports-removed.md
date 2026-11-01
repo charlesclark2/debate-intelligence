@@ -242,3 +242,13 @@ The import blocks are gone, and the check the operator reads is now right for th
    imports" from `cost-allocation-tags-apply` at `origin/dev`: `No changes.` and `PLAN OK: the two
    tags, Project unchanged and Environment unchanged, …`, then the PM's read, and no apply. That
    closes the Goal.
+
+## Operator records (recorded by the PM, 2026-10-31)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac1: the operator's plan of the root then shows no change to the tags (operator, read by the PM) | NOT RUN | PASS | 2026-10-31, "Planning this root after the imports" from the `cost-allocation-tags-apply` worktree at `origin/dev` `5949bba` (this task's merge), as `DebateBreakGlassAdmin`: the plan `No changes. Your infrastructure matches the configuration.`, no `Plan:`, error, destroy or replace line; `COSTTAGSPLAN` printed `PLAN OK: the two tags, Project unchanged and Environment unchanged, each Active; nothing else changes; permission set or assignment changes: 0; budget changes: 0`; read by the PM. No apply |
+
+Every criterion passes, so the Goal is `Succeeded`.

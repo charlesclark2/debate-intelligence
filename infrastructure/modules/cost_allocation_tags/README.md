@@ -8,7 +8,8 @@ Called once, from [`bootstrap/organization`](../../bootstrap/organization/budget
 allocation tags are account billing settings, and dev and prod share one account (ADR-0010). The
 environment budgets filter on `user:Environment` and the cost anomaly monitor on `user:Project`; an
 inactive tag makes them read $0. The operator activated both by hand on 2026-10-30, and two `import`
-blocks in the root adopt them without changing them.
+blocks in the root adopted them on 2026-10-31 without changing them; they were removed once both tags
+were in state (`v1-e05-t19`).
 
 ## What it creates
 

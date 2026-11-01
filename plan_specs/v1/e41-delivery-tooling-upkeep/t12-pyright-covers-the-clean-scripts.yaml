@@ -1,0 +1,74 @@
+# TASK v1-e41-t12-pyright-covers-the-clean-scripts - CI's pyright covers the scripts already clean, so they stay clean
+# Epic: E41 — Delivery Tooling Upkeep | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e41-t12-pyright-covers-the-clean-scripts
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+  annotations:
+    debate/title: "CI's pyright covers the scripts already clean, so they stay clean"
+spec:
+  # Filed by the PM, 2026-10-31, from v1-e41-t09's Follow-up work (the PM's review, 2026-10-31).
+  description: >-
+    CI runs a bare `uv run --frozen pyright`, whose scope is `[tool.pyright].include` in
+    pyproject.toml (`packages`, `tests/architecture`, `tests/smoke`).
+    `scripts/validate_specs.py` (clean since v1-e41-t09), `scripts/task_helper.py` and
+    `scripts/affected_tests.py` are clean but outside it, so nothing keeps them so. Add the
+    three by name to the include (not `scripts/`, whose other eight files hold 12 errors), and
+    show pyright clean over the new scope. Say what the pyproject change selects in CI, and that
+    the next change introducing a type error in one of the three is refused.
+  priority: 3
+  constraints:
+    packages: [pyproject.toml, tests/scripts]
+    forbidden:
+      - "`scripts/` included whole while other scripts carry errors"
+      - A type error silenced to pass
+  context:
+    - kind: TaskRef
+      name: v1-e41-t09-validate-specs-pyright-and-start-refuses-unknown
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The three scripts are in pyright's include by name, `uv run --frozen pyright` over
+        the new scope is clean, and a planted type error in one of them fails it, shown in
+        the report.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e41-t12-pyright-covers-the-clean-scripts-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+spec:
+  description: >-
+    CI's pyright covers the scripts already clean, so they stay clean.
+  goalRef:
+    name: v1-e41-t12-pyright-covers-the-clean-scripts
+  graph:
+    nodes:
+      - id: pyright-covers-the-clean-scripts
+        kind: Task
+        name: Pyright scope
+        description: >-
+          CI's pyright covers the scripts already clean, so they stay clean.
+        estimatedEffort: 30m
+        acceptanceCriteria:
+          - type: test_passes
+            name: Pyright scope tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, -k, ci_workflow or pyright]
+status:
+  phase: Pending

@@ -25,6 +25,10 @@ spec:
     one of these words as a whole word (or its stem, if you choose and state a stemming rule).
     The rule's other two parts are unchanged. Measure on hspolicy26 as t11 did: the blocks
     marked before and after.
+    (PM amendment 2026-10-31, from v1-e33-t13's question 1, ruling B.) Also give a kept affirmative-side
+    block (v1-e33-t13) its own comment, saying why it was marked, e.g. "Check this block against the
+    affirmative's plan: its heading names an affirmative or one of its advantages."; t11's plank comment
+    stays for blocks this rule or t11's marks; a block marked both ways gets one comment, the plank one.
   priority: 3
   constraints:
     packages: [debate_core.application, debate_core.integrations, packages/debate_core/tests, config/landscape, tests/config, docs/guides]

@@ -27,7 +27,8 @@ spec:
     other `debate_api` module may not import it), shown broken by a planted import.
   priority: 3
   constraints:
-    packages: [scripts, tests/scripts, pyproject.toml, packages/debate_api/tests]
+    # PM ruling 2026-10-31: a contract needs its planted case in tests/architecture/test_import_contracts.py.
+    packages: [scripts, tests/scripts, pyproject.toml, packages/debate_api/tests, tests/architecture]
     forbidden:
       - A test file dropped from a selection where a real directory walk reads it
       - A contract that is not kept on dev's tree

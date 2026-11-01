@@ -240,9 +240,49 @@ v1-e40-t30 deviation, for a spec amendment: the description says the memory plan
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-31
 
 **Notes:**
+
+This is the change Wednesday needs, built so that a plan which does anything else cannot pass.
+1. **ac1 passes.**
+   * `run_memory` is 32768, and vCPU, workers, volume, image and the login task are untouched.
+   * `terraform_checks.sh` passes. The module's `terraform test` pins 32 GB and fails with 16384
+     put back.
+2. **ac2 passes.**
+   * Red on a refuse-nothing skeleton: 40 failed, all at assertions. The two that passed can't be
+     failed by a skeleton, and the report says why.
+   * Green: 84, with the image mode's 41 unchanged.
+   * All nine mutants are caught, the PM's five among them. Each was probed to confirm it really
+     printed `PLAN OK`, which is the right way to read a plan-check mutant. 2b gained its own case.
+3. **ac3 is the operator's**, as the report's blocks lay out, before 2026-11-04 06:00 and not on a
+   Wednesday. The Goal stays `InProgress`.
+4. **Deviation 1: accepted.** It is one schedule and one policy, the run's. The PM's next batch
+   amends the description to "the run schedule and the run scheduler's policy pointed at the new
+   revision".
+5. **Decisions accepted:**
+   * a `--memory` mode rather than a sibling, since `python3 -I` keeps a sibling from importing the
+     helpers, with the shared screening split into its own commit;
+   * the known-revision rule on the run schedule, which fails closed on an unexpected plan shape;
+   * the image checked against `owner.auto.tfvars` in this mode too;
+   * the sizes and the price taken from AWS's pages, read 2026-10-31, with the per-run figures
+     marked as resting on ADR-0020 (8)'s estimate. Reading public docs was within the brief;
+   * the deploy script needs no change, with the runbook's rule to push no image before this
+     apply;
+   * a `REVISION` read before the apply names the deregistered revision, and the runbook says so;
+   * the apply block refuses a running task, a Wednesday and a Terraform override, and fails
+     closed on an unreadable count.
+6. **Follow-ups, the PM's rulings:**
+   * **The parse's memory peak:** folded into v1-e40-t31 by the next batch. The run records its own
+     high-water mark at the end, so the size comes from a measurement next time.
+   * **The known-revision rule for the image mode:** one p3 E41 task in the next batch.
+7. **Closing checks:** the affected set (93 files) stopped at 88% at its limit with nothing failing,
+   and is left to the PR's `ci` under agreement 10. The always-run list, docs, infrastructure and
+   the caselist-run script tests (822), ruff, pyright on the two named paths, lint-imports, the doc
+   checks and the specs are clean.
+8. **Merge:** `scripts/task pr --partial` once `ci` is green, because ac3, the apply, follows the
+   merge. Then the report's blocks, with the plan line and the check's line sent to the PM before
+   the apply.

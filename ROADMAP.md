@@ -61,14 +61,14 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 55 | 252 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 115 | 94 | 505 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 73 | 67 | 304 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 115 | 95 | 505 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 74 | 67 | 306 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 16 | 11 | 114 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 29 | 21 | 166 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 29 | 25 | 94 |
-| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 51 | 30 | 90 |
+| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 52 | 31 | 91 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -217,7 +217,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [A removal lists raw/ and parsed/ again after deleting, and stops incomplete if a version survived](plan_specs/v1/e30-caselist-ingestion/t29-removal-confirms-raw-and-parsed-deletes.yaml) `v1-e30-t29-removal-confirms-raw-and-parsed-deletes` | Succeeded | 1 | 1.0 |
 | [Inbox deletions fsync the inbox directory, so a removed archive cannot come back after a power cut](plan_specs/v1/e30-caselist-ingestion/t30-inbox-deletions-fsync-the-directory.yaml) `v1-e30-t30-inbox-deletions-fsync-the-directory` | Succeeded | 0 | 1.0 |
 | [The pull keeps OpenEv's own camp word on a camp file's manifest row](plan_specs/v1/e30-caselist-ingestion/t31-openev-camp-word-on-the-manifest-row.yaml) `v1-e30-t31-openev-camp-word-on-the-manifest-row` | Succeeded | 2 | 1.0 |
-| [Michigan's three camps are filed apart, as OpenEv files them, so their cards can link](plan_specs/v1/e30-caselist-ingestion/t32-michigan-split-into-openevs-three-camps.yaml) `v1-e30-t32-michigan-split-into-openevs-three-camps` | InProgress | 1 | 2.0 |
+| [Michigan's three camps are filed apart, as OpenEv files them, so their cards can link](plan_specs/v1/e30-caselist-ingestion/t32-michigan-split-into-openevs-three-camps.yaml) `v1-e30-t32-michigan-split-into-openevs-three-camps` | Succeeded | 1 | 2.0 |
 
 #### [E31 — Debate File Parsing](plan_specs/v1/e31-debate-file-parsing/epic.yaml)
 
@@ -370,6 +370,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [landscape cassettes gains a smoke check and a removal form that reaches every copy](plan_specs/v1/e32-argument-landscape/t36-landscape-cassettes-smoke-check-and-removal-form.yaml) `v1-e32-t36-landscape-cassettes-smoke-check-and-removal-form` | Succeeded | 1 | 2.0 |
 | [The model-use gate reads open question 4 from the policy's open-questions table, not the first row numbered 4](plan_specs/v1/e32-argument-landscape/t37-model-use-gate-reads-the-open-questions-table.yaml) `v1-e32-t37-model-use-gate-reads-the-open-questions-table` | Succeeded | 1 | 0.5 |
 | [The landscape smoke check reads the review queue's order line and a dry run's scan refusal](plan_specs/v1/e32-argument-landscape/t38-landscape-smoke-checks-order-line-and-dry-run-refusal.yaml) `v1-e32-t38-landscape-smoke-checks-order-line-and-dry-run-refusal` | Pending | 2 | 1.0 |
+| [Why the model stage scored 36.8%: the evaluation broken down, and the scan's hits listed in the operator's terminal](plan_specs/v1/e32-argument-landscape/t39-model-evaluation-diagnosis.yaml) `v1-e32-t39-model-evaluation-diagnosis` | Pending | 4 | 3.0 |
 
 #### [E33 — Evidence File Builder](plan_specs/v1/e33-file-builder/epic.yaml)
 
@@ -601,7 +602,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [A parse worker over its share of memory fails its file, not the whole run](plan_specs/v1/e40-cloud-caselist-run/t31-parse-worker-memory-ceiling.yaml) `v1-e40-t31-parse-worker-memory-ceiling` | Succeeded | 1 | 3.0 |
 | [A backfile import logs each step as it ends, so a task killed part-way shows how far it got](plan_specs/v1/e40-cloud-caselist-run/t32-backfile-import-logs-each-step.yaml) `v1-e40-t32-backfile-import-logs-each-step` | Succeeded | 1 | 1.0 |
 | [A cloud run refused for an expired login says the Wednesday login renews it, not to log in by hand](plan_specs/v1/e40-cloud-caselist-run/t33-expired-login-cloud-notice-names-the-wednesday-login.yaml) `v1-e40-t33-expired-login-cloud-notice-names-the-wednesday-login` | Succeeded | 2 | 1.0 |
-| [The OpenEv metadata re-import runs in bucket mode, so a camp table change reaches dev's records](plan_specs/v1/e40-cloud-caselist-run/t34-openev-metadata-reimport-in-bucket-mode.yaml) `v1-e40-t34-openev-metadata-reimport-in-bucket-mode` | InProgress | 2 | 2.0 |
+| [The OpenEv metadata re-import runs in bucket mode, so a camp table change reaches dev's records](plan_specs/v1/e40-cloud-caselist-run/t34-openev-metadata-reimport-in-bucket-mode.yaml) `v1-e40-t34-openev-metadata-reimport-in-bucket-mode` | Succeeded | 2 | 2.0 |
 | [A cloud run refused for an expired login names the Wednesday login in its own output too](plan_specs/v1/e40-cloud-caselist-run/t35-expired-login-cli-output-in-bucket-mode.yaml) `v1-e40-t35-expired-login-cli-output-in-bucket-mode` | Pending | 1 | 1.0 |
 | [The aggregate rebuild reads cards source by source, so it no longer holds a whole caselist's cards in memory](plan_specs/v1/e40-cloud-caselist-run/t36-parse-rebuild-streams-occurrence-rows.yaml) `v1-e40-t36-parse-rebuild-streams-occurrence-rows` | Pending | 2 | 3.0 |
 | [Redaction no longer takes two apostrophes for a quoted path and removes the words between them](plan_specs/v1/e40-cloud-caselist-run/t37-redact-keeps-text-between-apostrophes.yaml) `v1-e40-t37-redact-keeps-text-between-apostrophes` | Pending | 1 | 1.0 |
@@ -624,6 +625,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [Test selection no longer reads ast.walk( as a directory walk, and a contract keeps debate_api.container imported one way](plan_specs/v1/e41-delivery-tooling-upkeep/t11-selector-ast-walk-and-container-contract.yaml) `v1-e41-t11-selector-ast-walk-and-container-contract` | Succeeded | 1 | 1.0 |
 | [CI's pyright covers the scripts already clean, so they stay clean](plan_specs/v1/e41-delivery-tooling-upkeep/t12-pyright-covers-the-clean-scripts.yaml) `v1-e41-t12-pyright-covers-the-clean-scripts` | Pending | 1 | 0.5 |
 | [The image plan check refuses a schedule repointed at a revision registered before the apply](plan_specs/v1/e41-delivery-tooling-upkeep/t13-image-plan-check-known-revision-rule.yaml) `v1-e41-t13-image-plan-check-known-revision-rule` | Pending | 1 | 0.5 |
+| [A bounded run that starts a Docker container stops that container too](plan_specs/v1/e41-delivery-tooling-upkeep/t14-hard-stop-stops-a-named-container.yaml) `v1-e41-t14-hard-stop-stops-a-named-container` | Pending | 1 | 0.8 |
 
 
 ## V2

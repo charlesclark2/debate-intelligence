@@ -265,5 +265,45 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e06-t07-verify-docx
+    - id: t08
+      kind: Task
+      name: '`cut` can cut a card from the user''s own stored copy of an article, with that provenance'
+      description: >-
+        `cut` can cut a card from the user's own stored copy of an article, with that
+        provenance.
+      inputs:
+        specRef: plan_specs/v1/e06-card-cutting/t08-cut-from-a-stored-pasted-copy.yaml
+        goalRef: v1-e06-t08-cut-from-a-stored-pasted-copy
+      dependsOn:
+      - t06
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e06-t08-cut-from-a-stored-pasted-copy reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e06-t08-cut-from-a-stored-pasted-copy
+    - id: t09
+      kind: Task
+      name: '`cut` refused for an unrecorded model call says to set DEBATE_MODEL_MODE=live for a real cut'
+      description: >-
+        `cut` refused for an unrecorded model call says to set DEBATE_MODEL_MODE=live for a
+        real cut.
+      inputs:
+        specRef: plan_specs/v1/e06-card-cutting/t09-cut-replay-hint-names-live-mode.yaml
+        goalRef: v1-e06-t09-cut-replay-hint-names-live-mode
+      dependsOn:
+      - t06
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e06-t09-cut-replay-hint-names-live-mode reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e06-t09-cut-replay-hint-names-live-mode
 status:
   phase: Pending

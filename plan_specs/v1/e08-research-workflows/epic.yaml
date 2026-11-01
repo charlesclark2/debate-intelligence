@@ -271,5 +271,24 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e08-t07-daily-command
+    - id: t08
+      kind: Task
+      name: 'Counterplans and kritiks get the research needs their arguments have'
+      description: >-
+        Counterplans and kritiks get the research needs their arguments have.
+      inputs:
+        specRef: plan_specs/v1/e08-research-workflows/t08-counterplan-and-kritik-needs.yaml
+        goalRef: v1-e08-t08-counterplan-and-kritik-needs
+      dependsOn:
+      - t04
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e08-t08-counterplan-and-kritik-needs reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e08-t08-counterplan-and-kritik-needs
 status:
   phase: Pending

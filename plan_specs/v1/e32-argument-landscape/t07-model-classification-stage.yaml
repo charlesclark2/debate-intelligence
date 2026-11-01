@@ -40,6 +40,9 @@ spec:
     entries are carried to it rather than recomputed, and prod's model stage sends only items
     dev's entries lack at the same prompt version and model. Name the carrying in the report;
     the first prod model run is v1-e05-t17's.
+    (PM amendment 2026-11-01, from v1-e32-t39's diagnosis.) The hold on live model runs stands
+    until `v1-e32-t40` (prompt 1.1.0, the scrub and the scan) re-records the same 47 cards and meets the
+    bar. ac5's first live run and the LD evaluation wait for it. This task stays `InProgress` until then.
   priority: 2
   constraints:
     packages: [debate_core.application, debate_core.arguments, debate_core.integrations, prompts/landscape, tests/fixtures/landscape, packages/debate_cli, docs/policies, docs/data]

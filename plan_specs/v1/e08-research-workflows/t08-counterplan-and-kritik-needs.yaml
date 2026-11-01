@@ -1,0 +1,76 @@
+# TASK v1-e08-t08-counterplan-and-kritik-needs - Counterplans and kritiks get the research needs their arguments have
+# Epic: E08 Federated Research Workflows | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e08-t08-counterplan-and-kritik-needs
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+  annotations:
+    debate/title: "Counterplans and kritiks get the research needs their arguments have"
+spec:
+  # Filed by the PM, 2026-11-01, from v1-e08-t04's question 4 (the PM's ruling, 2026-11-01).
+  description: >-
+    v1-e08-t04's taxonomy has five needs (uniqueness, link, internal link, impact, answers),
+    which fit DAs, advantages and framing but not counterplans or kritiks. A counterplan's
+    research is solvency, net benefit and competition; a kritik's is link, impact, alternative
+    and framework. Give the taxonomy needs per argument family, and propose the shape (a needs
+    set per family, validated so that each argument's pairs are complete within its family). Add
+    the generic counterplans and kritiks the Policy landscape names, under the landscape's ids,
+    with templates in the coach's terms, and mark them for the coach's review (operator). The
+    existing arguments and their templates are unchanged.
+  priority: 3
+  constraints:
+    packages: [config/argument_taxonomy.yaml, debate_core.domain, debate_core.application, packages/debate_core/tests]
+    forbidden:
+      - A change to an existing argument's templates or windows
+      - A template holding a resolution or topic wording not taken from a committed file
+      - Live model calls in tests
+  context:
+    - kind: TaskRef
+      name: v1-e08-t04-argument-need-expansion
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The taxonomy validates needs per family, every counterplan and kritik has a template
+        for each need of its family, and the added ids match the landscape's, by tests shown
+        failing first; the coach reviews them (operator).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e08-t08-counterplan-and-kritik-needs-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+spec:
+  description: >-
+    Counterplans and kritiks get the research needs their arguments have.
+  goalRef:
+    name: v1-e08-t08-counterplan-and-kritik-needs
+  graph:
+    nodes:
+      - id: counterplan-and-kritik-needs
+        kind: Task
+        name: CP and K needs
+        description: >-
+          Counterplans and kritiks get the research needs their arguments have.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: CP and K needs tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_query_expansion.py, -k, taxonomy]
+status:
+  phase: Pending

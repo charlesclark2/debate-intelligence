@@ -1,0 +1,91 @@
+# TASK v1-e40-t39-cut-index-and-linker-words-held-compactly - The near-duplicate index and the linker's word lists are held compactly, so a season's rebuild fits with room
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t39-cut-index-and-linker-words-held-compactly
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "The near-duplicate index and the linker's word lists are held compactly, so a season's rebuild fits with room"
+spec:
+  # Filed by the PM, 2026-11-01, from v1-e40-t36's whole-store measurement and the PM's ruling of 2026-11-01 (its question 1, option c).
+  description: >-
+    v1-e40-t36 measured the whole hspolicy26 rebuild (docs/data/caselist-rebuild-memory.md): a
+    6.25 GB peak over 3,869 sources. Reading the sources reached 516 MB. CutIndex
+    (debate_core.evidence.near_duplicates) took the peak to 5.95 GB: it holds every distinct
+    full body's words and 5-word shingles as Python strings, about 180 bytes per word. After it
+    returns, the linker's word tuples, one per distinct full body, hold about 2 GB. A full
+    season is estimated at up to 22.5 GB. Hold both compactly: shingles as 64-bit hashes in
+    compact sorted arrays (or another structure; propose it); each body's word list dropped once
+    its shingles are made; the linker's words held compactly too. Every hash match is confirmed
+    by comparing the strings, or by the candidate pair's full comparison as today, so a
+    collision can never change a cluster; show this with a planted collision. Prove byte
+    identity on t36's synthetic stores with its oracle, and on the whole hspolicy26 store
+    against its own aggregates (an operator block, as t36's was). Measure the main process's
+    peak before and after with t31's method, at 250 sources and the whole store, and record both
+    in caselist-rebuild-memory.md. No parser, fingerprint or record version change.
+  priority: 2
+  constraints:
+    packages: [debate_core.evidence, debate_core.application, packages/debate_core/tests, docs/data]
+    forbidden:
+      - A change to any aggregate's bytes for the same store
+      - A parser, fingerprint or record schema version change
+      - A hash match accepted without confirming the strings
+      - Card text, a source's name or path in docs, the report or a test
+      - Network or AWS access in a test
+  context:
+    - kind: TaskRef
+      name: v1-e40-t36-parse-rebuild-streams-occurrence-rows
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        CutIndex and the linker's word lists each take at most half their memory measured by
+        t36 at the whole store, measured before and after with t31's method and recorded in
+        docs/data. The aggregates are byte-identical on t36's synthetic stores, and a
+        planted hash collision changes no cluster. By tests shown failing first.
+    - id: ac2
+      description: >-
+        The operator's whole-store check matches the store's own aggregates byte for byte
+        (operator, recorded by the PM).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t39-cut-index-and-linker-words-held-compactly-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    The near-duplicate index and the linker's word lists are held compactly, so a season's
+    rebuild fits with room.
+  goalRef:
+    name: v1-e40-t39-cut-index-and-linker-words-held-compactly
+  graph:
+    nodes:
+      - id: cut-index-and-linker-words-held-compactl
+        kind: Task
+        name: Compact index
+        description: >-
+          The near-duplicate index and the linker's word lists are held compactly, so a
+          season's rebuild fits with room.
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Compact index tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, near_duplicate or caselist_parse or card_stats]
+status:
+  phase: Pending

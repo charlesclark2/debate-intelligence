@@ -47,10 +47,20 @@ spec:
     labels the results of one query per format on the topics current then, and the report
     records nDCG@10 ranked against provider order; a lower ranked figure opens a weight-tuning
     ticket and does not block this task (v1-e08-t03's PM review).
+    (PM amendment 2026-11-01, from v1-e08-t04's PM review.) Wire v1-e08-t04's expansion: map
+    `--argument`, `--need`, `--topic` (a topic preset id), `--var NAME=VALUE` (for example `bill=`) and
+    `--expand-llm` onto `ExpansionRequest`; build `QueryExpansionStage` from
+    `load_argument_taxonomy(ARGUMENT_TAXONOMY_PATH)`, with a guard only when `--expand-llm` is given;
+    and print the expansion's warning when it has one. `UnknownExpansionChoice` exits 2, a usage error,
+    because it is a choice the person typed, and its message lists the valid choices. `Search` is a
+    `DomainEntity` and now carries the optional `expansion` field, so a stored search that has one is
+    refused by a build from before v1-e08-t04. Say whether any installed build reads stored searches
+    across builds. If one does, make that read tolerate the field and prove it with an earlier build's
+    offline wheel, as the caselist tasks do; if none does, say so in the report.
   priority: 1
   constraints:
     # PM amendment 2026-10-22: registration, Article matching and the outcome live in debate_core.
-    packages: [debate_cli, debate_core.application, debate_core.integrations.discovery, packages/debate_cli/tests, packages/debate_core/tests, packages/debate_cli/pyproject.toml, uv.lock]
+    packages: [debate_cli, debate_core.application, debate_core.integrations.discovery, packages/debate_cli/tests, packages/debate_core/tests, packages/debate_cli/pyproject.toml, uv.lock, config/argument_taxonomy.yaml]
     forbidden:
       - Business logic (ranking, dedupe, expansion) in debate_cli
       - Hiding provider failures when results are partial

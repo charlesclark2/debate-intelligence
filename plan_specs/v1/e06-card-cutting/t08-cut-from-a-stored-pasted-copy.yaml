@@ -1,0 +1,82 @@
+# TASK v1-e06-t08-cut-from-a-stored-pasted-copy - `cut` can cut a card from the user's own stored copy of an article, with that provenance
+# Epic: E06 Card Cutting, Citation & Export | Release: v1.3 (URL → verified card) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e06-t08-cut-from-a-stored-pasted-copy
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e06-card-cutting
+  annotations:
+    debate/title: "`cut` can cut a card from the user's own stored copy of an article, with that provenance"
+spec:
+  # Filed by the PM, 2026-11-01, from v1-e06-t06's follow-up 1 and question 4 (the PM's ruling, 2026-11-01; the coach may veto before it starts).
+  description: >-
+    `cut` cuts only from a snapshot the publisher's site returned (PUBLISHER_RETRIEVED).
+    `fetch`'s exit-3 hint, given right after 'nothing can be cut from this source', suggests
+    storing your copy with --paste, which implies a pasted copy can be cut. Cutting from the
+    user's own copy is valuable: the coach reads articles through library access that the
+    fetcher sees as paywalled. Give `cut` a way to cut a stored USER_SUPPLIED snapshot of the
+    URL (an option, or the stored snapshot's id; propose which). The card carries that
+    provenance wherever the domain records it (the manifest's snapshot reference, and the cite,
+    as the citation rules already treat a user-supplied copy). It is verified against that
+    snapshot exactly as a retrieved one is. Cutting from a pasted copy makes no fetch. When no
+    pasted copy is stored, the command refuses with a hint naming `fetch --paste`. `fetch`'s
+    exit-3 hint then says the copy can be stored and cut with the new option.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.evidence, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke]
+    forbidden:
+      - A card cut from a pasted copy recorded as publisher-retrieved
+      - A fetch when cutting from a pasted copy
+      - Evidence text in --json output
+      - Live network or model calls in tests
+  context:
+    - kind: TaskRef
+      name: v1-e06-t06-cut-command
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A card cut from a stored pasted copy is VERIFIED against that snapshot, carries
+        USER_SUPPLIED provenance in its manifest, and makes no fetch; without a stored copy
+        the command refuses with the --paste hint; fetch's exit-3 hint names the option; by
+        tests shown failing first, and an installed-build smoke check.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e06-t08-cut-from-a-stored-pasted-copy-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e06-card-cutting
+spec:
+  description: >-
+    `cut` can cut a card from the user's own stored copy of an article, with that provenance.
+  goalRef:
+    name: v1-e06-t08-cut-from-a-stored-pasted-copy
+  graph:
+    nodes:
+      - id: cut-from-a-stored-pasted-copy
+        kind: Task
+        name: Pasted copy
+        description: >-
+          `cut` can cut a card from the user's own stored copy of an article, with that
+          provenance.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Pasted copy tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/test_cut_command.py, -k, paste]
+status:
+  phase: Pending

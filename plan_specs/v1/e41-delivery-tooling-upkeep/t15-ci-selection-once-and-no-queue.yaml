@@ -1,0 +1,107 @@
+# TASK v1-e41-t15-ci-selection-once-and-no-queue - CI chooses the tests once, skips the test parts when none are chosen, cancels superseded pull-request runs, and runs the partition proof only when it can change
+# Epic: E41 — Delivery Tooling Upkeep | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e41-t15-ci-selection-once-and-no-queue
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+  annotations:
+    debate/title: "CI chooses the tests once, skips the test parts when none are chosen, cancels superseded pull-request runs, and runs the partition proof only when it can change"
+spec:
+  # Filed by the PM, 2026-11-01, from the PM's measurement of 2026-11-01 (job timings of eight pull-request runs, read from GitHub's public API) and the operator's report of five-minute parts.
+  description: >-
+    Measured 2026-11-01. On whole-selection pull requests the eight parts are level (pytest
+    190–290 s each). Every part repeats 'Choose the tests' (17–33 s), and every part collects
+    the whole selection before dealing out its share. The bot's refresh-generated-files pull
+    requests change only ROADMAP.md and docs/README.md, yet run all eight parts (44–76 s each),
+    and they waited 200–280 s for runners. Each merge into dev starts the PR's run, dev's push
+    run and the bot's run: about 16 jobs each, against about 20 concurrent jobs for a free
+    public repository. Part 1's slowest test, repeatedly, is tests/scripts/test_ci_workflow_test
+    _job.py::test_the_parts_together_are_exactly_the_default_selection_and_no_test_is_in_two_of_
+    them, at 69.8 s on PR #769: it collects the whole suite once per part. Do: (1) choose the
+    tests once, in the `changes` job, and hand the selection to every part (an output or an
+    artifact). (2) Skip the test matrix and its coverage job when the selection is empty, so a
+    pull request touching only generated docs runs only the doc checks. The `ci` job must treat
+    a skipped matrix as success and still fail if any part fails. (3) Add a concurrency group
+    for pull_request runs, per branch, with cancel-in-progress. Never cancel push runs on dev or
+    main: dev's run gates the pre-release. (4) Run the partition proof only when ci.yml,
+    tests/pytest_plugins/run_in_parts.py or the selection script changes, and on every push run,
+    by the selection's own rules or in a job of its own. Say which, and why it cannot be
+    forgotten. (5) Measure each part's fixed cost (setup, install, collection under -n auto)
+    against its test time on a whole-selection run, from the job step timings and the logs'
+    durations (the logs are an operator read: `gh run view --log`). Send the PM the options with
+    numbers: file-level dealing by recorded durations, fewer parts, the xdist worker count.
+    Don't build (5)'s option here. The target: an ordinary pull request's `ci` under 3 minutes
+    of wall time, and no test parts on the bot's pull requests.
+  priority: 1
+  constraints:
+    packages: [.github/workflows, scripts, tests/scripts, tests/pytest_plugins, docs/process]
+    forbidden:
+      - Paid runners or larger runners
+      - Removing a check from the `ci` job's needs, or a part that can be forgotten (the partition proof stays)
+      - Cancelling a push run on dev or main
+      - Network access in a test
+  context:
+    - kind: TaskRef
+      name: v1-e41-t11-selector-ast-walk-and-container-contract
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The selection is chosen once and every part reads it, and an empty selection skips
+        the matrix while `ci` still passes, by workflow tests shown failing first.
+    - id: ac2
+      description: >-
+        Pull-request runs on the same branch cancel the superseded run while push runs never
+        do, and the partition proof runs only on its triggers and on push runs, by tests
+        shown failing first.
+    - id: ac3
+      description: >-
+        After merge, the operator's read of one bot pull request (no test parts) and one
+        ordinary task pull request's `ci` wall time is recorded by the PM.
+    - id: ac4
+      description: >-
+        Each part's fixed cost against its test time is recorded in docs/process with the
+        options, sent to the PM.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e41-t15-ci-selection-once-and-no-queue-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+spec:
+  description: >-
+    CI chooses the tests once, skips the test parts when none are chosen, cancels superseded
+    pull-request runs, and runs the partition proof only when it can change.
+  goalRef:
+    name: v1-e41-t15-ci-selection-once-and-no-queue
+  graph:
+    nodes:
+      - id: ci-selection-once-and-no-queue
+        kind: Task
+        name: CI once
+        description: >-
+          CI chooses the tests once, skips the test parts when none are chosen, cancels
+          superseded pull-request runs, and runs the partition proof only when it can
+          change.
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: CI once tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, -k, ci_workflow or test_selection]
+status:
+  phase: Pending

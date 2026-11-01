@@ -888,5 +888,45 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e40-t38-landscape-staleness-ignores-lock-refusals
+    - id: t39
+      kind: Task
+      name: 'The near-duplicate index and the linker''s word lists are held compactly, so a season''s rebuild fits with room'
+      description: >-
+        The near-duplicate index and the linker's word lists are held compactly, so a
+        season's rebuild fits with room.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t39-cut-index-and-linker-words-held-compactly.yaml
+        goalRef: v1-e40-t39-cut-index-and-linker-words-held-compactly
+      dependsOn:
+      - t36
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t39-cut-index-and-linker-words-held-compactly reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t39-cut-index-and-linker-words-held-compactly
+    - id: t40
+      kind: Task
+      name: 'In bucket mode a missing or unreadable token, and a download refused for an expired login, give the cloud''s cure, not a login by hand'
+      description: >-
+        In bucket mode a missing or unreadable token, and a download refused for an expired
+        login, give the cloud's cure, not a login by hand.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t40-token-errors-name-the-cloud-cure.yaml
+        goalRef: v1-e40-t40-token-errors-name-the-cloud-cure
+      dependsOn:
+      - t35
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t40-token-errors-name-the-cloud-cure reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t40-token-errors-name-the-cloud-cure
 status:
   phase: Pending

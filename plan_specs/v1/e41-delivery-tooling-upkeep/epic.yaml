@@ -413,5 +413,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e41-t14-hard-stop-stops-a-named-container
+    - id: t15
+      kind: Task
+      name: 'CI chooses the tests once, skips the test parts when none are chosen, cancels superseded pull-request runs, and runs the partition proof only when it can change'
+      description: >-
+        CI chooses the tests once, skips the test parts when none are chosen, cancels
+        superseded pull-request runs, and runs the partition proof only when it can change.
+      inputs:
+        specRef: plan_specs/v1/e41-delivery-tooling-upkeep/t15-ci-selection-once-and-no-queue.yaml
+        goalRef: v1-e41-t15-ci-selection-once-and-no-queue
+      dependsOn:
+      - t11
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e41-t15-ci-selection-once-and-no-queue reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e41-t15-ci-selection-once-and-no-queue
 status:
   phase: Pending

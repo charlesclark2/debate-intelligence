@@ -119,8 +119,6 @@ def restore_target_refusal(
     `environment` is the one the restore runs in. Every path is compared real (the module docstring), so
     a symbolic link to a data directory is that data directory.
     """
-    # Red skeleton: today's behaviour, the running environment's data directory alone.
-    data_dirs = list(data_dirs)[:1]
     lives: list[tuple[str, Path]] = []
     for data_dir in data_dirs:
         if data_dir.path is None:
@@ -160,7 +158,7 @@ def _real(path: Path) -> Path:
 
 def _folded(path: Path) -> Path:
     """`path` in one letter case: the Mac's file system finds `PROD` at `prod`."""
-    return path  # Red skeleton: no case folding, as before.
+    return Path(str(path).casefold())
 
 
 @dataclass(frozen=True, slots=True)

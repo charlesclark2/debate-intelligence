@@ -498,3 +498,33 @@ stays `InProgress` for ac4, the coach's review.
    each entry's `review` to `coach_reviewed`, raises `taxonomy_version` if anything changed, records
    ac4, and sets the Goal `Succeeded`. No edit to this branch is needed for it.
 9. **Merge:** `scripts/task pr --partial` once `ci` is green.
+
+## After the review: the PR's CI failure
+
+**What failed.** Part 1 of the PR's `test` job failed with `1 failed, 2390 passed, 1 skipped in
+278.55s`. The failing test was
+`tests/scripts/test_stamp_build.py::test_stamp_bundles_the_committed_prompts_and_their_lock_but_no_readme`,
+with the error `Left contains one more item: 'search/expand.md'`.
+
+v1-e06-t06 (#767) merged into dev after this task started. That test pinned the four prompts it knew
+by hand, so this branch's new `prompts/search/expand.md` made the bundled list one longer. My bounded
+run of `test_stamp_build.py` before the report passed because the branch did not have #767 yet. The
+two PRs only break together.
+
+**What changed.**
+- `scripts/task sync v1-e08-t04-argument-need-expansion` rebased the 7 commits onto `origin/dev` and
+  updated the pushed branch. Dev had moved only by its generated-files refresh (#768).
+- The test now derives its expected list from the committed `prompts/` tree: every `*.md` except
+  `README.md`, plus `prompts.lock.json`. It asserts that `prompts/README.md` exists, so leaving it out
+  is not vacuous, and that `card/select.md` and `card/markup.md` are among the files. It compares every
+  bundled file's bytes with the committed one, not just those two.
+- `check-wheels`' required members in `scripts/stamp_build.py` are unchanged.
+- Commit `cbf67d9`.
+
+**Evidence.**
+- `tests/scripts/test_stamp_build.py` and `test_query_expansion.py`: `95 passed in 2.06s`.
+- I committed the test, then broke `_bundle_prompts` in `scripts/stamp_build.py` two ways and
+  restored it from HEAD after each run. The derived test failed on its list assertion both times:
+  - bundling a README: `1 failed`;
+  - leaving the `search/` prompts out: `1 failed`.
+- ruff and pyright on the test are clean.

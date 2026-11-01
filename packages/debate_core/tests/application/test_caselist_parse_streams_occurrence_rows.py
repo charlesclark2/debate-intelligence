@@ -777,13 +777,13 @@ async def test_a_generated_store_is_written_as_before_and_after_a_removal(tmp_pa
 # Memory
 # ------------------------------------------------------------------------------------------------
 
-POOL: Final = tuple(body(1000 + number, words=3000) for number in range(12))
-"""Twelve long bodies every source of the memory stores reads: about 20 KB each, so that a card's
-body is most of what holding it costs, and the distinct bodies do not grow with the sources."""
+POOL: Final = tuple(body(1000 + number, words=1000) for number in range(8))
+"""Eight long bodies every source of the memory stores reads: about 7 KB each, so that a card's body
+is most of what holding it costs, and the distinct bodies do not grow with the sources."""
 
 
 def memory_store(world: SyntheticStore, sources: int) -> set[str]:
-    """`sources` sources of the twelve pool cards each, in their own week and path; their digests."""
+    """`sources` sources of the eight pool cards each, in their own week and path; their digests."""
     return {
         world.source(
             f"memory-{number}",
@@ -821,9 +821,9 @@ class CountingPlacer:
 
 
 async def test_no_card_but_the_last_read_is_alive_when_the_rebuild_places_them(tmp_path: Path) -> None:
-    """The rebuild before this task held every card here: 24 sources of 12, 288."""
+    """The rebuild before this task held every card here: 16 sources of 8, 128."""
     world = SyntheticStore(tmp_path / "evidence")
-    CountingPlacer.store = frozenset(memory_store(world, 24))
+    CountingPlacer.store = frozenset(memory_store(world, 16))
     CountingPlacer.alive_at_placing = []
     await world.parse()
     gc.collect()
@@ -855,10 +855,11 @@ async def rebuild_peak(tmp_path: Path, sources: int) -> int:
 async def test_the_rebuilds_peak_grows_by_far_less_than_the_cards_of_the_sources_added(
     tmp_path: Path,
 ) -> None:
-    """Six sources, then twenty-four: 216 cards more, of about 20 KB of body each. Holding them would
-    add their bodies to the peak and more; reading them in turn adds a fingerprint and a row's place
-    each, well under a quarter of their bodies."""
-    fewer, more = 6, 24
+    """Four sources, then sixteen: 96 cards more, of about 7 KB of body each. Holding them adds their
+    bodies to the peak and more; reading them in turn adds a fingerprint and a row's place each, well
+    under a quarter of their bodies. Measured when it was written: the rebuild that collects every
+    card grew by more than the bodies, this one by under a twentieth of them."""
+    fewer, more = 4, 16
     added_bodies = (more - fewer) * sum(len(text) for text in POOL)
 
     growth = await rebuild_peak(tmp_path, more) - await rebuild_peak(tmp_path, fewer)

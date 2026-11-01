@@ -85,24 +85,26 @@ class SpecTree:
     errors: list[str] = field(default_factory=list)
     files: list[Path] = field(default_factory=list)
     release_order: list[str] = field(default_factory=list)
-    #: metadata.name -> the file that declares it
-    names: dict[str, Path] = field(default_factory=dict)
+    # A name, label or goalRef missing from the YAML is recorded as None, never dropped: the checks
+    # that read it then refuse the tree naming None (v1-e41-t09).
+    #: metadata.name -> the file that declares it; a second document without a name is a duplicate
+    names: dict[str | None, Path] = field(default_factory=dict)
     #: metadata.name -> the Goal document
-    goals: dict[str, dict] = field(default_factory=dict)
+    goals: dict[str | None, dict] = field(default_factory=dict)
     #: release version -> its Goal's debate/title annotation
     release_titles: dict[str, str] = field(default_factory=dict)
     #: release version -> its Goal's metadata.name
     release_goals: dict[str, str] = field(default_factory=dict)
-    #: release version -> the epic names its Plan references
-    release_epics: dict[str, list[str]] = field(default_factory=dict)
+    #: release version -> the epic names its Plan's External nodes reference
+    release_epics: dict[str, list[str | None]] = field(default_factory=dict)
     #: epic name -> {path, release, major, dir, plan}
     epics: dict[str, dict] = field(default_factory=dict)
     #: epic name -> the task names that carry its debate/epic label
-    epic_tasks: dict[str, list[str]] = field(default_factory=lambda: defaultdict(list))
+    epic_tasks: dict[str | None, list[str]] = field(default_factory=lambda: defaultdict(list))
     #: task name -> its release version
-    task_release: dict[str, str] = field(default_factory=dict)
+    task_release: dict[str, str | None] = field(default_factory=dict)
     #: task name -> its epic name
-    task_epic: dict[str, str] = field(default_factory=dict)
+    task_epic: dict[str, str | None] = field(default_factory=dict)
     #: task name -> the task names it lists as prerequisites
     task_prereqs: dict[str, list[str]] = field(default_factory=dict)
 
@@ -251,12 +253,12 @@ def read_release(tree: SpecTree, path: Path, by_kind: dict[str | None, list[dict
         tree.err(path, "release files need exactly one Goal, one Gate and one Plan")
         return
     goal = by_kind["Goal"][0]
-    version = (goal["metadata"].get("labels") or {}).get("debate/release")
-    if version != path.stem:
+    version = path.stem
+    if (goal["metadata"].get("labels") or {}).get("debate/release") != version:
         tree.err(path, "debate/release label must equal the file name")
         return
     tree.release_titles[version] = (goal["metadata"].get("annotations") or {}).get("debate/title", version)
-    tree.release_goals[path.stem] = goal["metadata"]["name"]  # path.stem is version, checked above
+    tree.release_goals[version] = goal["metadata"]["name"]
     tree.release_epics[version] = [
         (node.get("inputs") or {}).get("goalRef")
         for node in by_kind["Plan"][0]["spec"]["graph"]["nodes"]
@@ -331,7 +333,7 @@ def check_epics(tree: SpecTree) -> None:
         for task in members:
             if task not in listed:
                 tree.err(epic["path"], f"epic Plan does not list task {task}")
-        for task in sorted(listed - set(members)):
+        for task in sorted(listed - set(members), key=str):  # a Task node without a goalRef lists None
             tree.err(epic["path"], f"epic Plan lists {task} but no task file declares it")
     for epic_name in tree.epic_tasks:
         if epic_name not in tree.epics:
@@ -345,12 +347,12 @@ def check_prerequisites(tree: SpecTree) -> None:
                 tree.err(tree.names[task], f"context TaskRef {prereq!r} does not resolve to a task")
                 continue
             order = tree.release_order
-            if tree.task_release[prereq] not in order or tree.task_release[task] not in order:
+            prereq_release, task_release = tree.task_release[prereq], tree.task_release[task]
+            if prereq_release not in order or task_release not in order:
                 continue
-            if order.index(tree.task_release[prereq]) > order.index(tree.task_release[task]):
+            if order.index(prereq_release) > order.index(task_release):
                 tree.err(
-                    tree.names[task],
-                    f"prerequisite {prereq} ships in a later release ({tree.task_release[prereq]})",
+                    tree.names[task], f"prerequisite {prereq} ships in a later release ({prereq_release})"
                 )
     if has_cycle(tree.task_prereqs):
         tree.err(tree.specs, "cross-task prerequisite graph contains a cycle")
@@ -521,7 +523,7 @@ def main(argv: list[str] | None = None) -> int:
     tree = collect(args.root.resolve())
 
     if args.require_succeeded:
-        name = args.require_succeeded
+        name: str = args.require_succeeded
         if name not in tree.goals:
             print(f"{name}: no such Goal")
             return 1

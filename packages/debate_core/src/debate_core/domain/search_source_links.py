@@ -2,7 +2,7 @@
 
 The card page offers "Open on openCaselist" for a disclosed card, built only from what the index
 already stores of the card's representative occurrence: its caselist, school and team code, and
-"Open on OpenEv" for a camp card, from its stored OpenEv id. A team's
+"Find on OpenEv" for a camp card, from its camp and year (`v1-e39-t28`). A team's
 page on openCaselist is `https://opencaselist.com/<caselist>/<school>/<team code>`, and it lists the
 rounds the team disclosed with each file, so it is the page the file is published on.
 
@@ -21,15 +21,31 @@ display name, and a link built from it would land on the wrong page. Such a card
 disclosure is not on record, and one whose school or team code the parser could not read
 (`UNKNOWN`) have no link.
 
-## A camp card links to its file on OpenEv (`v1-e39-t16`)
+## A camp card links to its camp's page on OpenEv (`v1-e39-t28`)
 
-"Open on OpenEv" is built from the OpenEv id the index stores for a camp occurrence since format 3,
-which the build reads from the release manifest's row for the file (`openev_id`, `v1-e30-t14`), and
-from nothing else: never the camp, the year, the event or the file title. The title is the
-importer's, with the camp, year and lab initials taken off the file name, so it names no OpenEv
-address. A camp card whose row has no id (a file imported before `v1-e30-t14` and not named
-`openev-<id>-…`, or any card of a format 1 or 2 index) has no link. The address's shape is
-:data:`OPENEV_FILE_URL_TEMPLATE`'s, which the repository does not pin: see its note.
+"Find on OpenEv" opens the camp's page, `https://opencaselist.com/openev/<year>/<word>`
+(:data:`OPENEV_CAMP_PAGE_TEMPLATE`), which lists each of the camp's files with its download. The
+operator confirmed that shape on 2026-10-31. It is not the file's own page: a file's address is the
+API's download by path, which the index does not store and which refuses a browser not signed in. So
+the label says it opens the camp's page, with the camp and year beside it.
+
+The address is built from the occurrence's stored camp and year and from nothing else: never the file
+title, the event, the OpenEv id or the request. The stored camp is the importer's canonical name from
+the alias table (`camp_aliases.yaml`), which is not OpenEv's own word for the camp (the count of
+`v1-e39-t28`: only one of three confirmed words is a stored value). So the word comes from the table's
+`openev` section, which the caller passes in as `openev_words`, the camp's canonical name to its word,
+filled only with words the operator confirmed by opening the page. A camp with no word there has no
+link: the stored camp itself is never the address. Nor has `UNKNOWN`, the importer's "could not read",
+whatever the table says, nor a word that is not one address word of letters and digits.
+
+The year is the camp release's, and links only from :data:`OPENEV_ARCHIVE_FIRST_YEAR`, the oldest year
+on OpenEv's sidebar, to the current season plus one by
+:func:`~debate_core.domain.season.current_season_start`: a topic year's camp files arrive in June and
+July, before its season starts on 1 August. An occurrence past the provenance limit has no link.
+
+Until `v1-e39-t28` the link was built from the stored OpenEv id (`v1-e39-t16`), at
+`https://opencaselist.com/openev/<id>`, which the operator found is OpenEv's page for a *year*. The id
+is still stored on a format 3 index, for a later per-file link, and read for nothing here.
 
 ## Nothing here is the request's
 
@@ -49,22 +65,27 @@ having one, so the view can count them.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import date
 from enum import StrEnum
 from typing import Final
 
 from debate_core.domain.caselist import CASELIST_SLUG_PATTERN, TEAM_CODE_MAX_LENGTH
 from debate_core.domain.evidence_search import OccurrenceProvenance
 from debate_core.domain.file_recipe import CAMP_STORE
+from debate_core.domain.season import current_season_start
 
 __all__ = [
     "OPENCASELIST_LABEL",
     "OPENCASELIST_ORIGIN",
-    "OPENEV_FILE_URL_TEMPLATE",
+    "OPENEV_ARCHIVE_FIRST_YEAR",
+    "OPENEV_CAMP_PAGE_TEMPLATE",
+    "OPENEV_CAMP_WORD_PATTERN",
     "OPENEV_LABEL",
     "NoTeamPage",
     "SourceLink",
-    "openev_file_url",
+    "openev_camp_page_url",
     "source_link",
     "team_page_url",
     "why_no_team_page",
@@ -75,24 +96,28 @@ OPENCASELIST_ORIGIN: Final = "https://opencaselist.com"
 
 OPENCASELIST_LABEL: Final = "Open on openCaselist"
 
-OPENEV_FILE_URL_TEMPLATE: Final = f"{OPENCASELIST_ORIGIN}/openev/{{openev_id}}"
-"""Where a camp file is on OpenEv, by its id: OpenEv is openCaselist's section for camp files.
+OPENEV_CAMP_PAGE_TEMPLATE: Final = f"{OPENCASELIST_ORIGIN}/openev/{{year}}/{{word}}"
+"""A camp's page on OpenEv, OpenEv being openCaselist's section for camp files: the camp release's year
+and OpenEv's own word for the camp. Confirmed by the operator for three 2026 camps on 2026-10-31."""
 
-**Not pinned by anything the repository holds** (`v1-e39-t16`). The repository pins the API the pull
-uses (`GET /openev`, and a download by the file's path through `GET /download?path=`), not a page a
-browser opens, and the index stores the id, never the path. So the shape is this constant's, held by
-a test, until the coach's check after the deploy to dev opens one link and confirms it or gives the
-right one; changing it is this line and its test."""
+OPENEV_ARCHIVE_FIRST_YEAR: Final = 2013
+"""The oldest year on OpenEv's sidebar. The newest linked is the current season plus one."""
 
-OPENEV_LABEL: Final = "Open on OpenEv"
+OPENEV_CAMP_WORD_PATTERN: Final = r"[A-Za-z0-9]+"
+"""One OpenEv address word, matched whole: the shape of the confirmed `HDC`, `UM7` and `UTNIF`."""
+
+OPENEV_LABEL: Final = "Find on OpenEv"
+"""It finds the file on its camp's page, which is what it opens: not the file itself."""
 
 _SCHOOL_MAX_LENGTH: Final = 100
 _CASELIST: Final = re.compile(CASELIST_SLUG_PATTERN)
 _SCHOOL: Final = re.compile(rf"[A-Za-z0-9](?:[A-Za-z0-9-]{{0,{_SCHOOL_MAX_LENGTH - 2}}}[A-Za-z0-9])?")
 _TEAM_CODE: Final = re.compile(rf"[A-Za-z0-9]{{1,{TEAM_CODE_MAX_LENGTH}}}")
 """Matched whole (`fullmatch`), so a trailing newline is no more part of an address than a slash is."""
+_OPENEV_WORD: Final = re.compile(OPENEV_CAMP_WORD_PATTERN)
 _UNREAD: Final = "UNKNOWN"
-"""What the archive parser records for a school or team code it could not read."""
+"""What the archive parser records for a school or team code it could not read, and the OpenEv
+importer for a camp."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,18 +162,29 @@ def team_page_url(caselist: str, school: str, team_code: str) -> str | None:
     return f"{OPENCASELIST_ORIGIN}/{caselist}/{school}/{team_code}"
 
 
-def openev_file_url(openev_id: object) -> str | None:
-    """A camp file's address on OpenEv, from its id, or `None` for a value that is no OpenEv id: one read
-    from an index row is checked again here, a boolean, zero or a negative number refused."""
-    if isinstance(openev_id, bool) or not isinstance(openev_id, int) or openev_id < 1:
+def openev_camp_page_url(word: object, year: object, *, today: date) -> str | None:
+    """A camp's page on OpenEv, from its OpenEv word and the release's year, or `None` for a word that is
+    not one address word (or is `UNKNOWN`) and a year outside OpenEv's archive, as of `today`."""
+    if not isinstance(word, str) or _OPENEV_WORD.fullmatch(word) is None or word == _UNREAD:
         return None
-    return OPENEV_FILE_URL_TEMPLATE.format(openev_id=openev_id)
+    if isinstance(year, bool) or not isinstance(year, int):
+        return None
+    if not OPENEV_ARCHIVE_FIRST_YEAR <= year <= current_season_start(today) + 1:
+        return None
+    return OPENEV_CAMP_PAGE_TEMPLATE.format(year=year, word=word)
 
 
-def source_link(occurrence: OccurrenceProvenance) -> SourceLink | None:
-    """The link to the page that publishes `occurrence`'s file, or `None` when none can be built."""
+def source_link(
+    occurrence: OccurrenceProvenance, *, openev_words: Mapping[str, str], today: date
+) -> SourceLink | None:
+    """The link to the page that publishes `occurrence`'s file, or `None` when none can be built.
+
+    `openev_words` is the alias table's `openev` section, a canonical camp to its OpenEv word, and
+    `today` the date the season is counted from: both are a camp card's only, and a disclosed card's
+    link reads neither.
+    """
     if occurrence.caselist == CAMP_STORE:
-        return _openev_link(occurrence)
+        return _openev_link(occurrence, openev_words, today)
     school, team_code = occurrence.school, occurrence.team_code
     if not occurrence.provenance or school is None or team_code is None:
         return None
@@ -156,9 +192,14 @@ def source_link(occurrence: OccurrenceProvenance) -> SourceLink | None:
     return None if url is None else SourceLink(label=OPENCASELIST_LABEL, url=url)
 
 
-def _openev_link(occurrence: OccurrenceProvenance) -> SourceLink | None:
-    """A camp occurrence's file on OpenEv, from its stored id alone: never its title, camp or year."""
-    if not occurrence.provenance or occurrence.openev_id is None:
+def _openev_link(
+    occurrence: OccurrenceProvenance, openev_words: Mapping[str, str], today: date
+) -> SourceLink | None:
+    """A camp occurrence's camp page on OpenEv, from its camp through the table and its year alone."""
+    camp = occurrence.camp
+    if not occurrence.provenance or camp is None or camp == _UNREAD:
         return None
-    url = openev_file_url(occurrence.openev_id)
-    return None if url is None else SourceLink(label=OPENEV_LABEL, url=url)
+    url = openev_camp_page_url(openev_words.get(camp), occurrence.camp_year, today=today)
+    if url is None:
+        return None
+    return SourceLink(label=f"{OPENEV_LABEL}: {camp} {occurrence.camp_year} camp page", url=url)

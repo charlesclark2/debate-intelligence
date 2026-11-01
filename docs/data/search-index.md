@@ -161,11 +161,10 @@ build (`SEARCH_INDEX_STORE_NOT_READY`, naming its key and line, never the line),
 read as no ids. Like the camp release's other columns, the id is kept only with the provenance, for
 the first `provenance_limit` occurrences.
 
-The card page builds "Open on OpenEv" from this value alone
-(`debate_core.domain.search_source_links`), never from the camp, year or title. The address is
-`https://opencaselist.com/openev/<id>`, a constant (`OPENEV_FILE_URL_TEMPLATE`) that nothing in the
-repository pins: the repository holds the API the pull uses, not a page a browser opens. It is
-checked once, by hand, on dev ([the runbook](../runbooks/evidence-search.md#moving-the-index-to-format-3)).
+The card page does not read this value since `v1-e39-t28`: the address `v1-e39-t16` built from it,
+`https://opencaselist.com/openev/<id>`, is OpenEv's page for a year, not the file's (the operator's
+check of 2026-10-31). It is kept for a later per-file link, which would need the file's path as well.
+[The camp card's link](#the-camp-cards-link-to-openev) is built from the camp and year instead.
 
 **How many have one, 2026-10-31.** Counted on the operator's Mac, read-only, counts only. The
 `openev` store (`2026.10.20-docx-6`) holds 102 camp files with cards, all in `2026-policy`, from the
@@ -178,6 +177,33 @@ card. So **0 of the 102** camp files with cards get an id without a re-parse, an
 other means the repository has. A camp file the pull imports from now on carries one. The cloud run's
 store was seeded from this Mac at the cutover (2026-10-26) and was not counted here: that would be a
 read of the bucket.
+
+### The camp card's link to OpenEv
+
+Since `v1-e39-t28` a camp card's page links to its camp's page on OpenEv,
+`https://opencaselist.com/openev/<year>/<word>`, which lists each of the camp's files with its download
+and sends a reader who is not signed in to openCaselist's sign-in page. The label, *Find on OpenEv*
+with the camp and year, says it opens the camp's page, not the file. It is built by
+`debate_core.domain.search_source_links` from the representative occurrence's `camp` and `camp_year`,
+which every format holds, and from nothing else: never the title, the event, `openev_id` or the
+request.
+
+* **The word is the alias table's, not the stored camp.** `camp` is the importer's canonical name from
+  `camp_aliases.yaml`, which is not OpenEv's own word for most camps. The table's `openev` section maps
+  a canonical camp to OpenEv's word, filled only for camps whose page the operator has opened and seen
+  list the camp's files. A camp with no word has no link, and so has `UNKNOWN`, whatever the table
+  says. A camp whose canonical name gathers spellings OpenEv files as two camps is given no word.
+* **The year** links from 2013, the oldest year on OpenEv's sidebar, to the current season plus one
+  (`debate_core.domain.season`: a season starts on 1 August, and a topic year's camp files arrive in
+  June and July). An occurrence past the provenance limit has no camp, so no link.
+* A disclosed card is unchanged, and the results page shows no link.
+
+**The count, 2026-10-31.** Counted on the operator's Mac, read-only, counts only. The `openev` store's
+102 camp files with cards, all `2026-policy`, are stored under 15 camp values. 14 are canonical names
+from the table and the 15th is `UNKNOWN`. 12 are one word of letters and digits besides `UNKNOWN`.
+Of the three camp pages the operator confirmed, only UTNIF's word is a stored value. With the table's
+words as committed (UTNIF's alone), **2 of the 102** files link. The same 15 values are in all four
+local indexes (formats 1 and 2).
 
 ### `search`: the full-text index
 

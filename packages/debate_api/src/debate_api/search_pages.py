@@ -43,7 +43,9 @@ search_index_holder.ScreenedSearch`).
 * **Open on openCaselist.** Below the provenance line, a disclosed card's link to its team's page,
   from :func:`~debate_core.domain.search_source_links.source_link`, in a new tab with no opener and
   no referrer. A card whose link cannot be built shows none. It leaves the platform, so it writes
-  no record.
+  no record. A camp card's is *Find on OpenEv*, its camp's page, through the alias table's OpenEv
+  words in :attr:`~debate_api.state.PilotServices.openev_camp_words` and the clock's date
+  (`v1-e39-t28`).
 
 ## Passage search, stems and prefixes (`v1-e39-t13`)
 
@@ -94,6 +96,7 @@ from debate_core.domain.evidence_search import (
     MAX_QUERY_CHARACTERS,
     Card,
     InvalidSearchCursor,
+    OccurrenceProvenance,
     ResultCount,
     SearchFilters,
     SearchHit,
@@ -102,7 +105,7 @@ from debate_core.domain.evidence_search import (
 )
 from debate_core.domain.file_recipe import CAMP_STORE, RECIPE_STORE_PATTERN
 from debate_core.domain.search_card_html import render_card_html, render_snippet_html, render_text_html
-from debate_core.domain.search_source_links import source_link
+from debate_core.domain.search_source_links import SourceLink, source_link
 
 __all__ = [
     "CAMP_LABEL",
@@ -247,6 +250,14 @@ def _count_words(count: ResultCount | None) -> str | None:
     if count.capped:
         return f"{count.matches:,}+ cards matched."
     return "1 card matched." if count.matches == 1 else f"{count.matches:,} cards matched."
+
+
+def _source_link(request: Request, representative: OccurrenceProvenance | None) -> SourceLink | None:
+    """The card's link out, a camp card's from the table's OpenEv words and today's date."""
+    if representative is None:
+        return None
+    services = pilot_state(request).services
+    return source_link(representative, openev_words=services.openev_camp_words, today=services.clock().date())
 
 
 def _card_href(caselist: str, cluster_id: str) -> str:
@@ -421,7 +432,7 @@ def card_page(caselist: str, cluster_id: str, request: Request) -> HTMLResponse:
         back_href=back or _FRESH_SEARCH,
         back_words=_BACK_TO_RESULTS if back else _NEW_SEARCH,
         provenance_line=representative.provenance_line if representative is not None else None,
-        source_link=source_link(representative) if representative is not None else None,
+        source_link=_source_link(request, representative),
         counts=_counts(card.file_count, card.team_count),
         copy_href=_card_href(card.caselist, card.cluster_id) + "/copy",
         card_reference=f"{card.caselist}/{card.cluster_id}",

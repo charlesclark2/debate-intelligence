@@ -1811,9 +1811,11 @@ prod's first format 2 index ([Promoting the pilot to prod](#promoting-the-pilot-
 
 ## Moving the index to format 3
 
-`v1-e39-t16` changed the index's format from 2 to 3: `occurrences` holds a camp file's OpenEv id,
-and a camp card's page links to the file on OpenEv from it
-([the index's data model](../data/search-index.md#a-camp-files-openev-id-format-3)). A function from
+`v1-e39-t16` changed the index's format from 2 to 3: `occurrences` holds a camp file's OpenEv id
+([the index's data model](../data/search-index.md#a-camp-files-openev-id-format-3)), kept for a later
+per-file link. Since `v1-e39-t28` a camp card's page links to its camp's page on OpenEv from the camp
+and year every format holds, not from the id
+([the link](../data/search-index.md#the-camp-cards-link-to-openev)). A function from
 `v1-e39-t16` on reads formats 1, 2 and 3; an older one reads 1 and 2 only and refuses a format 3
 index with `its format version is not one this build reads, 1 or 2`. Since the cutover the weekly
 cloud run builds and publishes dev's index, and the first run on an image carrying `v1-e39-t16`
@@ -1850,8 +1852,9 @@ scripts/tub_deploy.sh dev
 ```
 Success looks like `{"status":"ok"}` and `Deployed <sha> to dev`, where `<sha>` is a commit that
 holds `v1-e39-t16`'s merge. Then sign in on dev and search for any word: the results carry a count
-above zero, so the new function is serving the format 2 index. A camp card shows no *Open on OpenEv*
-yet: format 2 has no ids.
+above zero, so the new function is serving the format 2 index. From a commit that also holds
+`v1-e39-t28`'s merge, a camp card whose camp has an OpenEv word shows *Find on OpenEv* already, on
+format 2: the link needs only the camp and year.
 
 **2. The cloud run's image**, by [A new image, later](caselist-cloud-run.md#a-new-image-later), from a
 dev pre-release that holds `v1-e39-t16`'s merge, never one before step 1. Its format check prints
@@ -1860,23 +1863,18 @@ builds format 3, checks it against the shrink guard and publishes it; within fiv
 function swaps to it. A build and publish by hand (`tub index build`, `tub index publish`) from a
 checkout holding `v1-e39-t16` writes format 3 too, so it waits for step 1 as well.
 
-**3. What to expect after the swap.** Every card is found as before. A camp card links to OpenEv only
-when its file's release manifest records an id, and on 2026-10-31 none of the 102 camp files with
-cards in the store did ([the count](../data/search-index.md#a-camp-files-openev-id-format-3)), so no
-camp card shows the link until a camp file the pull imports is indexed. The address's shape,
-`https://opencaselist.com/openev/<id>`, is pinned by nothing in the repository. Check it once, in a
-browser signed in to openCaselist, with an id the sync has listed. This prints one, from the run
-records the Mac keeps, and nothing else:
-
-**Operator command** (expected runtime under a second)
-Where: your Mac, anywhere
-```bash
-python3 -I -c 'import glob, json, os; ids = sorted({one["openev_id"] for name in glob.glob(os.path.expanduser("~/.debate-research/dev/caselist-sync-runs/*.json")) for one in json.load(open(name)).get("openev_selections", [])}); print("https://opencaselist.com/openev/" + str(ids[-1]) if ids else "STOP: no OpenEv id in the run records")'
-```
-Open the printed address. If it opens that file's page on OpenEv, say so to the PM. If it opens
-anything else, tell the PM what it shows: the address is one constant,
-`OPENEV_FILE_URL_TEMPLATE` in `debate_core.domain.search_source_links`, and its test, so a task can
-change it before any camp card carries an id.
+**3. What to expect after the swap.** Every card is found as before, and camp cards link as they
+did on format 2. **The address check is done** (the operator, 2026-10-31). The address `v1-e39-t16`
+built from a stored id, `https://opencaselist.com/openev/<id>`, is OpenEv's page for a *year*: it
+opened "Open Evidence Project" with the id as the year and an empty list. A camp's page,
+`https://opencaselist.com/openev/<year>/<camp>`, lists each of the camp's files with its download,
+and sends a reader who is not signed in to openCaselist's sign-in page. So `v1-e39-t28` links a camp
+card to its camp's page, through the OpenEv word `camp_aliases.yaml` gives its camp, and with the
+card's year ([the link](../data/search-index.md#the-camp-cards-link-to-openev)). **Camp cards link
+from the day dev's function carries `v1-e39-t28`**, whatever the index's format. Only camps whose
+word the operator has confirmed link: a camp with no word in the table shows no link. To give a camp
+one, open its page signed in, and once it lists the camp's files add the word to the table's
+`openev` section in a task.
 
 **In prod** the order is the same, at the promotion: the prod function (step 11's deploy) before
 prod's first format 3 index ([Promoting the pilot to prod](#promoting-the-pilot-to-prod), item 7),

@@ -3,7 +3,7 @@
 :class:`PilotServices` is what a composition root hands :func:`debate_api.app.create_app`: the
 configuration, the cookie keys, the two sign-in use cases, the search index holder (`v1-e39-t06`),
 the access audit (`v1-e39-t07`), the card download (`v1-e39-t08`), the landscape bundles
-(`v1-e39-t17`) and the clock.
+(`v1-e39-t17`), each camp's OpenEv word for the card page's camp link (`v1-e39-t28`) and the clock.
 `debate_api.container` builds it from the function's environment; a test builds it from fakes.
 :class:`PilotState` adds what the app derives from it once, and lives on `app.state.pilot` for the
 gate and the routes.
@@ -11,7 +11,7 @@ gate and the routes.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import cast
@@ -61,6 +61,8 @@ class PilotServices:
     access_audit: AccessAuditService
     card_download: CardDownloadService
     landscape: LandscapeShelf[RenderedBundle]
+    openev_camp_words: Mapping[str, str]
+    """The alias table's `openev` section: a canonical camp to OpenEv's word for its page."""
     clock: Callable[[], datetime]
 
 

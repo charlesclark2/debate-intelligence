@@ -1109,7 +1109,8 @@ class PilotWorld:
     """The app over the fakes, a browser for it, and helpers to sign in or plant a session.
 
     Sign-in alone: nothing is published to search, no source is stored to download and no landscape
-    bundle is listed. Each surface's world overrides the method that builds its service.
+    bundle is listed. Each surface's world overrides the method that builds its service. No camp has
+    an OpenEv word unless `openev_camp_words` gives one (`v1-e39-t28`).
     """
 
     public_origin = PUBLIC_ORIGIN
@@ -1121,7 +1122,7 @@ class PilotWorld:
     good_email_code = GOOD_EMAIL_CODE
     authenticator_secret = AUTHENTICATOR_SECRET
 
-    def __init__(self) -> None:
+    def __init__(self, *, openev_camp_words: Mapping[str, str] | None = None) -> None:
         self.clock = MutableClock()
         self._index_directory = tempfile.TemporaryDirectory(prefix="tub-index-")
         self.index_directory = Path(self._index_directory.name)
@@ -1165,6 +1166,7 @@ class PilotWorld:
             access_audit=access_audit,
             card_download=self._card_download(search_index, access_audit),
             landscape=self._landscape(),
+            openev_camp_words={} if openev_camp_words is None else openev_camp_words,
             clock=self.clock,
         )
         self.app = create_app(self.services)

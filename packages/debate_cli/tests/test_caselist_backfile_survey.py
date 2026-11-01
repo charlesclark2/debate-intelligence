@@ -20,6 +20,7 @@ from debate_cli.commands.caselist_backfile import current_season_start
 from debate_cli.context import cli_context
 from debate_core.application.caselist.backfile_survey import BackfileSurvey
 from debate_core.application.ports.caselist_source import ArchiveKind, ArchiveListing, CaselistInfo
+from debate_core.domain import season
 
 runner = CliRunner()
 ON_A_SUNDAY_IN_OCTOBER = datetime(2026, 10, 25, 15, 0, tzinfo=UTC)
@@ -173,3 +174,8 @@ def test_the_table_says_nothing_was_downloaded() -> None:
 def test_a_season_starts_on_the_first_of_august() -> None:
     assert current_season_start(date(2026, 7, 31)) == 2025
     assert current_season_start(date(2026, 8, 1)) == 2026
+
+
+def test_the_command_reads_the_domains_season_rule_unchanged() -> None:
+    """Moved to `debate_core.domain.season` in `v1-e39-t28`, for the camp link: the CLI keeps no copy."""
+    assert current_season_start is season.current_season_start

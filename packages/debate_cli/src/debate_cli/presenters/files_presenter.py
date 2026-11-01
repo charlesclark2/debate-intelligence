@@ -14,6 +14,12 @@ and each check's PASS, WARN or FAIL. Never card text, a school or a team code: n
 `--json` carries the same results under `quality.findings`, each shaped as the `.quality.json`'s
 `results` entries are (`v1-e33-t12`). A file with no WARN or FAIL prints the table alone.
 
+`files publish` names the warned checks of each file it lets through in the table's caption, and below
+the table prints each of their warnings in the same line `files check` does, under the file's slug,
+and `--json` carries them as the file's `warnings` (PM amendment 2026-10-31, `v1-e33-t16`). A refused
+file prints none of these: a `QUALITY_FAILED` refusal carries its sidecar check's warnings in its own
+message (`v1-e33-t10`).
+
 ## Exit codes
 
 * `0`: built (or checked) and every check passed or only warned; a draft was written; every file was
@@ -241,6 +247,7 @@ def publish_rendered(result: PublishResult, *, environment: str, bucket: str) ->
         title=f"{verb} the {environment} evidence bucket {bucket}",
         caption=", ".join(f"{count} {status}" for status, count in counts.items() if count)
         + (f". Warned, not blocked: {'; '.join(warned)}" if warned else ""),
+        lines_below=_warning_lines(result.outcomes),
     )
     refused = result.refused
     if not refused:
@@ -270,6 +277,7 @@ def _outcome_payload(outcome: PublishOutcome) -> dict[str, JsonValue]:
         "written": list(outcome.written),
         "skipped": list(outcome.skipped),
         "warned_checks": [str(one) for one in outcome.warned_checks],
+        "warnings": [one.model_dump(mode="json") for one in outcome.warnings],
         "refusal": None
         if refusal is None
         else {
@@ -279,6 +287,18 @@ def _outcome_payload(outcome: PublishOutcome) -> dict[str, JsonValue]:
             "failing_checks": [str(one) for one in refusal.failing_checks],
         },
     }
+
+
+def _warning_lines(outcomes: Sequence[PublishOutcome]) -> list[str]:
+    """Each warning of each file let through, as `files check` prints it, under the file's slug."""
+    lines: list[str] = []
+    for one in outcomes:
+        if one.warnings:
+            lines += [
+                f"Warned, not blocked in {one.slug}:",
+                *(f"  {finding_line(found)}" for found in one.warnings),
+            ]
+    return lines
 
 
 def _where(outcome: PublishOutcome) -> str:

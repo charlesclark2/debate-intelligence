@@ -50,13 +50,17 @@ writes a bucket does (ADR-0020 (4)); a dry run takes nothing.
 
 A file is published only when, in this order:
 
-1. its quality report is beside it and readable (`QUALITY_REPORT_MISSING` otherwise);
+1. its quality report is beside it and readable (`QUALITY_REPORT_MISSING` otherwise), and was
+   written by this build's version of the checks: a report from another version is
+   `QUALITY_REPORT_OUTDATED`, naming both versions, whether or not it would still read, and
+   `files check` writes a current one (`v1-e33-t16`);
 2. the report is for the `.docx` as it is now, by SHA-256 (`QUALITY_REPORT_STALE`);
 3. its sidecar records that the recipe was `ready`: a file built from a `status: draft` recipe is
    `BUILT_FROM_A_DRAFT` whatever its quality, and a sidecar written before the status was recorded is
    `RECIPE_STATUS_UNRECORDED` until the file is rebuilt (PM amendment 2026-10-24);
 4. the report's status is PASS (`QUALITY_FAILED`, naming the failing checks); a WARN never blocks,
-   and is recorded in `metadata.json` (PM amendment 2026-10-21);
+   and is recorded in `metadata.json` (PM amendment 2026-10-21); `files publish` prints each warning
+   of a file it lets through as `files check` does (PM amendment 2026-10-31);
 5. the quality check, run again on the exact bytes to be uploaded, is PASS too (`QUALITY_FAILED`),
    so a source suppressed since the report was written stops the file; the report uploaded is this
    one;

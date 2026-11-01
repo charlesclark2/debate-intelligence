@@ -210,9 +210,54 @@ None. The full affected set is left to the pull request's `ci` under agreement 1
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-31
 
 **Notes:**
+
+The count is the useful finding. -25308 is defined in `keyring` but never mapped, so a locked
+keychain under launchd has always reached us as "a bug". That fits 2026-10-21, though nothing can now
+prove which status that run met.
+1. **ac1 passes.**
+   * Every row cites the installed `keyring` 25.7.0 at file and line, its shipped README, and
+     Apple's headers.
+   * The report says plainly what the count rests on (the code's mapping, run by the tests) and what
+     it doesn't (which OSStatus a real Mac returns in each case).
+2. **ac2 passes.**
+   * Red: 32 failed against classes nothing raised, and the CLI's red output was the 2026-10-21
+     report word for word.
+   * Green: 65.
+   * The stand-in is `keyring`'s own macOS backend with only its `api` module replaced. That is the
+     strongest stand-in available without a real keychain.
+   * The PM read `token_store.py`: only an `int` at `__cause__.args[0]` is read, a message never
+     (a test proves `ValueError("-25308")` stays `INTERNAL_ERROR`), and an unmodelled status is
+     re-raised as it came.
+3. **ac3 passes.** Four scheduled runs, each with its code, its words, its hint and no "bug", and no
+   keychain message in the log, the details, the bucket copies or the notification.
+4. **Mutants:** all eight are caught, the PM's five plus 2b (the cause chain kept), 6 and 7.
+5. **Decisions accepted:**
+   * codes named as every other `DomainError`'s, and documented in the port and the scheduled-sync
+     runbook;
+   * a missing item keeps `CASELIST_TOKEN_MISSING`, which already gives the spec's first hint;
+   * the two pairs that even the OSStatus can't separate share one code, with a hint covering both;
+   * `NoKeyringError` mapped to `KeyringUnavailable`;
+   * a Linux `KeyringLocked` with no status left as `INTERNAL_ERROR`, since only macOS was counted;
+   * `raise ... from None` on a named failure, with `details.os_status` keeping the number;
+   * the shared `fix_for` and run words leave the cloud run unchanged, since Secrets Manager never
+     calls `keyring`;
+   * no smoke check, since no refusal can be staged without a real keychain. The CLI test covers
+     the composition root.
+6. **Follow-ups, the PM's rulings:**
+   * **The Mac-only hint for `CASELIST_TOKEN_MISSING`:** one p3 E34 task in the PM's next batch.
+     Outside bucket mode the hint is `caselist auth login`, and bucket mode keeps its renew-task
+     fix.
+   * **Measuring the real OSStatus:** not a task. The next refusal records its code, and the PM
+     reads it then.
+7. **Closing checks:** the affected set (303 files through two hub modules) is left to the PR's
+   `ci` under agreement 10. The always-run list with the auth and pull tests (701), every importer
+   of the four changed modules (954), ruff, pyright, lint-imports, thin handlers, the doc checks and
+   the specs are clean.
+8. **Merge:** a plain `scripts/task pr` once `ci` is green. No operator step follows. This is v1.1
+   work.

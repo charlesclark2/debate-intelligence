@@ -52,7 +52,7 @@ spec:
         digest, and `files check` flags exactly the cards a camp-path suppression names, by
         test.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

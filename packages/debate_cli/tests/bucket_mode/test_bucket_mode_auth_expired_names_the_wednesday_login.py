@@ -377,3 +377,23 @@ def test_a_mac_backfile_import_refused_for_auth_expired_keeps_its_output_word_fo
     assert error["code"] == "CASELIST_AUTH_EXPIRED"
     assert error["message"] == THE_BACKFILE_LISTING_REFUSED + THE_MACS_INSTRUCTION
     assert error.get("hint") is None
+
+
+# ------------------------------------------------------------------------------------------------
+# The runbook says which build changed it
+# ------------------------------------------------------------------------------------------------
+
+CLOUD_RUNBOOK: Final = Path(__file__).resolve().parents[4] / "docs" / "runbooks" / "caselist-cloud-run.md"
+
+
+def test_the_cloud_runbook_says_which_image_stopped_the_auth_expired_output_naming_a_login() -> None:
+    text = flattened(CLOUD_RUNBOOK.read_text(encoding="utf-8"))
+    assert "a later image changes it" not in text
+    assert (
+        "Since `v1-e40-t35` an image's `CASELIST_AUTH_EXPIRED` message says only what OpenCaselist refused"
+        in text
+    )
+    assert (
+        "Since `v1-e40-t35` the run's own log and its record (`caselist runs --json`'s `error_message`)"
+        in text
+    )

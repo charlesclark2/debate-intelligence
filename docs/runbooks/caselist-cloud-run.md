@@ -1308,8 +1308,10 @@ It is a second login that week for the same account, which may end the token the
 ([Step 3](#step-3--does-a-new-login-end-the-macs-token-before-apply-b)); and without
 `--token-backend secretsmanager` it writes only the Mac's own token, which the cloud run never reads.
 The policy's clause 10 says a `401` or `403` is escalated, never worked around: this email is the
-escalation. A run on an image built before `v1-e40-t33` still names that command as its fix, and the
-run's own log still says to run it (the error's message is the Mac's); the rule holds for both.
+escalation. A run on an image built before `v1-e40-t33` still names that command as its fix. Since
+`v1-e40-t35` the run's own log and its record (`caselist runs --json`'s `error_message`) say only what
+was refused, with the fix above as the command's hint; on an image built before it both still say to
+run it (the error's message is the Mac's). The rule holds for all of them.
 
 ## A backlog growing
 
@@ -1579,8 +1581,11 @@ last lines (`aws logs tail` without the `grep`s) to the PM.
 * `CASELIST_AUTH_EXPIRED`, `CASELIST_TOKEN_MISSING` or `CASELIST_TOKEN_UNREADABLE`: the token the run's
   login stored has expired, or there is none. **The Wednesday 03:00 login renews it. Nobody logs in by
   hand for an import**, which would be a second login: start the import again after Thursday 00:00.
-  The task's own message still says to run `caselist auth login`; that wording is the Mac's, and a
-  later image changes it.
+  Since `v1-e40-t35` an image's `CASELIST_AUTH_EXPIRED` message says only what OpenCaselist refused,
+  and its hint is the Wednesday login of
+  [A run refused for an expired login](#a-run-refused-for-an-expired-login). An image built before it
+  still says to run `caselist auth login`, and the messages of the other two codes still do: that
+  wording is the Mac's, and the rule holds for all of them.
 * `INSIDE_NO_IMPORT_WINDOW`, `BACKFILE_BUDGET_SPENT`, `NOT_ENOUGH_FREE_SPACE`,
   `RUN_STATE_NOT_SEEDED`, `NOT_A_BACKFILE`, `NO_COMPLETE_ARCHIVE`: as
   [caselist-backfiles.md, "What each refusal means"](caselist-backfiles.md#what-each-refusal-means) says.

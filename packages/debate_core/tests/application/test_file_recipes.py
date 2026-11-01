@@ -1439,6 +1439,18 @@ def test_resolve_a_camp_pin_to_the_release_a_path_was_withdrawn_from_is_refused_
     assert ([card.occurrence.snapshot for card in kept.cards], kept.errors) == (["2030-policy"], ())
 
 
+def test_resolve_auto_skips_a_camp_row_with_camp_paths_whose_whole_source_is_suppressed() -> None:
+    """A row's camp paths add a question; the whole-source one is still asked first."""
+    rows = [
+        camp_occurrence(CARD_A, SOURCE_1, 5, release="2031-policy", paths=[LATER_CAMP_PATH]),
+        camp_occurrence(CARD_A, SOURCE_2, 9, release="2030-policy", paths=[CAMP_PATH]),
+    ]
+    resolved = camp_world(rows, suppressions=[suppress(SOURCE_1)]).resolve(
+        recipe_text(card(CARD_A), header=CAMP_HEADER)
+    )
+    assert (chosen(resolved), resolved.errors) == ([(SOURCE_2, 9, "AUTO")], ())
+
+
 def test_resolve_a_camp_row_with_no_camp_paths_is_resolved_as_before_a_withdrawal_of_one() -> None:
     """A row from a table written before rows carried camp paths: the suppression list has nothing to ask."""
     rows = [camp_occurrence(CARD_A, SOURCE_1, 5, release="2031-policy")]

@@ -440,6 +440,11 @@ check has passed.
 
 ## After the backfill: correct the camp files' camp and title (`v1-e30-t08`)
 
+This was run on 2026-10-09, before the cutover. Since then dev is in bucket mode and its records are
+the cloud run's run-state bundle: a camp table change reaches them by
+[caselist-cloud-run.md, "A camp table change"](caselist-cloud-run.md#a-camp-table-change-the-openev-metadata-re-import)
+(`v1-e40-t34`), not by the blocks below.
+
 The 105 camp files imported on day 1 all carry camp `UNKNOWN`, and their titles still hold the
 camp, the year and the lab's initials. The importer looked for the camp only in a folder or at the
 start of a filename; these files name it after the title. `v1-e30-t08` fixed the detection, and

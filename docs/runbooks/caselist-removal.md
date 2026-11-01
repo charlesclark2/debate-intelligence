@@ -1071,6 +1071,12 @@ agent on an older build, carry neither, and a plan over them says *matched by fi
 hand-imported row carries the id only if its name gives one, and never the path; it is never a later
 upload, so nothing needs it.
 
+**Since the cutover, dev is in bucket mode, and the blocks below are not how dev runs it**: there,
+`caselist reimport-openev-metadata` is a dry run unless `--execute`, works on the bucket's run state,
+and publishes the manifest itself, and a publish from the Mac would put the Mac's copy over the cloud
+run's. Use [caselist-cloud-run.md, "A camp table change"](caselist-cloud-run.md#a-camp-table-change-the-openev-metadata-re-import)
+(`v1-e40-t34`). The blocks are kept as they were run before the cutover.
+
 Give the rows their identity in the dev data directory, from this machine's delivery record, with
 a build that has `v1-e30-t14` (`uv run` in a checkout of `dev` after it merges). Do it for each
 release under `manifests/openev/`; today that is `2026-policy`. First the dry run, which writes

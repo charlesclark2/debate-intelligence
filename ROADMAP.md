@@ -68,7 +68,7 @@ v2.3's extension work.
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 29 | 21 | 166 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 29 | 25 | 94 |
-| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 52 | 32 | 91 |
+| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 52 | 33 | 91 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -604,7 +604,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [A cloud run refused for an expired login says the Wednesday login renews it, not to log in by hand](plan_specs/v1/e40-cloud-caselist-run/t33-expired-login-cloud-notice-names-the-wednesday-login.yaml) `v1-e40-t33-expired-login-cloud-notice-names-the-wednesday-login` | Succeeded | 2 | 1.0 |
 | [The OpenEv metadata re-import runs in bucket mode, so a camp table change reaches dev's records](plan_specs/v1/e40-cloud-caselist-run/t34-openev-metadata-reimport-in-bucket-mode.yaml) `v1-e40-t34-openev-metadata-reimport-in-bucket-mode` | Succeeded | 2 | 2.0 |
 | [A cloud run refused for an expired login names the Wednesday login in its own output too](plan_specs/v1/e40-cloud-caselist-run/t35-expired-login-cli-output-in-bucket-mode.yaml) `v1-e40-t35-expired-login-cli-output-in-bucket-mode` | Succeeded | 1 | 1.0 |
-| [The aggregate rebuild reads cards source by source, so it no longer holds a whole caselist's cards in memory](plan_specs/v1/e40-cloud-caselist-run/t36-parse-rebuild-streams-occurrence-rows.yaml) `v1-e40-t36-parse-rebuild-streams-occurrence-rows` | Pending | 2 | 3.0 |
+| [The aggregate rebuild reads cards source by source, so it no longer holds a whole caselist's cards in memory](plan_specs/v1/e40-cloud-caselist-run/t36-parse-rebuild-streams-occurrence-rows.yaml) `v1-e40-t36-parse-rebuild-streams-occurrence-rows` | Succeeded | 2 | 3.0 |
 | [Redaction no longer takes two apostrophes for a quoted path and removes the words between them](plan_specs/v1/e40-cloud-caselist-run/t37-redact-keeps-text-between-apostrophes.yaml) `v1-e40-t37-redact-keeps-text-between-apostrophes` | Pending | 1 | 1.0 |
 | [A lock refusal is not reported as a run that stopped before its stages](plan_specs/v1/e40-cloud-caselist-run/t38-landscape-staleness-ignores-lock-refusals.yaml) `v1-e40-t38-landscape-staleness-ignores-lock-refusals` | Pending | 1 | 0.8 |
 

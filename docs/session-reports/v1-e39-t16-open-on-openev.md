@@ -297,9 +297,67 @@ None of these is a criterion. They are the post-merge moves, in this order.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-31
 
 **Notes:**
+
+The feature is built and safe to ship while it stays dark. The count you took first is what makes
+that clear. The PM read both runbook diffs whole.
+1. **ac1 passes.**
+   * The link is built only from the stored id, in a new tab with `noopener noreferrer`.
+   * A camp card with no id, a format 2 index, a disclosed card and the results page show no link.
+   * Red against refuse-everything skeletons: 4 + 3 + 4 + 3 failed, all at assertions. Your own
+     probe slip (`/cards/openev/`) was fixed before the counted run, and the report says so.
+   * 14 of 15 mutants are caught, each by an assertion. The three that matter most to the PM are
+     caught: the link built from the title (1), the link on a disclosed card (2a) and the referrer
+     sent (3).
+   * **2b is accepted as equivalent.** A caselist row's snapshot is a date, so it names no camp
+     release, and a test pins the outcome.
+   * Mutant 5 was replaced, not counted, after its first form crashed at collection. That was the
+     right call.
+2. **ac2 passes.**
+   * The format moves once, to 3, and the reader still reads 1 and 2.
+   * A holder given format 4 refuses it with a message and keeps serving what it holds.
+   * Measuring the deployed function's behaviour on the start commit was what the PM wanted. A wrong
+     order costs at most a stale or unavailable search until the function is deployed, and nothing
+     needs rolling back.
+3. **The deploy-order check in `caselist-cloud-run.md`: accepted.** It compares the format each
+   commit writes, under the stated assumption that a build reads its own format and every earlier
+   one. It was run offline against real commits in both directions, and it reads AWS without
+   changing anything. It uses `debate-admin`, as `tub_deploy.sh` does. If that sign-in has lapsed,
+   the call fails without printing `OK`, which is the safe way round.
+4. **Deviation 1: the build-time join, accepted.** It costs no `CampFile` field, no parser or
+   fingerprint version and no re-parse. It reaches every file the pull imports from now on.
+5. **Deviation 2: the packages, accepted.** The next PM batch adds `debate_cli`,
+   `debate_core.testing` and `docs/runbooks` to the spec's packages.
+6. **Decisions accepted:**
+   * the smaller id for a file at two paths;
+   * the id kept within the provenance limit, for the `openev` store only;
+   * an unreadable manifest stops the build, while a missing one gives no ids;
+   * formats 1 to 3 stay readable;
+   * `release_manifest_lines` is required, so a missed wiring fails loudly.
+7. **The questions, the PM's rulings:**
+   * **Q1: (a) now, plus (b) filed at p3.** The 102 hand-imported policy files are this season's
+     camp cards, so links on them are the feature's value this year. The p3 task measures first,
+     counts only, with the operator's listing call, and stops below a match rate the PM sets. Only
+     after that does it fill manifest rows, with a rebuild by hand (see Q3).
+   * **Q2: (a).** The operator opens one address now (follow-up 3). If the shape is wrong, a one-line
+     task changes the constant and its test before any card carries an id.
+   * **Q3: (a).** The Q1 (b) task names the rebuild by hand. Nothing else fills ids into existing
+     rows.
+8. **Closing checks:** the affected set (386 files) is left to the PR's `ci` under agreement 10.
+   Every package it reaches was run within the limit: core application and caselist (4,561), API
+   (1,100), domain, local and the CLI index tests (1,365), the always-run list (373) and the runbook
+   readers (152). ruff, pyright over the whole repository, lint-imports, thin handlers, the doc
+   checks and the specs are clean. The stale `ROADMAP.md` comes from the base, and the refresh
+   workflow regenerates it.
+9. **Merge and order:**
+   * A plain `scripts/task pr` once `ci` is green.
+   * Then dev's function is deployed (follow-up 1), never on a Wednesday, and before Thursday's
+     e39-t10 journey, which may build an index by hand from a checkout holding this task.
+   * Wednesday 11-04's run is on `v1.1.0-dev.251`, which writes format 2, and the new function reads
+     it.
+   * The first run image carrying this task waits for the format check's `OK`.

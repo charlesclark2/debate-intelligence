@@ -772,6 +772,14 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e30-t30-inbox-deletions-fsync-the-directory
+    - id: ext-v1-e34-t02-scheduled-sync
+      kind: External
+      name: 'Prerequisite from E34: Weekly scheduled sync'
+      description: >-
+        Cross-epic prerequisite owned by v1-e34-caselist-sync (release v1.1).
+      inputs:
+        goalRef: v1-e34-t02-scheduled-sync
+        specRef: plan_specs/v1/e34-caselist-sync/t02-scheduled-sync.yaml
     - id: t31
       kind: Task
       name: 'The pull keeps OpenEv''s own camp word on a camp file''s manifest row'
@@ -780,6 +788,9 @@ spec:
       inputs:
         specRef: plan_specs/v1/e30-caselist-ingestion/t31-openev-camp-word-on-the-manifest-row.yaml
         goalRef: v1-e30-t31-openev-camp-word-on-the-manifest-row
+      dependsOn:
+      - t04
+      - ext-v1-e34-t02-scheduled-sync
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e30-t31-openev-camp-word-on-the-manifest-row reports phase Succeeded
@@ -789,5 +800,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e30-t31-openev-camp-word-on-the-manifest-row
+    - id: t32
+      kind: Task
+      name: 'Michigan''s three camps are filed apart, as OpenEv files them, so their cards can link'
+      description: >-
+        Michigan's three camps are filed apart, as OpenEv files them, so their cards can
+        link.
+      inputs:
+        specRef: plan_specs/v1/e30-caselist-ingestion/t32-michigan-split-into-openevs-three-camps.yaml
+        goalRef: v1-e30-t32-michigan-split-into-openevs-three-camps
+      dependsOn:
+      - t04
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e30-t32-michigan-split-into-openevs-three-camps reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e30-t32-michigan-split-into-openevs-three-camps
 status:
   phase: Pending

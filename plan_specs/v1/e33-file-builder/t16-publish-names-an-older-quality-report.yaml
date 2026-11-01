@@ -32,7 +32,7 @@ spec:
     refusal keeps carrying the sidecar's warnings in its message (v1-e33-t10).
   priority: 3
   constraints:
-    packages: [debate_core.application, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, docs/runbooks]
+    packages: [debate_core.application, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, docs/runbooks, docs/data]
     forbidden:
       - Publishing a file whose report is older (it stays a refusal)
       - A path or a card's text in a refusal

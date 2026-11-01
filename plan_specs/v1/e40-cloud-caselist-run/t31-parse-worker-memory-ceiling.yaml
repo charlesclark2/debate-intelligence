@@ -28,6 +28,10 @@ spec:
     `WorkerFailure` with its own reason, is recorded like the time limit's, and the run goes on.
     The cloud task sets the ceiling from its memory and worker count, leaving room for the main
     process. If the main process is what grows, say so and stop: that is a different fix.
+    (PM amendment 2026-11-01, from v1-e40-t30's follow-up.) The weekly run records the container's memory
+    high-water mark at the end of each stage and in its details, read as v1-e40-t32 reads it for an
+    import (the cgroup's peak, and the main process's own), so the run task's size comes from a
+    measurement. Record Wednesday 2026-11-04's figures if the run has them.
   priority: 2
   constraints:
     packages: [debate_core.application, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, infrastructure, docs/data, docs/runbooks]

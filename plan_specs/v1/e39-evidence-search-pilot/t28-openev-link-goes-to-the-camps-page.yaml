@@ -56,7 +56,7 @@ spec:
     filled. No index format change, and the stored OpenEv id stays as it is. ac1 stands as done.
   priority: 2
   constraints:
-    packages: [debate_core.domain, debate_core.application, packages/debate_core/tests, debate_api, packages/debate_api/tests, debate_cli, docs/data, docs/runbooks, tests/docs]
+    packages: [debate_core.domain, debate_core.application, packages/debate_core/tests, debate_api, packages/debate_api/tests, debate_cli, packages/debate_cli/tests, docs/data, docs/runbooks, tests/docs]
     forbidden:
       - A link built from a file title, the event, the OpenEv id or anything the request carries
       - A school, student or lab name in the report or in a link

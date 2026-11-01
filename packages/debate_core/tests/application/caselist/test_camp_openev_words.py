@@ -30,7 +30,21 @@ def table(openev: object) -> CampAliases:
 
 def test_the_packaged_table_holds_the_words_the_operator_confirmed() -> None:
     """Written by hand from the operator's checks of 2026-10-31: a word only for a page that opened."""
-    assert dict(load_camp_aliases().openev_words) == {"UTNIF": "UTNIF"}
+    assert dict(load_camp_aliases().openev_words) == {
+        "CNDI": "CNDI",
+        "DDI": "DDI",
+        "Emory": "ENDI",
+        "Georgetown": "GDS",
+        "Gonzaga": "GDI",
+        "Harvard": "HDC",
+        "JDI": "JDI",
+        "Mean Green": "MGC",
+        "MSDI": "MSDI",
+        "NHSI": "NHSI",
+        "UTNIF": "UTNIF",
+        "Wake Forest": "RKS",
+        "Wyoming": "WYO",
+    }
 
 
 def test_the_section_maps_a_canonical_camp_to_its_word() -> None:

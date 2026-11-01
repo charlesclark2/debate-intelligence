@@ -366,5 +366,33 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e41-t12-pyright-covers-the-clean-scripts
+    - id: ext-v1-e40-t30-run-task-memory-fits-a-full-parse
+      kind: External
+      name: 'Prerequisite from E40: The run task gets 32 GB, so a full re-parse or a backfile import is not killed for memory'
+      description: >-
+        Cross-epic prerequisite owned by v1-e40-cloud-caselist-run (release v1.8).
+      inputs:
+        goalRef: v1-e40-t30-run-task-memory-fits-a-full-parse
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t30-run-task-memory-fits-a-full-parse.yaml
+    - id: t13
+      kind: Task
+      name: 'The image plan check refuses a schedule repointed at a revision registered before the apply'
+      description: >-
+        The image plan check refuses a schedule repointed at a revision registered before
+        the apply.
+      inputs:
+        specRef: plan_specs/v1/e41-delivery-tooling-upkeep/t13-image-plan-check-known-revision-rule.yaml
+        goalRef: v1-e41-t13-image-plan-check-known-revision-rule
+      dependsOn:
+      - ext-v1-e40-t30-run-task-memory-fits-a-full-parse
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e41-t13-image-plan-check-known-revision-rule reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e41-t13-image-plan-check-known-revision-rule
 status:
   phase: Pending

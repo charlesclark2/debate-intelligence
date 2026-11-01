@@ -58,4 +58,19 @@ camps:
     - Wyoming Forensics Institute
 
 openev:
+  # From OpenEv's own 2026 "Files By Camp" list, read by the PM in the operator's signed-in browser on
+  # 2026-10-31, with the operator's word on Mean Green (OpenEv's "Mean Green Comet"). Michigan has no
+  # word: OpenEv files MNDI, UM7 and UMC as three camps, which this table merges (v1-e30-t32 splits it).
+  CNDI: CNDI
+  DDI: DDI
+  Emory: ENDI
+  Georgetown: GDS
+  Gonzaga: GDI
+  Harvard: HDC
+  JDI: JDI
+  Mean Green: MGC
+  MSDI: MSDI
+  NHSI: NHSI
   UTNIF: UTNIF
+  Wake Forest: RKS
+  Wyoming: WYO

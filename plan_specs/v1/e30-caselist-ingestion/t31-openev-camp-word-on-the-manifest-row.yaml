@@ -31,7 +31,14 @@ spec:
     forbidden:
       - Network access in a test (recorded listings only)
       - A camp word that is not one address word stored
-  context: []
+  # PM sweep 2026-11-01: the importer and the pull. The manifest rows' openev_id (v1-e30-t14) is merged but InProgress for its operator half only, and v1-e39-t16 ships later (v1.7), so neither is listed.
+  context:
+    - kind: TaskRef
+      name: v1-e30-t04-openev-importer
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e34-t02-scheduled-sync
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-

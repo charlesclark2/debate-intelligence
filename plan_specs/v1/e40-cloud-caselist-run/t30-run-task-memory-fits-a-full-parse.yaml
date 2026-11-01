@@ -37,6 +37,10 @@ spec:
     `caselist-cloud-run.md` gets the apply as operator blocks (plan, the check, the apply read
     by the PM), with the rule: never on a Wednesday, and before 2026-11-04 06:00 Chicago so
     Wednesday's run has it. No image is needed: the task definition keeps its digest.
+    (PM amendment 2026-11-01, from the session's deviation 1, accepted.) A memory change replaces only the
+    run task definition, so the plan check expects the run schedule and the run scheduler's policy
+    pointed at the new revision (Plan: 1 to add, 2 to change, 1 to destroy), not two schedules and two
+    policies; any login schedule or policy change is refused.
   priority: 1
   constraints:
     packages: [infrastructure, ops, tests/scripts, docs/adr, docs/runbooks, tests/docs]

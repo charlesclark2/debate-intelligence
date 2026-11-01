@@ -30,10 +30,12 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Final, Protocol
 
+from debate_core.application.errors import DomainError
 from debate_core.domain.caselist import CASELIST_SLUG_PATTERN
 
 __all__ = [
     "CaselistCassettes",
+    "CassetteDeleteRefused",
     "CassetteFiles",
     "CassetteFiling",
     "caselist_cassettes",
@@ -116,6 +118,10 @@ class CaselistCassettes:
     others: int
     """Cassettes only other caselists name: untouched."""
 
+    @property
+    def confirmation(self) -> str:
+        return ""
+
 
 def caselist_cassettes(files: CassetteFiles, caselist: str) -> CaselistCassettes:
     """What `files` holds of `caselist`, read and changed nothing. Raises `ValueError` for a non-slug."""
@@ -142,7 +148,13 @@ def caselist_cassettes(files: CassetteFiles, caselist: str) -> CaselistCassettes
     )
 
 
-def delete_caselist_cassettes(files: CassetteFiles, caselist: str) -> CaselistCassettes:
+class CassetteDeleteRefused(DomainError):
+    def __init__(self, listed: CaselistCassettes) -> None:
+        self.listed = listed
+        super().__init__("refused")
+
+
+def delete_caselist_cassettes(files: CassetteFiles, caselist: str, *, confirmation: str | None) -> CaselistCassettes:
     """Delete `caselist`'s sole cassettes and take its name off the shared ones; what it did, by cassette.
 
     Everything is listed first, so an unreadable cassette stops the delete before anything changes.

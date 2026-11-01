@@ -106,6 +106,7 @@ def test_the_container_wires_these_integrations() -> None:
         "debate_core.integrations.models.factory",
         "debate_core.integrations.models.model_mode",
         "debate_core.integrations.models.prompt_registry",
+        "debate_core.integrations.models.record_replay",
         "debate_core.integrations.models.routing_policy",
         "debate_core.integrations.models.usage",
         "debate_core.integrations.opencaselist",

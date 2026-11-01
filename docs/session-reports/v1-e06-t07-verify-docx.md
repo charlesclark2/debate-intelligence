@@ -262,9 +262,145 @@ None. The affected set's full run is left to the pull request's `ci` check, whic
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** CHANGES_REQUESTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-02
 
 **Notes:**
+
+One change, on question 2. Everything else is accepted as built.
+
+1. **The change: a card in the body that the manifest does not list makes the run exit 1.** Question
+   2 is ruled (c) with (b)'s exit. Evidence integrity is the project's first rule: anything that
+   cannot be verified is reported UNVERIFIED. An exit 0 from `verify card.docx` reads as "this
+   document's cards are verified", and a pasted card would ride along under it.
+   * Each unclaimed body card is reported as an entry of its own: its body position, status
+     UNVERIFIED, and a new reason `BODY_CARD_NOT_IN_MANIFEST`. It goes in the table and in
+     `--json`, beside `document.unclaimed_body_cards`, which stays.
+   * The run exits 1, as for any UNVERIFIED card.
+   * No evidence text appears; the tag as the table already shows it is fine.
+   * A test fails first against today's code, plus a mutant (the unclaimed card reported but the
+     exit left 0). Update the README, the help and `snapshot-text-format.md` where they list the
+     codes.
+2. **Accepted:**
+   * **ac1–ac5:** offsets counted by hand; ac5 over six fields for both JSON and embedded manifests;
+     `SNAPSHOT_MISSING` reused for SNAPSHOT_UNAVAILABLE, as ruled.
+   * **Red first:** 42 and then 25 tests failed against skeletons.
+   * **Mutants:** 19, the PM's seven forms among them. The case-insensitive survivor was closed with
+     the right test.
+   * The smoke check (cut then verify on the build under test), which agreement 5 asks for.
+3. **The rulings on the other questions:**
+   * **Q1, (a).** Whole words. It reports more than E03, never less, and a word that lost letters is
+     a different word.
+   * **Q3, (a).** Keep `INVALID_MANIFEST` for a damaged part or an unreadable body.
+   * **Q4, (a).** Only what follows the cite is evidence.
+   * **Q5, (a).** The PM files the follow-up: `export_docx` refuses a card whose `format_profile`
+     differs from the profile it renders in.
+4. **Decisions accepted:**
+   * the reader walking the XML for Word's final view (tracked insertions in, deletions and hidden
+     runs out, objects as U+FFFC);
+   * the token-level Myers diff with its 2,000-token cap;
+   * the whole-reference comparison;
+   * `CardVerdict`'s invariant;
+   * the snapshot id under the card id.
+5. **Follow-ups the PM files:** a `NEGATION_REMOVED` warning for body deletions (p3, with E03's
+   flag), and Q5's `export_docx` refusal (p3). Locating a `MANUAL_EDIT` in Word stays a note until
+   students ask for it.
+6. **Deviation 4 (the `git fetch`):** noted, and self-reported. The rule stands: network calls,
+   read-only ones included, go to the operator, except `scripts/task sync` when the PM asks for it.
+7. **Closing checks:** the affected set (238 files) is left to `ci` (agreement 10). The bounded run
+   (1,169 passed), ruff, pyright, lint-imports, thin handlers, the specs and the doc checks are clean.
+   After the change, re-run the verify tests, the smoke check and the always-run list. Append what
+   changed under a new heading below this review, and leave this review as written.
+
+## After the PM review
+
+The change asked for in the 2026-11-02 review (question 2, ruled (c) with (b)'s exit) is commit
+`31d09ea`. Questions 1, 3, 4 and 5 stand as built, under the rulings; nothing else changed.
+
+### What changed
+
+* **A new reason, `BODY_CARD_NOT_IN_MANIFEST`** (`verification_types.py`). It goes on a body card's
+  own entry, never on a manifest card's verdict.
+* **One entry per unclaimed body card:** `UnclaimedBodyCardVerdict` in `verify_manifest.py` holds
+  `body_position` (counted from 0), `tag` (as the body shows it), `status` (always `UNVERIFIED`; the
+  schema makes it a const), `reasons` and `reason_codes`. The detail gives only the position: "body
+  card 2 (position 1 from 0) is not in the document's manifest, so nothing about it was verified".
+  * In `--json` the entries go in `document.unclaimed_body_card_verdicts`, next to
+    `document.unclaimed_body_cards`, which stays as it was.
+  * The report's `total` and `unverified` count the entries, so `all_verified` is false and the run
+    exits 1. A JSON manifest has no `document`, so its counts don't change. The manifest card's own
+    verdict doesn't change either.
+* **The table** shows one row per entry after the manifest's cards. Its first column reads
+  "body card N", counted from 1 as a reader would count. The title counts the entry ("1 of 2
+  card(s) verified").
+  * The line under the table now ends "they are UNVERIFIED".
+  * The panel's `cards` line adds "N in the body only", and the panel names those cards on a line
+    "not in the manifest". Its `reasons` count includes the code.
+  * `--verbose` prints each entry's detail.
+* **Where the codes are listed:**
+  * `verify --help` has a new line under exit 1: "BODY_CARD_NOT_IN_MANIFEST for a card in a .docx
+    body that its manifest does not list".
+  * The README's exit table has a row `1` (`BODY_CARD_NOT_IN_MANIFEST`), following the same pattern
+    as the `2` (`NO_MANIFEST`) row, so E03's rows keep their pinned text. Its .docx section has a
+    bullet for the code.
+  * `docs/evidence/snapshot-text-format.md` lists it in the table of codes `VerifyManifest` finds,
+    now four.
+  * The module docstrings of `verify_manifest.py` and `commands/verify.py` mention it.
+* **`verify_result.v1.json`** was regenerated by `scripts/export_schemas.py`. The change is
+  additive: a new field and its definition, the new enum value, and new descriptions for `total`,
+  `verified` and `unclaimed_body_cards`.
+* **Updated pins:**
+  * the untouched export's `document` object, in the CLI test and the smoke check;
+  * the help and README exit-code tests, which now also pin the new line and row;
+  * `test_card_service.py`'s hand-written table of every reason code.
+  * The use-case test for a pasted card was rewritten: it had pinned the old behaviour, a verdict
+    that changed nothing.
+
+### Evidence
+
+* **Red first, against today's code (`d10c832`)**, with the two new tests written before any
+  change:
+  * `test_docx_a_card_pasted_into_the_body_is_an_unverified_entry_of_its_own` (use case) failed at
+    its first assertion: `AssertionError: a card the manifest does not list is never verified /
+    assert not True`.
+  * `test_docx_a_card_pasted_into_the_body_exits_one_with_its_own_unverified_entry` (CLI) failed:
+    `assert 0 == <ExitCode.DOMAIN_FAILURE: 1>`, with the table "1 of 1 card(s) verified".
+  * Result: 2 failed.
+* **After the change:** both pass. Between them they check:
+  * the counts (2 / 1 / 1);
+  * the entry's position, status and code, and the exact detail;
+  * the "body card 2" row with its tag, UNVERIFIED and the code;
+  * the panel's count and the verbose line;
+  * that neither the pasted card's evidence nor its cite appears in any output.
+* **Mutants.** The PM's mutant was "unclaimed card reported but exit 0". I ran it in three forms,
+  each on top of `31d09ea` and restored from HEAD:
+
+  | Mutant | Result |
+  |---|---|
+  | `all_verified` looks only at the manifest's cards (the entry is reported, the run exits 0) | caught, 2 failed: the use-case assertion, and the CLI's exit-code assertion with the table already showing "1 of 2 card(s) verified" |
+  | `total` leaves the body card out (so `verified == total` and the run exits 0) | caught, 2 failed, the same two assertions |
+  | the table drops the body card's row | caught, 1 failed: the CLI test finds no "body card 2" row |
+
+  Today's code is a fourth form: no entry at all, which is the red run above.
+* **Re-runs the review asked for**, one command, `hard_stop.py 115 .venv/bin/python -m pytest -n
+  auto -m "not slow and not live"`, over:
+  * the verify tests: `test_verify_docx.py`, `test_verify_manifest.py`, `test_docx_verify.py`,
+    `test_verify_command.py`, `test_publish_verify_parse_pull_panels.py`,
+    `test_card_edit_service.py`, `test_card_service.py`, `tests/integration/test_verify_cli.py`;
+  * the smoke checks: `tests/smoke/test_cut_smoke.py`, `tests/smoke/test_cli_smoke.py`;
+  * the always-run list (`ALWAYS_RUN` in `scripts/affected_tests.py`): `tests/architecture/`,
+    `tests/specs/`, `test_app.py`, `test_help_rendering.py`, `test_container_factories.py`.
+
+  Result: **709 passed in 25.50 s.** The cut smoke file alone: 4 passed, none skipped.
+* **Other checks:** ruff format and ruff check are clean; pyright, 0 errors; lint-imports, 20 kept;
+  `check_thin_handlers.py`, OK (71 handlers within 25 statements; `verify` gained a loop);
+  `check_links.py`, OK; `check_command_blocks.py`, OK; `docs_index.py --check-descriptions`, OK;
+  `uv run scripts/validate_specs.py`, OK.
+* **Not re-run:** the affected set as a whole. It was already over the two-minute line, and it stays
+  with the pull request's `ci` check (agreement 10).
+* **Spec on dev:** I compared this task's spec with my local `origin/dev` ref and found no amendment
+  beyond the phase. That ref is from 2026-11-01 14:12. I did not fetch: the review's point 6 sends
+  network calls to the operator. If the PM amended the spec on dev after that time, `scripts/task
+  sync` would bring the change in.

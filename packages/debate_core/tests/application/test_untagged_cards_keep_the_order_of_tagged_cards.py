@@ -193,7 +193,7 @@ def parse_service(data_dir: Path) -> CaselistParseService:
         parser=DebateDocxParser(),
         runner=InProcessParseRunner(),
         suppression=RecordedSuppressionList(local_suppression_list_file(data_dir)),
-        place_cards=CaselistCardStatsService(build_fake_caselist_repository()).place,
+        card_placer=CaselistCardStatsService(build_fake_caselist_repository()).placer,
         failure_rate_threshold=1.0,
         failure_rate_minimum_sources=1,
     )

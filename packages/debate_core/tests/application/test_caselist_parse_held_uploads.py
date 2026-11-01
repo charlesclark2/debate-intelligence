@@ -41,7 +41,7 @@ from tests.fixtures.parse_pipeline.build_parse_world import (
 )
 
 from debate_core.application.caselist.publish_service import SourceResult
-from debate_core.application.caselist_card_stats import CardPlacement, CaselistCardStatsService
+from debate_core.application.caselist_card_stats import CaselistCardStatsService, ClusterPlacement
 from debate_core.application.ports.parsed_store import AGGREGATE_NAMES
 from debate_core.application.ports.suppression import (
     PathHoldEntry,
@@ -180,14 +180,21 @@ async def test_a_held_uploads_cards_are_never_clustered_with_the_live_ones(world
     await world.run()
     await hold(world, HELD_ONLY_PATH)
     placed: list[str] = []
-    place = CaselistCardStatsService(build_fake_caselist_repository()).place
+    new_placer = CaselistCardStatsService(build_fake_caselist_repository()).placer
 
-    def recording(cards: Sequence[ParsedCard]) -> Sequence[CardPlacement]:
-        placed.extend(card.provenance.source_sha256 for card in cards)
-        return place(cards)
+    class Recording:
+        def __init__(self) -> None:
+            self._inner = new_placer()
+
+        def add(self, card: ParsedCard) -> None:
+            placed.append(card.provenance.source_sha256)
+            self._inner.add(card)
+
+        def placements(self) -> Sequence[ClusterPlacement]:
+            return self._inner.placements()
 
     service = world.service()
-    service._place_cards = recording  # pyright: ignore[reportPrivateUsage]
+    service._card_placer = Recording  # pyright: ignore[reportPrivateUsage]
     await service.run(await service.plan(CASELIST))
 
     assert placed, "the precondition: the live cards are placed"

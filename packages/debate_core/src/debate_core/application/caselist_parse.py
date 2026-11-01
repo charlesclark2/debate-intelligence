@@ -18,7 +18,20 @@
    result arrives, so a run stopped part-way keeps what it finished.
 5. **Rebuilds the three aggregates** from every per-source file in the directory: the index, the
    failures file and the occurrence table, with fingerprints and clusters from the `v1-e31-t04`
-   service (:meth:`~debate_core.application.caselist_card_stats.CaselistCardStatsService.place`).
+   service (:class:`~debate_core.application.caselist_card_stats.CardPlacer`).
+
+## The rebuild reads cards source by source (`v1-e40-t36`)
+
+Until `v1-e40-t36` the rebuild read every card of the caselist into one list before placing any:
+about 1.3 GB in the main process for 250 `hspolicy26` sources, growing with every card
+(`docs/data/caselist-parse-memory.md`). It now reads one source's document at a time, gives each
+card to a :class:`~debate_core.application.caselist_card_stats.CardPlacer` and keeps of it only its
+place in the table: its source, its paragraph range and its completeness. What must stay whole is
+what a cluster spanning sources needs, which the placer holds: a fingerprint per card, and the text of
+each distinct full body for the clusterer. The rows are then ordered by a key per row and built one
+at a time as the store writes them, so no list of rows is held either. The aggregates are the same
+bytes as before for the same store: cards are given in the order the one list was sorted into, by
+source and then first paragraph, and the rows are written in the same order.
 
 ## A failing source is an outcome
 
@@ -72,7 +85,7 @@ import time
 from collections import Counter
 from collections.abc import Awaitable, Callable, Iterator, Sequence
 from dataclasses import dataclass, field
-from typing import Final
+from typing import Final, Protocol
 
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.occurrence_table_guard import (
@@ -102,7 +115,7 @@ from debate_core.application.caselist.parsed_publish_only import (
 )
 from debate_core.application.caselist.publish_plan import local_blob_key, validate_publish_target
 from debate_core.application.caselist.suppression import load_suppression_state
-from debate_core.application.caselist_card_stats import CardPlacement
+from debate_core.application.caselist_card_stats import ClusterPlacement
 from debate_core.application.ports.debate_files import DebateFileParser
 from debate_core.application.ports.parsed_store import (
     DocumentRecord,
@@ -116,7 +129,7 @@ from debate_core.application.ports.parsed_store import (
     version_directory_name,
 )
 from debate_core.application.ports.suppression import SuppressionList, SuppressionState
-from debate_core.domain.debate_files import ParsedCard, ParsedDocument, ParseFailure
+from debate_core.domain.debate_files import CardCompleteness, ParsedCard, ParsedDocument, ParseFailure
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
 
 __all__ = [
@@ -140,7 +153,27 @@ always reported, and the one the parse stage of `caselist pull` records for the 
 (`v1-e34-t17`). A verdict, on nobody's list of failures a retry may cure: the same sources fail the
 same way next time."""
 
-PlaceCards = Callable[[Sequence[ParsedCard]], Sequence[CardPlacement]]
+
+class PlacesCards(Protocol):
+    """Places a caselist's cards given one at a time (`v1-e40-t36`), as
+    :class:`~debate_core.application.caselist_card_stats.CardPlacer` does."""
+
+    def add(self, card: ParsedCard) -> None:
+        """Take the next card."""
+        ...
+
+    def placements(self) -> Sequence[ClusterPlacement]:
+        """One placement per card given, in the order given."""
+        ...
+
+
+_CardPosition = tuple[EnumeratedSource, int, int, CardCompleteness]
+"""What the occurrence rows need of a card besides its placement: its source, first and last
+paragraph, and completeness."""
+
+_RowKey = tuple[str, str, int, str, str, int, int]
+"""An occurrence row's place in the table: cluster, source, first paragraph, snapshot and disclosure,
+then the card's position and the disclosure's, which keep the order the rows were made in."""
 
 
 # ------------------------------------------------------------------------------------------------
@@ -291,8 +324,9 @@ class CaselistParseService:
         runner: In this process, or the bounded pool.
         suppression: The removal suppression list. Required, no default: nothing is parsed, and no
             aggregate is written, without it (`v1-e30-t07`).
-        place_cards: The `v1-e31-t04` fingerprinting and clustering,
-            :meth:`~debate_core.application.caselist_card_stats.CaselistCardStatsService.place`.
+        card_placer: Makes a new placer for each rebuild: the `v1-e31-t04` fingerprinting and
+            clustering, given the cards one at a time,
+            :meth:`~debate_core.application.caselist_card_stats.CaselistCardStatsService.placer`.
         failure_rate_threshold: The `parse.failure_rate_threshold` setting.
         failure_rate_minimum_sources: The `parse.failure_rate_minimum_sources` setting: how many
             sources a run must have tried before its failure rate is judged. Required, with no
@@ -311,7 +345,7 @@ class CaselistParseService:
         parser: DebateFileParser,
         runner: ParseRunner,
         suppression: SuppressionList,
-        place_cards: PlaceCards,
+        card_placer: Callable[[], PlacesCards],
         failure_rate_threshold: float,
         failure_rate_minimum_sources: int,
         clock: Callable[[], float] = time.monotonic,
@@ -329,7 +363,7 @@ class CaselistParseService:
         self._parser = parser
         self._runner = runner
         self._suppression = suppression
-        self._place_cards = place_cards
+        self._card_placer = card_placer
         self._threshold = failure_rate_threshold
         self._minimum_sources = failure_rate_minimum_sources
         self._clock = clock
@@ -572,7 +606,7 @@ class CaselistParseService:
         entries = await self._store.read_entries(plan.caselist, plan.version)
         index = _index_rows(entries, held, state)
         failures = _failure_rows(entries, held, state)
-        occurrences, clusters = await self._occurrence_rows(plan, entries, held, state)
+        occurrences, rows, clusters = await self._occurrence_rows(plan, entries, held, state)
         await self._store.write_aggregates(
             plan.caselist, plan.version, index=index, failures=failures, occurrences=occurrences
         )
@@ -582,7 +616,7 @@ class CaselistParseService:
             unsupported=sum(entry.outcome is SourceOutcome.UNSUPPORTED for entry in index),
             failed=sum(entry.outcome is SourceOutcome.FAILED for entry in index),
             cards=sum(entry.cards for entry in index),
-            occurrences=len(occurrences),
+            occurrences=rows,
             clusters=clusters,
         )
 
@@ -592,66 +626,86 @@ class CaselistParseService:
         entries: Sequence[SourceEntry],
         held: dict[str, EnumeratedSource],
         state: SuppressionState,
-    ) -> tuple[list[OccurrenceRecord], int]:
-        """One row per card per disclosure the list does not stop, and the number of clusters.
+    ) -> tuple[Iterator[OccurrenceRecord], int, int]:
+        """One row per card per disclosure the list does not stop, made as the store writes them;
+        how many rows; and how many clusters.
 
         A disclosure is one row however many snapshots list it, spanning the first to the latest.
+        Each source's cards are read and given to the placer in turn, in the order of one list of
+        every card sorted by source and first paragraph, and none is kept (this module's docstring).
         """
-        cards: list[ParsedCard] = []
-        for entry in entries:
+        placer = self._card_placer()
+        cards: list[_CardPosition] = []
+        for entry in sorted(entries, key=lambda entry: entry.source_sha256):
             source = held.get(entry.source_sha256)
             if entry.outcome is not SourceOutcome.PARSED or source is None:
                 continue
             live = live_disclosures(source, state)
             if not live:
                 continue
-            record = await self._store.read_document(plan.caselist, plan.version, entry.source_sha256)
-            if record is None:
-                raise ValueError(f"parsed source {entry.source_sha256} has no document in {plan.version}")
-            document = record.to_parsed_document(live[0].path)
-            cards.extend(
-                card.model_copy(update={"formatting_spans": (), "font_size_spans": ()})
-                for card in document.cards
-            )
-        cards.sort(key=lambda card: (card.provenance.source_sha256, card.provenance.first_element_index))
-        placements = self._place_cards(cards)
-        spans = {sha256: _disclosure_spans(source, state) for sha256, source in held.items()}
-        rows: list[OccurrenceRecord] = []
-        for placement in placements:
-            provenance = placement.card.provenance
-            source = held[provenance.source_sha256]
-            for disclosure, first, last, camp_paths in spans[provenance.source_sha256]:
-                rows.append(
-                    OccurrenceRecord(
-                        caselist=plan.caselist,
-                        snapshot=first,
-                        last_snapshot=last,
-                        source_sha256=provenance.source_sha256,
-                        parser_version=plan.parser_version,
-                        profile_version=plan.profile_version,
-                        fingerprint_version=FINGERPRINT_VERSION,
-                        disclosure=disclosure,
-                        camp=source.camp,
-                        first_element_index=provenance.first_element_index,
-                        last_element_index=provenance.last_element_index,
-                        exact_fingerprint=placement.fingerprint,
-                        cluster_id=placement.cluster_id,
-                        membership=placement.membership,
-                        completeness=placement.card.completeness,
-                        camp_path_disclosures=camp_paths,
-                    ),
+            for card in await self._cards_of(plan, source, live[0].path):
+                placer.add(card)
+                provenance = card.provenance
+                cards.append(
+                    (source, provenance.first_element_index, provenance.last_element_index, card.completeness)
                 )
-        ordered = sorted(
-            rows,
-            key=lambda row: (
-                row.cluster_id,
-                row.source_sha256,
-                row.first_element_index,
-                row.snapshot,
-                row.disclosure or "",
-            ),
-        )
-        return ordered, len({placement.cluster_id for placement in placements})
+        placements = placer.placements()
+        spans: dict[str, list[tuple[str | None, str, str, tuple[str, ...]]]] = {}
+        order: list[_RowKey] = []
+        for position, ((source, first_element, _, _), placement) in enumerate(
+            zip(cards, placements, strict=True)
+        ):
+            if source.sha256 not in spans:
+                spans[source.sha256] = _disclosure_spans(source, state)
+            for span, (disclosure, first, _, _) in enumerate(spans[source.sha256]):
+                order.append(
+                    (
+                        placement.cluster_id,
+                        source.sha256,
+                        first_element,
+                        first,
+                        disclosure or "",
+                        position,
+                        span,
+                    )
+                )
+        order.sort()
+
+        def rows() -> Iterator[OccurrenceRecord]:
+            for *_, position, span in order:
+                source, first_element, last_element, completeness = cards[position]
+                placement = placements[position]
+                disclosure, first, last, camp_paths = spans[source.sha256][span]
+                yield OccurrenceRecord(
+                    caselist=plan.caselist,
+                    snapshot=first,
+                    last_snapshot=last,
+                    source_sha256=source.sha256,
+                    parser_version=plan.parser_version,
+                    profile_version=plan.profile_version,
+                    fingerprint_version=FINGERPRINT_VERSION,
+                    disclosure=disclosure,
+                    camp=source.camp,
+                    first_element_index=first_element,
+                    last_element_index=last_element,
+                    exact_fingerprint=placement.fingerprint,
+                    cluster_id=placement.cluster_id,
+                    membership=placement.membership,
+                    completeness=completeness,
+                    camp_path_disclosures=camp_paths,
+                )
+
+        return rows(), len(order), len({placement.cluster_id for placement in placements})
+
+    async def _cards_of(self, plan: ParsePlan, source: EnumeratedSource, path: str) -> list[ParsedCard]:
+        """One parsed source's cards by first paragraph, its document let go once they are read."""
+        record = await self._store.read_document(plan.caselist, plan.version, source.sha256)
+        if record is None:
+            raise ValueError(f"parsed source {source.sha256} has no document in {plan.version}")
+        document = record.to_parsed_document(path)
+        if document.source_sha256 != source.sha256:
+            raise ValueError(f"parsed source {source.sha256}'s document names another source")
+        return sorted(document.cards, key=lambda card: card.provenance.first_element_index)
 
     # -- failures -----------------------------------------------------------------------------
 

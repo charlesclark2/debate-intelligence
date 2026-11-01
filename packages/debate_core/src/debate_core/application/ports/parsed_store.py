@@ -74,7 +74,7 @@ of the running parser version is ever written to.
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from datetime import date
 from enum import StrEnum
 from typing import Final, Literal, NamedTuple, Protocol, Self, runtime_checkable
@@ -585,9 +585,14 @@ class ParsedStore(Protocol):
         *,
         index: Sequence[SourceEntry],
         failures: Sequence[SourceEntry],
-        occurrences: Sequence[OccurrenceRecord],
+        occurrences: Iterable[OccurrenceRecord],
     ) -> None:
-        """Replace the index, failures and occurrence files of a version directory, each atomically."""
+        """Replace the index, failures and occurrence files of a version directory, each atomically.
+
+        `occurrences` is read once, in order, and may be made as it is read (`v1-e40-t36`): the
+        parse pipeline builds each row as the store writes it, so a caselist's rows are never held
+        at once. A row that fails to build leaves every file as it was.
+        """
         ...
 
     async def read_index(self, caselist: str, version: str) -> tuple[SourceEntry, ...] | None:

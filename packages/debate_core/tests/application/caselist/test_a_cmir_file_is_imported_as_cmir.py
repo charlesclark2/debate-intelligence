@@ -137,7 +137,7 @@ async def test_a_cmir_file_is_counted_unsupported_under_its_own_format(tmp_path:
         parser=DebateDocxParser(),
         runner=InProcessParseRunner(),
         suppression=RecordedSuppressionList(local_suppression_list_file(data_dir)),
-        place_cards=CaselistCardStatsService(build_fake_caselist_repository()).place,
+        card_placer=CaselistCardStatsService(build_fake_caselist_repository()).placer,
         failure_rate_threshold=0.5,
         failure_rate_minimum_sources=1,
     )

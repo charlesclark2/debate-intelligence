@@ -62,7 +62,7 @@ from debate_core.application.caselist.parse_workers import (
 from debate_core.application.caselist.parsed_publish import ParsedStorePublisher
 from debate_core.application.caselist.publish_service import SourceResult
 from debate_core.application.caselist.suppression import RecordedSuppressionList
-from debate_core.application.caselist_card_stats import CardPlacement, CaselistCardStatsService
+from debate_core.application.caselist_card_stats import CaselistCardStatsService, ClusterPlacement
 from debate_core.application.caselist_parse import CaselistParseService, ParseRunReport
 from debate_core.application.errors import StoreProfileNotConfigured
 from debate_core.application.ports.debate_files import DebateFileParser
@@ -203,7 +203,7 @@ class World:
             parser=parser or DebateDocxParser(),
             runner=runner or InProcessParseRunner(),
             suppression=self.suppression,
-            place_cards=CaselistCardStatsService(build_fake_caselist_repository()).place,
+            card_placer=CaselistCardStatsService(build_fake_caselist_repository()).placer,
             failure_rate_threshold=threshold,
             failure_rate_minimum_sources=minimum,
         )
@@ -635,23 +635,30 @@ class RewritingParser(CountingParser):
         return result.model_copy(update={"cards": (rewritten,)})
 
 
-def placed_as_card_fingerprint_v1_did(cards: Sequence[ParsedCard]) -> list[CardPlacement]:
+class PlacedAsCardFingerprintV1Did:
     """What `card-fingerprint-v1` did with this test's cards, written out: each its own cluster.
 
     The two full cards differ by one word in 33, under v1's containment threshold, and the wiki
     file's abbreviated cards match neither.
     """
-    return [
-        CardPlacement(
-            card,
-            fingerprint := card_fingerprint(card).exact_fingerprint,
-            fingerprint,
-            ClusterMembership.NEAR_DUPLICATE
-            if card.completeness is CardCompleteness.FULL
-            else ClusterMembership.UNLINKED,
+
+    def __init__(self) -> None:
+        self._placed: list[ClusterPlacement] = []
+
+    def add(self, card: ParsedCard) -> None:
+        fingerprint = card_fingerprint(card).exact_fingerprint
+        self._placed.append(
+            ClusterPlacement(
+                fingerprint,
+                fingerprint,
+                ClusterMembership.NEAR_DUPLICATE
+                if card.completeness is CardCompleteness.FULL
+                else ClusterMembership.UNLINKED,
+            )
         )
-        for card in cards
-    ]
+
+    def placements(self) -> list[ClusterPlacement]:
+        return self._placed
 
 
 def names_a_fingerprint_or_a_cluster(value: object) -> bool:
@@ -690,7 +697,7 @@ async def test_a_rebuild_after_the_fingerprint_version_changed_leaves_no_old_sta
             parser=parser,
             runner=InProcessParseRunner(),
             suppression=world.suppression,
-            place_cards=placed_as_card_fingerprint_v1_did,
+            card_placer=PlacedAsCardFingerprintV1Did,
             failure_rate_threshold=0.5,
             failure_rate_minimum_sources=1,
         )

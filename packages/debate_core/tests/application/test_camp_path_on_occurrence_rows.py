@@ -149,7 +149,7 @@ class CampWorld:
             parser=DebateDocxParser(),
             runner=InProcessParseRunner(),
             suppression=self.suppression,
-            place_cards=CaselistCardStatsService(build_fake_caselist_repository()).place,
+            card_placer=CaselistCardStatsService(build_fake_caselist_repository()).placer,
             failure_rate_threshold=0.5,
             failure_rate_minimum_sources=1,
         )

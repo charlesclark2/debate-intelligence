@@ -40,6 +40,15 @@ spec:
     dependency of debate-core through its `docx` extra, which the installed build carries, and
     the composition root passes `render_cards_docx` to ExportService. A smoke check shows the
     installed build writes a .docx.
+    (PM amendment 2026-11-01, the exit codes, which predate v1-e05-t09; written in by the session.)
+    `debate_cli/exit_codes.py` stays the only place a failure becomes an exit code. 0: a VERIFIED
+    card exported. 2: a usage error. 3: retrieval failed (PAYWALLED, ROBOTS_DISALLOWED, BLOCKED,
+    NOT_FOUND, printed with the canonical URL), and the retryable provider failures (outage,
+    throttle); no card is saved. 4: a new `CARD_UNVERIFIED` member for cut's own verdict; the card
+    is exported with its banner and each reason is printed. 1: a refused model call
+    (`ModelAccessDenied`, `ModelRequestRejected`, as v1-e05-t09 rules) and the cases v1-e06-t02's
+    ruling calls could not run (a missing or damaged snapshot, an unregistered prompt); nothing is
+    saved and no card id is printed. The description's "5 model/config error" is superseded.
   priority: 1
   constraints:
     # PM amendment 2026-10-27: the command's tests and smoke check, and verify's exit-2 wording.

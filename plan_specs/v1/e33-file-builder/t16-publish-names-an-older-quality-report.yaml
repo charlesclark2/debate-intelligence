@@ -41,7 +41,7 @@ spec:
         one keeps `QUALITY_REPORT_MISSING`, a current one publishes as before; by tests
         shown failing first.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

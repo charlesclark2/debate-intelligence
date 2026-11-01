@@ -11,6 +11,11 @@ school-view counts are worked out by hand in `packages/debate_cli/tests/test_lan
 
 Unmarked, like the other offline caselist smoke checks. Every school, team code and card is
 invented, and none of them may appear in what the command prints.
+
+`debate-research landscape cassettes` (`v1-e32-t34`, its removal form `v1-e32-t36`) is checked at the
+end, over the build's own scratch data directory: empty, and then with a cassette directory planted by
+:class:`~debate_core.integrations.models.record_replay.CassetteDirectory` as the model stage files one,
+under synthetic slugs, with invented prompt variables and answers. No model is called.
 """
 
 from __future__ import annotations
@@ -20,11 +25,15 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+from pydantic import BaseModel
 from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from tests.smoke.installed_build import InstalledCli
 
 from debate_cli.exit_codes import ExitCode
+from debate_core.application.cassette_filing import filed_under
+from debate_core.domain.model_contracts import ModelPrompt, ModelRequest, TaskClass
 from debate_core.integrations.docx_parser import DebateDocxParser
+from debate_core.integrations.models.record_replay import CassetteDirectory
 from debate_core.testing.landscape_run import SyntheticRun, plant_synthetic_run
 from debate_core.testing.landscape_store import PARSER_VERSION
 
@@ -145,3 +154,103 @@ def test_landscape_report_reads_a_restored_copy_and_writes_only_the_text_caches_
         "analytic_texts/synthetic26.jsonl",
         "plan_texts/synthetic26.jsonl",
     ]
+
+
+# --- landscape cassettes (v1-e32-t34, v1-e32-t36) ---------------------------------------------
+
+CASSETTE_CASELIST = "synthld21"
+OTHER_CASELIST = "synthld26"
+CASSETTE_CARD = "InventedCardText"
+"""In every planted cassette's prompt variables: what printing a cassette's content would show."""
+
+
+class SortedCard(BaseModel):
+    position: str
+
+
+def plant_cassette(data_dir: Path, card: str, *caselists: str) -> None:
+    """The cassette of `card` in the model stage's directory, filed under each of `caselists` (or none)."""
+    directory = CassetteDirectory(data_dir / "landscape" / "model-cassettes")
+    prompt = ModelPrompt(
+        prompt_id="example.sort-card", prompt_version="1.0.0", variables={"items": f"{CASSETTE_CARD} {card}"}
+    )
+    request = ModelRequest.build(TaskClass.HIGH_VOLUME, prompt, SortedCard)
+    response = {"output": {"position": "invented"}, "model_id": "recorded-model"}
+    if not caselists:
+        directory.write_structured(request, response)
+    for caselist in caselists:
+        with filed_under(caselist):
+            directory.write_structured(request, response)
+
+
+@pytest.fixture
+def planted_cassettes(installed_cli: InstalledCli) -> Path:
+    """2 of the caselist's alone, 3 shared with another, 1 unattributed, 4 of the other alone."""
+    data_dir = installed_cli.data_dir
+    for card in ("one", "two"):
+        plant_cassette(data_dir, card, CASSETTE_CASELIST)
+    for card in ("three", "four", "five"):
+        plant_cassette(data_dir, card, CASSETTE_CASELIST, OTHER_CASELIST)
+    plant_cassette(data_dir, "six")
+    for card in ("seven", "eight", "nine", "ten"):
+        plant_cassette(data_dir, card, OTHER_CASELIST)
+    return data_dir / "landscape" / "model-cassettes"
+
+
+def files_under(root: Path) -> dict[str, bytes]:
+    return {
+        path.relative_to(root).as_posix(): path.read_bytes() for path in root.rglob("*") if path.is_file()
+    }
+
+
+def test_landscape_cassettes_on_an_empty_data_directory_finds_none_and_creates_nothing(
+    installed_cli: InstalledCli,
+) -> None:
+    before = sorted(installed_cli.data_dir.rglob("*")) if installed_cli.data_dir.exists() else None
+
+    result = installed_cli.run("--json", "landscape", "cassettes", "--caselist", CASSETTE_CASELIST)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    data = json.loads(result.stdout)["data"]
+    assert (data["directory_found"], data["deleted"]) == (False, False)
+    assert data["cassettes"] == {"sole": 0, "shared": 0, "unattributed": 0, "other_caselists": 0}
+    after = sorted(installed_cli.data_dir.rglob("*")) if installed_cli.data_dir.exists() else None
+    assert after == before
+
+
+def test_landscape_cassettes_counts_a_planted_directory_and_changes_nothing(
+    installed_cli: InstalledCli, planted_cassettes: Path
+) -> None:
+    before = files_under(planted_cassettes)
+
+    result = installed_cli.run("--json", "landscape", "cassettes", "--caselist", CASSETTE_CASELIST)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    data = json.loads(result.stdout)["data"]
+    assert data["directory_found"] is True
+    assert data["cassettes"] == {"sole": 2, "shared": 3, "unattributed": 1, "other_caselists": 4}
+    assert files_under(planted_cassettes) == before
+    assert CASSETTE_CARD not in result.output and str(installed_cli.data_dir) not in result.output
+
+
+def test_landscape_cassettes_for_removal_deletes_every_copy_with_its_own_code(
+    installed_cli: InstalledCli, planted_cassettes: Path
+) -> None:
+    base = ("--json", "landscape", "cassettes", "--caselist", CASSETTE_CASELIST)
+    purge_code = json.loads(installed_cli.run(*base).stdout)["data"]["confirmation"]
+    removal_code = json.loads(installed_cli.run(*base, "--for-removal").stdout)["data"]["confirmation"]
+    before = files_under(planted_cassettes)
+
+    refused = installed_cli.run(*base, "--for-removal", "--delete", "--confirm", purge_code)
+
+    assert refused.exit_code == ExitCode.DOMAIN_FAILURE, refused.output
+    assert json.loads(refused.stdout)["error"]["code"] == "CONFIRMATION_MISMATCH"
+    assert files_under(planted_cassettes) == before
+
+    done = installed_cli.run(*base, "--for-removal", "--delete", "--confirm", removal_code)
+
+    assert done.exit_code == ExitCode.OK, done.output
+    assert json.loads(done.stdout)["data"]["deleted"] is True
+    assert len(files_under(planted_cassettes)) == 4
+    again = json.loads(installed_cli.run(*base).stdout)["data"]["cassettes"]
+    assert again == {"sole": 0, "shared": 0, "unattributed": 0, "other_caselists": 4}

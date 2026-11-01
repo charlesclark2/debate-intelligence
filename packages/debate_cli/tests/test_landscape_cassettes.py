@@ -640,3 +640,29 @@ def test_an_unreadable_file_stops_the_removal_names_no_file_and_changes_nothing(
     assert envelope_of(result)["error"]["code"] == "CASSETTE_UNREADABLE"
     assert SCHOOLISH not in result.output and "Maple" not in result.output
     assert tree(data_dir) == before
+
+
+def test_an_unattributed_cassette_alone_is_something_for_the_removal_and_nothing_for_the_purge(
+    data_dir: Path,
+) -> None:
+    """The removal's dry run gives its code where the purge's says a delete would change nothing."""
+    write(data_dir, "first")
+    write(data_dir, "second", KEPT)
+
+    purge = invoke("--caselist", PURGED)
+    removal = invoke("--caselist", PURGED, "--for-removal")
+
+    assert "Dry run: nothing was changed, and a delete would change nothing." in flat(purge.stdout)
+    code = removal_code_of()
+    assert f"Dry run: nothing was changed. To carry it out, add: --delete --confirm {code}" in flat(
+        removal.stdout
+    )
+    done = invoke("--caselist", PURGED, "--for-removal", "--delete", "--confirm", code, "--json")
+    assert done.exit_code == ExitCode.OK, done.output
+    assert envelope_of(done)["data"]["cassettes"] == {
+        "sole": 0,
+        "shared": 0,
+        "unattributed": 1,
+        "other_caselists": 1,
+    }
+    assert len(tree(data_dir)) == 1

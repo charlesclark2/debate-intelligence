@@ -156,19 +156,32 @@ def test_stamp_bundles_the_committed_profiles_and_routing_files(checkout: Path, 
 def test_stamp_bundles_the_committed_prompts_and_their_lock_but_no_readme(
     checkout: Path, tmp_path: Path
 ) -> None:
-    """`cut` loads its prompt registry from this copy in an installed build (v1-e06-t06)."""
+    """`cut` loads its prompt registry from this copy in an installed build (v1-e06-t06).
+
+    The expected list is read from the committed `prompts/` tree, every prompt file and the lock but
+    no README, so a new prompt is bundled without editing this test (v1-e08-t04's CI failure).
+    """
     sb.stamp(checkout, info(), tmp_path / "dist")
 
+    committed = REPO_ROOT / "prompts"
+    assert (committed / "README.md").is_file(), "the README this test expects to be left out has gone"
+    expected = sorted(
+        [
+            path.relative_to(committed).as_posix()
+            for path in committed.rglob("*.md")
+            if path.is_file() and path.name != "README.md"
+        ]
+        + ["prompts.lock.json"]
+    )
+    assert {"card/select.md", "card/markup.md"} <= set(expected)
+
     bundled = checkout / sb.BUNDLED_CONFIG / "prompts"
-    assert sorted(path.relative_to(bundled).as_posix() for path in bundled.rglob("*") if path.is_file()) == [
-        "card/markup.md",
-        "card/select.md",
-        "landscape/classify_position.md",
-        "model/repair.md",
-        "prompts.lock.json",
-    ]
-    for prompt in ("card/select.md", "card/markup.md"):
-        assert (bundled / prompt).read_bytes() == (checkout / "prompts" / prompt).read_bytes()
+    assert (
+        sorted(path.relative_to(bundled).as_posix() for path in bundled.rglob("*") if path.is_file())
+        == expected
+    )
+    for relative in expected:
+        assert (bundled / relative).read_bytes() == (committed / relative).read_bytes(), relative
 
 
 def test_the_bundled_prompts_load_as_the_checkouts_registry(checkout: Path, tmp_path: Path) -> None:

@@ -1,0 +1,30 @@
+{
+  "output": {
+    "queries": [
+      {
+        "query": "community clinic funding state budget shortfall",
+        "rationale": "Looks for reporting on current gaps in state budgets for clinics."
+      },
+      {
+        "query": "community clinic funding now",
+        "rationale": "Repeats a chosen query."
+      },
+      {
+        "query": "community clinic closures announced",
+        "rationale": "Looks for news of clinics closing for lack of funds."
+      }
+    ]
+  },
+  "output_schema": "debate_core.application.query_expansion.QueryExpansion",
+  "prompt_id": "search.expand",
+  "prompt_version": "1.0.0",
+  "variables": {
+    "argument": "Test DA (da)",
+    "max_queries": 3,
+    "need": "Uniqueness",
+    "need_description": "Where things stand now.",
+    "query": "community clinic funding",
+    "template_queries": "- community clinic funding now\n- community clinic funding polling",
+    "topic": "community clinic funding"
+  }
+}

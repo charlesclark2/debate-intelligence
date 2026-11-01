@@ -28,6 +28,13 @@
         "output_schema": "debate_core.application.structured_output.RepairedSchema",
         "task_class": "complex_reasoning"
       }
+    },
+    "search.expand": {
+      "1.0.0": {
+        "body_sha256": "1251763a6ee96488c89dc21a1c5ead797467dfe6a2cfaa2cdc4c298f5c66ae4f",
+        "output_schema": "debate_core.application.query_expansion.QueryExpansion",
+        "task_class": "high_volume"
+      }
     }
   }
 }

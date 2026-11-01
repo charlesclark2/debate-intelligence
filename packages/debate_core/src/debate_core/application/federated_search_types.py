@@ -2,7 +2,8 @@
 
 A federated search (E08) is four stages run in a fixed order over one value, :class:`SearchState`:
 
-1. **expand** — turn the request into the queries to ask (argument and need templates, v1-e08-t04);
+1. **expand** — turn the request into the queries to ask, by debate argument and need
+   (:mod:`debate_core.application.query_expansion`, v1-e08-t04);
 2. **fan_out** — ask every selected provider every query, concurrently, under one deadline, and
    record how each call ended (:mod:`debate_core.application.federated_search`, this task);
 3. **normalize** — collapse what the providers returned into distinct sources, `merged_candidates`
@@ -41,12 +42,14 @@ from debate_core.domain import (
 )
 from debate_core.domain.base import ORGANIZATION_ID_FIELD, OWNER_ID_FIELD
 from debate_core.domain.discovery import CandidateResult, ProviderHealth, ProviderQuery, ProviderStatus
+from debate_core.domain.search import SearchExpansion
 
 if TYPE_CHECKING:
     from debate_core.application.federated_dedupe import MergedCandidate
     from debate_core.application.federated_ranking import RankedCandidate
 
 __all__ = [
+    "ExpansionRequest",
     "PassThroughStage",
     "SearchOutcome",
     "SearchPipeline",
@@ -55,6 +58,37 @@ __all__ = [
     "SearchState",
     "StageName",
 ]
+
+
+class ExpansionRequest(DomainModel):
+    """Which argument and need to expand a search's query by (`--argument`, `--need`).
+
+    `argument` and `need` are taken as typed: the expand stage resolves them against the taxonomy,
+    aliases included, and refuses one it does not know with the valid choices.
+    """
+
+    argument: NonEmptyText = Field(description="The argument's id or an alias: `politics-da`, `ptx`.")
+    need: NonEmptyText = Field(description="The need's id or an alias: `link`, `uq`, `at`.")
+    topic_id: NonEmptyText | None = Field(
+        default=None, description="A topic preset whose variables fill the templates, such as {topic}."
+    )
+    variables: dict[str, NonEmptyText] = Field(
+        default_factory=dict[str, NonEmptyText],
+        description="Values for the templates' variables, such as topic and bill; never query.",
+    )
+    use_model: bool = Field(
+        default=False,
+        description=(
+            "Also ask a model for extra queries (`--expand-llm`). Off unless asked for, and never "
+            "needed: the templates' queries are asked whatever the model does."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _check_query_is_the_searchs(self) -> Self:
+        if "query" in self.variables:
+            raise ValueError("variables cannot set query: it is the search's own query")
+        return self
 
 
 class SearchRequest(DomainModel):
@@ -70,6 +104,10 @@ class SearchRequest(DomainModel):
             "The providers to ask, by settings name, in this order; None asks every enabled provider. "
             "A name settings do not enable is reported as not configured, not dropped."
         ),
+    )
+    expansion: ExpansionRequest | None = Field(
+        default=None,
+        description="The argument and need to expand the query by; None asks the query as typed.",
     )
     owner_id: Ulid | None = Field(default=None, description=OWNER_ID_FIELD)
     organization_id: Ulid | None = Field(default=None, description=ORGANIZATION_ID_FIELD)
@@ -97,6 +135,9 @@ class SearchState:
 
     queries: tuple[ProviderQuery, ...]
     """What every provider will be asked. Starts as the request's own query; expand may change it."""
+
+    expansion: SearchExpansion | None = None
+    """How expand turned the request into `queries`, stored with the search; None when it did not."""
 
     provider_statuses: tuple[ProviderStatus, ...] = ()
     """How each call ended, query by query and provider by provider. Written by fan_out."""
@@ -127,6 +168,7 @@ class SearchState:
         self,
         *,
         queries: tuple[ProviderQuery, ...] | None = None,
+        expansion: SearchExpansion | None = None,
         provider_statuses: tuple[ProviderStatus, ...] | None = None,
         candidates: tuple[CandidateResult, ...] | None = None,
         merged_candidates: tuple[MergedCandidate, ...] | None = None,
@@ -137,6 +179,7 @@ class SearchState:
         return dataclasses.replace(
             self,
             queries=self.queries if queries is None else queries,
+            expansion=self.expansion if expansion is None else expansion,
             provider_statuses=self.provider_statuses if provider_statuses is None else provider_statuses,
             candidates=self.candidates if candidates is None else candidates,
             merged_candidates=self.merged_candidates if merged_candidates is None else merged_candidates,

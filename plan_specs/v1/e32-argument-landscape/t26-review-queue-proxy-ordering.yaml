@@ -48,7 +48,7 @@ spec:
         its suggestion shown, the report's placements and counts are unchanged, and a table
         a removal has reached is refused; tests shown failing first.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

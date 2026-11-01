@@ -62,13 +62,13 @@ v2.3's extension work.
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 55 | 252 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 110 | 90 | 500 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 69 | 57 | 299 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 69 | 58 | 299 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 16 | 11 | 114 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 29 | 21 | 166 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 27 | 23 | 90 |
-| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 40 | 23 | 75 |
+| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 40 | 24 | 75 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -381,7 +381,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [files check and files build name each warned or failed card, its check and why, as the quality report does](plan_specs/v1/e33-file-builder/t12-files-check-names-each-warned-card.yaml) `v1-e33-t12-files-check-names-each-warned-card` | Succeeded | 1 | 1.0 |
 | [A CP draft keeps a block an affirmative-side position places, marked to check against the plan](plan_specs/v1/e33-file-builder/t13-cp-draft-keeps-aff-side-blocks-marked.yaml) `v1-e33-t13-cp-draft-keeps-aff-side-blocks-marked` | Succeeded | 1 | 1.0 |
 | [A coach-edited list of plan-mechanism words in the topic config marks a CP draft's plan-dependent blocks](plan_specs/v1/e33-file-builder/t14-plan-mechanism-words-in-the-topic-config.yaml) `v1-e33-t14-plan-mechanism-words-in-the-topic-config` | Pending | 1 | 1.0 |
-| [A built file still holding the CP text placeholder is warned, and a CP draft has a smoke check](plan_specs/v1/e33-file-builder/t15-unreplaced-cp-text-slot-warned.yaml) `v1-e33-t15-unreplaced-cp-text-slot-warned` | Pending | 1 | 1.0 |
+| [A built file still holding the CP text placeholder is warned, and a CP draft has a smoke check](plan_specs/v1/e33-file-builder/t15-unreplaced-cp-text-slot-warned.yaml) `v1-e33-t15-unreplaced-cp-text-slot-warned` | Succeeded | 1 | 1.0 |
 
 
 ### v1.3 — URL → verified card
@@ -567,7 +567,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [A week a killed run published is parsed by the next run, not left for the next import](plan_specs/v1/e40-cloud-caselist-run/t08-parse-owed.yaml) `v1-e40-t08-parse-owed` | Succeeded | 1 | 3.0 |
 | [The backfile imports run once each in the cloud, not on the operator's machine](plan_specs/v1/e40-cloud-caselist-run/t09-cloud-backfile-import.yaml) `v1-e40-t09-cloud-backfile-import` | InProgress | 2 | 3.0 |
 | [A restored working copy that brings the raw sources a hand prod publish needs](plan_specs/v1/e40-cloud-caselist-run/t10-restore-with-sources.yaml) `v1-e40-t10-restore-with-sources` | Succeeded | 1 | 2.0 |
-| [The dev lock held for good when the weekly run's home moves to prod](plan_specs/v1/e40-cloud-caselist-run/t11-run-home-moved-holder.yaml) `v1-e40-t11-run-home-moved-holder` | Pending | 1 | 2.0 |
+| [The dev lock held for good when the weekly run's home moves to prod](plan_specs/v1/e40-cloud-caselist-run/t11-run-home-moved-holder.yaml) `v1-e40-t11-run-home-moved-holder` | Succeeded | 1 | 2.0 |
 | [A held upload a cloud task records reaches the bucket, not only its working copy](plan_specs/v1/e40-cloud-caselist-run/t12-held-upload-records-reach-the-bucket.yaml) `v1-e40-t12-held-upload-records-reach-the-bucket` | Succeeded | 1 | 3.0 |
 | [In bucket mode, the report stage counts a source the bucket holds at its manifest digest as present](plan_specs/v1/e40-cloud-caselist-run/t13-bucket-mode-report-counts-held-sources.yaml) `v1-e40-t13-bucket-mode-report-counts-held-sources` | InProgress | 1 | 3.0 |
 | [The deploy script's region test, which failed once under load, made deterministic](plan_specs/v1/e40-cloud-caselist-run/t14-deploy-script-region-test-under-load.yaml) `v1-e40-t14-deploy-script-region-test-under-load` | Succeeded | 0 | 1.0 |

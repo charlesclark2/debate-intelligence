@@ -416,7 +416,8 @@ def test_a_card_whose_school_is_not_in_the_urls_form_shows_no_link(student: Any)
     assert "opencaselist.com" not in page
 
 
-def test_a_camp_card_shows_no_link_because_the_index_has_no_openev_address(student: Any) -> None:
+def test_a_camp_card_shows_no_openev_link_without_a_stored_openev_id(student: Any) -> None:
+    """The corpus's camp card has no OpenEv id; one that has is linked (`v1-e39-t16`'s own tests)."""
     page = student.browser.get(student.card_path("camp")).text
 
     assert source_links(page) == []

@@ -219,12 +219,12 @@ def test_holder_moves_from_format_one_to_format_two_when_the_weekly_update_publi
 def test_holder_refuses_a_format_it_does_not_read_with_a_message(
     make_holder: Callable[[], SearchIndexHolder], bucket: InMemorySearchIndexSource, format_two_sqlite: bytes
 ) -> None:
-    bucket.publish(published_index(format_two_sqlite, documents_by_store={"hsld26": 3}, format_version=3))
+    bucket.publish(published_index(format_two_sqlite, documents_by_store={"hsld26": 3}, format_version=4))
     holder = make_holder()
 
     refusal = refused(holder)
     assert refusal.refusal is SearchIndexRefusal.UNKNOWN_FORMAT_VERSION
-    assert str(refusal).endswith("was refused: its format version is not one this build reads, 1 or 2")
+    assert str(refusal).endswith("was refused: its format version is not one this build reads, 1, 2 or 3")
 
 
 def test_holder_keeps_serving_when_a_format_it_does_not_read_is_published(
@@ -240,14 +240,15 @@ def test_holder_keeps_serving_when_a_format_it_does_not_read_is_published(
     holder = make_holder()
     assert sorted(search(holder, "tariff")[0]) == [1, 2]
 
-    bucket.publish(published_index(format_two_sqlite, documents_by_store={"hsld26": 3}, format_version=3))
+    bucket.publish(published_index(format_two_sqlite, documents_by_store={"hsld26": 3}, format_version=4))
     clock.advance(POINTER_RECHECK_INTERVAL)
     with caplog.at_level(logging.WARNING, logger="debate_core.application.search_index_holder"):
         hits, notices = search(holder, "tariff")
     assert (sorted(hits), notices) == ([1, 2], ())
     assert holder.loaded_index_id == format_two.index_id
     assert any(
-        "its format version is not one this build reads, 1 or 2" in one.getMessage() for one in caplog.records
+        "its format version is not one this build reads, 1, 2 or 3" in one.getMessage()
+        for one in caplog.records
     )
     assert all("tariff" not in one.getMessage() for one in caplog.records), "no query text in any log line"
 

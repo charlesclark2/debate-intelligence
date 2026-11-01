@@ -228,6 +228,110 @@ def test_tub_index_build_writes_one_directory_under_the_data_directory(parsed: P
         ]
 
 
+CAMP_SOURCE: Final = "2" * 64
+
+
+def write_camp_store(data_dir: Path) -> None:
+    """One invented camp card in the `openev` store's 2026-policy release, as `caselist parse` writes it."""
+    card = ParsedCard(
+        tag="Invented camp claim",
+        full_cite="Lindqvist 26",
+        evidence_text="Invented camp evidence about invented trade",
+        completeness=CardCompleteness.FULL,
+        match_source=StyleMatchSource.HEURISTIC,
+        confidence=0.9,
+        provenance=FileImportProvenance(
+            source_sha256=CAMP_SOURCE,
+            source_path="placeholder.docx",
+            origin=SourceOrigin.OPENEV,
+            camp="Cascade Institute",
+            snapshot=date(2026, 7, 1),
+            first_element_index=0,
+            last_element_index=2,
+            parser_version=PARSER,
+            profile_version=PROFILE,
+        ),
+    )
+    fields: dict[str, Any] = {
+        "caselist": "openev",
+        "snapshot": "2026-policy",
+        "source_sha256": CAMP_SOURCE,
+        "parser_version": PARSER,
+        "profile_version": PROFILE,
+        "fingerprint_version": FINGERPRINT_VERSION,
+    }
+    store = LocalParsedStore(data_dir)
+    document = ParsedDocument(
+        source_sha256=CAMP_SOURCE,
+        source_path="placeholder.docx",
+        parser_version=PARSER,
+        profile_version=PROFILE,
+        cards=(card,),
+    )
+    entry = SourceEntry.model_validate(
+        {
+            **fields,
+            "source_format": SourceFormat.DOCX,
+            "byte_size": 1,
+            "outcome": SourceOutcome.PARSED,
+            "cards": 1,
+        }
+    )
+    record = DocumentRecord.from_parsed_document(
+        document,
+        caselist="openev",
+        snapshot="2026-policy",
+        fingerprint_version=FINGERPRINT_VERSION,
+        camp="Cascade Institute",
+    )
+    row = OccurrenceRecord.model_validate(
+        {
+            **fields,
+            "last_snapshot": "2026-policy",
+            "disclosure": None,
+            "camp": "Cascade Institute",
+            "first_element_index": 0,
+            "last_element_index": 2,
+            "exact_fingerprint": card_fingerprint(card).exact_fingerprint,
+            "cluster_id": card_fingerprint(card).exact_fingerprint,
+            "membership": ClusterMembership.NEAR_DUPLICATE,
+            "completeness": CardCompleteness.FULL,
+        }
+    )
+    asyncio.run(store.write_source("openev", PARSER, entry, record))
+    asyncio.run(store.write_aggregates("openev", PARSER, index=(entry,), failures=(), occurrences=(row,)))
+
+
+def test_tub_index_build_gives_a_camp_occurrence_the_openev_id_its_release_manifest_records(
+    installation: Path,
+) -> None:
+    """`v1-e39-t16`: the composition root hands the build this machine's release manifests."""
+    write_camp_store(installation)
+    manifest = installation / "objects" / "manifests" / "openev" / "2026-policy.jsonl"
+    manifest.parent.mkdir(parents=True)
+    member = {
+        "schema_version": 1,
+        "kind": "member",
+        "path": "Invented Camp/invented.docx",
+        "sha256": CAMP_SOURCE,
+        "classification": "NEW",
+        "skip_reason": None,
+        "openev_id": 4021,
+        "upstream_path_sha256": None,
+    }
+    manifest.write_text(json.dumps(member) + "\n", encoding="utf-8")
+
+    result = invoke("--json", "tub", "index", "build", "--caselist", "openev")
+
+    assert result.exit_code == ExitCode.OK, result.stdout
+    data = envelope_of(result)["data"]
+    assert data["manifest"]["format_version"] == 3
+    with sqlite3.connect(Path(data["directory"]) / "search-index.sqlite") as connection:
+        assert connection.execute("SELECT caselist, openev_id FROM occurrences").fetchall() == [
+            ("openev", 4021)
+        ]
+
+
 def test_tub_index_build_says_what_it_left_out_as_no_card_by_store(parsed: Path) -> None:
     """`v1-e39-t12`: the count is in the envelope and the table, since the manifest does not hold it."""
     as_json = invoke("--json", "tub", "index", "build", "--caselist", CASELIST)

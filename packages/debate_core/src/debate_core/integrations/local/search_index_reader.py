@@ -3,9 +3,10 @@
 :class:`SqliteSearchIndexReader` is the :class:`~debate_core.application.ports.search_index_reader.
 SearchIndexReader` the function's composition root wires (`v1-e39-t06`). It opens one `v1-e39-t02`
 index file read-only and immutable, refuses a file whose application id or format version it
-does not read, and runs six statements and nothing else: :data:`MATCH_STATEMENT`,
+does not read, and runs seven statements and nothing else: :data:`MATCH_STATEMENT`,
 :data:`COUNT_STATEMENT`, their passage forms :data:`PASSAGE_MATCH_STATEMENT` and
-:data:`PASSAGE_COUNT_STATEMENT`, :data:`DOCUMENT_STATEMENT` and :data:`OCCURRENCES_STATEMENT`. What
+:data:`PASSAGE_COUNT_STATEMENT`, :data:`DOCUMENT_STATEMENT`, and :data:`OCCURRENCES_STATEMENT` or, on
+an index older than format 3, :data:`OCCURRENCES_BEFORE_OPENEV_STATEMENT`. What
 they mean is decided by :class:`~debate_core.application.evidence_search.EvidenceSearchService`; every
 value a student typed reaches them as a bound parameter.
 
@@ -70,9 +71,11 @@ from debate_core.domain.evidence_search import (
     SearchFilters,
 )
 from debate_core.domain.search_index import (
+    OPENEV_ID_FORMAT_VERSION,
     READABLE_SEARCH_INDEX_FORMAT_VERSIONS,
     decode_font_size_spans,
     decode_formatting_spans,
+    readable_formats_sentence,
 )
 from debate_core.integrations.local.search_index import APPLICATION_ID
 
@@ -80,6 +83,7 @@ __all__ = [
     "COUNT_STATEMENT",
     "DOCUMENT_STATEMENT",
     "MATCH_STATEMENT",
+    "OCCURRENCES_BEFORE_OPENEV_STATEMENT",
     "OCCURRENCES_STATEMENT",
     "PASSAGE_COUNT_STATEMENT",
     "PASSAGE_MATCH_STATEMENT",
@@ -209,11 +213,20 @@ _LOCATION_COLUMNS: Final = ("first_element_index", "last_element_index")
 
 OCCURRENCES_STATEMENT: Final = (
     "SELECT "
-    + ", ".join((*_OCCURRENCE_COLUMNS, *_LOCATION_COLUMNS))
+    + ", ".join((*_OCCURRENCE_COLUMNS, *_LOCATION_COLUMNS, "openev_id"))
     + " FROM occurrences WHERE doc_id = ? ORDER BY ordinal"
 )
 """Every occurrence of one document, by its primary key, with where each is in its source: what a
-download reads its card from (`v1-e39-t08`). A search's rows leave the location out."""
+download reads its card from (`v1-e39-t08`), and a camp occurrence's OpenEv id, which its card page
+links to (`v1-e39-t16`). A search's rows leave both out."""
+
+OCCURRENCES_BEFORE_OPENEV_STATEMENT: Final = (
+    "SELECT "
+    + ", ".join((*_OCCURRENCE_COLUMNS, *_LOCATION_COLUMNS, "NULL"))
+    + " FROM occurrences WHERE doc_id = ? ORDER BY ordinal"
+)
+""":data:`OCCURRENCES_STATEMENT` on a format 1 or 2 index, which has no `openev_id` column: no
+occurrence there has an OpenEv id."""
 
 _OPEN_CHECKS: Final = ("PRAGMA application_id", "PRAGMA user_version")
 
@@ -225,15 +238,16 @@ READER_STATEMENTS: Final = (
     PASSAGE_COUNT_STATEMENT,
     DOCUMENT_STATEMENT,
     OCCURRENCES_STATEMENT,
+    OCCURRENCES_BEFORE_OPENEV_STATEMENT,
 )
 """Every statement the reader sends."""
 
 
 def _occurrence(row: tuple[Any, ...]) -> StoredOccurrence:
-    """One occurrence from :data:`_OCCURRENCE_COLUMNS`, and its location when the row has
-    :data:`_LOCATION_COLUMNS` after them."""
-    location: tuple[Any, ...] = row[len(_OCCURRENCE_COLUMNS) :] or (None, None)
-    first_element_index, last_element_index = location
+    """One occurrence from :data:`_OCCURRENCE_COLUMNS`, and its location and OpenEv id when the row has
+    :data:`_LOCATION_COLUMNS` and the id after them."""
+    rest: tuple[Any, ...] = row[len(_OCCURRENCE_COLUMNS) :] or (None, None, None)
+    first_element_index, last_element_index, openev_id = rest
     (
         doc_id,
         ordinal,
@@ -277,6 +291,7 @@ def _occurrence(row: tuple[Any, ...]) -> StoredOccurrence:
         camp_file_title=camp_file_title,
         first_element_index=first_element_index,
         last_element_index=last_element_index,
+        openev_id=openev_id,
     )
 
 
@@ -328,8 +343,9 @@ class SqliteSearchIndexReader:
             raise UnreadableSearchIndex("not a search index: its application id is not TUBS")
         if format_version not in READABLE_SEARCH_INDEX_FORMAT_VERSIONS:
             self._connection.close()
-            readable = " and ".join(str(one) for one in sorted(READABLE_SEARCH_INDEX_FORMAT_VERSIONS))
-            raise UnreadableSearchIndex(f"index format version {format_version}; this build reads {readable}")
+            raise UnreadableSearchIndex(
+                f"index format version {format_version}; this build reads {readable_formats_sentence('and')}"
+            )
         self._format_version: int = format_version
 
     def __enter__(self) -> Self:
@@ -460,6 +476,11 @@ class SqliteSearchIndexReader:
         )
 
     def occurrences(self, doc_id: int) -> tuple[StoredOccurrence, ...]:
+        statement = (
+            OCCURRENCES_STATEMENT
+            if self._format_version >= OPENEV_ID_FORMAT_VERSION
+            else OCCURRENCES_BEFORE_OPENEV_STATEMENT
+        )
         with self._lock:
-            rows = self._connection.execute(OCCURRENCES_STATEMENT, (doc_id,)).fetchall()
+            rows = self._connection.execute(statement, (doc_id,)).fetchall()
         return tuple(_occurrence(row) for row in rows)

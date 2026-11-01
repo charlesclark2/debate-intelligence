@@ -723,7 +723,8 @@ class OccurrenceProvenance:
 
     `provenance` False means the index kept only the occurrence's digests (it is past the build's
     provenance limit), so every disclosure field is `None` and so is the line. School, team code,
-    tournament and round are kept off the `repr`.
+    tournament and round are kept off the `repr`. `openev_id` is a camp occurrence's OpenEv file, which
+    its card page links to, on a format 3 index (`v1-e39-t16`); a search's hits leave it `None`.
     """
 
     ordinal: int
@@ -742,6 +743,7 @@ class OccurrenceProvenance:
     camp_year: int | None = None
     camp_event: str | None = None
     camp_file_title: str | None = None
+    openev_id: int | None = None
     provenance_line: str | None = field(default=None, repr=False)
 
 

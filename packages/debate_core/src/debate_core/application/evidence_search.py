@@ -471,6 +471,7 @@ class EvidenceSearchService:
                     camp_year=one.camp_year,
                     camp_event=one.camp_event,
                     camp_file_title=one.camp_file_title,
+                    openev_id=one.openev_id,
                     provenance_line=_line(one),
                 )
                 for one in survivors

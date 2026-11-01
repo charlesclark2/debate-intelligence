@@ -958,6 +958,7 @@ class ServiceContainer:
     def _build_search_index_build(
         self, event_for_caselist: Callable[[str], Event | None]
     ) -> SearchIndexBuildService:
+        from debate_core.application.caselist.manifest import read_manifest_lines
         from debate_core.integrations.docx_parser import DebateDocxParser
         from debate_core.integrations.local.parsed_store import LocalParsedStore
         from debate_core.integrations.local.search_index import SqliteSearchIndexWriter
@@ -970,6 +971,7 @@ class ServiceContainer:
             writer=SqliteSearchIndexWriter(),
             parser_version=DebateDocxParser().parser_version,
             event_for_caselist=event_for_caselist,
+            release_manifest_lines=lambda key: read_manifest_lines(self.evidence_object_path(key)),
         )
 
     def search_index_publish(self) -> SearchIndexPublishService:

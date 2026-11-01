@@ -389,6 +389,7 @@ class World:
             writer=SqliteSearchIndexWriter(),
             parser_version=PARSER,
             event_for_caselist=EVENTS.get,
+            release_manifest_lines=lambda _key: (),
         )
         self.publisher = RecordingPublisher(bucket=self.bucket, parser_version=PARSER)
         write_store(self.parsed, LD, texts(LD, 10))

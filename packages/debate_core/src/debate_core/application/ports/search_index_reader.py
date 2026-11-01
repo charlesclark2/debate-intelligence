@@ -67,6 +67,9 @@ class StoredOccurrence:
     camp_file_title: str | None = None
     first_element_index: int | None = None
     last_element_index: int | None = None
+    openev_id: int | None = None
+    """A camp occurrence's OpenEv id, read by a card's lookup on a format 3 index and not by a search;
+    `None` on formats 1 and 2, which have no such column (`v1-e39-t16`)."""
 
 
 @dataclass(frozen=True, slots=True)

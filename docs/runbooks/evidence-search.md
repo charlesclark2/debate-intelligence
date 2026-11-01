@@ -1661,7 +1661,7 @@ index whole; that is the behaviour this replaces, and it is safe, only wasteful.
 ## Moving the index to format 2
 
 `v1-e39-t13` changed the index's format from 1 to 2: its words are stemmed, so `grow` finds
-`growing`, and search by passage needs it ([the index's data model](../data/search-index.md#the-schema-format-version-2)).
+`growing`, and search by passage needs it ([the index's data model](../data/search-index.md#the-schema-format-version-3)).
 A function from `v1-e39-t13` on reads both formats; an older one reads format 1 only and refuses a
 format 2 index. So the function goes first and the index second, in this order, once in dev after
 the task merges and once in prod at its promotion. Agreement 11 applies to every block: a dry run or
@@ -1808,6 +1808,79 @@ reads both, but the move is undone.
 
 **In prod** the order is the same, at the promotion: the prod function (step 11's deploy) before
 prod's first format 2 index ([Promoting the pilot to prod](#promoting-the-pilot-to-prod), item 7).
+
+## Moving the index to format 3
+
+`v1-e39-t16` changed the index's format from 2 to 3: `occurrences` holds a camp file's OpenEv id,
+and a camp card's page links to the file on OpenEv from it
+([the index's data model](../data/search-index.md#a-camp-files-openev-id-format-3)). A function from
+`v1-e39-t16` on reads formats 1, 2 and 3; an older one reads 1 and 2 only and refuses a format 3
+index with `its format version is not one this build reads, 1 or 2`. Since the cutover the weekly
+cloud run builds and publishes dev's index, and the first run on an image carrying `v1-e39-t16`
+builds format 3 even when no store changed, because an index of another format is not one it would
+keep. So **dev's function is deployed with `v1-e39-t16` first, and only then the cloud run's image
+that carries it**, in this order, once in dev after the task merges and once in prod at its
+promotion. [A new image, later](caselist-cloud-run.md#a-new-image-later) checks the order before
+every run image is applied.
+
+**What the wrong order does.** A run image carrying `v1-e39-t16` applied before the function
+publishes a format 3 index that the function refuses. An environment that already holds the
+format 2 index goes on serving it, and logs the refusal; a new one has no index and answers every
+search with *Search is not available right now*. Deploying the function (step 1 below) ends it
+within five minutes. Nothing is rolled back and no index is rebuilt.
+
+**1. Deploy dev's function**, from `$WT` on `dev` after the merge, with its environment synced
+([Before you start](#before-you-start)). First the rehearsal, which builds the image and calls no AWS:
+
+**Operator command** (expected runtime ~3 min)
+Where: `$WT`
+```bash
+cd "$WT"
+git pull --ff-only
+uv sync --all-packages
+scripts/tub_deploy.sh dev --dry-run
+```
+Success looks like the image built and the script stopping before the push. Then the deploy:
+
+**Operator command** (expected runtime ~3 min; changes dev's function)
+Where: `$WT`
+```bash
+cd "$WT"
+scripts/tub_deploy.sh dev
+```
+Success looks like `{"status":"ok"}` and `Deployed <sha> to dev`, where `<sha>` is a commit that
+holds `v1-e39-t16`'s merge. Then sign in on dev and search for any word: the results carry a count
+above zero, so the new function is serving the format 2 index. A camp card shows no *Open on OpenEv*
+yet: format 2 has no ids.
+
+**2. The cloud run's image**, by [A new image, later](caselist-cloud-run.md#a-new-image-later), from a
+dev pre-release that holds `v1-e39-t16`'s merge, never one before step 1. Its format check prints
+`OK: ...` only once dev's function reads the format that image writes. The first Wednesday run on it
+builds format 3, checks it against the shrink guard and publishes it; within five minutes dev's
+function swaps to it. A build and publish by hand (`tub index build`, `tub index publish`) from a
+checkout holding `v1-e39-t16` writes format 3 too, so it waits for step 1 as well.
+
+**3. What to expect after the swap.** Every card is found as before. A camp card links to OpenEv only
+when its file's release manifest records an id, and on 2026-10-31 none of the 102 camp files with
+cards in the store did ([the count](../data/search-index.md#a-camp-files-openev-id-format-3)), so no
+camp card shows the link until a camp file the pull imports is indexed. The address's shape,
+`https://opencaselist.com/openev/<id>`, is pinned by nothing in the repository. Check it once, in a
+browser signed in to openCaselist, with an id the sync has listed. This prints one, from the run
+records the Mac keeps, and nothing else:
+
+**Operator command** (expected runtime under a second)
+Where: your Mac, anywhere
+```bash
+python3 -I -c 'import glob, json, os; ids = sorted({one["openev_id"] for name in glob.glob(os.path.expanduser("~/.debate-research/dev/caselist-sync-runs/*.json")) for one in json.load(open(name)).get("openev_selections", [])}); print("https://opencaselist.com/openev/" + str(ids[-1]) if ids else "STOP: no OpenEv id in the run records")'
+```
+Open the printed address. If it opens that file's page on OpenEv, say so to the PM. If it opens
+anything else, tell the PM what it shows: the address is one constant,
+`OPENEV_FILE_URL_TEMPLATE` in `debate_core.domain.search_source_links`, and its test, so a task can
+change it before any camp card carries an id.
+
+**In prod** the order is the same, at the promotion: the prod function (step 11's deploy) before
+prod's first format 3 index ([Promoting the pilot to prod](#promoting-the-pilot-to-prod), item 7),
+and before the weekly run's home moves to prod with an image that builds one (item 13).
 
 ## Download .docx and the cart
 
@@ -2190,23 +2263,26 @@ curl -sS https://tub.dev.wfbdebate.com/healthz
 ```
 Success looks like `InProgress`, then `{"status":"ok"}`. For prod, the same with prod's names.
 
-**A format 2 index rolls back only to a function that reads format 2** (`v1-e39-t13`). An image
-built before that task reads format 1 alone. Pointed at it while `current.json` names a format 2
-index, a new environment refuses the index and answers every search with *Search is not available
-right now* until a format 1 index is published, and only a build from before `v1-e39-t13` writes
-one. So before you roll back, check that the digest's image reads format 2: its tag is the commit it
-was built from, and that commit's `search_index.py` names the formats it reads.
+**An index rolls back only to a function that reads its format** (`v1-e39-t13`, `v1-e39-t16`). An
+image built before `v1-e39-t13` reads format 1 alone, and one built before `v1-e39-t16` reads formats
+1 and 2. Pointed at one while `current.json` names an index of a newer format, a new environment
+refuses the index and answers every search with *Search is not available right now* until an index
+of a format it reads is published, and only an older build writes one. So before you roll back,
+check that the digest's image reads the published format, 3 since `v1-e39-t16`: its tag is the
+commit it was built from, and that commit's `search_index.py` names the format it writes, which it
+reads with every earlier one.
 
 ```bash
 cd "$WT"
 git fetch origin
 ROLLBACK_COMMIT='the-tag-from-the-list'
 git show "${ROLLBACK_COMMIT%%-uncommitted-*}:packages/debate_core/src/debate_core/domain/search_index.py" \
-  | grep -c 'READABLE_SEARCH_INDEX_FORMAT_VERSIONS: Final = frozenset({1, SEARCH_INDEX_FORMAT_VERSION})'
+  | grep -cE '^SEARCH_INDEX_FORMAT_VERSION: Final = [3-9]$'
 ```
-Success looks like `1`: that image reads formats 1 and 2, and the rollback is safe. `0`, or `fatal:`
-for a commit git does not have, means it reads format 1 only: do not roll back to it while the
-published index is format 2; take it to the PM.
+Success looks like `1`: that image writes format 3 or later and reads format 3, and the rollback is
+safe while the published index is format 3. `0`, or `fatal:` for a commit git does not have, means it
+reads format 2 at most: do not roll back to it while the published index is format 3; take it to the
+PM.
 
 ## What this runbook deliberately does not do
 

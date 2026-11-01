@@ -1,7 +1,8 @@
 """Where a card on the search pilot's card page came from, as a link out of the platform (`v1-e39-t11`).
 
 The card page offers "Open on openCaselist" for a disclosed card, built only from what the index
-already stores of the card's representative occurrence: its caselist, school and team code. A team's
+already stores of the card's representative occurrence: its caselist, school and team code, and
+"Open on OpenEv" for a camp card, from its stored OpenEv id. A team's
 page on openCaselist is `https://opencaselist.com/<caselist>/<school>/<team code>`, and it lists the
 rounds the team disclosed with each file, so it is the page the file is published on.
 
@@ -20,13 +21,15 @@ display name, and a link built from it would land on the wrong page. Such a card
 disclosure is not on record, and one whose school or team code the parser could not read
 (`UNKNOWN`) have no link.
 
-## No camp card is linked
+## A camp card links to its file on OpenEv (`v1-e39-t16`)
 
-The index stores a camp card's camp, year, event and file title, and no OpenEv path or file id. The
-title is the importer's, with the camp, year and lab initials taken off the file name, so it names no
-OpenEv address either. A camp card has no link until the index stores one (PM ruling 2026-10-22,
-option A: `v1-e39-t16` carries the address from the import through `CampFile` into the index, after
-`v1-e39-t13`'s format move).
+"Open on OpenEv" is built from the OpenEv id the index stores for a camp occurrence since format 3,
+which the build reads from the release manifest's row for the file (`openev_id`, `v1-e30-t14`), and
+from nothing else: never the camp, the year, the event or the file title. The title is the
+importer's, with the camp, year and lab initials taken off the file name, so it names no OpenEv
+address. A camp card whose row has no id (a file imported before `v1-e30-t14` and not named
+`openev-<id>-…`, or any card of a format 1 or 2 index) has no link. The address's shape is
+:data:`OPENEV_FILE_URL_TEMPLATE`'s, which the repository does not pin: see its note.
 
 ## Nothing here is the request's
 
@@ -52,11 +55,16 @@ from typing import Final
 
 from debate_core.domain.caselist import CASELIST_SLUG_PATTERN, TEAM_CODE_MAX_LENGTH
 from debate_core.domain.evidence_search import OccurrenceProvenance
+from debate_core.domain.file_recipe import CAMP_STORE
 
 __all__ = [
+    "OPENCASELIST_LABEL",
     "OPENCASELIST_ORIGIN",
+    "OPENEV_FILE_URL_TEMPLATE",
+    "OPENEV_LABEL",
     "NoTeamPage",
     "SourceLink",
+    "openev_file_url",
     "source_link",
     "team_page_url",
     "why_no_team_page",
@@ -66,6 +74,17 @@ OPENCASELIST_ORIGIN: Final = "https://opencaselist.com"
 """The site a disclosed card's team page is on. A fixed origin: no part of a link is ever the request's."""
 
 OPENCASELIST_LABEL: Final = "Open on openCaselist"
+
+OPENEV_FILE_URL_TEMPLATE: Final = f"{OPENCASELIST_ORIGIN}/openev/{{openev_id}}"
+"""Where a camp file is on OpenEv, by its id: OpenEv is openCaselist's section for camp files.
+
+**Not pinned by anything the repository holds** (`v1-e39-t16`). The repository pins the API the pull
+uses (`GET /openev`, and a download by the file's path through `GET /download?path=`), not a page a
+browser opens, and the index stores the id, never the path. So the shape is this constant's, held by
+a test, until the coach's check after the deploy to dev opens one link and confirms it or gives the
+right one; changing it is this line and its test."""
+
+OPENEV_LABEL: Final = "Open on OpenEv"
 
 _SCHOOL_MAX_LENGTH: Final = 100
 _CASELIST: Final = re.compile(CASELIST_SLUG_PATTERN)
@@ -118,10 +137,28 @@ def team_page_url(caselist: str, school: str, team_code: str) -> str | None:
     return f"{OPENCASELIST_ORIGIN}/{caselist}/{school}/{team_code}"
 
 
+def openev_file_url(openev_id: object) -> str | None:
+    """A camp file's address on OpenEv, from its id, or `None` for a value that is no OpenEv id: one read
+    from an index row is checked again here, a boolean, zero or a negative number refused."""
+    if isinstance(openev_id, bool) or not isinstance(openev_id, int) or openev_id < 1:
+        return None
+    return OPENEV_FILE_URL_TEMPLATE.format(openev_id=openev_id)
+
+
 def source_link(occurrence: OccurrenceProvenance) -> SourceLink | None:
     """The link to the page that publishes `occurrence`'s file, or `None` when none can be built."""
+    if occurrence.caselist == CAMP_STORE:
+        return _openev_link(occurrence)
     school, team_code = occurrence.school, occurrence.team_code
     if not occurrence.provenance or school is None or team_code is None:
         return None
     url = team_page_url(occurrence.caselist, school, team_code)
     return None if url is None else SourceLink(label=OPENCASELIST_LABEL, url=url)
+
+
+def _openev_link(occurrence: OccurrenceProvenance) -> SourceLink | None:
+    """A camp occurrence's file on OpenEv, from its stored id alone: never its title, camp or year."""
+    if not occurrence.provenance or occurrence.openev_id is None:
+        return None
+    url = openev_file_url(occurrence.openev_id)
+    return None if url is None else SourceLink(label=OPENEV_LABEL, url=url)

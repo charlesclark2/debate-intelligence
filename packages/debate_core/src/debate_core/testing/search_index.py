@@ -8,8 +8,9 @@ that an unchanged pointer cost no body and that nothing but the three keys was a
 serves the suppression list beside them, the fourth key the function reads (`v1-e39-t07`), from
 :meth:`InMemorySearchIndexSource.write_suppression_list`.
 
-:func:`format_one_index` turns an index the running writer wrote into the format 1 file the writer
-wrote before `v1-e39-t13`, so a test can show what the function does while it serves one.
+:func:`format_one_index` and :func:`format_two_index` turn an index the running writer wrote into the
+format 1 file the writer wrote before `v1-e39-t13`, or the format 2 file it wrote before `v1-e39-t16`,
+so a test can show what the function does while it serves one.
 
 Every value here is synthetic: invented caselist slugs, versions and counts.
 """
@@ -49,6 +50,7 @@ __all__ = [
     "InMemorySearchIndexSource",
     "PublishedIndex",
     "format_one_index",
+    "format_two_index",
     "published_index",
 ]
 
@@ -164,15 +166,39 @@ def published_index(
     )
 
 
-def format_one_index(sqlite: bytes) -> bytes:
-    """The format 1 file of the same rows as `sqlite`: its full-text table unstemmed, its version 1.
+def format_two_index(sqlite: bytes) -> bytes:
+    """The format 2 file of the same rows as `sqlite`: no `openev_id` column, its version 2.
 
-    In memory, from bytes to bytes. The writer of `v1-e39-t02` to `v1-e39-t12` wrote the same
-    `documents` and `occurrences`, so only the `search` table, `index_info` and `user_version` differ.
+    In memory, from bytes to bytes. The writer of `v1-e39-t13` to `v1-e39-t15` wrote the same
+    `documents`, `search` table and `occurrences` but for that column (`v1-e39-t16`).
     """
     connection = sqlite3.connect(":memory:", isolation_level=None)
     try:
         connection.deserialize(sqlite)
+        for statement in (
+            "BEGIN",
+            "ALTER TABLE occurrences DROP COLUMN openev_id",
+            "UPDATE index_info SET value = '2' WHERE key = 'format_version'",
+            "PRAGMA user_version = 2",
+            "COMMIT",
+            "VACUUM",
+        ):
+            connection.execute(statement)
+        return connection.serialize()
+    finally:
+        connection.close()
+
+
+def format_one_index(sqlite: bytes) -> bytes:
+    """The format 1 file of the same rows as `sqlite`: its full-text table unstemmed, its version 1.
+
+    In memory, from bytes to bytes. The writer of `v1-e39-t02` to `v1-e39-t12` wrote format 2's
+    `documents` and `occurrences`, so it is :func:`format_two_index` with only the `search` table,
+    `index_info` and `user_version` changed.
+    """
+    connection = sqlite3.connect(":memory:", isolation_level=None)
+    try:
+        connection.deserialize(format_two_index(sqlite))
         for statement in (
             "BEGIN",
             "DROP TABLE search",

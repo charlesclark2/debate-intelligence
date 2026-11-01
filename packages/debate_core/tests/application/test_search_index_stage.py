@@ -310,6 +310,7 @@ class World:
             writer=SqliteSearchIndexWriter(),
             parser_version=PARSER,
             event_for_caselist={CASELIST: Event.LD}.get,
+            release_manifest_lines=lambda _key: (),
         )
         write_store(self.parsed, CASELIST, ["Invented growth evidence", "Invented trade evidence"])
         write_store(self.parsed, OPENEV_STORE, ["Invented camp evidence"], version=self.openev_version)

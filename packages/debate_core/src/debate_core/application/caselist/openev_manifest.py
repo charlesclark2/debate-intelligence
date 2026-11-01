@@ -117,6 +117,7 @@ __all__ = [
     "RecordedRelease",
     "merged_manifest_lines",
     "openev_manifest_key",
+    "openev_ids_by_source",
     "openev_release_name",
     "read_recorded_release",
     "row_upstream_identity",
@@ -316,6 +317,26 @@ def row_upstream_identity(row: Mapping[str, object]) -> tuple[int, str] | None:
     if not isinstance(digest, str) or _SHA256_HEX.match(digest) is None:
         return None
     return openev_id, digest
+
+
+def openev_ids_by_source(recorded: RecordedRelease) -> dict[str, int]:
+    """Each stored camp file's OpenEv id, by its SHA-256: what the search index links a camp card to.
+
+    From every stored member row whose `openev_id` is a positive whole number (`v1-e30-t14`), whether
+    or not it also carries the path's digest: a hand import named `openev-<id>-…` knows the id alone.
+    A row from before `v1-e30-t14`, or one with no id, gives none. A file at two paths of the release
+    has the smaller of its ids, the first upload of those bytes, so the answer is the same whatever
+    order the rows are in (`v1-e39-t16`).
+    """
+    ids: dict[str, int] = {}
+    for row in recorded.rows.values():
+        sha256, openev_id = row.get("sha256"), row.get("openev_id")
+        if row.get("classification") not in _STORED or not isinstance(sha256, str):
+            continue
+        if isinstance(openev_id, bool) or not isinstance(openev_id, int) or openev_id < 1:
+            continue
+        ids[sha256] = min(openev_id, ids.get(sha256, openev_id))
+    return ids
 
 
 def summary_row(

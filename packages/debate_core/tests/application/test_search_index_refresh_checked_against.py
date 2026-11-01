@@ -147,6 +147,7 @@ class BucketWorld:
             writer=SqliteSearchIndexWriter(),
             parser_version=PARSER,
             event_for_caselist={CASELIST: Event.LD}.get,
+            release_manifest_lines=lambda _key: (),
         )
         write_store(self.parsed, CASELIST, CASELIST_TEXTS)
         write_store(self.parsed, OPENEV_STORE, CAMP_TEXTS)

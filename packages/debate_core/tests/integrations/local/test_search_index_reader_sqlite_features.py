@@ -44,6 +44,7 @@ from debate_core.domain.caselist import Event, Side
 from debate_core.domain.evidence_search import SearchFilters, parse_query
 from debate_core.integrations.local.search_index import SqliteSearchIndexWriter
 from debate_core.integrations.local.search_index_reader import SqliteSearchIndexReader
+from debate_core.testing.search_index import format_two_index
 
 REPO_ROOT: Final = Path(__file__).resolve().parents[5]
 INDEX_ID: Final = "0123456789abcdef"
@@ -78,7 +79,7 @@ ALLOWED_STATEMENTS: Final = (
     "team_count FROM documents WHERE caselist = {} AND cluster_id = {}",
     "SELECT doc_id, ordinal, caselist, source_sha256, disclosure, snapshot, last_snapshot, completeness, "
     "attributed, provenance, side, school, team_code, tournament, round, camp, camp_year, camp_event, "
-    "camp_file_title, first_element_index, last_element_index FROM occurrences WHERE doc_id = {} "
+    "camp_file_title, first_element_index, last_element_index, openev_id FROM occurrences WHERE doc_id = {} "
     "ORDER BY ordinal",
     # v1-e39-t13: a passage's ranking and its count, each kept to the documents sharing enough words.
     "WITH RECURSIVE words (word, rest) AS (SELECT NULL, {} UNION ALL "
@@ -107,6 +108,11 @@ ALLOWED_STATEMENTS: Final = (
     "AND ({} IS NULL OR d.event = {}) AND ({} IS NULL OR d.caselist = {}) AND ({} IS NULL OR d.camp = {}) "
     "AND ({} IS NULL OR instr(d.sides, {}) > 0) AND ({} IS NULL OR d.first_seen >= {}) "
     "ORDER BY search.rowid LIMIT {}",
+    # v1-e39-t16: a card's occurrences on a format 1 or 2 index, which has no `openev_id` column.
+    "SELECT doc_id, ordinal, caselist, source_sha256, disclosure, snapshot, last_snapshot, completeness, "
+    "attributed, provenance, side, school, team_code, tournament, round, camp, camp_year, camp_event, "
+    "camp_file_title, first_element_index, last_element_index, NULL FROM occurrences WHERE doc_id = {} "
+    "ORDER BY ordinal",
 )
 
 #: What FTS5 itself prepares outside a statement's step, so SQLite traces it unnested: its config read
@@ -252,9 +258,12 @@ def traced_statements(path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[list
 
 
 def test_search_index_reader_runs_only_statements_sqlite_3_40_has(
-    index_path: Path, monkeypatch: pytest.MonkeyPatch
+    index_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    traced, _ = traced_statements(index_path, monkeypatch)
+    """Over this build's format and format 2, whose card lookup reads no OpenEv id (`v1-e39-t16`)."""
+    format_two = tmp_path / "format-two.sqlite"
+    format_two.write_bytes(format_two_index(index_path.read_bytes()))
+    traced = traced_statements(index_path, monkeypatch)[0] + traced_statements(format_two, monkeypatch)[0]
     sent = [
         statement
         for statement in traced
@@ -415,8 +424,8 @@ def test_search_index_reader_refuses_a_file_that_is_not_this_index(tmp_path: Pat
     newer = tmp_path / "newer.sqlite"
     shutil.copy(index_path, newer)
     with sqlite3.connect(newer) as connection:
-        connection.execute("PRAGMA user_version = 3")
-    with pytest.raises(UnreadableSearchIndex, match="format version 3; this build reads 1 and 2"):
+        connection.execute("PRAGMA user_version = 4")
+    with pytest.raises(UnreadableSearchIndex, match="format version 4; this build reads 1, 2 and 3"):
         SqliteSearchIndexReader(newer, index_id=INDEX_ID)
 
 

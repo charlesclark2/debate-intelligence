@@ -287,7 +287,7 @@ def format_one(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 def test_format_one_reader_says_its_format(format_one: Path, forms: Path) -> None:
     assert SqliteSearchIndexReader(format_one, index_id=INDEX_ID).format_version == 1
-    assert SqliteSearchIndexReader(forms, index_id=INDEX_ID).format_version == 2
+    assert SqliteSearchIndexReader(forms, index_id=INDEX_ID).format_version == 3
 
 
 @pytest.mark.parametrize(

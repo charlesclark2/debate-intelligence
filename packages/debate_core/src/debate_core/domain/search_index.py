@@ -55,6 +55,7 @@ __all__ = [
     "SEARCH_INDEX_PREFIX",
     "SEARCH_INDEX_SQLITE_NAME",
     "SQLITE_FEATURE_CEILING",
+    "OPENEV_ID_FORMAT_VERSION",
     "STEMMED_FORMAT_VERSION",
     "IndexCounts",
     "IndexFile",
@@ -70,22 +71,39 @@ __all__ = [
     "encode_formatting_spans",
     "index_object_key",
     "read_aloud_text",
+    "readable_formats_sentence",
     "render_search_index_manifest_schema",
 ]
 
-SEARCH_INDEX_FORMAT_VERSION: Final = 2
+SEARCH_INDEX_FORMAT_VERSION: Final = 3
 """The SQLite schema the writer creates. Bumped by any change a reader would break on.
 
 2 since `v1-e39-t13`: the full-text table's tokenizer puts FTS5's `porter` stemmer in front of
-`unicode61`, so a word matches its other forms. Nothing else in the file changed."""
+`unicode61`, so a word matches its other forms. 3 since `v1-e39-t16`: `occurrences` has an
+`openev_id` column, the OpenEv id of a camp occurrence's file, which no full-text table holds.
+Nothing else in the file changed either time."""
 
 STEMMED_FORMAT_VERSION: Final = 2
 """The first format whose words are stemmed, and so the first passage search runs on."""
 
-READABLE_SEARCH_INDEX_FORMAT_VERSIONS: Final = frozenset({1, SEARCH_INDEX_FORMAT_VERSION})
-"""The formats this build reads: the one it writes, and format 1, which the function serves while the
-first weekly update after `v1-e39-t13` builds format 2. On format 1 a search matches words as written
-and passage search is off, and the page says both (the PM's ruling of 2026-10-23)."""
+OPENEV_ID_FORMAT_VERSION: Final = 3
+"""The first format whose occurrences hold a camp file's OpenEv id, and so the first a camp card's
+"Open on OpenEv" link is built from."""
+
+READABLE_SEARCH_INDEX_FORMAT_VERSIONS: Final = frozenset(
+    {1, STEMMED_FORMAT_VERSION, SEARCH_INDEX_FORMAT_VERSION}
+)
+"""The formats this build reads: the one it writes, and formats 1 and 2, so the function can be
+deployed before the first weekly update after it builds the format it writes. On format 1 a search
+matches words as written and passage search is off, and the page says both (the PM's ruling of
+2026-10-23). On formats 1 and 2 no camp card has an OpenEv link."""
+
+
+def readable_formats_sentence(conjunction: str) -> str:
+    """The readable formats in words, `1, 2 or 3`: what a refusal names as the formats it reads."""
+    *rest, last = (str(one) for one in sorted(READABLE_SEARCH_INDEX_FORMAT_VERSIONS))
+    return f"{', '.join(rest)} {conjunction} {last}" if rest else last
+
 
 SQLITE_FEATURE_CEILING: Final = "3.40.0"
 """The newest SQLite whose features the index may use: the Lambda image's (ADR-0019 (c) 1)."""

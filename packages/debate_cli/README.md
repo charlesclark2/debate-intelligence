@@ -332,7 +332,7 @@ each reason's detail on stderr). `--json` prints one envelope, published as
 |---|---|
 | `0` | Every card is VERIFIED. |
 | `1` | The manifest was read and at least one card is UNVERIFIED. Every card is still listed. |
-| `2` | A usage error, or a file that is not a card manifest: not JSON, or not valid against `card_manifest.v1.json`. The failing JSON path is reported and nothing is verified. |
+| `2` | A usage error, or a file that is not a card manifest this build reads: not JSON, not valid against `card_manifest.v1.json`, or written by a newer build of debate-research. The failing JSON path is reported and nothing is verified. |
 | `3` | Verification could not run, for example because a store could not be read. No card has a verdict. |
 
 Three rules worth knowing:

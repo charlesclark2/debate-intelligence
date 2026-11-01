@@ -925,7 +925,7 @@ CAMP_RELEASES: Final = {
 
 def add_camp_file(world: World, content: bytes) -> list[SourceCard]:
     """`content` released in both releases: a row per card per release, carrying that release's camp path."""
-    cards = asyncio.run(world.files.add_source(content, disclosure=None))
+    cards = list(asyncio.run(world.files.add_source(content, disclosure=None)))
     rows: list[OccurrenceRecord] = []
     for release, path in CAMP_RELEASES.items():
         rows += [
@@ -1070,5 +1070,6 @@ def test_a_rebuild_with_no_camp_path_leaves_no_camp_paths_file_from_the_build_be
 
 
 def _camp_source(world: World) -> str:
-    rows = asyncio.run(world.store.read_occurrences("openev", PARSER.parser_version)) or ()
+    rows = asyncio.run(world.store.read_occurrences("openev", PARSER.parser_version))
+    assert rows
     return rows[0].source_sha256

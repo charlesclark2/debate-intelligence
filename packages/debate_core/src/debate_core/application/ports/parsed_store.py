@@ -94,6 +94,7 @@ __all__ = [
     "OPENEV_STORE",
     "PARSED_PREFIX",
     "PARSED_STORE_SCHEMA_VERSION",
+    "REBUILT_NAMES",
     "REPARSE_SEPARATOR",
     "CampPathRecord",
     "DocumentRecord",
@@ -140,9 +141,11 @@ CAMP_PATHS_NAME: Final = "camp_paths.jsonl"
 """The camp rows' camp path digests, beside `occurrences.jsonl` (`v1-e33-t07`); only in `openev`."""
 
 AGGREGATE_NAMES: Final = (INDEX_NAME, FAILURES_NAME, OCCURRENCES_NAME)
-"""The files rebuilt from the per-source files on every run, and deleted by a removal.
+"""The files rebuilt from the per-source files on every run, which every version directory holds."""
 
-A store directory holds `camp_paths.jsonl` only when its table has a camp row with a camp path."""
+REBUILT_NAMES: Final = (*AGGREGATE_NAMES, CAMP_PATHS_NAME)
+"""Every file a run rebuilds, a publish sends after the per-source files and a removal deletes: the
+aggregates, and `camp_paths.jsonl` where the table has a camp row at a camp path (`v1-e33-t07`)."""
 
 REPARSE_SEPARATOR: Final = "_reparse-"
 """Between a parser version and its generation in a version directory's name."""

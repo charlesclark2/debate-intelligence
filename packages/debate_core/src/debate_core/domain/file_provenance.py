@@ -330,7 +330,14 @@ class FileProvenanceManifest(DomainModel):
 
     def camp_path_sidecar(self, sidecar_json: bytes) -> CampPathSidecar | None:
         """The camp paths of this sidecar's camp cards, for its bytes `sidecar_json`; None if none has one."""
-        return None
+        cards = tuple(
+            CampPathCard(position=entry.position, camp_path_disclosures=entry.camp_path_disclosures)
+            for entry in self.cards
+            if entry.camp_path_disclosures
+        )
+        if not cards:
+            return None
+        return CampPathSidecar(sidecar_sha256=hashlib.sha256(sidecar_json).hexdigest(), cards=cards)
 
     def with_camp_paths(self, sidecar_json: bytes, camp_paths_json: bytes | None) -> Self:
         """This sidecar with each camp card's camp paths, from `camp_paths_json` if written for this sidecar.
@@ -338,7 +345,26 @@ class FileProvenanceManifest(DomainModel):
         `sidecar_json` is the sidecar's bytes as read. Camp paths written for other bytes, unreadable,
         or naming a card that is not a camp card, give none: each camp card is then checked as before.
         """
-        return self
+        if camp_paths_json is None:
+            return self
+        try:
+            camp_paths = CampPathSidecar.model_validate_json(camp_paths_json)
+        except ValueError:
+            return self
+        if camp_paths.sidecar_sha256 != hashlib.sha256(sidecar_json).hexdigest():
+            return self
+        given = {card.position: card.camp_path_disclosures for card in camp_paths.cards}
+        camp = {entry.position for entry in self.cards if entry.caselist == CAMP_STORE}
+        if not set(given) <= camp:
+            return self
+        return self.evolve(
+            cards=tuple(
+                entry.evolve(camp_path_disclosures=given[entry.position])
+                if entry.position in given
+                else entry
+                for entry in self.cards
+            )
+        )
 
 
 class CampPathCard(DomainModel):

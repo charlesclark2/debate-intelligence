@@ -552,9 +552,11 @@ def check_suppression(
     """No card from a suppressed source or disclosure (ac6). Names the card and the request, nothing else.
 
     A caselist card is flagged by a suppression of its whole source or of its own disclosure. A camp
-    card records no disclosure, and its sidecar entry no camp path, so a suppression of one camp path
-    (`v1-e30-t14`) cannot be told apart from another path of the same bytes: any suppression of one
-    path of its source flags it, for a person to look at, rather than letting a removed card through.
+    card records no disclosure. With the camp paths of its release beside the sidecar (`v1-e33-t07`),
+    it is flagged when every one of them is withdrawn (`v1-e30-t14`), and the same file from another
+    release is not. A camp card with none, built before they were recorded or with that file gone,
+    cannot be told apart from another path of the same bytes: any suppression of one path of its
+    source flags it, for a person to look at, rather than letting a removed card through.
     """
     check = QualityCheck.SUPPRESSION
     results: list[CheckResult] = []
@@ -569,6 +571,11 @@ def check_suppression(
             if digest is not None and (sha, digest) in suppressions.disclosures:
                 request = suppressions.disclosures[sha, digest]
                 message = f"the card's disclosure is on the suppression list (request {request})"
+        elif entry.camp_path_disclosures:
+            found = [suppressions.disclosures.get((sha, path)) for path in entry.camp_path_disclosures]
+            withdrawn = sorted(request for request in found if request is not None)
+            if len(withdrawn) == len(found):
+                message = f"the card's camp path is withdrawn from its release (request {withdrawn[0]})"
         else:
             requests = sorted(
                 request for (source, _), request in suppressions.disclosures.items() if source == sha

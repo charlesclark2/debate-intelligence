@@ -46,6 +46,7 @@ from debate_core.domain.debate_files import ParsedDocument, ParseFailure
 from debate_core.domain.file_provenance import (
     FileProvenanceEntry,
     FileProvenanceManifest,
+    camp_path_sidecar_name,
     provenance_sidecar_name,
 )
 from debate_core.domain.style_profile import StyleProfile
@@ -174,7 +175,9 @@ class FileQualityService:
         """Check the file at `built_path` and write its two reports beside it."""
         sidecar_path = built_path.with_name(provenance_sidecar_name(built_path.name))
         sidecar = sidecar_path.read_bytes() if sidecar_path.is_file() else None
-        report = await self.check_file(built_path.read_bytes(), sidecar)
+        camp_paths_path = built_path.with_name(camp_path_sidecar_name(built_path.name))
+        camp_paths = camp_paths_path.read_bytes() if camp_paths_path.is_file() else None
+        report = await self.check_file(built_path.read_bytes(), sidecar, camp_paths)
         json_name, markdown_name = quality_report_names(built_path.name)
         json_path, markdown_path = built_path.with_name(json_name), built_path.with_name(markdown_name)
         json_path.write_bytes(report.to_json_bytes())
@@ -190,6 +193,8 @@ class FileQualityService:
         """
         docx_sha256 = hashlib.sha256(docx).hexdigest()
         manifest, problems = self._read_sidecar(sidecar)
+        if manifest is not None and sidecar is not None:
+            manifest = manifest.with_camp_paths(sidecar, camp_paths)
         results = check_sidecar(
             problems=problems,
             recorded_docx_sha256=manifest.docx_sha256 if manifest is not None else None,

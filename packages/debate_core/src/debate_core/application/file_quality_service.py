@@ -181,8 +181,13 @@ class FileQualityService:
         markdown_path.write_text(render_markdown(report), encoding="utf-8")
         return CheckedFile(report=report, json_path=json_path, markdown_path=markdown_path)
 
-    async def check_file(self, docx: bytes, sidecar: bytes | None) -> FileQualityReport:
-        """The report for a built file's bytes and its sidecar's (None when there is none). Writes nothing."""
+    async def check_file(
+        self, docx: bytes, sidecar: bytes | None, camp_paths: bytes | None = None
+    ) -> FileQualityReport:
+        """The report for a built file's bytes and its sidecar's (None when there is none). Writes nothing.
+
+        `camp_paths` is the file of the camp cards' camp paths beside the sidecar, None when there is none.
+        """
         docx_sha256 = hashlib.sha256(docx).hexdigest()
         manifest, problems = self._read_sidecar(sidecar)
         results = check_sidecar(

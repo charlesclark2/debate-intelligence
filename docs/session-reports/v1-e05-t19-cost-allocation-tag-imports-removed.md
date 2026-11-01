@@ -203,9 +203,42 @@ budget's, no longer shows the two `will be imported` lines that t18's report war
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-31
 
 **Notes:**
+
+The import blocks are gone, and the check the operator reads is now right for the plan this root gives.
+1. **The finding that mattered.** The PM suspected `COSTTAGSPLAN` would refuse a clean plan once the
+   imports were gone, and the red run proved it: `the Project tag is in the plan 0 times, not once`.
+   That is what the operator's next plan would have printed. The check now finds the tags among all
+   resources. It keeps every refusal it had, and adds one: a third tag that is merely unchanged is
+   refused too.
+2. **ac1's session halves pass.**
+   * The diff touches neither the module nor its call nor the `check` (`git diff --quiet` on the
+     module).
+   * The structural test refuses any `import` block naming a cost allocation tag.
+   * Red: 12 failed, grouped by reason. Green: the node criterion passes (39).
+   * Four mutants caught at assertions.
+   * `terraform_checks.sh` passes offline, with no lock file changed.
+3. **Decisions accepted:**
+   * the success line `PLAN OK: the two tags, …`, since two unchanged tags are not two changes;
+   * the import shape still accepted, which is harmless now that the structural test forbids the
+     blocks;
+   * the apply block replaced by "No apply follows";
+   * Terraform's no-op shape measured on built-in resources, with the operator's plan as the real
+     confirmation, as you say.
+4. **Follow-up (the module README's sentence):** the PM's next batch fixes it as a doc line, with your
+   suggested wording. It is documentation, not "the module", so the forbidden item does not apply to
+   a batch edit.
+5. **Closing checks:** the affected set (95 files) stopped at 47% at its limit with nothing failing,
+   and is left to the PR's `ci` under agreement 10. The files naming the runbook or `budgets.tf`,
+   `tests/infrastructure`, `tests/docs`, `tests/architecture`, `tests/specs` (919), the rest of the
+   always-run list (40), the model spend check (26), ruff, pyright, lint-imports and the doc checks
+   are clean.
+6. **Merge:** `--partial` once `ci` is green. Then the operator runs "Planning this root after the
+   imports" from `cost-allocation-tags-apply` at `origin/dev`: `No changes.` and `PLAN OK: the two
+   tags, Project unchanged and Environment unchanged, …`, then the PM's read, and no apply. That
+   closes the Goal.

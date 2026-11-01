@@ -43,7 +43,7 @@ spec:
         notice; a pull refused by a runner's hold is unchanged; by tests shown failing
         first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

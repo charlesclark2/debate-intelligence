@@ -64,6 +64,14 @@ the next run gets past only once its fix is made. `--json` gives them as `banner
 every other run and for a run with no details. They are
 :func:`~debate_core.application.sync_runs.banner_words`, decided as the banner's title is, by the
 same rule as the verdict.
+
+## A skipped run (`v1-e40-t29`)
+
+A pull refused because the weekly run's home moved to prod did nothing by design, and its details say
+so: its `Outcome` is `skipped (RUN_HOME_MOVED)`, with `none` failed on and `none (skipped)` as its
+verdict (:func:`~debate_core.application.sync_runs.outcome_shown`). Its record still says `failed`
+(`RunHomeMoved`), which is what a build from before it shows, and what `--json` gives as the record's
+`outcome`; the details' `skipped` is the code, `RUN_HOME_MOVED`.
 """
 
 from __future__ import annotations
@@ -78,7 +86,13 @@ from debate_cli.context import cli_context, command_name
 from debate_cli.exit_codes import codes_exit_as_a_retrieval_failure
 from debate_cli.output import JsonValue, TableSpec
 from debate_cli.parses_owed import parses_owed
-from debate_core.application.sync_runs import RecordedRun, SyncRunHistory, SyncRunRecord, banner_words
+from debate_core.application.sync_runs import (
+    RecordedRun,
+    SyncRunHistory,
+    SyncRunRecord,
+    banner_words,
+    outcome_shown,
+)
 
 __all__ = ["runs"]
 
@@ -144,7 +158,7 @@ def _row(run: RecordedRun) -> list[str]:
     return [
         record.run_id,
         record.started_at.astimezone(UTC).strftime("%Y-%m-%d %H:%M"),
-        str(record.outcome) + (f" ({record.error_class})" if record.error_class else ""),
+        outcome_shown(record, run.details),
         *_failed_on_and_verdict(run),
         downloaded,
         str(record.archives_deferred),

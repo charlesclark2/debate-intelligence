@@ -609,6 +609,75 @@ def test_a_pull_after_the_run_home_moved_is_refused_naming_the_move_and_keeps_it
     assert world.last_record(empty)[0]["error_class"] == "RunHomeMoved"
 
 
+def runs_table_row(world: World, run_id: str) -> list[str]:
+    """`caselist runs`' row for `run_id`, cell by cell, in a terminal wide enough not to wrap a cell."""
+    world.monkeypatch.setenv("COLUMNS", "240")
+    result = world.invoke("caselist", "runs")
+    assert result.exit_code == ExitCode.OK, result.output
+    [row] = [line for line in result.stdout.splitlines() if run_id in line]
+    return [cell.strip() for cell in row.strip("│ ").split("│")]
+
+
+def test_runs_shows_a_pull_after_the_run_home_moved_as_skipped_and_a_runners_hold_as_before(
+    world: World, tmp_path: Path
+) -> None:
+    """`v1-e40-t29`: the skipped run, read back by `caselist runs` from this Mac's log, beside a hold's."""
+    seeded_with_two_weeks(world)
+    another_runner_holds_the_lock(world, lease_left=timedelta(minutes=10))
+    empty = world.use(tmp_path / "empty")
+    held = world.pull()
+    assert held["error"]["code"] == "RUN_LOCK_HELD", held
+    world.clock.advance(timedelta(minutes=20))
+    the_run_home_moved(world)
+    world.use(empty)
+
+    refused = world.pull()
+
+    assert refused["error"]["code"] == "RUN_HOME_MOVED", refused
+    assert refused["data"] is None and "run_record" not in (refused["error"].get("details") or {}), (
+        "no `run_record` for the cloud's runs-recorded filter to count, as for every lock refusal"
+    )
+    (held_record, _), (moved_record, moved_details) = (
+        (json.loads(one) for one in pair)
+        for pair in zip(
+            (empty / "caselist-sync-runs.jsonl").read_text(encoding="utf-8").splitlines(),
+            (empty / "caselist-sync-run-details.jsonl").read_text(encoding="utf-8").splitlines(),
+            strict=True,
+        )
+    )
+    assert (moved_record["outcome"], moved_record["error_class"]) == ("failed", "RunHomeMoved")
+    assert (moved_details.get("skipped"), moved_details["failure_codes"]) == ("RUN_HOME_MOVED", [])
+
+    listed = world.run("caselist", "runs")
+
+    assert listed["exit_code"] == ExitCode.OK, listed
+    newest, older = listed["data"]["runs"]
+    assert (newest["run_id"], older["run_id"]) == (moved_record["run_id"], held_record["run_id"])
+    assert (newest["outcome"], newest["error_class"]) == ("failed", "RunHomeMoved"), "the record's own fields"
+    assert (newest["details"].get("skipped"), newest["verdict"], newest["banner"]) == (
+        "RUN_HOME_MOVED",
+        None,
+        "skipped",
+    )
+    assert (older["outcome"], older["error_class"], older["verdict"], older["banner"]) == (
+        "failed",
+        "RunLockHeld",
+        "person",
+        "skipped",
+    )
+    assert "skipped" not in older["details"]
+    assert runs_table_row(world, moved_record["run_id"])[2:5] == [
+        "skipped (RUN_HOME_MOVED)",
+        "none",
+        "none (skipped)",
+    ]
+    assert runs_table_row(world, held_record["run_id"])[2:5] == [
+        "failed (RunLockHeld)",
+        "RUN_LOCK_HELD",
+        "person (skipped)",
+    ]
+
+
 def test_the_seed_after_the_run_home_moved_is_refused_naming_the_move(world: World) -> None:
     seeded_with_two_weeks(world)
     the_run_home_moved(world)

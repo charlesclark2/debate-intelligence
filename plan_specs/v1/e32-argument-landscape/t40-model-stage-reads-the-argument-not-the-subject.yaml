@@ -1,0 +1,111 @@
+# TASK v1-e32-t40-model-stage-reads-the-argument-not-the-subject - The model stage names the argument a card is read as, with each position's side and description, and the scrub and scan fixed
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t40-model-stage-reads-the-argument-not-the-subject
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "The model stage names the argument a card is read as, with each position's side and description, and the scrub and scan fixed"
+spec:
+  # Filed by the PM, 2026-11-01, from v1-e32-t39's diagnosis and the PM's rulings of 2026-11-01 on its six options.
+  description: >-
+    v1-e32-t39's replay (docs/data/landscape-model-evaluation.md) found that the 36.8% comes
+    from the model's answers, not the batch or the sample. All 9 wrong answers of the label's
+    kind name a neighbour on the same side, and only 1 of the 34 positions involved has a
+    description. 10 of the 11 answers of another kind name a position of the other side: the
+    model names what a card is about, not the argument it is read in. Topicality scored 1 of 7,
+    and generic-k was refused 3 of 3. One call failed on a rationale over the schema's 280
+    characters. Of the scan's 647 hit lines, 178 were JSON key words and 445 committed taxonomy
+    words; the 24 real names were other teams' tournaments and codes in heading paths, which the
+    scrub leaves in. Do, in order. (1) Prompt landscape.classify_position 1.1.0: name the
+    argument the card is read as in a round, not its subject. Send each position with its side
+    and a one-line description. State the 280-character rationale limit. The session drafts a
+    one-line description for every position of the NHI taxonomy that lacks one, raises the
+    taxonomy's version, and marks the descriptions for the coach's review. The coach approves
+    them before any re-record (operator). In the same review, for the 13 sample rows t39 names
+    (by row number, no text), the coach says whether those positions should be told apart at
+    all. (2) The scrub removes the scan's whole third list (every disclosing team's school, code
+    and tournament) from heading paths, tags, cites and excerpts, as it removes code words from
+    tags today. (3) The scan reads field values, not JSON keys; leaves out the committed
+    positions text; holds only tournaments on its third list; and scans the repair cassettes.
+    (4) A smoke check for `landscape evaluate`, with a synthetic labelled sample and cassettes.
+    (5) The operator re-records the same 47 cards under 1.1.0 (live, recorded; cost cents) and
+    runs `--breakdown`, pasting only the JSON counts, never the terminal listing. The counts go
+    to docs/data. If accuracy meets 85%, the PM lifts the hold on live runs (v1-e32-t07's ac5
+    and the LD evaluation). If not, the counts and the options go to the PM. Unchanged: the
+    labels, the bar, the set it applies to, the review threshold, and a batch size of 20.
+  priority: 1
+  constraints:
+    packages: [debate_core.arguments, debate_core.application, debate_core.integrations, prompts/landscape, config/landscape, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, tests/smoke, tests/fixtures/landscape, docs/data, docs/runbooks]
+    forbidden:
+      - A live model call in a test (fake or replay router, and synthetic cassettes, only)
+      - Card text, a tag, heading, cite, label text or a scan hit's words in the report, docs, logs, JSON output or a test
+      - A school, team code, debater name or tournament in a fixture
+      - A change to the coach's labels, the 85% bar, the set it applies to or the review threshold
+      - A re-record before the coach has approved the descriptions
+  context:
+    - kind: TaskRef
+      name: v1-e32-t39-model-evaluation-diagnosis
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Prompt 1.1.0 is registered and locked, sends each position's side and description,
+        and states the rationale limit. The scrub removes the third list from all four
+        fields. The scan reads values only, skips the positions text, holds tournaments only
+        on its third list, and scans repair cassettes. All by tests shown failing first.
+    - id: ac2
+      description: >-
+        Every NHI position has a one-line description, and the coach has approved them and
+        answered the 13 rows' question (operator, recorded by the PM).
+    - id: ac3
+      description: >-
+        The operator's re-record of the same 47 cards under 1.1.0 and its `--breakdown`
+        (operator, recorded by the PM) give counts recorded in docs/data. Its scan finds no
+        school, team code or tournament in the prompt inputs.
+    - id: ac4
+      description: >-
+        A smoke check runs `landscape evaluate` on a synthetic sample against the checkout's
+        script and an installed build, and fails against a break.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t40-model-stage-reads-the-argument-not-the-subject-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    The model stage names the argument a card is read as, with each position's side and
+    description, and the scrub and scan fixed.
+  goalRef:
+    name: v1-e32-t40-model-stage-reads-the-argument-not-the-subject
+  graph:
+    nodes:
+      - id: model-stage-reads-the-argument-not-the-s
+        kind: Task
+        name: Argument not subject
+        description: >-
+          The model stage names the argument a card is read as, with each position's side
+          and description, and the scrub and scan fixed.
+        estimatedEffort: 5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Argument not subject tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, packages/debate_cli/tests, -k, evaluat or model_stage or scrub or scan]
+status:
+  phase: Pending

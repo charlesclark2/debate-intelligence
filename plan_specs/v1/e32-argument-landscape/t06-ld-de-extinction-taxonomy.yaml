@@ -46,9 +46,14 @@ spec:
     the PM the rule's form before building it: for example, a per-tournament entry beside the date
     ranges, and what a disclosure naming no tournament resolves to. The loader change it needs is this
     task's, and every earlier snapshot still resolves as it does today.
+    (PM amendment 2026-11-01, from v1-e08-t04's question 5.) Once the de-extinction resolution is
+    committed in `topics.yaml`, add its topic preset to `config/argument_taxonomy.yaml` (the topic value
+    taken word for word from the committed resolution, as the NHI preset's is, with the same test) and
+    propose the topic's own LD arguments there for the coach's review. The generic LD framing (util,
+    deontology, structural violence, theory) stays as v1-e08-t04 wrote it.
   priority: 2
   constraints:
-    packages: [config/landscape, scripts, debate_core.arguments, debate_core.application, debate_core.integrations, packages/debate_core/tests, tests/config, docs/guides]
+    packages: [config/landscape, scripts, debate_core.arguments, debate_core.application, debate_core.integrations, packages/debate_core/tests, tests/config, docs/guides, config/argument_taxonomy.yaml]
     forbidden:
       - Debater names, team codes or initials anywhere in taxonomy YAML or seeding fixtures
       - Hardcoding caselist slugs or topic wording in Python code (config only)

@@ -1,0 +1,81 @@
+# TASK v1-e40-t40-token-errors-name-the-cloud-cure - In bucket mode a missing or unreadable token, and a download refused for an expired login, give the cloud's cure, not a login by hand
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t40-token-errors-name-the-cloud-cure
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "In bucket mode a missing or unreadable token, and a download refused for an expired login, give the cloud's cure, not a login by hand"
+spec:
+  # Filed by the PM, 2026-11-01, from v1-e40-t35's follow-ups (the PM's review, 2026-11-01).
+  description: >-
+    v1-e40-t35 gave a bucket-mode CASELIST_AUTH_EXPIRED the cloud's cure in the command's output
+    and the run record. Two gaps remain. (1) CASELIST_TOKEN_MISSING and
+    CASELIST_TOKEN_UNREADABLE still print 'run `debate-research caselist auth login`' (or logout
+    then login) in a bucket-mode command's output, which the cloud runbook forbids. Widen t35's
+    context manager to a table of code → cloud cure, taking each cure's wording from the
+    runbook's own section for it. Propose the wording to the PM where the runbook has none. (2)
+    The notice of a bucket-mode run whose download stage failed on CASELIST_AUTH_EXPIRED
+    (sync_runs.py's failed-stage arm) still gives the next cloud run or one started by hand.
+    Give it t33's Wednesday-login cure. On the Mac every word stays unchanged, pinned by its old
+    text.
+  priority: 3
+  constraints:
+    packages: [debate_cli, debate_core.application, packages/debate_cli/tests, packages/debate_core/tests, docs/runbooks]
+    forbidden:
+      - A change to the Mac's output for any of these codes
+      - A cure given to a code outside the table
+      - Network or AWS access in a test
+  context:
+    - kind: TaskRef
+      name: v1-e40-t35-expired-login-cli-output-in-bucket-mode
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        In bucket mode, each code in the table prints its cloud cure and never a hand login,
+        and a download refused for an expired login gets the Wednesday-login cure in its
+        notice, while the Mac's output is unchanged and pinned by its old text, by tests
+        shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t40-token-errors-name-the-cloud-cure-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    In bucket mode a missing or unreadable token, and a download refused for an expired login,
+    give the cloud's cure, not a login by hand.
+  goalRef:
+    name: v1-e40-t40-token-errors-name-the-cloud-cure
+  graph:
+    nodes:
+      - id: token-errors-name-the-cloud-cure
+        kind: Task
+        name: Token cures
+        description: >-
+          In bucket mode a missing or unreadable token, and a download refused for an
+          expired login, give the cloud's cure, not a login by hand.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Token cures tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests, -k, token or auth_expired]
+status:
+  phase: Pending

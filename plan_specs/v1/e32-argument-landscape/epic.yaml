@@ -906,5 +906,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e32-t39-model-evaluation-diagnosis
+    - id: t40
+      kind: Task
+      name: 'The model stage names the argument a card is read as, with each position''s side and description, and the scrub and scan fixed'
+      description: >-
+        The model stage names the argument a card is read as, with each position's side and
+        description, and the scrub and scan fixed.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t40-model-stage-reads-the-argument-not-the-subject.yaml
+        goalRef: v1-e32-t40-model-stage-reads-the-argument-not-the-subject
+      dependsOn:
+      - t39
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t40-model-stage-reads-the-argument-not-the-subject reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t40-model-stage-reads-the-argument-not-the-subject
 status:
   phase: Pending

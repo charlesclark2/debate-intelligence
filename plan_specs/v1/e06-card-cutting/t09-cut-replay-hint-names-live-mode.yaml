@@ -1,0 +1,76 @@
+# TASK v1-e06-t09-cut-replay-hint-names-live-mode - `cut` refused for an unrecorded model call says to set DEBATE_MODEL_MODE=live for a real cut
+# Epic: E06 Card Cutting, Citation & Export | Release: v1.3 (URL → verified card) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e06-t09-cut-replay-hint-names-live-mode
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e06-card-cutting
+  annotations:
+    debate/title: "`cut` refused for an unrecorded model call says to set DEBATE_MODEL_MODE=live for a real cut"
+spec:
+  # Filed by the PM, 2026-11-01, from v1-e06-t06's follow-up 2 and question 3 (the PM's ruling, 2026-11-01).
+  description: >-
+    `cut` runs in replay mode unless DEBATE_MODEL_MODE says otherwise (v1-e05-t03's one
+    control). A first real cut is therefore refused with MISSING_FIXTURE_ERROR, whose hint says
+    to record with DEBATE_MODEL_MODE=record and points at the committed cassettes' README: the
+    right fix for a test author, not for a coach cutting a card. In `cut`'s output only, the
+    hint says that a real cut runs with DEBATE_MODEL_MODE=live, and what that costs (a model
+    call on the environment's route). Every other command's hint is unchanged.
+  priority: 3
+  constraints:
+    packages: [debate_cli, packages/debate_cli/tests]
+    forbidden:
+      - A change to the default model mode
+      - A change to another command's hint
+      - Live network or model calls in tests
+  context:
+    - kind: TaskRef
+      name: v1-e06-t06-cut-command
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `cut` refused for an unrecorded call names DEBATE_MODEL_MODE=live in its hint, and
+        another command's MISSING_FIXTURE_ERROR hint is unchanged, by tests shown failing
+        first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e06-t09-cut-replay-hint-names-live-mode-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e06-card-cutting
+spec:
+  description: >-
+    `cut` refused for an unrecorded model call says to set DEBATE_MODEL_MODE=live for a real
+    cut.
+  goalRef:
+    name: v1-e06-t09-cut-replay-hint-names-live-mode
+  graph:
+    nodes:
+      - id: cut-replay-hint-names-live-mode
+        kind: Task
+        name: Live hint
+        description: >-
+          `cut` refused for an unrecorded model call says to set DEBATE_MODEL_MODE=live
+          for a real cut.
+        estimatedEffort: 30m
+        acceptanceCriteria:
+          - type: test_passes
+            name: Live hint tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/test_cut_command.py, -k, replay or fixture]
+status:
+  phase: Pending

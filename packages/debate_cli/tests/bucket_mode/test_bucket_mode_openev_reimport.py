@@ -35,7 +35,7 @@ from tests.fixtures.parse_pipeline.build_parse_world import WEEKS
 import debate_core.integrations.s3 as s3_package
 from debate_cli.exit_codes import ExitCode
 from debate_core.application.caselist import openev_import_service
-from debate_core.application.caselist.run_lock import RUN_LOCK_KEY
+from debate_core.application.caselist.run_lock import RUN_LOCK_KEY, BucketRunLock
 from debate_core.application.caselist.run_state import RUN_STATE_BUNDLE_KEY
 from debate_core.integrations.local.fs_blob_store import FsSnapshotStore
 
@@ -300,6 +300,28 @@ def test_reimport_inside_the_no_import_window_is_refused_dry_or_not_before_anyth
 
     assert every_version(seeded) == before
     assert not (seeded.data_dir / "debate.sqlite3").exists(), "nothing was restored"
+
+
+def test_reimport_whose_window_opens_as_it_takes_the_lock_stops_before_the_restore_and_releases_it(
+    seeded: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The window is asked again once the lock is held, as the backfile import's locked steps ask it."""
+    take = BucketRunLock.take
+
+    def taken_as_the_window_opens(self: BucketRunLock, **arguments: Any) -> Any:
+        taken = take(self, **arguments)
+        seeded.clock.now = INSIDE_THE_WINDOW["Tuesday 06:00 Chicago, as it opens"]
+        return taken
+
+    monkeypatch.setattr(BucketRunLock, "take", taken_as_the_window_opens)
+    manifest = member_row(seeded)
+
+    refused(reimport(seeded, "--execute"), "INSIDE_NO_IMPORT_WINDOW")
+
+    assert COMMAND in lock_holders(seeded)
+    assert seeded.lock()["state"] == "free"
+    assert not (seeded.data_dir / "debate.sqlite3").exists(), "nothing was restored"
+    assert member_row(seeded) == manifest
 
 
 @pytest.mark.parametrize("moment", sorted(OUTSIDE_THE_WINDOW), ids=str)

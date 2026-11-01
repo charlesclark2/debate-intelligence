@@ -61,14 +61,14 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 55 | 252 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 114 | 93 | 504 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 71 | 65 | 302 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 115 | 94 | 505 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 71 | 66 | 302 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 16 | 11 | 114 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 29 | 21 | 166 |
-| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 28 | 24 | 92 |
-| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 46 | 27 | 82 |
+| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 29 | 25 | 94 |
+| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 48 | 28 | 84 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -216,7 +216,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [The annual purge, as one runbook](plan_specs/v1/e30-caselist-ingestion/t28-annual-purge-runbook.yaml) `v1-e30-t28-annual-purge-runbook` | Succeeded | 1 | 2.0 |
 | [A removal lists raw/ and parsed/ again after deleting, and stops incomplete if a version survived](plan_specs/v1/e30-caselist-ingestion/t29-removal-confirms-raw-and-parsed-deletes.yaml) `v1-e30-t29-removal-confirms-raw-and-parsed-deletes` | Succeeded | 1 | 1.0 |
 | [Inbox deletions fsync the inbox directory, so a removed archive cannot come back after a power cut](plan_specs/v1/e30-caselist-ingestion/t30-inbox-deletions-fsync-the-directory.yaml) `v1-e30-t30-inbox-deletions-fsync-the-directory` | Succeeded | 0 | 1.0 |
-| [The pull keeps OpenEv's own camp word on a camp file's manifest row](plan_specs/v1/e30-caselist-ingestion/t31-openev-camp-word-on-the-manifest-row.yaml) `v1-e30-t31-openev-camp-word-on-the-manifest-row` | Pending | 2 | 1.0 |
+| [The pull keeps OpenEv's own camp word on a camp file's manifest row](plan_specs/v1/e30-caselist-ingestion/t31-openev-camp-word-on-the-manifest-row.yaml) `v1-e30-t31-openev-camp-word-on-the-manifest-row` | Succeeded | 2 | 1.0 |
 | [Michigan's three camps are filed apart, as OpenEv files them, so their cards can link](plan_specs/v1/e30-caselist-ingestion/t32-michigan-split-into-openevs-three-camps.yaml) `v1-e30-t32-michigan-split-into-openevs-three-camps` | InProgress | 1 | 2.0 |
 
 #### [E31 — Debate File Parsing](plan_specs/v1/e31-debate-file-parsing/epic.yaml)
@@ -297,6 +297,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Earlier seasons' complete archives, from 2021-22 on, imported and parsed as backfiles](plan_specs/v1/e34-caselist-sync/t34-backfile-seasons-import.yaml) `v1-e34-t34-backfile-seasons-import` | Succeeded | 1 | 4.0 |
 | [A Mac run stopped for a missing token says to log in again](plan_specs/v1/e34-caselist-sync/t35-token-missing-hint-on-the-mac.yaml) `v1-e34-t35-token-missing-hint-on-the-mac` | Succeeded | 1 | 0.5 |
 | [A Mac run stopped for an unreadable token says to log out and log in again](plan_specs/v1/e34-caselist-sync/t36-token-unreadable-hint-on-the-mac.yaml) `v1-e34-t36-token-unreadable-hint-on-the-mac` | Succeeded | 1 | 0.5 |
+| [A listed camp file is not taken as already imported because a file of another camp shares its name](plan_specs/v1/e34-caselist-sync/t37-listed-camp-file-with-a-hand-imported-name.yaml) `v1-e34-t37-listed-camp-file-with-a-hand-imported-name` | Pending | 1 | 1.0 |
 
 
 ### v1.2 — Argument landscape & file building
@@ -356,7 +357,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [Team links on a school's page, as on a position's](plan_specs/v1/e32-argument-landscape/t23-school-page-team-links.yaml) `v1-e32-t23-school-page-team-links` | Succeeded | 1 | 1.0 |
 | [Policy affs whose plan text has no label, identified by the plan or the advantages](plan_specs/v1/e32-argument-landscape/t24-unlabelled-plan-affs.yaml) `v1-e32-t24-unlabelled-plan-affs` | Succeeded | 2 | 4.0 |
 | [What each impact runs through, named in words a debater uses](plan_specs/v1/e32-argument-landscape/t25-readable-impact-chains.yaml) `v1-e32-t25-readable-impact-chains` | Succeeded | 1 | 3.0 |
-| [The review queue ordered by the local proxy model, which places nothing](plan_specs/v1/e32-argument-landscape/t26-review-queue-proxy-ordering.yaml) `v1-e32-t26-review-queue-proxy-ordering` | Pending | 1 | 3.0 |
+| [The review queue ordered by the local proxy model, which places nothing](plan_specs/v1/e32-argument-landscape/t26-review-queue-proxy-ordering.yaml) `v1-e32-t26-review-queue-proxy-ordering` | Succeeded | 1 | 3.0 |
 | [Branches and mechanisms in the DA sections, counted first](plan_specs/v1/e32-argument-landscape/t27-branches-and-mechanisms-counted-first.yaml) `v1-e32-t27-branches-and-mechanisms-counted-first` | Succeeded | 2 | 4.0 |
 | [Tags quoted in the impact and link-chain tables, held to the report's withholding, counted first](plan_specs/v1/e32-argument-landscape/t28-tags-in-the-tables-held-to-withholding.yaml) `v1-e32-t28-tags-in-the-tables-held-to-withholding` | Succeeded | 1 | 2.0 |
 | [Harms headings counted under Impact, the word the coach's debaters use](plan_specs/v1/e32-argument-landscape/t29-harms-headings-under-impact.yaml) `v1-e32-t29-harms-headings-under-impact` | Succeeded | 1 | 2.0 |
@@ -553,7 +554,8 @@ Debaters search the team's evidence store from a school Chromebook or at home: a
 | [The weekly index stage skips an identical rebuild its record already matches, and publish --newest on the current index records instead of republishing](plan_specs/v1/e39-evidence-search-pilot/t25-identical-rebuild-skipped-and-newest-records.yaml) `v1-e39-t25-identical-rebuild-skipped-and-newest-records` | Succeeded | 1 | 2.0 |
 | [The cloud smoke checks reach dev: a check marked live is let through pytest-socket, and validate-dev's cloud job proves it](plan_specs/v1/e39-evidence-search-pilot/t26-cloud-smoke-checks-reach-dev.yaml) `v1-e39-t26-cloud-smoke-checks-reach-dev` | Succeeded | 0 | 1.0 |
 | [A smoke check runs publish --newest on the current index against an installed build](plan_specs/v1/e39-evidence-search-pilot/t27-newest-on-the-current-index-smoke-check.yaml) `v1-e39-t27-newest-on-the-current-index-smoke-check` | Pending | 1 | 1.0 |
-| [A camp card links to its camp's page on OpenEv, the address the operator confirmed](plan_specs/v1/e39-evidence-search-pilot/t28-openev-link-goes-to-the-camps-page.yaml) `v1-e39-t28-openev-link-goes-to-the-camps-page` | InProgress | 1 | 2.0 |
+| [A camp card links to its camp's page on OpenEv, the address the operator confirmed](plan_specs/v1/e39-evidence-search-pilot/t28-openev-link-goes-to-the-camps-page.yaml) `v1-e39-t28-openev-link-goes-to-the-camps-page` | Succeeded | 1 | 2.0 |
+| [A camp card's OpenEv link takes the camp word the pull recorded, before the table's](plan_specs/v1/e39-evidence-search-pilot/t29-openev-camp-word-from-the-row-into-the-index.yaml) `v1-e39-t29-openev-camp-word-from-the-row-into-the-index` | Pending | 2 | 2.0 |
 
 
 ### v1.8 — Weekly caselist run in the cloud
@@ -593,10 +595,12 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [store sync never moves reports/sync/, so a push of pulled copies cannot overwrite the run's lock or state files](plan_specs/v1/e40-cloud-caselist-run/t27-store-sync-leaves-the-run-state-alone.yaml) `v1-e40-t27-store-sync-leaves-the-run-state-alone` | Pending | 1 | 1.0 |
 | [The last bucket-mode wording pass: banners and the CLI name the next cloud run, and a cloud run's login hint names the task role](plan_specs/v1/e40-cloud-caselist-run/t28-last-bucket-mode-wording-pass.yaml) `v1-e40-t28-last-bucket-mode-wording-pass` | Succeeded | 1 | 2.0 |
 | [A Mac pull refused because the weekly run moved to prod is recorded as skipped, with its own notice](plan_specs/v1/e40-cloud-caselist-run/t29-pull-refused-by-the-move-is-skipped.yaml) `v1-e40-t29-pull-refused-by-the-move-is-skipped` | Pending | 1 | 1.0 |
-| [The run task gets 32 GB, so a full re-parse or a backfile import is not killed for memory](plan_specs/v1/e40-cloud-caselist-run/t30-run-task-memory-fits-a-full-parse.yaml) `v1-e40-t30-run-task-memory-fits-a-full-parse` | InProgress | 1 | 1.0 |
+| [The run task gets 32 GB, so a full re-parse or a backfile import is not killed for memory](plan_specs/v1/e40-cloud-caselist-run/t30-run-task-memory-fits-a-full-parse.yaml) `v1-e40-t30-run-task-memory-fits-a-full-parse` | Succeeded | 1 | 1.0 |
 | [A parse worker over its share of memory fails its file, not the whole run](plan_specs/v1/e40-cloud-caselist-run/t31-parse-worker-memory-ceiling.yaml) `v1-e40-t31-parse-worker-memory-ceiling` | Pending | 1 | 2.0 |
 | [A backfile import logs each step as it ends, so a task killed part-way shows how far it got](plan_specs/v1/e40-cloud-caselist-run/t32-backfile-import-logs-each-step.yaml) `v1-e40-t32-backfile-import-logs-each-step` | Succeeded | 1 | 1.0 |
 | [A cloud run refused for an expired login says the Wednesday login renews it, not to log in by hand](plan_specs/v1/e40-cloud-caselist-run/t33-expired-login-cloud-notice-names-the-wednesday-login.yaml) `v1-e40-t33-expired-login-cloud-notice-names-the-wednesday-login` | Succeeded | 2 | 1.0 |
+| [The OpenEv metadata re-import runs in bucket mode, so a camp table change reaches dev's records](plan_specs/v1/e40-cloud-caselist-run/t34-openev-metadata-reimport-in-bucket-mode.yaml) `v1-e40-t34-openev-metadata-reimport-in-bucket-mode` | Pending | 2 | 2.0 |
+| [A cloud run refused for an expired login names the Wednesday login in its own output too](plan_specs/v1/e40-cloud-caselist-run/t35-expired-login-cli-output-in-bucket-mode.yaml) `v1-e40-t35-expired-login-cli-output-in-bucket-mode` | Pending | 1 | 1.0 |
 
 #### [E41 — Delivery Tooling Upkeep](plan_specs/v1/e41-delivery-tooling-upkeep/epic.yaml)
 

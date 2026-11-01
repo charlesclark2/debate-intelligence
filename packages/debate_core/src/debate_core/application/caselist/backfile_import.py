@@ -294,6 +294,8 @@ class BackfileImportService:
         guard: The bucket's run lock, the weekly run's.
         run_state: The restore and the bundle's save; `None` with no bucket.
         seeded: Whether the bucket holds a lock object; `None` with no bucket.
+        home_moved: The refusal of a lock held for good by the move of the run's home, or `None`
+            (`v1-e40-t11`); itself `None` with no bucket.
         publisher: The source and manifest publisher; `None` with no bucket.
         parse: The parse pipeline, over the same suppression list as the importer.
         parsed_publisher: The parsed store's publisher; `None` with no bucket.
@@ -324,6 +326,7 @@ class BackfileImportService:
         parsed_version: str,
         clock: Callable[[], datetime],
         volume: Callable[[Path], VolumeReading] | None = None,
+        home_moved: Callable[[], str | None] | None = None,
     ) -> None:
         self._settings = caselist_settings
         self._bucket_mode = bucket_mode
@@ -338,6 +341,7 @@ class BackfileImportService:
         self._guard = guard
         self._run_state = run_state
         self._seeded = seeded
+        self._home_moved = home_moved
         self._publisher = publisher
         self._parse = parse
         self._parsed_publisher = parsed_publisher
@@ -448,6 +452,9 @@ class BackfileImportService:
                     "(docs/runbooks/caselist-cutover.md)",
                 )
             ]
+        moved = await asyncio.to_thread(self._home_moved) if self._home_moved is not None else None
+        if moved is not None:
+            return [Refusal("RUN_HOME_MOVED", moved)]
         return []
 
     async def _newest_complete_archive(self, caselist: str) -> ArchiveListing | None:

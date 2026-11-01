@@ -1146,6 +1146,41 @@ def test_publish_in_bucket_mode_is_refused_while_another_runner_holds_the_lock(
     assert _keys(buckets, DEV_BUCKET) == [RUN_LOCK], "nothing published"
 
 
+def test_publish_in_bucket_mode_after_the_run_home_moved_is_refused_naming_the_move(
+    world: SyntheticRun, buckets: S3Client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """`v1-e40-t11`: dev's lock held for good by the move of the run's home, written out by hand."""
+    monkeypatch.setenv("DEBATE_CASELIST__RUN_STATE", "bucket")
+    moved = {
+        "format_version": 1,
+        "home_environment": "prod",
+        "state": "held",
+        "holder": {
+            "kind": "moved",
+            "run_id": "20261204T150000Z",
+            "task": None,
+            "command": "caselist move-run-home",
+            "by": "mac",
+            "build": "v1.1.0-dev.300",
+        },
+        "acquired_at": "2026-12-04T15:00:00Z",
+        "renewed_at": None,
+        "lease_expires_at": None,
+        "took_over_from": None,
+    }
+    buckets.put_bucket_versioning(Bucket=DEV_BUCKET, VersioningConfiguration={"Status": "Enabled"})
+    buckets.put_object(Bucket=DEV_BUCKET, Key=RUN_LOCK, Body=json.dumps(moved).encode())
+    copy = _restored_copy(tmp_path / "copy-root")
+
+    result = landscape(world, "--caselist", CASELIST, "--publish", "--restored-copy", str(copy))
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.stdout
+    assert _error(result)["code"] == "RUN_HOME_MOVED"
+    assert _error(result)["message"].startswith("the weekly run now runs from prod: ")
+    assert _keys(buckets, DEV_BUCKET) == [RUN_LOCK], "nothing published"
+    assert json.loads(buckets.get_object(Bucket=DEV_BUCKET, Key=RUN_LOCK)["Body"].read()) == moved
+
+
 # ------------------------------------------------------------------------------------------------
 # v1-e40-t17: a report over a copy restored from the bucket (the PM's ruling of 2026-10-30)
 #

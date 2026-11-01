@@ -459,6 +459,47 @@ def test_tub_index_prune_execute_refuses_while_another_runner_holds_the_lock(thr
     assert three_published.listing() == before
 
 
+#: Dev's lock after the weekly run's home moved to prod (`v1-e40-t11`), written out by hand.
+MOVED_LOCK: Final = json.dumps(
+    {
+        "format_version": 1,
+        "home_environment": "prod",
+        "state": "held",
+        "holder": {
+            "kind": "moved",
+            "run_id": "20261204T150000Z",
+            "task": None,
+            "command": "caselist move-run-home",
+            "by": "mac",
+            "build": "v1.1.0-dev.300",
+        },
+        "acquired_at": "2026-12-04T15:00:00Z",
+        "renewed_at": None,
+        "lease_expires_at": None,
+        "took_over_from": None,
+    }
+).encode()
+
+
+def test_tub_index_prune_execute_after_the_run_home_moved_is_refused_naming_the_move(
+    three_published: World,
+) -> None:
+    code = three_published.dry_run()
+    three_published.client.put_object(Bucket=BUCKET, Key=RUN_LOCK_KEY, Body=MOVED_LOCK)
+    before = three_published.listing()
+
+    refused = three_published.run("--env", "dev", "--execute", "--confirm", code)
+
+    assert refused["exit_code"] == ExitCode.DOMAIN_FAILURE, refused
+    assert refused["error"]["code"] == "RUN_HOME_MOVED"
+    assert refused["error"]["message"].startswith(
+        "the weekly run now runs from prod: this bucket's run lock (reports/sync/run-lock.json) is held for "
+        "good since 2026-12-04T15:00:00Z by the move of the run's home to prod (`caselist move-run-home`, "
+        "from a mac with build v1.1.0-dev.300)"
+    )
+    assert three_published.listing() == before
+
+
 def test_tub_index_prune_execute_in_prod_needs_confirm_prod(
     three_published: World, monkeypatch: pytest.MonkeyPatch
 ) -> None:

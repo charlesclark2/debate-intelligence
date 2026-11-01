@@ -181,6 +181,7 @@ from debate_core.application.caselist.run_lock import (
     HolderKind,
 )
 from debate_core.application.caselist.run_state import RunState
+from debate_core.application.caselist.run_home_move import RunHomeMove
 from debate_core.application.caselist.run_state_restore import RunStateRestore
 from debate_core.application.caselist.run_state_seed import RunStateSeed
 from debate_core.application.caselist.run_state_sources import RestoredSources
@@ -1664,6 +1665,22 @@ class ServiceContainer:
             ),
         )
 
+    def _home_moved_refusal(self) -> str | None:
+        """What a lock held for good by the move of the run's home says to this environment (`v1-e40-t11`)."""
+        moved = self.bucket_run_lock().home_moved()
+        return str(moved) if moved is not None else None
+
+    def run_home_move(self) -> RunHomeMove:
+        """`caselist move-run-home`: dev's lock held for good when the run's home moves (`v1-e40-t11`)."""
+        return self.singleton(
+            "run_home_move",
+            lambda: RunHomeMove(
+                lock=self.bucket_run_lock,
+                environment=self.settings.environment.value,
+                build=current_build_info().tag,
+            ),
+        )
+
     def run_state_restore(self) -> RunStateRestore:
         """`caselist restore-run-state`: a working copy restored into a directory of its own (`v1-e40-t06`).
 
@@ -2209,6 +2226,7 @@ class ServiceContainer:
             guard=self.bucket_write_guard(),
             run_state=self.run_state if bucket else None,
             seeded=(lambda: self.bucket_run_lock().bucket_is_seeded()) if bucket else None,
+            home_moved=self._home_moved_refusal if bucket else None,
             publisher=self.caselist_publish if bucket else None,
             parse=lambda: self._build_caselist_parse(suppression),
             parsed_publisher=self.parsed_publisher if bucket else None,

@@ -70,9 +70,13 @@ class SeedPlan:
     """The state files this machine holds, by name; the others are uploaded as absent."""
     unconfirmed: tuple[str, ...] = ()
     withheld: str | None = None
+    home_moved: str | None = None
+    """The refusal of a lock held for good by the move of the run's home (`v1-e40-t11`), or `None`."""
 
     @property
     def refusal(self) -> str | None:
+        if self.home_moved is not None:
+            return self.home_moved
         if self.seeded_already:
             return (
                 "the bucket already holds a run lock, so it is seeded; a bucket is seeded once, and its "
@@ -123,7 +127,10 @@ class RunStateSeed:
         self._data_dir = Path(data_dir)
 
     async def plan(self) -> SeedPlan:
-        seeded = await asyncio.to_thread(self._lock().bucket_is_seeded)
+        lock = self._lock()
+        seeded = await asyncio.to_thread(lock.bucket_is_seeded)
+        moved = await asyncio.to_thread(lock.home_moved) if seeded else None
+        home_moved = str(moved) if moved is not None else None
         state = self._state()
         manifests = len(await state.local_manifests())
         present = tuple(name for name in STATE_FILES if (self._data_dir / name).is_file())
@@ -131,13 +138,18 @@ class RunStateSeed:
             await state.refuse_withheld()
         except RunStateWithheld as withheld:
             return SeedPlan(
-                seeded_already=seeded, manifests=manifests, state_files=present, withheld=str(withheld)
+                seeded_already=seeded,
+                manifests=manifests,
+                state_files=present,
+                withheld=str(withheld),
+                home_moved=home_moved,
             )
         return SeedPlan(
             seeded_already=seeded,
             manifests=manifests,
             state_files=present,
             unconfirmed=await state.unconfirmed_manifests(),
+            home_moved=home_moved,
         )
 
     async def execute(self) -> SeedReport:

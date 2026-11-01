@@ -409,6 +409,23 @@ def test_a_caselist_with_no_complete_archive_is_refused(backfiles: tuple[World, 
     assert site.fetched == []
 
 
+def test_after_the_run_home_moved_the_plan_and_the_import_are_refused_naming_the_move(
+    backfiles: tuple[World, Site],
+) -> None:
+    """`v1-e40-t11`: refused at the plan, so the import neither locks nor spends a download."""
+    world, site = backfiles
+    moved = world.run("caselist", "move-run-home", "--execute")
+    assert moved["exit_code"] == ExitCode.OK, moved
+    before = world.everything()
+
+    for envelope in (dry_run(world), execute(world)):
+        assert refusals(envelope) == ["RUN_HOME_MOVED"]
+        assert "the weekly run now runs from prod: " in envelope["error"]["message"]
+
+    assert site.fetched == []
+    assert world.everything() == before
+
+
 def test_a_bucket_not_yet_seeded_is_refused(world: World, tmp_path: Path) -> None:
     world.mode("bucket")
     world.monkeypatch.setenv("DEBATE_CASELIST__BACKFILE_CASELISTS", json.dumps([BACKFILE]))

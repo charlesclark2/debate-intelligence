@@ -189,6 +189,28 @@ This record covers release v1.8 and its two environments. What V2 replaces is in
    - **Memory.** 16 GB is the smallest Fargate allows at 8 vCPU. The index build used 1.18 GB
      resident at its largest ([search index](../data/search-index.md#full-store-builds)); the rest is
      the parse workers' and the restore's.
+     **Amended 2026-10-31 (`v1-e40-t30`): 32 GB.** 16 GB was the smallest size, not a measured need,
+     and it was not enough. The first cloud backfile import (`hspolicy25`, run task definition
+     revision 10, `v1.1.0-dev.251`, 8 vCPU, 16 GB, `DEBATE_PARSE__WORKERS=8`) started 2026-10-31 at
+     21:32 Chicago and was killed at 22:43, after 71 minutes. ECS recorded `OutOfMemoryError:
+     container killed due to memory usage`, exit 137
+     ([backfile seasons](../data/caselist-backfile-seasons.md)). It logged nothing first, so the step
+     is not known; at 71 minutes the parse is the likeliest. The Mac's `docx-6` re-parse survived
+     on 6 workers because macOS swaps and compresses memory; a Fargate task does neither. The run
+     task's memory is now 32768 MiB, with the CPU (8 vCPU), the 8 parse workers, the ephemeral
+     storage and the image unchanged, and the login task as it was. At 8 vCPU Fargate allows
+     "Between 16 GB and 60 GB in 4 GB increments" (Linux, platform 1.4.0 or later), so 32 GB is
+     allowed and 60 GB is the ceiling at this CPU
+     ([Task CPU and memory](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/fargate-tasks-services.html#fargate-tasks-size),
+     read 2026-10-31). What it costs: AWS's Fargate pricing page, read 2026-10-31, gives Linux/ARM in
+     US East (N. Virginia) memory at $0.0000009889 per GB-second (its Example 2; the region's table
+     did not load), which is the $0.00356004 per GB-hour of (8). 16 GB more is **$0.05696064 for
+     each hour** a run or an import lasts, so the run is $0.3819 an hour, not $0.3249. A weekly run
+     at (8)'s 1.5 hours (*estimate*) costs about $0.085 more, about $0.37 a month at 4.3 runs; any
+     one task stops at the 6-hour deadline (item 6), so the most the extra memory adds to a run or
+     an import is $0.34. The 71 minutes of the killed import would have cost $0.067 more. The table
+     in (8) keeps its 2026-10-22 figures. A full run that is still killed at 32 GB goes to the PM
+     with ECS's stop reason before the memory is raised again or the parse workers lowered.
    - **Ephemeral storage.** A full-re-parse week at today's size needs about **20 GB**: the parsed
      store written afresh (9.1 GB), every raw source restored for it (4.2 GB), the week's archives in
      the inbox (up to about 3 GB; retention freed 2.76 GB of nine files on 2026-10-22), the index
@@ -854,6 +876,8 @@ that is unplugged, closed or away, which is the coach's reason for the move.
 | Conditional writes: `If-None-Match` and `If-Match` on `PutObject`; a delete marker counts as absent; the first of concurrent writers wins and the rest get `412`; `409` on a concurrent delete; conditional deletes exist for general purpose buckets | [Conditional requests](https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-requests.html), [Conditional writes](https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-writes.html) |
 | Fargate ephemeral storage: 20 GiB default, 200 GiB at most, set by `ephemeralStorage`, holds the image, AES-256 encrypted, platform version 1.4.0 | [Fargate task ephemeral storage](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/fargate-task-storage.html) |
 | Fargate prices for `arm64` and storage; per-second billing with a 1-minute minimum; vCPU and memory combinations; Spot up to 70% off | [AWS Fargate pricing](https://aws.amazon.com/fargate/pricing/) |
+| (Read 2026-10-31, `v1-e40-t30`.) At 8 vCPU (8192 units, Linux, platform 1.4.0 or later), task memory "Between 16 GB and 60 GB in 4 GB increments" | [Task CPU and memory](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/fargate-tasks-services.html#fargate-tasks-size) |
+| (Read 2026-10-31, `v1-e40-t30`.) Linux/ARM in US East (N. Virginia): $0.0000009889 per GB-second of memory, in the page's Example 2; the region's own table did not load | [AWS Fargate pricing](https://aws.amazon.com/fargate/pricing/) |
 | $0.40 per secret-month, $0.05 per 10,000 calls | [Secrets Manager pricing](https://aws.amazon.com/secrets-manager/pricing/) |
 | $1 per key-month, $1 more for each of the first two rotations, $0.03 per 10,000 requests, 20,000 free | [AWS KMS pricing](https://aws.amazon.com/kms/pricing/) |
 | Logs $0.50 per GB, 5 GB free; $0.10 per alarm, 10 free; $0.30 per custom metric, 10 free | [CloudWatch pricing](https://aws.amazon.com/cloudwatch/pricing/) |

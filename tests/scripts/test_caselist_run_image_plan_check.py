@@ -21,6 +21,13 @@ What is worth asserting, and why:
   replaced, an expected change missing, and an extra change in the module like 2026-10-29's
   event-target update;
 * the runbook's block saves the plan, shows it as JSON and runs this check on that file.
+
+`--memory` checks the run task's memory change instead (`v1-e40-t30`): the run task definition replaced
+with 32768 MiB and nothing else in it changed, its image still the owner file's; the run schedule and
+its role's policy repointed at the new revision, the schedule `ENABLED` throughout; the login's task
+definition, schedule and policy untouched. Its cases are the last section: the PM's five refusals (an
+image change, a login change, an Identity Center change, a size other than 32768 or a vCPU change, a
+schedule left on the old revision) and the neighbours of each, and each mode refusing the other's plan.
 """
 
 from __future__ import annotations
@@ -53,12 +60,21 @@ TASK_STOPPED_RUN: Final = M + 'aws_cloudwatch_event_target.task_stopped["run"]'
 Plan = dict[str, Any]
 
 
-def run_check(plan: Plan | str, tmp_path: Path, owner: str = OWNER) -> tuple[int, str]:
+def run_check(
+    plan: Plan | str, tmp_path: Path, owner: str = OWNER, *, memory: bool = False
+) -> tuple[int, str]:
     plan_file, owner_file = tmp_path / "plan.json", tmp_path / "owner.auto.tfvars"
     plan_file.write_text(plan if isinstance(plan, str) else json.dumps(plan), encoding="utf-8")
     owner_file.write_text(owner, encoding="utf-8")
     ran = subprocess.run(
-        [sys.executable, "-I", str(SCRIPT), str(plan_file), str(owner_file)],
+        [
+            sys.executable,
+            "-I",
+            str(SCRIPT),
+            str(plan_file),
+            str(owner_file),
+            *(["--memory"] if memory else []),
+        ],
         capture_output=True,
         text=True,
         check=False,
@@ -653,3 +669,384 @@ def test_the_runbook_applies_the_checked_plan_after_the_pms_word_and_never_on_a_
     assert 'if [ "$(date +%A)" = "Wednesday" ]; then echo "STOP' in apply_block
     assert "`PLAN STOP` goes to the PM" in section
     assert "after the PM's word" in section
+
+
+# ------------------------------------------------------------------------------------------------
+# --memory: the run task's memory change (v1-e40-t30)
+# ------------------------------------------------------------------------------------------------
+
+RUN_DEFINITION: Final = M + "aws_ecs_task_definition.run[0]"
+RUN_SCHEDULE: Final = M + "aws_scheduler_schedule.run[0]"
+RUN_POLICY: Final = M + "aws_iam_role_policy.run_scheduler[0]"
+LOGIN_DEFINITION: Final = M + "aws_ecs_task_definition.login[0]"
+LOGIN_SCHEDULE: Final = M + "aws_scheduler_schedule.login[0]"
+LOGIN_POLICY: Final = M + "aws_iam_role_policy.scheduler[0]"
+
+
+def memory_plan() -> Plan:
+    """The run task's memory to 32 GB: 1 to add, 2 to change, 1 to destroy. The image stays the owner
+    file's digest, which is NEW_DIGEST here; the login and everything else are refreshed, unchanged."""
+    return {
+        "format_version": "1.2",
+        "terraform_version": "1.16.0",
+        "resource_changes": [
+            entry(
+                RUN_DEFINITION,
+                ["delete", "create"],
+                task_side("run", NEW_DIGEST) | {"arn": "arn:old", "revision": 10},
+                task_side("run", NEW_DIGEST) | {"memory": "32768"},
+                arn=True,
+                revision=True,
+                id=True,
+            ),
+            repointed_schedule("run"),
+            repointed_policy("run_scheduler"),
+            unchanged(LOGIN_DEFINITION),
+            unchanged(LOGIN_SCHEDULE),
+            unchanged(LOGIN_POLICY),
+            unchanged(f"{M}aws_cloudwatch_metric_alarm.late_run"),
+            unchanged(TASK_STOPPED_RUN),
+            unchanged("module.evidence_bucket.aws_s3_bucket.this"),
+            unchanged('aws_ssoadmin_account_assignment.evidence_operator["coach"]'),
+            unchanged("aws_ssoadmin_permission_set.caselist_run_deployer"),
+            entry("data.aws_caller_identity.current", ["read"], None, {}),
+        ],
+    }
+
+
+def test_the_memory_change_is_plan_ok(tmp_path: Path) -> None:
+    code, said = run_check(memory_plan(), tmp_path, memory=True)
+
+    assert said == (
+        "PLAN OK: 1 to add, 2 to change, 1 to destroy; the run task definition replaced with its memory "
+        "16384 -> 32768 and nothing else in it changed, 8192 CPU units and the image "
+        "sha256:222222222222... as before; the run schedule and its role's policy repointed at the new "
+        "revision; the run schedule ENABLED throughout; the login task definition, its schedule and its "
+        "policy unchanged; nothing else changes"
+    ), said
+    assert code == 0
+
+
+def test_the_memory_change_created_before_its_old_revision_is_destroyed_is_still_plan_ok(
+    tmp_path: Path,
+) -> None:
+    plan = memory_plan()
+    change_of(plan, RUN_DEFINITION)["actions"] = ["create", "delete"]
+
+    code, said = run_check(plan, tmp_path, memory=True)
+
+    assert said.startswith("PLAN OK: 1 to add, 2 to change, 1 to destroy"), said
+    assert code == 0
+
+
+def test_the_image_check_refuses_the_memory_change(tmp_path: Path) -> None:
+    """Without --memory the plan is not an image change: the login is unchanged, the image kept."""
+    code, said = run_check(memory_plan(), tmp_path)
+
+    assert said.startswith("PLAN STOP: "), said
+    assert LOGIN_DEFINITION + ": no change, expected a replace (delete and create)" in said, said
+    assert RUN_DEFINITION + " keeps its image, so there is no image change to apply" in said, said
+    assert code == 1
+
+
+def test_the_memory_check_refuses_an_image_plan(tmp_path: Path) -> None:
+    """The image apply's plan, even with the new memory in it, is not the memory change."""
+    plan = image_plan()
+    change_of(plan, RUN_DEFINITION)["after"]["memory"] = "32768"
+
+    code, said = run_check(plan, tmp_path, memory=True)
+
+    assert said.startswith("PLAN STOP: "), said
+    assert RUN_DEFINITION + " also changes ['image']" in said, said
+    assert "a login change, which the memory change never makes: " in said, said
+    for address in (LOGIN_DEFINITION, LOGIN_SCHEDULE, LOGIN_POLICY):
+        assert address in said, said
+    assert code == 1
+
+
+def run_after(plan: Plan, **changed: object) -> None:
+    change_of(plan, RUN_DEFINITION)["after"].update(changed)
+
+
+def run_container_after(plan: Plan, **changed: object) -> None:
+    change_of(plan, RUN_DEFINITION)["after"]["container_definitions"] = container_definitions(
+        "run", NEW_DIGEST, **changed
+    )
+
+
+def run_schedule_starting(revision: str) -> Callable[[Plan], None]:
+    """The run schedule's target set to a revision already known when the plan is made."""
+
+    def change(plan: Plan) -> None:
+        schedule = change_of(plan, RUN_SCHEDULE)
+        schedule["after"]["target"][0]["ecs_parameters"][0]["task_definition_arn"] = (
+            f"arn:aws:ecs:us-east-1:{ACCOUNT}:task-definition/debate-dev-caselist-run:{revision}"
+        )
+        schedule["after_unknown"] = {}
+
+    return change
+
+
+def the_memory_change_for(owner_digest: str) -> Callable[[Plan], None]:
+    """Both sides of the run definition on another image than the owner file names."""
+
+    def change(plan: Plan) -> None:
+        definition = change_of(plan, RUN_DEFINITION)
+        for side in ("before", "after"):
+            definition[side]["container_definitions"] = container_definitions("run", owner_digest)
+
+    return change
+
+
+MEMORY_STOPPED: Final[dict[str, tuple[Callable[[Plan], None], str]]] = {
+    # The image: it stays the owner file's digest.
+    "an image change as well": (
+        lambda plan: run_container_after(plan, image=f"{REPOSITORY}@sha256:{'3' * 64}"),
+        RUN_DEFINITION + " also changes ['image']",
+    ),
+    "the digest line replaced as well": (
+        lambda plan: change_of(plan, RUN_DEFINITION)["before"].update(
+            container_definitions=container_definitions("run", OLD_DIGEST)
+        ),
+        RUN_DEFINITION + " also changes ['image']",
+    ),
+    "a run task on another image than the owner file's": (
+        the_memory_change_for(OLD_DIGEST),
+        RUN_DEFINITION + "'s image is " + REPOSITORY + "@" + OLD_DIGEST + ", expected the digest in "
+        "owner.auto.tfvars",
+    ),
+    # The login: never changed by this.
+    "the login task definition replaced": (
+        lambda plan: changed_instead(plan, replaced_task_definition("login")),
+        "a login change, which the memory change never makes: " + LOGIN_DEFINITION + " (delete/create)",
+    ),
+    "the login task definition updated": (
+        lambda plan: changed_instead(
+            plan, entry(LOGIN_DEFINITION, ["update"], {"memory": "512"}, {"memory": "1024"})
+        ),
+        "a login change, which the memory change never makes: " + LOGIN_DEFINITION + " (update)",
+    ),
+    "the login schedule repointed": (
+        lambda plan: changed_instead(plan, repointed_schedule("login")),
+        "a login change, which the memory change never makes: " + LOGIN_SCHEDULE + " (update)",
+    ),
+    "the login scheduler policy updated": (
+        lambda plan: changed_instead(plan, repointed_policy("scheduler")),
+        "a login change, which the memory change never makes: " + LOGIN_POLICY + " (update)",
+    ),
+    # Identity Center, anywhere.
+    "an account assignment destroyed": (
+        identity_center_change('aws_ssoadmin_account_assignment.evidence_operator["coach"]', ["delete"]),
+        "an Identity Center change, which never passes: "
+        'aws_ssoadmin_account_assignment.evidence_operator["coach"] (delete); never apply this plan',
+    ),
+    "a permission set replaced": (
+        identity_center_change("aws_ssoadmin_permission_set.caselist_run_deployer", ["delete", "create"]),
+        "an Identity Center change, which never passes: "
+        "aws_ssoadmin_permission_set.caselist_run_deployer (delete/create); never apply this plan",
+    ),
+    "an identity store user created in another module": (
+        identity_center_change('module.organization.aws_identitystore_user.people["coach"]', ["create"]),
+        'never passes: module.organization.aws_identitystore_user.people["coach"] (create)',
+    ),
+    # The size.
+    "the memory left at 16 GB": (
+        lambda plan: run_after(plan, memory="16384"),
+        RUN_DEFINITION + "'s memory is 16384 -> 16384, expected 32768",
+    ),
+    "a memory of 28 GB": (
+        lambda plan: run_after(plan, memory="28672"),
+        RUN_DEFINITION + "'s memory is 16384 -> 28672, expected 32768",
+    ),
+    "a memory of 60 GB": (
+        lambda plan: run_after(plan, memory="61440"),
+        RUN_DEFINITION + "'s memory is 16384 -> 61440, expected 32768",
+    ),
+    "a vCPU change": (
+        lambda plan: run_after(plan, cpu="16384"),
+        RUN_DEFINITION + " changes its ['cpu']",
+    ),
+    "the ephemeral storage changed": (
+        lambda plan: run_after(plan, ephemeral_storage=[{"size_in_gib": 200}]),
+        RUN_DEFINITION + " changes its ['ephemeral_storage']",
+    ),
+    "another task role": (
+        lambda plan: run_after(plan, task_role_arn="arn:aws:iam::x:role/other"),
+        RUN_DEFINITION + " changes its ['task_role_arn']",
+    ),
+    "the parse workers changed": (
+        lambda plan: run_container_after(
+            plan,
+            environment=[
+                {"name": n, "value": v}
+                for n, v in (ENVIRONMENT["run"] | {"DEBATE_PARSE__WORKERS": "12"}).items()
+            ],
+        ),
+        RUN_DEFINITION + " changes its environment: adds [], removes [], changes ['DEBATE_PARSE__WORKERS']",
+    ),
+    "another command": (
+        lambda plan: run_container_after(plan, command=["--json", "caselist", "backfile-import"]),
+        RUN_DEFINITION + " also changes ['command']",
+    ),
+    "unreadable container definitions": (
+        lambda plan: run_after(plan, container_definitions="not json"),
+        RUN_DEFINITION + ": its container definitions cannot be read from the plan",
+    ),
+    "the run task definition updated in place": (
+        lambda plan: change_of(plan, RUN_DEFINITION).update(actions=["update"]),
+        RUN_DEFINITION + ": update, expected a replace (delete and create)",
+    ),
+    "the run task definition unchanged": (
+        lambda plan: changed_instead(plan, unchanged(RUN_DEFINITION)),
+        RUN_DEFINITION + ": no change, expected a replace (delete and create)",
+    ),
+    # The schedule, on the new revision.
+    "the run schedule left on the old revision": (
+        lambda plan: changed_instead(plan, unchanged(RUN_SCHEDULE)),
+        RUN_SCHEDULE + ": no change, expected an update",
+    ),
+    "the run schedule set to the old revision by name": (
+        run_schedule_starting("7"),
+        RUN_SCHEDULE + " changes [], expected only target",
+    ),
+    "the run schedule set to another revision already registered": (
+        run_schedule_starting("9"),
+        RUN_SCHEDULE
+        + " starts debate-dev-caselist-run:9, a revision known before the apply, not the new one",
+    ),
+    "the run scheduler policy left as it is": (
+        lambda plan: changed_instead(plan, unchanged(RUN_POLICY)),
+        RUN_POLICY + ": no change, expected an update",
+    ),
+    "the run scheduler policy renamed": (
+        lambda plan: change_of(plan, RUN_POLICY)["after"].update(name="everything"),
+        RUN_POLICY + " changes ['name', 'policy'], expected only policy",
+    ),
+    "the run schedule turned off": (
+        run_schedule_turned_off,
+        RUN_SCHEDULE + " is ENABLED -> DISABLED, expected ENABLED throughout",
+    ),
+    "the run schedule moved in time": (
+        the_schedule_moved_in_time,
+        RUN_SCHEDULE + " changes ['schedule_expression', 'target'], expected only target",
+    ),
+    "the run schedule starting two tasks": (
+        the_schedule_starting_two_tasks,
+        RUN_SCHEDULE + " changes its target beyond the task definition it starts",
+    ),
+    # Anything else.
+    "a change outside the module": (
+        outside_the_module,
+        "a change outside module.caselist_run: module.evidence_bucket.aws_s3_bucket_policy.this (update)",
+    ),
+    "an old revision left deposed": (
+        an_old_revision_left_deposed,
+        "an unexpected change in module.caselist_run: " + RUN_DEFINITION + " deposed 00000001 (delete)",
+    ),
+    "the task-stopped target updated": (
+        lambda plan: changed_instead(plan, entry(TASK_STOPPED_RUN, ["update"], {"a": 1}, {"a": 2})),
+        "an unexpected change in module.caselist_run: " + TASK_STOPPED_RUN + " (update)",
+    ),
+}
+
+
+@pytest.mark.parametrize("case", sorted(MEMORY_STOPPED))
+def test_any_other_plan_is_memory_plan_stop_naming_the_address(tmp_path: Path, case: str) -> None:
+    plan = copy.deepcopy(memory_plan())
+    change, reason = MEMORY_STOPPED[case]
+    change(plan)
+
+    code, said = run_check(plan, tmp_path, memory=True)
+
+    assert said.startswith("PLAN STOP: "), said
+    assert reason in said, said
+    assert code == 1
+
+
+def test_the_memory_check_needs_the_owner_files_digest(tmp_path: Path) -> None:
+    code, said = run_check(memory_plan(), tmp_path, owner='owner = "coach"\n', memory=True)
+
+    assert said.startswith("PLAN STOP: owner.auto.tfvars names no image digest"), said
+    assert code == 1
+
+
+def test_a_file_that_is_not_a_plans_json_is_memory_plan_stop(tmp_path: Path) -> None:
+    code, said = run_check("Plan: 1 to add, 2 to change, 1 to destroy.\n", tmp_path, memory=True)
+
+    assert said.startswith("PLAN STOP: the plan file is not JSON"), said
+    assert code == 2
+
+
+# The runbook's section
+
+
+def memory_section() -> str:
+    text = RUNBOOK.read_text(encoding="utf-8")
+    start = text.index("\n## The run task's memory\n")
+    return text[start : text.index("\n## ", start + 1)]
+
+
+def test_the_memory_section_follows_a_new_image_later() -> None:
+    text = RUNBOOK.read_text(encoding="utf-8")
+    image = text.index("\n## A new image, later\n")
+    memory = text.index("\n## The run task's memory\n")
+
+    assert image < memory
+    assert text.index("\n## ", image + 1) == memory
+
+
+def test_the_memory_section_checks_the_saved_plans_json_with_memory_and_names_its_plan_line() -> None:
+    section = memory_section()
+    [plan_block] = [block for block in bash_blocks(section) if " plan " in block]
+
+    assert "rm -f infrastructure/envs/dev/caselist-run-memory.tfplan /tmp/caselist-run-memory-plan.json" in (
+        plan_block
+    )
+    assert "plan -input=false -no-color -out=caselist-run-memory.tfplan" in plan_block
+    assert "show -json caselist-run-memory.tfplan > /tmp/caselist-run-memory-plan.json" in plan_block
+    assert (
+        "python3 -I ops/caselist_run/check_image_plan.py /tmp/caselist-run-memory-plan.json "
+        "infrastructure/envs/dev/owner.auto.tfvars --memory"
+    ) in plan_block
+    assert " apply " not in plan_block
+    assert "`Plan: 1 to add, 2 to change, 1 to destroy.`" in section
+
+
+def test_the_memory_section_applies_the_checked_plan_after_the_pms_word_and_never_on_a_wednesday() -> None:
+    section = memory_section()
+    [apply_block] = [block for block in bash_blocks(section) if " apply " in block]
+
+    assert "apply -input=false caselist-run-memory.tfplan" in apply_block
+    assert 'if [ "$(TZ=America/Chicago date +%A)" = "Wednesday" ]; then echo "STOP' in apply_block
+    assert " plan " not in apply_block
+    assert "after the PM's word" in section
+    assert "2026-11-04 06:00" in section
+
+
+def test_the_memory_section_reads_back_only_the_scheduled_revisions_memory_and_cpu() -> None:
+    [read_back] = [block for block in bash_blocks(memory_section()) if "describe-task-definition" in block]
+
+    assert "scheduler get-schedule" in read_back
+    assert "--query 'taskDefinition.[cpu,memory]'" in read_back
+
+
+def inside_double_quotes(block: str) -> list[str]:
+    """The text inside each double-quoted string of a shell block (one with no heredoc or escaped quote)."""
+    found, quote, current = [], None, ""
+    for character in block:
+        if quote is None:
+            quote = character if character in "'\"" else None
+        elif character == quote:
+            if quote == '"':
+                found.append(current)
+            quote, current = None, ""
+        elif quote == '"':
+            current += character
+    return found
+
+
+def test_no_memory_section_block_puts_an_exclamation_mark_inside_double_quotes() -> None:
+    """zsh expands `!` inside double quotes when a block is pasted (agreement 9's neighbour)."""
+    assert inside_double_quotes('echo "a!b" \'c!d\' "e"') == ["a!b", "e"]
+    for block in bash_blocks(memory_section()):
+        assert not [text for text in inside_double_quotes(block) if "!" in text], block

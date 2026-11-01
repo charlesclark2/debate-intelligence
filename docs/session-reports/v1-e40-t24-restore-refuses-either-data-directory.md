@@ -179,9 +179,52 @@ None. The affected set (190 files) runs in the pull request's `ci` check.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-31
 
 **Notes:**
+
+A dev restore can no longer leave its marker in prod's data directory, or the reverse. The PM read the
+diff of `run_state_restore.py`, `environment_data_dirs.py`, `container.py` and `caselist_restore.py`.
+1. **ac1 passes.**
+   * Red against today's check: 79 failed, all at assertions, with none at collection.
+   * Green: 159 passed, then 165 at HEAD. The node criterion passes (135).
+   * The PM's four mutants are caught: one environment only (78), the holding case dropped (22),
+     links not resolved (16), and the sibling refused as a string prefix (27). The prefix mutant
+     also refuses the cutover runbook's `prod-publish-<week>`, which the sibling tests are there to
+     catch.
+   * The four extra mutants are caught as well. The one that guards the design is "this shell's
+     `DEBATE_STORAGE__DATA_DIR` reaches the other environment" (27).
+2. **Resolving the other environment from its own two layers: accepted.** Reading only the profile
+   file and the built-in profile, through `StorageSettings` for the expansion, is right. Loading
+   prod's whole settings in a dev shell would hand prod every dev override. The profile is found the
+   way `load_settings` finds it, with the same bundled configuration root.
+3. **Deviations accepted:**
+   * **1:** the sibling hint is in words. The forbidden list wins over the brief, and a test holds
+     every refusal free of paths.
+   * **2:** the running environment's profile directory is refused under an override as well. It
+     only refuses more, and no runbook restores under a `DEBATE_*` override.
+   * **3:** letter case is folded. It is right for the Mac, and on a case-sensitive disk it only
+     refuses more.
+   * **4:** the node ran through the venv under `hard_stop`.
+4. **Decisions accepted:**
+   * an unreadable profile refuses every target, naming `config show` and no path;
+   * `RESTORE_TARGET_REFUSED` is kept, with the running environment's pinned phrases unchanged, so
+     the smoke check and the earlier tests still match;
+   * non-strict `resolve` is used, so dangling links and targets not made yet are followed (both
+     tested);
+   * the autouse prod profile in the CLI tests, so no test reads the real home folder.
+5. **Runbooks:** the three restore targets (J2, the landscape restore, the cutover) are siblings of
+   both data directories and are in the sibling tests. None needed a change.
+6. **Follow-ups, the PM's rulings:**
+   * **The launchd plist override:** not filed. The weekly run is in the cloud now, and no runbook
+     installs an agent with a data directory in its plist. This gets reopened if one does.
+   * **The landscape `--restored-copy` check:** not filed. Since v1-e40-t23 it requires the marker,
+     which no data directory has, so a data directory is already refused there.
+7. **Closing checks:** the affected set (190 files, through `container.py`) is left to the PR's `ci`
+   under agreement 10. The always-run list (373), `bucket_mode` (222), the docs and smoke restore
+   checks (24), ruff, pyright, lint-imports, thin handlers and the specs are clean.
+8. **Merge:** a plain `scripts/task pr` once `ci` is green. No operator step follows. The change
+   reaches the Mac with the next installed CLI, and the cloud image never runs a restore.

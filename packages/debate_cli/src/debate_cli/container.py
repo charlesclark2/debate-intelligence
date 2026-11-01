@@ -260,7 +260,7 @@ from debate_core.application.settings import (
     find_repository_root,
 )
 from debate_core.application.snapshot_service import SnapshotService
-from debate_core.application.structured_output import StructuredOutputGuard
+from debate_core.application.structured_output import REPAIR_PROMPT_ID, StructuredOutputGuard
 from debate_core.application.sync_runs import (
     CLOUD_NO_SESSION_CURE,
     SYNC_RUN_LOG_FILENAME,
@@ -841,7 +841,9 @@ class ServiceContainer:
         """The model stage measured against a coach's labels (`v1-e32-t07` ac4), over this machine's stores.
 
         It replays, or with `record` records, the same cassettes a landscape run replays, under the data
-        directory, and scans every cassette of the prompt there after it has run.
+        directory, and scans every cassette of the prompt there after it has run. A breakdown
+        (`v1-e32-t39`) also lists the scan's hits in the repair cassettes there, which hold the cards of
+        each batch that was repaired.
         """
         from debate_core.integrations.landscape.yaml_taxonomy_repository import YamlTaxonomyRepository
         from debate_core.integrations.local import FsEvidenceObjectStore
@@ -859,6 +861,7 @@ class ServiceContainer:
             objects=FsEvidenceObjectStore(data_dir),
             stage=lambda max_items: self.landscape_model_stage(mode, max_items, cassette_dir=cassettes),
             cassette_texts=lambda: _texts_under(cassettes / CLASSIFY_POSITION_PROMPT_ID),
+            repair_cassette_texts=lambda: _texts_under(cassettes / REPAIR_PROMPT_ID),
         )
 
     def landscape_model_stage(

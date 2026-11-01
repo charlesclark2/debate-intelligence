@@ -135,6 +135,17 @@ was refused, with `error.code` `MODEL_STAGE_INTERRUPTED` and the same `cause_cod
 and, for a rate limit that said how long to wait, `retry_after_seconds` in `error.details`, beside the
 summary. Only `record` calls a model, and a rerun of it asks about every labelled card again. `1`
 otherwise (`EVALUATION_BELOW_BAR`), and for a name either scan found even when the stage also stopped.
+
+`--breakdown` (`v1-e32-t39`) replays only, and is refused with `--model-mode record`: the router it builds
+holds no model, so a request no cassette recorded fails (`MISSING_FIXTURE`) and is never sent. It gives
+every labelled card one outcome (correct, a wrong position of the label's kind, a wrong kind, placed
+though labelled none, refused, below the threshold, lost to a batch that failed validation, not asked,
+not found), beside what the headings alone place, with each batch's calls and what the
+structured-output guard did, a confusion table of position ids, the score on the cards a real run sends
+to the model, and the score by the sample's strata. `data.breakdown` holds those, and the scan's hits as
+counts by kind and field. The hits themselves, each with its text, field, kind, matched words and the
+words either side, are printed in a terminal only: never in `--json`, a log or a file, and not when
+stdout is not a terminal.
 """
 
 from __future__ import annotations
@@ -142,6 +153,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import shlex
+import sys
 from datetime import date
 from enum import StrEnum
 from pathlib import Path
@@ -159,7 +171,11 @@ from debate_cli.options.snapshot_date import parse_snapshot_date
 from debate_cli.output import CliOutput, CommandFailure, JsonValue, OutputMode
 from debate_core.application.analytic_texts import AnalyticTextCounts
 from debate_core.application.errors import error_code_of
-from debate_core.application.landscape_model_evaluation import TARGET_ACCURACY, FormatEvaluation
+from debate_core.application.landscape_model_evaluation import (
+    TARGET_ACCURACY,
+    EvaluationBreakdown,
+    FormatEvaluation,
+)
 from debate_core.application.landscape_model_stage import (
     DEFAULT_MAX_MODEL_ITEMS,
     POLICY_QUESTION,
@@ -182,15 +198,27 @@ from debate_core.application.landscape_run import (
 from debate_core.application.landscape_staleness import FailedSyncRun
 from debate_core.application.plan_texts import PlanTextCounts
 from debate_core.application.settings import Environment, Settings, find_repository_root
+from debate_core.arguments.landscape.evaluation_breakdown import (
+    CardBreakdown,
+    Score,
+    confusion,
+    deterministic_counts,
+    outcomes_by_label_kind,
+    refusals_by_label,
+    weighted_accuracy,
+)
 from debate_core.arguments.landscape.model_stage import NameScan
+from debate_core.arguments.landscape.scan_hits import ScanHit, hit_counts, mark_counts
 from debate_core.domain.landscape_trends import LandscapeTrends, TrendLabel
 
 __all__ = [
     "CIRCUIT_WIDE",
+    "HITS_NOTICE",
     "REPORT_HELP",
     "SCAN_NOTICE",
     "SCHOOL_VIEW",
     "EvaluationMode",
+    "breakdown_summary",
     "evaluate",
     "evaluation_summary",
     "report",
@@ -202,6 +230,11 @@ POLICY_FILE: Final = Path("docs") / "policies" / "caselist-data-use.md"
 SCAN_NOTICE: Final = (
     "scan.hits quote report lines that may name a school or a team code. For this terminal only: "
     "never paste them into a report, a document, an issue or a commit (docs/policies/caselist-data-use.md)."
+)
+
+HITS_NOTICE: Final = (
+    "The scan's hits, for this terminal only: never paste them into a session, a report, a document, an "
+    "issue or a commit (docs/policies/caselist-data-use.md)."
 )
 
 CIRCUIT_WIDE: Final = "circuit_wide"
@@ -370,6 +403,14 @@ def evaluate(
         Path | None,
         typer.Option("--config-dir", file_okay=False, help="The directory holding topics.yaml."),
     ] = None,
+    breakdown: Annotated[
+        bool,
+        typer.Option(
+            "--breakdown",
+            help="Replay only: every labelled card's outcome beside the headings' placement, and the "
+            "scan's hits, listed in this terminal only.",
+        ),
+    ] = False,
     json_output: Annotated[
         bool, typer.Option("--json", help="Write one machine-readable JSON object to stdout.")
     ] = False,
@@ -378,24 +419,236 @@ def evaluate(
     cli = cli_context(ctx)
     if json_output and not cli.output.is_json:
         cli.output = CliOutput(OutputMode.JSON, verbose=cli.output.verbose)
+    if breakdown and model_mode is EvaluationMode.RECORD:
+        _end(cli, ctx, _BREAKDOWN_RECORDS_NOTHING)
     refusal = _policy_refusal() if model_mode is EvaluationMode.RECORD else None
     if refusal is not None:
         _end(cli, ctx, refusal)
     service = cli.services.landscape_evaluation(
         config_dir=landscape_config_dir(config_dir), record=model_mode is EvaluationMode.RECORD
     )
+    through = parse_snapshot_date(snapshot) if snapshot else None
     with sample.open(encoding="utf-8", newline="") as labels, sample_rows.open(encoding="utf-8") as rows:
-        result = asyncio.run(
-            service.evaluate(
-                caselist, labels, rows, snapshot=parse_snapshot_date(snapshot) if snapshot else None
-            )
+        broken_down = (
+            asyncio.run(service.break_down(caselist, labels, rows, snapshot=through)) if breakdown else None
+        )
+        result = (
+            broken_down.evaluation
+            if broken_down is not None
+            else asyncio.run(service.evaluate(caselist, labels, rows, snapshot=through))
         )
     payload = evaluation_summary(result)
+    display = _evaluation_display(result)
+    if broken_down is not None:
+        payload["breakdown"] = breakdown_summary(broken_down)
+        display = "\n".join([display, *_breakdown_lines(broken_down), *_hit_lines(broken_down)])
     passed = result.stopped is None and result.meets_target and result.sent.clean and result.cassettes.clean
     if passed or not cli.output.is_json:
-        cli.output.success(command_name(ctx), payload, display=_evaluation_display(result))
+        cli.output.success(command_name(ctx), payload, display=display)
     if not passed:
         _end(cli, ctx, _evaluation_failure(result, payload))
+
+
+_BREAKDOWN_RECORDS_NOTHING: Final = CommandFailure(
+    code="BREAKDOWN_REPLAYS_ONLY",
+    message="--breakdown replays the cassettes this machine recorded and calls no model; it takes no "
+    "--model-mode record",
+    exit_code=ExitCode.USAGE_ERROR,
+    hint="Drop --model-mode record, or run the evaluation without --breakdown.",
+)
+
+
+def _stdout_is_a_terminal() -> bool:
+    """Whether the hits may be printed: stdout is a terminal, not a pipe or a file."""
+    return sys.stdout.isatty()
+
+
+def breakdown_summary(result: EvaluationBreakdown) -> dict[str, JsonValue]:
+    """`data.breakdown`: outcomes, positions and scores by taxonomy id, and the scan's hits as counts only."""
+    return {
+        "outcomes": dict(result.outcomes),
+        "refused_by_label": {
+            reason: dict(counts) for reason, counts in refusals_by_label(result.cards).items()
+        },
+        "by_label_kind": {
+            kind: dict(counts) for kind, counts in outcomes_by_label_kind(result.cards).items()
+        },
+        "confusion": [
+            {"label": label, "answer": answer, "cards": count}
+            for label, answer, count in confusion(result.cards)
+        ],
+        "wrong_answers_naming_a_related_position": sum(card.related for card in result.cards),
+        "model_set": _score_json(result.model_set),
+        "deterministic": dict(deterministic_counts(result.cards)),
+        "batches": [
+            {
+                "batch": one.number,
+                "cards": one.cards,
+                "calls": one.calls,
+                "outcome": one.outcome,
+                "problems": dict(one.problems),
+                "error_count": one.error_count,
+            }
+            for one in result.batches
+        ],
+        "strata": [
+            {"stratum": one.name, "population": one.population, **_score_json(one.score)}
+            for one in result.strata
+        ],
+        "weighted_accuracy": weighted_accuracy(result.strata),
+        "cards": [_card_json(card) for card in result.cards],
+        "scan_hits": {
+            "prompt_inputs": _hits_json(result.sent_hits),
+            "cassettes": _hits_json(result.cassette_hits),
+            "repair_cassettes": {"texts": result.repair_cassettes, **_hits_json(result.repair_hits)},
+        },
+    }
+
+
+def _score_json(score: Score) -> dict[str, JsonValue]:
+    return {
+        "cards": score.cards,
+        "counted": score.counted,
+        "correct": score.correct,
+        "accuracy": score.accuracy,
+    }
+
+
+def _card_json(card: CardBreakdown) -> dict[str, JsonValue]:
+    placed = card.deterministic
+    return {
+        "sample_row": card.sample_row,
+        "stratum": card.stratum,
+        "label": card.label,
+        "label_kind": card.label_kind,
+        "outcome": card.outcome.value,
+        "refusal": card.refusal,
+        "answer": card.answer,
+        "confidence": card.confidence,
+        "batch": card.batch,
+        "related": card.related,
+        "deterministic": None
+        if placed is None
+        else {
+            "position_id": placed.position_id,
+            "method": placed.method,
+            "confidence": placed.confidence,
+            "sent_to_model": placed.sent_to_model,
+        },
+    }
+
+
+def _hits_json(hits: tuple[ScanHit, ...]) -> dict[str, JsonValue]:
+    """A text type's hits as counts: by kind and field, and the two flags. Never a hit's words."""
+    counts: dict[str, JsonValue] = {kind: dict(fields) for kind, fields in hit_counts(hits).items()}
+    return {
+        "hits": len(hits),
+        "by_kind_and_field": counts,
+        "tournament_hits_naming_a_team": sum(hit.team_name for hit in hits),
+        "in_taxonomy": sum(hit.in_taxonomy for hit in hits),
+        "json_key": sum(hit.json_key for hit in hits),
+        "in_input": sum(hit.in_input for hit in hits),
+        "marks_by_field": {where: dict(marks) for where, marks in mark_counts(hits).items()},
+    }
+
+
+def _breakdown_lines(result: EvaluationBreakdown) -> list[str]:
+    outcomes = ", ".join(f"{name} {count}" for name, count in result.outcomes.items())
+    refused = "; ".join(
+        f"{reason}: " + ", ".join(f"labelled {label} {count}" for label, count in counts.items())
+        for reason, counts in refusals_by_label(result.cards).items()
+    )
+    lines = [
+        "",
+        f"Breakdown of the {len(result.cards)} labelled card(s): {outcomes}.",
+        f"Refused, by the coach's label: {refused or 'none'}.",
+        "Batches: "
+        + "; ".join(
+            f"{one.number}: {one.cards} card(s), {one.calls} call(s), {one.outcome}"
+            + (f" ({', '.join(f'{kind} {n}' for kind, n in one.problems.items())})" if one.problems else "")
+            for one in result.batches
+        )
+        + ".",
+        f"Sent to the model by a real run (headings unplaced or below the threshold): "
+        f"{_score_line(result.model_set)}.",
+        "Headings alone: "
+        + ", ".join(
+            f"{name.replace('_', ' ')} {count}" for name, count in deterministic_counts(result.cards).items()
+        )
+        + ".",
+    ]
+    if result.strata:
+        weighted = weighted_accuracy(result.strata)
+        lines.append(
+            "By stratum: "
+            + "; ".join(
+                f"{one.name} (of {one.population}): {_score_line(one.score)}" for one in result.strata
+            )
+            + f". Weighted to the strata: {'n/a' if weighted is None else f'{weighted:.1%}'}."
+        )
+    lines.append("By the label's kind: ")
+    lines += [
+        f"  {kind}: " + ", ".join(f"{name} {count}" for name, count in counts.items())
+        for kind, counts in outcomes_by_label_kind(result.cards).items()
+    ]
+    lines.append("Label -> answer (cards):")
+    lines += [f"  {label} -> {answer}: {count}" for label, answer, count in confusion(result.cards)]
+    lines.append("Cards (sample row, stratum: label -> outcome, answer; headings):")
+    lines += [f"  {_card_line(card)}" for card in result.cards]
+    for name, hits in (
+        ("prompt inputs", result.sent_hits),
+        ("cassettes", result.cassette_hits),
+        (f"repair cassettes ({result.repair_cassettes})", result.repair_hits),
+    ):
+        counts = "; ".join(
+            f"{kind}: " + ", ".join(f"{where} {n}" for where, n in fields.items())
+            for kind, fields in hit_counts(hits).items()
+        )
+        lines.append(f"Scan hits in the {name}: {len(hits)}{f' ({counts})' if counts else ''}.")
+    return lines
+
+
+def _score_line(score: Score) -> str:
+    accuracy = "n/a" if score.accuracy is None else f"{score.accuracy:.1%}"
+    return f"{score.cards} card(s), counted {score.counted}, correct {score.correct}: {accuracy}"
+
+
+def _card_line(card: CardBreakdown) -> str:
+    answer = "no answer" if card.answer is None else f"{card.answer} {card.confidence:.2f}"
+    outcome = f"{card.outcome.value} {card.refusal}" if card.refusal else card.outcome.value
+    placed = card.deterministic
+    if placed is None:
+        headings = "not found"
+    elif placed.position_id is None:
+        headings = "decided none" if placed.decided_none else "unplaced"
+    else:
+        headings = f"{placed.position_id} {placed.method} {placed.confidence:.2f}"
+    sent = "" if placed is None else (", sent" if placed.sent_to_model else ", not sent")
+    batch = "" if card.batch is None else f", batch {card.batch}"
+    return (
+        f"row {card.sample_row}, {card.stratum}: {card.label} ({card.label_kind}) -> {outcome}, {answer}"
+        f"{batch}; headings {headings}{sent}"
+    )
+
+
+def _hit_lines(result: EvaluationBreakdown) -> list[str]:
+    """The scan's hits, one line each, for a terminal; a count of them withheld otherwise."""
+    hits = (*result.sent_hits, *result.cassette_hits, *result.repair_hits)
+    if not hits:
+        return []
+    if not _stdout_is_a_terminal():
+        return [f"{len(hits)} scan hit(s) withheld: stdout is not a terminal. Run it in one to read them."]
+    lines = ["", HITS_NOTICE]
+    for number, hit in enumerate(hits, start=1):
+        marked = " (a team's name)" if hit.team_name else ""
+        vocabulary = " (a taxonomy word)" if hit.in_taxonomy else ""
+        key = " (a JSON key)" if hit.json_key else ""
+        sent = " (in the cards sent)" if hit.in_input else ""
+        lines.append(
+            f"  {number}. {hit.text} | {hit.where.value} | {hit.kind.value}{marked}{vocabulary}{key}{sent} | "
+            f"... {hit.before} [{hit.matched}] {hit.after} ..."
+        )
+    return lines
 
 
 def evaluation_summary(result: FormatEvaluation) -> dict[str, JsonValue]:

@@ -27,14 +27,20 @@ from __future__ import annotations
 import csv
 import json
 from collections import Counter
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Final, TextIO, cast
+from typing import Any, Final, TextIO, cast
 
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.errors import DomainError, ProviderError
-from debate_core.application.landscape_model_stage import ModelClassificationStage, ModelStageInterrupted
+from debate_core.application.landscape_model_stage import (
+    CLASSIFY_POSITION_PROMPT_ID,
+    BatchRecord,
+    ModelClassificationStage,
+    ModelStageInterrupted,
+    ModelStageOutcome,
+)
 from debate_core.application.landscape_seeding import SeedReading, read_seed_sources
 from debate_core.application.landscape_staleness import LandscapeStalenessCheck
 from debate_core.application.ports.evidence_store import EvidenceObjectStore
@@ -42,24 +48,61 @@ from debate_core.application.ports.parsed_store import ParsedStore
 from debate_core.application.ports.suppression import SuppressionList
 from debate_core.application.ports.taxonomy_repository import TaxonomyRepository
 from debate_core.application.position_classification import model_candidate
-from debate_core.arguments.landscape.matcher import read_items
-from debate_core.arguments.landscape.model_stage import ModelCandidate, NameScan, name_scan, places_nothing
+from debate_core.arguments.landscape.evaluation_breakdown import (
+    CardBreakdown,
+    CardOutcome,
+    Score,
+    StratumScore,
+    card_outcome,
+    deterministic_placement,
+    label_kind,
+    model_set_score,
+    outcome_counts,
+    related,
+    stratum_scores,
+)
+from debate_core.arguments.landscape.matcher import MatchItem, PositionMatcher, read_items
+from debate_core.arguments.landscape.model_stage import (
+    ModelCandidate,
+    NameScan,
+    name_scan,
+    places_nothing,
+    prompt_variables,
+    refusal_reason,
+)
 from debate_core.arguments.landscape.review_queue import DEFAULT_REVIEW_THRESHOLD
+from debate_core.arguments.landscape.scan_hits import (
+    ScanHit,
+    ScanNames,
+    cassette_hits,
+    input_batch_hits,
+    repair_cassette_hits,
+)
 from debate_core.arguments.landscape.source_headings import CaselistNames
 from debate_core.arguments.landscape.tag_scrub import code_words
 from debate_core.domain.landscape import Taxonomy
-from debate_core.domain.landscape_classification import ItemKind
+from debate_core.domain.landscape_classification import ItemKind, OverrideRules
 
 __all__ = [
+    "BATCH_ANSWERED",
+    "BATCH_REFUSED",
+    "BATCH_REPAIRED",
     "NO_POSITION_LABEL",
     "TARGET_ACCURACY",
     "UNSURE_LABEL",
+    "BatchBreakdown",
+    "EvaluationBreakdown",
     "EvaluationRefused",
     "FormatEvaluation",
+    "LabelledAnswers",
     "LabelledCard",
     "LandscapeModelEvaluationService",
+    "ask_labelled_cards",
+    "break_down_labelled_cards",
     "evaluate_labelled_cards",
     "read_coach_sample",
+    "read_sample_populations",
+    "score_labelled_answers",
 ]
 
 TARGET_ACCURACY: Final = 0.85
@@ -82,6 +125,10 @@ class LabelledCard:
 
     item_id: str
     label: str
+    sample_row: int | None = None
+    """Its row in the coach's file, which names it to the coach and the PM without its text."""
+    stratum: str | None = None
+    """The stratum `v1-e32-t21` drew it from, when the rows file says."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -150,15 +197,18 @@ def read_coach_sample(sample: TextIO, rows: Iterable[str], taxonomy: Taxonomy) -
     not have, is refused by its row number.
     """
     by_row: dict[int, str] = {}
+    strata: dict[int, str] = {}
     for line in rows:
         if not line.strip():
             continue
         loaded: object = json.loads(line)
         if isinstance(loaded, dict):
             data = cast(dict[str, object], loaded)
-            row, item_id = data.get("sample_row"), data.get("item_id")
+            row, item_id, stratum = data.get("sample_row"), data.get("item_id"), data.get("stratum")
             if isinstance(row, int) and isinstance(item_id, str):
                 by_row[row] = item_id
+                if isinstance(stratum, str):
+                    strata[row] = stratum
     reader = csv.DictReader(sample)
     if reader.fieldnames is None or not {"sample_row", "position"} <= set(reader.fieldnames):
         raise EvaluationRefused("the coach's sample needs its sample_row and position columns")
@@ -178,8 +228,135 @@ def read_coach_sample(sample: TextIO, rows: Iterable[str], taxonomy: Taxonomy) -
                 f"row {row} names a position that is not an active id of {taxonomy.topic_id} "
                 f"{taxonomy.taxonomy_version}"
             )
-        labelled.append(LabelledCard(item_id=by_row[row], label=label))
+        labelled.append(
+            LabelledCard(item_id=by_row[row], label=label, sample_row=row, stratum=strata.get(row))
+        )
     return tuple(labelled)
+
+
+def read_sample_populations(rows: Iterable[str]) -> dict[str, int]:
+    """The unplaced cards each stratum of the sample was drawn from, from the rows file's header line.
+
+    Empty for a rows file whose header has no `populations` (a sample not drawn by strata).
+    """
+    header = next((line for line in rows if line.strip()), None)
+    loaded: object = json.loads(header) if header is not None else None
+    populations = cast(dict[str, object], loaded).get("populations") if isinstance(loaded, dict) else None
+    if not isinstance(populations, dict):
+        return {}
+    return {
+        str(name): count
+        for name, count in cast(dict[object, object], populations).items()
+        if isinstance(count, int)
+    }
+
+
+@dataclass(frozen=True, slots=True)
+class LabelledAnswers:
+    """What the stage was asked about the labelled cards, and answered (:func:`ask_labelled_cards`)."""
+
+    labels: Mapping[str, str]
+    """Each labelled card's label, by item id."""
+    items: Mapping[str, MatchItem] = field(repr=False)
+    """Each labelled card the reading holds, as stage one reads it, by item id: the found cards."""
+    candidates: Mapping[str, ModelCandidate] = field(repr=False)
+    """One candidate per fingerprint of the found cards: what the stage was asked about."""
+    outcome: ModelStageOutcome
+    names: CaselistNames = field(repr=False)
+    tournaments: frozenset[str] = field(repr=False)
+    """The disclosing teams' names, every source's: the scan's other names."""
+
+
+async def ask_labelled_cards(
+    reading: SeedReading,
+    labelled: Iterable[LabelledCard],
+    stage: ModelClassificationStage,
+    taxonomy: Taxonomy,
+) -> LabelledAnswers:
+    """Ask `stage` about every labelled card `reading` holds, once per fingerprint, as a run would ask."""
+    labels = {one.item_id: one.label for one in labelled}
+    names = CaselistNames(reading.caselist_names)
+    codes = code_words(reading.caselist_names)
+    candidates: dict[str, ModelCandidate] = {}
+    items: dict[str, MatchItem] = {}
+    tournaments: set[str] = set()
+    for source in reading.sources:
+        tournaments |= {name for team in source.teams for name in team.names}
+        if not any(item_id.startswith(f"{source.sha256}:") for item_id in labels):
+            continue
+        cards = iter(source.cards)
+        for item in read_items(source, names):
+            if item.kind is not ItemKind.CARD:
+                continue
+            card = next(cards)
+            if item.item_id in labels:
+                items[item.item_id] = item
+                candidates.setdefault(item.fingerprint, model_candidate(source, item, card, names, codes))
+    outcome = await stage.run(
+        list(candidates.values()),
+        taxonomy=taxonomy,
+        caselist=reading.caselist,
+        version=reading.version,
+        names=names,
+        codes=codes,
+    )
+    return LabelledAnswers(
+        labels=labels,
+        items=items,
+        candidates=candidates,
+        outcome=outcome,
+        names=names,
+        tournaments=frozenset(tournaments),
+    )
+
+
+def score_labelled_answers(
+    reading: SeedReading,
+    taxonomy: Taxonomy,
+    asked: LabelledAnswers,
+    *,
+    prompt_version: str,
+    review_threshold: float = DEFAULT_REVIEW_THRESHOLD,
+    cassettes: Iterable[str] = (),
+    snapshot: date | None = None,
+) -> FormatEvaluation:
+    """The evaluation's score of `asked`, and the scans of what was sent and of `cassettes`."""
+    labels, outcome = asked.labels, asked.outcome
+    counted = correct = below = labelled_none = 0
+    for item_id, item in asked.items.items():
+        result = outcome.results.get(item.fingerprint)
+        if result is None or places_nothing(result):
+            continue
+        if result.confidence < review_threshold:
+            below += 1
+            continue
+        counted += 1
+        correct += result.position_id == labels[item_id]
+        labelled_none += labels[item_id] == NO_POSITION_LABEL
+    refused = Counter(outcome.refused)
+    return FormatEvaluation(
+        caselist=reading.caselist,
+        event=taxonomy.event.value if taxonomy.event is not None else "",
+        topic_id=taxonomy.topic_id,
+        taxonomy_version=taxonomy.taxonomy_version,
+        prompt_version=prompt_version,
+        snapshot=snapshot,
+        labelled=len(labels),
+        found=len(asked.items),
+        asked=outcome.sent,
+        calls=outcome.calls,
+        counted=counted,
+        correct=correct,
+        placed_below_threshold=below,
+        placed_labelled_none=labelled_none,
+        refused=dict(sorted(refused.items())),
+        input_tokens=outcome.input_tokens,
+        output_tokens=outcome.output_tokens,
+        sent=name_scan(outcome.sent_inputs, reading.caselist_names, asked.tournaments),
+        cassettes=name_scan(cassettes, reading.caselist_names, asked.tournaments),
+        interrupted_by=outcome.interrupted_by,
+        unanswered=len(asked.candidates) - outcome.sent,
+    )
 
 
 async def evaluate_labelled_cards(
@@ -196,66 +373,232 @@ async def evaluate_labelled_cards(
 
     `cassette_texts` is read after the stage has run, so a recording run scans what it recorded.
     """
-    labels = {one.item_id: one.label for one in labelled}
-    names = CaselistNames(reading.caselist_names)
-    codes = code_words(reading.caselist_names)
-    candidates: dict[str, ModelCandidate] = {}
-    fingerprint_of: dict[str, str] = {}
-    tournaments: set[str] = set()
-    for source in reading.sources:
-        tournaments |= {name for team in source.teams for name in team.names}
-        if not any(item_id.startswith(f"{source.sha256}:") for item_id in labels):
-            continue
-        cards = iter(source.cards)
-        for item in read_items(source, names):
-            if item.kind is not ItemKind.CARD:
-                continue
-            card = next(cards)
-            if item.item_id in labels:
-                fingerprint_of[item.item_id] = item.fingerprint
-                candidates.setdefault(item.fingerprint, model_candidate(source, item, card, names, codes))
-    outcome = await stage.run(
-        list(candidates.values()),
-        taxonomy=taxonomy,
-        caselist=reading.caselist,
-        version=reading.version,
-        names=names,
-        codes=codes,
-    )
-    counted = correct = below = labelled_none = 0
-    for item_id, fingerprint in fingerprint_of.items():
-        result = outcome.results.get(fingerprint)
-        if result is None or places_nothing(result):
-            continue
-        if result.confidence < review_threshold:
-            below += 1
-            continue
-        counted += 1
-        correct += result.position_id == labels[item_id]
-        labelled_none += labels[item_id] == NO_POSITION_LABEL
-    refused = Counter(outcome.refused)
-    return FormatEvaluation(
-        caselist=reading.caselist,
-        event=taxonomy.event.value if taxonomy.event is not None else "",
-        topic_id=taxonomy.topic_id,
-        taxonomy_version=taxonomy.taxonomy_version,
+    asked = await ask_labelled_cards(reading, labelled, stage, taxonomy)
+    return score_labelled_answers(
+        reading,
+        taxonomy,
+        asked,
         prompt_version=stage.prompt_version,
+        review_threshold=review_threshold,
+        cassettes=cassette_texts(),
         snapshot=snapshot,
-        labelled=len(labels),
-        found=len(fingerprint_of),
-        asked=outcome.sent,
-        calls=outcome.calls,
-        counted=counted,
-        correct=correct,
-        placed_below_threshold=below,
-        placed_labelled_none=labelled_none,
-        refused=dict(sorted(refused.items())),
-        input_tokens=outcome.input_tokens,
-        output_tokens=outcome.output_tokens,
-        sent=name_scan(outcome.sent_inputs, reading.caselist_names, tournaments),
-        cassettes=name_scan(cassette_texts(), reading.caselist_names, tournaments),
-        interrupted_by=outcome.interrupted_by,
-        unanswered=len(candidates) - outcome.sent,
+    )
+
+
+BATCH_ANSWERED: Final = "answered"
+BATCH_REPAIRED: Final = "repaired"
+BATCH_REFUSED: Final = "refused"
+
+
+@dataclass(frozen=True, slots=True)
+class BatchBreakdown:
+    """One batch of the evaluation: its cards, its calls, and what the structured-output guard did."""
+
+    number: int
+    """From 1, in the order asked."""
+    cards: int
+    calls: int
+    outcome: str
+    """:data:`BATCH_ANSWERED` first time, :data:`BATCH_REPAIRED` (the repair's answer was used), or
+    :data:`BATCH_REFUSED` (the answer and its repair both failed: every card placed nothing)."""
+    problems: Mapping[str, int] = field(default_factory=dict[str, int])
+    """The failed attempts' reported problems by type (`string_too_long`, `missing_item`): no values."""
+    error_count: int = 0
+    """How many problems the failed attempts had in all, reported or not."""
+
+
+@dataclass(frozen=True, slots=True)
+class EvaluationBreakdown:
+    """The evaluation, and every labelled card's outcome beside stage one's placement (`v1-e32-t39`).
+
+    The scan hits are for the operator's terminal only, and are withheld from the `repr`.
+    """
+
+    evaluation: FormatEvaluation
+    cards: tuple[CardBreakdown, ...]
+    batches: tuple[BatchBreakdown, ...]
+    populations: Mapping[str, int] = field(default_factory=dict[str, int])
+    """The unplaced cards each stratum of the sample was drawn from; empty when the rows file has none."""
+    sent_hits: tuple[ScanHit, ...] = field(default=(), repr=False)
+    """The scan's hits in each batch's prompt input as sent."""
+    cassette_hits: tuple[ScanHit, ...] = field(default=(), repr=False)
+    """Its hits in each cassette of the prompt the evaluation's scan read."""
+    repair_hits: tuple[ScanHit, ...] = field(default=(), repr=False)
+    """Its hits in this prompt's repair cassettes filed under the caselist, which that scan does not read."""
+    repair_cassettes: int = 0
+    """How many repair cassettes those are."""
+
+    @property
+    def outcomes(self) -> dict[str, int]:
+        return outcome_counts(self.cards)
+
+    @property
+    def model_set(self) -> Score:
+        return model_set_score(self.cards)
+
+    @property
+    def strata(self) -> tuple[StratumScore, ...]:
+        return stratum_scores(self.cards, self.populations)
+
+
+async def break_down_labelled_cards(
+    reading: SeedReading,
+    taxonomy: Taxonomy,
+    overrides: OverrideRules,
+    labelled: Sequence[LabelledCard],
+    stage: ModelClassificationStage,
+    *,
+    review_threshold: float = DEFAULT_REVIEW_THRESHOLD,
+    cassette_texts: Callable[[], Iterable[str]] = lambda: (),
+    repair_cassette_texts: Callable[[], Iterable[str]] = lambda: (),
+    populations: Mapping[str, int] | None = None,
+    snapshot: date | None = None,
+) -> EvaluationBreakdown:
+    """:func:`evaluate_labelled_cards`, and each card's outcome, batch and stage-one placement.
+
+    The stage is asked exactly as the evaluation asks it, so a replay finds the same cassettes. Stage one
+    places each found card with `taxonomy` and the coach's `overrides`, as a landscape run does.
+    """
+    asked = await ask_labelled_cards(reading, labelled, stage, taxonomy)
+    cassettes = list(cassette_texts())
+    evaluation = score_labelled_answers(
+        reading,
+        taxonomy,
+        asked,
+        prompt_version=stage.prompt_version,
+        review_threshold=review_threshold,
+        cassettes=cassettes,
+        snapshot=snapshot,
+    )
+    outcome = asked.outcome
+    matcher = PositionMatcher(taxonomy, overrides)
+    batch_of = {
+        fingerprint: number
+        for number, record in enumerate(outcome.batches, start=1)
+        for fingerprint in record.fingerprints
+    }
+    cards: list[CardBreakdown] = []
+    for item_id, one in {card.item_id: card for card in labelled}.items():
+        cards.append(
+            _card_breakdown(
+                one,
+                asked.items.get(item_id),
+                outcome,
+                taxonomy,
+                matcher,
+                batch_of,
+                threshold=review_threshold,
+            )
+        )
+    names = ScanNames.of(
+        reading.caselist_names,
+        asked.tournaments,
+        taxonomy_text=str(prompt_variables(taxonomy, ())["positions"]),
+    )
+    repairs = [
+        text for text in repair_cassette_texts() if _repairs(text, reading.caselist, stage.prompt_version)
+    ]
+    return EvaluationBreakdown(
+        evaluation=evaluation,
+        cards=tuple(cards),
+        batches=tuple(_batch_breakdown(number, one) for number, one in enumerate(outcome.batches, start=1)),
+        populations=dict(populations or {}),
+        sent_hits=tuple(
+            hit
+            for number, text in enumerate(outcome.sent_inputs, start=1)
+            for hit in input_batch_hits(f"input batch {number}", text, names)
+        ),
+        cassette_hits=tuple(
+            hit
+            for number, text in enumerate(cassettes, start=1)
+            for hit in cassette_hits(f"cassette {number}", text, names)
+        ),
+        repair_hits=tuple(
+            hit
+            for number, text in enumerate(repairs, start=1)
+            for hit in repair_cassette_hits(f"repair cassette {number}", text, names)
+        ),
+        repair_cassettes=len(repairs),
+    )
+
+
+def _card_breakdown(
+    labelled: LabelledCard,
+    item: MatchItem | None,
+    outcome: ModelStageOutcome,
+    taxonomy: Taxonomy,
+    matcher: PositionMatcher,
+    batch_of: Mapping[str, int],
+    *,
+    threshold: float,
+) -> CardBreakdown:
+    kind = label_kind(taxonomy, labelled.label)
+    if item is None:
+        return CardBreakdown(
+            label=labelled.label,
+            label_kind=kind,
+            outcome=CardOutcome.NOT_FOUND,
+            sample_row=labelled.sample_row,
+            stratum=labelled.stratum,
+        )
+    result = outcome.results.get(item.fingerprint)
+    found = card_outcome(taxonomy, labelled.label, result, threshold=threshold)
+    answered = result is not None and not places_nothing(result)
+    answer = result.position_id if result is not None and answered else None
+    reason = refusal_reason(result) if result is not None and found is CardOutcome.REFUSED else None
+    return CardBreakdown(
+        label=labelled.label,
+        label_kind=kind,
+        outcome=found,
+        refusal=reason.value if reason is not None else None,
+        answer=answer,
+        confidence=result.confidence if result is not None and answered else None,
+        deterministic=deterministic_placement(matcher.place(item), threshold=threshold),
+        sample_row=labelled.sample_row,
+        stratum=labelled.stratum,
+        batch=batch_of.get(item.fingerprint),
+        related=found in (CardOutcome.WRONG_POSITION_SAME_KIND, CardOutcome.WRONG_KIND)
+        and answer is not None
+        and related(taxonomy, answer, labelled.label),
+    )
+
+
+def _batch_breakdown(number: int, record: BatchRecord) -> BatchBreakdown:
+    failed = [attempt for attempt in record.attempts if not attempt.valid]
+    if record.refused:
+        verdict = BATCH_REFUSED
+    elif record.repaired:
+        verdict = BATCH_REPAIRED
+    else:
+        verdict = BATCH_ANSWERED
+    return BatchBreakdown(
+        number=number,
+        cards=len(record.fingerprints),
+        calls=len(record.attempts),
+        outcome=verdict,
+        problems=dict(sorted(Counter(problem.type for one in failed for problem in one.problems).items())),
+        error_count=sum(one.error_count for one in failed),
+    )
+
+
+def _repairs(cassette: str, caselist: str, prompt_version: str) -> bool:
+    """Whether `cassette` is a `model.repair` call for this prompt and version, filed under `caselist`."""
+    try:
+        loaded: object = json.loads(cassette)
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(loaded, dict):
+        return False
+    document = cast(dict[str, Any], loaded)
+    caselists = document.get("caselists")
+    try:
+        failed = document["request"]["prompt"]["variables"]["failed_prompt"]
+    except (KeyError, TypeError):
+        return False
+    return (
+        isinstance(caselists, list)
+        and caselist in caselists
+        and failed == f"{CLASSIFY_POSITION_PROMPT_ID}@{prompt_version}"
     )
 
 
@@ -276,6 +619,7 @@ class LandscapeModelEvaluationService:
         objects: EvidenceObjectStore,
         stage: EvaluationStageFactory,
         cassette_texts: Callable[[], Iterable[str]],
+        repair_cassette_texts: Callable[[], Iterable[str]] = lambda: (),
         review_threshold: float = DEFAULT_REVIEW_THRESHOLD,
     ) -> None:
         self._taxonomies = taxonomies
@@ -285,11 +629,45 @@ class LandscapeModelEvaluationService:
         self._objects = objects
         self._stage = stage
         self._cassette_texts = cassette_texts
+        self._repair_cassette_texts = repair_cassette_texts
         self._threshold = review_threshold
 
     async def evaluate(
         self, caselist: str, sample: TextIO, rows: Iterable[str], *, snapshot: date | None = None
     ) -> FormatEvaluation:
+        prepared = await self._prepared(caselist, sample, rows, snapshot)
+        return await evaluate_labelled_cards(
+            prepared.reading,
+            prepared.taxonomy,
+            prepared.labelled,
+            self._stage(len(prepared.labelled)),
+            review_threshold=self._threshold,
+            cassette_texts=self._cassette_texts,
+            snapshot=prepared.through,
+        )
+
+    async def break_down(
+        self, caselist: str, sample: TextIO, rows: Iterable[str], *, snapshot: date | None = None
+    ) -> EvaluationBreakdown:
+        """:meth:`evaluate`, broken down card by card, with the scan's hits for the operator's terminal."""
+        lines = list(rows)
+        prepared = await self._prepared(caselist, sample, lines, snapshot)
+        return await break_down_labelled_cards(
+            prepared.reading,
+            prepared.taxonomy,
+            self._taxonomies.overrides(prepared.reading.topic_id),
+            prepared.labelled,
+            self._stage(len(prepared.labelled)),
+            review_threshold=self._threshold,
+            cassette_texts=self._cassette_texts,
+            repair_cassette_texts=self._repair_cassette_texts,
+            populations=read_sample_populations(lines),
+            snapshot=prepared.through,
+        )
+
+    async def _prepared(
+        self, caselist: str, sample: TextIO, rows: Iterable[str], snapshot: date | None
+    ) -> _Prepared:
         through = snapshot or await LandscapeStalenessCheck(
             objects=self._objects, run_log=None
         ).newest_snapshot(caselist)
@@ -312,12 +690,14 @@ class LandscapeModelEvaluationService:
             caselist=caselist,
             through=through,
         )
-        return await evaluate_labelled_cards(
-            reading,
-            taxonomy,
-            labelled,
-            self._stage(len(labelled)),
-            review_threshold=self._threshold,
-            cassette_texts=self._cassette_texts,
-            snapshot=through,
-        )
+        return _Prepared(reading=reading, taxonomy=taxonomy, labelled=labelled, through=through)
+
+
+@dataclass(frozen=True, slots=True)
+class _Prepared:
+    """A caselist's snapshot resolved, its sources read, and the coach's labels joined to them."""
+
+    reading: SeedReading = field(repr=False)
+    taxonomy: Taxonomy
+    labelled: tuple[LabelledCard, ...]
+    through: date

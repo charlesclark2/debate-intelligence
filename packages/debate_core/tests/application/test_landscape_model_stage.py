@@ -578,9 +578,9 @@ def test_the_coach_sample_is_joined_to_its_cards_by_row() -> None:
     )
 
     assert read_coach_sample(sample, ROWS, TAXONOMY) == (
-        LabelledCard(card_item_id("c" * 64, 0), "states-cp"),
-        LabelledCard(card_item_id("c" * 64, 3), "spending-da"),
-        LabelledCard(card_item_id("c" * 64, 9), "none"),
+        LabelledCard(card_item_id("c" * 64, 0), "states-cp", sample_row=1),
+        LabelledCard(card_item_id("c" * 64, 3), "spending-da", sample_row=2),
+        LabelledCard(card_item_id("c" * 64, 9), "none", sample_row=4),
     )
 
 

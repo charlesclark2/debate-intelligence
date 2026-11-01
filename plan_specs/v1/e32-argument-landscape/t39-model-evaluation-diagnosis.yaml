@@ -84,7 +84,7 @@ spec:
         gives the counts recorded in docs/data/landscape-model-evaluation.md, and the PM has
         the options.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -881,9 +881,11 @@ on 32 GB. Not while a task is running on the run's cluster, a backfile import in
 deregisters the revision such a task started from. The apply block refuses a Wednesday and a running
 task itself.
 
-**No image, so no hold.** This apply keeps `owner.auto.tfvars`'s digest (`v1.1.0-dev.251`), so the hold
-in [A new image, later](#a-new-image-later) on images carrying `v1-e39-t16` does not apply. Do not
-replace the digest line for this apply: the check refuses a plan that changes the image as well.
+**No image.** This apply keeps `owner.auto.tfvars`'s digest (`v1.1.0-dev.251`). The PM's hold of
+2026-10-31 on run images carrying `v1-e39-t16` (lifted when `v1-e39-t28` merged) was about images, so
+it never applied to this change. Do not replace the digest line for this apply: the check refuses a
+plan that changes the image as well, and a new image is [A new image, later](#a-new-image-later)'s
+apply, on its own.
 
 **What the plan should be: `Plan: 1 to add, 2 to change, 1 to destroy.`** The run task definition is
 replaced (a new revision with `memory` `"16384" -> "32768"`, the old one deregistered; the one `must be

@@ -656,13 +656,20 @@ def test_a_rerun_after_a_throttled_landscape_model_stage_asks_only_about_the_car
     assert _data(again)["classification"]["cards_by_method"] == {"ALIAS": 7, "MODEL": 2}
 
 
+OPEN_QUESTIONS_TABLE = (
+    "## Open questions\n\n"
+    "| # | Question | Status | Who resolves it | What it blocks |\n|---|---|---|---|---|\n"
+)
+
+
 def test_live_is_refused_while_the_policy_leaves_question_four_open(
     world: SyntheticRun, model_router: _PlacesEverything, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     checkout = tmp_path / "checkout"
     (checkout / "docs" / "policies").mkdir(parents=True)
     (checkout / "docs" / "policies" / "caselist-data-use.md").write_text(
-        "| 4 | The provider's no-retention terms | **Open** | Operator | E32 gate |\n", encoding="utf-8"
+        OPEN_QUESTIONS_TABLE + "| 4 | The provider's no-retention terms | **Open** | Operator | E32 gate |\n",
+        encoding="utf-8",
     )
     monkeypatch.setattr(landscape_module, "find_repository_root", lambda *_: checkout)
 
@@ -1955,7 +1962,8 @@ def test_evaluate_record_is_refused_while_the_policy_leaves_question_four_open(
     checkout = tmp_path / "checkout"
     (checkout / "docs" / "policies").mkdir(parents=True)
     (checkout / "docs" / "policies" / "caselist-data-use.md").write_text(
-        "| 4 | The provider's no-retention terms | **Open** | Operator | E32 gate |\n", encoding="utf-8"
+        OPEN_QUESTIONS_TABLE + "| 4 | The provider's no-retention terms | **Open** | Operator | E32 gate |\n",
+        encoding="utf-8",
     )
     monkeypatch.setattr(landscape_module, "find_repository_root", lambda *_: checkout)
 
@@ -1964,6 +1972,114 @@ def test_evaluate_record_is_refused_while_the_policy_leaves_question_four_open(
     assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
     assert _error(result)["code"] == "MODEL_USE_NOT_YET_ALLOWED"
     assert asked == []
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e32-t37: the model-use gate reads open question 4 from the policy's open-questions table
+#
+# The real policy numbers a clause register row, a permitted use and an open question 4, in that order.
+# Before this task the gate read the first `| 4 |` row, the clause register's, so it let a recording or
+# a live run through while question 4 was open. `_policy_shaped` copies the real file's tables in order.
+# ------------------------------------------------------------------------------------------------
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _policy_shaped(question_four_status: str) -> str:
+    return (
+        "# Caselist and OpenEv data-use policy\n\n"
+        "## Sources and terms\n\n### Clause register\n\n"
+        "| # | Clause | What it says | What it means for us |\n|---|---|---|---|\n"
+        "| 4 | Acceptable Use — rate limits | No downloading beyond set rate limits | A set rate |\n\n"
+        "## Permitted uses\n\n| # | Use | Conditions |\n|---|---|---|\n"
+        "| 4 | **Parsing, hashing, fingerprinting** of the corpus | Derived artefacts inherit the rules |\n\n"
+        f"{OPEN_QUESTIONS_TABLE}"
+        "| 3 | **OpenEv's distribution terms** | **Accepted as a known gap**, 2026-09-19 | The coach | — |\n"
+        "| 4 | Confirmation that the model provider does not retain or train on our inputs | "
+        f"{question_four_status} | Operator | [E32 gate](#e32--model-classification-of-the-corpus) |\n\n"
+        "## Review and change control\n\n- Reviewed each season.\n"
+    )
+
+
+def _checkout_with_policy(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, policy: str) -> None:
+    checkout = tmp_path / "checkout"
+    (checkout / "docs" / "policies").mkdir(parents=True)
+    (checkout / "docs" / "policies" / "caselist-data-use.md").write_text(policy, encoding="utf-8")
+    monkeypatch.setattr(landscape_module, "find_repository_root", lambda *_: checkout)
+
+
+def test_model_use_gate_refuses_a_live_run_while_the_open_questions_table_leaves_question_four_open(
+    world: SyntheticRun, model_router: _PlacesEverything, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _checkout_with_policy(monkeypatch, tmp_path, _policy_shaped("**Open**"))
+
+    result = landscape(world, "--caselist", CASELIST, "--no-publish", "--model-mode", "live")
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    error = _error(result)
+    assert (error["code"], error["details"]["open_question"]) == ("MODEL_USE_NOT_YET_ALLOWED", 4)
+    assert "still open" in error["message"]
+    assert model_router.calls == []
+    assert not (world.data_dir / "landscape").exists()
+
+
+def test_model_use_gate_refuses_a_recording_while_the_open_questions_table_leaves_question_four_open(
+    world: SyntheticRun, sample_files: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    asked = _stub_evaluation(monkeypatch, _evaluated())
+    _checkout_with_policy(monkeypatch, tmp_path, _policy_shaped("**Open**"))
+
+    result = evaluate(world, sample_files, "--model-mode", "record")
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    assert _error(result)["code"] == "MODEL_USE_NOT_YET_ALLOWED"
+    assert asked == []
+
+
+def test_model_use_gate_allows_a_recording_once_the_open_questions_table_resolves_question_four(
+    world: SyntheticRun, sample_files: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    asked = _stub_evaluation(monkeypatch, _evaluated())
+    _checkout_with_policy(
+        monkeypatch,
+        tmp_path,
+        _policy_shaped("**Resolved** 2026-11-01 (version 1.20), by the coach's decision"),
+    )
+
+    result = evaluate(world, sample_files, "--model-mode", "record")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert asked == [True]
+
+
+def test_model_use_gate_refuses_a_recording_when_the_policy_has_no_open_questions_heading(
+    world: SyntheticRun, sample_files: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    asked = _stub_evaluation(monkeypatch, _evaluated())
+    policy = _policy_shaped("**Resolved** 2026-11-01").replace("## Open questions\n", "## Questions\n")
+    _checkout_with_policy(monkeypatch, tmp_path, policy)
+
+    result = evaluate(world, sample_files, "--model-mode", "record")
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    error = _error(result)
+    assert error["code"] == "MODEL_USE_NOT_YET_ALLOWED"
+    assert "no `## Open questions` heading" in error["message"]
+    assert asked == []
+
+
+def test_model_use_gate_allows_a_recording_under_the_policy_in_this_checkout(
+    world: SyntheticRun, sample_files: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Version 1.20 resolved question 4 (2026-11-01). Reopening it fails this test, as it should."""
+    asked = _stub_evaluation(monkeypatch, _evaluated())
+    assert (REPOSITORY_ROOT / "docs" / "policies" / "caselist-data-use.md").is_file()
+    monkeypatch.setattr(landscape_module, "find_repository_root", lambda *_: REPOSITORY_ROOT)
+
+    result = evaluate(world, sample_files, "--model-mode", "record")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert asked == [True]
 
 
 # ------------------------------------------------------------------------------------------------

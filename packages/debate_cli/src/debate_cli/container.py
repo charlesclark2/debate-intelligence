@@ -174,6 +174,7 @@ from debate_core.application.caselist.removal_service import (
     TakedownAccess,
     TakedownNotConfigured,
 )
+from debate_core.application.caselist.run_home_move import RunHomeMove
 from debate_core.application.caselist.run_lock import (
     RUN_LOCK_KEY,
     BucketRunLock,
@@ -181,7 +182,6 @@ from debate_core.application.caselist.run_lock import (
     HolderKind,
 )
 from debate_core.application.caselist.run_state import RunState
-from debate_core.application.caselist.run_home_move import RunHomeMove
 from debate_core.application.caselist.run_state_restore import RunStateRestore
 from debate_core.application.caselist.run_state_seed import RunStateSeed
 from debate_core.application.caselist.run_state_sources import RestoredSources
@@ -381,6 +381,14 @@ class SettingsNotConfigured(RuntimeError):
 
 def _utc_now() -> datetime:
     return datetime.now(UTC)
+
+
+def _build_named() -> str:
+    """This build, as a lock holder names who wrote it: its tag, or a source checkout's commit."""
+    info = current_build_info()
+    if info.tag:
+        return info.tag
+    return f"source checkout {info.commit[:12]}" if info.commit else "source checkout"
 
 
 def _ecs_task_metadata() -> str:
@@ -1677,7 +1685,7 @@ class ServiceContainer:
             lambda: RunHomeMove(
                 lock=self.bucket_run_lock,
                 environment=self.settings.environment.value,
-                build=current_build_info().tag,
+                build=_build_named(),
             ),
         )
 

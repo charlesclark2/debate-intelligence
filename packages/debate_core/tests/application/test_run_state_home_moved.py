@@ -271,7 +271,9 @@ def test_the_move_does_not_write_over_a_lock_that_changed_after_it_took_it(
         move_in(s3_client, bucket, clock, lock_object=racing).move()
 
     assert current(s3_client, bucket) == taker
-    assert all(body["holder"] is None or body["holder"]["kind"] != "moved" for body in bodies(s3_client, bucket))
+    assert all(
+        body["holder"] is None or body["holder"]["kind"] != "moved" for body in bodies(s3_client, bucket)
+    )
 
 
 def test_the_move_is_refused_while_a_run_holds_the_lock_naming_the_holder_and_writes_nothing(
@@ -362,7 +364,7 @@ def test_after_the_move_every_take_is_refused_naming_the_holder_and_where_the_ru
     assert str(refused.value) == (
         "the weekly run now runs from prod: this bucket's run lock (reports/sync/run-lock.json) is held "
         "for good since 2026-11-04T11:00:05Z by the move of the run's home to prod (`caselist "
-        f"move-run-home`, from a mac with build {BUILD}), so this {environment} command did nothing"
+        f"move-run-home`, from a mac, build {BUILD}), so this {environment} command did nothing"
     )
     assert "caselist move-run-home --release" in str(getattr(refused.value, "hint", ""))
     assert version_ids(s3_client, bucket) == written
@@ -391,7 +393,9 @@ def test_after_the_move_a_local_mode_command_is_refused_naming_the_move(
     assert version_ids(s3_client, bucket) == written
 
 
-def test_a_lock_a_move_does_not_hold_has_no_moved_refusal(s3_client: S3Client, bucket: str, clock: Clock) -> None:
+def test_a_lock_a_move_does_not_hold_has_no_moved_refusal(
+    s3_client: S3Client, bucket: str, clock: Clock
+) -> None:
     lock = runner(s3_client, bucket, clock)
     assert lock.home_moved() is None
     lock.take(command="caselist pull")

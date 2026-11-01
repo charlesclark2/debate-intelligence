@@ -495,7 +495,7 @@ def test_tub_index_prune_execute_after_the_run_home_moved_is_refused_naming_the_
     assert refused["error"]["message"].startswith(
         "the weekly run now runs from prod: this bucket's run lock (reports/sync/run-lock.json) is held for "
         "good since 2026-12-04T15:00:00Z by the move of the run's home to prod (`caselist move-run-home`, "
-        "from a mac with build v1.1.0-dev.300)"
+        "from a mac, build v1.1.0-dev.300)"
     )
     assert three_published.listing() == before
 

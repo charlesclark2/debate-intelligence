@@ -48,6 +48,13 @@ once exactly one succeeds.
 6. **Taking over an expired lease** is automatic, so that one task that died does not stop every
    later week. The new holder records `took_over_from`, and :attr:`TakenLock.took_over` says so in
    words for the run's details and its notification.
+7. **Held for good** (ADR-0020 (7) step 3, `v1-e40-t11`). When the run's home moves to prod, dev's
+   lock is rewritten by `caselist move-run-home`, under the lock and with `If-Match`, as held by a
+   holder of kind `moved` naming `home_environment: prod`, with no lease
+   (:meth:`BucketRunLock.hold_for_good`). It never expires, and every take of it is
+   :class:`RunHomeMoved`, which says the weekly run now runs from prod; so are local mode's check, the
+   seed's plan and the backfile import's (:meth:`BucketRunLock.home_moved`). Only
+   :meth:`BucketRunLock.release_home_move`, again with `If-Match`, ends it.
 
 The local `flock` (:class:`~debate_core.application.caselist_sync.RunLock`) stays as well, for two
 runs on one machine.
@@ -202,9 +209,9 @@ class LockHolder:
         return f"{self.kind} run {self.run_id} (`{self.command}`)"
 
     def written_by(self) -> str:
-        """Who wrote a moved holder: `from a mac with build v1.1.0-dev.262`, as far as it says."""
+        """Who wrote a moved holder: `from a mac, build v1.1.0-dev.262`, as far as it says."""
         runner = f"from a {self.by}" if self.by else "from an unnamed runner"
-        return f"{runner} with build {self.build}" if self.build else runner
+        return f"{runner}, build {self.build}" if self.build else runner
 
 
 @dataclass(frozen=True, slots=True)
@@ -222,7 +229,9 @@ class LockBody:
     @property
     def moved(self) -> bool:
         """Whether the lock is held for good by the move of the run's home (ADR-0020 (7), `v1-e40-t11`)."""
-        return self.state is LockState.HELD and self.holder is not None and self.holder.kind == HolderKind.MOVED
+        return (
+            self.state is LockState.HELD and self.holder is not None and self.holder.kind == HolderKind.MOVED
+        )
 
     def as_bytes(self) -> bytes:
         body = {
@@ -580,21 +589,15 @@ class BucketRunLock:
     def take(self, *, command: str, run_id: str | None = None) -> TakenLock:
         """Take the lease for `command`, taking over an expired one. See the module docstring, rule 2.
 
-        Raises :class:`RunStateNotSeeded`, :class:`RunLockUnreadable`, :class:`RunLockWrongHome` or
-        :class:`RunLockHeld`, each before anything is written.
+        Raises :class:`RunStateNotSeeded`, :class:`RunLockUnreadable`, :class:`RunHomeMoved`,
+        :class:`RunLockWrongHome` or :class:`RunLockHeld`, each before anything is written.
         """
         found = self._store.read()
         if found is None:
             raise RunStateNotSeeded
         current = LockBody.from_bytes(found.body)
-        if current.home_environment != self._environment:
-            raise RunLockWrongHome(home=current.home_environment, environment=self._environment)
         now = self._clock()
-        previous: LockHolder | None = None
-        if current.state is LockState.HELD:
-            if not self._expired(current, now):
-                raise RunLockHeld(holder=current.holder, lease_expires_at=current.lease_expires_at)
-            previous = current.holder
+        previous = self._refuse_unless_takeable(current, now)
         holder = self._holder(command, run_id, now)
         body = LockBody(
             home_environment=self._environment,
@@ -653,11 +656,25 @@ class BucketRunLock:
         found = self._store.read()
         if found is None:
             raise RunStateNotSeeded
-        return LockBody.from_bytes(found.body)
+        current = LockBody.from_bytes(found.body)
+        self._refuse_unless_takeable(current, self._clock())
+        return current
 
     def home_moved(self) -> RunHomeMoved | None:
-        """The refusal a lock held by the move of the run's home gives this runner, or `None`."""
-        return None
+        """The refusal a lock held by the move of the run's home gives this runner, or `None`.
+
+        For the checks that read the lock without taking it: local mode's (ruling 3(a)), the seed's
+        plan and the backfile import's. No lock, or one this build cannot read, is `None`: those have
+        refusals of their own.
+        """
+        found = self._store.read()
+        if found is None:
+            return None
+        try:
+            current = LockBody.from_bytes(found.body)
+        except RunLockUnreadable:
+            return None
+        return RunHomeMoved(body=current, environment=self._environment) if current.moved else None
 
     def moved_body(self, *, home: str, command: str, build: str | None) -> LockBody:
         """The lock held for good by the move of the run's home to `home`, written now by this runner."""
@@ -677,23 +694,73 @@ class BucketRunLock:
         )
 
     def hold_for_good(self, *, home: str, command: str, build: str | None) -> LockBody:
-        """Rewrite the lock this runner holds as held for good by the move of the run's home."""
-        return self.moved_body(home=home, command=command, build=build)
+        """Rewrite the lock this runner holds as held for good by the move of the run's home.
+
+        With `If-Match` on the version this runner last wrote, after its renewals have stopped, so the
+        holder is written under the lock and over nothing but this runner's own lease. From then on this
+        runner holds nothing, and :meth:`release` writes nothing. Returns the body written.
+
+        Raises :class:`RunLockNotHeld` unless this runner holds the lease, and :class:`RunLockLost`
+        when it was taken over before the write. A store that did not answer leaves the lease this
+        runner's, for :meth:`release` to free.
+        """
+        with self._condition:
+            self._refuse_unless_held()
+            while self._renewal_in_flight:
+                self._condition.wait()
+            etag = self._etag
+            # No write of this runner's goes out after this one: the fence refuses from here.
+            self._phase = _Phase.RELEASED
+        assert etag is not None
+        self._stop_renewing.set()
+        if self._renewer is not None and self._renewer is not threading.current_thread():
+            self._renewer.join(timeout=5)
+        body = self.moved_body(home=home, command=command, build=build)
+        try:
+            self._store.replace(body.as_bytes(), etag=etag)
+        except LockObjectChanged:
+            with self._condition:
+                self._phase = _Phase.LOST
+                self._condition.notify_all()
+            raise RunLockLost from None
+        except DomainError:
+            with self._condition:
+                self._phase = _Phase.HELD
+            raise
+        logger.warning("run lock: held for good by %s", body.holder.described() if body.holder else "a move")
+        return body
 
     def check_home_move(self) -> LockBody:
-        """The release's dry run: the lock read, refused unless a move holds it. Nothing written."""
-        found = self._store.read()
-        if found is None:
-            raise RunStateNotSeeded
-        return LockBody.from_bytes(found.body)
+        """The release's dry run: the lock read, refused unless a move holds it. Nothing written.
+
+        Raises :class:`RunStateNotSeeded`, :class:`RunLockUnreadable` or :class:`RunHomeNotMoved`.
+        """
+        return self._moved_lock()[0]
 
     def release_home_move(self) -> tuple[LockBody, LockBody]:
         """Give the lock back to this environment, free: the undoing of a move.
 
-        Returns the lock as read, and what was written over it.
+        Only a lock a move holds, and only with `If-Match` on the version read, so a lock that changed
+        since is never written over
+        (:class:`~debate_core.application.ports.run_lock.LockObjectChanged`). Returns the lock as read,
+        and what was written over it. Raises what :meth:`check_home_move` raises, before writing.
         """
-        found = self.check_home_move()
-        return found, LockBody(home_environment=self._environment, state=LockState.FREE, renewed_at=self._clock())
+        found, etag = self._moved_lock()
+        free = LockBody(home_environment=self._environment, state=LockState.FREE, renewed_at=self._clock())
+        self._store.replace(free.as_bytes(), etag=etag)
+        logger.warning(
+            "run lock: the move of the run's home was released; %s is its home again", self._environment
+        )
+        return found, free
+
+    def _moved_lock(self) -> tuple[LockBody, str]:
+        found = self._store.read()
+        if found is None:
+            raise RunStateNotSeeded
+        current = LockBody.from_bytes(found.body)
+        if not current.moved:
+            raise RunHomeNotMoved(current)
+        return current, found.etag
 
     def start_renewing(self) -> None:
         """Renew every :data:`RENEW_EVERY` in a daemon thread until :meth:`release`.
@@ -792,7 +859,29 @@ class BucketRunLock:
     # The pieces
     # ------------------------------------------------------------------------------------------
 
+    def _refuse_unless_takeable(self, current: LockBody, now: datetime) -> LockHolder | None:
+        """Take's rules (rule 2): raise its refusals, or return the holder of an expired lease taken over.
+
+        A lock held for good by the move of the run's home is :class:`RunHomeMoved` whichever rule
+        meets it first: the home, for this environment's own runs, or the lease, which never expires,
+        for a runner of the new home pointed at this bucket.
+        """
+        if current.home_environment != self._environment:
+            if current.moved:
+                raise RunHomeMoved(body=current, environment=self._environment)
+            raise RunLockWrongHome(home=current.home_environment, environment=self._environment)
+        if current.state is not LockState.HELD:
+            return None
+        if not self._expired(current, now):
+            if current.moved:
+                raise RunHomeMoved(body=current, environment=self._environment)
+            raise RunLockHeld(holder=current.holder, lease_expires_at=current.lease_expires_at)
+        return current.holder
+
     def _expired(self, body: LockBody, now: datetime) -> bool:
+        if body.moved:
+            # Held for good (`v1-e40-t11`): only the release, after the coach confirms, ends it.
+            return False
         if body.lease_expires_at is None:
             return True
         return now > body.lease_expires_at + self._skew_margin

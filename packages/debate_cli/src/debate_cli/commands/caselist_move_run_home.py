@@ -44,7 +44,8 @@ def move_run_home(
     release: Annotated[
         bool,
         typer.Option(
-            "--release", help="Undo a move: the lock back to this environment, free. Only after the coach confirms."
+            "--release",
+            help="Undo a move: the lock back to this environment, free. Only after the coach confirms.",
         ),
     ] = False,
 ) -> None:
@@ -73,7 +74,10 @@ def _guard(settings: Settings) -> CommandFailure | None:
     if settings.caselist.run_state is not RunStateMode.BUCKET:
         return CommandFailure(
             code="RUN_STATE_IS_LOCAL",
-            message="this machine keeps its run state locally (caselist.run_state = local): the lock is the bucket's",
+            message=(
+                "this machine keeps its run state locally (caselist.run_state = local), and the lock is "
+                "the bucket's"
+            ),
             exit_code=ExitCode.DOMAIN_FAILURE,
             details={"environment": settings.environment.value},
             hint="Use a build whose profile sets caselist.run_state = bucket, as the cutover runbook says.",

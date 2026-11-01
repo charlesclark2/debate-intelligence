@@ -28,7 +28,7 @@ import typer
 from tests.fixtures.parse_pipeline.build_parse_world import WEEKS
 
 from debate_cli.app import create_app
-from debate_cli.build_info import current_build_info
+from debate_cli.build_info import BuildInfo
 from debate_cli.exit_codes import ExitCode
 from debate_core.application.caselist.bucket_run import BucketRun
 from debate_core.application.caselist.run_lock import RUN_LOCK_KEY
@@ -461,7 +461,10 @@ def test_a_run_whose_lease_is_taken_ends_run_lock_lost_even_with_nothing_left_to
 # The run's home moved to prod (`v1-e40-t11`, ADR-0020 (7) step 3)
 # ------------------------------------------------------------------------------------------------
 
-MOVED: Final = "the weekly run now runs from prod: this bucket's run lock (reports/sync/run-lock.json) is held for good since "
+MOVED: Final = (
+    "the weekly run now runs from prod: this bucket's run lock (reports/sync/run-lock.json) is held "
+    "for good since "
+)
 
 
 def the_run_home_moved(world: World) -> dict[str, Any]:
@@ -474,6 +477,10 @@ def the_run_home_moved(world: World) -> dict[str, Any]:
 
 def test_move_run_home_plans_then_holds_the_lock_for_good_then_releases_it(world: World) -> None:
     seeded_with_two_weeks(world)
+    stamped = BuildInfo(
+        version="1.1.0", channel="dev", commit="0" * 40, tag="v1.1.0-dev.999", built_at=None, run_id=None
+    )
+    world.monkeypatch.setattr("debate_cli.container.current_build_info", lambda: stamped)
     now = at(world.clock.now)
     expected = {
         "format_version": 1,
@@ -485,7 +492,7 @@ def test_move_run_home_plans_then_holds_the_lock_for_good_then_releases_it(world
             "task": None,
             "command": "caselist move-run-home",
             "by": "mac",
-            "build": current_build_info().tag,
+            "build": "v1.1.0-dev.999",
         },
         "acquired_at": now,
         "renewed_at": None,
@@ -498,7 +505,10 @@ def test_move_run_home_plans_then_holds_the_lock_for_good_then_releases_it(world
 
     assert planned["exit_code"] == ExitCode.OK, planned
     assert (planned["data"]["applied"], planned["data"]["release"]) == (False, False)
-    assert (planned["data"]["found"]["state"], planned["data"]["found"]["home_environment"]) == ("free", "dev")
+    assert (planned["data"]["found"]["state"], planned["data"]["found"]["home_environment"]) == (
+        "free",
+        "dev",
+    )
     assert planned["data"]["written"] == expected
     assert world.everything() == before, "the dry run writes nothing"
 
@@ -542,7 +552,10 @@ def test_move_run_home_is_refused_while_a_run_holds_the_lock_naming_it(world: Wo
 
         assert refused["exit_code"] == ExitCode.DOMAIN_FAILURE, refused
         assert refused["error"]["code"] == "RUN_LOCK_HELD"
-        assert f"mac run {OTHER_RUN} (`caselist pull`) holds the bucket's run lock" in refused["error"]["message"]
+        assert (
+            f"mac run {OTHER_RUN} (`caselist pull`) holds the bucket's run lock"
+            in refused["error"]["message"]
+        )
     assert world.everything() == before
 
 
@@ -571,7 +584,7 @@ def test_each_bucket_writing_command_is_refused_after_the_run_home_moved_naming_
     assert refused["exit_code"] == ExitCode.DOMAIN_FAILURE, refused
     assert refused["error"]["code"] == "RUN_HOME_MOVED", refused["error"]
     assert refused["error"]["message"].startswith(MOVED), refused["error"]["message"]
-    assert "(`caselist move-run-home`, from a mac with build " in refused["error"]["message"]
+    assert "(`caselist move-run-home`, from a mac, build " in refused["error"]["message"]
     assert "caselist move-run-home --release" in refused["error"]["hint"]
     assert world.everything() == before
 

@@ -41,9 +41,22 @@ spec:
     report. Since camp and year are in every format, the link shows on the format 2 index as
     soon as dev's function carries this task. Remove the hold that `caselist-cloud-run.md` puts
     on a run image carrying v1-e39-t16 until this task merges.
+
+    (PM amendment 2026-10-31, from the count.) The count found the stored camp is not OpenEv's
+    address word: 14 of the 15 stored values are `camp_aliases.yaml`'s canonical names and the
+    15th is `UNKNOWN`, and of the three confirmed words only UTNIF is stored. So each canonical
+    camp in `camp_aliases.yaml` gets an optional OpenEv word, filled only with the words the
+    operator confirms by opening the camp's page (UTNIF already is). The link maps the stored
+    camp through the table and takes the year: a camp with no word, a camp that merges spellings
+    OpenEv files as two camps, and `UNKNOWN` whatever the table says get no link. A year is in
+    OpenEv's archive from 2013 to the current season plus one, by the repository's season rule
+    (1 August), which moves into the domain (`debate_core/domain/season.py`, say) with
+    `caselist_backfile.py` importing it unchanged; `debate_cli` joins the packages for that move.
+    The report says how many of the 102 camp files with cards get a link once the table is
+    filled. No index format change, and the stored OpenEv id stays as it is. ac1 stands as done.
   priority: 2
   constraints:
-    packages: [debate_core.domain, debate_core.application, packages/debate_core/tests, debate_api, packages/debate_api/tests, docs/data, docs/runbooks, tests/docs]
+    packages: [debate_core.domain, debate_core.application, packages/debate_core/tests, debate_api, packages/debate_api/tests, debate_cli, docs/data, docs/runbooks, tests/docs]
     forbidden:
       - A link built from a file title, the event, the OpenEv id or anything the request carries
       - A school, student or lab name in the report or in a link
@@ -60,8 +73,9 @@ spec:
         named beyond the three confirmed.
     - id: ac2
       description: >-
-        A camp card whose stored camp is one address word and whose year is in OpenEv's
-        archive links to `https://opencaselist.com/openev/<year>/<camp>` in a new tab with
+        A camp card whose stored camp has an OpenEv word in `camp_aliases.yaml` and whose
+        year is in OpenEv's archive links to `https://opencaselist.com/openev/<year>/<word>`,
+        the camp through the table's openev word and the year, in a new tab with
         no opener and no referrer, with a label that says it opens the camp's page; any
         other camp card has none; the id-based address is gone; a disclosed card is
         unchanged; by tests shown failing first.

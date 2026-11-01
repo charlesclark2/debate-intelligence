@@ -224,9 +224,43 @@ files). I diffed the spec against `origin/dev` before the report, and nothing di
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-31
 
 **Notes:**
+
+The coach's answer B, built as asked. On hspolicy26 the five advantage blocks are back in their CP
+drafts, marked, and nothing else changed.
+1. **ac1 passes.**
+   * Red against a skeleton: 7 failed at assertions. You turned three `KeyError` failures into
+     assertion failures before quoting the run. t11's tests, the byte-for-byte test among them, passed
+     unchanged.
+   * Green: the node criterion passes (62).
+   * Thirteen mutants caught at assertions, including both presenter mutants and 5c (zero instead of
+     null for a non-CP draft).
+2. **The count is t11's method exactly.** It went through the pure functions with neither cache, and
+   `find -newer` printed 0 after each run.
+   * Left out: 15 blocks (16 cards) → 10 (10).
+   * Advantage-placed blocks kept and marked: 5 (6 cards). None was placed under an aff.
+   * Marked blocks: 1 → 6. None of the five is a draft's first block, so none collides with the CP
+     text slot.
+3. **Decisions accepted:**
+   * the placing position's kind as the only test;
+   * kept blocks left where t11's ordering puts them;
+   * one comment per block;
+   * `affirmative_side_kept` counted after resolution, beside t11's count;
+   * the override-placed aff block in the test world, so that mutant 3 can be seen at all, which is
+     careful.
+4. **Deviations accepted:** the node command's form, and no smoke change. v1-e33-t15 adds the CP draft
+   smoke check.
+5. **Question 1: B.** Aff-side blocks get their own comment, e.g. "Check this block against the
+   affirmative's plan: its heading names an affirmative or one of its advantages." t11's plank comment
+   stays for plank-marked blocks. A block both rules mark gets one comment, with the plank reason. The
+   PM's next batch adds this to v1-e33-t14, which touches the same rule.
+6. **Closing checks:** the affected set (95 files) reached 62% at its limit with nothing failing, and
+   is left to the PR's `ci` under agreement 10. The changed areas, every file naming the service or
+   the presenter, the docs tests and the always-run list (688), ruff, pyright, lint-imports, thin
+   handlers, the command blocks and the specs are clean.
+7. **Merge:** a plain `scripts/task pr` once `ci` is green. Then v1-e33-t14.

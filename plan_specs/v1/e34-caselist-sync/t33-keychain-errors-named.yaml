@@ -63,7 +63,7 @@ spec:
         A scheduled run that fails on one of the named errors records the named code, and its
         failure notice gives the hint rather than "a bug in debate-research", by test.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

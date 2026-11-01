@@ -48,8 +48,12 @@ aws = [
 # same reason boto3 is: the domain and application layers never import it (the import-linter
 # contract in the workspace root enforces that), and only debate_core.integrations.docx_parser
 # needs it: `uv sync --all-packages --extra docx`, or `pip install debate-core[docx]`.
+# python-docx (v1-e06-t06, the PM's amendment from v1-e06-t04's follow-up 1): the card renderer,
+# debate_core.evidence.docx_renderer, writes each cut card's .docx with it. Built on lxml, and kept
+# out of the domain and application layers by the same contract.
 docx = [
     "lxml>=5.3",
+    "python-docx>=1.1",
 ]
 
 # The HTTP client every adapter that talks HTTP uses: the article fetcher

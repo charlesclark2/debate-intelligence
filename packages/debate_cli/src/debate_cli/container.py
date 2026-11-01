@@ -15,7 +15,9 @@ runs (`v1-e29-t05-evidence-sync-cli`); :meth:`ServiceContainer.caselist_import`,
 which `debate-research caselist auth` runs (`v1-e34-t01-caselist-api-client`);
 and :meth:`ServiceContainer.verify_manifest`, which `debate-research verify` runs
 (`v1-e03-t06-verify-command`); and :meth:`ServiceContainer.article_fetch`, which
-`debate-research fetch` runs (`v1-e04-t06-fetch-command`); and :meth:`ServiceContainer.caselist_sync`, which
+`debate-research fetch` runs (`v1-e04-t06-fetch-command`), and :meth:`ServiceContainer.card_cutting`,
+which `debate-research cut` runs after it (`v1-e06-t06-cut-command`); and
+:meth:`ServiceContainer.caselist_sync`, which
 `debate-research caselist pull` and the weekly launchd agent run (`v1-e34-t02-scheduled-sync`), recorded by
 :meth:`ServiceContainer.caselist_sync_monitor` and read back by
 :meth:`ServiceContainer.caselist_sync_history` (`v1-e34-t03-sync-monitoring`); and

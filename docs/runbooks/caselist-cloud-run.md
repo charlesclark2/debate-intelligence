@@ -1227,6 +1227,42 @@ is [caselist-cutover.md](caselist-cutover.md)'s, and falling back to the Mac is 
 run on an image built before `v1-e40-t28` still names `debate-research caselist pull` as its fix;
 the rule holds for that email too.
 
+## A run refused for an expired login
+
+When OpenCaselist refuses a cloud run with 401 or 403, the run stops on `CASELIST_AUTH_EXPIRED` and
+the alert email `caselist pull stopped: OpenCaselist login expired` has this fix line since
+`v1-e40-t33`:
+
+> Fix: the next Wednesday 03:00 login renews the caselist_token, and the run after it takes up what this run did not finish, from the run state saved in the bucket; a backfile import refused for it starts again after Thursday 00:00 (caselist-cloud-run.md, "A run refused for an expired login"); never a login by hand, which would be a second login
+
+Its title and message, `Run <id> (dev) was refused by OpenCaselist and fetched nothing more.`, are
+the ones a run on the Mac sends, and a run on the Mac still names `debate-research caselist auth
+login` as its fix.
+
+**What it means.** The cloud run's caselist_token is the one the login task writes to Secrets Manager
+every Wednesday at 03:00, three hours before the run. A token that stopped working between two of
+those logins is renewed by the next one, and that Wednesday's run restores the bucket's run state and
+does what this one did not, as in [A failed or stopped run](#a-failed-or-stopped-run). A backfile
+import refused for it says so in its log (the `"code"` line in [Backfile imports](#backfile-imports))
+and starts again after Thursday 00:00, once the no-import window has closed.
+
+**What to do: usually nothing.** Two cases go to the PM with the run's id:
+
+* the Wednesday login failed as well: its own email, `Weekly caselist login failed`, came that morning.
+  Follow that email's fix, which [caselist-run-alerts.md](caselist-run-alerts.md#when-an-alert-arrives)
+  explains; it replaces the login that failed rather than adding a second one;
+* the refused run is a Wednesday run whose login that morning sent no failure email. The token was
+  hours old, and a refusal straight after a login may mean access was suspended
+  ([caselist-data-use.md](../policies/caselist-data-use.md), clause 10). Do not log in again.
+
+**Never run `debate-research caselist auth login` on the operator's Mac** for a cloud run's refusal.
+It is a second login that week for the same account, which may end the token the other login holds
+([Step 3](#step-3--does-a-new-login-end-the-macs-token-before-apply-b)); and without
+`--token-backend secretsmanager` it writes only the Mac's own token, which the cloud run never reads.
+The policy's clause 10 says a `401` or `403` is escalated, never worked around: this email is the
+escalation. A run on an image built before `v1-e40-t33` still names that command as its fix, and the
+run's own log still says to run it (the error's message is the Mac's); the rule holds for both.
+
 ## A backlog growing
 
 When the archives a cloud run's daily download cap deferred have grown for two runs in a row, the

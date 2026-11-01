@@ -52,7 +52,7 @@ spec:
         its own code and keeps those naming only other caselists; each form refuses the
         other's code; the removal runbook's paragraph runs it; by tests shown failing first.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

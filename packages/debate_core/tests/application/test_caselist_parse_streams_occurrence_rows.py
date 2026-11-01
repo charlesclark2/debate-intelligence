@@ -92,7 +92,7 @@ from debate_core.evidence.abbreviated_links import (
     matching_full_cards,
     short_cite_key,
 )
-from debate_core.evidence.fingerprints import FINGERPRINT_VERSION, card_fingerprint
+from debate_core.evidence.fingerprints import FINGERPRINT_VERSION, card_fingerprint, fingerprint_text
 from debate_core.evidence.near_duplicates import (
     NearDuplicateThresholds,
     cluster_near_duplicates,
@@ -179,12 +179,22 @@ def body(seed: int, words: int = 60) -> str:
     return " ".join(chosen.choice(VOCABULARY) for _ in range(words)) + "."
 
 
-def near_copy(text: str) -> str:
+def near_copy(text: str, replacement: str = "gallimaufry") -> str:
     """`text` with its middle word changed: the near duplicate a copy with a typo is."""
     words = text.split(" ")
     middle = len(words) // 2
-    words[middle] = "gallimaufry" if words[middle] != "gallimaufry" else "hobbledehoy"
+    words[middle] = replacement if words[middle] != replacement else "hobbledehoy"
     return " ".join(words)
+
+
+def near_copy_naming_its_cluster(text: str) -> str:
+    """A near copy of `text` whose fingerprint sorts before `text`'s: a cluster is named for its
+    smallest fingerprint, so in one with `text` this copy names it."""
+    return next(
+        variant
+        for word in VOCABULARY
+        if fingerprint_text(variant := near_copy(text, word)) < fingerprint_text(text)
+    )
 
 
 def cut(text: str, opening: int = 6, closing: int = 6) -> str:
@@ -592,6 +602,16 @@ def lines(content: bytes) -> list[dict[str, object]]:
     return [json.loads(line) for line in content.decode("utf-8").splitlines()]
 
 
+def cluster_of(world: SyntheticStore, fingerprint: str) -> object:
+    """The one cluster the table's rows with `fingerprint` are in."""
+    (cluster,) = {
+        row["cluster_id"]
+        for row in lines(world.written()[OCCURRENCES_NAME])
+        if row["exact_fingerprint"] == fingerprint
+    }
+    return cluster
+
+
 # ------------------------------------------------------------------------------------------------
 # The stores
 # ------------------------------------------------------------------------------------------------
@@ -640,8 +660,11 @@ def caselist_sources(world: SyntheticStore) -> dict[str, str]:
             (Card(3, SHARED), Card(7, body(5))),
             at=[(WEEKS[1], "Wimble/Neg-Round5.docx"), (WEEKS[1], "Sorrel/Neg-Round6.docx")],
         ),
+        # Its near copy names the cluster its other card shares with alpha and gamma, until it is stopped.
         "stopped_later": world.source(
-            "stopped_later", (Card(1, SECOND), Card(2, body(6))), at=[(WEEKS[3], "Brindle/Aff-Round2.docx")]
+            "stopped_later",
+            (Card(1, SECOND), Card(2, body(6)), Card(4, near_copy_naming_its_cluster(SECOND))),
+            at=[(WEEKS[3], "Brindle/Aff-Round2.docx")],
         ),
         "failed": world.source(
             "failed", ParseFailureReason.MALFORMED_PACKAGE, at=[(WEEKS[0], "Quorl/Neg-Round3.docx")]
@@ -685,6 +708,7 @@ async def test_a_stopped_disclosure_and_a_stopped_source_are_written_as_before(t
     world = SyntheticStore(tmp_path / "evidence")
     sources = caselist_sources(world)
     await world.parse()
+    named_before = cluster_of(world, fingerprint_text(SECOND))
     await world.stop(sources["two_paths"], disclosure=disclosure_digest(CASELIST, "Wimble/Neg-Round5.docx"))
     await world.stop(sources["stopped_later"])
     plan = await world.parse()
@@ -696,6 +720,10 @@ async def test_a_stopped_disclosure_and_a_stopped_source_are_written_as_before(t
         disclosure_digest(CASELIST, "Sorrel/Neg-Round6.docx")
     }
     assert sources["stopped_later"] not in {row["source_sha256"] for row in rows}
+    # The stopped source's near copy named the cluster its card shared with two live sources: their
+    # rows' cluster is now named for a card that is still disclosed.
+    assert named_before == fingerprint_text(near_copy_naming_its_cluster(SECOND))
+    assert cluster_of(world, fingerprint_text(SECOND)) == fingerprint_text(SECOND)
     assert sources["stopped_later"] not in {row["source_sha256"] for row in lines(written[INDEX_NAME])}
 
 

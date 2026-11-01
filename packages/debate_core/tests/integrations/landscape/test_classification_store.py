@@ -18,6 +18,8 @@ from debate_core.arguments.landscape.review_queue import ReviewRow
 from debate_core.domain.landscape_classification import ClassificationResult
 from debate_core.integrations.landscape.classification_store import (
     LocalClassificationStore,
+    LocalQueueOrderModelStore,
+    queue_order_model_path,
     review_queue_path,
 )
 
@@ -102,3 +104,36 @@ async def test_the_review_queue_is_written_under_the_data_directory(tmp_path: Pa
         "normalized_heading,answer,documents,teams,aff_teams,neg_teams,cards,candidate_positions,decision",
         "fed key,false,2,2,1,1,3,states-cp;spending-da,",
     ]
+
+
+@pytest.mark.anyio
+async def test_a_queue_the_proxy_ordered_has_its_suggestion_column_before_the_decision(
+    tmp_path: Path,
+) -> None:
+    """`v1-e32-t26`: the suggestion is its own column, blank below the threshold; `decision` stays empty."""
+    rows = [
+        ReviewRow(
+            "debt group", False, 2, 2, 0, 2, 2, (), proxy_confidence=0.8, suggested_position="spending-da"
+        ),
+        ReviewRow("fed key", False, 6, 6, 0, 6, 6, ("states-cp",), proxy_confidence=0.3),
+    ]
+    location = await LocalClassificationStore(tmp_path).write_review_queue(
+        "hspolicy99", "policy-sample-topic", rows, suggestions=True
+    )
+    assert Path(location).read_text(encoding="utf-8").splitlines() == [
+        "normalized_heading,answer,documents,teams,aff_teams,neg_teams,cards,candidate_positions,"
+        "suggested_position,decision",
+        "debt group,false,2,2,0,2,2,,spending-da,",
+        "fed key,false,6,6,0,6,6,states-cp,,",
+    ]
+
+
+@pytest.mark.anyio
+async def test_the_review_order_model_is_kept_beside_t21s_feature_table(tmp_path: Path) -> None:
+    store = LocalQueueOrderModelStore(tmp_path)
+    assert await store.read("hspolicy99", "policy-sample-topic") is None
+    location = await store.write("hspolicy99", "policy-sample-topic", "{}\n")
+    assert location == store.location("hspolicy99", "policy-sample-topic")
+    assert Path(location) == queue_order_model_path(tmp_path, "hspolicy99", "policy-sample-topic")
+    assert Path(location).parent == tmp_path / "landscape" / "local-classifier" / "hspolicy99"
+    assert await store.read("hspolicy99", "policy-sample-topic") == "{}\n"

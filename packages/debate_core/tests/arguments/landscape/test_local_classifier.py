@@ -330,6 +330,7 @@ def test_team_vocabulary_counts_distinct_teams_and_no_unknown_team() -> None:
 def test_the_classifier_reads_no_network_model_or_download() -> None:
     allowed = {
         "__future__",
+        "array",
         "collections",
         "collections.abc",
         "csv",

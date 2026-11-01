@@ -88,6 +88,11 @@ class ClassificationStore(Protocol):
         """Make `entries` the caselist's whole cache, atomically."""
         ...
 
-    async def write_review_queue(self, caselist: str, topic_id: str, rows: Sequence[ReviewRow]) -> str:
-        """Write `caselist`'s queue CSV on `topic_id`, replacing the last one; return where it went."""
+    async def write_review_queue(
+        self, caselist: str, topic_id: str, rows: Sequence[ReviewRow], *, suggestions: bool = False
+    ) -> str:
+        """Write `caselist`'s queue CSV on `topic_id`, replacing the last one; return where it went.
+
+        `suggestions` writes the local proxy model's suggestion column, for a queue it ordered (`v1-e32-t26`).
+        """
         ...

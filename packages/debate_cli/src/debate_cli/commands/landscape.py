@@ -761,6 +761,7 @@ def run_summary(
             "rows": queue.rows,
             "items": queue.queued_items,
             "location": result.classification.review_queue_location,
+            "order": result.classification.review_queue_order,
         },
         "text_caches": {
             "plan_texts": _text_cache(result.plan_texts),
@@ -896,6 +897,7 @@ def _display(result: LandscapeRunResult, settings: Settings) -> str:
         *_would_ask_lines(result),
         f"Review queue: {result.classification.review_queue.counts.rows} rows "
         f"({result.classification.review_queue_location}).",
+        *([result.classification.review_queue_order] if result.classification.review_queue_order else []),
         _trends_line(result.trends),
         f"School view: {result.schools.schools} school(s), {result.schools.teams} team code(s), "
         f"{len(result.schools.rows)} row(s).",

@@ -54,16 +54,22 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+from array import array
 from collections import Counter, defaultdict
 from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from itertools import pairwise
 from typing import Any, Final, TextIO, cast
 
 from sklearn.feature_extraction.text import TfidfVectorizer  # pyright: ignore[reportMissingTypeStubs]
 from sklearn.linear_model import LogisticRegression  # pyright: ignore[reportMissingTypeStubs]
 
 from debate_core.arguments.landscape.matcher import PositionMatcher, read_items
+from debate_core.arguments.landscape.queue_order import (
+    Prediction,
+    QueueOrderModel,
+    card_features,
+    card_tokens,
+)
 from debate_core.arguments.landscape.review_queue import DEFAULT_REVIEW_THRESHOLD, needs_review
 from debate_core.arguments.landscape.seeding import SeedSource
 from debate_core.arguments.landscape.source_headings import CaselistNames
@@ -253,15 +259,15 @@ def feature_rows(
             continue
         result = matcher.place(item)
         placement = _placement(result, review_threshold)
-        headings = tuple(heading.text for heading in item.headings)
+        features = card_features(item, own, caselist, matcher, codes)
         rows.append(
             FeatureRow(
                 item_id=item.item_id,
                 source_sha256=source.sha256,
                 teams=teams,
-                headings=headings,
-                placing=tuple(matcher.placing_index([text]) is not None for text in headings),
-                tag=card_tag(item.tag, own, caselist, codes),
+                headings=features.headings,
+                placing=features.placing,
+                tag=features.tag,
                 placement=placement,
                 label=result.position_id if placement in LABEL_METHODS else None,
             )
@@ -309,17 +315,7 @@ def feature_tokens(row: FeatureRow, *, without_placing_headings: bool = False) -
     `without_placing_headings`, a heading that places a card on its own is left out, as no heading over
     an unplaced card does.
     """
-    found: list[str] = []
-    for text, places in zip(row.headings, row.placing, strict=True):
-        if not (without_placing_headings and places):
-            found += _grams("h", text.split())
-    if row.tag:
-        found += _grams("t", row.tag.split())
-    return tuple(found)
-
-
-def _grams(prefix: str, words: Sequence[str]) -> list[str]:
-    return [f"{prefix}:{word}" for word in words] + [f"{prefix}:{one} {two}" for one, two in pairwise(words)]
+    return card_tokens(row.headings, row.placing, row.tag, without_placing_headings=without_placing_headings)
 
 
 def team_vocabulary(
@@ -345,13 +341,6 @@ def team_vocabulary(
 def _as_given(tokens: Sequence[str]) -> Sequence[str]:
     """The vectorizer's analyzer: the tokens are already made by :func:`feature_tokens`."""
     return tokens
-
-
-@dataclass(frozen=True, slots=True)
-class Prediction:
-    position_id: str
-    confidence: float
-    """The model's probability for that position: the largest it gives."""
 
 
 class LocalClassifier:
@@ -420,6 +409,24 @@ class LocalClassifier:
             vocabulary=vocabulary,
             without_placing_headings=without_placing_headings,
             trained_cards=sum(folded.values()),
+        )
+
+    def queue_order_model(self, suggest_from: float | None) -> QueueOrderModel:
+        """This model's weights, to order the review queue without scikit-learn (`v1-e32-t26`).
+
+        `suggest_from` is the confidence from which its held-out precision stays at the target, as
+        :func:`compare` measured it for this model.
+        """
+        idf: Any = self._vectorizer.idf_
+        coefficients: Any = self._model.coef_
+        return QueueOrderModel(
+            classes=self.classes,
+            vocabulary=self.vocabulary,
+            idf=array("d", (float(one) for one in idf)),
+            coefficients=array("d", (float(one) for one in coefficients.T.ravel())),
+            intercepts=tuple(float(one) for one in cast(Iterable[object], self._model.intercept_)),  # pyright: ignore[reportArgumentType]
+            suggest_from=suggest_from,
+            without_placing_headings=self.without_placing_headings,
         )
 
     def predict(self, rows: Sequence[FeatureRow]) -> tuple[Prediction | None, ...]:

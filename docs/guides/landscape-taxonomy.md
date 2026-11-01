@@ -693,6 +693,19 @@ never in the repository. A heading fewer than two teams used is left out of it.
 Your first pass over the Policy queue happens before the first `debate-research landscape report`
 run (`v1-e32-t05`), which applies your decisions, so the first report counts with them.
 
+**The order and the suggestion.** When a local model has been trained for the caselist, the queue
+comes ordered by how sure that model is about the cards under each heading, surest first, and has a
+`suggested_position` column before `decision`. The model reads only the cards' tags and the headings
+that place nothing, and it places nothing: the report counts exactly what it would without it. Its
+order is the useful part: on the 47 cards you labelled for it in October, its guess was right 13
+times of 24 at or above its threshold, 4 of 17 just below it, and never far below it. So its position
+is shown only at or above the threshold, as a suggestion you accept by copying it into `decision` or
+override with your own, and even there it is wrong about half the time. Below the threshold the
+column is blank, because the guess is usually wrong there; the row's place in the order is all it
+tells you. Headings it knows nothing about come last, in the usual order. The run prints one line on
+the order: by the model, or the usual order and why (no model trained yet, the taxonomy changed since,
+or a removal reached a file it was trained on).
+
 To decide, copy the CSV somewhere outside the repository, open it in a spreadsheet and fill the last
 column, `decision`, for the rows you want to settle:
 

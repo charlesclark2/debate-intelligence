@@ -30,9 +30,10 @@ from typing import Any, Final, cast
 
 from debate_core.application.caselist.suppression import load_suppression_state
 from debate_core.application.landscape_seeding import SeedReading
-from debate_core.application.ports.parsed_store import ParsedStore, SourceOutcome
+from debate_core.application.ports.parsed_store import ParsedStore
 from debate_core.application.ports.suppression import SuppressionList
 from debate_core.application.ports.taxonomy_repository import TaxonomyRepository
+from debate_core.application.review_queue_order import sources_a_removal_reached
 from debate_core.arguments.landscape.local_classifier import (
     FeatureRow,
     code_words,
@@ -126,17 +127,18 @@ async def sources_no_longer_live(
     """The table's sources a removal has reached since it was built.
 
     One is no longer live when the store's version no longer holds it parsed, when it is suppressed
-    whole, or when one of its disclosures is suppressed that was not when the table was built.
+    whole, or when one of its disclosures is suppressed that was not when the table was built
+    (:func:`~debate_core.application.review_queue_order.sources_a_removal_reached`, which the review
+    queue's order model trained from a table is refused by too).
     """
-    entries = await store.read_entries(table.caselist, table.version)
-    parsed = {entry.source_sha256 for entry in entries if entry.outcome is SourceOutcome.PARSED}
-    state = await load_suppression_state(suppression)
-    built = set(table.suppressed_at_build)
-    sources = table.sources
-    newly = {
-        sha for sha, disclosure in state.disclosures if sha in sources and (sha, disclosure) not in built
-    }
-    return frozenset(sha for sha in sources if sha not in parsed or sha in state.sources or sha in newly)
+    return await sources_a_removal_reached(
+        table.caselist,
+        table.version,
+        table.sources,
+        table.suppressed_at_build,
+        store=store,
+        suppression=suppression,
+    )
 
 
 def feature_table_lines(table: FeatureTable) -> Iterator[str]:

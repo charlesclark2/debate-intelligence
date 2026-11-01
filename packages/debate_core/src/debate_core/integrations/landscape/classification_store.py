@@ -6,6 +6,12 @@ The filesystem implementation of
     <data_dir>/landscape/classifications/<caselist>.jsonl              one cached result per line
     <data_dir>/landscape/review/<caselist>/<topic id>-review-queue.csv  the latest review queue
 
+and of :class:`~debate_core.application.ports.queue_order_model_store.QueueOrderModelStore`
+(`v1-e32-t26`), beside `v1-e32-t21`'s feature table, which a removal and the annual purge delete
+whole with it::
+
+    <data_dir>/landscape/local-classifier/<caselist>/<topic id>-review-order-model.json
+
 Both are written whole or not at all, to a temporary file renamed into place, with compact sorted
 JSON lines so the same cache always writes the same bytes. Both live in this machine's data
 directory and nowhere else: the queue holds headings teams wrote, so it is never written into the
@@ -30,20 +36,38 @@ from debate_core.integrations.local.refusals import refused_as_access_denied
 __all__ = [
     "CLASSIFICATIONS_DIRECTORY",
     "LANDSCAPE_DIRECTORY",
+    "LOCAL_CLASSIFIER_DIRECTORY",
     "REVIEW_DIRECTORY",
     "LocalClassificationStore",
+    "LocalQueueOrderModelStore",
+    "queue_order_model_path",
     "review_queue_path",
 ]
 
 LANDSCAPE_DIRECTORY: Final = "landscape"
 CLASSIFICATIONS_DIRECTORY: Final = "classifications"
 REVIEW_DIRECTORY: Final = "review"
+LOCAL_CLASSIFIER_DIRECTORY: Final = "local-classifier"
+"""`v1-e32-t21`'s directory under `landscape/`: its feature tables, counts and coach samples, and the
+review-order model."""
 _ROLE: Final = "the landscape classification cache"
+_MODEL_ROLE: Final = "the review-order model"
 
 
 def review_queue_path(data_dir: Path, caselist: str, topic_id: str) -> Path:
     """`<data_dir>/landscape/review/<caselist>/<topic id>-review-queue.csv`."""
     return data_dir / LANDSCAPE_DIRECTORY / REVIEW_DIRECTORY / caselist / f"{topic_id}-review-queue.csv"
+
+
+def queue_order_model_path(data_dir: Path, caselist: str, topic_id: str) -> Path:
+    """`<data_dir>/landscape/local-classifier/<caselist>/<topic id>-review-order-model.json`."""
+    return (
+        data_dir
+        / LANDSCAPE_DIRECTORY
+        / LOCAL_CLASSIFIER_DIRECTORY
+        / caselist
+        / f"{topic_id}-review-order-model.json"
+    )
 
 
 class LocalClassificationStore:
@@ -88,12 +112,39 @@ class LocalClassificationStore:
             with atomic_replacement(path) as incoming:
                 incoming.write_text("".join(f"{line}\n" for line in lines), encoding="utf-8")
 
-    async def write_review_queue(self, caselist: str, topic_id: str, rows: Sequence[ReviewRow]) -> str:
+    async def write_review_queue(
+        self, caselist: str, topic_id: str, rows: Sequence[ReviewRow], *, suggestions: bool = False
+    ) -> str:
         buffer = io.StringIO(newline="")
-        write_review_queue_csv(rows, buffer)
+        write_review_queue_csv(rows, buffer, suggestions=suggestions)
         path = review_queue_path(self._data_dir, caselist, topic_id)
         with refused_as_access_denied("write", _ROLE):
             path.parent.mkdir(parents=True, exist_ok=True)
             with atomic_replacement(path) as incoming:
                 incoming.write_text(buffer.getvalue(), encoding="utf-8", newline="")
+        return str(path)
+
+
+class LocalQueueOrderModelStore:
+    """The review-order model files of one data directory."""
+
+    def __init__(self, data_dir: Path) -> None:
+        self._data_dir = data_dir
+
+    def location(self, caselist: str, topic_id: str) -> str:
+        return str(queue_order_model_path(self._data_dir, caselist, topic_id))
+
+    async def read(self, caselist: str, topic_id: str) -> str | None:
+        path = queue_order_model_path(self._data_dir, caselist, topic_id)
+        with refused_as_access_denied("read", _MODEL_ROLE):
+            if not path.is_file():
+                return None
+            return path.read_text(encoding="utf-8")
+
+    async def write(self, caselist: str, topic_id: str, text: str) -> str:
+        path = queue_order_model_path(self._data_dir, caselist, topic_id)
+        with refused_as_access_denied("write", _MODEL_ROLE):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with atomic_replacement(path) as incoming:
+                incoming.write_text(text, encoding="utf-8")
         return str(path)

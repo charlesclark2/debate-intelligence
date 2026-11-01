@@ -155,8 +155,8 @@ class LocalParsedStore:
         """The table, each camp row with the camp paths `camp_paths.jsonl` gives it (`v1-e33-t07`).
 
         The digests are given only when the file names the SHA-256 of the table's bytes as read: a
-        table rewritten since by a build that writes none, or a file this build cannot read, gives
-        none, and those camp rows read as an earlier build wrote them.
+        table rewritten since with other bytes, or a file this build cannot read, gives none, and those
+        camp rows read as an earlier build wrote them.
         """
         directory = self._root / caselist / version
         table, beside = directory / OCCURRENCES_NAME, directory / CAMP_PATHS_NAME

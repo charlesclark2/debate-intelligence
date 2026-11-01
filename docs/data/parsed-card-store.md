@@ -378,9 +378,11 @@ removed. It carries the six fields every record does, the release as `snapshot`,
 | `occurrence_table_sha256` | SHA-256 of the `occurrences.jsonl` bytes it was written beside |
 
 The local store gives the digests of the lines whose `occurrence_table_sha256` is the SHA-256 of the
-table as read to that table's rows of the same release and source. A table rewritten since, by a
-build that writes no camp paths, has other bytes, so its rows get none. A line this build cannot
-read (a later build's shape) makes it give none at all. No earlier build opens the file. Like the
+table as read to that table's rows of the same release and source. A table rewritten since with
+other rows has other bytes, so its rows get none. An earlier build's rebuild of the same rows writes
+the same bytes (the rows carry no digest), so they keep the digests: a camp path withdrawn after it
+still stops its release for this build's readers. A line this build cannot read (a later build's
+shape) makes it give none at all. No earlier build opens the file. Like the
 other aggregates it is rebuilt by every run, published after the per-source files and deleted by a
 removal.
 

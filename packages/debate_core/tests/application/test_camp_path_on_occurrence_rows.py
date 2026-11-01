@@ -292,15 +292,24 @@ async def test_a_teams_withdrawn_disclosure_of_the_same_bytes_stops_no_camp_row(
 # ------------------------------------------------------------------------------------------------
 
 
-async def test_a_table_rewritten_since_by_a_build_that_writes_no_camp_paths_reads_with_none(
+async def test_a_table_rewritten_with_other_bytes_since_reads_with_no_camp_paths(
     world: CampWorld,
 ) -> None:
-    """An earlier build's rebuild leaves `camp_paths.jsonl` as it was: its rows behave as before."""
+    """`camp_paths.jsonl` was written for the bytes before: the rows behave as before this task."""
     table = world.directory / "occurrences.jsonl"
     table.write_text("".join(reversed(table.read_text(encoding="utf-8").splitlines(keepends=True))))
     rows = await world.rows()
     assert len(rows) == 4
     assert {row.camp_path_disclosures for row in rows} == {()}
+
+
+async def test_a_rebuild_of_the_same_rows_by_a_build_that_writes_no_camp_paths_keeps_them(
+    world: CampWorld,
+) -> None:
+    """An earlier build writes the same bytes for the same rows: what `v1.1.0-dev.251`'s parse did."""
+    table = world.directory / "occurrences.jsonl"
+    table.write_bytes(table.read_bytes())
+    assert by_release(await world.rows()) == {"2031-policy": [IN_2031] * 2, "2032-policy": [IN_2032] * 2}
 
 
 async def test_a_table_with_no_camp_path_has_no_camp_paths_file_beside_it(world: CampWorld) -> None:

@@ -44,8 +44,10 @@ was built, as it asks about a caselist disclosure. Every earlier build reads `oc
 a model that refuses a key it does not know, and refuses a record version it does not know, so the
 digests are not written into the table. The local store writes them to `camp_paths.jsonl` beside it,
 one :class:`CampPathRecord` per camp path, each naming the SHA-256 of the table it was written with,
-and puts them back on the rows when it reads a table whose bytes have that SHA-256. A table rewritten
-since, by a build that writes no digests, reads with none: its camp rows behave as they did before.
+and puts them back on the rows when it reads a table whose bytes have that SHA-256. A table with other
+bytes, rewritten since with other rows by a build that writes no digests, reads with none: its camp
+rows behave as they did before. An earlier build's rebuild of the same rows writes the same bytes,
+and they keep the digests.
 
 ## The skip key
 

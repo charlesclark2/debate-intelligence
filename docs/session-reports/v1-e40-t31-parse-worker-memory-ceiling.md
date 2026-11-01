@@ -274,9 +274,45 @@ later](../runbooks/caselist-cloud-run.md#a-new-image-later)), which is outside t
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-01
 
 **Notes:**
+
+Measuring first was the right call, and the measurement changed the task. A worker peaks at 632 MiB
+at most. The main process grows by about 0.8 GB per 250 `hspolicy26` sources in the rebuild, so a
+per-worker ceiling would not have stopped the kill of 2026-10-31. That finding is why `v1-e40-t36`
+exists.
+
+1. **ac1:** `docs/data/caselist-parse-memory.md` was committed before any code. It holds counts and
+   sizes only. Deviation 2 is accepted: the whole-store figure is clearly marked as a straight line
+   through two subsets, and Docker Desktop's 8 GB VM made a whole run impossible.
+2. **ac2:**
+   * The figures are read in `_timed`'s `finally` as each stage ends. Mutant 1b shows they are read
+     after the stage, not before.
+   * Unread figures are left out, never zero, `null` or an empty object (mutants 2a–2e).
+   * Decision 1 is right. The figures sit inside each `stage_times` entry, which both earlier
+     schemas leave open, instead of a new top-level key that the existing pin forbids.
+   * The run record is unchanged, and mutant 3b shows both builds refuse figures placed on it.
+   * The reader cannot raise: `_bytes_in` catches `OSError` and `UnicodeDecodeError`, and
+     `getrusage` does not fail. So reading in `finally` never masks a stage's own result.
+3. **The cross-build check** under the stamped `v1.1.0-dev.251` and `v1.1.0-dev.200` wheels reads
+   through both their readers, the details file and the bucket. Mutant 3a shows the check fails on
+   a refusal, which is what makes its `PASS` mean something.
+4. **Red then green:** 6 of 7 core tests and both CLI cases failed at assertions against the
+   skeleton. 11 mutants, all caught.
+5. **Deviation 3** (a container outliving `hard_stop.py`) did no harm: it only read and wrote to
+   scratch. Deviation 4 (a directory of its own for hand-written details) is accepted.
+6. **Closing checks:**
+   * The affected set (309 files) is left to the PR's `ci` under agreement 10.
+   * Clean: the direct importers (1,359 passed), architecture/specs/docs (554), the node's criterion
+     (10), ruff, pyright, lint-imports, thin handlers, command blocks and the specs.
+7. **Follow-ups:**
+   * The first figures go to `v1-e40-t36`. They arrive with the first image apply after this merges:
+     Thursday's, if it carries this commit.
+   * Follow-up 2, `hard_stop.py` and `docker run`: the PM files it under E41.
+   * Decision 7's ceiling findings stay recorded here only. No ceiling task is filed.
+8. **Merge:** a plain `scripts/task pr` once `ci` is green (the Goal is `Succeeded`, and there is no
+   operator follow-up).

@@ -43,6 +43,7 @@ from debate_cli.exit_codes import (
     codes_exit_as_a_retrieval_failure,
     exit_code_for_failure_codes,
 )
+from debate_core.application.caselist import memory_high_water
 from debate_core.application.caselist_sync import (
     DataVolumeUsage,
     InboxFileKind,
@@ -1053,6 +1054,37 @@ def test_a_run_reports_each_stages_times_in_its_summary_and_its_details(
     assert [one["stage"] for one in data["run_details"]["stage_times"]] == every_stage
     assert data["data_volume"] is None, "storage.volume_warning_percent is unset: no volume is read"
     assert data["run_details"]["data_volume"] is None
+
+
+@pytest.mark.parametrize("cgroup_peak", ["7516192768\n", None], ids=["cgroup_v2", "no_cgroup"])
+def test_memory_figures_a_run_reports_each_stages_marks_in_its_summary_and_its_details(
+    installation: Path,
+    site: respx.MockRouter,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    cgroup_peak: str | None,
+) -> None:
+    """`v1-e40-t31`: the container's cgroup peak, from a stand-in cgroup, and the main process's own,
+    as each stage ended. With no cgroup, the Mac's case, the container's figure is left out."""
+    cgroup = tmp_path / "cgroup"
+    cgroup.mkdir()
+    if cgroup_peak is not None:
+        (cgroup / "memory.peak").write_text(cgroup_peak, encoding="ascii")
+    monkeypatch.setattr(memory_high_water, "CGROUP_ROOT", cgroup)
+
+    data = pull("--caselist", SYNTHETIC_CASELIST)["data"]
+
+    for entries in (data["stage_times"], data["run_details"]["stage_times"]):
+        assert len(entries) == 9, "every stage the run carried out"
+        figures = [one.get("memory", {}) for one in entries]
+        if cgroup_peak is None:
+            assert [sorted(one) for one in figures] == [["main_process_peak_bytes"]] * 9
+        else:
+            assert [(one.get("container_peak_bytes"), one.get("cgroup")) for one in figures] == [
+                (7516192768, "v2")
+            ] * 9
+        assert all(isinstance(one.get("main_process_peak_bytes"), int) for one in figures)
+        assert all(one["main_process_peak_bytes"] > 0 for one in figures)
 
 
 def test_a_run_under_a_volume_warning_reads_the_data_directorys_volume_and_warns_past_it(

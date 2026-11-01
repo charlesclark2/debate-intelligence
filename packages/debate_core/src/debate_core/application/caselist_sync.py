@@ -592,6 +592,7 @@ from debate_core.application.caselist.manifest import (
     write_manifest,
     write_manifest_lines,
 )
+from debate_core.application.caselist.memory_high_water import MemoryHighWater, read_memory_high_water
 from debate_core.application.caselist.occurrence_table_guard import NewerFingerprintTable
 from debate_core.application.caselist.openev_import_service import (
     OpenEvImportReport,
@@ -1035,6 +1036,8 @@ class StageTime:
     stage: SyncStage
     started_at: datetime
     finished_at: datetime
+    memory: MemoryHighWater | None = None
+    """The memory high-water marks read as the stage ended (`v1-e40-t31`), or `None` when none was read."""
 
     @property
     def duration_seconds(self) -> float:
@@ -3255,6 +3258,7 @@ class CaselistSyncService:
         later_manifests: LaterManifests | None = None,
         volume_warning_percent: int | None = None,
         read_volume: Callable[[Path], VolumeReading] = read_volume,
+        read_memory: Callable[[], MemoryHighWater] = read_memory_high_water,
         state_written: Callable[[Path], None] | None = None,
         after_publish: Callable[[], Awaitable[object]] | None = None,
         backfile_caselists: Sequence[str] = (),
@@ -3274,6 +3278,7 @@ class CaselistSyncService:
         self._after_publish = after_publish
         self._volume_warning_percent = volume_warning_percent
         self._read_volume = read_volume
+        self._read_memory = read_memory
         self._archives = archive_importer
         # The importer's own repository, local store and suppression list unless told otherwise, so
         # that no pull imports a weekly without measuring the later manifests again (`v1-e30-t18`).

@@ -25,6 +25,7 @@ import pytest
 from tests.fixtures.caselist.build_synthetic_archives import SYNTHETIC_CASELIST
 
 from debate_core.application.caselist.evidence_listing import LocalEvidence
+from debate_core.application.caselist.memory_high_water import MemoryHighWater
 from debate_core.application.caselist.import_service import CaselistImportService
 from debate_core.application.caselist.openev_import_service import OpenEvImportService
 from debate_core.application.caselist_sync import (
@@ -145,7 +146,11 @@ def service(
     search_index: SlowGrowingIndexStage | None = None,
     volume_warning_percent: int | None = None,
     volume: Callable[[Path], VolumeReading] = read_volume,
+    memory: Callable[[], MemoryHighWater] | None = MemoryHighWater,
 ) -> CaselistSyncService:
+    """The run over `tmp_path`. `memory` reads nothing unless a test gives it figures (`v1-e40-t31`):
+    no test here reads this machine's cgroup or this process's peak. `None` is the service's own
+    reader."""
     data_dir = tmp_path / "evidence"
     database = SqliteDatabase.open(data_dir)
     repository = SqliteCaselistRepository(database)
@@ -172,6 +177,7 @@ def service(
         clock=clock,
         volume_warning_percent=volume_warning_percent,
         read_volume=volume,
+        **({} if memory is None else {"read_memory": memory}),
     )
 
 

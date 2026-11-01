@@ -535,6 +535,17 @@ class StageTiming(BaseModel):
     stage: str
     started_at: datetime
     finished_at: datetime
+    memory: MemoryFigures | None = None
+
+
+class MemoryFigures(BaseModel):
+    """The memory high-water marks read as a stage ended (`v1-e40-t31`)."""
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    container_peak_bytes: int | None = Field(default=None, ge=0)
+    cgroup: str | None = None
+    main_process_peak_bytes: int | None = Field(default=None, ge=0)
 
 
 class DataVolume(BaseModel):

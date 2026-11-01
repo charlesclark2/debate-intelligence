@@ -70,7 +70,10 @@ there, or passes another table with `--camp-aliases`. Matching compares words, i
 treating spaces, hyphens, underscores and dots alike, so one spelling covers every way a filename
 separates it. Two camps claiming one spelling is refused when the table is loaded
 (:class:`InvalidCampAliases`), since which of them a file would get would otherwise depend on the
-order the file happened to list them in.
+order the file happened to list them in. Spellings of different camps may overlap, as a bare
+`Michigan` is the first word of `Michigan Classic` (`v1-e30-t32`): that is not refused, because the
+longest spelling is tried first at each word, so `Michigan Classic 2026` is Michigan Classic whatever
+the table's order, and a folder names a camp only as a whole.
 
 ## OpenEv's word for each camp (`v1-e39-t28`)
 
@@ -79,7 +82,8 @@ camp's page, `https://opencaselist.com/openev/<year>/<word>`, which the search p
 to (:mod:`debate_core.domain.search_source_links`). The canonical name is this table's choice and not
 OpenEv's, so the two differ for most camps. A word is filled only once the operator has opened that
 page and seen the camp's files. A camp with no word has no link. Nor has a camp whose canonical name
-gathers spellings OpenEv files as two camps, so such a camp is given no word. The section names only
+gathers spellings OpenEv files as two camps, or a bare name that may be any of several (`Michigan`,
+beside OpenEv's MNDI, UM7 and UMC), so such a camp is given no word. The section names only
 camps of the table, never `UNKNOWN`, and each word is one address word of letters and digits, given
 to one camp. Matching never reads it: a file's camp, lab and title are the same with or without it.
 

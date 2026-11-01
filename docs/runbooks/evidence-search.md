@@ -1401,6 +1401,16 @@ real run, in a window with no leftover `DEBATE_*` override.
     prod; AWS opened a support case for it. The gzip object was 318,115,067 bytes that day. Check
     it with `aws service-quotas get-requested-service-quota-change --request-id <id>`, the id in
     `v1-e39-t10`'s report, and tick this item when it reads `APPROVED`.
+13. **The weekly run's home moves to prod**, by
+    [the cutover runbook's "At the pilot's promotion"](caselist-cutover.md#at-the-pilots-promotion-the-runs-home-moves-to-prod),
+    once prod's run is applied and prod's lock is seeded. Dev's lock is then held for good by
+    `DEBATE_ENV=dev debate-research caselist move-run-home --execute` (`v1-e40-t11`), after its dry run
+    (the same command without `--execute`) shows dev's lock `free` and the `moved` holder it would
+    write. Its success line reads `"applied": true` with `"home_environment": "prod"`, `"state":
+    "held"` and `"kind": "moved"`, and a dev command is refused afterwards with `RUN_HOME_MOVED`, "the
+    weekly run now runs from prod". A move made by mistake is undone only by `caselist move-run-home
+    --release` and then `--release --execute`, and only after the coach confirms, with prod's schedule
+    off ([undoing the move](caselist-cutover.md#undoing-the-move-the-release-only-after-the-coach-confirms)).
 
 ## The coach's beta (`v1-e39-t10`)
 

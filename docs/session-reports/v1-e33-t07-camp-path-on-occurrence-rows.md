@@ -372,9 +372,66 @@ Reply with 1: a or b, 2: a, b or c.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-01
 
 **Notes:**
+
+This closes the takedown gap without breaking either build in use, and the cross-build check proves
+it rather than asserting it.
+1. **The count:** every one of the 8,081 camp rows gets a digest on its next parse, with no
+   re-import, because every stored row has a path. The 236 rows at two paths are what made the
+   plural field necessary.
+2. **ac1 passes.**
+   * Red over a skeleton: 29 failed. The passes are before-and-after guards, and the report says so.
+   * Green: 417, and the node criterion passes (575).
+   * All 22 mutants are dealt with, the PM's seven among them. M7a and M7b are also caught by the
+     cross-build check, as `v1.1.0-dev.251` refusing the planted field.
+   * R2 was handled correctly: its test was written and seen to pass, the mutant still survived
+     because the question was redundant, and the redundant question was deleted (agreement 8). M1,
+     M3a and R1 were re-run against the deletion.
+3. **ac2 passes.** Both earlier builds (`v1.1.0-dev.251`, the cloud image, and `v1.1.0-dev.200`, the
+   Mac's) were built offline from their commits. Each read every file this branch wrote: store,
+   resolver, publisher, sidecar, files check and files publish. An earlier build's re-parse keeps
+   the digests usable, because it writes the same bytes.
+4. **ac3 passes**, with the digests beside the sidecar (question 1).
+5. **Question 1: (a).** ac3 is read as "the sidecar, or the file beside it, tied to its bytes,
+   carries". With `extra="forbid"` and closed version sets in both earlier builds, the companion
+   files are the only way to ship this now. Moving the digests into the strict files is not filed:
+   it belongs to the time when no build before this one is in use (prod's promotion at the
+   earliest), and the PM raises it then.
+6. **Question 2: (a), the narrowed guard, with no policy change.** The data-use policy already
+   permits a held path's digest in the removal records (its register rows for v1-e30-t13 and t14),
+   and the occurrence row's `disclosure` is already a digest of a path. These fields are the same
+   kind of value. The guard still refuses every other "path" name, and refuses a path as these two
+   fields' value. The parsed-store doc's paragraph saying so is enough.
+7. **Deviations accepted:**
+   * **2:** the plural field, with "stopped only when every path is withdrawn".
+   * **3:** `debate_core.integrations` and `debate_core.evidence.file_checks`, which the 2026-10-21
+     amendment needs. The PM's next batch adds them to the packages.
+   * **4:** the other tasks' tests, each for the reason given.
+   * **5:** `REBUILT_NAMES` beside an unchanged `AGGREGATE_NAMES`.
+8. **Decisions accepted:**
+   * the tie by bytes, with its one cost over-stopping (the safe direction);
+   * an unreadable companion gives no digests;
+   * the parse asking the publisher's camp-path question;
+   * `.camp-paths.json` not published, so the five published objects are unchanged;
+   * `FILE_BUILDER_VERSION` unchanged;
+   * `CHECKER_VERSION` bumped to `-4`, because a verdict can change. The coach runs `files check`
+     again before publishing, as `QUALITY_REPORT_OUTDATED` says;
+   * no path in any message or log, tested;
+   * synthetic fixtures only.
+9. **Follow-ups:**
+   * **Publishing the camp paths as a sixth object:** not filed. It changes the published layout
+     that the V2 tub reads, so it's decided with that contract.
+   * **Counting the cloud store:** not needed, since the Mac's count answers the question.
+10. **Closing checks:** the affected set (402 files through the root conftest) is left to the PR's
+    `ci` under agreement 10. The always-run list with the changed areas (2,096), the 83 files naming
+    a changed module in three bounded parts (1,693), ruff, pyright, lint-imports, the schema check,
+    the doc checks and the specs are clean.
+11. **Merge:** a plain `scripts/task pr` once `ci` is green, after `scripts/task sync`. v1-e40-t32
+    (merged) changed the parse loop in `caselist_parse.py`; if the sync conflicts there, keep both
+    changes. No operator step follows. The digests reach the cloud store with the first image that
+    carries this task.

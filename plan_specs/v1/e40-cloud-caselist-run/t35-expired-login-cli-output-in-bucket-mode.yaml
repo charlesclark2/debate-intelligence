@@ -41,7 +41,7 @@ spec:
         and not `caselist auth login`; on the Mac it is unchanged, asserted by its old text;
         by tests shown failing first.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

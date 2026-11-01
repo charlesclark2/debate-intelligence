@@ -69,6 +69,7 @@ from debate_cli.commands import (
     fetch,
     files,
     landscape,
+    landscape_cassettes,
     store,
     tub_index,
     tub_index_prune,
@@ -124,6 +125,7 @@ def register_commands(app: typer.Typer) -> None:
     )
     argument_landscape.command("report")(landscape.report)
     argument_landscape.command("evaluate")(landscape.evaluate)
+    argument_landscape.command("cassettes")(landscape_cassettes.cassettes)
     app.add_typer(argument_landscape)
 
     evidence_files = command_group(

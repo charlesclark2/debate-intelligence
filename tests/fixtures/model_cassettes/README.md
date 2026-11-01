@@ -15,6 +15,12 @@ id, its version, the canonical JSON of its variables and the output schema's dot
 `_embed/` and `_rerank/`. The fake computes its embeddings and rerank scores and keeps no files for
 them.
 
+A cassette recorded or replayed for a caselist, as the landscape model stage's are under the data
+directory, also names it in a top-level `caselists` list of slugs, outside the key and the match
+(`debate_core.application.cassette_filing`, `v1-e32-t31`); `debate-research landscape cassettes`
+counts and deletes one caselist's cassettes by it (`v1-e32-t34`). The cassettes here are recorded
+outside any caselist, so none of them carries the field.
+
 ## What may be in a file here
 
 **Everything is invented.** No credentials, request signatures, account ids, student names or real

@@ -42,7 +42,7 @@ spec:
         cassettes, keeping shared and unattributed ones; annual-purge step 4 calls it and
         the heredoc copy is gone; by tests shown failing first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -275,6 +275,7 @@ if TYPE_CHECKING:  # pragma: no cover - imported for the type checker only; see 
     from debate_core.integrations.docx_parser import DebateDocxParser
     from debate_core.integrations.local import SqliteDatabase
     from debate_core.integrations.models.model_mode import ModelMode
+    from debate_core.integrations.models.record_replay import CassetteDirectory
     from debate_core.integrations.models.routing_policy import RoutingFileFinding
     from debate_core.integrations.models.usage import UsageLog
     from debate_core.integrations.opencaselist import CaselistTokenStore, OpenCaselistClient
@@ -705,7 +706,6 @@ class ServiceContainer:
         It replays, or with `record` records, the same cassettes a landscape run replays, under the data
         directory, and scans every cassette of the prompt there after it has run.
         """
-        from debate_core.integrations.landscape.classification_store import LANDSCAPE_DIRECTORY
         from debate_core.integrations.landscape.yaml_taxonomy_repository import YamlTaxonomyRepository
         from debate_core.integrations.local import FsEvidenceObjectStore
         from debate_core.integrations.local.parsed_store import LocalParsedStore
@@ -713,7 +713,7 @@ class ServiceContainer:
 
         mode = ModelMode.RECORD if record else ModelMode.REPLAY
         data_dir = self.settings.storage.data_dir
-        cassettes = data_dir / LANDSCAPE_DIRECTORY / MODEL_CASSETTES_DIRECTORY
+        cassettes = self._landscape_cassette_dir()
         return LandscapeModelEvaluationService(
             taxonomies=YamlTaxonomyRepository.load(config_dir),
             parsed_store=LocalParsedStore(data_dir),
@@ -743,7 +743,6 @@ class ServiceContainer:
         what this machine recorded. Record and live wrap the Bedrock router, imported only then. The
         prompts are read from this checkout's `prompts/`; an installed build has none, and is refused.
         """
-        from debate_core.integrations.landscape.classification_store import LANDSCAPE_DIRECTORY
         from debate_core.integrations.local.parsed_store import LocalParsedStore
         from debate_core.integrations.models.factory import build_model_router
         from debate_core.integrations.models.model_mode import ModelMode
@@ -771,14 +770,30 @@ class ServiceContainer:
             repository_root=root,
             clock=_PortClock(self.clock()),
             usage_log=self.usage_log(),
-            cassette_dir=cassette_dir
-            or settings.storage.data_dir / LANDSCAPE_DIRECTORY / MODEL_CASSETTES_DIRECTORY,
+            cassette_dir=cassette_dir or self._landscape_cassette_dir(),
         )
         return ModelClassificationStage(
             StructuredOutputGuard(router, registry),
             ParsedStoreCardTexts(LocalParsedStore(parsed_dir or settings.storage.data_dir)),
             max_items=max_items,
         )
+
+    def landscape_cassettes(self) -> CassetteDirectory:
+        """The landscape model cassettes on this machine, for `landscape cassettes` (`v1-e32-t34`).
+
+        The directory :meth:`landscape_model_stage` records to and replays from by default, and
+        :meth:`landscape_evaluation` scans: `<data dir>/landscape/model-cassettes/`, from `DEBATE_ENV`'s
+        `storage.data_dir`. Unlike the model stage it needs no `prompts/`, so the checkout that ran the
+        stage and an installed build read the same directory for the same environment.
+        """
+        from debate_core.integrations.models.record_replay import CassetteDirectory
+
+        return CassetteDirectory(self._landscape_cassette_dir())
+
+    def _landscape_cassette_dir(self) -> Path:
+        from debate_core.integrations.landscape.classification_store import LANDSCAPE_DIRECTORY
+
+        return self.settings.storage.data_dir / LANDSCAPE_DIRECTORY / MODEL_CASSETTES_DIRECTORY
 
     def usage_log(self) -> UsageLog:
         """This machine's model usage log, `<data dir>/usage/` (`v1-e05-t07`): what `usage` reads, and

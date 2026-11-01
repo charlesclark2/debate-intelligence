@@ -300,9 +300,57 @@ uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapsho
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-01
 
 **Notes:**
+
+This is the diagnosis the PM asked for, and it settles where the gap is. The batch and the sample are
+not the cause; the model's answers are. Wrong answers name a same-side neighbour, or what the card is
+about instead of the argument it is read in. Most of the "school in every text" scan result was a JSON
+key word. Both criteria pass, so the Goal is `Succeeded`.
+
+1. **ac1:**
+   * One outcome per card, summing to labelled, with stage one's placement beside each, on synthetic
+     cards recorded and then replayed with no router behind them.
+   * The hits are withheld from `--json`, from the logs at DEBUG and from every file. They print
+     only to a terminal, and the command says how many it withheld otherwise.
+   * 22 tests failed against the skeleton; 22 mutants were caught, the PM's four among them. The two
+     mutants redone so that they really mutated are noted honestly.
+2. **ac2, recorded by the PM:** the operator's replay (2026-11-01) made no model call and reproduced
+   the recording exactly: labelled 47, asked 47 in 4 calls, counted 38, correct 14, and 30,460 / 3,881
+   tokens. The outcomes sum to 47. The counts are in `docs/data/landscape-model-evaluation.md`. PASS.
+3. **The rulings on the six options.** The PM files one fix task from them (E32, p1: it blocks the
+   landscape stage in the cloud run and the cheaper-model work).
+   1. **Labels:** kept as the measure. The coach looks at the 13 rows in question (the 9 neighbours
+      and the 4 placed none), only to say whether those positions should be told apart at all. That
+      is a taxonomy question, asked in the fix task.
+   2. **The bar, the set and the threshold:** unchanged.
+   3. **The prompt:** 1.1.0 says to name the argument the card is read as, not its subject. Each
+      position is sent with its side and a one-line description. The session drafts the
+      descriptions and the coach approves them (a taxonomy edit). Then re-record the same 47; the
+      live call is the operator's.
+   4. **The schema:** the prompt states the 280-character rationale limit; batches stay at 20.
+   5. **The scrub:** the scan's whole third list (every disclosing team's school, code and
+      tournament) comes out of headings, tags, cites and excerpts too.
+   6. **The scan:** field values, not JSON keys; the committed `positions` text left out; tournaments
+      only on the third list; the repair cassettes scanned. No accept-list.
+4. **Decisions accepted:** the `--breakdown` shape; kind by the coach's label; `not_asked` and
+   `not_found`; the two extra fields; the four marks; terminal-only printing; weighting by stratum.
+5. **The pasted terminal listing** (Deviations). Handled correctly: nothing was written down, the
+   counts came from the JSON, and the runbook's warning is now bold and comes before the command. The
+   lines named tournaments and team codes with a few words of card text around them, and they reached
+   a model session outside the ModelRouter. The PM records this in the next batch as a note under the
+   data-use policy's model-provider rules: what happened, that nothing was persisted, and the
+   safeguard (the JSON marks now answer what the listing was needed for). With the scan fixed (option
+   6), the listing will be about 24 lines. The operator reads it in the terminal and pastes only the
+   counts.
+6. **Closing checks:** the affected set (231 files) is left to `ci` (agreement 10). The bounded groups
+   (1,732 and 52 passed), ruff, pyright, lint-imports, thin handlers, the specs and the doc checks are
+   clean.
+7. **Follow-up:** a smoke check for `landscape evaluate` goes into the fix task.
+8. **Before the PR:** set the phase with `uv run scripts/task_helper.py set-phase
+   v1-e32-t39-model-evaluation-diagnosis Succeeded`, run validate_specs and commit.
+9. **Merge:** a plain `scripts/task pr` once `ci` is green.

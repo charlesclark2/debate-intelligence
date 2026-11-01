@@ -132,7 +132,8 @@ from typing import Final, Literal, cast
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from debate_core.application.caselist.publish_plan import InvalidPublishTarget, validate_publish_target
-from debate_core.application.caselist.run_lock import RunLockHeld, RunLockLost
+from debate_core.application.caselist.run_home_move import NEW_HOME
+from debate_core.application.caselist.run_lock import RunHomeMoved, RunLockHeld, RunLockLost
 from debate_core.application.caselist.status_service import CASELIST_DRIFT
 from debate_core.application.caselist_sync import (
     CLOUD_FAILURE_RATE_RUNBOOK,
@@ -177,8 +178,13 @@ __all__ = [
     "CLOUD_PUBLISHED_AGAIN_RUNBOOK",
     "CLOUD_PUBLISH_CURE",
     "CLOUD_UNFINISHED_RUN_CURE",
+    "RUN_HOME_MOVED_FIX",
+    "RUN_HOME_MOVED_NOTICE",
+    "RUN_HOME_MOVED_TITLE",
     "RUN_LOCK_LOST",
     "RUN_LOCK_LOST_TITLE",
+    "SKIPPED_OUTCOME",
+    "SKIPPED_REFUSALS",
     "TOOK_OVER_THE_LOCK",
     "TOOK_OVER_THE_LOCK_TITLE",
     "BucketRunDetails",
@@ -228,6 +234,7 @@ __all__ = [
     "details_for_summary",
     "hint_for_a_record",
     "notifications_for",
+    "outcome_shown",
     "parse_commands",
     "read_remote_records",
     "read_remote_runs",
@@ -643,6 +650,17 @@ class SyncRunDetails(BaseModel):
     """What a bucket-mode run did with the bucket's run lock and state, or `None` in local mode
     (`v1-e40-t04`). A key a build from before it passes over."""
 
+    skipped: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    """For a run that did nothing by design, the code of the refusal it was skipped for; else `None`
+    (`v1-e40-t29`). Only `RUN_HOME_MOVED`: a pull after the weekly run's home moved to prod
+    (:data:`SKIPPED_REFUSALS`). Such a run failed on nothing, so its :attr:`failure_codes` are empty,
+    though the command still exits as refused.
+
+    Its record is the one every build reads, `failed` with the error's class: the record's outcome is
+    a closed set an earlier build validates, and `skipped` there would be a record those builds refuse.
+    This key is where a run is recorded as skipped, and it is written only when set, so every other
+    run's details are byte for byte what they were. A build from before it passes over it."""
+
     def stage(self, name: str) -> StageDetails | None:
         return next((one for one in self.stages if one.stage == name), None)
 
@@ -894,8 +912,12 @@ def details_for_failure(
     """The details of a run that raised instead of returning a summary.
 
     Its one failure code is the code the CLI reports the error under, and its hint the fix a stage
-    would have given the same error, in the same mode (`bucket_mode`, `v1-e40-t22`).
+    would have given the same error, in the same mode (`bucket_mode`, `v1-e40-t22`). A refusal that
+    skips the run (:data:`SKIPPED_REFUSALS`, `v1-e40-t29`) is no failure: its code is the details'
+    `skipped`, and they have no failure code and no hint.
     """
+    if isinstance(error, SKIPPED_REFUSALS):
+        return SyncRunDetails(run_id=run_id, skipped=reported_error_code(error))
     hint = fix_for(error, bucket_mode=bucket_mode)
     return SyncRunDetails(
         run_id=run_id,
@@ -1032,6 +1054,28 @@ ANOTHER_RUN_HELD_THE_LOCK: Final = (
 person's look is not what it asks for: the run holding the lock is the one that says how it went.
 The runbook quotes both."""
 
+SKIPPED_REFUSALS: Final = (RunHomeMoved,)
+"""The refusals that skip a run rather than fail it (`v1-e40-t29`): the lock held for good by the move of
+the weekly run's home to prod (`v1-e40-t11`). Such a run did nothing because nothing is its to do, and
+its details say `skipped` with the refusal's code (:attr:`SyncRunDetails.skipped`). Every other lock
+refusal fails the run as before: another runner's live lease, a lock naming another home, a seeded
+bucket in local mode, a lock this build cannot read."""
+
+SKIPPED_OUTCOME: Final = "skipped"
+"""What `caselist runs` shows as the outcome of a skipped run, with its code beside it
+(:func:`outcome_shown`)."""
+
+RUN_HOME_MOVED_TITLE: Final = f"caselist pull skipped: the weekly run moved to {NEW_HOME}"
+RUN_HOME_MOVED_NOTICE: Final = (
+    f"skipped: the weekly run now runs from {NEW_HOME}, so this pull did nothing. Nothing here needs a "
+    "person."
+)
+RUN_HOME_MOVED_FIX: Final = f"none: {NEW_HOME}'s weekly cloud run records and announces its own runs"
+"""A pull skipped because the weekly run's home moved (`v1-e40-t29`), after the run in `v1-e34-t35`'s
+shape: what the run did, then the verdict. The same in local mode and in bucket mode: in either, dev's lock
+is held for good and nothing in dev is the weekly run's any more. It names no person, school or path,
+the lock's key and the move's holder included. The runbook quotes all three."""
+
 RUNS_COMMAND: Final = "debate-research caselist runs"
 
 RUN_LOCK_LOST_TITLE: Final = "caselist pull lost the bucket's run lock"
@@ -1157,7 +1201,8 @@ banner asks for a person, naming each snapshot by caselist and date. The runbook
 
 LOCK_BANNER_WORDS: Final = "skipped"
 """What `caselist runs` shows beside the verdict of a run the lock refused (`v1-e34-t26`): the word
-:data:`ANOTHER_RUN_HELD_THE_LOCK_TITLE` puts beside `caselist pull`."""
+:data:`ANOTHER_RUN_HELD_THE_LOCK_TITLE` puts beside `caselist pull`, and :data:`RUN_HOME_MOVED_TITLE` too
+(`v1-e40-t29`)."""
 
 FIX_FIRST_BANNER_WORDS: Final = "retry once fixed"
 """What `caselist runs` shows beside the verdict of a refusal a retry gets past only once its fix is
@@ -1365,11 +1410,23 @@ def notifications_for(
     details' `bucket_run` says it was (:data:`CLOUD_AUTH_EXPIRED_CURE`), never `caselist auth login`,
     which in the cloud would be a second login. The title and message are unchanged, and so is the
     Mac's notice.
+
+    **A skipped run says so, and that nothing needs a person** (`v1-e40-t29`). A pull refused because
+    the weekly run's home moved to prod, as its details' `skipped` says, has a notice of its own
+    (:data:`RUN_HOME_MOVED_TITLE`), the same in either mode, instead of the failed run's verdict.
     """
     where = f"Run {record.run_id} ({record.environment})"
     sent: list[Notification] = []
     bucket = details.bucket_run
-    if record.error_class == SyncRunInProgress.__name__:
+    if details.skipped is not None:
+        sent.append(
+            Notification(
+                title=RUN_HOME_MOVED_TITLE,
+                message=f"{where} {RUN_HOME_MOVED_NOTICE}",
+                fix_command=RUN_HOME_MOVED_FIX,
+            )
+        )
+    elif record.error_class == SyncRunInProgress.__name__:
         sent.append(
             Notification(
                 title=ANOTHER_RUN_HELD_THE_LOCK_TITLE,
@@ -1710,15 +1767,31 @@ def banner_words(
     next run retries once its fix is made, whose title is :data:`RETRIED_AFTER_ITS_FIX_TITLE`. Decided
     as :func:`notifications_for` decides those titles, from the same record, details and rule. `None`
     for a run with no details: an older build recorded it, and the banner it showed is not known.
+    :data:`LOCK_BANNER_WORDS` too for a skipped run, whose title is :data:`RUN_HOME_MOVED_TITLE`
+    (`v1-e40-t29`).
     """
     if details is None:
         return None
-    if record.error_class in (SyncRunInProgress.__name__, RunLockHeld.__name__):
+    if details.skipped is not None or record.error_class in (
+        SyncRunInProgress.__name__,
+        RunLockHeld.__name__,
+    ):
         return LOCK_BANNER_WORDS
     if record.error_class == CaselistAuthExpired.__name__:
         return None
     retried = _retried_by_the_next_run(details.failure_codes, may_succeed_on_retry)
     return FIX_FIRST_BANNER_WORDS if retried and _a_fix_comes_first(record, details) else None
+
+
+def outcome_shown(record: SyncRunRecord, details: SyncRunDetails | None) -> str:
+    """A run's outcome as `caselist runs` shows it: the record's, with its error's class beside it, or
+    :data:`SKIPPED_OUTCOME` with the refusal's code for a run its details say was skipped (`v1-e40-t29`).
+
+    A skipped run's record says `failed`, which is what a build from before it shows.
+    """
+    if details is not None and details.skipped is not None:
+        return f"{SKIPPED_OUTCOME} ({details.skipped})"
+    return str(record.outcome) + (f" ({record.error_class})" if record.error_class else "")
 
 
 def _stage_outcome(record: SyncRunRecord, stage: SyncStage) -> str | None:

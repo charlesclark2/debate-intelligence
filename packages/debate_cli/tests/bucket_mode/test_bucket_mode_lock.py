@@ -654,7 +654,11 @@ def test_runs_shows_a_pull_after_the_run_home_moved_as_skipped_and_a_runners_hol
     newest, older = listed["data"]["runs"]
     assert (newest["run_id"], older["run_id"]) == (moved_record["run_id"], held_record["run_id"])
     assert (newest["outcome"], newest["error_class"]) == ("failed", "RunHomeMoved"), "the record's own fields"
-    assert (newest["details"].get("skipped"), newest["verdict"], newest["banner"]) == ("RUN_HOME_MOVED", None, "skipped")
+    assert (newest["details"].get("skipped"), newest["verdict"], newest["banner"]) == (
+        "RUN_HOME_MOVED",
+        None,
+        "skipped",
+    )
     assert (older["outcome"], older["error_class"], older["verdict"], older["banner"]) == (
         "failed",
         "RunLockHeld",
@@ -662,8 +666,16 @@ def test_runs_shows_a_pull_after_the_run_home_moved_as_skipped_and_a_runners_hol
         "skipped",
     )
     assert "skipped" not in older["details"]
-    assert runs_table_row(world, moved_record["run_id"])[2:5] == ["skipped (RUN_HOME_MOVED)", "none", "none (skipped)"]
-    assert runs_table_row(world, held_record["run_id"])[2:5] == ["failed (RunLockHeld)", "RUN_LOCK_HELD", "person (skipped)"]
+    assert runs_table_row(world, moved_record["run_id"])[2:5] == [
+        "skipped (RUN_HOME_MOVED)",
+        "none",
+        "none (skipped)",
+    ]
+    assert runs_table_row(world, held_record["run_id"])[2:5] == [
+        "failed (RunLockHeld)",
+        "RUN_LOCK_HELD",
+        "person (skipped)",
+    ]
 
 
 def test_the_seed_after_the_run_home_moved_is_refused_naming_the_move(world: World) -> None:

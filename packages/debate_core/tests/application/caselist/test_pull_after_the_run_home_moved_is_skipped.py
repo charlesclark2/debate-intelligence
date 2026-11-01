@@ -1,4 +1,6 @@
-"""A pull refused because the weekly run moved to prod is recorded as skipped, with its own notice (`v1-e40-t29`).
+"""A pull refused because the weekly run moved to prod is recorded skipped, with its own notice.
+
+`v1-e40-t29`, from `v1-e40-t11`'s follow-up.
 
 Since `v1-e40-t11`, once `caselist move-run-home` has held dev's run lock for good for prod, a `caselist
 pull` is refused with `RUN_HOME_MOVED`. Its run was recorded as failed and announced with the generic
@@ -50,7 +52,7 @@ from debate_core.application.caselist.run_lock import (
     RunLockWrongHome,
 )
 from debate_core.application.caselist.run_state import RunState
-from debate_core.application.caselist_sync import CaselistSyncService, run_pull
+from debate_core.application.caselist_sync import run_pull
 from debate_core.application.ports.notifier import Notification, RecordingNotifier
 from debate_core.application.settings import RunStateMode
 from debate_core.application.sync_runs import (
@@ -124,7 +126,14 @@ def clock() -> Clock:
     return Clock()
 
 
-def a_lock(client: S3Client, bucket: str, clock: Clock, *, environment: str = "dev", kind: HolderKind = HolderKind.MAC) -> BucketRunLock:
+def a_lock(
+    client: S3Client,
+    bucket: str,
+    clock: Clock,
+    *,
+    environment: str = "dev",
+    kind: HolderKind = HolderKind.MAC,
+) -> BucketRunLock:
     return BucketRunLock(
         store=S3LockObject(bucket=bucket, key=RUN_LOCK_KEY, client=client),
         environment=environment,
@@ -214,7 +223,9 @@ class Mac:
             self.raised.append(refused)
 
     def record(self) -> dict[str, Any]:
-        [record] = [json.loads(line) for line in (self.data_dir / SYNC_RUN_LOG_FILENAME).read_text().splitlines()]
+        [record] = [
+            json.loads(line) for line in (self.data_dir / SYNC_RUN_LOG_FILENAME).read_text().splitlines()
+        ]
         return record
 
     def details(self) -> dict[str, Any]:
@@ -298,7 +309,10 @@ async def test_a_pull_after_the_run_home_moved_keeps_the_record_every_earlier_bu
     for name in ("record_schema_of_the_start_commit.json", "record_schema_of_the_cloud_image.json"):
         jsonschema.validate(record, json.loads((STORED / name).read_text()))
     details = mac.details()
-    for name in ("details_schema_before_parsed_stores_owed.json", "details_schema_of_the_macs_installed_build.json"):
+    for name in (
+        "details_schema_before_parsed_stores_owed.json",
+        "details_schema_of_the_macs_installed_build.json",
+    ):
         jsonschema.validate(details, json.loads((STORED / name).read_text()))
 
 
@@ -313,13 +327,18 @@ async def test_a_pull_after_the_run_home_moved_reads_back_as_skipped_beside_its_
     assert banner_words(record, details, may_succeed_on_retry=a_retry_may_cure) == "skipped"
 
 
-def test_details_with_no_skip_write_no_skipped_key_so_every_other_run_reads_as_before_run_home_moved() -> None:
+def test_details_with_no_skip_write_no_skipped_key_so_every_other_run_reads_as_before_run_home_moved() -> (
+    None
+):
     """The key is written only on a skipped run: every other run's details are byte for byte as before."""
     assert "skipped" not in SyncRunDetails(run_id=RUN_ID).model_dump(mode="json")
     assert "skipped" not in json.loads(SyncRunDetails(run_id=RUN_ID).model_dump_json())
-    assert SyncRunDetails.model_validate({"run_id": RUN_ID, "skipped": "RUN_HOME_MOVED"}).model_dump(mode="json").get(
-        "skipped"
-    ) == "RUN_HOME_MOVED", "and read back where it is"
+    assert (
+        SyncRunDetails.model_validate({"run_id": RUN_ID, "skipped": "RUN_HOME_MOVED"})
+        .model_dump(mode="json")
+        .get("skipped")
+        == "RUN_HOME_MOVED"
+    ), "and read back where it is"
 
 
 # ------------------------------------------------------------------------------------------------
@@ -349,9 +368,14 @@ async def test_a_pull_a_runners_hold_refused_keeps_its_record_and_wording_not_ru
         HELD_FIX,
         None,
     )
-    assert banner_words(
-        SyncRunRecord.model_validate(record), SyncRunDetails.model_validate(details), may_succeed_on_retry=a_retry_may_cure
-    ) == "skipped", "the banner's word, as `v1-e34-t26` gave it"
+    assert (
+        banner_words(
+            SyncRunRecord.model_validate(record),
+            SyncRunDetails.model_validate(details),
+            may_succeed_on_retry=a_retry_may_cure,
+        )
+        == "skipped"
+    ), "the banner's word, as `v1-e34-t26` gave it"
 
 
 async def test_a_pull_a_lock_naming_another_home_refused_is_failed_not_skipped_as_run_home_moved_is(

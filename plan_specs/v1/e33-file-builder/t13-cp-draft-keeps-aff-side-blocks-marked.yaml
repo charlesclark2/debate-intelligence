@@ -45,7 +45,7 @@ spec:
         counts say which, and a non-CP draft is byte for byte as before, with the hspolicy26
         counts before and after; tests shown failing first.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -255,9 +255,45 @@ None. The affected set's remainder runs in the pull request's `ci` check (agreem
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-31
 
 **Notes:**
+
+An unreplaced CP text slot now shows wherever the coach looks, and still publishes.
+1. **ac1 passes.**
+   * Red: 13 failed on a do-nothing skeleton, plus the smoke check failing at the build's findings
+     after its slot-first assertions passed. Green: 266 and 3.
+   * The node criterion passes (143).
+   * The finding line, written by hand, names the paragraph and pocket > hat > block.
+   * The smoke check passes on an offline stamped, installed build too.
+2. **Mutants:** eight, all caught. Mutant 2 (the copied string) shows the constant is really read.
+   Mutant 4 (publish blocked) is caught by both the service and the CLI. You turned mutant 6's tuple
+   unpack into an assertion.
+3. **Decisions accepted:**
+   * **A new check id, `placeholders-replaced`, last in order.** A WARN under another check would name
+     the wrong check in every line the coach reads.
+   * **The checker version bumped to `2026.10.31-file-checks-3`, with what that means stated.**
+     Published files are untouched. A built but unpublished file needs a `files check` before publish
+     (`QUALITY_REPORT_MISSING` until then). e33-t05's prod file has no slot.
+   * **`CP_TEXT_SLOT` defined in the checks module and re-exported by suggest,** which the layers
+     contract and the import cycle require.
+   * **Headings the coach didn't write named by level and paragraph,** so no other text leaks.
+   * **An exact match only.**
+4. **Deviations accepted:**
+   * the regenerated schema, which its drift test requires (the PM's next batch adds `docs/data` to
+     the spec's packages);
+   * the three pins that grew by one row;
+   * the counterplan recipe kept out of `recipes/`, so the guide's quoted examples stay as they are;
+   * a FAIL under the new id when the file doesn't parse, as every document-reading check does, which
+     is the service's rule.
+5. **Follow-up: yes, one p3 E33 task in the PM's next batch.** Publish names a report written by an
+   older checker version as such, instead of "missing".
+6. **Closing checks:** the affected set (94 files) stopped at 94% at its limit with nothing failing,
+   and is left to the PR's `ci` under agreement 10. The always-run list (372), the changed files (266),
+   the files smoke check (3), ruff, pyright, lint-imports, thin handlers, the schema check and the
+   specs are clean.
+7. **Merge:** a plain `scripts/task pr` once `ci` is green. v1-e33-t14 also touches file-recipes.md;
+   whichever merges second rebases that paragraph.

@@ -893,8 +893,105 @@ What it will take, in order:
    prod's lock object is seeded naming `home_environment: prod`: `caselist seed-run-state --execute
    --confirm-prod`, from a copy restored from dev, once every manifest it holds is in the prod bucket.
 3. The dev lock object is rewritten, held for good by a holder of kind `moved` naming
-   `home_environment: prod`, so that no dev run starts again. No command writes that holder yet: it is
-   follow-up work, filed in `v1-e40-t06`'s session report.
+   `home_environment: prod`, so that no dev run starts again: `caselist move-run-home --execute`, the
+   same day as step 2 and after its dry run, as [the dev lock held for good](#the-dev-lock-held-for-good)
+   below says.
 4. The dev schedule is deleted and prod's enabled, by plans the PM reads, with a plan check in this
    runbook's style. Then prod's late-run alarm's email, after prod's first recorded run, and dev's off.
 5. The comparison of step 7, against a prod run.
+
+### The dev lock held for good
+
+`debate-research caselist move-run-home` (`v1-e40-t11`). It takes dev's lock like any other command,
+so it is refused with `RUN_LOCK_HELD` while a run holds it, and then rewrites it with `If-Match`, held
+for good by a holder of kind `moved`: `home_environment: prod`, the time it was written, and who wrote
+it (the kind of runner, `mac` here, and the build's tag; never a person). It has no lease and never
+expires. From then on every command that would take dev's lock (`caselist pull`, `publish`, `parse
+--publish`, `remove`, `unsuppress`, `retire --bucket`, `restore-run-state`, `seed-run-state`,
+`backfile-import`, `landscape report --publish`, `tub index publish`, `tub index prune`, `store sync
+--push`, `files publish`) is refused with `RUN_HOME_MOVED` and the words `the weekly run now runs from
+prod`, and writes nothing. It runs in dev only: in prod it is refused (`RUN_HOME_MOVE_REFUSED`) before
+it reads anything, since prod's lock names prod from its seed.
+
+**Which builds may be about.** Builds older than this command (`v1.1.0-dev.251`, the image the dev task
+runs, among them) read the moved lock and refuse it too, as a dev build: `RUN_LOCK_WRONG_HOME`, "the
+bucket's run lock names prod as the run's home environment, and this is dev". They do not name the move,
+and they write nothing. **But an older build run as prod against dev's bucket** (`DEBATE_ENV=prod` with
+a `DEBATE_STORAGE__S3__BUCKET` override naming dev's bucket) **would take the moved lock over**: its rule
+reads a lock with no lease as expired. So no block here or after sets such an override (each checks for
+leftover `DEBATE_*` variables first), and the move itself is run from a build that has the command,
+which the first block checks.
+
+**The checks and the dry run.** Prod's lock must exist, from step 2, before dev's is moved: the first
+line asks prod's seed for its plan, which only reads. Then the move's dry run, which reads dev's lock
+and writes nothing.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, anywhere
+```bash
+aws sso login --profile debate-dev-evidence
+aws sso login --profile debate-prod-evidence
+if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; env | grep -o '^DEBATE_[A-Z_]*'; elif ! debate-research caselist move-run-home --help >/dev/null 2>&1; then echo "STOP: this debate-research has no move-run-home; install a release after v1-e40-t11"; else cd "$HOME" && DEBATE_ENV=prod debate-research --json caselist seed-run-state | grep -oE '"seeded_already": (true|false)'; DEBATE_ENV=dev debate-research --json caselist move-run-home | grep -oE '"applied": (true|false)|"home_environment": "[a-z]+"|"state": "(free|held)"|"kind": "[a-z]+"|"code": "[A-Z_]+"'; fi
+```
+
+**What to read, and what stops you.** Go on only with `"seeded_already": true` (prod is seeded), then
+`"applied": false`, `"home_environment": "dev"` and `"state": "free"` (dev's lock as it is), then
+`"home_environment": "prod"`, `"state": "held"` and `"kind": "moved"` (what the move would write).
+`"seeded_already": false` stops you: step 2 is not done. `"code": "RUN_LOCK_HELD"` means a run holds
+dev's lock: wait until it has recorded, and run the block again. `"code": "RUN_HOME_MOVED"` means dev's
+lock is moved already: there is nothing to do.
+
+**The move.**
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, anywhere
+```bash
+if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif pgrep -fl 'debate-research( --json)? caselist'; then echo "STOP: a caselist command is running (above)"; else cd "$HOME" && DEBATE_ENV=dev debate-research --json caselist move-run-home --execute | grep -oE '"applied": (true|false)|"home_environment": "[a-z]+"|"state": "(free|held)"|"kind": "[a-z]+"|"code": "[A-Z_]+"'; fi
+```
+Success looks like `"applied": true`, then `"home_environment": "dev"` and `"state": "free"` (what it
+found), then `"home_environment": "prod"`, `"state": "held"` and `"kind": "moved"` (what it wrote).
+Anything else: stop and send the PM the output. Then check that a dev command is refused, by asking for
+the move's dry run again, which reads only:
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, anywhere
+```bash
+cd "$HOME" && DEBATE_ENV=dev debate-research --json caselist move-run-home | grep -oE '"code": "[A-Z_]+"|the weekly run now runs from prod'
+```
+Success looks like `"code": "RUN_HOME_MOVED"` and `the weekly run now runs from prod`. Record the move's
+date in `v1-e40-t11`'s follow-ups.
+
+### Undoing the move: the release, only after the coach confirms
+
+A move made by mistake (before prod was seeded, say) is undone by its release, and by nothing else: an
+older version of the lock object cannot be copied back, because the bucket refuses an unconditional
+write of the lock (`v1-e40-t07`). **The release follows the coach's confirmation, never comes before
+it.** It makes dev the run's home again, so prod's schedule must be off first (disabled, or never
+enabled): two homes would mean two weekly runs and two ledgers against the same five downloads a day
+(ADR-0020 (7)). The release writes dev's lock `free`, naming dev as the home, with `If-Match` on the
+version it read, and only when a move holds it.
+
+**The release's dry run.** It reads and writes nothing.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, anywhere
+```bash
+aws sso login --profile debate-dev-evidence
+if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; else cd "$HOME" && DEBATE_ENV=dev debate-research --json caselist move-run-home --release | grep -oE '"applied": (true|false)|"home_environment": "[a-z]+"|"state": "(free|held)"|"kind": "[a-z]+"|"code": "[A-Z_]+"'; fi
+```
+
+**What to read, and what stops you.** Go on only with `"applied": false`, then `"home_environment":
+"prod"`, `"state": "held"` and `"kind": "moved"` (the move it found), then `"home_environment": "dev"`
+and `"state": "free"` (what it would write), and only with the coach's confirmation in hand.
+`"code": "RUN_HOME_NOT_MOVED"` means no move holds dev's lock: there is nothing to release.
+
+**The release.**
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, anywhere
+```bash
+if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; else cd "$HOME" && DEBATE_ENV=dev debate-research --json caselist move-run-home --release --execute | grep -oE '"applied": (true|false)|"home_environment": "[a-z]+"|"state": "(free|held)"|"kind": "[a-z]+"|"code": "[A-Z_]+"'; fi
+```
+Success looks like `"applied": true`, `"home_environment": "prod"`, `"state": "held"`, `"kind":
+"moved"`, then `"home_environment": "dev"` and `"state": "free"`. `"code": "LOCK_OBJECT_CHANGED"` means
+the lock changed between the read and the write, and nothing was written: run the dry run again.

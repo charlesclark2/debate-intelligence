@@ -8,7 +8,9 @@
 * a bucket with no lock object is never started on;
 * every command that writes to a bucket takes the lock in bucket mode, and every registered command
   is classified as one that does or one that does not;
-* in local mode a bucket-writing command refuses a bucket that holds a lock object (ruling 3(a)).
+* in local mode a bucket-writing command refuses a bucket that holds a lock object (ruling 3(a));
+* (`v1-e40-t11`) once `caselist move-run-home` has held the lock for good for prod, every command that
+  takes it is refused, naming the move and where the run now lives, and the release gives it back.
 
 Another runner is played by the test writing the lock object directly, as a Mac or a task would.
 """
@@ -26,6 +28,7 @@ import typer
 from tests.fixtures.parse_pipeline.build_parse_world import WEEKS
 
 from debate_cli.app import create_app
+from debate_cli.build_info import BuildInfo
 from debate_cli.exit_codes import ExitCode
 from debate_core.application.caselist.bucket_run import BucketRun
 from debate_core.application.caselist.run_lock import RUN_LOCK_KEY
@@ -199,6 +202,7 @@ BUCKET_WRITING: Final = {
     "caselist retire",
     "caselist seed-run-state",
     "caselist restore-run-state",
+    "caselist move-run-home",
     "landscape report",
     "tub index publish",
     "tub index prune",
@@ -451,3 +455,179 @@ def test_a_run_whose_lease_is_taken_ends_run_lock_lost_even_with_nothing_left_to
     assert lost["exit_code"] != ExitCode.OK, lost
     record, details = world.last_record(empty)
     assert (record["error_class"], details["failure_codes"]) == ("RunLockLost", ["RUN_LOCK_LOST"])
+
+
+# ------------------------------------------------------------------------------------------------
+# The run's home moved to prod (`v1-e40-t11`, ADR-0020 (7) step 3)
+# ------------------------------------------------------------------------------------------------
+
+MOVED: Final = (
+    "the weekly run now runs from prod: this bucket's run lock (reports/sync/run-lock.json) is held "
+    "for good since "
+)
+
+
+def the_run_home_moved(world: World) -> dict[str, Any]:
+    """`caselist move-run-home --execute`, as the promotion runs it: dev, bucket mode."""
+    world.mode("bucket")
+    moved = world.run("caselist", "move-run-home", "--execute")
+    assert moved["exit_code"] == ExitCode.OK, moved
+    return moved
+
+
+def test_move_run_home_plans_then_holds_the_lock_for_good_then_releases_it(world: World) -> None:
+    seeded_with_two_weeks(world)
+    stamped = BuildInfo(
+        version="1.1.0", channel="dev", commit="0" * 40, tag="v1.1.0-dev.999", built_at=None, run_id=None
+    )
+    world.monkeypatch.setattr("debate_cli.container.current_build_info", lambda: stamped)
+    now = at(world.clock.now)
+    expected = {
+        "format_version": 1,
+        "home_environment": "prod",
+        "state": "held",
+        "holder": {
+            "kind": "moved",
+            "run_id": now.replace("-", "").replace(":", ""),
+            "task": None,
+            "command": "caselist move-run-home",
+            "by": "mac",
+            "build": "v1.1.0-dev.999",
+        },
+        "acquired_at": now,
+        "renewed_at": None,
+        "lease_expires_at": None,
+        "took_over_from": None,
+    }
+    before = world.everything()
+
+    planned = world.run("caselist", "move-run-home")
+
+    assert planned["exit_code"] == ExitCode.OK, planned
+    assert (planned["data"]["applied"], planned["data"]["release"]) == (False, False)
+    assert (planned["data"]["found"]["state"], planned["data"]["found"]["home_environment"]) == (
+        "free",
+        "dev",
+    )
+    assert planned["data"]["written"] == expected
+    assert world.everything() == before, "the dry run writes nothing"
+
+    moved = the_run_home_moved(world)
+
+    assert moved["data"]["applied"] is True
+    assert moved["data"]["written"] == expected == world.lock()
+    assert "caselist move-run-home" in lock_holders(world), "written under the move's own lease"
+    moved_version = world.everything()
+
+    release_planned = world.run("caselist", "move-run-home", "--release")
+
+    assert release_planned["exit_code"] == ExitCode.OK, release_planned
+    assert (release_planned["data"]["applied"], release_planned["data"]["release"]) == (False, True)
+    assert release_planned["data"]["found"] == expected
+    assert world.everything() == moved_version, "the release's dry run writes nothing"
+
+    released = world.run("caselist", "move-run-home", "--release", "--execute")
+
+    assert released["exit_code"] == ExitCode.OK, released
+    assert world.lock() == {
+        "format_version": 1,
+        "home_environment": "dev",
+        "state": "free",
+        "holder": None,
+        "acquired_at": None,
+        "renewed_at": now,
+        "lease_expires_at": None,
+        "took_over_from": None,
+    }
+    assert world.pull()["exit_code"] == ExitCode.OK, "dev's run takes its lock again"
+
+
+def test_move_run_home_is_refused_while_a_run_holds_the_lock_naming_it(world: World) -> None:
+    seeded_with_two_weeks(world)
+    another_runner_holds_the_lock(world, lease_left=timedelta(minutes=10))
+    before = world.everything()
+
+    for arguments in ((), ("--execute",)):
+        refused = world.run("caselist", "move-run-home", *arguments)
+
+        assert refused["exit_code"] == ExitCode.DOMAIN_FAILURE, refused
+        assert refused["error"]["code"] == "RUN_LOCK_HELD"
+        assert (
+            f"mac run {OTHER_RUN} (`caselist pull`) holds the bucket's run lock"
+            in refused["error"]["message"]
+        )
+    assert world.everything() == before
+
+
+def test_the_release_is_refused_when_no_move_holds_the_lock(world: World) -> None:
+    seeded_with_two_weeks(world)
+    before = world.everything()
+
+    refused = world.run("caselist", "move-run-home", "--release", "--execute")
+
+    assert refused["exit_code"] == ExitCode.DOMAIN_FAILURE, refused
+    assert refused["error"]["code"] == "RUN_HOME_NOT_MOVED"
+    assert world.everything() == before
+
+
+@pytest.mark.parametrize("command", sorted(COMMANDS))
+def test_each_bucket_writing_command_is_refused_after_the_run_home_moved_naming_the_move(
+    world: World, command: str
+) -> None:
+    seeded_with_two_weeks(world)
+    run = COMMANDS[command](world)
+    the_run_home_moved(world)
+    before = world.everything()
+
+    refused = run()
+
+    assert refused["exit_code"] == ExitCode.DOMAIN_FAILURE, refused
+    assert refused["error"]["code"] == "RUN_HOME_MOVED", refused["error"]
+    assert refused["error"]["message"].startswith(MOVED), refused["error"]["message"]
+    assert "(`caselist move-run-home`, from a mac, build " in refused["error"]["message"]
+    assert "caselist move-run-home --release" in refused["error"]["hint"]
+    assert world.everything() == before
+
+
+def test_a_pull_after_the_run_home_moved_is_refused_naming_the_move_and_keeps_its_record_local(
+    world: World, tmp_path: Path
+) -> None:
+    seeded_with_two_weeks(world)
+    the_run_home_moved(world)
+    before = world.everything()
+    calls = len(world.site.calls)
+    empty = world.use(tmp_path / "empty")
+
+    refused = world.pull()
+
+    assert refused["exit_code"] == ExitCode.DOMAIN_FAILURE, refused
+    assert refused["error"]["code"] == "RUN_HOME_MOVED"
+    assert refused["error"]["message"].startswith(MOVED)
+    assert len(world.site.calls) == calls, "nothing listed or fetched"
+    assert world.everything() == before
+    assert world.last_record(empty)[0]["error_class"] == "RunHomeMoved"
+
+
+def test_the_seed_after_the_run_home_moved_is_refused_naming_the_move(world: World) -> None:
+    seeded_with_two_weeks(world)
+    the_run_home_moved(world)
+    before = world.everything()
+
+    refused = world.run("caselist", "seed-run-state")
+
+    assert refused["error"]["code"] == "SEED_REFUSED", refused
+    assert MOVED in refused["error"]["message"]
+    assert world.everything() == before
+
+
+def test_in_local_mode_a_command_after_the_run_home_moved_is_refused_naming_the_move(world: World) -> None:
+    seeded_with_two_weeks(world)
+    the_run_home_moved(world)
+    world.mode("local")
+    before = world.everything()
+
+    refused = world.run("caselist", "publish", "--caselist", "testcl26")
+
+    assert refused["error"]["code"] == "RUN_HOME_MOVED", refused
+    assert refused["error"]["message"].startswith(MOVED)
+    assert world.everything() == before

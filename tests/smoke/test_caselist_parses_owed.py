@@ -132,6 +132,14 @@ def shown(installed_cli: InstalledCli) -> Any:
     return shown
 
 
+def parses_owed_in(envelope: dict[str, Any]) -> object:
+    """`parses_owed` from one command's `--json`, asserted present: t08 gives it whether or not
+    anything is owed."""
+    assert envelope["exit_code"] == ExitCode.OK, envelope
+    assert "parses_owed" in envelope["data"], f"{envelope['command']} --json gives no parses_owed"
+    return envelope["data"]["parses_owed"]
+
+
 def owed_file(directory: Path, *, snapshots: tuple[str, ...] = (), full_parses: tuple[str, ...] = ()) -> Path:
     """The parse-owed file in `directory`, written by t08's writer: `snapshots` of the synthetic
     caselist, and a full parse of each of `full_parses` under the new parser version."""
@@ -176,10 +184,8 @@ def test_parses_owed_in_the_data_directory_are_shown_by_caselist_runs_and_caseli
     runs = run("caselist", "runs")
     status = run("caselist", "status")
 
-    assert runs["exit_code"] == ExitCode.OK, runs
-    assert runs["data"]["parses_owed"] == expected
-    assert status["exit_code"] == ExitCode.OK, status
-    assert status["data"]["parses_owed"] == expected
+    assert parses_owed_in(runs) == expected
+    assert parses_owed_in(status) == expected
     assert said in shown("caselist", "runs")
     assert said in shown("caselist", "status")
 
@@ -208,11 +214,10 @@ def test_parses_owed_in_the_bucket_are_shown_by_caselist_runs_remote_and_not_by_
     remote = run("caselist", "runs", "--remote")
     local = run("caselist", "runs")
 
-    assert remote["exit_code"] == ExitCode.OK, remote
     assert remote["data"]["source"] == "bucket"
-    assert remote["data"]["parses_owed"] == expected
+    assert parses_owed_in(remote) == expected
     assert said in shown("caselist", "runs", "--remote")
-    assert local["data"]["parses_owed"] == NOTHING_OWED, "this machine owes nothing"
+    assert parses_owed_in(local) == NOTHING_OWED, "this machine owes nothing"
     assert "parse owed" not in shown("caselist", "runs").lower()
 
 
@@ -226,10 +231,9 @@ def test_no_parses_owed_is_shown_as_nothing_by_caselist_runs_and_caselist_status
 
     for arguments in (("caselist", "runs"), ("caselist", "runs", "--remote"), ("caselist", "status")):
         envelope = run(*arguments)
-        assert envelope["exit_code"] == ExitCode.OK, envelope
-        assert envelope["data"]["parses_owed"] == NOTHING_OWED, arguments
+        assert parses_owed_in(envelope) == NOTHING_OWED, arguments
         assert "parse owed" not in shown(*arguments).lower(), arguments
 
     bucket.put_object(Bucket=BUCKET, Key=STATE_KEY, Body=b"")
-    assert run("caselist", "runs", "--remote")["data"]["parses_owed"] == NOTHING_OWED
+    assert parses_owed_in(run("caselist", "runs", "--remote")) == NOTHING_OWED
     assert "parse owed" not in shown("caselist", "runs", "--remote").lower()

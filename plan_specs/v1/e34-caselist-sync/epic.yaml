@@ -904,5 +904,24 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e34-t35-token-missing-hint-on-the-mac
+    - id: t36
+      kind: Task
+      name: 'A Mac run stopped for an unreadable token says to log out and log in again'
+      description: >-
+        A Mac run stopped for an unreadable token says to log out and log in again.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t36-token-unreadable-hint-on-the-mac.yaml
+        goalRef: v1-e34-t36-token-unreadable-hint-on-the-mac
+      dependsOn:
+      - t35
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t36-token-unreadable-hint-on-the-mac reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t36-token-unreadable-hint-on-the-mac
 status:
   phase: Pending

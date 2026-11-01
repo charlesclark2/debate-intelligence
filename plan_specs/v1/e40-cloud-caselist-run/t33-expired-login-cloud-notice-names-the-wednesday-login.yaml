@@ -1,0 +1,82 @@
+# TASK v1-e40-t33-expired-login-cloud-notice-names-the-wednesday-login - A cloud run refused for an expired login says the Wednesday login renews it, not to log in by hand
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t33-expired-login-cloud-notice-names-the-wednesday-login
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "A cloud run refused for an expired login says the Wednesday login renews it, not to log in by hand"
+spec:
+  # Filed by the PM, 2026-10-31, from v1-e34-t35's check of the neighbouring codes (the PM's review, 2026-10-31).
+  description: >-
+    A run refused by OpenCaselist with 401 or 403 records `CASELIST_AUTH_EXPIRED`, and its
+    notification reads "caselist pull stopped: OpenCaselist login expired" with the fix
+    `debate-research caselist auth login`, in both modes. In bucket mode that is wrong: the
+    cloud's token is in Secrets Manager, the Wednesday 03:00 login task renews it, and
+    `caselist-cloud-run.md` tells the operator not to log in by hand (a second login). In bucket
+    mode, give it the cloud's cure, as v1-e40-t22 and v1-e40-t28 gave the other bucket-mode
+    notices theirs: the next Wednesday login renews the token, and an import refused for it
+    starts again after Thursday 00:00. On the Mac nothing changes. Check the email the alert
+    topic sends, as well as the notification, and say whether the login task's own failure
+    notice is already right.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, packages/debate_core/tests, docs/runbooks]
+    forbidden:
+      - A change to the Mac's notice for this code
+      - Network or AWS access in a test
+  context:
+    - kind: TaskRef
+      name: v1-e34-t33-keychain-errors-named
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e40-t22-bucket-mode-hints-point-at-the-cloud
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        In bucket mode a run refused for an expired login names the Wednesday login and not
+        `caselist auth login`; on the Mac the notice is unchanged, asserted by its old text;
+        by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t33-expired-login-cloud-notice-names-the-wednesday-login-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    A cloud run refused for an expired login says the Wednesday login renews it, not to log in
+    by hand.
+  goalRef:
+    name: v1-e40-t33-expired-login-cloud-notice-names-the-wednesday-login
+  graph:
+    nodes:
+      - id: expired-login-cloud-notice-names-the-wed
+        kind: Task
+        name: Expired login in the cloud
+        description: >-
+          A cloud run refused for an expired login says the Wednesday login renews it, not
+          to log in by hand.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Expired login in the cloud tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, auth_expired]
+status:
+  phase: Pending

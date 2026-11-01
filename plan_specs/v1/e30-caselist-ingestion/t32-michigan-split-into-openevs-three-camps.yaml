@@ -1,0 +1,89 @@
+# TASK v1-e30-t32-michigan-split-into-openevs-three-camps - Michigan's three camps are filed apart, as OpenEv files them, so their cards can link
+# Epic: E30 Caselist Evidence Ingestion | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e30-t32-michigan-split-into-openevs-three-camps
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+  annotations:
+    debate/title: "Michigan's three camps are filed apart, as OpenEv files them, so their cards can link"
+spec:
+  # Filed by the PM, 2026-10-31, from the OpenEv camp words the PM read on 2026-10-31, at the operator's request.
+  description: >-
+    `camp_aliases.yaml` merges `Michigan7`, `Michigan Classic`, `MNDI` and `Michigan National
+    Debate Institute` into one canonical camp, `Michigan`. OpenEv files three camps: `MNDI`
+    (Michigan (MNDI)), `UM7` (Michigan) and `UMC` (Michigan (Classic)), read from its 2026 Files
+    By Camp list. So a Michigan camp card cannot link to its camp's page (v1-e39-t28's rule
+    leaves a merged camp without a word). Count first, read-only and counts only: how many
+    stored camp files are `Michigan`, and how many of them name each spelling in their path or
+    file name, and how many name none (a bare `Michigan`). Then split the table into three
+    canonical camps, each with its spellings and its OpenEv word (`MNDI`, `UM7`, `UMC`), and say
+    how a bare `Michigan` is filed: it stays `Michigan`, with no word, unless the count shows
+    another rule is sound. Matching takes whole words, so `Michigan` must not swallow `Michigan
+    Classic`: say how the loader orders or refuses that. Refile the existing camp files' camp
+    from their stored names without a download, and say what else carries the camp (the parsed
+    occurrence rows, the search index) and how each learns the new one: a rebuild, a re-import
+    of metadata, or the next parse. Stop and report if it needs a parser or fingerprint version
+    bump.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, docs/data, docs/runbooks]
+    forbidden:
+      - A download, or network access in a test
+      - A school, student or lab name in the report
+      - A camp given a word OpenEv's list does not show
+  context:
+    - kind: TaskRef
+      name: v1-e30-t04-openev-importer
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Counts first: the stored Michigan camp files, by the spelling each names, recorded
+        before any rule.
+    - id: ac2
+      description: >-
+        The table files Michigan7, Michigan Classic and MNDI as three camps with their
+        OpenEv words, a bare Michigan as the count rules, and no spelling swallowing
+        another; existing files are refiled without a download; by tests shown failing
+        first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e30-t32-michigan-split-into-openevs-three-camps-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+spec:
+  description: >-
+    Michigan's three camps are filed apart, as OpenEv files them, so their cards can link.
+  goalRef:
+    name: v1-e30-t32-michigan-split-into-openevs-three-camps
+  graph:
+    nodes:
+      - id: michigan-split-into-openevs-three-camps
+        kind: Task
+        name: Michigan split
+        description: >-
+          Michigan's three camps are filed apart, as OpenEv files them, so their cards can
+          link.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Michigan split tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, camp]
+status:
+  phase: Pending

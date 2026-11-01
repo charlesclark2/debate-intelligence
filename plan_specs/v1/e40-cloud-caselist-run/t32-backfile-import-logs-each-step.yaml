@@ -29,7 +29,11 @@ spec:
     forbidden:
       - A school, team, file name or path in a log line
       - Network or AWS access in a test
-  context: []
+  # PM sweep 2026-11-01: the import command is v1-e34-t34's. v1-e40-t09 (the cloud import) and v1-e40-t30 (its memory) are merged but InProgress for operator records only, so they are not listed.
+  context:
+    - kind: TaskRef
+      name: v1-e34-t34-backfile-seasons-import
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-

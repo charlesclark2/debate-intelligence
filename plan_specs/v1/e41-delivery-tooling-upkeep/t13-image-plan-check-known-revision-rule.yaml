@@ -1,0 +1,73 @@
+# TASK v1-e41-t13-image-plan-check-known-revision-rule - The image plan check refuses a schedule repointed at a revision registered before the apply
+# Epic: E41 — Delivery Tooling Upkeep | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e41-t13-image-plan-check-known-revision-rule
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+  annotations:
+    debate/title: "The image plan check refuses a schedule repointed at a revision registered before the apply"
+spec:
+  # Filed by the PM, 2026-10-31, from v1-e40-t30's follow-up (the PM's review, 2026-10-31).
+  description: >-
+    v1-e40-t30's `--memory` mode of `ops/caselist_run/check_image_plan.py` refuses a run
+    schedule whose new task definition ARN is already known in the plan: a known ARN is a
+    revision registered earlier, not the one the apply creates. The image mode does not, so it
+    would pass a schedule repointed at an old hand-registered revision as long as only `target`
+    changed. Give the image mode the same rule, for both schedules, sharing t30's helper, and
+    keep every other behaviour of both modes.
+  priority: 3
+  constraints:
+    packages: [ops, tests/scripts]
+    forbidden:
+      - An apply, or AWS access in a test
+      - Any other change to what either mode passes
+  context:
+    - kind: TaskRef
+      name: v1-e40-t30-run-task-memory-fits-a-full-parse
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The image mode refuses a schedule repointed at a known revision, both modes'
+        existing cases pass unchanged, by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e41-t13-image-plan-check-known-revision-rule-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+spec:
+  description: >-
+    The image plan check refuses a schedule repointed at a revision registered before the apply.
+  goalRef:
+    name: v1-e41-t13-image-plan-check-known-revision-rule
+  graph:
+    nodes:
+      - id: image-plan-check-known-revision-rule
+        kind: Task
+        name: Known revision rule
+        description: >-
+          The image plan check refuses a schedule repointed at a revision registered
+          before the apply.
+        estimatedEffort: 30m
+        acceptanceCriteria:
+          - type: test_passes
+            name: Known revision rule tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, -k, plan_check]
+status:
+  phase: Pending

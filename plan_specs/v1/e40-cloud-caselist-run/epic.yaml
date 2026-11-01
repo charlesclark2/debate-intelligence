@@ -731,6 +731,8 @@ spec:
       inputs:
         specRef: plan_specs/v1/e40-cloud-caselist-run/t32-backfile-import-logs-each-step.yaml
         goalRef: v1-e40-t32-backfile-import-logs-each-step
+      dependsOn:
+      - ext-v1-e34-t34-backfile-seasons-import
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e40-t32-backfile-import-logs-each-step reports phase Succeeded
@@ -740,5 +742,34 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e40-t32-backfile-import-logs-each-step
+    - id: ext-v1-e34-t33-keychain-errors-named
+      kind: External
+      name: 'Prerequisite from E34: A keychain failure under launchd names its cause, and clearing a token already gone is no error'
+      description: >-
+        Cross-epic prerequisite owned by v1-e34-caselist-sync (release v1.1).
+      inputs:
+        goalRef: v1-e34-t33-keychain-errors-named
+        specRef: plan_specs/v1/e34-caselist-sync/t33-keychain-errors-named.yaml
+    - id: t33
+      kind: Task
+      name: 'A cloud run refused for an expired login says the Wednesday login renews it, not to log in by hand'
+      description: >-
+        A cloud run refused for an expired login says the Wednesday login renews it, not to
+        log in by hand.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t33-expired-login-cloud-notice-names-the-wednesday-login.yaml
+        goalRef: v1-e40-t33-expired-login-cloud-notice-names-the-wednesday-login
+      dependsOn:
+      - ext-v1-e34-t33-keychain-errors-named
+      - t22
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t33-expired-login-cloud-notice-names-the-wednesday-login reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t33-expired-login-cloud-notice-names-the-wednesday-login
 status:
   phase: Pending

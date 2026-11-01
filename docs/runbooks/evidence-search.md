@@ -958,14 +958,14 @@ set. Do it all in one terminal window, not on a Wednesday, and not while a cloud
 
 Once: `uv run playwright install chromium`, in `$WT`.
 
-**Once, before J1: the seed's names are no real school's** (PM ruling 2026-11-01). The seed's three
+**Once, before J1: the seed's names are no real school's** (PM ruling 2026-10-31; run 2026-10-31: `0`). The seed's three
 school names and its tournament are invented; this checks that no disclosed path in this Mac's
 manifests holds any of them. It prints a count, never a path or a name.
 
 **Operator command** (expected runtime seconds)
 Where: any terminal
 ```bash
-grep -rliE 'quillfern|ostrander|brindlecote|lanternfield' "$HOME/.debate-research/dev/manifests" | grep -v '/testcl26/' | wc -l
+grep -rliE 'quillfern|ostrander|brindlecote|lanternfield' "$HOME/.debate-research/dev/objects/manifests" | grep -v '/testcl26/' | wc -l
 ```
 Success looks like `0`. Anything else: stop and tell the PM, who renames the seed before it reaches
 dev.

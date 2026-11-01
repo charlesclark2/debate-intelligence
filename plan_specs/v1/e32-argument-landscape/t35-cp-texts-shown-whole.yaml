@@ -31,6 +31,11 @@ spec:
     whether any cached reading must be refreshed (`v1-e32-t30`'s analytic-text cache). Keep
     every existing rule: a text naming a school of the caselist is withheld whole, planks
     included, and nothing but the shown text is ever logged or cached as words.
+    (PM amendment 2026-10-31, the PM's reviews of the first build and the re-work.) A continuation may
+    open with a capital: "no capital" above is struck, as 11 of the count's 26 continuation copies opened
+    with one (Deviation 1). And ac1's "the group's digest covers what is shown" is superseded: the checks
+    (read-back and the school check) cover every line shown, and a CP group is its opening paragraph's,
+    showing the whole text the most of its teams read, with that count (the PM's ruling, point 2).
   priority: 2
   constraints:
     packages: [debate_core.arguments, debate_core.application, debate_core.domain, debate_core.testing, tests/fixtures/landscape, packages/debate_core/tests, docs/guides]
@@ -47,8 +52,9 @@ spec:
       description: >-
         The counts are recorded first; then a CP text ending in a colon is shown with its
         planks, a text continued in the next paragraph is joined where the count found that
-        shape, a plank naming a school withholds the whole text, and the group's digest
-        covers what is shown, by synthetic fixtures and tests shown failing first.
+        shape, a plank naming a school withholds the whole text, and the checks cover every
+        line shown while a CP group is its opening paragraph's (amended 2026-10-31), by
+        synthetic fixtures and tests shown failing first.
 status:
   phase: Succeeded
 ---

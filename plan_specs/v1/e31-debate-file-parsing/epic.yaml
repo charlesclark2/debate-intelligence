@@ -772,5 +772,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e31-t32-bold-in-part-tags
+    - id: t33
+      kind: Task
+      name: 'A pointer to another card (`<<AUTHOR ''YY FOR REFERENCE>>`) is never promoted to a cite'
+      description: >-
+        A pointer to another card (`<<AUTHOR 'YY FOR REFERENCE>>`) is never promoted to a
+        cite.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t33-reference-pointers-are-not-cites.yaml
+        goalRef: v1-e31-t33-reference-pointers-are-not-cites
+      dependsOn:
+      - t31
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t33-reference-pointers-are-not-cites reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t33-reference-pointers-are-not-cites
 status:
   phase: Pending

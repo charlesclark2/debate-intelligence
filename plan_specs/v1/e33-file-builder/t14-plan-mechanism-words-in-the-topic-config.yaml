@@ -1,0 +1,78 @@
+# TASK v1-e33-t14-plan-mechanism-words-in-the-topic-config - A coach-edited list of plan-mechanism words in the topic config marks a CP draft's plan-dependent blocks
+# Epic: E33 Evidence File Builder | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e33-t14-plan-mechanism-words-in-the-topic-config
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e33-file-builder
+  annotations:
+    debate/title: "A coach-edited list of plan-mechanism words in the topic config marks a CP draft's plan-dependent blocks"
+spec:
+  # Filed by the PM, 2026-10-31, from v1-e33-t11's question 2 (the PM's ruling B, 2026-10-31).
+  description: >-
+    v1-e33-t11's plank rule (an affirmative's alias or tag keyword, or a t16 plank label) marked
+    1 of 68 kept blocks on hspolicy26 and missed both blocks the coach named, a preemption block
+    and a waiver block. Add a per-topic list of plan-mechanism words to the landscape topic
+    config (config/landscape, beside the topic's other files), loaded and validated with the
+    config, which the coach edits; seed hspolicy26's with `preempt`, `preemption`, `waiver` and
+    `waive`, and say the coach adds more. t11's rule also marks a kept block whose heading holds
+    one of these words as a whole word (or its stem, if you choose and state a stemming rule).
+    The rule's other two parts are unchanged. Measure on hspolicy26 as t11 did: the blocks
+    marked before and after.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, packages/debate_core/tests, config/landscape, tests/config, docs/guides]
+    forbidden:
+      - A team's text written into a draft
+      - A topic without the list refused
+  context:
+    - kind: TaskRef
+      name: v1-e33-t11-suggest-drafts-a-cp-file-a-coach-can-build-on
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A topic's plan-mechanism words load with its config, a CP draft marks a kept block
+        whose heading holds one, a topic with no list behaves as before, and hspolicy26's
+        preemption and waiver blocks are marked, by counts and tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e33-t14-plan-mechanism-words-in-the-topic-config-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e33-file-builder
+spec:
+  description: >-
+    A coach-edited list of plan-mechanism words in the topic config marks a CP draft's
+    plan-dependent blocks.
+  goalRef:
+    name: v1-e33-t14-plan-mechanism-words-in-the-topic-config
+  graph:
+    nodes:
+      - id: plan-mechanism-words-in-the-topic-config
+        kind: Task
+        name: Plan-mechanism words
+        description: >-
+          A coach-edited list of plan-mechanism words in the topic config marks a CP
+          draft's plan-dependent blocks.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Plan-mechanism words tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, suggest or topic_config]
+status:
+  phase: Pending

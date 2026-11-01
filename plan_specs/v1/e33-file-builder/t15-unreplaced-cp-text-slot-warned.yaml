@@ -1,0 +1,78 @@
+# TASK v1-e33-t15-unreplaced-cp-text-slot-warned - A built file still holding the CP text placeholder is warned, and a CP draft has a smoke check
+# Epic: E33 Evidence File Builder | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e33-t15-unreplaced-cp-text-slot-warned
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e33-file-builder
+  annotations:
+    debate/title: "A built file still holding the CP text placeholder is warned, and a CP draft has a smoke check"
+spec:
+  # Filed by the PM, 2026-10-31, from v1-e33-t11's question 1 (the PM's ruling B) and Follow-up 2, and v1-e33-t12's Follow-up (2026-10-31).
+  description: >-
+    A `ready` recipe still holding v1-e33-t11's placeholder `[the counterplan text: write it
+    here]` builds it as written, with a quality report of PASS. Add a file quality check result:
+    a WARN naming the block whose analytic is the placeholder, so `files build`, `files check`
+    and `files publish` show it (v1-e33-t12 prints it as a finding line) and publish still goes
+    ahead. Also: the QUALITY_FAILED panel's hint, which says to read the `.quality.md` for each
+    card's finding, says the findings are listed above it; and a CP in the file-builder example
+    corpus (tests/fixtures/file_builder) with a smoke assertion in tests/smoke/test_files_cli.py
+    that its draft opens with the slot.
+  priority: 3
+  constraints:
+    packages: [debate_core.evidence, debate_core.application, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, tests/fixtures/file_builder, tests/smoke]
+    forbidden:
+      - A FAIL for the placeholder (publish must go ahead)
+      - A real disclosed file in a fixture
+  context:
+    - kind: TaskRef
+      name: v1-e33-t12-files-check-names-each-warned-card
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A built file holding the placeholder carries a WARN naming its block, shown by
+        build, check and publish, and a file without it is unchanged; the QUALITY_FAILED
+        hint says the findings are above; a smoke check builds a CP draft from the example
+        corpus and finds the slot first; tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e33-t15-unreplaced-cp-text-slot-warned-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e33-file-builder
+spec:
+  description: >-
+    A built file still holding the CP text placeholder is warned, and a CP draft has a smoke
+    check.
+  goalRef:
+    name: v1-e33-t15-unreplaced-cp-text-slot-warned
+  graph:
+    nodes:
+      - id: unreplaced-cp-text-slot-warned
+        kind: Task
+        name: Placeholder warned
+        description: >-
+          A built file still holding the CP text placeholder is warned, and a CP draft has
+          a smoke check.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Placeholder warned tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, file_check or quality]
+status:
+  phase: Pending

@@ -137,7 +137,8 @@ says how many cards it would ask the model about.
 With `--model-mode none` that is 0, and it asks none.
 
 **Operator command** (expected runtime ~5 to 12 min the first time this build reports the caselist, a
-few minutes after: the plan-text and analytic-text caches hold only `2026.10.20-docx-6` readings, so
+few minutes after: the plan-text and analytic-text caches hold only `2026.10.20-docx-6` readings, or
+readings of older rules (a rules bump such as `v1-e32-t35`'s `analytic-texts-3`), so
 the first report on this build reads every on-topic source again, and the dry run keeps what it read in
 those two caches for step 4 (a build before `v1-e32-t30` keeps none of it); the analytic texts' first
 fill took 551 s on 2026-10-24)

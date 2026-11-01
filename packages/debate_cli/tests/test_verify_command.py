@@ -117,6 +117,7 @@ def test_the_help_documents_every_exit_code() -> None:
         "1  at least one card is UNVERIFIED (every card is still listed)",
         "2  usage error, a manifest that fails its JSON Schema, or one from a newer build",
         "NO_MANIFEST for a .docx with no embedded manifest",
+        "BODY_CARD_NOT_IN_MANIFEST for a card in a .docx body that its manifest does not list",
         "3  verification could not run, for example a store could not be read",
     ):
         assert line in result.stdout
@@ -132,6 +133,8 @@ def test_the_cli_readme_documents_every_exit_code() -> None:
         "| `2` | A usage error, or a file that is not a card manifest this build reads: not JSON, not valid "
         "against `card_manifest.v1.json`, or written by a newer build of debate-research. The failing JSON "
         "path is reported and nothing is verified. |",
+        "| `1` (`BODY_CARD_NOT_IN_MANIFEST`) | A .docx's body holds a card its manifest does not list, "
+        "such as one pasted in by hand. It is listed as UNVERIFIED, by its place in the body. |",
         "| `3` | Verification could not run, for example because a store could not be read. No card "
         "has a verdict. |",
     ):
@@ -700,6 +703,7 @@ def test_docx_an_untouched_export_exits_zero_and_lists_its_card_verified_with_it
         "format_profile": "team-default",
         "body_cards": 1,
         "unclaimed_body_cards": [],
+        "unclaimed_body_card_verdicts": [],
     }
 
 
@@ -774,6 +778,42 @@ def test_docx_a_bracketed_interpolation_is_shown_as_a_warning_and_exits_zero(
     ]
     assert "INTERPOLATION_PRESENT (warning) at offset 156" in for_a_person.stdout
     assert "Okapi" not in as_json.stdout + for_a_person.stdout + for_a_person.stderr
+
+
+def with_a_pasted_card(document: Any) -> None:
+    document.add_paragraph("A card pasted in by hand", style="Heading 4")
+    document.add_paragraph("Someone 24")
+    document.add_paragraph("Words no snapshot holds.")
+
+
+def test_docx_a_card_pasted_into_the_body_exits_one_with_its_own_unverified_entry(
+    tmp_path: Path, docx_world: ExportedDocx
+) -> None:
+    path = written(tmp_path, edited(docx_world.export.document, with_a_pasted_card))
+
+    as_json = invoke("--json", "verify", str(path))
+    for_a_person = invoke("verify", str(path))
+    verbose = invoke("--verbose", "verify", str(path))
+
+    assert as_json.exit_code == for_a_person.exit_code == ExitCode.DOMAIN_FAILURE, for_a_person.output
+    error = envelope(as_json)["error"]
+    assert (error["code"], error["exit_code"]) == ("UNVERIFIED", 1)
+    report = error["details"]
+    assert [(card["card_id"], card["status"]) for card in report["cards"]] == [(NEWS_CARD_ID, "VERIFIED")]
+    assert (report["total"], report["verified"], report["unverified"]) == (2, 1, 1)
+    assert report["document"]["unclaimed_body_cards"] == [1]
+    assert [
+        (entry["body_position"], entry["status"], entry["reason_codes"])
+        for entry in report["document"]["unclaimed_body_card_verdicts"]
+    ] == [(1, "UNVERIFIED", ["BODY_CARD_NOT_IN_MANIFEST"])]
+    table = for_a_person.stdout
+    assert "1 of 2 card(s) verified" in table
+    row = next(line for line in table.splitlines() if line.startswith("│ body card 2"))
+    assert "A card pasted in by hand" in row and "UNVERIFIED" in row and "BODY_CARD_NOT_IN_MANIFEST" in row
+    assert "BODY_CARD_NOT_IN_MANIFEST" in for_a_person.stderr, "the panel counts the reason"
+    assert "body card 2 BODY_CARD_NOT_IN_MANIFEST: body card 2 (position 1 from 0)" in verbose.stderr
+    everything = as_json.stdout + for_a_person.stdout + for_a_person.stderr + verbose.stderr
+    assert "Words no snapshot holds" not in everything and "Someone 24" not in everything
 
 
 def test_docx_with_no_embedded_manifest_exits_two_with_no_manifest(tmp_path: Path) -> None:

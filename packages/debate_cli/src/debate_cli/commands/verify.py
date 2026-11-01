@@ -10,7 +10,9 @@ A .docx the platform exported is read too (`v1-e06-t07`): the use case finds the
 it, verifies its cards the same way, and then checks that the document body still shows each card's
 evidence, allowing only the edits the edit policy allows. A card whose quoted words were changed is
 UNVERIFIED with `MANUAL_EDIT` and the character range; a bracketed interpolation is a warning
-(`INTERPOLATION_PRESENT`) on a card that stays VERIFIED. The file is only ever read.
+(`INTERPOLATION_PRESENT`) on a card that stays VERIFIED. A card in the body that the manifest does
+not list, such as one pasted in by hand, is a row of its own, UNVERIFIED with
+`BODY_CARD_NOT_IN_MANIFEST`. The file is only ever read.
 
 Snapshots are read from this environment's data directory (`storage.data_dir`, chosen by
 `DEBATE_ENV` or `DEBATE_STORAGE__DATA_DIR`). Nothing is fetched: a card whose snapshot is not on this
@@ -22,7 +24,8 @@ From :mod:`debate_cli.exit_codes`, and each one means exactly one thing here:
 
 * `0`: every card is VERIFIED.
 * `1`: the manifest was read and at least one card is UNVERIFIED, a .docx's `MANUAL_EDIT` among
-  them. Every card is still reported.
+  them, or a .docx's body holds a card its manifest does not list (`BODY_CARD_NOT_IN_MANIFEST`).
+  Every card is still reported.
 * `2`: the command line was wrong, or the file is not a card manifest this build reads: not JSON,
   not valid against `card_manifest.v1.json`, or written by a newer build (`NewerManifestVersion`,
   whose hint says to install a newer build). The failing JSON path is reported and nothing is
@@ -65,6 +68,7 @@ from debate_core.application.verify_manifest import (
     NewerManifestVersion,
     NoManifest,
     ReportedReason,
+    UnclaimedBodyCardVerdict,
     VerificationCouldNotRun,
 )
 from debate_core.domain import VerificationStatus
@@ -86,12 +90,14 @@ def verify(
     Each card's evidence is cut again from its stored snapshot and compared exactly.
     In a .docx, the body must still show each card's evidence: deleting whole words and
     changing markup are allowed, a bracketed interpolation is a warning, and any other
-    change is MANUAL_EDIT. Snapshots are read from this environment's data directory and
-    never fetched, and the file is never written.
+    change is MANUAL_EDIT. A card in the body that the manifest does not list is
+    UNVERIFIED with BODY_CARD_NOT_IN_MANIFEST. Snapshots are read from this environment's
+    data directory and never fetched, and the file is never written.
 
     Exit codes:
     0  every card is VERIFIED
-    1  at least one card is UNVERIFIED (every card is still listed)
+    1  at least one card is UNVERIFIED (every card is still listed);
+       BODY_CARD_NOT_IN_MANIFEST for a card in a .docx body that its manifest does not list
     2  usage error, a manifest that fails its JSON Schema, or one from a newer build (its JSON path is shown);
        NO_MANIFEST for a .docx with no embedded manifest
     3  verification could not run, for example a store could not be read
@@ -112,6 +118,9 @@ def verify(
             cli.output.detail(f"{verdict.card_id} {reason.code.value}: {reason.detail}")
         for warning in verdict.warnings:
             cli.output.detail(f"{verdict.card_id} {warning.code.value} (warning): {warning.detail}")
+    for unclaimed in report.unclaimed_body_card_verdicts:
+        for reason in unclaimed.reasons:
+            cli.output.detail(f"{_body_card(unclaimed)} {reason.code.value}: {reason.detail}")
     if report.all_verified:
         cli.output.success(command_name(ctx), payload, display=_table(report))
         return
@@ -144,11 +153,16 @@ def _unverified(report: ManifestVerificationReport, payload: dict[str, Any]) -> 
 def _unverified_panel(report: ManifestVerificationReport) -> dict[str, JsonValue]:
     """The cards by count, the reasons by code, and one line per snapshot an unverified card names."""
     unverified = [verdict for verdict in report.cards if verdict.status is not VerificationStatus.VERIFIED]
+    unclaimed = report.unclaimed_body_card_verdicts
+    in_the_body_only = f", {len(unclaimed)} in the body only" if unclaimed else ""
     panel: dict[str, JsonValue] = {
         "cards": (
-            f"{report.total} in the manifest, {report.verified} verified, {report.unverified} unverified"
+            f"{len(report.cards)} in the manifest{in_the_body_only}, {report.verified} verified, "
+            f"{report.unverified} unverified"
         ),
-        "reasons": by_count(code.value for verdict in unverified for code in verdict.reason_codes),
+        "reasons": by_count(
+            code.value for verdict in (*unverified, *unclaimed) for code in verdict.reason_codes
+        ),
     }
     by_snapshot: dict[str | None, list[CardVerdict]] = {}
     for verdict in unverified:
@@ -157,6 +171,8 @@ def _unverified_panel(report: ManifestVerificationReport) -> dict[str, JsonValue
         codes = ", ".join(dict.fromkeys(code.value for verdict in cards for code in verdict.reason_codes))
         named = "no snapshot named" if snapshot is None else f"snapshot {snapshot}"
         panel[named] = f"{len(cards)} card(s) unverified ({codes})"
+    if unclaimed:
+        panel["not in the manifest"] = ", ".join(_body_card(verdict) for verdict in unclaimed)
     return every_value_in_full(panel)
 
 
@@ -221,7 +237,8 @@ def _could_not_run(stopped: VerificationCouldNotRun) -> CommandFailure:
 def _table(report: ManifestVerificationReport) -> TableSpec:
     """A row per card: its id with its snapshot's beneath, its tag, its status, its reasons and warnings.
 
-    A snapshot id is as wide as a card id, so the second line costs the table no width.
+    A snapshot id is as wide as a card id, so the second line costs the table no width. A body card the
+    manifest does not list follows the manifest's cards, named by its place in the body.
     """
     return TableSpec(
         title=f"{report.verified} of {report.total} card(s) verified",
@@ -244,9 +261,18 @@ def _table(report: ManifestVerificationReport) -> TableSpec:
                 ),
             )
             for verdict in report.cards
+        ]
+        + [
+            (_body_card(unclaimed), unclaimed.tag, unclaimed.status.value, "\n".join(unclaimed.reason_codes))
+            for unclaimed in report.unclaimed_body_card_verdicts
         ],
         lines_below=_document_lines(report),
     )
+
+
+def _body_card(unclaimed: UnclaimedBodyCardVerdict) -> str:
+    """How a person names a body card: counted from 1, as Word's reader would count them."""
+    return f"body card {unclaimed.body_position + 1}"
 
 
 def _reason_cell(reason: ReportedReason) -> str:
@@ -258,7 +284,7 @@ def _reason_cell(reason: ReportedReason) -> str:
 
 
 def _document_lines(report: ManifestVerificationReport) -> list[str]:
-    """For a .docx: which profile its body was read in, and any body card the manifest does not list."""
+    """For a .docx: which profile its body was read in, and how many body cards the manifest does not list."""
     document = report.document
     if document is None:
         return []
@@ -268,7 +294,7 @@ def _document_lines(report: ManifestVerificationReport) -> list[str]:
         positions = ", ".join(str(position + 1) for position in unclaimed)
         lines.append(
             f"{len(unclaimed)} card(s) in the body are not in its manifest (body card {positions}); "
-            "they were not verified."
+            "they are UNVERIFIED."
         )
     return lines
 

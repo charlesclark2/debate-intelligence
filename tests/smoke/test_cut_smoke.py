@@ -243,5 +243,10 @@ def test_verify_reads_the_docx_cut_wrote_and_finds_its_card_verified_offline(
         [],
         embedded["snapshot_id"],
     )
-    assert data["document"] == {"format_profile": "team-default", "body_cards": 1, "unclaimed_body_cards": []}
+    assert data["document"] == {
+        "format_profile": "team-default",
+        "body_cards": 1,
+        "unclaimed_body_cards": [],
+        "unclaimed_body_card_verdicts": [],
+    }
     assert out.read_bytes() == written, "verify only reads the document"

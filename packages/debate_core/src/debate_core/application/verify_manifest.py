@@ -60,8 +60,9 @@ interpolation is a warning (``INTERPOLATION_PRESENT``) on a card that stays VERI
 in the format profile the cards name; a manifest whose cards name more than one profile, or one this
 build does not have, describes no document this build can read, and is an :class:`InvalidManifest`.
 So is a document whose manifest is damaged or whose body cannot be read. A body card no manifest card
-claims (a card pasted in by hand) has no verdict: the report lists its position, and it changes no
-card's status.
+claims (a card pasted in by hand) is an entry of its own, UNVERIFIED with
+``BODY_CARD_NOT_IN_MANIFEST`` and counted among the report's cards, so the document is not verified
+(the PM's ruling of 2026-11-02); it changes no manifest card's status.
 
 ## A card that passes the schema but is not a Card
 
@@ -88,7 +89,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from functools import cache
-from typing import Any, Final, Self, cast
+from typing import Any, Final, Literal, Self, cast
 
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError as SchemaViolation
@@ -424,6 +425,45 @@ class CardVerdict(BaseModel):
         )
 
 
+class UnclaimedBodyCardVerdict(BaseModel):
+    """The verdict on a card in a .docx's body that its manifest does not list (`v1-e06-t07`).
+
+    Always UNVERIFIED with ``BODY_CARD_NOT_IN_MANIFEST``: no snapshot is named for it, so nothing it
+    shows can be verified. It has no card id; it is known by its position in the body.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    body_position: int = Field(ge=0, description="Its index among the body's cards, from 0.")
+    tag: str = Field(description="Its tag as the body shows it.")
+    status: Literal[VerificationStatus.UNVERIFIED]
+    reasons: tuple[ReportedReason, ...] = Field(min_length=1)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def reason_codes(self) -> tuple[ReasonCode, ...]:
+        """The codes of :attr:`reasons`, in order, without repeats."""
+        return tuple(dict.fromkeys(reason.code for reason in self.reasons))
+
+    @classmethod
+    def of(cls, card: BodyCard) -> UnclaimedBodyCardVerdict:
+        number = card.position + 1
+        return cls(
+            body_position=card.position,
+            tag=card.tag,
+            status=VerificationStatus.UNVERIFIED,
+            reasons=(
+                ReportedReason(
+                    code=ReasonCode.BODY_CARD_NOT_IN_MANIFEST,
+                    detail=(
+                        f"body card {number} (position {card.position} from 0) is not in the document's "
+                        "manifest, so nothing about it was verified"
+                    ),
+                ),
+            ),
+        )
+
+
 class DocumentCheck(BaseModel):
     """What was read of a .docx's body beside its manifest (`v1-e06-t07`)."""
 
@@ -436,8 +476,15 @@ class DocumentCheck(BaseModel):
     unclaimed_body_cards: tuple[int, ...] = Field(
         description=(
             "The positions, among the body's cards from 0, of those no manifest card claims, such as a "
-            "card pasted in by hand. They have no verdict and change no card's status."
+            "card pasted in by hand. Each has an entry in unclaimed_body_card_verdicts."
         )
+    )
+    unclaimed_body_card_verdicts: tuple[UnclaimedBodyCardVerdict, ...] = Field(
+        default=(),
+        description=(
+            "One UNVERIFIED entry per unclaimed body card, in body order, counted in the report's "
+            "total and unverified. A manifest card's status does not change for them."
+        ),
     )
 
 
@@ -455,16 +502,21 @@ class ManifestVerificationReport(BaseModel):
         description="For a .docx: what was read of its body. Absent for a JSON manifest.",
     )
 
+    @property
+    def unclaimed_body_card_verdicts(self) -> tuple[UnclaimedBodyCardVerdict, ...]:
+        """For a .docx, the body cards its manifest does not list; empty otherwise."""
+        return () if self.document is None else self.document.unclaimed_body_card_verdicts
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def total(self) -> int:
-        """How many cards the manifest lists."""
-        return len(self.cards)
+        """How many cards were judged: the manifest's, and for a .docx each body card it does not list."""
+        return len(self.cards) + len(self.unclaimed_body_card_verdicts)
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def verified(self) -> int:
-        """How many of them are VERIFIED."""
+        """How many of them are VERIFIED. A body card the manifest does not list never is."""
         return sum(1 for verdict in self.cards if verdict.status is VerificationStatus.VERIFIED)
 
     @computed_field  # type: ignore[prop-decorator]
@@ -475,7 +527,10 @@ class ManifestVerificationReport(BaseModel):
 
     @property
     def all_verified(self) -> bool:
-        """True when every card is VERIFIED. A manifest lists at least one card, so this is never vacuous."""
+        """True when every card is VERIFIED and a .docx's body holds no card its manifest does not list.
+
+        A manifest lists at least one card, so this is never vacuous.
+        """
         return self.verified == self.total
 
 
@@ -551,6 +606,7 @@ class VerifyManifest:
                 format_profile=name,
                 body_cards=len(body.cards),
                 unclaimed_body_cards=tuple(card.position for card in unclaimed),
+                unclaimed_body_card_verdicts=tuple(UnclaimedBodyCardVerdict.of(card) for card in unclaimed),
             ),
         )
 

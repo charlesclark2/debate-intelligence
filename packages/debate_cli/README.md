@@ -336,6 +336,7 @@ reason codes (`--verbose` adds each reason's detail on stderr). `--json` prints 
 |---|---|
 | `0` | Every card is VERIFIED. |
 | `1` | The manifest was read and at least one card is UNVERIFIED. Every card is still listed. |
+| `1` (`BODY_CARD_NOT_IN_MANIFEST`) | A .docx's body holds a card its manifest does not list, such as one pasted in by hand. It is listed as UNVERIFIED, by its place in the body. |
 | `2` | A usage error, or a file that is not a card manifest this build reads: not JSON, not valid against `card_manifest.v1.json`, or written by a newer build of debate-research. The failing JSON path is reported and nothing is verified. |
 | `2` (`NO_MANIFEST`) | A .docx with no embedded manifest, such as a hand-cut team file. verify reads only files debate-research exported; nothing is verified. |
 | `3` | Verification could not run, for example because a store could not be read. No card has a verdict. |
@@ -367,8 +368,11 @@ name and each card's evidence paragraph is compared with its `evidence_text` und
 * any other change to the quoted words (a word changed or added, letters taken out of a word, two
   words joined, a paragraph added under the evidence) makes it UNVERIFIED with `MANUAL_EDIT`, the
   `evidence_text` range it replaced and the body range that replaced it, and the run exits `1`;
-* a card whose tag is no longer in the body is UNVERIFIED with `BODY_CARD_MISSING`; a card pasted
-  into the body that the manifest does not list is named under the table and judged by nothing.
+* a card whose tag is no longer in the body is UNVERIFIED with `BODY_CARD_MISSING`;
+* a card in the body that the manifest does not list, such as one pasted in by hand, is a row of its
+  own, named by its place in the body ("body card 2"), UNVERIFIED with `BODY_CARD_NOT_IN_MANIFEST`,
+  and the run exits `1`. In `--json` it is an entry of `document.unclaimed_body_card_verdicts`, beside
+  the positions in `document.unclaimed_body_cards`, and it counts in `total` and `unverified`.
 
 The body is read as Word shows it: tracked insertions count, tracked deletions and hidden text do
 not. Neither output quotes the evidence or an interpolation's words, and the file is only read.

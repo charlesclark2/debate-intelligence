@@ -297,13 +297,26 @@ def with_a_pasted_card(document: Document) -> None:
     document.add_paragraph("Words no snapshot holds.")
 
 
-def test_docx_a_card_pasted_into_the_body_is_listed_and_changes_no_verdict(export: NewsExport) -> None:
+def test_docx_a_card_pasted_into_the_body_is_an_unverified_entry_of_its_own(export: NewsExport) -> None:
     report = verify(export, edited(export.document, with_a_pasted_card))
 
-    assert verdict_of(report).status is VerificationStatus.VERIFIED
-    assert report.document == DocumentCheck(
-        format_profile="team-default", body_cards=2, unclaimed_body_cards=(1,)
+    assert not report.all_verified, "a card the manifest does not list is never verified"
+    assert (report.total, report.verified, report.unverified) == (2, 1, 1)
+    assert verdict_of(report).status is VerificationStatus.VERIFIED, "the manifest's card is untouched"
+    document = report.model_dump(mode="json")["document"]
+    assert (document["body_cards"], document["unclaimed_body_cards"]) == (2, [1])
+    [entry] = document["unclaimed_body_card_verdicts"]
+    assert (entry["body_position"], entry["tag"], entry["status"], entry["reason_codes"]) == (
+        1,
+        "A card pasted in by hand",
+        "UNVERIFIED",
+        ["BODY_CARD_NOT_IN_MANIFEST"],
     )
+    [reason] = entry["reasons"]
+    assert reason["detail"] == (
+        "body card 2 (position 1 from 0) is not in the document's manifest, so nothing about it was verified"
+    )
+    assert "Words no snapshot holds" not in json.dumps(report.model_dump(mode="json"))
 
 
 def test_docx_a_paragraph_added_under_the_evidence_is_manual_edit(export: NewsExport) -> None:

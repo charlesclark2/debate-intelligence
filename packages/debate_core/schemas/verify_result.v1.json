@@ -414,11 +414,20 @@
           "type": "integer"
         },
         "unclaimed_body_cards": {
-          "description": "The positions, among the body's cards from 0, of those no manifest card claims, such as a card pasted in by hand. They have no verdict and change no card's status.",
+          "description": "The positions, among the body's cards from 0, of those no manifest card claims, such as a card pasted in by hand. Each has an entry in unclaimed_body_card_verdicts.",
           "items": {
             "type": "integer"
           },
           "title": "Unclaimed Body Cards",
+          "type": "array"
+        },
+        "unclaimed_body_card_verdicts": {
+          "default": [],
+          "description": "One UNVERIFIED entry per unclaimed body card, in body order, counted in the report's total and unverified. A manifest card's status does not change for them.",
+          "items": {
+            "$ref": "#/$defs/UnclaimedBodyCardVerdict"
+          },
+          "title": "Unclaimed Body Card Verdicts",
           "type": "array"
         }
       },
@@ -445,7 +454,8 @@
         "CARD_INVALID",
         "SNAPSHOT_REFERENCE_MISMATCH",
         "MANUAL_EDIT",
-        "BODY_CARD_MISSING"
+        "BODY_CARD_MISSING",
+        "BODY_CARD_NOT_IN_MANIFEST"
       ],
       "title": "ReasonCode",
       "type": "string"
@@ -562,6 +572,54 @@
       "title": "ReportedWarning",
       "type": "object"
     },
+    "UnclaimedBodyCardVerdict": {
+      "additionalProperties": false,
+      "description": "The verdict on a card in a .docx's body that its manifest does not list (`v1-e06-t07`).\n\nAlways UNVERIFIED with ``BODY_CARD_NOT_IN_MANIFEST``: no snapshot is named for it, so nothing it\nshows can be verified. It has no card id; it is known by its position in the body.",
+      "properties": {
+        "body_position": {
+          "description": "Its index among the body's cards, from 0.",
+          "minimum": 0,
+          "title": "Body Position",
+          "type": "integer"
+        },
+        "tag": {
+          "description": "Its tag as the body shows it.",
+          "title": "Tag",
+          "type": "string"
+        },
+        "status": {
+          "const": "UNVERIFIED",
+          "title": "Status",
+          "type": "string"
+        },
+        "reasons": {
+          "items": {
+            "$ref": "#/$defs/ReportedReason"
+          },
+          "minItems": 1,
+          "title": "Reasons",
+          "type": "array"
+        },
+        "reason_codes": {
+          "description": "The codes of :attr:`reasons`, in order, without repeats.",
+          "items": {
+            "$ref": "#/$defs/ReasonCode"
+          },
+          "readOnly": true,
+          "title": "Reason Codes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "body_position",
+        "tag",
+        "status",
+        "reasons",
+        "reason_codes"
+      ],
+      "title": "UnclaimedBodyCardVerdict",
+      "type": "object"
+    },
     "VerificationCheck": {
       "description": "One check the verifier can run. A result lists those that ran, passed or not.",
       "enum": [
@@ -636,13 +694,13 @@
           "description": "For a .docx: what was read of its body. Absent for a JSON manifest."
         },
         "total": {
-          "description": "How many cards the manifest lists.",
+          "description": "How many cards were judged: the manifest's, and for a .docx each body card it does not list.",
           "readOnly": true,
           "title": "Total",
           "type": "integer"
         },
         "verified": {
-          "description": "How many of them are VERIFIED.",
+          "description": "How many of them are VERIFIED. A body card the manifest does not list never is.",
           "readOnly": true,
           "title": "Verified",
           "type": "integer"

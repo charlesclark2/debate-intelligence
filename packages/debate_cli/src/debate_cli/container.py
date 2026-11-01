@@ -144,17 +144,20 @@ from __future__ import annotations
 import functools
 import os
 import sys
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Final, cast
+from types import TracebackType
+from typing import TYPE_CHECKING, Any, Final, Self, cast
 
 from debate_cli.build_info import bundled_config_root, current_build_info
 from debate_cli.exit_codes import codes_exit_as_a_retrieval_failure
 from debate_core.application.aff_assignment import AffAssignmentService
 from debate_core.application.analytic_texts import AnalyticTextService
-from debate_core.application.article_fetch import ArticleFetch
+from debate_core.application.article_fetch import ArticleFetch, Closeable
 from debate_core.application.article_service import ArticleService
+from debate_core.application.card_selection import CardSelector
+from debate_core.application.card_service import CardService
 from debate_core.application.caselist.bucket_run import BucketRun
 from debate_core.application.caselist.evidence_listing import (
     LocalEvidence,
@@ -205,6 +208,7 @@ from debate_core.application.caselist_sync import (
     ParseOwed,
     why_no_search_index_stage,
 )
+from debate_core.application.citation_service import CitationService
 from debate_core.application.environment_data_dirs import profile_data_dir
 from debate_core.application.evidence_profiles import (
     MODEL_PROFILE_SETTING,
@@ -217,6 +221,7 @@ from debate_core.application.evidence_sync import (
     SyncKeyspace,
 )
 from debate_core.application.evidence_verifier import EvidenceVerifier
+from debate_core.application.export_service import ExportService
 from debate_core.application.file_build_service import FileBuildService
 from debate_core.application.file_publish_service import FilePublishService
 from debate_core.application.file_quality_service import FileQualityService
@@ -232,8 +237,9 @@ from debate_core.application.landscape_scan import ScanAcceptanceLog
 from debate_core.application.plan_texts import PlanTextService
 from debate_core.application.ports.archive import ArchiveEntry
 from debate_core.application.ports.caller_identity import CallerIdentity
+from debate_core.application.ports.card_edit_log import CardEditEntry
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey
-from debate_core.application.ports.model_router import RoutingConfigError
+from debate_core.application.ports.model_router import ModelRouter, RoutingConfigError
 from debate_core.application.ports.notifier import Notifier, NullNotifier
 from debate_core.application.ports.suppression import SuppressionList
 from debate_core.application.review_queue_order import ReviewQueueOrdering
@@ -265,6 +271,12 @@ from debate_core.application.verify_manifest import VerifyManifest
 from debate_core.domain import new_id
 from debate_core.domain.caselist import Event
 from debate_core.domain.model_contracts import ModelProvider
+from debate_core.evidence.format_profile import (
+    FORMAT_PROFILES_DIRECTORY,
+    FormatProfileError,
+    ResolvedFormatProfile,
+    load_format_profiles,
+)
 from debate_core.retrieval.extraction import ContentTypeDispatcher
 
 if TYPE_CHECKING:  # pragma: no cover - imported for the type checker only; see the factories
@@ -279,14 +291,18 @@ if TYPE_CHECKING:  # pragma: no cover - imported for the type checker only; see 
     from debate_core.integrations.docx_parser import DebateDocxParser
     from debate_core.integrations.local import SqliteDatabase
     from debate_core.integrations.models.model_mode import ModelMode
+    from debate_core.integrations.models.prompt_registry import PromptRegistry
     from debate_core.integrations.models.record_replay import CassetteDirectory
     from debate_core.integrations.models.routing_policy import RoutingFileFinding
     from debate_core.integrations.models.usage import UsageLog
     from debate_core.integrations.opencaselist import CaselistTokenStore, OpenCaselistClient
 
 __all__ = [
+    "CARD_CASSETTES_DIRECTORY",
     "DEFAULT_INBOX_DIRECTORY",
+    "LOCAL_OWNER_ID",
     "SERVICE_NAMES",
+    "CardCutting",
     "EvidenceStoreNotConfigured",
     "ServiceContainer",
     "Settings",
@@ -297,6 +313,7 @@ __all__ = [
 SERVICE_NAMES: Final[tuple[str, ...]] = (
     "article_fetch",
     "bucket_write_guard",
+    "card_cutting",
     "caselist_import",
     "caselist_parse",
     "caselist_publish",
@@ -329,6 +346,103 @@ Inside the data directory so that one environment is one directory, exactly as t
 the SQLite file are (`debate_core.integrations.local`): a dev pull can never drop an archive where
 a prod import would read it.
 """
+
+
+CARD_CASSETTES_DIRECTORY: Final = Path("cards") / "model-cassettes"
+"""Where `cut`'s model calls are recorded and replayed, in the data directory (`v1-e06-t06`).
+
+Each cassette holds the numbered text of the article it was asked about, so it is this machine's
+data, as the landscape's cassettes are: kept under the data directory and never committed."""
+
+LOCAL_OWNER_ID: Final = "00000000000000000000000001"
+"""The owner of every card `cut` saves: V1's CLI is one person's tool on one machine (`v1-e06-t06`).
+
+A card always belongs to someone (`Card.owner_id`), and V1 has no accounts to name them by, so the
+CLI's cards share one fixed id. It is not a person's identifier and says nothing about anyone; V2's
+accounts give cards their owners."""
+
+
+class CardCutting:
+    """What `cut` runs after its fetch: the card service, the exporter, the format profiles (`v1-e06-t06`).
+
+    An async context manager, like :class:`~debate_core.application.article_fetch.ArticleFetch`: the
+    citation service's Crossref client holds an HTTP client, which belongs to the event loop that used
+    it, and leaving the block closes it.
+    """
+
+    def __init__(
+        self,
+        *,
+        cards: CardService,
+        export: ExportService,
+        profiles: Mapping[str, ResolvedFormatProfile],
+        connection: Closeable,
+    ) -> None:
+        self.cards = cards
+        self.export = export
+        self.profiles = profiles
+        """The format profiles a card can be exported in, by name."""
+        self._connection = connection
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        await self._connection.aclose()
+
+
+class _NoCardEditsYet:
+    """The card edit log while no command edits a card: it holds no entries, and refuses one.
+
+    CitationService reads the log only to re-resolve a card a student has edited, and keep their
+    changes (`v1-e06-t01`). No V1 command edits a card, so no production log exists yet
+    (:mod:`debate_core.application.ports.card_edit_log`), and a card `cut` has just made has no edits.
+    """
+
+    async def append(self, entry: CardEditEntry) -> None:
+        raise RuntimeError("no V1 command edits a card, so nothing may append to the card edit log")
+
+    async def entries_for(self, card_id: str) -> tuple[CardEditEntry, ...]:
+        return ()
+
+
+def _committed_root(what: str) -> Path:
+    """Where the committed `config/` and `prompts/` are read: an installed build's bundled copy, else the
+    source checkout around the working directory, as the settings are; refused when there is neither."""
+    root = bundled_config_root() or find_repository_root()
+    if root is None:
+        raise ConfigurationError(
+            f"{what} is read from the copy an installed build carries, or from a source checkout, and "
+            "this run has neither; reinstall the build, or run from a checkout",
+            field=what,
+        )
+    return root
+
+
+def _committed_prompts() -> Path:
+    from debate_core.integrations.models.prompt_registry import DEFAULT_PROMPT_DIRECTORY
+
+    directory = _committed_root(str(DEFAULT_PROMPT_DIRECTORY)) / DEFAULT_PROMPT_DIRECTORY
+    if not directory.is_dir():
+        raise ConfigurationError(
+            f"no {DEFAULT_PROMPT_DIRECTORY}/ directory at {directory}; this build carries no prompts to "
+            "cut a card with",
+            field=str(DEFAULT_PROMPT_DIRECTORY),
+        )
+    return directory
+
+
+def _committed_format_profiles() -> dict[str, ResolvedFormatProfile]:
+    directory = _committed_root(str(FORMAT_PROFILES_DIRECTORY)) / FORMAT_PROFILES_DIRECTORY
+    try:
+        return load_format_profiles(directory)
+    except FormatProfileError as error:
+        raise ConfigurationError(str(error), field=str(FORMAT_PROFILES_DIRECTORY)) from error
 
 
 class EvidenceStoreNotConfigured(ConfigurationError):
@@ -1157,6 +1271,113 @@ class ServiceContainer:
             max_user_text_bytes=settings.http.max_response_bytes,
         )
         return ArticleFetch(articles=service, snapshots=snapshots, connection=fetcher)
+
+    def card_cutting(self) -> CardCutting:
+        """What `debate-research cut` runs after the fetch: CardService and ExportService (`v1-e06-t06`).
+
+        CardService gets :class:`~debate_core.application.card_selection.CardSelector` over the
+        structured-output guard, the prompt registry and :meth:`card_model_router`; CitationService with
+        :func:`~debate_core.integrations.crossref_doi.crossref_doi_client` over a
+        :class:`~debate_core.integrations.crossref_doi.FileDoiCache` in `<data dir>/crossref/`; the
+        evidence verifier; and the SQLite file and blob store under `storage.data_dir`, the ones `fetch`
+        stores snapshots in and `verify` reads. ExportService renders with
+        :func:`~debate_core.evidence.docx_renderer.render_cards_docx`.
+
+        The prompts are read from the committed `prompts/`: an installed build's bundled copy
+        (`scripts/stamp_build.py`), or the source checkout's. A run with neither is refused before
+        anything is fetched, as is a format profile directory that does not load.
+
+        Crossref's transport is the network in every real run. A test registers its own under
+        `"crossref_transport"` before the command runs, as `fetch`'s tests do for the fetcher.
+        """
+        return self.singleton("card_cutting", self._build_card_cutting)
+
+    def _build_card_cutting(self) -> CardCutting:
+        from debate_cli import package_version
+        from debate_core.evidence.docx_renderer import render_cards_docx
+        from debate_core.integrations.crossref_doi import (
+            CROSSREF_CACHE_DIRECTORY,
+            FileDoiCache,
+            crossref_doi_client,
+        )
+        from debate_core.integrations.local import FsSnapshotStore, SqliteArticleRepository
+        from debate_core.integrations.local.sqlite_repos import SqliteCardRepository
+        from debate_core.integrations.models.prompt_registry import PromptRegistry
+
+        settings = self.settings
+        profiles = self.format_profiles()
+        registry = PromptRegistry.load(_committed_prompts())
+        clock = _PortClock(self.clock())
+        ids = _PortIdGenerator()
+        snapshots = SnapshotService(
+            blobs=FsSnapshotStore(settings.storage.data_dir), clock=clock, id_generator=ids
+        )
+        articles = SqliteArticleRepository(self.database)
+        doi_client = crossref_doi_client(
+            settings.http,
+            settings.providers,
+            version=package_version(),
+            cache=FileDoiCache(settings.storage.data_dir / CROSSREF_CACHE_DIRECTORY),
+            # A test's mock transport, or None: the network. `Any`, for the reason the fetcher's is.
+            transport=cast(Any, self._instances.get("crossref_transport")),
+        )
+        cards = CardService(
+            articles=articles,
+            snapshots=snapshots,
+            selector=CardSelector(StructuredOutputGuard(self._card_model_router(registry), registry)),
+            citations=CitationService(
+                articles=articles, snapshots=snapshots, edit_log=_NoCardEditsYet(), doi_metadata=doi_client
+            ),
+            verifier=EvidenceVerifier(articles=articles, snapshots=snapshots, clock=clock),
+            cards=SqliteCardRepository(self.database),
+            clock=clock,
+            id_generator=ids,
+        )
+        export = ExportService(articles=articles, clock=clock, render_docx=render_cards_docx)
+        return CardCutting(cards=cards, export=export, profiles=profiles, connection=doi_client)
+
+    def _card_model_router(self, registry: PromptRegistry) -> ModelRouter:
+        """The router `cut`'s `card.select` and `card.markup` calls go to, chosen as every model router is.
+
+        :func:`~debate_core.integrations.models.factory.build_model_router` decides: the fixture fake
+        when `models.provider` is `fake`, and otherwise the record-and-replay router in the mode
+        `DEBATE_MODEL_MODE` names, replay when it names none, so a run nobody configured reaches no
+        model. Its cassettes are kept in `<data dir>/cards/model-cassettes/`: they hold the numbered
+        text of the articles cut, so they are this machine's data and never committed, as the
+        landscape's are. Record and live wrap the Bedrock router, imported only then, behind the usage
+        log and the budget (`v1-e05-t07`). A test registers its own router under `"card_model_router"`.
+        """
+        return self.singleton("card_model_router", lambda: self._build_card_model_router(registry))
+
+    def _build_card_model_router(self, registry: PromptRegistry) -> ModelRouter:
+        from debate_core.integrations.models.factory import build_model_router
+        from debate_core.integrations.models.model_mode import ModelMode, resolve_model_mode
+
+        settings = self.settings
+        mode = resolve_model_mode(None)
+        real_router = None
+        if mode is not ModelMode.REPLAY and settings.models.provider is not ModelProvider.FAKE:
+            # Imported here, not at module scope: only a record or live run needs the AWS SDK.
+            from debate_core.integrations.bedrock import bedrock_router_factory
+
+            real_router = bedrock_router_factory(registry)
+        return build_model_router(
+            settings,
+            mode=mode,
+            real_router=real_router,
+            clock=_PortClock(self.clock()),
+            usage_log=self.usage_log(),
+            cassette_dir=settings.storage.data_dir / CARD_CASSETTES_DIRECTORY,
+        )
+
+    def format_profiles(self) -> dict[str, ResolvedFormatProfile]:
+        """The card format profiles by name (`v1-e06-t03`), from the committed `config/format_profiles`.
+
+        An installed build reads its bundled copy and a source checkout its own, as the settings do. A
+        directory that is missing or does not load is a
+        :class:`~debate_core.application.settings.ConfigurationError` naming the problem.
+        """
+        return self.singleton("format_profiles", _committed_format_profiles)
 
     def caselist_import(self) -> CaselistImportService:
         """Build the weekly-archive importer over this environment's local evidence store.

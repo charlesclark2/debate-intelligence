@@ -8,8 +8,9 @@ are fixed here rather than at each `raise`:
     The command did what it was asked to do.
 
 `1` — `DOMAIN_FAILURE`
-    The command ran and the answer is a failure: a card is `UNVERIFIED`, a record was not found,
-    a write lost its revision check. Running the same command again gives the same answer.
+    The command ran and the answer is a failure: `verify` found a card `UNVERIFIED`, a record was
+    not found, a write lost its revision check. Running the same command again gives the same
+    answer.
 
 `2` — `USAGE_ERROR`
     The command line was wrong: unknown command or option, missing argument, no command given.
@@ -24,6 +25,14 @@ are fixed here rather than at each `raise`:
     outage from a verdict. A model call the provider *refused* is not on it
     (:data:`REFUSED_MODEL_CALLS`, `v1-e05-t09`): no retry fixes it, so it is a `1`.
 
+`4` — `CARD_UNVERIFIED`
+    `cut` made a card and the evidence verifier did not pass it (`v1-e06-t06`): the card was saved
+    and exported `UNVERIFIED`, with its banner, and each reason was printed. It is never `0`, because
+    an unverified card is not finished evidence (architecture proposal §8), and it is not `1`, so that
+    a script can tell a card that needs a person's look from a cut that could not run at all: a
+    refused model call, a missing or damaged snapshot or an unregistered prompt saves no card and is a
+    `1`, and a source that could not be retrieved, or a model provider that did not answer, is a `3`.
+
 `70` — `INTERNAL_ERROR`
     A bug: an exception the CLI does not model. 70 is `EX_SOFTWARE` from `sysexits.h`.
 
@@ -35,7 +44,8 @@ Most commands never need to: :class:`~debate_cli.app.DebateResearchGroup` catche
 raises and applies :func:`exit_code_for` for it. A command only chooses a code itself when the
 failure is an *outcome* rather than an exception — `verify` reporting an `UNVERIFIED` card is the
 V1 example, and it reports that outcome through
-:meth:`~debate_cli.output.CliOutput.failure` and then exits with `DOMAIN_FAILURE`.
+:meth:`~debate_cli.output.CliOutput.failure` and then exits with `DOMAIN_FAILURE`; `cut` reporting
+an `UNVERIFIED` card it exported exits with `CARD_UNVERIFIED` the same way.
 
 `debate_core` never imports this module: an exit code is a property of a command-line surface, not
 of the domain. The dependency runs the other way for **error codes**: the word a failure is
@@ -143,6 +153,7 @@ class ExitCode(IntEnum):
     DOMAIN_FAILURE = 1
     USAGE_ERROR = 2
     RETRIEVAL_FAILURE = 3
+    CARD_UNVERIFIED = 4
     INTERNAL_ERROR = 70
 
 

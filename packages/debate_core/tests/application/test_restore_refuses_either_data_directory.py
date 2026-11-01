@@ -234,11 +234,16 @@ def test_prods_data_directory_however_it_is_spelled_is_refused(
 
 SIBLINGS: Final = (
     "~/.debate-research/dev-journey-copy",
-    "~/.debate-research/prod-landscape-copy",
+    "~/.debate-research/landscape-copy-samplecl26",
+    "~/.debate-research/prod-publish-2026-11-04",
     "~/.debate-research/devcopy",
     "~/.debate-research/prod2",
 )
-"""Each beside the data directories, its name starting with one's: a prefix is not a parent."""
+"""Each beside the data directories, most with a name starting with one's: a prefix is not a parent.
+
+The first three are the runbooks' own: evidence-search.md's J2, the landscape runbook's restore and
+the cutover runbook's hand publish to prod, with an invented caselist and week.
+"""
 
 
 @pytest.mark.parametrize("state", STATES)

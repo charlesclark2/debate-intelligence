@@ -386,9 +386,53 @@ Paste-ready:
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-01
 
 **Notes:**
+
+This is the coach-facing half of t21, done carefully. The queue is ordered, the suggestion is gated
+by the threshold the coach's sample was measured at, and nothing is placed.
+1. **ac1 passes, all five parts.**
+   * The queue is in hand-worked confidence order.
+   * Suggestions appear only at or above the threshold, with commodity frame at exactly 0.5.
+   * The seven bundle files are byte-identical with and without the model.
+   * Five removal-and-version refusals each leave today's CSV byte for byte.
+   * Red over a refuse-nothing skeleton: 13 of 40 failed. The 27 passes are listed with why.
+   * The node criterion passes (1,102).
+2. **Mutants:** all 15 are caught, the PM's six in eight forms. 1b, the suggestion written into
+   `decision` where `apply-decisions` would place it, is the one that mattered most, and three tests
+   catch it.
+3. **Decision 1, accepted and the right call:** a weights file scored in plain Python, not a
+   pickle. The installed CLI has no scikit-learn, and loading a pickle runs code. It is checked
+   against scikit-learn's own `predict_proba` within 1e-9, and against a fresh interpreter that
+   loads no `sklearn`, `numpy` or `scipy`.
+4. **Decisions accepted:**
+   * t21's measured model (seed 21, nine tenths), so the coach's sample applies;
+   * a row scored over all its cards;
+   * the suggestion column only when ordered, so a file without a model is today's to the byte;
+   * the extra refusals (taxonomy, caselist, unreadable);
+   * the store no longer holding a version refused;
+   * answer rows treated alike;
+   * `AffAssignmentService.run` left alone, with no production caller.
+5. **Deviations accepted:**
+   * **1:** the read-only `git fetch` changed nothing but the ref. The rule stands for next time.
+   * **2:** no smoke check, see question 3.
+   * **3:** t21's allow-list gains the stdlib `array`.
+6. **Questions, the PM's rulings:**
+   * **1, the retraining sentence:** yes. The PM's next batch adds it to `caselist-removal.md`, and
+     the same to `annual-purge.md`'s step 4.
+   * **2, the threshold: (a), the rule.** The threshold belongs to the model it gates.
+     `train-queue-order` prints the sample's value beside it. If the two differ, the operator sends
+     the line to the PM before the coach relies on the suggestion.
+   * **3, the smoke check:** one p3 E32 task in the next batch covers this order line and
+     v1-e32-t19's dry-run scan refusal in `tests/smoke/test_landscape_smoke.py`.
+7. **Closing checks:** the affected set (235 files) stopped at 49% at its limit with nothing failing,
+   and is left to the PR's `ci` under agreement 10. The always-run list, the landscape application,
+   integration, CLI and script tests (746), the node's directory (1,102), the docs tests (287),
+   ruff, pyright, lint-imports, thin handlers, the doc checks and the specs are clean.
+8. **Merge:** a plain `scripts/task pr` once `ci` is green. After the merge, the operator trains the
+   model on hspolicy26 from a checkout on dev (the report's block, run from that checkout instead of
+   this worktree). That is not a criterion.

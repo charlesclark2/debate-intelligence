@@ -1081,6 +1081,12 @@ _WHAT_STOPPED_A_RUN: Final = {
     "FULL_ARCHIVE_REFUSED": "the complete archive it was asked for cannot be fetched this run",
     "MANIFESTS_NOT_WRITABLE": "this build's local store cannot write manifests",
     "UNREADABLE_MANIFEST": "a manifest on this machine has a line nobody can read",
+    "KEYCHAIN_INTERACTION_NOT_ALLOWED": (
+        "the keychain needed a person, and a run in the background cannot ask"
+    ),
+    "NO_KEYCHAIN": "no keychain was open: nobody was logged in to the Mac",
+    "KEYCHAIN_DENIED": "the keychain was asked for the caselist_token and said no",
+    "KEYCHAIN_REFUSED_PROGRAM": "the keychain refused this program",
     UNMODELLED_ERROR_CODE: "an error nobody modelled, most likely a bug",
 }
 """What a run that stopped before a stage could record it says it stopped on, by the error's code

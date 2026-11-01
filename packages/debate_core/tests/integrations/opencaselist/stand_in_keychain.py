@@ -19,10 +19,12 @@ from __future__ import annotations
 
 import contextlib
 import secrets
-from typing import Final, Literal
+from typing import Final, Literal, cast
 
 import pytest
 from keyring.backends import macOS
+
+from debate_core.integrations.opencaselist.token_store import KeyringLike
 
 type SecurityCall = Literal["find", "add", "delete"]
 """`SecItemCopyMatching` (read), `SecItemAdd` (store) and `SecItemDelete` (delete, and the delete a
@@ -107,9 +109,10 @@ class StandInSecurity:
         del self.items[(service, username)]
 
 
-def macos_keyring_over(security: StandInSecurity, monkeypatch: pytest.MonkeyPatch) -> macOS.Keyring:
+def macos_keyring_over(security: StandInSecurity, monkeypatch: pytest.MonkeyPatch) -> KeyringLike:
     """`keyring`'s own macOS backend, calling `security` in place of the Security framework."""
     monkeypatch.setattr(macOS, "api", security, raising=False)
     monkeypatch.setattr(macOS.Keyring, "keychain", None)
     assert macOS.api is security, "the real Security framework would be called"
-    return macOS.Keyring()
+    # keyring's backends are untyped; the store's three calls are their documented interface.
+    return cast(KeyringLike, macOS.Keyring())

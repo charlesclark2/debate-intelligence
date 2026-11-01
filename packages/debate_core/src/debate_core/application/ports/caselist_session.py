@@ -68,10 +68,13 @@ class KeychainFailure(DomainError):
     macOS OSStatus the cause was told apart by; the library's message is never kept.
     """
 
+    CAUSE: ClassVar[str]
+    """What the OSStatus means, in this project's words."""
+
     HINT: ClassVar[str]
     """What to do about it: :attr:`hint`, on every instance."""
 
-    def __init__(self, operation: KeychainOperation, os_status: int, cause: str) -> None:
+    def __init__(self, operation: KeychainOperation, os_status: int) -> None:
         self.operation: KeychainOperation = operation
         """The call that was refused: `read`, `store` or `delete` the caselist_token."""
         self.os_status = os_status
@@ -80,38 +83,32 @@ class KeychainFailure(DomainError):
         """One line on what to do about it."""
         super().__init__(
             f"the keychain did not let this program {operation} the caselist_token "
-            f"(OSStatus {os_status}): {cause}"
+            f"(OSStatus {os_status}): {self.CAUSE}"
         )
 
 
 class KeychainInteractionNotAllowed(KeychainFailure):
     """OSStatus -25308: the keychain needed a person, and the process cannot show a prompt."""
 
+    CAUSE: ClassVar[str] = (
+        "the keychain is locked, or has not yet been told this program may use the item, and a "
+        "process with no screen, like the scheduled run, cannot ask"
+    )
     HINT: ClassVar[str] = (
         "The Mac must be logged in, not only switched on, with its login keychain unlocked. If it "
         "is, run `debate-research caselist auth status` once in Terminal and choose Always Allow "
         "if the keychain asks."
     )
 
-    def __init__(self, operation: KeychainOperation, os_status: int) -> None:
-        super().__init__(
-            operation,
-            os_status,
-            "the keychain is locked, or has not yet been told this program may use the item, and "
-            "a process with no screen, like the scheduled run, cannot ask",
-        )
-
 
 class NoKeychain(KeychainFailure):
     """OSStatus -25291, -25294 or -25307: no keychain is open for this user."""
 
+    CAUSE: ClassVar[str] = "no keychain is open for this user"
     HINT: ClassVar[str] = (
         "The Mac must be logged in, not only switched on: the login keychain opens when its user "
         "logs in. Then run `debate-research caselist auth status` to check the token is there."
     )
-
-    def __init__(self, operation: KeychainOperation, os_status: int) -> None:
-        super().__init__(operation, os_status, "no keychain is open for this user")
 
 
 class KeychainDenied(KeychainFailure):
@@ -121,36 +118,28 @@ class KeychainDenied(KeychainFailure):
     share this code, and its hint covers both.
     """
 
+    CAUSE: ClassVar[str] = (
+        "it asked to be unlocked, or whether this program may use the item, and was told no"
+    )
     HINT: ClassVar[str] = (
         "The keychain denied this program: run `debate-research caselist auth status` in "
         "Terminal, unlock the keychain and choose Always Allow when it asks; "
         f"{_FILE_BACKEND}."
     )
 
-    def __init__(self, operation: KeychainOperation, os_status: int) -> None:
-        super().__init__(
-            operation,
-            os_status,
-            "it asked to be unlocked, or whether this program may use the item, and was told no",
-        )
-
 
 class KeychainRefusedProgram(KeychainFailure):
     """OSStatus -25293 or -67030: the keychain could not confirm the program, or its own password."""
 
+    CAUSE: ClassVar[str] = (
+        "it could not confirm this program, or the keychain's own password, as allowed to use the item"
+    )
     HINT: ClassVar[str] = (
         "The keychain refused this program: in Keychain Access, open the item "
         "debate-research.opencaselist and allow this build under Access Control, or delete the "
         "item and log in again with `debate-research caselist auth login`; "
         f"{_FILE_BACKEND}."
     )
-
-    def __init__(self, operation: KeychainOperation, os_status: int) -> None:
-        super().__init__(
-            operation,
-            os_status,
-            "it could not confirm this program, or the keychain's own password, as allowed to use the item",
-        )
 
 
 class IssuedToken(Protocol):

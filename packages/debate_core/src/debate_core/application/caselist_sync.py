@@ -640,6 +640,7 @@ from debate_core.application.errors import (
     reported_error_message,
 )
 from debate_core.application.ports.archive import ArchiveEntry, ArchiveMember
+from debate_core.application.ports.caselist_session import KeychainFailure
 from debate_core.application.ports.caselist_source import (
     OPENEV_INBOX_PREFIX,
     ArchiveKind,
@@ -6036,7 +6037,9 @@ def fix_for(error: BaseException, *, bucket_mode: bool = False) -> str | None:
     bucket's refusal, and a profile the AWS config does not define, carry the fix the store's
     adapter wrote, and that is the one given (`v1-e29-t07`). An occurrence table a newer build
     stamped carries its own, which names both versions and the store (`v1-e34-t29`); in bucket mode,
-    the one that names a new image for the cloud run rather than the weekly agent (`v1-e40-t22`).
+    the one that names a new image for the cloud run rather than the weekly agent (`v1-e40-t22`). A
+    keychain that refused the token store carries the fix for its cause (`v1-e34-t33`): the cloud
+    run's token is in Secrets Manager, so only a run on this Mac meets one.
 
     Public because the run monitor asks the same question of an error that ended a run before any
     stage could record it (`v1-e34-t19`): that run's notification carries the same fix.
@@ -6055,6 +6058,8 @@ def fix_for(error: BaseException, *, bucket_mode: bool = False) -> str | None:
         return _UNREADABLE_PENDING_WORK_FIX
     if isinstance(error, NewerFingerprintTable):
         return error.cloud_fix if bucket_mode else error.fix
+    if isinstance(error, KeychainFailure):
+        return error.hint
     return None
 
 

@@ -20,6 +20,7 @@ translation `keyring` makes, which class for which call, is the real one.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import cast
 
 import pytest
 from keyring import errors as keyring_errors
@@ -39,6 +40,7 @@ from debate_core.application.ports.caselist_session import (
 from debate_core.integrations.opencaselist.token_store import (
     KEYRING_SERVICE,
     CaselistTokenStore,
+    KeyringLike,
     KeyringTokenBackend,
     KeyringUnavailable,
 )
@@ -280,7 +282,7 @@ def test_keyring_with_no_backend_at_all_is_keyring_unavailable(operation: Keycha
     """`keyring`'s `fail` backend, which raises `NoKeyringError` on every call: the store's own
     refusal for a machine with no usable keychain, whose message names the file backend."""
     store = CaselistTokenStore(
-        KeyringTokenBackend(account=ACCOUNT, keyring=fail.Keyring()), clock=lambda: NOW
+        KeyringTokenBackend(account=ACCOUNT, keyring=cast(KeyringLike, fail.Keyring())), clock=lambda: NOW
     )
 
     with pytest.raises(KeyringUnavailable) as raised:

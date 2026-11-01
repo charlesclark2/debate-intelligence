@@ -51,6 +51,7 @@ from debate_core.application.file_recipes import RecipeResolver, load_recipe
 from debate_core.application.file_suggest_service import (
     CHECK_AGAINST_THE_PLAN,
     CP_TEXT_SLOT,
+    AffirmativeSideKept,
     FileSuggestService,
     OtherPositionsLeftOut,
     SuggestRefused,
@@ -109,6 +110,12 @@ CARDS: Final = {
     "usfg": ("Only the federal government acts", "Pereira 25", "usfg"),
     "budgets": ("Budgets need one federal payer", "Oyelaran 25", "budgets"),
     "waivers": ("Waivers take years to win", "Brannigan 26", "waivers"),
+    "costs": ("States cut costs on their own", "Achterberg 26", "costs"),
+    "premiums": ("State pools lower premiums", "Szabo 25", "premiums"),
+    "payer": ("A state payer is enough", "Quintero 26", "payer"),
+    "politics": ("The states dodge the fight", "Varga 26", "politics"),
+    "consult": ("Consult the governors first", "Iwu 25", "consult"),
+    "link": ("Cost fights burn capital", "Delacroix 26", "link"),
 }
 
 
@@ -716,3 +723,216 @@ def test_a_counterplan_whose_every_card_is_in_another_positions_block_is_refused
     with pytest.raises(SuggestRefused, match="another position"):
         built.suggest(position="states-cp")
     assert not (built.files_dir / "recipes").exists()
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e33-t13: a counterplan's draft keeps a block an aff or an advantage places, marked to check
+# against the plan, and still leaves out a block any other kind places
+# ------------------------------------------------------------------------------------------------
+
+SIDES_TAXONOMY: Final = f"""\
+schema_version: 1
+topic_id: {TOPIC}
+taxonomy_version: 1.0.0
+event: POLICY
+positions:
+  - {{id: states-cp, label: States CP, kind: cp, side: neg, aliases: [states cp]}}
+  - {{id: consult-cp, label: Consult CP, kind: cp, side: neg, aliases: [consult cp]}}
+  - {{id: t-usfg, label: T USFG, kind: t, side: neg, aliases: [t usfg]}}
+  - {{id: politics-da, label: Politics DA, kind: da, side: neg, aliases: [politics da]}}
+  - {{id: single-payer-aff, label: Single payer, kind: aff, side: aff, aliases: [single payer]}}
+  - {{id: cost-advantage, label: Cost advantage, kind: advantage, side: aff, aliases: [cost advantage],
+     parent: single-payer-aff}}
+"""
+
+#: The coach's decision placing `federal payer` under the aff: a heading no alias names and the plank
+#: rule does not mark, so only the affirmative-side rule can put the comment above its block.
+SIDES_OVERRIDES: Final = f"""\
+schema_version: 1
+topic_id: {TOPIC}
+overrides:
+  - heading: federal payer
+    position_id: single-payer-aff
+    decided: '2026-09-10'
+"""
+
+T8, T9, T10 = Team("Quillon", "CdEf"), Team("Rowanhill", "GhIj"), Team("Saltmarsh", "KlMn")
+
+ADVANTAGE: Final = (*STATES, "Cost Advantage")
+FEDERAL_PAYER: Final = (*STATES, "Federal Payer")
+POLITICS: Final = ("1NC", "Politics DA")
+CONSULT: Final = ("1NC", "Consult CP")
+
+#: Ten teams' 1NCs on 09-08, one file each: T1-T5 read the States CP, T6-T10 the other positions.
+SIDES_FILES: Final[tuple[PlantedFile, ...]] = (
+    (
+        "kilo",
+        "2026-09-08",
+        (T1,),
+        (
+            (STATES, "fiat"),
+            (STATES, "costs"),
+            (STATES, "usfg"),
+            (STATES, "payer"),
+            ((*STATES, "Solvency"), "solvency"),
+            (STATES, "politics"),
+            (STATES, "consult"),
+            (STATES, "premiums"),
+        ),
+    ),
+    ("lima", "2026-09-08", (T2,), ((STATES, "fiat"), (STATES, "costs"), (STATES, "usfg"), (STATES, "payer"))),
+    ("mike", "2026-09-08", (T3,), ((STATES, "fiat"), (STATES, "costs"), (STATES, "usfg"))),
+    ("november", "2026-09-08", (T4,), ((STATES, "fiat"), (STATES, "costs"))),
+    ("oscar", "2026-09-08", (T5,), ((STATES, "fiat"),)),
+    (
+        "romeo",
+        "2026-09-08",
+        (T6,),
+        (
+            (ADVANTAGE, "costs"),
+            (ADVANTAGE, "premiums"),
+            (T_USFG, "usfg"),
+            (FEDERAL_PAYER, "payer"),
+            (POLITICS, "politics"),
+            (CONSULT, "consult"),
+            (POLITICS, "link"),
+        ),
+    ),
+    (
+        "sierra",
+        "2026-09-08",
+        (T7,),
+        (
+            (ADVANTAGE, "costs"),
+            (ADVANTAGE, "premiums"),
+            (T_USFG, "usfg"),
+            (FEDERAL_PAYER, "payer"),
+            (POLITICS, "politics"),
+            (CONSULT, "consult"),
+            (ADVANTAGE, "link"),
+        ),
+    ),
+    (
+        "tango",
+        "2026-09-08",
+        (T8,),
+        (
+            (ADVANTAGE, "costs"),
+            (T_USFG, "usfg"),
+            (FEDERAL_PAYER, "payer"),
+            (POLITICS, "politics"),
+            (CONSULT, "consult"),
+            (ADVANTAGE, "link"),
+        ),
+    ),
+    ("uniform", "2026-09-08", (T9,), ((ADVANTAGE, "costs"), (T_USFG, "usfg"))),
+    ("victor", "2026-09-08", (T10,), ((ADVANTAGE, "costs"),)),
+)
+"""Read under states-cp, all from T1-T5 under `States CP` (or `Solvency` below it, which places nothing):
+`fiat` by 5 teams (rank 1), `costs` by 4 (rank 2), `usfg` by 3 (rank 3), `payer` by 2 (rank 4), and
+`solvency`, `politics`, `consult` and `premiums` by T1 alone (ranks 5 to 8, in cluster-id order).
+
+Each card's block is the heading most of its copies sit under, T6-T10's copies included:
+
+| Card | Copies under `states cp` | Copies under its block | Block | Placed under | The CP's draft |
+|---|---|---|---|---|---|
+| `fiat` | 5 | 5 | `states cp` | states-cp itself | kept |
+| `costs` | 4 | 5 | `cost advantage` | cost-advantage, an advantage | kept, marked |
+| `premiums` | 1 | 2 | `cost advantage` | cost-advantage, an advantage | kept, marked |
+| `usfg` | 3 | 4 | `t usfg` | t-usfg, a T | left out |
+| `payer` | 2 | 3 | `federal payer` | single-payer-aff, an aff, by the coach's override | kept, marked |
+| `solvency` | 0 | 1 | `solvency` | nothing | kept |
+| `politics` | 1 | 3 | `politics da` | politics-da, a DA | left out |
+| `consult` | 1 | 3 | `consult cp` | consult-cp, another CP | left out |
+
+So the CP's draft holds `states cp` (fiat), `cost advantage` (costs, premiums), `federal payer` (payer) and
+`solvency`, in the order of each block's most-read card; it leaves out 3 blocks holding 3 cards and keeps
+2 affirmative-side blocks holding 3 cards. No heading holds the aff's alias or opens with a plank label,
+so t11's plank rule marks none of them.
+
+Read under politics-da, a DA: `politics` by T6-T8 (rank 1, block `politics da`) and `link` by T6 (rank 2),
+whose two other copies sit under `cost advantage`: a DA's draft keeps that block, unmarked, as before.
+"""
+
+
+@pytest.fixture
+def sides_world(tmp_path: Path) -> World:
+    built = plant(
+        tmp_path,
+        on_record=(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10),
+        files=SIDES_FILES,
+        taxonomy=SIDES_TAXONOMY,
+    )
+    (built.config_dir / "overrides").mkdir()
+    (built.config_dir / "overrides" / f"{TOPIC}.yaml").write_text(SIDES_OVERRIDES, encoding="utf-8")
+    return built
+
+
+def comment_above_each_block(text: str) -> dict[str, str]:
+    """Each block heading, in file order, and the line directly above its `- block:` line."""
+    lines = text.splitlines()
+    return {
+        yaml.safe_load(line.strip())[0]["block"]: lines[index - 1].strip()
+        for index, line in enumerate(lines)
+        if line.strip().startswith("- block:")
+    }
+
+
+def test_a_block_an_advantage_or_an_aff_places_is_kept_in_rank_order_and_others_are_left_out(
+    sides_world: World,
+) -> None:
+    result = sides_world.suggest(position="states-cp")
+    text = result.path.read_text(encoding="utf-8")
+    assert [(block, [item.get("fingerprint") for item in items]) for block, items in items_of(text)] == [
+        ("states cp", [None, fingerprint_of("fiat")]),
+        ("cost advantage", [fingerprint_of("costs"), fingerprint_of("premiums")]),
+        ("federal payer", [fingerprint_of("payer")]),
+        ("solvency", [fingerprint_of("solvency")]),
+    ]
+    for left_out in ("usfg", "politics", "consult"):
+        assert fingerprint_of(left_out) not in text
+    assert result.left_out == ()
+
+
+def test_each_kept_affirmative_side_block_has_the_check_against_the_plan_comment_directly_above_it(
+    sides_world: World,
+) -> None:
+    text = sides_world.suggest(position="states-cp").path.read_text(encoding="utf-8")
+    above = comment_above_each_block(text)
+    assert list(above) == ["states cp", "cost advantage", "federal payer", "solvency"]
+    assert above["cost advantage"] == above["federal payer"] == CHECK_AGAINST_THE_PLAN
+    assert CHECK_AGAINST_THE_PLAN not in (above["states cp"], above["solvency"])
+    assert sum(line.strip() == CHECK_AGAINST_THE_PLAN for line in text.splitlines()) == 2
+
+
+def test_the_counts_say_what_was_left_out_and_what_was_kept_as_affirmative_side(sides_world: World) -> None:
+    result = sides_world.suggest(position="states-cp")
+    assert result.other_positions == OtherPositionsLeftOut(blocks=3, cards=3)
+    assert result.affirmative_side_kept == AffirmativeSideKept(blocks=2, cards=3)
+
+
+def test_a_counterplans_draft_with_no_affirmative_side_block_counts_none_kept(cp_world: World) -> None:
+    result = cp_world.suggest(position="states-cp")
+    assert result.other_positions == OtherPositionsLeftOut(blocks=1, cards=1)
+    assert result.affirmative_side_kept == AffirmativeSideKept(blocks=0, cards=0)
+
+
+def test_the_draft_with_affirmative_side_blocks_still_validates_and_loads(sides_world: World) -> None:
+    text = sides_world.suggest(position="states-cp").path.read_text(encoding="utf-8")
+    jsonschema.validate(yaml.safe_load(text), yaml.safe_load(SCHEMA.read_text(encoding="utf-8")))
+    loaded = load_recipe(text)
+    assert loaded.ok, loaded.errors
+
+
+def test_a_draft_that_is_not_a_counterplans_keeps_an_advantages_block_unmarked_as_before(
+    sides_world: World,
+) -> None:
+    result = sides_world.suggest(position="politics-da")
+    text = result.path.read_text(encoding="utf-8")
+    assert [(block, [item.get("fingerprint") for item in items]) for block, items in items_of(text)] == [
+        ("politics da", [fingerprint_of("politics")]),
+        ("cost advantage", [fingerprint_of("link")]),
+    ]
+    assert CP_TEXT_SLOT not in text and CHECK_AGAINST_THE_PLAN not in text
+    assert result.other_positions is None
+    assert result.affirmative_side_kept is None

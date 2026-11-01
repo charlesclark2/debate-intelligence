@@ -1,4 +1,4 @@
-"""One caselist's cassettes, listed and deleted alone (`v1-e32-t31`), behind the listing's code (`v1-e32-t34`).
+"""One caselist's cassettes, listed and deleted alone (`v1-e32-t31`), behind a code (`v1-e32-t34`).
 
 The cassettes are recorded by the record-and-replay router over
 :class:`~debate_core.testing.fakes.model_router.ScriptedModelRouter`, so they are the files a run writes;
@@ -82,7 +82,9 @@ def name_of(cassettes: Path, card: str) -> str:
 def confirmed_delete(cassettes: Path, caselist: str) -> CaselistCassettes:
     """A delete given the code of the listing just before it, as `landscape cassettes --delete` is."""
     files = CassetteDirectory(cassettes)
-    return delete_caselist_cassettes(files, caselist, confirmation=caselist_cassettes(files, caselist).confirmation)
+    return delete_caselist_cassettes(
+        files, caselist, confirmation=caselist_cassettes(files, caselist).confirmation
+    )
 
 
 def snapshot(cassettes: Path) -> dict[str, bytes]:
@@ -221,7 +223,9 @@ def test_a_cassette_never_loses_its_last_caselist_to_a_withdrawal(cassettes: Pat
 
 
 @pytest.mark.parametrize("confirmation", [None, "", "0" * 12])
-def test_a_delete_without_its_listings_code_changes_nothing(cassettes: Path, confirmation: str | None) -> None:
+def test_a_delete_without_its_listings_code_changes_nothing(
+    cassettes: Path, confirmation: str | None
+) -> None:
     files = CassetteDirectory(cassettes)
     listed = caselist_cassettes(files, PURGED)
     before = snapshot(cassettes)

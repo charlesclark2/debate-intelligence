@@ -9,7 +9,7 @@
 | Where | Your Mac, in a checkout of this repository, with the installed `debate-research` build; one terminal window per environment |
 | How long | About an hour of attention for each of dev and prod, most of it reading listings |
 | Destructive? | **Yes**, in [Step 2](#step-2--landscape-school-views), [Step 4](#step-4--a-caselist-the-inventory-marks-purge) and [Step 5](#step-5--the-student-search-pilots-index): school views, a purged caselist's local classifier files and cassettes, and the search pilot's superseded index versions, every version included. Everything else here lists or checks |
-| Tooling | `debate-research config show`, `store ls`, `tub index build`, `publish` and `prune` (the removal runbook's [P4](caselist-removal.md#p4--delete-the-superseded-index-versions-noncurrent-versions-included)), and the AWS CLI under the everyday and takedown profiles |
+| Tooling | `debate-research config show`, `store ls`, `tub index build`, `publish` and `prune` (the removal runbook's [P4](caselist-removal.md#p4--delete-the-superseded-index-versions-noncurrent-versions-included)), `landscape cassettes` from the checkout with `uv run` (step 4), and the AWS CLI under the everyday and takedown profiles |
 | Spec | [`v1-e30-t28-annual-purge-runbook`](../../plan_specs/v1/e30-caselist-ingestion/t28-annual-purge-runbook.yaml) |
 
 A season runs 1 August to 31 July. The policy keeps a season's data for that season and the following
@@ -502,9 +502,9 @@ removal): this Mac's local classifier files for the caselist, and the model stag
 only this caselist names. First what they hold.
 
 **One caselist's cassettes** (`v1-e32-t31`). A cassette is filed under its prompt and its call's key
-(`<data dir>/landscape/model-cassettes/<prompt>/<key>.json`), and names the caselists it was recorded
-or replayed for in its `caselists` list. The caselist is not part of the key: an identical card in two
-caselists is one cassette, and names both. So the block sorts them three ways:
+in `<data dir>/landscape/model-cassettes/`, and names the caselists it was recorded or replayed for.
+The caselist is not part of the key: an identical card in two caselists is one cassette, and names
+both. `debate-research landscape cassettes` (`v1-e32-t34`) counts them three ways:
 
 * **its alone**: only this caselist names it, and the delete removes it;
 * **shared**: another caselist names it too, and the delete takes only this name off, keeping the
@@ -512,9 +512,11 @@ caselists is one cassette, and names both. So the block sorts them three ways:
 * **unattributed**: it names no caselist, because it was recorded before `v1-e32-t31`. No caselist's
   delete removes it; the count goes to the PM.
 
-The block writes its script into the window's scratch directory, and the delete block runs the same
-script. It reads nothing but the cassettes, prints counts and a slug only, and stops, changing
-nothing, on a file it cannot read as a cassette.
+The command reads the directory the landscape model stage records to, from this environment's
+`storage.data_dir`. It runs from the checkout, as the model stage does, with `uv run`: the window is
+in one, and it must be up to date on `dev`, since the installed build may predate the command. It
+prints counts, the slug and a confirmation code, never a cassette's content or name or a path. Without
+`--delete` it changes nothing, and it stops, changing nothing, on a file it cannot read as a cassette.
 
 **Operator command** (expected runtime seconds; reads only)
 Where: your Mac, in the purge window, with `CASELIST` from the block above
@@ -523,90 +525,33 @@ if grep -qE "^(bucket|bundle|local): ${CASELIST} PURGE" "$PURGE"/inventory-bucke
   DATA_DIR=$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["data"]["settings"]["storage.data_dir"])' "$PURGE/settings.json")
   if [ -d "${DATA_DIR}/landscape/local-classifier/${CASELIST}" ]; then echo "local classifier files: $(find "${DATA_DIR}/landscape/local-classifier/${CASELIST}" -type f | wc -l | tr -d ' ')"; else echo "local classifier files: none"; fi
   if [ -f "${DATA_DIR}/landscape/classifications/${CASELIST}.jsonl" ]; then echo "classified here: yes"; else echo "classified here: no"; fi
-  cat > "$PURGE/cassettes.py" <<'CASSETTES'
-import json
-import os
-import re
-import sys
-from pathlib import Path
-
-root = Path(sys.argv[1])
-caselist = sys.argv[2]
-action = sys.argv[3]
-slug = re.compile(r"[a-z]+[0-9]{2}")
-filed = re.compile(r"(_embed|_rerank|[A-Za-z0-9][A-Za-z0-9._-]*)/[0-9a-f]{64}\.json")
-if slug.fullmatch(caselist) is None or action not in ("list", "delete"):
-    sys.exit(f"STOP: {caselist} is not a caselist slug, or {action} is neither list nor delete; nothing was changed")
-
-alone, shared, unattributed, others = [], [], [], 0
-documents = {}
-for path in sorted(root.glob("*/*.json")) if root.is_dir() else []:
-    name = path.relative_to(root).as_posix()
-    try:
-        document = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, ValueError):
-        document = None
-    named = (document.get("caselists") or []) if isinstance(document, dict) else None
-    readable = isinstance(named, list) and all(isinstance(one, str) and slug.fullmatch(one) for one in named)
-    if filed.fullmatch(name) is None or not readable:
-        sys.exit(f"STOP: {name} is not a cassette this script can read; nothing was changed")
-    documents[name] = document
-    if not named:
-        unattributed.append(name)
-    elif caselist not in named:
-        others += 1
-    elif len(set(named)) == 1:
-        alone.append(name)
-    else:
-        shared.append(name)
-
-
-def write_whole(path, document):
-    partial = path.with_name(f".{path.name}.partial")
-    with partial.open("w", encoding="utf-8") as stream:
-        stream.write(json.dumps(document, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False) + "\n")
-        stream.flush()
-        os.fsync(stream.fileno())
-    os.replace(partial, path)
-    directory = os.open(path.parent, os.O_RDONLY)
-    os.fsync(directory)
-    os.close(directory)
-
-
-if action == "delete":
-    for name in shared:
-        document = documents[name]
-        write_whole(root / name, {**document, "caselists": sorted(set(document["caselists"]) - {caselist})})
-    for name in alone:
-        (root / name).unlink()
-        directory = os.open((root / name).parent, os.O_RDONLY)
-        os.fsync(directory)
-        os.close(directory)
-    print(f"deleted: {len(alone)} cassette(s) only {caselist} named")
-    print(f"withdrawn: {caselist} from {len(shared)} shared cassette(s), kept for their other caselists")
-    print(f"kept: {len(unattributed)} unattributed cassette(s)")
-else:
-    print(f"cassettes of {caselist}: {len(alone)} its alone, {len(shared)} shared, {len(unattributed)} unattributed, {others} of other caselists only")
-CASSETTES
-  python3 -I "$PURGE/cassettes.py" "${DATA_DIR}/landscape/model-cassettes" "$CASELIST" list
+  DEBATE_ENV="$PURGE_ENV" uv run debate-research landscape cassettes --caselist "$CASELIST"
 else
   echo "STOP: step 3 marked no ${CASELIST} PURGE"
 fi
 ```
-Success looks like three lines, the last of them the cassette counts, for example:
+Success looks like the two lines, then the cassette counts, for example:
 
 ```text
 local classifier files: none
 classified here: yes
-cassettes of samplecl20: 3 its alone, 1 shared, 0 unattributed, 12 of other caselists only
+Model cassettes of samplecl20 in dev, in the landscape model stage's directory, <data dir>/landscape/model-cassettes/:
+  3 this caselist's alone: a delete removes them.
+  1 shared with another caselist: kept, losing only this caselist's name, since another caselist still replays them.
+  0 unattributed, naming no caselist (recorded before v1-e32-t31): kept, since no caselist's delete removes one. Send the PM the count.
+  12 of other caselists only: untouched.
+Dry run: nothing was changed. To carry it out, add: --delete --confirm 3f9a0c1d2e4b
 ```
 
-A data directory with no cassettes prints `0 its alone, 0 shared, 0 unattributed, 0 of other
-caselists only`. A `STOP` line names one cassette file by its prompt and key: tell the PM and delete
-nothing. When `unattributed` is above zero and `classified here: yes`, an unattributed cassette may hold
+A data directory the model stage never recorded in prints `No model cassettes in dev: …` and `Nothing
+to delete.`; so does a Mac with no `landscape/model-cassettes` directory, today's state. That, or
+`Dry run: nothing was changed, and a delete would change nothing.`, means the cassette delete below is
+skipped. `CASSETTE_UNREADABLE` means a file there is not a cassette: tell the PM and delete nothing.
+`No such command 'cassettes'` means the checkout predates `v1-e32-t34`: pull `dev` and paste the block
+again. When `unattributed` is above zero and `classified here: yes`, an unattributed cassette may hold
 this caselist's cards and nothing here deletes it: send the PM the counts.
 
-**Then delete.**
+**Then delete the local classifier files.**
 
 **Operator command** (expected runtime seconds; deletes, and cannot be undone)
 Where: your Mac, in the purge window, straight after the block above
@@ -614,19 +559,41 @@ Where: your Mac, in the purge window, straight after the block above
 if grep -qE "^(bucket|bundle|local): ${CASELIST} PURGE" "$PURGE"/inventory-bucket.txt "$PURGE"/inventory-bundle.txt "$PURGE"/inventory-local.txt; then
   DATA_DIR=$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["data"]["settings"]["storage.data_dir"])' "$PURGE/settings.json")
   if [ -d "${DATA_DIR}/landscape/local-classifier/${CASELIST}" ]; then rm -r "${DATA_DIR}/landscape/local-classifier/${CASELIST}" && echo "deleted: the local classifier files of ${CASELIST}"; else echo "nothing to delete: no local classifier files of ${CASELIST}"; fi
-  python3 -I "$PURGE/cassettes.py" "${DATA_DIR}/landscape/model-cassettes" "$CASELIST" delete
 else
   echo "STOP: step 3 marked no ${CASELIST} PURGE"
 fi
 ```
-Success looks like a `deleted:` or `nothing to delete:` line for the local classifier files, then the
-cassettes' `deleted:`, `withdrawn:` and `kept:` lines, with the counts the block before printed. **The
-check:** the block before this one again prints `local classifier files: none`, and `0 its alone, 0
-shared` for the caselist, with the same `unattributed` count as before. Tell the PM when a cassette was
-deleted, since the model evaluation of this caselist is then recorded again. A coach sample deleted
-this way is drawn again with
-`scripts/compare_local_classifier.py features` and then `sample`; tell the PM if one was waiting to be
-labelled.
+Success looks like a `deleted:` or `nothing to delete:` line.
+
+**Then delete the cassettes**, unless the dry run said there is nothing to delete. Set `CASSETTES_CODE`
+to the code after `--confirm` in the dry run's last line. The command lists again and deletes only if
+that listing's code is the one given, so a cassette recorded since the dry run, or a code from another
+caselist's dry run, is refused with `CONFIRMATION_MISMATCH` and nothing is changed: paste the dry run
+block again and read it. In prod the command also takes `--confirm-prod`, which the block adds.
+
+**Operator command** (expected runtime seconds; deletes, and cannot be undone)
+Where: your Mac, in the purge window, after the block above
+```bash
+CASSETTES_CODE=
+if [ -z "$CASSETTES_CODE" ]; then
+  echo "STOP: set CASSETTES_CODE to the code the dry run printed"
+elif grep -qE "^(bucket|bundle|local): ${CASELIST} PURGE" "$PURGE"/inventory-bucket.txt "$PURGE"/inventory-bundle.txt "$PURGE"/inventory-local.txt; then
+  if [ "$PURGE_ENV" = "prod" ]; then
+    DEBATE_ENV=prod uv run debate-research landscape cassettes --caselist "$CASELIST" --delete --confirm "$CASSETTES_CODE" --confirm-prod
+  else
+    DEBATE_ENV="$PURGE_ENV" uv run debate-research landscape cassettes --caselist "$CASELIST" --delete --confirm "$CASSETTES_CODE"
+  fi
+else
+  echo "STOP: step 3 marked no ${CASELIST} PURGE"
+fi
+```
+Success looks like `Deleted 3 cassette(s) only this caselist named.`, `Kept 1 shared cassette(s) …` and
+`Kept 0 unattributed cassette(s) …`, with the counts the dry run printed. **The check:** the dry run
+block again prints `local classifier files: none`, and `0 this caselist's alone` and `0 shared` for the
+caselist, with the same `unattributed` count as before. Tell the PM when a cassette was deleted, since
+the model evaluation of this caselist is then recorded again. A coach sample deleted this way is drawn
+again with `scripts/compare_local_classifier.py features` and then `sample`; tell the PM if one was
+waiting to be labelled.
 
 **A camp year marked `PURGE`** (`openev <year> PURGE`) is counted with `DEBATE_ENV=<env>
 debate-research store ls raw/openev/<year>/` and the release manifests `store ls manifests/openev/`

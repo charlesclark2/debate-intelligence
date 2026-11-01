@@ -779,7 +779,7 @@ class ServiceContainer:
         )
 
     def landscape_cassettes(self) -> CassetteDirectory:
-        """This machine's landscape model cassettes (`v1-e32-t34`), for `landscape cassettes` to count and delete.
+        """The landscape model cassettes on this machine, for `landscape cassettes` (`v1-e32-t34`).
 
         The directory :meth:`landscape_model_stage` records to and replays from by default, and
         :meth:`landscape_evaluation` scans: `<data dir>/landscape/model-cassettes/`, from `DEBATE_ENV`'s

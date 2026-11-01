@@ -16,6 +16,11 @@ is not part of the match. A cassette instead names, beside the request and respo
    deletes them: a cassette the caselist alone named is deleted, one another caselist also names
    loses only this name and is kept, and one that names no caselist (recorded before this task) is
    reported as unattributed and never deleted by a caselist.
+4. A delete takes the listing's :attr:`~CaselistCassettes.confirmation` (`v1-e32-t34`), the code
+   `debate-research landscape cassettes` prints on its dry run, as `caselist retire` and `tub index
+   prune` print theirs. It is a digest of the caselist and of every cassette the delete would change, its
+   sole and its shared ones, so a code read before the model stage recorded another of them, or read
+   for another caselist, is refused with :class:`CassetteDeleteRefused` before anything changes.
 
 No school, team code or path goes into a cassette: only the caselist's slug, which
 :func:`filed_under` refuses unless it is one.
@@ -23,6 +28,8 @@ No school, team code or path goes into a cassette: only the caselist's slug, whi
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from collections.abc import Generator, Iterable
 from contextlib import contextmanager
@@ -30,6 +37,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Final, Protocol
 
+from debate_core.application.caselist.version_retention import CONFIRMATION_LENGTH
 from debate_core.application.errors import DomainError
 from debate_core.domain.caselist import CASELIST_SLUG_PATTERN
 
@@ -120,7 +128,9 @@ class CaselistCassettes:
 
     @property
     def confirmation(self) -> str:
-        return ""
+        """The code :func:`delete_caselist_cassettes` takes: a digest of the caselist and what it changes."""
+        shown = {"caselist": self.caselist, "sole": list(self.sole), "shared": list(self.shared)}
+        return hashlib.sha256(json.dumps(shown, sort_keys=True).encode()).hexdigest()[:CONFIRMATION_LENGTH]
 
 
 def caselist_cassettes(files: CassetteFiles, caselist: str) -> CaselistCassettes:
@@ -149,17 +159,30 @@ def caselist_cassettes(files: CassetteFiles, caselist: str) -> CaselistCassettes
 
 
 class CassetteDeleteRefused(DomainError):
-    def __init__(self, listed: CaselistCassettes) -> None:
+    """A delete given no code, or not the code of the listing it would act on. Nothing was changed."""
+
+    def __init__(self, listed: CaselistCassettes, confirmation: str | None) -> None:
         self.listed = listed
-        super().__init__("refused")
+        """What the delete found, and would have acted on."""
+        super().__init__(
+            "the confirmation code is not this listing's: list the caselist's cassettes again, read the "
+            "listing, and pass the code it prints; nothing was changed"
+            if confirmation
+            else "pass the confirmation code the listing prints; nothing was changed"
+        )
 
 
-def delete_caselist_cassettes(files: CassetteFiles, caselist: str, *, confirmation: str | None) -> CaselistCassettes:
+def delete_caselist_cassettes(
+    files: CassetteFiles, caselist: str, *, confirmation: str | None
+) -> CaselistCassettes:
     """Delete `caselist`'s sole cassettes and take its name off the shared ones; what it did, by cassette.
 
-    Everything is listed first, so an unreadable cassette stops the delete before anything changes.
+    Everything is listed first, so an unreadable cassette, or a `confirmation` that is not that
+    listing's code (:class:`CassetteDeleteRefused`), stops the delete before anything changes.
     """
     listed = caselist_cassettes(files, caselist)
+    if confirmation != listed.confirmation:
+        raise CassetteDeleteRefused(listed, confirmation)
     for cassette in listed.shared:
         files.withdraw(cassette, caselist)
     for cassette in listed.sole:

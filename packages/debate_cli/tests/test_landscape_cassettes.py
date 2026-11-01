@@ -135,7 +135,11 @@ def flat(text: str) -> str:
 
 def tree(data_dir: Path) -> dict[str, bytes]:
     root = cassette_root(data_dir)
-    return {path.relative_to(root).as_posix(): path.read_bytes() for path in sorted(root.rglob("*")) if path.is_file()}
+    return {
+        path.relative_to(root).as_posix(): path.read_bytes()
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+    }
 
 
 def confirmation_of(*arguments: str) -> str:
@@ -178,7 +182,9 @@ def test_the_dry_run_says_what_a_delete_would_do_to_each_kind_and_how_to_confirm
 
     assert result.exit_code == ExitCode.OK, result.output
     text = flat(result.stdout)
-    assert f"Model cassettes of {PURGED} in dev, in the landscape model stage's directory, {DIRECTORY}" in text
+    assert (
+        f"Model cassettes of {PURGED} in dev, in the landscape model stage's directory, {DIRECTORY}" in text
+    )
     assert "3 this caselist's alone: a delete removes them." in text
     assert "2 shared with another caselist: kept, losing only this caselist's name" in text
     assert "1 unattributed, naming no caselist" in text
@@ -192,7 +198,9 @@ def test_the_counts_follow_the_caselist_asked_about(data_dir: Path, cassettes: d
     assert data.get("cassettes") == {"sole": 4, "shared": 2, "unattributed": 1, "other_caselists": 3}
 
 
-def test_where_the_model_stage_recorded_nothing_the_command_says_so_and_creates_nothing(data_dir: Path) -> None:
+def test_where_the_model_stage_recorded_nothing_the_command_says_so_and_creates_nothing(
+    data_dir: Path,
+) -> None:
     listed = invoke("--caselist", PURGED, "--json")
     human = invoke("--caselist", PURGED)
 
@@ -250,8 +258,8 @@ def test_the_delete_says_how_many_it_deleted_and_how_many_it_kept_and_why(
     text = flat(result.stdout)
     assert "Deleted 3 cassette(s) only this caselist named." in text
     assert (
-        "Kept 2 shared cassette(s), taking only this caselist's name off: another caselist still replays them."
-        in text
+        "Kept 2 shared cassette(s), taking only this caselist's name off: "
+        "another caselist still replays them." in text
     )
     assert "Kept 1 unattributed cassette(s): it names no caselist, so no caselist's delete removes it" in text
     assert "4 of other caselists only: untouched." in text

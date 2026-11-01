@@ -99,7 +99,10 @@ class SeedTeam:
 
     side: Side
     names: tuple[str, ...] = field(default=(), repr=False)
-    """The school and team code the team disclosed under, taken out of its headings; never written."""
+    """The school, team code and tournament the team disclosed under, taken out of its headings; never
+    written."""
+    tournament: str | None = field(default=None, repr=False)
+    """The tournament alone, when the disclosure names one: the name scan's third list (`v1-e32-t40`)."""
 
 
 @dataclass(frozen=True, slots=True)

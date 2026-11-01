@@ -306,7 +306,12 @@ TAXONOMY = Taxonomy.model_validate(
 SOURCE = SeedSource(
     sha256="c" * 64,
     teams=(
-        SeedTeam(identity="maple/ab", side=Side.NEG, names=("Maple Grove", "AB", "Lakeside Invitational")),
+        SeedTeam(
+            identity="maple/ab",
+            side=Side.NEG,
+            names=("Maple Grove", "AB", "Lakeside Invitational"),
+            tournament="Lakeside Invitational",
+        ),
     ),
     cards=(
         SeedCard(tag="Federal action key", section_path=("1NC", "Fed Key"), first_element_index=0),
@@ -649,7 +654,8 @@ def test_prompt_1_1_0_reads_the_argument_not_the_subject_with_sides_descriptions
             variables=prompt_variables(DESCRIBED, [item]),
         )
     )
-    system = " ".join((rendered.system or "").split())
+    assert rendered.system is not None
+    system = " ".join(rendered.system.split())
 
     assert "the argument the card is read as in a round, not the subject it is about" in system
     assert f"at most {RATIONALE_LIMIT} characters" in system
@@ -680,3 +686,230 @@ async def test_a_cassette_recorded_under_1_0_0_is_never_served_to_the_stage_afte
     replaying = RecordReplayModelRouter(None, mode=ModelMode.REPLAY, cassette_dir=tmp_path)
     with pytest.raises(MissingFixtureError, match="1.1.0"):
         await evaluate_labelled_cards(READING, TAXONOMY, LABELLED, stage_over(replaying, prompts))
+
+
+# v1-e32-t40: the scan's third list, every disclosing team's school, code and tournament, comes out of each
+# card's heading path, tag, cite and excerpt. Maple Grove's card names Cedar Ridge's tournament and code in
+# all four; by hand, what is sent keeps only the other words.
+
+CEDAR = SeedTeam(
+    identity="cedar/kl",
+    side=Side.AFF,
+    names=("Cedar Ridge", "KL", "Harbor Classic"),
+    tournament="Harbor Classic",
+)
+NAMED = SeedSource(
+    sha256=SHA,
+    teams=(
+        SeedTeam(
+            identity="maple/ab",
+            side=Side.NEG,
+            names=("Maple Grove", "AB", "Lakeside Invitational"),
+            tournament="Lakeside Invitational",
+        ),
+    ),
+    cards=(
+        SeedCard(
+            tag="Harbor Classic KL: the cliff nears",
+            section_path=("1NC", "Harbor Classic Cliff"),
+            first_element_index=0,
+            short_cite="Okafor 26 Harbor Classic",
+        ),
+    ),
+)
+NAMED_READING = dataclasses.replace(
+    READING, sources=(NAMED, SeedSource(sha256="d" * 64, teams=(CEDAR,), cards=()))
+)
+
+
+class AnswersAny(ScriptedModelRouter):
+    """Places every card it is asked about, whatever its tag, and keeps each batch's items."""
+
+    def __init__(self) -> None:
+        super().__init__(model_id="recorded-model")
+        self.items: list[dict[str, Any]] = []
+
+    async def generate_structured[OutputT: BaseModel](
+        self,
+        task_class: TaskClass,
+        prompt: ModelPrompt,
+        schema: type[OutputT],
+        params: ModelParams | None = None,
+    ) -> ModelResponse[OutputT]:
+        items: list[dict[str, Any]] = json.loads(str(prompt.variables["items"]))
+        self.items += items
+        self.enqueue(
+            {
+                "answers": [
+                    {
+                        "item": item["item"],
+                        "position_id": "spending-da",
+                        "confidence": 0.9,
+                        "rationale": "a reason",
+                    }
+                    for item in items
+                ]
+            }
+        )
+        return await super().generate_structured(task_class, prompt, schema, params)
+
+
+async def named_store() -> InMemoryParsedStore:
+    store = InMemoryParsedStore()
+    entry = SourceEntry.model_validate(
+        {**COMMON, "source_format": "DOCX", "byte_size": 10, "outcome": "PARSED", "reason": None, "cards": 1}
+    )
+    document = DocumentRecord.model_validate(
+        {
+            **COMMON,
+            "document": {
+                "source_sha256": SHA,
+                "parser_version": VERSION,
+                "profile_version": "2026.09.20-verbatim-1",
+                "cards": [card(0, "Analysts at the Harbor Classic warn that the cliff nears for KL.")],
+                "warnings": [],
+            },
+        }
+    )
+    await store.write_source("hspolicy99", VERSION, entry, document)
+    return store
+
+
+@pytest.mark.anyio
+async def test_the_third_list_comes_out_of_every_field_an_evaluation_sends(prompts: PromptRegistry) -> None:
+    router = AnswersAny()
+    stage = ModelClassificationStage(
+        StructuredOutputGuard(router, prompts), ParsedStoreCardTexts(await named_store())
+    )
+    result = await evaluate_labelled_cards(
+        NAMED_READING, TAXONOMY, (LabelledCard(card_item_id(SHA, 0), "spending-da"),), stage
+    )
+
+    assert router.items == [
+        {
+            "item": "item-1",
+            "headings": ["cliff"],
+            "under_an_answer_heading": False,
+            "tag": "the cliff nears",
+            "cite": "okafor 26",
+            "excerpt": "analysts at the warn that the cliff nears for",
+        }
+    ]
+    assert (result.sent.texts, result.sent.clean) == (1, True)
+
+
+# v1-e32-t40: the scan reads field values, leaves out the committed positions text, holds only tournaments
+# on its third list, scans the repair cassettes of this prompt version filed under the caselist, and reads
+# only cassettes of the prompt version it ran (1.0.0's, which `v1-e32-t39` read, held names in headings).
+
+
+def classify_cassette(version: str, rationale: str) -> str:
+    return json.dumps(
+        {
+            "caselists": ["hspolicy99"],
+            "request": {"prompt": {"prompt_id": CLASSIFY_POSITION_PROMPT_ID, "prompt_version": version}},
+            "response": {"output": {"answers": [{"item": "item-1", "rationale": rationale}]}},
+        }
+    )
+
+
+def repair_cassette(failed: str, user: str, caselist: str = "hspolicy99") -> str:
+    return json.dumps(
+        {
+            "caselists": [caselist],
+            "request": {
+                "prompt": {
+                    "prompt_id": "model.repair",
+                    "variables": {
+                        "failed_prompt": f"{CLASSIFY_POSITION_PROMPT_ID}@{failed}",
+                        "failed_user": user,
+                    },
+                }
+            },
+        }
+    )
+
+
+@pytest.mark.anyio
+async def test_the_scan_holds_only_tournaments_on_its_third_list(prompts: PromptRegistry) -> None:
+    """A team's school and code are on the first two lists; on the third too, each counted twice."""
+    result = await evaluate_labelled_cards(
+        READING,
+        TAXONOMY,
+        LABELLED,
+        stage_over(ByTag(BETTER_ANSWERS), prompts),
+        cassette_texts=lambda: ['{"rationale": "the AB team of Maple Grove"}'],
+    )
+
+    assert (result.cassettes.schools, result.cassettes.team_codes, result.cassettes.other_names) == (1, 1, 0)
+
+
+@pytest.mark.anyio
+async def test_the_evaluation_scans_its_prompts_repair_cassettes_filed_under_the_caselist(
+    prompts: PromptRegistry,
+) -> None:
+    repairs = [
+        repair_cassette("1.1.0", "cards read at the Lakeside Invitational"),
+        repair_cassette("1.1.0", "nothing named"),
+        repair_cassette("1.0.0", "the AB team"),
+        repair_cassette("1.1.0", "Maple Grove", caselist="hspolicy98"),
+    ]
+    result = await evaluate_labelled_cards(
+        READING,
+        TAXONOMY,
+        LABELLED,
+        stage_over(ByTag(BETTER_ANSWERS), prompts),
+        repair_cassette_texts=lambda: repairs,
+    )
+
+    scan = result.repair_cassettes
+    assert (scan.texts, scan.schools, scan.team_codes, scan.other_names) == (2, 0, 0, 1)
+    assert result.sent.clean and result.cassettes.clean
+
+
+@pytest.mark.anyio
+async def test_the_evaluation_scans_no_cassette_of_another_prompt_version(prompts: PromptRegistry) -> None:
+    """A text whose version cannot be read is scanned: the filter fails toward reading more."""
+    cassettes = [
+        classify_cassette("1.0.0", "as Maple Grove reads it"),
+        classify_cassette("1.1.0", "a reason"),
+        '{"rationale": "the KL team"}',
+    ]
+    result = await evaluate_labelled_cards(
+        READING,
+        TAXONOMY,
+        LABELLED,
+        stage_over(ByTag(BETTER_ANSWERS), prompts),
+        cassette_texts=lambda: cassettes,
+    )
+
+    assert (result.cassettes.texts, result.cassettes.schools, result.cassettes.team_codes) == (2, 0, 1)
+
+
+@pytest.mark.anyio
+async def test_the_scan_leaves_out_the_positions_text_the_cassettes_hold(
+    tmp_path: Path, prompts: PromptRegistry
+) -> None:
+    """A description holding a team code's word (`ab`) is in every cassette's positions: committed text."""
+    taxonomy = Taxonomy.model_validate(
+        {
+            **TAXONOMY.model_dump(mode="json"),
+            "positions": [
+                *(one.model_dump(mode="json", exclude_defaults=True) for one in TAXONOMY.positions),
+                {"id": "ab-cp", "label": "AB CP", "kind": "cp", "side": "neg", "description": "Ab initio."},
+            ],
+        }
+    )
+    recording = RecordReplayModelRouter(
+        ByTag(FIRST_ANSWERS), mode=ModelMode.RECORD, cassette_dir=tmp_path, environ={}
+    )
+    result = await evaluate_labelled_cards(
+        READING,
+        taxonomy,
+        LABELLED,
+        stage_over(recording, prompts),
+        cassette_texts=lambda: texts_under(tmp_path),
+    )
+
+    assert (result.cassettes.texts, result.cassettes.clean) == (1, True)
+    assert "ab-cp" in texts_under(tmp_path)[0]

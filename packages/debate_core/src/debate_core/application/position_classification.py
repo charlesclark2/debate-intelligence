@@ -81,7 +81,7 @@ from debate_core.arguments.landscape.review_queue import (
 )
 from debate_core.arguments.landscape.seeding import SeedCard, SeedSource
 from debate_core.arguments.landscape.source_headings import CaselistNames
-from debate_core.arguments.landscape.tag_scrub import card_tag, code_words
+from debate_core.arguments.landscape.tag_scrub import DisclosedNames, card_tag, code_words
 from debate_core.domain.landscape import Taxonomy
 from debate_core.domain.landscape_classification import (
     DETERMINISTIC_PROMPT_VERSION,
@@ -362,6 +362,7 @@ class PositionClassificationService:
         shared: Counter[ClassificationKey] = Counter()
         hits = 0
         codes = code_words(reading.caselist_names)
+        disclosed = DisclosedNames.of_sources(reading.sources)
         for one in read:
             if one.card is None or not needs_review(one.result, self._threshold):
                 continue
@@ -376,7 +377,7 @@ class PositionClassificationService:
                 continue
             if key in cached:
                 refused.add(key)
-            candidates[key] = model_candidate(one.source, one.item, one.card, names, codes)
+            candidates[key] = model_candidate(one.source, one.item, one.card, names, codes, disclosed)
         outcome = await stage.run(
             [dataclasses.replace(candidate, cards=shared[key]) for key, candidate in candidates.items()],
             taxonomy=taxonomy,
@@ -422,23 +423,30 @@ def _queue_predictions(
 
 
 def model_candidate(
-    source: SeedSource, item: MatchItem, card: SeedCard, names: CaselistNames, codes: Collection[str]
+    source: SeedSource,
+    item: MatchItem,
+    card: SeedCard,
+    names: CaselistNames,
+    codes: Collection[str],
+    disclosed: DisclosedNames,
 ) -> ModelCandidate:
     """`card` of `source`, read by stage one as `item`, as the model stage is asked about it.
 
     Its headings lose team-code words, and its tag and short cite are read as words without the
-    disclosing teams' names, the caselist's schools or any team code. The excerpt is cut later, from the
-    evidence the stage reads for the cards it keeps.
+    disclosing teams' names, the caselist's schools or any team code. All three lose every name of
+    `disclosed`, every disclosing team's school, code and tournament in the reading (`v1-e32-t40`). The
+    excerpt is cut later, from the evidence the stage reads for the cards it keeps, by the same names.
     """
     own = tuple(name for team in source.teams for name in team.names if name.strip())
     return ModelCandidate(
         fingerprint=item.fingerprint,
         source_sha256=source.sha256,
         first_element_index=card.first_element_index or 0,
-        headings=sent_headings(item.headings, codes),
-        tag=card_tag(card.tag, own, names, codes),
-        short_cite=scrubbed_cite(card.short_cite, own, names, codes),
+        headings=sent_headings(item.headings, codes, disclosed),
+        tag=card_tag(card.tag, own, names, codes, disclosed),
+        short_cite=scrubbed_cite(card.short_cite, own, names, codes, disclosed),
         own_names=own,
+        disclosed=disclosed,
     )
 
 

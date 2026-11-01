@@ -1259,3 +1259,34 @@ async def test_model_a_card_sends_no_school_team_code_tournament_digest_or_whole
     assert item["cite"] == "thornbury 24"
     assert item["headings"] == ["cliff"]
     assert set(item) == {"item", "headings", "under_an_answer_heading", "tag", "cite", "excerpt"}
+
+
+AT_THE_CLASSIC = SeedTeam(
+    identity="four",
+    side=Side.AFF,
+    names=("School four", "Codefour", "Harbor Classic"),
+    tournament="Harbor Classic",
+)
+NAMING_THE_CLASSIC = source(9, ONE, (("1NC", "Harbor Classic Cliff"), "Harbor Classic cliff nears"))
+
+
+@pytest.mark.anyio
+async def test_model_a_run_sends_no_disclosing_teams_name_in_a_heading_or_tag(
+    tmp_path: Path, prompts: PromptRegistry
+) -> None:
+    """`v1-e32-t40`: another team's tournament comes out of what a run asks about, as the evaluation's does.
+
+    The router answers the tag either way, so a name left in fails the assertion, not the router.
+    """
+    router = AnsweringRouter({**ANSWERS, "harbor classic cliff nears": ANSWERS["cliff nears"]})
+    await model_run(
+        tmp_path,
+        repository(taxonomy()),
+        stage(router, prompts),
+        NAMING_THE_CLASSIC,
+        source(10, AT_THE_CLASSIC),
+    )
+
+    assert [(item["headings"], item["tag"]) for batch in router.batches for item in batch] == [
+        (["cliff"], "cliff nears")
+    ]

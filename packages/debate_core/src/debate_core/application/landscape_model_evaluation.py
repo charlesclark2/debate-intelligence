@@ -15,8 +15,10 @@ One evaluation, for one caselist (one format) at its newest weekly snapshot unle
 3. **scores** the answers (:class:`FormatEvaluation`): of the cards a run would count (a MODEL result at
    or above the review threshold), how many name the coach's position. A card the coach labelled `none`
    counts against the model when it is placed;
-4. **scans** what was sent, and every cassette of the prompt, for the caselist's schools, team codes and
-   the disclosing teams' tournaments (:func:`~debate_core.arguments.landscape.model_stage.name_scan`).
+4. **scans** what was sent, every cassette of the prompt version it ran, and every repair cassette of that
+   version filed under the caselist, for the caselist's schools, team codes and the disclosing teams'
+   tournaments (:func:`~debate_core.arguments.landscape.model_stage.name_scan`): their values, not their
+   JSON keys, and without the committed positions text a cassette holds (`v1-e32-t40`).
 
 Nothing is cached and no report is written: the evaluation measures the stage and changes no placement.
 Every count is a number; no tag, heading or label text is returned or logged.
@@ -79,7 +81,7 @@ from debate_core.arguments.landscape.scan_hits import (
     repair_cassette_hits,
 )
 from debate_core.arguments.landscape.source_headings import CaselistNames
-from debate_core.arguments.landscape.tag_scrub import code_words
+from debate_core.arguments.landscape.tag_scrub import DisclosedNames, code_words
 from debate_core.domain.landscape import Taxonomy
 from debate_core.domain.landscape_classification import ItemKind, OverrideRules
 
@@ -99,9 +101,12 @@ __all__ = [
     "LandscapeModelEvaluationService",
     "ask_labelled_cards",
     "break_down_labelled_cards",
+    "committed_positions",
     "evaluate_labelled_cards",
     "read_coach_sample",
     "read_sample_populations",
+    "scanned_cassettes",
+    "scanned_repairs",
     "score_labelled_answers",
 ]
 
@@ -161,7 +166,9 @@ class FormatEvaluation:
     sent: NameScan = field(default_factory=lambda: NameScan(texts=0))
     """The scan of every batch's prompt input as sent."""
     cassettes: NameScan = field(default_factory=lambda: NameScan(texts=0))
-    """The scan of every cassette of the prompt on this machine."""
+    """The scan of every cassette of the prompt on this machine, but one naming another prompt version."""
+    repair_cassettes: NameScan = field(default_factory=lambda: NameScan(texts=0))
+    """The scan of every repair cassette of the prompt version, filed under the caselist (`v1-e32-t40`)."""
     interrupted_by: ProviderError | None = None
     """The router error that stopped the stage partway; None when it ran to the end."""
     unanswered: int = 0
@@ -182,6 +189,11 @@ class FormatEvaluation:
     @property
     def accuracy(self) -> float | None:
         return self.correct / self.counted if self.counted else None
+
+    @property
+    def scans_clean(self) -> bool:
+        """Whether no scan, of the prompt inputs, the cassettes or the repair cassettes, found a name."""
+        return self.sent.clean and self.cassettes.clean and self.repair_cassettes.clean
 
     @property
     def meets_target(self) -> bool:
@@ -264,7 +276,8 @@ class LabelledAnswers:
     outcome: ModelStageOutcome
     names: CaselistNames = field(repr=False)
     tournaments: frozenset[str] = field(repr=False)
-    """The disclosing teams' names, every source's: the scan's other names."""
+    """Every disclosing team's tournament, every source's: the scan's third list (`v1-e32-t40`; until then
+    each team's school and code were on it too, and the first two lists hold those)."""
 
 
 async def ask_labelled_cards(
@@ -277,11 +290,12 @@ async def ask_labelled_cards(
     labels = {one.item_id: one.label for one in labelled}
     names = CaselistNames(reading.caselist_names)
     codes = code_words(reading.caselist_names)
+    disclosed = DisclosedNames.of_sources(reading.sources)
     candidates: dict[str, ModelCandidate] = {}
     items: dict[str, MatchItem] = {}
     tournaments: set[str] = set()
     for source in reading.sources:
-        tournaments |= {name for team in source.teams for name in team.names}
+        tournaments |= {team.tournament for team in source.teams if team.tournament}
         if not any(item_id.startswith(f"{source.sha256}:") for item_id in labels):
             continue
         cards = iter(source.cards)
@@ -291,7 +305,9 @@ async def ask_labelled_cards(
             card = next(cards)
             if item.item_id in labels:
                 items[item.item_id] = item
-                candidates.setdefault(item.fingerprint, model_candidate(source, item, card, names, codes))
+                candidates.setdefault(
+                    item.fingerprint, model_candidate(source, item, card, names, codes, disclosed)
+                )
     outcome = await stage.run(
         list(candidates.values()),
         taxonomy=taxonomy,
@@ -318,10 +334,13 @@ def score_labelled_answers(
     prompt_version: str,
     review_threshold: float = DEFAULT_REVIEW_THRESHOLD,
     cassettes: Iterable[str] = (),
+    repair_cassettes: Iterable[str] = (),
     snapshot: date | None = None,
 ) -> FormatEvaluation:
-    """The evaluation's score of `asked`, and the scans of what was sent and of `cassettes`."""
+    """The evaluation's score of `asked`, and the scans of what was sent, of `cassettes` and of
+    `repair_cassettes`, each read as :func:`scanned_cassettes` and :func:`scanned_repairs` choose."""
     labels, outcome = asked.labels, asked.outcome
+    committed = committed_positions(taxonomy)
     counted = correct = below = labelled_none = 0
     for item_id, item in asked.items.items():
         result = outcome.results.get(item.fingerprint)
@@ -353,7 +372,18 @@ def score_labelled_answers(
         input_tokens=outcome.input_tokens,
         output_tokens=outcome.output_tokens,
         sent=name_scan(outcome.sent_inputs, reading.caselist_names, asked.tournaments),
-        cassettes=name_scan(cassettes, reading.caselist_names, asked.tournaments),
+        cassettes=name_scan(
+            scanned_cassettes(cassettes, prompt_version),
+            reading.caselist_names,
+            asked.tournaments,
+            leave_out=(committed,),
+        ),
+        repair_cassettes=name_scan(
+            scanned_repairs(repair_cassettes, reading.caselist, prompt_version),
+            reading.caselist_names,
+            asked.tournaments,
+            leave_out=(committed,),
+        ),
         interrupted_by=outcome.interrupted_by,
         unanswered=len(asked.candidates) - outcome.sent,
     )
@@ -367,11 +397,13 @@ async def evaluate_labelled_cards(
     *,
     review_threshold: float = DEFAULT_REVIEW_THRESHOLD,
     cassette_texts: Callable[[], Iterable[str]] = lambda: (),
+    repair_cassette_texts: Callable[[], Iterable[str]] = lambda: (),
     snapshot: date | None = None,
 ) -> FormatEvaluation:
     """Ask `stage` about every labelled card `reading` holds, and score the answers against the labels.
 
-    `cassette_texts` is read after the stage has run, so a recording run scans what it recorded.
+    `cassette_texts` and `repair_cassette_texts` are read after the stage has run, so a recording run
+    scans what it recorded.
     """
     asked = await ask_labelled_cards(reading, labelled, stage, taxonomy)
     return score_labelled_answers(
@@ -381,6 +413,7 @@ async def evaluate_labelled_cards(
         prompt_version=stage.prompt_version,
         review_threshold=review_threshold,
         cassettes=cassette_texts(),
+        repair_cassettes=repair_cassette_texts(),
         snapshot=snapshot,
     )
 
@@ -460,7 +493,8 @@ async def break_down_labelled_cards(
     places each found card with `taxonomy` and the coach's `overrides`, as a landscape run does.
     """
     asked = await ask_labelled_cards(reading, labelled, stage, taxonomy)
-    cassettes = list(cassette_texts())
+    cassettes = scanned_cassettes(cassette_texts(), stage.prompt_version)
+    repairs = scanned_repairs(repair_cassette_texts(), reading.caselist, stage.prompt_version)
     evaluation = score_labelled_answers(
         reading,
         taxonomy,
@@ -468,6 +502,7 @@ async def break_down_labelled_cards(
         prompt_version=stage.prompt_version,
         review_threshold=review_threshold,
         cassettes=cassettes,
+        repair_cassettes=repairs,
         snapshot=snapshot,
     )
     outcome = asked.outcome
@@ -491,13 +526,8 @@ async def break_down_labelled_cards(
             )
         )
     names = ScanNames.of(
-        reading.caselist_names,
-        asked.tournaments,
-        taxonomy_text=str(prompt_variables(taxonomy, ())["positions"]),
+        reading.caselist_names, asked.tournaments, taxonomy_text=committed_positions(taxonomy)
     )
-    repairs = [
-        text for text in repair_cassette_texts() if _repairs(text, reading.caselist, stage.prompt_version)
-    ]
     return EvaluationBreakdown(
         evaluation=evaluation,
         cards=tuple(cards),
@@ -581,15 +611,49 @@ def _batch_breakdown(number: int, record: BatchRecord) -> BatchBreakdown:
     )
 
 
-def _repairs(cassette: str, caselist: str, prompt_version: str) -> bool:
-    """Whether `cassette` is a `model.repair` call for this prompt and version, filed under `caselist`."""
+def committed_positions(taxonomy: Taxonomy) -> str:
+    """`taxonomy`'s positions as the prompt sends them: committed text, which the scans leave out."""
+    return str(prompt_variables(taxonomy, ())["positions"])
+
+
+def scanned_cassettes(texts: Iterable[str], prompt_version: str) -> list[str]:
+    """The cassettes of the prompt an evaluation scans: every one but those naming another prompt version.
+
+    A cassette recorded under an earlier version is no part of this evaluation (1.0.0's held names in
+    heading paths, `v1-e32-t39`). A text whose version cannot be read is scanned: the filter fails toward
+    reading more.
+    """
+    return [text for text in texts if _prompt_version_of(text) in (None, prompt_version)]
+
+
+def _prompt_version_of(cassette: str) -> str | None:
+    document = _document_of(cassette)
+    try:
+        version = document["request"]["prompt"]["prompt_version"] if document is not None else None
+    except (KeyError, TypeError):
+        return None
+    return version if isinstance(version, str) else None
+
+
+def _document_of(cassette: str) -> dict[str, Any] | None:
     try:
         loaded: object = json.loads(cassette)
     except json.JSONDecodeError:
+        return None
+    return cast(dict[str, Any], loaded) if isinstance(loaded, dict) else None
+
+
+def scanned_repairs(texts: Iterable[str], caselist: str, prompt_version: str) -> list[str]:
+    """The repair cassettes an evaluation scans: of the classify prompt at `prompt_version`, filed under
+    `caselist` (`v1-e32-t39` listed their hits; `v1-e32-t40` counts them in the evaluation's scan)."""
+    return [text for text in texts if _repairs(text, caselist, prompt_version)]
+
+
+def _repairs(cassette: str, caselist: str, prompt_version: str) -> bool:
+    """Whether `cassette` is a `model.repair` call for this prompt and version, filed under `caselist`."""
+    document = _document_of(cassette)
+    if document is None:
         return False
-    if not isinstance(loaded, dict):
-        return False
-    document = cast(dict[str, Any], loaded)
     caselists = document.get("caselists")
     try:
         failed = document["request"]["prompt"]["variables"]["failed_prompt"]
@@ -643,6 +707,7 @@ class LandscapeModelEvaluationService:
             self._stage(len(prepared.labelled)),
             review_threshold=self._threshold,
             cassette_texts=self._cassette_texts,
+            repair_cassette_texts=self._repair_cassette_texts,
             snapshot=prepared.through,
         )
 

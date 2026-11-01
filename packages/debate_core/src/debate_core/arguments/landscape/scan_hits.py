@@ -8,9 +8,13 @@ operator needs each hit: the text it is in (an input batch, a cassette, a repair
 
 This module finds them by the scan's own rule, the same three lists matched as whole lowercase words
 (:func:`~debate_core.arguments.landscape.matcher.tag_words`), field by field. A text the scan counts for a
-kind always has a hit of that kind listed: a match no single field holds, such as two fields' words read
-together, is listed as :attr:`HitField.ACROSS_FIELDS` from the whole text. The scan rule itself is
-unchanged.
+kind always has a hit of that kind listed: a match no named field holds, such as one in a text that is not
+JSON, is listed as :attr:`HitField.ACROSS_FIELDS` from the text's values.
+
+Since `v1-e32-t40`, as the scan does (:func:`~debate_core.arguments.landscape.model_stage.name_scan`), it
+reads field values and never a JSON key, leaves out the committed positions text the prompt sends (a
+cassette's `positions`, and the same text in a repair cassette's copy of the failed prompt), and the third
+list holds the disclosing teams' tournaments only.
 
 **A hit is for the terminal.** A :class:`ScanHit` withholds its words from its `repr`, and nothing here
 logs or writes. Only :func:`hit_counts`, by kind and field, may be written down.
@@ -28,6 +32,7 @@ from enum import StrEnum
 from typing import Final, cast
 
 from debate_core.arguments.landscape.matcher import tag_words
+from debate_core.arguments.landscape.model_stage import json_values, scanned_values
 
 __all__ = [
     "CONTEXT_WORDS",
@@ -52,8 +57,8 @@ class HitKind(StrEnum):
     SCHOOL = "school"
     TEAM_CODE = "team-code word"
     TOURNAMENT = "tournament"
-    """The scan's third list: every disclosing team's school, code and tournament (`name_scan`'s
-    `other_names`), so a school's words are a hit of this kind too (:attr:`ScanHit.team_name`)."""
+    """The scan's third list: every disclosing team's tournament (`name_scan`'s `other_names`). Until
+    `v1-e32-t40` each team's school and code were on it too (:attr:`ScanHit.team_name`)."""
 
 
 class HitField(StrEnum):
@@ -65,13 +70,14 @@ class HitField(StrEnum):
     EXCERPT = "excerpt"
     RATIONALE = "model rationale"
     TAXONOMY = "taxonomy positions"
-    """The prompt's `positions` variable: the committed taxonomy's ids, labels and descriptions."""
+    """The prompt's `positions` variable, less the committed taxonomy's text
+    (:attr:`ScanNames.taxonomy_text`): a cassette recorded under another taxonomy shows what differs."""
     REPAIRED_PROMPT = "repaired prompt"
     """A repair cassette's copy of the failed call's prompt, as rendered: its cards and its taxonomy."""
     METADATA = "cassette metadata"
     """Anything else of a cassette: its key, caselists, route, usage, schema, ids and JSON keys."""
     ACROSS_FIELDS = "across fields"
-    """A match the scan finds in the text as a whole and no field holds alone."""
+    """A match the scan finds in a value of the text that no named field holds."""
 
 
 _ITEM_FIELDS: Final = {"tag": HitField.TAG, "cite": HitField.CITE, "excerpt": HitField.EXCERPT}
@@ -93,6 +99,8 @@ class ScanNames:
     others: tuple[str, ...] = field(repr=False)
     taxonomy_words: str = field(default="", repr=False)
     """The committed taxonomy's words, padded: a hit's words found here are ordinary vocabulary."""
+    taxonomy_text: str = field(default="", repr=False)
+    """The committed positions text as the prompt sends it, left out of every value (`v1-e32-t40`)."""
 
     @classmethod
     def of(
@@ -113,7 +121,13 @@ class ScanNames:
             ),
             others=tuple(words for words in map(tag_words, other_names) if words),
             taxonomy_words=f" {tag_words(taxonomy_text)} ",
+            taxonomy_text=taxonomy_text,
         )
+
+    @property
+    def leave_out(self) -> tuple[str, ...]:
+        """The committed text no value is read with."""
+        return (self.taxonomy_text,) if self.taxonomy_text else ()
 
     def phrases(self) -> Iterator[tuple[HitKind, str]]:
         yield from ((HitKind.SCHOOL, one) for one in dict.fromkeys(self.schools))
@@ -139,7 +153,7 @@ class ScanHit:
     """Up to :data:`CONTEXT_WORDS` words before the match, in the field."""
     after: str = field(repr=False)
     team_name: bool = False
-    """A :attr:`HitKind.TOURNAMENT` hit whose words are a school or team code of the caselist."""
+    """A :attr:`HitKind.TOURNAMENT` hit whose words are also a school or team code of the caselist."""
     in_taxonomy: bool = False
     """The matched words are words of the committed taxonomy too: vocabulary, not only a name."""
     json_key: bool = False
@@ -179,10 +193,14 @@ def _hits_in(text_label: str, where: HitField, value: str, names: ScanNames) -> 
 
 
 def _across(text_label: str, whole: str, found: list[ScanHit], names: ScanNames) -> list[ScanHit]:
-    """The scan's matches in `whole` of a kind no field's hit has: the scan counts them, so they show."""
+    """The scan's matches in `whole`'s values of a kind no field's hit has: the scan counts them, so they
+    show."""
     listed = {hit.kind for hit in found}
     return [
-        hit for hit in _hits_in(text_label, HitField.ACROSS_FIELDS, whole, names) if hit.kind not in listed
+        hit
+        for value in scanned_values(whole, names.leave_out)
+        for hit in _hits_in(text_label, HitField.ACROSS_FIELDS, value, names)
+        if hit.kind not in listed
     ]
 
 
@@ -252,19 +270,6 @@ def input_batch_hits(text_label: str, items: str, names: ScanNames) -> list[Scan
     )
 
 
-def _leaves(value: object) -> Iterator[str]:
-    """Every key and scalar of a JSON value, as text."""
-    if isinstance(value, dict):
-        for key, inner in cast(dict[str, object], value).items():
-            yield key
-            yield from _leaves(inner)
-    elif isinstance(value, list):
-        for inner in cast(list[object], value):
-            yield from _leaves(inner)
-    elif value is not None:
-        yield str(value)
-
-
 def _rationales(response: Mapping[str, object]) -> list[str]:
     output = response.get("output")
     answers = cast(dict[str, object], output).get("answers") if isinstance(output, dict) else None
@@ -315,7 +320,11 @@ def cassette_hits(text_label: str, cassette: str, names: ScanNames) -> list[Scan
     ]
     positions = variables.pop("positions", None)
     if isinstance(positions, str):
-        found += _hits_in(text_label, HitField.TAXONOMY, positions, names)
+        found += [
+            hit
+            for value in json_values(positions, names.leave_out)
+            for hit in _hits_in(text_label, HitField.TAXONOMY, value, names)
+        ]
     found += _rationale_and_metadata(text_label, document, names)
     return _marked(found + _across(text_label, cassette, found, names), keys=keys, sent=_sent_words(items))
 
@@ -336,8 +345,9 @@ def repair_cassette_hits(text_label: str, cassette: str, names: ScanNames) -> li
     for key in ("failed_system", "failed_user"):
         value = variables.pop(key, None)
         if isinstance(value, str):
-            found += _hits_in(text_label, HitField.REPAIRED_PROMPT, value, names)
-            repaired.append(tag_words(value))
+            for part in json_values(value, names.leave_out):
+                found += _hits_in(text_label, HitField.REPAIRED_PROMPT, part, names)
+                repaired.append(tag_words(part))
     found += _rationale_and_metadata(text_label, document, names)
     return _marked(found + _across(text_label, cassette, found, names), keys=keys, sent=" ".join(repaired))
 
@@ -349,8 +359,8 @@ def _rationale_and_metadata(text_label: str, document: dict[str, object], names:
         for rationale in _rationales(_response(document))
         for hit in _hits_in(text_label, HitField.RATIONALE, rationale, names)
     ]
-    for leaf in _leaves(document):
-        found += _hits_in(text_label, HitField.METADATA, leaf, names)
+    for value in json_values(document, names.leave_out):
+        found += _hits_in(text_label, HitField.METADATA, value, names)
     return found
 
 

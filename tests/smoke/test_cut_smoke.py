@@ -215,3 +215,33 @@ def test_cut_writes_a_verified_docx_from_a_stored_snapshot_and_replayed_answers_
     )
     events = [json.loads(line)["event"] for line in run.stderr.splitlines() if line.startswith("{")]
     assert events == ["fetch", "extract", "select", "verify", "export"]
+
+
+def test_verify_reads_the_docx_cut_wrote_and_finds_its_card_verified_offline(
+    installed_cli: InstalledCli, stored_news: Path
+) -> None:
+    """`verify evidence.docx` on the build under test (v1-e06-t07): the manifest `cut` embedded is read,
+    its card checked against the snapshot in the data directory and its body against the card. The
+    build reads the body in its own bundled format profile, so a build missing it fails here."""
+    out = installed_cli.workdir / "evidence.docx"
+    cut = installed_cli.run(
+        "cut", NEWS_URL, "--need", NEWS_NEED, "--argument", NEWS_ARGUMENT, "--output", str(out)
+    )
+    assert cut.exit_code == ExitCode.OK, cut.output
+    written = out.read_bytes()
+
+    run = installed_cli.run("--json", "verify", str(out))
+
+    assert run.exit_code == ExitCode.OK, run.output
+    data = run.envelope()["data"]
+    assert isinstance(data, dict)
+    [card] = data["cards"]
+    [embedded] = json.loads(read_embedded_manifest_bytes(out))["cards"]
+    assert (card["card_id"], card["status"], card["reason_codes"], card["snapshot_id"]) == (
+        embedded["card_id"],
+        "VERIFIED",
+        [],
+        embedded["snapshot_id"],
+    )
+    assert data["document"] == {"format_profile": "team-default", "body_cards": 1, "unclaimed_body_cards": []}
+    assert out.read_bytes() == written, "verify only reads the document"

@@ -638,5 +638,24 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e39-t26-cloud-smoke-checks-reach-dev
+    - id: t27
+      kind: Task
+      name: 'A smoke check runs publish --newest on the current index against an installed build'
+      description: >-
+        A smoke check runs publish --newest on the current index against an installed build.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t27-newest-on-the-current-index-smoke-check.yaml
+        goalRef: v1-e39-t27-newest-on-the-current-index-smoke-check
+      dependsOn:
+      - t25
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t27-newest-on-the-current-index-smoke-check reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t27-newest-on-the-current-index-smoke-check
 status:
   phase: Pending

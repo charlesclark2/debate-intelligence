@@ -1,4 +1,4 @@
-"""The weekly run's memory high-water marks at the end of each stage, in its summary and its details (`v1-e40-t31`).
+"""The weekly run's memory high-water marks as each stage ends, in its summary and details (`v1-e40-t31`).
 
 The measurement in `docs/data/caselist-parse-memory.md` found that the run's main process is what
 grows, in the parse's aggregate rebuild, so the cloud task's size has to come from what a real run
@@ -28,7 +28,7 @@ import pytest
 from tests.fixtures.caselist.build_synthetic_archives import SYNTHETIC_CASELIST
 
 from debate_core.application.caselist import memory_high_water
-from debate_core.application.caselist.memory_high_water import MemoryHighWater
+from debate_core.application.caselist.memory_high_water import MemoryHighWater, read_memory_high_water
 from debate_core.application.caselist_sync import RunSummary, SearchIndexStageReport, StageOutcome
 from debate_core.application.sync_runs import SyncRunDetails, details_for_summary, record_for_summary
 
@@ -37,8 +37,12 @@ from .test_caselist_sync_stage_times_and_volume import EVERY_STAGE, Clock, servi
 GIB: Final = 1024**3
 MIB: Final = 1024**2
 
-BEFORE_THE_INDEX: Final = MemoryHighWater(container_peak_bytes=1 * GIB, cgroup="v2", main_process_peak_bytes=200 * MIB)
-AFTER_THE_INDEX: Final = MemoryHighWater(container_peak_bytes=3 * GIB, cgroup="v2", main_process_peak_bytes=900 * MIB)
+BEFORE_THE_INDEX: Final = MemoryHighWater(
+    container_peak_bytes=1 * GIB, cgroup="v2", main_process_peak_bytes=200 * MIB
+)
+AFTER_THE_INDEX: Final = MemoryHighWater(
+    container_peak_bytes=3 * GIB, cgroup="v2", main_process_peak_bytes=900 * MIB
+)
 
 STORED: Final = Path(__file__).parent / "caselist" / "stored_run_records"
 FIGURES: Final = Path(__file__).parent / "caselist" / "run_memory_figures"
@@ -174,15 +178,17 @@ def test_memory_figures_none_readable_are_no_figures_never_zero(tmp_path: Path) 
 # ------------------------------------------------------------------------------------------------
 
 
-def test_memory_figures_come_from_the_containers_cgroup_and_this_process_by_default(
+def test_memory_figures_from_t32s_reader_are_the_containers_cgroup_and_this_process(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """`v1-e40-t32`'s reader over a stand-in cgroup. That the service reads with it when none is given
+    is the CLI's test of the same figures, through the container's wiring."""
     cgroup = tmp_path / "cgroup"
     cgroup.mkdir()
     (cgroup / "memory.peak").write_text("7516192768\n", encoding="ascii")
     monkeypatch.setattr(memory_high_water, "CGROUP_ROOT", cgroup)
 
-    summary = asyncio.run(service(tmp_path, Clock(), memory=None).run([SYNTHETIC_CASELIST]))
+    summary = asyncio.run(service(tmp_path, Clock(), memory=read_memory_high_water).run([SYNTHETIC_CASELIST]))
 
     figures = [one.memory for one in summary.stage_times]
     assert [(one.container_peak_bytes, one.cgroup) if one else None for one in figures] == [

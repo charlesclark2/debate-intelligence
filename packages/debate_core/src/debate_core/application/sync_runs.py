@@ -69,7 +69,11 @@ What a newer build knows beyond the record is kept **beside** it, keyed by run i
   and owe no comparison;
 * when each stage the run carried out started and ended, and, where the run reads its data volume,
   the fullest that volume got and the warning past `storage.volume_warning_percent`
-  (`v1-e40-t03`, ADR-0020 (1) 2).
+  (`v1-e40-t03`, ADR-0020 (1) 2);
+* the memory high-water marks as each of those stages ended, the container's and the main
+  process's, on the stage's own entry and left out where they could not be read (`v1-e40-t31`). Not
+  a key of the details' own: the details schema of `v1.1.0-dev.251` and `v1.1.0-dev.200` leaves a
+  stage entry open, and an earlier build reads the entry and passes over the figures.
 
 One line a run in :data:`SYNC_RUN_DETAILS_FILENAME`, next to the run log, and one object a run
 under :data:`SYNC_RUN_DETAILS_KEY_PREFIX`, next to the records' prefix and not under it: an older
@@ -129,7 +133,14 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Final, Literal, cast
 
-from pydantic import BaseModel, ConfigDict, Field, SerializerFunctionWrapHandler, ValidationError, model_serializer
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    ValidationError,
+    model_serializer,
+)
 
 from debate_core.application.caselist.publish_plan import InvalidPublishTarget, validate_publish_target
 from debate_core.application.caselist.run_home_move import NEW_HOME

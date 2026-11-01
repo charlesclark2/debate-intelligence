@@ -556,6 +556,16 @@ run reads how full the data directory's volume is after every stage it times and
 reading (:attr:`RunSummary.data_volume`); past the threshold, the summary says so, so the volume is
 resized before a run fills it. Unset, the default and the Mac's case, nothing is read: a laptop's
 disk is not the run's to judge. A reading that fails costs the run its reading, never a stage.
+
+## How much memory each stage had used (`v1-e40-t31`)
+
+The parse's measurement (`docs/data/caselist-parse-memory.md`) found the run's main process is what
+grows, so the cloud task's size has to come from what real runs used. Each stage the run times also
+records, as it ended, the container's memory high-water mark (its cgroup's peak) and the main
+process's own, read by `v1-e40-t32`'s
+:func:`~debate_core.application.caselist.memory_high_water.read_memory_high_water`
+(:attr:`StageTime.memory`). Both are read on every machine; a figure that cannot be read, as the
+container's on the Mac, is left out of the summary, never written as zero.
 """
 
 from __future__ import annotations
@@ -833,7 +843,8 @@ in the parse stage's `reason`, which every build reads. Under version 5, `search
 is added: the search index stage's index id, sizes and warnings (:class:`SearchIndexStageCounts`),
 or `null` when the stage did not run. A key added, so the version stays. So are `stage_times` and
 `data_volume` (`v1-e40-t03`): when each stage started and ended, and how full the data directory's
-volume got, or `null` when the run read no volume.
+volume got, or `null` when the run read no volume. So is each stage time's `memory` (`v1-e40-t31`):
+the memory high-water marks that could be read as the stage ended, left out when none could.
 """
 RUN_SUMMARY_DIRECTORY: Final = "caselist-sync-runs"
 
@@ -4006,7 +4017,9 @@ class CaselistSyncService:
             return await work()
         finally:
             tally.stage_times.append(
-                StageTime(stage=stage, started_at=started, finished_at=self._clock(), memory=self._read_memory())
+                StageTime(
+                    stage=stage, started_at=started, finished_at=self._clock(), memory=self._read_memory()
+                )
             )
             self._read_volume_after(stage, tally)
 

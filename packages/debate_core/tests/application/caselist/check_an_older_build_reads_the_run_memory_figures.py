@@ -40,14 +40,20 @@ from debate_core.integrations.local import FsEvidenceObjectStore
 
 HERE = Path(__file__).parent
 DETAILS = HERE / "run_memory_figures" / "details_this_build_writes.json"
-OLDER_RECORD = HERE / "stored_run_records" / "written_by_the_start_commit" / "a_week_imported_and_published.bucket.json"
+OLDER_RECORD = (
+    HERE / "stored_run_records" / "written_by_the_start_commit" / "a_week_imported_and_published.bucket.json"
+)
 
 
 def this_runs_record(details: dict[str, Any]) -> dict[str, Any]:
     [body] = json.loads(OLDER_RECORD.read_text(encoding="utf-8")).values()
     record: dict[str, Any] = json.loads(body)
     times = details["stage_times"]
-    record |= {"run_id": details["run_id"], "started_at": times[0]["started_at"], "finished_at": times[-1]["finished_at"]}
+    record |= {
+        "run_id": details["run_id"],
+        "started_at": times[0]["started_at"],
+        "finished_at": times[-1]["finished_at"],
+    }
     return record
 
 
@@ -78,7 +84,8 @@ async def main() -> int:
         log.write_text(line + "\n", encoding="utf-8")
         found = SyncRunDetailsLog(log).read().get(run_id)
         same = found is not None and as_read(found.stage_times) == expected
-        print(f"details file: the run read {found is not None}; {len(found.stage_times) if found else 0} stage(s), as written: {same}")
+        stages = len(found.stage_times) if found else 0
+        print(f"details file: the run read {found is not None}; {stages} stage(s), as written: {same}")
         failures += not same
 
         bucket = FsEvidenceObjectStore(root / "bucket")

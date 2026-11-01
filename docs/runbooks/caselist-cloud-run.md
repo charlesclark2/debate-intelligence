@@ -988,6 +988,51 @@ read-back for `v1-e40-t30`'s ac3.
 **Prod** gets 32 GB with its own first apply B, at the pilot's promotion: its task definition is created
 from the same module, so no separate step.
 
+### The run's memory figures
+
+From an image with `v1-e40-t31` on, each stage of a run records, as it ends, the memory high-water
+marks since the task started, in bytes. They are in the summary the run prints and in its details,
+on each entry of `stage_times`, as `"memory"`:
+
+* `"container_peak_bytes"` is the whole container's, every parse worker included, from its cgroup
+  (`"cgroup"` says `v1` or `v2`), as in [the backfile import's lines](#the-four-imports-v1-e40-t09-ac3).
+  Divided by 34359738368, the task's 32768 MiB in bytes, it is the share of the task the run had
+  reached by the end of that stage. On cgroup `v1` it counts the page cache as well, which the kernel
+  reclaims before it kills anything.
+* `"main_process_peak_bytes"` is the run's own process. The parse stage's is the one to watch: the
+  stage's aggregate rebuild holds every card of a caselist in this process, after the workers have
+  stopped ([caselist-parse-memory.md](../data/caselist-parse-memory.md)).
+* A figure that could not be read is left out, never zero. A run on the Mac has no container figure.
+  A stage with no `"memory"` at all was recorded by an image from before `v1-e40-t31`: Wednesday
+  2026-11-04's run, on `v1.1.0-dev.251`, records none.
+
+**Reading them.** A read, with the everyday profile. The Mac's build must have `v1-e40-t31` too: an
+earlier build reads these details and passes over the figures, so it prints `no figures` for every
+stage, the same as for a run that recorded none.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, a build with `v1-e40-t31`
+```bash
+debate-research --json caselist runs --remote --last 1 > /tmp/caselist-run-memory.json
+python3 -I - /tmp/caselist-run-memory.json <<'FIGURES'
+import json, sys
+TASK = 34359738368
+for run in json.load(open(sys.argv[1]))["data"]["runs"]:
+    print(run["run_id"], run["outcome"])
+    for one in (run["details"] or {}).get("stage_times", []):
+        memory = one.get("memory")
+        if not memory:
+            print(" ", one["stage"], "no figures")
+            continue
+        container = memory.get("container_peak_bytes")
+        share = "%.2f of the task" % (container / TASK) if container is not None else "container not read"
+        print(" ", one["stage"], "container", container, memory.get("cgroup"), share, "main", memory.get("main_process_peak_bytes"))
+FIGURES
+```
+Success looks like the newest run's id and outcome, then one line for each stage, in the run's order,
+each with its figures. Send the PM the lines. A share above about 0.8 after any stage, or a parse
+stage whose main figure is most of its container figure, goes to the PM before the next run.
+
 ## A failed parse stage
 
 When the cloud run's parse stage does not publish a caselist's parsed store, the run names no

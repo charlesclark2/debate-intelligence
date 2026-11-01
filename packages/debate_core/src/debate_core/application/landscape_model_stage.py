@@ -56,7 +56,7 @@ from debate_core.application.errors import (
     ProviderRateLimited,
     error_code_of,
 )
-from debate_core.application.model_errors import ModelOutputError, ValidationPolicy
+from debate_core.application.model_errors import ModelOutputError, OutputAttempt, ValidationPolicy
 from debate_core.application.ports.parsed_store import ParsedStore
 from debate_core.application.structured_output import StructuredOutputGuard
 from debate_core.arguments.landscape.model_stage import (
@@ -89,6 +89,7 @@ __all__ = [
     "CLASSIFICATION_TASK_CLASS",
     "DEFAULT_MAX_MODEL_ITEMS",
     "POLICY_QUESTION",
+    "BatchRecord",
     "CardTexts",
     "ModelClassificationStage",
     "ModelStageInterrupted",
@@ -200,6 +201,27 @@ class ParsedStoreCardTexts:
 
 
 @dataclass(frozen=True, slots=True)
+class BatchRecord:
+    """One batch the stage asked about: its cards, the guard's calls for it, and whether it was refused.
+
+    Counts, digests and the guard's problem records only (`v1-e32-t39`): an attempt's problems name a
+    location and a type, never the answer's values.
+    """
+
+    fingerprints: tuple[str, ...]
+    """The batch's cards, in the order it lists them (`item-1` first)."""
+    attempts: tuple[OutputAttempt, ...]
+    """Every call the guard made for it: one, or two when the first answer was repaired."""
+    refused: bool = False
+    """True when the answer and its one repair both failed: every card of it placed nothing."""
+
+    @property
+    def repaired(self) -> bool:
+        """Whether its first answer failed validation and the repair's answer was used."""
+        return not self.refused and len(self.attempts) > 1
+
+
+@dataclass(frozen=True, slots=True)
 class ModelStageOutcome:
     """What one stage run asked, what came back, and what it held back."""
 
@@ -220,6 +242,8 @@ class ModelStageOutcome:
     """The router error that stopped the stage; None when it ran to the end."""
     sent_inputs: tuple[str, ...] = field(default=(), repr=False)
     """Each batch's `items` variable as sent: what a scan of the prompt inputs reads. Never logged."""
+    batches: tuple[BatchRecord, ...] = ()
+    """Each batch answered or refused, in the order asked; a batch a stop interrupted has none."""
 
     @property
     def interrupted(self) -> str | None:
@@ -295,6 +319,7 @@ class ModelClassificationStage:
         calls = input_tokens = output_tokens = 0
         interrupted: ProviderError | None = None
         sent_inputs: list[str] = []
+        records: list[BatchRecord] = []
         for batch in batches(items, self._batch_size):
             variables = prompt_variables(taxonomy, batch)
             sent_inputs.append(str(variables["items"]))
@@ -322,6 +347,9 @@ class ModelClassificationStage:
                         model_id=invalid.model_id or "unknown",
                     )
                 refused[Refusal.BATCH_REFUSED.value] += size
+                records.append(
+                    BatchRecord(_fingerprints(batch), tuple(invalid.attempt_records), refused=True)
+                )
                 continue
             except ProviderError as error:
                 interrupted = error
@@ -331,6 +359,7 @@ class ModelClassificationStage:
                 )
                 break
             calls += len(answered.attempts)
+            records.append(BatchRecord(_fingerprints(batch), answered.attempts))
             usage = answered.response.usage
             input_tokens += usage.input_tokens or 0
             output_tokens += usage.output_tokens or 0
@@ -359,7 +388,12 @@ class ModelClassificationStage:
             output_tokens=output_tokens,
             interrupted_by=interrupted,
             sent_inputs=tuple(sent_inputs),
+            batches=tuple(records),
         )
+
+
+def _fingerprints(batch: Sequence[ModelItem]) -> tuple[str, ...]:
+    return tuple(item.candidate.fingerprint for item in batch)
 
 
 def _item(

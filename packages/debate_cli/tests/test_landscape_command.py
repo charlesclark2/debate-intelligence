@@ -15,6 +15,7 @@ import dataclasses
 import functools
 import hashlib
 import json
+import logging
 import os
 import shlex
 import shutil
@@ -42,7 +43,11 @@ from debate_core.application.errors import (
     ProviderError,
     ProviderRateLimited,
 )
-from debate_core.application.landscape_model_evaluation import FormatEvaluation
+from debate_core.application.landscape_model_evaluation import (
+    BatchBreakdown,
+    EvaluationBreakdown,
+    FormatEvaluation,
+)
 from debate_core.application.landscape_model_stage import ModelClassificationStage, ParsedStoreCardTexts
 from debate_core.application.landscape_report import CIRCUIT_WIDE_FILES, SCHOOL_VIEW_FILES
 from debate_core.application.landscape_run import BUNDLE_FILES, LandscapeRunService, PositionClassifier
@@ -60,8 +65,14 @@ from debate_core.application.sync_runs import (
     SyncRunOutcome,
     SyncRunRecord,
 )
+from debate_core.arguments.landscape.evaluation_breakdown import (
+    CardBreakdown,
+    CardOutcome,
+    DeterministicPlacement,
+)
 from debate_core.arguments.landscape.model_stage import DEFAULT_BATCH_SIZE, NameScan
 from debate_core.arguments.landscape.queue_order import QueueOrderModel
+from debate_core.arguments.landscape.scan_hits import HitField, HitKind, ScanHit
 from debate_core.domain.model_contracts import ModelParams, ModelPrompt, ModelResponse, TaskClass
 from debate_core.integrations.docx_parser import DebateDocxParser
 from debate_core.integrations.landscape.classification_store import queue_order_model_path, review_queue_path
@@ -2237,3 +2248,210 @@ def test_evaluate_throttled_with_a_name_in_a_cassette_exits_1_for_the_scan(
 
     assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
     assert _error(result)["code"] == "EVALUATION_BELOW_BAR"
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e32-t39: `landscape evaluate --breakdown`, over a stub breakdown holding one card of each counted
+# outcome and a planted hit. The hit's words reach the terminal only: never `--json`, a log or a file.
+# ------------------------------------------------------------------------------------------------
+
+#: An invented hit's words, distinctive so that a leak of any of them is found wherever it lands.
+PLANTED_HIT = ScanHit(
+    text="cassette 2",
+    where=HitField.RATIONALE,
+    kind=HitKind.SCHOOL,
+    matched="quillfeather academy",
+    before="as read at",
+    after="in the final",
+)
+
+
+def _broken_down() -> EvaluationBreakdown:
+    placed = DeterministicPlacement(position_id=None, method=None, confidence=0.0, sent_to_model=True)
+    return EvaluationBreakdown(
+        evaluation=_evaluated(labelled=3, found=3, asked=3, calls=2, counted=2, correct=1),
+        cards=(
+            CardBreakdown(
+                "spending-da",
+                "da",
+                CardOutcome.CORRECT,
+                answer="spending-da",
+                confidence=0.9,
+                deterministic=placed,
+                sample_row=1,
+                batch=1,
+            ),
+            CardBreakdown(
+                "spending-da",
+                "da",
+                CardOutcome.WRONG_KIND,
+                answer="states-cp",
+                confidence=0.8,
+                deterministic=placed,
+                sample_row=2,
+                batch=1,
+            ),
+            CardBreakdown(
+                "none",
+                "none",
+                CardOutcome.REFUSED,
+                refusal="NO_POSITION",
+                deterministic=placed,
+                sample_row=3,
+                batch=1,
+            ),
+        ),
+        batches=(
+            BatchBreakdown(
+                number=1, cards=3, calls=2, outcome="repaired", problems={"string_too_long": 1}, error_count=1
+            ),
+        ),
+        cassette_hits=(PLANTED_HIT,),
+    )
+
+
+def _stub_breakdown(monkeypatch: pytest.MonkeyPatch, result: EvaluationBreakdown) -> list[bool]:
+    asked: list[bool] = []
+
+    class Stub:
+        async def break_down(
+            self, caselist: str, sample: Any, rows: Any, *, snapshot: Any = None
+        ) -> EvaluationBreakdown:
+            logging.getLogger("debate_core").info("broken down", extra={"cards": len(result.cards)})
+            return result
+
+    def build(self: container_module.ServiceContainer, *, config_dir: Path, record: bool) -> Stub:
+        asked.append(record)
+        return Stub()
+
+    monkeypatch.setattr(container_module.ServiceContainer, "landscape_evaluation", build)
+    return asked
+
+
+def _breakdown(world: SyntheticRun, sample_files: tuple[Path, Path], *arguments: str) -> Result:
+    sample, rows = sample_files
+    return runner.invoke(
+        create_app(),
+        [
+            *arguments,
+            "landscape",
+            "evaluate",
+            "--config-dir",
+            str(world.config_dir),
+            "--caselist",
+            CASELIST,
+            "--sample",
+            str(sample),
+            "--sample-rows",
+            str(rows),
+            "--breakdown",
+        ],
+    )
+
+
+def test_evaluate_breakdown_json_counts_the_hits_and_holds_none_of_their_words(
+    world: SyntheticRun,
+    sample_files: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    tmp_path: Path,
+) -> None:
+    asked = _stub_breakdown(monkeypatch, _broken_down())
+    monkeypatch.setattr(landscape_module, "_stdout_is_a_terminal", lambda: True)
+    caplog.set_level(logging.DEBUG)
+
+    result = _breakdown(world, sample_files, "--json")
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    assert asked == [False]
+    details = _error(result)["details"]
+    breakdown = details["breakdown"]
+    assert breakdown["outcomes"]["correct"] == 1
+    assert sum(breakdown["outcomes"].values()) == 3
+    assert breakdown["batches"] == [
+        {
+            "batch": 1,
+            "cards": 3,
+            "calls": 2,
+            "outcome": "repaired",
+            "problems": {"string_too_long": 1},
+            "error_count": 1,
+        }
+    ]
+    assert breakdown["scan_hits"]["cassettes"] == {
+        "hits": 1,
+        "by_kind_and_field": {"school": {"model rationale": 1}},
+        "tournament_hits_naming_a_team": 0,
+        "in_taxonomy": 0,
+    }
+    leaked = [PLANTED_HIT.matched, PLANTED_HIT.before, PLANTED_HIT.after, "quillfeather"]
+    assert not any(words in result.output for words in leaked)
+    assert not any(words in caplog.text for words in leaked)
+    for path in tmp_path.rglob("*"):
+        if path.is_file():
+            assert "quillfeather" not in path.read_bytes().decode("utf-8", errors="replace"), path
+
+
+def test_evaluate_breakdown_lists_each_hit_in_a_terminal(
+    world: SyntheticRun, sample_files: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _stub_breakdown(monkeypatch, _broken_down())
+    monkeypatch.setattr(landscape_module, "_stdout_is_a_terminal", lambda: True)
+
+    result = _breakdown(world, sample_files)
+
+    shown = _flat(result.stdout)
+    assert (
+        "1. cassette 2 | model rationale | school | ... as read at [quillfeather academy] in the final ..."
+        in shown
+    )
+    assert landscape_module.HITS_NOTICE in shown
+    assert "Breakdown of the 3 labelled card(s): correct 1, wrong_position_same_kind 0, wrong_kind 1" in shown
+    assert "Batches: 1: 3 card(s), 2 call(s), repaired (string_too_long 1)." in shown
+
+
+def test_evaluate_breakdown_withholds_the_hits_when_stdout_is_not_a_terminal(
+    world: SyntheticRun, sample_files: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`> file` or `| tee` makes a file of the output: the hits are counted there, never shown."""
+    _stub_breakdown(monkeypatch, _broken_down())
+
+    result = _breakdown(world, sample_files)
+
+    assert "quillfeather" not in result.output
+    assert "1 scan hit(s) withheld: stdout is not a terminal." in _flat(result.stdout)
+    assert "Scan hits in the cassettes: 1 (school: model rationale 1)." in _flat(result.stdout)
+
+
+def test_evaluate_breakdown_refuses_record_mode_before_building_anything(
+    world: SyntheticRun, sample_files: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    asked = _stub_breakdown(monkeypatch, _broken_down())
+
+    result = _breakdown(world, sample_files, "--json")
+    asked.clear()
+    sample, rows = sample_files
+    refused = runner.invoke(
+        create_app(),
+        [
+            "--json",
+            "landscape",
+            "evaluate",
+            "--config-dir",
+            str(world.config_dir),
+            "--caselist",
+            CASELIST,
+            "--sample",
+            str(sample),
+            "--sample-rows",
+            str(rows),
+            "--breakdown",
+            "--model-mode",
+            "record",
+        ],
+    )
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE
+    assert refused.exit_code == ExitCode.USAGE_ERROR, refused.output
+    assert _error(refused)["code"] == "BREAKDOWN_REPLAYS_ONLY"
+    assert asked == []

@@ -10,7 +10,7 @@ from __future__ import annotations
 import io
 import zipfile
 from collections.abc import Callable, Mapping, Sequence
-from typing import Any
+from typing import Any, Final
 
 import pytest
 from lxml import etree
@@ -54,6 +54,20 @@ def _not_passing(results: list[CheckResult]) -> list[tuple[CheckStatus, int | No
 
 DOCX = "ab" * 32
 
+#: The running style profile, and the one a file built before a profile change records (t09's pair).
+RUNNING_PROFILE = "2026.09.20-verbatim-1"
+OTHER_PROFILE = "2026.11.02-verbatim-2"
+SAME_PROFILE: Final = {
+    "sidecar_style_profile_version": RUNNING_PROFILE,
+    "style_profile_version": RUNNING_PROFILE,
+}
+
+#: The WARN for a sidecar of `OTHER_PROFILE` checked under `RUNNING_PROFILE`, written by hand.
+OTHER_PROFILE_WARNING = (
+    "the sidecar was written under style profile 2026.11.02-verbatim-2; the files were re-read with "
+    "2026.09.20-verbatim-1, and a card the two profiles read differently fails evidence-identity"
+)
+
 
 def test_a_valid_sidecar_of_these_bytes_passes() -> None:
     results = check_sidecar(
@@ -62,6 +76,7 @@ def test_a_valid_sidecar_of_these_bytes_passes() -> None:
         docx_sha256=DOCX,
         sidecar_parser_version="p1",
         parser_version="p1",
+        **SAME_PROFILE,
     )
     assert [(result.status, result.check) for result in results] == [(CheckStatus.PASS, QualityCheck.SIDECAR)]
 
@@ -76,6 +91,7 @@ def test_a_sidecar_that_cannot_be_read_fails_with_each_problem() -> None:
         docx_sha256=DOCX,
         sidecar_parser_version=None,
         parser_version="p1",
+        **SAME_PROFILE,
     )
     assert _not_passing(results) == [
         (CheckStatus.FAIL, None, "the sidecar is not valid: cards.0.source_sha256: Field required"),
@@ -94,6 +110,7 @@ def test_a_sidecar_of_other_bytes_fails() -> None:
         docx_sha256=DOCX,
         sidecar_parser_version="p1",
         parser_version="p1",
+        **SAME_PROFILE,
     )
     assert _not_passing(results) == [
         (
@@ -111,9 +128,61 @@ def test_a_sidecar_from_another_parser_version_is_a_warning() -> None:
         docx_sha256=DOCX,
         sidecar_parser_version="p0",
         parser_version="p1",
+        **SAME_PROFILE,
     )
     assert _not_passing(results) == [
         (CheckStatus.WARN, None, "the sidecar was written under parser p0; the files were re-read with p1")
+    ]
+
+
+def test_a_sidecar_from_another_style_profile_is_one_warning_naming_both_profiles() -> None:
+    """`v1-e33-t10`: beside the parser's warning, in its words, and a WARN, never a FAIL."""
+    results = check_sidecar(
+        problems=(),
+        recorded_docx_sha256=DOCX,
+        docx_sha256=DOCX,
+        sidecar_parser_version="p1",
+        parser_version="p1",
+        sidecar_style_profile_version=OTHER_PROFILE,
+        style_profile_version=RUNNING_PROFILE,
+    )
+    assert _not_passing(results) == [(CheckStatus.WARN, None, OTHER_PROFILE_WARNING)]
+    assert [result.check for result in results] == [QualityCheck.SIDECAR]
+
+
+def test_a_sidecar_from_another_parser_and_another_profile_warns_of_each_parser_first() -> None:
+    results = check_sidecar(
+        problems=(),
+        recorded_docx_sha256=DOCX,
+        docx_sha256=DOCX,
+        sidecar_parser_version="p0",
+        parser_version="p1",
+        sidecar_style_profile_version=OTHER_PROFILE,
+        style_profile_version=RUNNING_PROFILE,
+    )
+    assert _not_passing(results) == [
+        (CheckStatus.WARN, None, "the sidecar was written under parser p0; the files were re-read with p1"),
+        (CheckStatus.WARN, None, OTHER_PROFILE_WARNING),
+    ]
+
+
+def test_a_sidecar_that_cannot_be_read_names_no_profile() -> None:
+    """With no valid sidecar there is no recorded profile to compare: the FAIL says why, and nothing else.
+
+    A sidecar with no `style_profile_version` is one: the field has been required since the first
+    sidecar (`v1-e33-t02`), so `FileQualityService` reads it as not valid.
+    """
+    results = check_sidecar(
+        problems=("style_profile_version: Field required",),
+        recorded_docx_sha256=None,
+        docx_sha256=DOCX,
+        sidecar_parser_version=None,
+        parser_version="p1",
+        sidecar_style_profile_version=None,
+        style_profile_version=RUNNING_PROFILE,
+    )
+    assert _not_passing(results) == [
+        (CheckStatus.FAIL, None, "the sidecar is not valid: style_profile_version: Field required")
     ]
 
 

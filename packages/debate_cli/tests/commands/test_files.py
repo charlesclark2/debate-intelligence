@@ -927,3 +927,114 @@ def test_files_build_check_and_publish_warn_of_the_cp_text_slot_and_publish_goes
     shown = " ".join(published.stdout.split())
     assert "1 PUBLISHED. Warned, not blocked: politics-da-slot-left: placeholders-replaced" in shown
     assert len(keys_in(dev_bucket, DEV_BUCKET)) == 5
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e33-t10: a sidecar written under another style profile is warned of, by check and by publish
+# ------------------------------------------------------------------------------------------------
+
+#: The profile a file built before a profile change records (t09's), and the WARN it gets, by hand.
+OTHER_PROFILE: Final = "2026.11.02-verbatim-2"
+
+
+def other_profile_warning(running: str) -> str:
+    return (
+        f"the sidecar was written under style profile {OTHER_PROFILE}; the files were re-read with "
+        f"{running}, and a card the two profiles read differently fails evidence-identity"
+    )
+
+
+def rewrite_sidecar(docx: Path, change: Any) -> None:
+    """The built file's sidecar with `change` applied to its JSON; the `.docx` left as built."""
+    sidecar = docx.with_name(provenance_sidecar_name(docx.name))
+    document = json.loads(sidecar.read_text(encoding="utf-8"))
+    change(document)
+    sidecar.write_text(json.dumps(document, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def test_files_check_warns_once_of_a_sidecar_from_another_style_profile_naming_both(
+    world: Planted,
+) -> None:
+    """The same profile gives no warning; another gives one, which never fails the file."""
+    docx = built_policy_file(world)
+    running = DebateDocxParser().profile_version
+    assert running != OTHER_PROFILE
+    same = invoke("--json", "files", "check", str(docx))
+    assert same.exit_code == ExitCode.OK, same.output
+    assert envelope(same)["data"]["quality"]["findings"] == []
+
+    rewrite_sidecar(docx, lambda document: document.update(style_profile_version=OTHER_PROFILE))
+
+    shown = invoke("files", "check", str(docx))
+    assert shown.exit_code == ExitCode.OK, shown.output
+    assert named_after_the_table(shown.stdout) == [
+        "Failures and warnings:",
+        f"WARN sidecar: {other_profile_warning(running)}",
+    ]
+    quality = envelope(invoke("--json", "files", "check", str(docx)))["data"]["quality"]
+    assert quality["status"] == "PASS" and quality["failing_checks"] == []
+    assert [(one["status"], one["check"], one["message"]) for one in quality["findings"]] == [
+        ("WARN", "sidecar", other_profile_warning(running))
+    ]
+
+
+def test_files_check_fails_a_sidecar_with_no_style_profile_as_not_valid_and_names_no_profile(
+    world: Planted,
+) -> None:
+    """Every sidecar ever written records its profile (required since `v1-e33-t02`); one without is
+    not a sidecar this build reads, so the file FAILs, as for any other field it requires."""
+    docx = built_policy_file(world)
+    rewrite_sidecar(docx, lambda document: document.pop("style_profile_version"))
+
+    quality = envelope(invoke("--json", "files", "check", str(docx)))["error"]["details"]["quality"]
+    sidecar = [one for one in quality["findings"] if one["check"] == "sidecar"]
+    assert [(one["status"], one["message"]) for one in sidecar] == [
+        ("FAIL", "the sidecar is not valid: style_profile_version: Field required")
+    ]
+    assert not any("style profile" in one["message"] for one in quality["findings"])
+
+
+def test_files_publish_re_check_warns_of_another_style_profile_and_its_refusal_says_so(
+    world: Planted, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The quality report beside the file is `files build`'s, from before the sidecar changed, so the
+    warning can only come from publish's own re-check. A dry run: no bucket client, no S3 call.
+
+    Then card 1's sidecar entry ends a paragraph later, as another profile might have bounded it: its
+    `evidence-identity` FAILs, and the refusal says the profiles differ.
+    """
+    docx = built_policy_file(world)
+    running = DebateDocxParser().profile_version
+    rewrite_sidecar(docx, lambda document: document.update(style_profile_version=OTHER_PROFILE))
+    as_dev(world, monkeypatch, tmp_path)
+    arguments = (
+        "files",
+        "publish",
+        "--env",
+        "dev",
+        str(docx),
+        "--dry-run",
+        "--recipes",
+        str(world.corpus.recipe.parent),
+    )
+
+    warned = invoke("--json", *arguments)
+    assert warned.exit_code == ExitCode.OK, warned.output
+    (one,) = envelope(warned)["data"]["files"]
+    assert (one["status"], one["warned_checks"]) == ("WOULD_PUBLISH", ["sidecar"])
+
+    def bounded_otherwise(document: dict[str, Any]) -> None:
+        document["cards"][0]["last_element_index"] += 1
+
+    rewrite_sidecar(docx, bounded_otherwise)
+    refused = invoke("--json", *arguments)
+    assert refused.exit_code == ExitCode.DOMAIN_FAILURE, refused.output
+    error = envelope(refused)["error"]
+    assert error["code"] == "QUALITY_FAILED"
+    (file,) = error["details"]["files"]
+    assert file["refusal"]["failing_checks"] == ["evidence-identity"]
+    assert other_profile_warning(running) in file["refusal"]["message"]
+    assert other_profile_warning(running) in error["message"]
+
+    panel = " ".join(invoke(*arguments).stderr.split())
+    assert other_profile_warning(running) in panel

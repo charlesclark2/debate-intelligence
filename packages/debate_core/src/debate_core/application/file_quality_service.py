@@ -191,6 +191,8 @@ class FileQualityService:
             docx_sha256=docx_sha256,
             sidecar_parser_version=manifest.parser_version if manifest is not None else None,
             parser_version=self._parser.parser_version,
+            sidecar_style_profile_version=manifest.style_profile_version if manifest is not None else None,
+            style_profile_version=self._parser.profile_version,
         )
         document = self._parse_built(docx, docx_sha256, manifest)
         if isinstance(document, ParseFailure):

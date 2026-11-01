@@ -111,6 +111,8 @@ def check_sidecar(
     docx_sha256: str,
     sidecar_parser_version: str | None,
     parser_version: str,
+    sidecar_style_profile_version: str | None,
+    style_profile_version: str,
 ) -> list[CheckResult]:
     """The sidecar is readable and valid (`problems` says how it is not), and describes these bytes.
 

@@ -333,9 +333,49 @@ for NAME in $(aws s3 ls "s3://${BUCKET}/manifests/openev/" --profile debate-dev-
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-01
 
 **Notes:**
+
+The exact source of OpenEv's camp word is now kept for every file the pull imports, with both
+builds in use proven unaffected.
+1. **ac1 passes.**
+   * Red: 9 failed, all assertions on the missing word or key.
+   * Green: 50, and the node criterion passes (241 after the sync).
+   * All 17 mutants are caught: the PM's five, with 1, 2, 4 and 5 in several forms, plus 6 to 10.
+     4b was rightly taken through the earlier builds' own readers, since 4 alone proves nothing
+     about them. 10 is caught only by existing tests, and the report says so.
+2. **The PM's cross-build requirement is met.** Every reader of a manifest row in both earlier builds
+   was listed, and each reads a `dict`, so t14's additive-key mechanism applies and `schema_version`
+   stays 1. t14's check under each earlier build's own code keeps this build's rows byte for byte
+   through merge, re-derive, removal and publish. The parse and index readers were probed too.
+3. **The search function:** unaffected, confirmed from its role's grants and its imports.
+4. **Deviations accepted:**
+   * **1:** the cloud count is the operator's and optional. The PM doesn't need it, since 0 rows
+     carry the key until a build with it pulls.
+   * **2:** the sentence in search-index.md.
+5. **Decisions accepted:**
+   * the name `openev_camp_word`;
+   * `UNKNOWN` refused, agreeing with the table's loader and the link;
+   * the key on every new row, `null` when no word is kept;
+   * no re-derive of a word;
+   * a zip's members carrying its word;
+   * the check where the row is written;
+   * the pattern reused, not copied;
+   * t14's scenario listings given words;
+   * the fixture renamed around decision 9.
+6. **Follow-ups, the PM's rulings:**
+   * **Joining the word into the index and preferring it to the table:** one p3 E39 task in the
+     PM's next batch, modelled on `openev_ids_by_source`.
+   * **A listed file sharing a hand-imported file's name in another folder is never fetched:** one
+     p3 E34 task in the next batch, counting first how many listed files are taken as
+     `already_imported` by name alone and from another camp.
+7. **Closing checks:** the affected set (348 files through `caselist_sync.py`) is left to the PR's
+   `ci` under agreement 10. Core caselist (1,848), the pull, client and smoke checks (410), the
+   always-run list (374, after the README fix), ruff, pyright, lint-imports, the doc checks and the
+   specs are clean.
+8. **Merge:** a plain `scripts/task pr` once `ci` is green. No operator step follows. The word starts
+   appearing with the first image that carries this task.

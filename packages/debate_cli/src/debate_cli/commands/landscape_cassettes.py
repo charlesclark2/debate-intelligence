@@ -5,6 +5,8 @@
     debate-research landscape cassettes --caselist hsld26
     debate-research landscape cassettes --caselist hsld26 --json
     debate-research landscape cassettes --caselist hsld26 --delete --confirm <code>
+    debate-research landscape cassettes --caselist hsld26 --for-removal
+    debate-research landscape cassettes --caselist hsld26 --for-removal --delete --confirm <code>
 
 Every decision is :mod:`~debate_core.application.cassette_filing`'s (`v1-e32-t31`): which caselists a
 cassette names, and what deleting one caselist's cassettes does to each. This is the guards and the
@@ -38,6 +40,21 @@ code another caselist's dry run printed, is refused, exit `1`, `CONFIRMATION_MIS
 prod, `--delete` also needs `--confirm-prod`. This is `caselist retire`'s pattern (and `tub index
 prune`'s), with `--delete` for its `--execute`.
 
+## The removal's form
+
+That delete is the annual purge's (`annual-purge.md`, step 4): what it keeps, another caselist still
+replays. A takedown is stricter: every copy of the removed text goes, and a shared cassette holds it for
+the other caselist too (PM ruling, 2026-10-31). `--for-removal` is that form, run by the removal
+runbook (`caselist-removal.md`) after a removal's `DONE`. It counts the same four ways, but its delete
+(:func:`~debate_core.application.cassette_filing.delete_caselist_cassettes_for_removal`, `v1-e32-t36`)
+deletes the sole, the shared and the unattributed cassettes, since one recorded before `v1-e32-t31` may
+hold the text, and keeps only those of other caselists alone. The other caselist's cost is a
+re-recording, never a wrong answer. Its dry run prints a code of its own, which covers the form as well
+as the cassettes, so a purge's code is refused by the removal and a removal's by the purge, even where
+both would delete the same cassettes. `--confirm-prod` is needed in prod as for the purge. The flag is
+named for the procedure that runs it, as the runbook names it, rather than for what it deletes, so that
+nobody reaches for it in a purge.
+
 ## What it prints
 
 Counts, the caselist's slug, the environment, the directory as `<data dir>/landscape/model-cassettes/`
@@ -63,15 +80,17 @@ from debate_core.application.cassette_filing import (
     CassetteDeleteRefused,
     caselist_cassettes,
     delete_caselist_cassettes,
+    delete_caselist_cassettes_for_removal,
     is_caselist_slug,
 )
 from debate_core.application.errors import DomainError, error_code_of
 from debate_core.application.settings import Environment
 
-__all__ = ["DIRECTORY_SHOWN", "cassettes", "cassettes_summary"]
+__all__ = ["DIRECTORY_SHOWN", "FOR_REMOVAL_FLAG", "cassettes", "cassettes_summary"]
 
 DIRECTORY_SHOWN: Final = "<data dir>/landscape/model-cassettes/"
 """The directory as the output names it: where it is in every data directory, never this machine's path."""
+FOR_REMOVAL_FLAG: Final = "--for-removal"
 
 
 def cassettes(
@@ -83,6 +102,15 @@ def cassettes(
             "--delete",
             help="Delete the cassettes this caselist alone names, given the dry run's code with --confirm. "
             "Shared and unattributed cassettes are kept.",
+        ),
+    ] = False,
+    for_removal: Annotated[
+        bool,
+        typer.Option(
+            FOR_REMOVAL_FLAG,
+            help="A takedown's form, for the removal runbook: count, and with --delete delete, every "
+            "cassette naming this caselist, shared ones too, and every unattributed one, behind a code of "
+            "its own.",
         ),
     ] = False,
     confirmation: Annotated[
@@ -107,24 +135,29 @@ def cassettes(
     files = cli.services.landscape_cassettes()
     found = files.root.is_dir()
     try:
-        listed = (
-            delete_caselist_cassettes(files, caselist, confirmation=confirmation)
-            if delete
-            else caselist_cassettes(files, caselist)
-        )
+        if not delete:
+            listed = caselist_cassettes(files, caselist)
+        elif for_removal:
+            listed = delete_caselist_cassettes_for_removal(files, caselist, confirmation=confirmation)
+        else:
+            listed = delete_caselist_cassettes(files, caselist, confirmation=confirmation)
     except CassetteDeleteRefused as refused:
         _end(cli, ctx, _mismatch(refused, environment))
     except DomainError as error:
         _end(cli, ctx, _unreadable(caselist, error))
     cli.output.success(
         command_name(ctx),
-        cassettes_summary(listed, environment, found=found, deleted=delete),
-        display=_display(listed, environment, found=found, deleted=delete),
+        cassettes_summary(listed, environment, found=found, deleted=delete, for_removal=for_removal),
+        display=(
+            _removal_display(listed, environment, found=found, deleted=delete)
+            if for_removal
+            else _display(listed, environment, found=found, deleted=delete)
+        ),
     )
 
 
 def cassettes_summary(
-    listed: CaselistCassettes, environment: Environment, *, found: bool, deleted: bool
+    listed: CaselistCassettes, environment: Environment, *, found: bool, deleted: bool, for_removal: bool
 ) -> dict[str, JsonValue]:
     """The `--json` envelope's `data`: counts, never a cassette's name."""
     return {
@@ -132,10 +165,15 @@ def cassettes_summary(
         "environment": environment.value,
         "directory": DIRECTORY_SHOWN,
         "directory_found": found,
+        "for_removal": for_removal,
         "deleted": deleted,
         "cassettes": _counts(listed),
-        "confirmation": None if deleted else listed.confirmation,
+        "confirmation": None if deleted else _code(listed, for_removal=for_removal),
     }
+
+
+def _code(listed: CaselistCassettes, *, for_removal: bool) -> str:
+    return listed.removal_confirmation if for_removal else listed.confirmation
 
 
 def _counts(listed: CaselistCassettes) -> dict[str, JsonValue]:
@@ -243,4 +281,40 @@ def _display(listed: CaselistCassettes, environment: Environment, *, found: bool
             if listed.sole or listed.shared
             else "Dry run: nothing was changed, and a delete would change nothing."
         )
+    return "\n".join(lines)
+
+
+def _removal_display(
+    listed: CaselistCassettes, environment: Environment, *, found: bool, deleted: bool
+) -> str:
+    if not found:
+        return _display(listed, environment, found=found, deleted=deleted)
+    lines = [
+        f"Model cassettes of {listed.caselist} in {environment.value}, for a removal, in the landscape model "
+        f"stage's directory, {DIRECTORY_SHOWN}:"
+    ]
+    if deleted:
+        lines += [
+            f"  Deleted {len(listed.sole)} cassette(s) only this caselist named.",
+            f"  Deleted {len(listed.shared)} shared cassette(s): the other caselist records them again.",
+            f"  Deleted {len(listed.unattributed)} unattributed cassette(s), since one may have held this "
+            "caselist's text.",
+        ]
+    else:
+        lines += [
+            f"  {len(listed.sole)} this caselist's alone: a removal deletes them.",
+            f"  {len(listed.shared)} shared with another caselist: a removal deletes them too, since they "
+            "hold this caselist's text; the other caselist records them again.",
+            f"  {len(listed.unattributed)} unattributed, naming no caselist (recorded before v1-e32-t31): a "
+            "removal deletes them too, since one may hold this caselist's text.",
+        ]
+    lines.append(f"  {listed.others} of other caselists only: untouched.")
+    if deleted:
+        if listed.sole or listed.shared or listed.unattributed:
+            lines.append("Tell the PM: this caselist's model evaluation is recorded again.")
+    elif listed.sole or listed.shared or listed.unattributed:
+        code = listed.removal_confirmation
+        lines.append(f"Dry run: nothing was changed. To carry it out, add: --delete --confirm {code}")
+    else:
+        lines.append("Dry run: nothing was changed, and a removal would delete nothing.")
     return "\n".join(lines)

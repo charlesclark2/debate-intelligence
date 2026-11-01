@@ -857,10 +857,88 @@ if [ -d "$DIR" ]; then ls "$DIR"; rm -r "$DIR"; echo "deleted: $DIR"; else echo 
 Success looks like the directory's files listed and `deleted: …`, or `nothing to delete: …` where
 the comparison never ran. In the request's register entry, record that it was deleted, with no path.
 
-**The model stage's cassettes** (`v1-e32-t07`), once the operator has recorded them, hold scrubbed
-excerpts of real cards under `<data dir>/landscape/model-cassettes/` on this machine only. After
-`DONE` for a removal that touched a caselist, delete that caselist's recordings there too, and tell
-the PM, since the evaluation is then recorded again (PM ruling, 2026-10-25).
+### The model stage's cassettes (E32)
+
+The landscape model stage's cassettes (`v1-e32-t07`), once the operator has recorded them, hold
+scrubbed excerpts of real cards under `<data dir>/landscape/model-cassettes/` on this machine only. A
+cassette names the caselists it was recorded or replayed for (`v1-e32-t31`), and an identical card in
+two caselists is one cassette naming both. After `DONE` for a removal that touched a caselist, delete
+every cassette that may hold the removed text, and tell the PM, since the evaluation is then recorded
+again (PM rulings, 2026-10-25 and 2026-10-31). `debate-research landscape cassettes --for-removal`
+(`v1-e32-t36`) does it:
+
+* **the caselist's alone**: deleted;
+* **shared** with another caselist: deleted too, since it holds the removed text for that caselist as
+  well. The other caselist records it again on its next run, and never gets a wrong answer meanwhile;
+* **unattributed**, naming no caselist because it was recorded before `v1-e32-t31`: deleted too, since
+  it may hold the text;
+* **other caselists' only**: kept.
+
+This is not the annual purge's form ([annual-purge.md, step 4](annual-purge.md)), which keeps shared
+and unattributed cassettes. Each form prints a code of its own, and refuses the other's. The command
+reads the directory for the environment's `storage.data_dir`, and runs from the checkout with `uv
+run`, as the removal does. It prints counts, the slug, the environment and the code: never a
+cassette's content or name, or a path. Without `--delete` it changes nothing. Run both blocks for each
+environment the removal ran in, `dev` first, then with `REMOVAL_ENV=prod`. Change `hspolicy26` to the
+caselist the removal touched.
+
+**Operator command** (expected runtime seconds; reads only)
+Where: your Mac, in the checkout, in a new terminal window
+```bash
+CASELIST=hspolicy26
+REMOVAL_ENV=dev
+if env | grep -q '^DEBATE_'; then
+  echo "STOP: a DEBATE_ variable is set in this shell; open a new window"
+else
+  DEBATE_ENV="$REMOVAL_ENV" uv run debate-research landscape cassettes --caselist "$CASELIST" --for-removal
+fi
+```
+Success looks like the counts, for example:
+
+```text
+Model cassettes of hspolicy26 in dev, for a removal, in the landscape model stage's directory, <data dir>/landscape/model-cassettes/:
+  3 this caselist's alone: a removal deletes them.
+  1 shared with another caselist: a removal deletes them too, since they hold this caselist's text; the other caselist records them again.
+  0 unattributed, naming no caselist (recorded before v1-e32-t31): a removal deletes them too, since one may hold this caselist's text.
+  12 of other caselists only: untouched.
+Dry run: nothing was changed. To carry it out, add: --delete --confirm 5d20b7e1c94a
+```
+
+`No model cassettes in dev: …` with `Nothing to delete.` means the model stage never recorded on this
+Mac, which is today's state, and `Dry run: nothing was changed, and a removal would delete nothing.`
+means none of them can hold the text: either way, skip the delete block, and record in the register
+entry that there was nothing to delete. Stop, and do not run the next block, if the first line names
+another caselist or environment than the removal's, if it prints `CASSETTE_UNREADABLE` (a file there
+is not a cassette: tell the PM, and delete nothing), or if it prints `No such command 'cassettes'` or
+`No such option: --for-removal` (the checkout predates `v1-e32-t36`: pull `dev` and paste the block
+again).
+
+**Then delete them.** Set `CASSETTES_CODE` to the code after `--confirm` in the dry run's last line.
+The command lists again and deletes only if that listing's code is the one given, so a cassette
+recorded since the dry run, or a code from another caselist's dry run or from the annual purge's form,
+is refused with `CONFIRMATION_MISMATCH` and nothing is changed: paste the dry run block again and read
+it. In prod the command also takes `--confirm-prod`, which the block adds.
+
+**Operator command** (expected runtime seconds; deletes, and cannot be undone)
+Where: your Mac, in the same window, after the block above
+```bash
+CASSETTES_CODE=
+if [ -z "$CASSETTES_CODE" ]; then
+  echo "STOP: set CASSETTES_CODE to the code the dry run printed"
+elif env | grep -q '^DEBATE_'; then
+  echo "STOP: a DEBATE_ variable is set in this shell; open a new window"
+elif [ "$REMOVAL_ENV" = "prod" ]; then
+  DEBATE_ENV=prod uv run debate-research landscape cassettes --caselist "$CASELIST" --for-removal --delete --confirm "$CASSETTES_CODE" --confirm-prod
+else
+  DEBATE_ENV="$REMOVAL_ENV" uv run debate-research landscape cassettes --caselist "$CASELIST" --for-removal --delete --confirm "$CASSETTES_CODE"
+fi
+```
+Success looks like `Deleted 3 cassette(s) only this caselist named.`, `Deleted 1 shared cassette(s): …`
+and `Deleted 0 unattributed cassette(s), …`, with the counts the dry run printed, then `Tell the PM:
+this caselist's model evaluation is recorded again.` **The check:** the dry run block again prints `0`
+for the caselist's own, its shared and the unattributed cassettes, and the same count of other
+caselists' as before. Then tell the PM the caselist and the three counts, and nothing else, and in the
+request's register entry record that its cassettes were deleted, with the counts and no path.
 
 ## The annual purge: landscape school views
 

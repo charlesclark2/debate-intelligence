@@ -885,8 +885,10 @@ around by hand here.
 2. **The same for an OpenEv camp release** of a topic year before 2021.
 3. **This Mac's own search-index builds** (`tub-index/`), which only the next local build prunes.
 4. **The model cassettes recorded before `v1-e32-t31`**, which name no caselist: step 4 reports them
-   as unattributed, and no caselist's delete reaches them. Every cassette recorded or replayed since
-   names its caselists, and step 4 deletes one caselist's alone.
+   as unattributed, and no caselist's purge reaches them; only a takedown's form
+   ([caselist-removal.md](caselist-removal.md#the-model-stages-cassettes-e32), `v1-e32-t36`) deletes
+   them. Every cassette recorded or replayed since names its caselists, and step 4 deletes one
+   caselist's alone.
 5. **Noncurrent versions under the rest of `reports/`, `uploads/` and `exports/`**, which no profile
    may list, so step 6 cannot check them.
 6. **A working copy restored before the marker is found by its database file**, three levels down: a

@@ -1087,17 +1087,28 @@ _WHAT_STOPPED_A_RUN: Final = {
     "NO_KEYCHAIN": "no keychain was open: nobody was logged in to the Mac",
     "KEYCHAIN_DENIED": "the keychain was asked for the caselist_token and said no",
     "KEYCHAIN_REFUSED_PROGRAM": "the keychain refused this program",
+    "CASELIST_TOKEN_MISSING": "no caselist_token was stored on this machine",
     UNMODELLED_ERROR_CODE: "an error nobody modelled, most likely a bug",
 }
 """What a run that stopped before a stage could record it says it stopped on, by the error's code
 (`v1-e34-t23`): in words, never the exception's class, which `v1-e34-t19` showed. A code with no
 words here is named by its code; the run's details hold the hint, and `caselist runs` the class."""
 
+_WORDS_OUTSIDE_BUCKET_MODE_ONLY: Final = frozenset({"CASELIST_TOKEN_MISSING"})
+"""Codes whose words in :data:`_WHAT_STOPPED_A_RUN` are said of a run on this machine alone
+(`v1-e34-t35`). A bucket-mode run names them by their code, as it did before they had words: the
+cloud run's token is the secret the Wednesday login renews, not one stored on this machine."""
 
-def _what_stopped_it(codes: Sequence[str]) -> str:
+
+def _what_stopped_it(codes: Sequence[str], *, bucket_mode: bool) -> str:
     if not codes:
         return "an error with no code"
-    return "; ".join(_WHAT_STOPPED_A_RUN.get(code, f"an error recorded as {code}") for code in codes)
+    return "; ".join(
+        f"an error recorded as {code}"
+        if bucket_mode and code in _WORDS_OUTSIDE_BUCKET_MODE_ONLY
+        else _WHAT_STOPPED_A_RUN.get(code, f"an error recorded as {code}")
+        for code in codes
+    )
 
 
 _WHAT_WAS_CAPTURED_IS_KEPT: Final = "What was captured is kept."
@@ -1367,7 +1378,10 @@ def notifications_for(
         sent.append(
             Notification(
                 title=title,
-                message=f"{where} stopped: {_what_stopped_it(details.failure_codes)}. {verdict}",
+                message=(
+                    f"{where} stopped: "
+                    f"{_what_stopped_it(details.failure_codes, bucket_mode=bucket is not None)}. {verdict}"
+                ),
                 fix_command=CLOUD_UNFINISHED_RUN_CURE if bucket is not None else PULL_COMMAND,
                 hint=details.hint,
             )

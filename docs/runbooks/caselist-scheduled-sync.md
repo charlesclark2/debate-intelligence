@@ -1899,10 +1899,13 @@ path; the code is chosen from the OSStatus alone. Before `v1-e34-t33` each of th
 | `KEYCHAIN_DENIED` | -128 | The keychain asked to be unlocked, or whether this program may use the item, and was told no. The two answer the same OSStatus, so they share the code | Run `caselist auth status` in Terminal, unlock the keychain and choose Always Allow; or set `caselist.token_backend = "file"` and log in again with `debate-research caselist auth login` |
 | `KEYCHAIN_REFUSED_PROGRAM` | -25293, -67030 | The keychain could not confirm this program, or its own password | In Keychain Access, allow this build on the item `debate-research.opencaselist`, or delete the item and log in again; or the file backend, as above |
 | `KEYRING_UNAVAILABLE` | none | `keyring` found no keychain backend at all | Set `DEBATE_CASELIST__TOKEN_BACKEND=file` and log in again |
+| `CASELIST_TOKEN_MISSING` | none | No caselist_token is stored on this machine for the environment. The banner says so, with the fix as its hint (`v1-e34-t35`) | Log in again with `debate-research caselist auth login` |
 
-`CASELIST_TOKEN_MISSING` is a keychain with no item for the environment: log in again with
-`debate-research caselist auth login`. `caselist auth logout` of a token that is already gone
-succeeds and says there was nothing to delete. Any other OSStatus is still `INTERNAL_ERROR`; run
+`CASELIST_TOKEN_MISSING` is a keychain with no item for the environment (-25300 reads as no token),
+or a file backend with no file. Its line in the table is for a run on this Mac. A cloud run that
+stops on it names the code and the next cloud run, as before: its token is the secret the Wednesday
+login renews ([caselist-cloud-run.md](caselist-cloud-run.md)). `caselist auth logout` of a token
+that is already gone succeeds and says there was nothing to delete. Any other OSStatus is still `INTERNAL_ERROR`; run
 the command again by hand with `--verbose` to see the keychain's message, and report it.
 
 **A download failed.** What did download is imported, up to the first week that did not arrive,

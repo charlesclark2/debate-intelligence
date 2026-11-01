@@ -646,6 +646,7 @@ from debate_core.application.ports.caselist_source import (
     ArchiveKind,
     ArchiveListing,
     CaselistArchiveSource,
+    CaselistTokenMissing,
     DownloadedFile,
     OpenEvFile,
     openev_id_of_inbox_name,
@@ -6026,6 +6027,12 @@ _UNREADABLE_PENDING_WORK_FIX: Final = (
     "when it cannot be repaired. It is not the AWS session."
 )
 
+_TOKEN_MISSING_ON_THIS_MACHINE_FIX: Final = (
+    "No caselist_token is stored on this machine for the environment: log in again with "
+    "`debate-research caselist auth login`."
+)
+"""A run outside bucket mode that found no caselist_token (`v1-e34-t35`), in `v1-e34-t33`'s words."""
+
 
 def fix_for(error: BaseException, *, bucket_mode: bool = False) -> str | None:
     """The fix a refused store calls for, or `None` for a failure with no fix a sentence can state.
@@ -6039,7 +6046,10 @@ def fix_for(error: BaseException, *, bucket_mode: bool = False) -> str | None:
     stamped carries its own, which names both versions and the store (`v1-e34-t29`); in bucket mode,
     the one that names a new image for the cloud run rather than the weekly agent (`v1-e40-t22`). A
     keychain that refused the token store carries the fix for its cause (`v1-e34-t33`): the cloud
-    run's token is in Secrets Manager, so only a run on this Mac meets one.
+    run's token is in Secrets Manager, so only a run on this Mac meets one. A missing caselist_token
+    carries the login outside bucket mode and nothing in it (`v1-e34-t35`): the cloud run's token is
+    the secret the Wednesday login renews, which no login on this machine puts right, so its notice
+    stays as it was.
 
     Public because the run monitor asks the same question of an error that ended a run before any
     stage could record it (`v1-e34-t19`): that run's notification carries the same fix.
@@ -6060,6 +6070,8 @@ def fix_for(error: BaseException, *, bucket_mode: bool = False) -> str | None:
         return error.cloud_fix if bucket_mode else error.fix
     if isinstance(error, KeychainFailure):
         return error.hint
+    if isinstance(error, CaselistTokenMissing) and not bucket_mode:
+        return _TOKEN_MISSING_ON_THIS_MACHINE_FIX
     return None
 
 

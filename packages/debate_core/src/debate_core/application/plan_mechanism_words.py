@@ -46,7 +46,12 @@ __all__ = [
 WORD_MIN_LENGTH: Final = 3
 WORD_MAX_LENGTH: Final = 32
 
-MechanismWord = str  # SKELETON: no constraint
+MechanismWord = Annotated[
+    str,
+    StringConstraints(
+        pattern=r"^[a-z]+(?:-[a-z]+)*$", min_length=WORD_MIN_LENGTH, max_length=WORD_MAX_LENGTH
+    ),
+]
 
 
 class PlanMechanismWords(DomainModel):
@@ -62,12 +67,15 @@ class PlanMechanismWords(DomainModel):
 
     @model_validator(mode="after")
     def _check_words(self) -> PlanMechanismWords:
-        return self  # SKELETON: refuses nothing
+        twice = sorted(word for word, count in Counter(self.words).items() if count > 1)
+        if twice:
+            raise ValueError(f"a word is listed twice: {', '.join(twice)}")
+        return self
 
 
 def holds_a_mechanism_word(heading: str, words: Iterable[str]) -> bool:
     """Whether `heading` (lowercase words, one space apart) holds one of `words`, or its plural."""
-    return False  # SKELETON
+    return any(_pattern(word).search(heading) for word in words)
 
 
 def _pattern(word: str) -> re.Pattern[str]:

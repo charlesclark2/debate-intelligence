@@ -1,18 +1,23 @@
-"""The cost allocation tags' plan check, run on synthetic plans (`v1-e05-t18`).
+"""The cost allocation tags' plan check, run on synthetic plans (`v1-e05-t18`, `v1-e05-t19`).
 
 `docs/runbooks/aws-account-baseline.md` checks the organization root's plan in `terraform show
--json`'s shape before the PM reads it: `COSTTAGSPLAN` prints `PLAN OK` only when the plan's change
-entries are the `Project` and `Environment` cost allocation tags, each imported with nothing to
-change (or created), each `Active`, and nothing else in the root. A change entry is a resource whose
-actions are not `no-op` or `read`, or one being imported, so permission sets and budgets that the
-plan only reads are never counted. The code is read out of the runbook, between its heredoc markers,
-and run as the operator runs it (`python3 -I -` with the plan's JSON as its argument), so a change
-to the runbook is what is tested.
+-json`'s shape before the PM reads it: `COSTTAGSPLAN` prints `PLAN OK` only when the plan holds the
+`Project` and `Environment` cost allocation tags, each unchanged, imported with nothing to change or
+created, each `Active`, and no other change in the root and no other cost allocation tag. A change
+entry is a resource whose actions are not `no-op` or `read`, or one being imported, so permission
+sets and budgets that the plan only reads are never counted. The code is read out of the runbook,
+between its heredoc markers, and run as the operator runs it (`python3 -I -` with the plan's JSON as
+its argument), so a change to the runbook is what is tested.
 
-Every plan here is written by hand. Its shape is the one Terraform 1.16 and hashicorp/aws 5.100.0
-gave for these import blocks against a loopback stand-in for Cost Explorer (the session report):
-`actions: ["no-op"]` and `importing: {"id": <key>}` for a tag found Active, `actions: ["update"]`
-with `importing` for one found Inactive. No account, no real address, nothing from a real plan.
+Since `v1-e05-t19` removed the import blocks, a plan of this root in this account has both tags in
+state and unchanged: `actions: ["no-op"]` with no `importing`, the shape Terraform 1.16 gives an
+unchanged resource in a saved plan (the session report). That plan is the one every refusal below is
+tried on, as well as `v1-e05-t18`'s import plan, whose shape Terraform 1.16 and hashicorp/aws
+5.100.0 gave for the import blocks against a loopback stand-in for Cost Explorer (that task's
+report): `actions: ["no-op"]` and `importing: {"id": <key>}` for a tag found Active,
+`actions: ["update"]` with `importing` for one found Inactive.
+
+Every plan here is written by hand. No account, no real address, nothing from a real plan.
 """
 
 from __future__ import annotations
@@ -79,6 +84,18 @@ def imported(address: str, key: str) -> dict[str, Any]:
     }
 
 
+def tag_unchanged(address: str, key: str) -> dict[str, Any]:
+    return {
+        "address": address,
+        "type": "aws_ce_cost_allocation_tag",
+        "change": {
+            "actions": ["no-op"],
+            "before": tag_state(key, "Active"),
+            "after": tag_state(key, "Active"),
+        },
+    }
+
+
 def created(address: str, key: str) -> dict[str, Any]:
     return {
         "address": address,
@@ -91,26 +108,50 @@ def unchanged(address: str, resource_type: str) -> dict[str, Any]:
     return {"address": address, "type": resource_type, "change": {"actions": ["no-op"]}}
 
 
+def rest_of_the_root() -> list[dict[str, Any]]:
+    """Budgets, a permission set and an assignment unchanged, and a data source read."""
+    return [
+        unchanged('aws_budgets_budget.environment_monthly["dev"]', "aws_budgets_budget"),
+        unchanged("module.model_spend_budget.aws_budgets_budget.model_spend", "aws_budgets_budget"),
+        unchanged("aws_ssoadmin_permission_set.maintainer", "aws_ssoadmin_permission_set"),
+        unchanged(
+            'aws_ssoadmin_account_assignment.maintainer["mock-maintainer"]',
+            "aws_ssoadmin_account_assignment",
+        ),
+        {
+            "address": "data.aws_ssoadmin_instances.current",
+            "type": "aws_ssoadmin_instances",
+            "change": {"actions": ["read"]},
+        },
+    ]
+
+
+def unchanged_plan() -> Plan:
+    """A plan after the imports: both tags in state and unchanged, and the rest of the root too."""
+    return {
+        "resource_changes": [
+            tag_unchanged(ENVIRONMENT, "Environment"),
+            tag_unchanged(PROJECT, "Project"),
+            *rest_of_the_root(),
+        ]
+    }
+
+
 def import_plan() -> Plan:
-    """The first apply: both tags already Active, imported, and the rest of the root unchanged."""
+    """`v1-e05-t18`'s apply: both tags already Active, imported, and the rest of the root unchanged."""
     return {
         "resource_changes": [
             imported(ENVIRONMENT, "Environment"),
             imported(PROJECT, "Project"),
-            unchanged('aws_budgets_budget.environment_monthly["dev"]', "aws_budgets_budget"),
-            unchanged("module.model_spend_budget.aws_budgets_budget.model_spend", "aws_budgets_budget"),
-            unchanged("aws_ssoadmin_permission_set.maintainer", "aws_ssoadmin_permission_set"),
-            unchanged(
-                'aws_ssoadmin_account_assignment.maintainer["mock-maintainer"]',
-                "aws_ssoadmin_account_assignment",
-            ),
-            {
-                "address": "data.aws_ssoadmin_instances.current",
-                "type": "aws_ssoadmin_instances",
-                "change": {"actions": ["read"]},
-            },
+            *rest_of_the_root(),
         ]
     }
+
+
+BASE_PLANS: Final[dict[str, Callable[[], Plan]]] = {
+    "after the imports": unchanged_plan,
+    "the import plan": import_plan,
+}
 
 
 def tag_change(plan: Plan, address: str) -> dict[str, Any]:
@@ -123,19 +164,26 @@ def tag_change(plan: Plan, address: str) -> dict[str, Any]:
 # ------------------------------------------------------------------------------------------------
 
 
+def test_a_plan_with_both_tags_unchanged_is_ok(tmp_path: Path) -> None:
+    assert run_check(unchanged_plan(), tmp_path) == (
+        "PLAN OK: the two tags, Project unchanged and Environment unchanged, each Active; nothing else"
+        " changes; permission set or assignment changes: 0; budget changes: 0"
+    )
+
+
 def test_the_import_plan_is_ok(tmp_path: Path) -> None:
     assert run_check(import_plan(), tmp_path) == (
-        "PLAN OK: two changes, Project imported and Environment imported, each Active; nothing else"
+        "PLAN OK: the two tags, Project imported and Environment imported, each Active; nothing else"
         " changes; permission set or assignment changes: 0; budget changes: 0"
     )
 
 
 def test_a_plan_that_creates_both_tags_is_ok(tmp_path: Path) -> None:
-    plan = import_plan()
+    plan = unchanged_plan()
     plan["resource_changes"][:2] = [created(ENVIRONMENT, "Environment"), created(PROJECT, "Project")]
 
     assert run_check(plan, tmp_path).startswith(
-        "PLAN OK: two changes, Project created and Environment created, each Active;"
+        "PLAN OK: the two tags, Project created and Environment created, each Active;"
     )
 
 
@@ -176,10 +224,19 @@ def dropped(address: str) -> Callable[[Plan], None]:
     return mutate
 
 
+OWNER: Final = 'module.cost_allocation_tags.aws_ce_cost_allocation_tag.this["Owner"]'
+
+
 def third_tag_imported(plan: Plan) -> None:
-    plan["resource_changes"].append(
-        imported('module.cost_allocation_tags.aws_ce_cost_allocation_tag.this["Owner"]', "Owner")
-    )
+    plan["resource_changes"].append(imported(OWNER, "Owner"))
+
+
+def third_tag_unchanged(plan: Plan) -> None:
+    plan["resource_changes"].append(tag_unchanged(OWNER, "Owner"))
+
+
+def third_tag_created(plan: Plan) -> None:
+    plan["resource_changes"].append(created(OWNER, "Owner"))
 
 
 def imported_under_the_other_key(plan: Plan) -> None:
@@ -192,7 +249,7 @@ def replaced(plan: Plan) -> None:
 
 def destroyed(plan: Plan) -> None:
     change = tag_change(plan, PROJECT)["change"]
-    del change["importing"]
+    change.pop("importing", None)
     change["actions"] = ["delete"]
     change["after"] = None
 
@@ -204,7 +261,7 @@ def imported_tag_key_differs(plan: Plan) -> None:
 REFUSED: Final[dict[str, tuple[Callable[[Plan], None], str]]] = {
     "the Environment tag found Inactive": (
         found_inactive(ENVIRONMENT, "Environment"),
-        "the Environment tag is update on import, not imported unchanged or created",
+        "the Environment tag is update",
     ),
     "the Project tag planned Inactive": (
         planned_inactive(PROJECT),
@@ -214,16 +271,15 @@ REFUSED: Final[dict[str, tuple[Callable[[Plan], None], str]]] = {
         dropped(ENVIRONMENT),
         "the Environment tag is in the plan 0 times, not once",
     ),
-    "a third tag managed": (
-        third_tag_imported,
-        'other changes: module.cost_allocation_tags.aws_ce_cost_allocation_tag.this["Owner"] no-op',
-    ),
+    "a third tag imported": (third_tag_imported, f"other changes: {OWNER} no-op"),
+    "a third tag unchanged": (third_tag_unchanged, f"other changes: {OWNER} no-op"),
+    "a third tag created": (third_tag_created, f"other changes: {OWNER} create"),
     "the Project tag imported as Environment": (
         imported_under_the_other_key,
-        "the Project tag is no-op on import, not imported unchanged or created",
+        "the Project tag is no-op on import, not unchanged, imported unchanged or created",
     ),
-    "a tag replaced": (replaced, "the Project tag is delete/create on import"),
-    "a tag destroyed": (destroyed, "the Project tag is delete, not imported unchanged or created"),
+    "a tag replaced": (replaced, "the Project tag is delete/create"),
+    "a tag destroyed": (destroyed, "the Project tag is delete, not unchanged, imported unchanged or created"),
     "a tag key in another case": (
         imported_tag_key_differs,
         "the Environment tag is planned as environment Active",
@@ -257,11 +313,12 @@ REFUSED: Final[dict[str, tuple[Callable[[Plan], None], str]]] = {
 }
 
 
+@pytest.mark.parametrize("base", BASE_PLANS.values(), ids=list(BASE_PLANS))
 @pytest.mark.parametrize("mutate,reason", REFUSED.values(), ids=list(REFUSED))
 def test_a_plan_that_differs_is_not_ok_and_says_why(
-    mutate: Callable[[Plan], None], reason: str, tmp_path: Path
+    base: Callable[[], Plan], mutate: Callable[[Plan], None], reason: str, tmp_path: Path
 ) -> None:
-    plan = copy.deepcopy(import_plan())
+    plan = copy.deepcopy(base())
     mutate(plan)
 
     line = run_check(plan, tmp_path)
@@ -270,9 +327,9 @@ def test_a_plan_that_differs_is_not_ok_and_says_why(
     assert reason in line
 
 
-def test_a_plan_with_nothing_to_do_is_not_ok(tmp_path: Path) -> None:
-    """A later plan, after the tags are in state, has no entries: that is not this apply's plan."""
-    plan = import_plan()
+def test_a_plan_without_the_tags_is_not_ok(tmp_path: Path) -> None:
+    """Unchanged tags are still in the plan, as `no-op`: a plan with neither is not this root's."""
+    plan = unchanged_plan()
     plan["resource_changes"] = plan["resource_changes"][2:]
 
     assert run_check(plan, tmp_path) == (
@@ -282,7 +339,7 @@ def test_a_plan_with_nothing_to_do_is_not_ok(tmp_path: Path) -> None:
 
 
 def test_read_and_unchanged_permission_sets_are_not_counted(tmp_path: Path) -> None:
-    plan = import_plan()
+    plan = unchanged_plan()
     for n in range(26):
         plan["resource_changes"].append(
             unchanged(

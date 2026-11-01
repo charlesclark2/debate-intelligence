@@ -124,11 +124,12 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Coroutine
 from pathlib import Path
-from typing import Annotated, Any, cast
+from typing import Annotated, Any, Final, cast
 
 import typer
 
 from debate_cli.bucket_lock import cancelled_on_sigterm
+from debate_cli.caselist_auth_expired import CLOUD_AUTH_EXPIRED_HINT, cloud_cure_for_an_expired_login
 from debate_cli.caselist_events import event_for_caselist
 from debate_cli.context import cli_context, command_name
 from debate_cli.exit_codes import ExitCode, exit_code_for_failure_codes
@@ -142,6 +143,8 @@ from debate_core.application.caselist_sync import (
     SyncStage,
     run_pull,
 )
+from debate_core.application.errors import error_code_of_class
+from debate_core.application.ports.caselist_source import CaselistAuthExpired
 from debate_core.application.settings import Settings
 from debate_core.application.sync_runs import (
     CLOUD_PUBLISH_CURE,
@@ -202,21 +205,22 @@ def pull(
     slugs = [] if publish_pending else list(caselist) if caselist else list(settings.caselist.sync_caselists)
 
     bracket = cli.services.bucket_run()
-    pulled = _run(
-        cancelled_on_sigterm(
-            bracket.terminate if bracket.bucket_mode else None,
-            run_pull(
-                lambda: cli.services.caselist_sync(event_for_caselist=event_for_caselist),
-                slugs,
-                dry_run=dry_run,
-                publish_pending=publish_pending,
-                monitor=cli.services.caselist_sync_monitor,
-                progress=cli.output.detail,
-                full_archive=full_archive,
-                bracket=bracket,
-            ),
+    with cloud_cure_for_an_expired_login(cli, ctx, bucket_mode=bracket.bucket_mode):
+        pulled = _run(
+            cancelled_on_sigterm(
+                bracket.terminate if bracket.bucket_mode else None,
+                run_pull(
+                    lambda: cli.services.caselist_sync(event_for_caselist=event_for_caselist),
+                    slugs,
+                    dry_run=dry_run,
+                    publish_pending=publish_pending,
+                    monitor=cli.services.caselist_sync_monitor,
+                    progress=cli.output.detail,
+                    full_archive=full_archive,
+                    bracket=bracket,
+                ),
+            )
         )
-    )
     summary = pulled.summary
     payload = pull_summary(summary, settings, pulled.summary_path, pulled.record, pulled.details)
     display = _pull_table(summary, settings, pulled.record)
@@ -448,6 +452,9 @@ def _pull_failure(
     )
 
 
+_AUTH_EXPIRED: Final = error_code_of_class(CaselistAuthExpired)
+
+
 def _hint_for(failed: list[StageRecord], *, retryable: bool, bucket_mode: bool = False) -> str:
     """What to do about the failed stages: the fix a stage names, or else how to run it again.
 
@@ -460,7 +467,13 @@ def _hint_for(failed: list[StageRecord], *, retryable: bool, bucket_mode: bool =
     run's ends with its task. So does every "run the same command again" (`v1-e40-t28`): the
     command is the cloud task's, which has ended, and what it captured and did not publish, the
     inbox included, ended with it.
+
+    A download OpenCaselist refused for an expired login names the Wednesday login instead in bucket
+    mode (`v1-e40-t35`, :data:`~debate_cli.caselist_auth_expired.CLOUD_AUTH_EXPIRED_HINT`): a run
+    started by hand before it is refused again, and a login by hand would be a second login.
     """
+    if bucket_mode and any(_AUTH_EXPIRED in record.error_codes for record in failed):
+        return CLOUD_AUTH_EXPIRED_HINT
     fixes = list(dict.fromkeys(record.hint for record in failed if record.hint))
     if fixes and bucket_mode:
         return " ".join(fixes) + f" Then in bucket mode {CLOUD_UNFINISHED_RUN_CURE}."

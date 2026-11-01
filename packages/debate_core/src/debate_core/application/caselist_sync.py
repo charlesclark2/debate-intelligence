@@ -657,6 +657,7 @@ from debate_core.application.ports.caselist_source import (
     ArchiveKind,
     ArchiveListing,
     CaselistArchiveSource,
+    CaselistAuthExpired,
     CaselistTokenMissing,
     DownloadedFile,
     OpenEvFile,
@@ -752,6 +753,7 @@ __all__ = [
     "fix_for",
     "full_archive_of_inbox_name",
     "inbox_files",
+    "message_for",
     "next_cloud_run",
     "openev_id_of_inbox_name",
     "parse_command",
@@ -5320,7 +5322,7 @@ class CaselistSyncService:
         what failed, an archive or a snapshot, in front of it. A directory of this machine that a
         message quotes is replaced by its name.
         """
-        message = reported_error_message(error)
+        message = message_for(error, bucket_mode=self._bucket_mode)
         sentence = f"{about}: {message}" if about else message
         return _StageFailure(
             self._naming_no_local_directory(sentence),
@@ -5331,7 +5333,9 @@ class CaselistSyncService:
     def _camp_failure(self, selection: OpenEvSelection, error: DomainError | OSError) -> _StageFailure:
         """:meth:`_failure` for a camp download: named by id and digest, never by its file name."""
         return _StageFailure(
-            self._naming_no_local_directory(_camp_download_refused(selection, error)),
+            self._naming_no_local_directory(
+                _camp_download_refused(selection, error, bucket_mode=self._bucket_mode)
+            ),
             (reported_error_code(error),),
             fix_for(error, bucket_mode=self._bucket_mode),
         )
@@ -6027,7 +6031,9 @@ def _revision_sentence(openev: Sequence[OpenEvSelection]) -> str:
     return f"; {len(revised)} taken as a revision of an id no longer listed ({listed})"
 
 
-def _camp_download_refused(selection: OpenEvSelection, refused: DomainError | OSError) -> str:
+def _camp_download_refused(
+    selection: OpenEvSelection, refused: DomainError | OSError, *, bucket_mode: bool = False
+) -> str:
     """A camp download's failed fetch or import, for a stage's reason: by id and digest, never by name.
 
     The error's own message can name the file: the archive reader says which file it could not read,
@@ -6043,7 +6049,7 @@ def _camp_download_refused(selection: OpenEvSelection, refused: DomainError | OS
     """
     if not isinstance(refused, DomainError):
         return f"{selection.label}: {reported_error_message(refused)}"
-    message = str(refused)
+    message = message_for(refused, bucket_mode=bucket_mode)
     file = selection.file
     names = {selection.inbox_name}
     if file is not None:
@@ -6078,6 +6084,22 @@ _TOKEN_UNREADABLE_ON_THIS_MACHINE_FIX: Final = (
 )
 """A run outside bucket mode whose caselist_token could not be read (`v1-e34-t36`): the error's own
 fix, in `v1-e34-t35`'s words. The logout deletes the record without reading it."""
+
+
+def message_for(error: BaseException, *, bucket_mode: bool = False) -> str:
+    """What `error` says of itself where a stage's reason, a run's record or the command's output quotes it.
+
+    :func:`~debate_core.application.errors.reported_error_message`, except for an expired login in bucket
+    mode (`v1-e40-t35`): there it is what was refused alone (:attr:`CaselistAuthExpired.refusal`), without
+    the Mac's "Run `debate-research caselist auth login` again". The cloud run's caselist_token is the one
+    the Wednesday 03:00 login renews, and a login by hand would be a second login that week
+    (`caselist-cloud-run.md`, "A run refused for an expired login"); the cure is the notice's
+    (:data:`~debate_core.application.sync_runs.CLOUD_AUTH_EXPIRED_CURE`) and the command's hint. On the Mac
+    the message is the error's own, word for word.
+    """
+    if bucket_mode and isinstance(error, CaselistAuthExpired):
+        return error.refusal
+    return reported_error_message(error)
 
 
 def fix_for(error: BaseException, *, bucket_mode: bool = False) -> str | None:

@@ -65,7 +65,7 @@ spec:
         by the PM, and the apply before 2026-11-04 leaves the schedule on a revision with 32
         GB (operator, recorded by the PM).
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

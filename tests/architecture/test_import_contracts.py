@@ -54,6 +54,7 @@ CORE_NEVER_IMPORTS_DELIVERY = "debate_core never imports a delivery package"
 DELIVERY_INDEPENDENCE = "The delivery packages are independent of one another"
 COMPOSITION_ROOT = "Delivery packages reach debate_core.integrations only through their composition root"
 DELIVERY_NEVER_IMPORTS_TESTING = "Delivery packages never import debate_core.testing"
+API_CONTAINER_ONE_WAY = "No debate_api module but the composition root imports debate_api.container"
 
 
 @dataclass(frozen=True)
@@ -174,6 +175,14 @@ VIOLATIONS = [
         "from debate_core.testing import fakes",
         DELIVERY_NEVER_IMPORTS_TESTING,
     ),
+    # The API's composition root imported by a route or a page, at any depth (v1-e41-t11).
+    Violation("debate_api.routes_probe", "from debate_api import container", API_CONTAINER_ONE_WAY),
+    Violation(
+        "debate_api.pages_probe",
+        "def build():\n    import debate_api.container",
+        API_CONTAINER_ONE_WAY,
+        as_package=True,
+    ),
 ]
 
 
@@ -253,6 +262,19 @@ def test_a_violating_import_breaks_its_contract_by_name(package_copy: Path, viol
 
     assert result.returncode != 0, result.output
     assert violation.broken_contract in result.broken, result.output
+
+
+def test_the_api_packages_own_init_importing_its_container_breaks_the_one_way_contract(
+    package_copy: Path,
+) -> None:
+    """`debate_api` is a module of its own here, not the package that holds the container (v1-e41-t11)."""
+    init = package_copy / "debate_api" / "__init__.py"
+    init.write_text(init.read_text() + "\nfrom debate_api import container\n")
+
+    result = lint_imports(package_copy)
+
+    assert result.returncode != 0, result.output
+    assert API_CONTAINER_ONE_WAY in result.broken, result.output
 
 
 def test_an_exception_that_no_longer_matches_an_import_fails(package_copy: Path, tmp_path: Path) -> None:

@@ -560,6 +560,19 @@ type = "forbidden"
 source_modules = ["debate_cli", "debate_api", "debate_workers"]
 forbidden_modules = ["debate_core.testing"]
 
+[[tool.importlinter.contracts]]
+name = "No debate_api module but the composition root imports debate_api.container"
+type = "forbidden"
+# v1-e41-t11, from v1-e39-t23: the container imports the app to build it, never the other way. A
+# route, page or app.py that imported it would reach, for the test selector, every adapter the
+# function wires. Each module is its own source (`as_packages = false`), the package's __init__ by
+# `debate_api` and every module under it by `debate_api.**`: listed as a package, `debate_api`
+# holds the container itself, and imports inside one package are not checked, so a planted import
+# left the contract kept. The container is among the sources too; it never imports itself.
+as_packages = false
+source_modules = ["debate_api", "debate_api.**"]
+forbidden_modules = ["debate_api.container"]
+
 # ---------------------------------------------------------------------------------------------
 # pytest: every project marker is registered here, once. Later tasks use them, never add their own.
 # ---------------------------------------------------------------------------------------------

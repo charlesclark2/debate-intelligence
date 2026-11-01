@@ -28,6 +28,16 @@ revision and nothing else in it, both schedules `ENABLED` before and after; each
 and nothing else. Anything else is `PLAN STOP`, naming each address and its actions, and goes to the
 PM before any apply.
 
+**`--memory`** checks the run task's memory change instead (`v1-e40-t30`, the runbook's "The run task's
+memory"), which touches the run side alone: `Plan: 1 to add, 2 to change, 1 to destroy.` Its three
+expected changes are the run task definition replaced, with its memory changed to 32768 and nothing
+else in it (its image still the digest in `owner.auto.tfvars`, its CPU, environment, roles and
+storage as they were); the run schedule's target repointed at the new revision, whose ARN the plan
+cannot know yet, the schedule `ENABLED` before and after; the run scheduler role's policy, which names
+that revision. A change to the login's task definition, schedule or scheduler policy is named as a
+login change, which this never makes. The Identity Center and outside-the-module rules are the image
+check's.
+
 Prints one line. Exit `0` for `PLAN OK`, `1` for `PLAN STOP`, `2` when a file cannot be read as a
 plan's JSON or an owner file (also `PLAN STOP`).
 """
@@ -53,6 +63,16 @@ REPOINTED = {
     MODULE + "aws_iam_role_policy.run_scheduler[0]": "policy",
 }
 EXPECTED = {address: REPLACE for address in TASK_DEFINITIONS} | {address: UPDATE for address in REPOINTED}
+# --memory (`v1-e40-t30`): the run side alone. The run scheduler's policy names the revision's ARN, so
+# it changes with the schedule; the login's three never change.
+LOGIN = (TASK_DEFINITIONS[0], SCHEDULES[0], MODULE + "aws_iam_role_policy.scheduler[0]")
+RUN_TASK_DEFINITION, RUN_SCHEDULE = TASK_DEFINITIONS[1], SCHEDULES[1]
+MEMORY_EXPECTED = {
+    RUN_TASK_DEFINITION: REPLACE,
+    RUN_SCHEDULE: UPDATE,
+    MODULE + "aws_iam_role_policy.run_scheduler[0]": UPDATE,
+}
+RUN_MEMORY = "32768"
 SCHEDULE_STATE = "ENABLED"
 IDENTITY_CENTER = ("aws_ssoadmin_", "aws_identitystore_")
 DIGEST = re.compile(r'^caselist_image_digest\s*=\s*"(sha256:[0-9a-f]{64})"\s*$', re.M)
@@ -283,9 +303,87 @@ def check(changes: list[dict[str, Any]], owner: str) -> tuple[list[str], str]:
     return problems, said
 
 
+def memory_problems(address: str, change: dict[str, Any], digest: str | None) -> list[str]:
+    before, after = container(change, "before"), container(change, "after")
+    if before is None or after is None:
+        return [address + ": its container definitions cannot be read from the plan"]
+    problems = container_problems(address, before, after, (*CONTAINER_KEYS, "image"))
+    if digest is not None and not str(after.get("image", "")).endswith("@" + digest):
+        problems.append(
+            f"{address}'s image is {after.get('image')}, expected the digest in owner.auto.tfvars"
+        )
+    sides = change["before"] or {}, change["after"] or {}
+    task = sorted(k for k in TASK_KEYS if k != "memory" and sides[0].get(k) != sides[1].get(k))
+    if task:
+        problems.append(f"{address} changes its {task}")
+    old, new = sides[0].get("memory"), sides[1].get("memory")
+    if new != RUN_MEMORY or old == new:
+        problems.append(f"{address}'s memory is {old} -> {new}, expected {RUN_MEMORY}")
+    return problems
+
+
+def known_revision(change: dict[str, Any]) -> str | None:
+    """The revision a schedule's target names after the apply, when the plan already knows it."""
+    try:
+        unknown_arn = (change.get("after_unknown") or {})["target"][0]["ecs_parameters"][0][
+            "task_definition_arn"
+        ]
+    except (KeyError, IndexError, TypeError):
+        unknown_arn = False
+    if unknown_arn is True:
+        return None
+    try:
+        arn = (change["after"] or {})["target"][0]["ecs_parameters"][0]["task_definition_arn"]
+    except (KeyError, IndexError, TypeError):
+        return "(none)"
+    return str(arn).rpartition("task-definition/")[2] or str(arn)
+
+
 def check_memory(changes: list[dict[str, Any]], owner: str) -> tuple[list[str], str]:
-    """The run task's memory change (`v1-e40-t30`). Skeleton: refuses nothing yet."""
-    return [], "skeleton"
+    """The run task's memory change (`v1-e40-t30`): its problems, and what `PLAN OK` says."""
+    digest, changed, problems, inside = screened(changes, owner)
+
+    for address, expected in MEMORY_EXPECTED.items():
+        found = inside.get(address)
+        if found is None or kind(found) != expected:
+            actual = "no change" if found is None else "/".join(found["change"]["actions"])
+            wanted = "a replace (delete and create)" if expected == REPLACE else "an update"
+            problems.append(f"{address}: {actual}, expected {wanted}")
+        elif expected == REPLACE:
+            problems += memory_problems(address, found["change"], digest)
+        else:
+            problems += repointed_problems(address, REPOINTED[address], found["change"])
+    found = inside.get(RUN_SCHEDULE)
+    if found is not None:
+        problem = state_problem(RUN_SCHEDULE, found["change"])
+        if problem is not None:
+            problems.append(problem)
+        revision = known_revision(found["change"])
+        if revision is not None:
+            problems.append(
+                f"{RUN_SCHEDULE} starts {revision}, a revision known before the apply, not the new one"
+            )
+    login = [label(found) for address, found in inside.items() if address in LOGIN]
+    if login:
+        problems.append("a login change, which the memory change never makes: " + ", ".join(sorted(login)))
+    unexpected = [
+        label(found)
+        for address, found in inside.items()
+        if address not in MEMORY_EXPECTED and address not in LOGIN
+    ]
+    if unexpected:
+        problems.append("an unexpected change in module.caselist_run: " + ", ".join(sorted(unexpected)))
+
+    run = inside.get(RUN_TASK_DEFINITION)
+    before = (run["change"]["before"] or {}) if run else {}
+    said = (
+        f"{counts(changed)}; the run task definition replaced with its memory {before.get('memory')} -> "
+        f"{RUN_MEMORY} and nothing else in it changed, {before.get('cpu')} CPU units and the image "
+        f"{(digest or '')[:19]}... as before; the run schedule and its role's policy repointed at the new "
+        f"revision; the run schedule {SCHEDULE_STATE} throughout; the login task definition, its schedule "
+        f"and its policy unchanged; nothing else changes"
+    )
+    return problems, said
 
 
 def main(argv: Sequence[str] | None = None) -> int:

@@ -1,4 +1,4 @@
-# The weekly run (ADR-0020 (1), (5)): one on-demand Fargate task, arm64, 8 vCPU, 16 GB and 100 GiB
+# The weekly run (ADR-0020 (1), (5)): one on-demand Fargate task, arm64, 8 vCPU, 32 GB and 100 GiB
 # of ephemeral storage, started every Wednesday at 06:00 America/Chicago, three hours after the
 # login (login_task.tf), as the run role.
 #
@@ -40,9 +40,10 @@ locals {
   run_schedule_group_arn  = "arn:${local.partition}:scheduler:${local.region}:${local.account_id}:schedule-group/${local.run_schedule_group_name}"
 
   # ADR-0020 (1) 2 and 6. Fargate's ephemeral storage above its 20 GiB default needs platform
-  # version 1.4.0 or later, which LATEST is.
+  # version 1.4.0 or later, which LATEST is. 32 GB since v1-e40-t30: 16 GB, the least Fargate allows
+  # at 8 vCPU, was killed for memory by the hspolicy25 import of 2026-10-31 (ADR-0020's amendment).
   run_cpu                = "8192"
-  run_memory             = "16384"
+  run_memory             = "32768"
   run_ephemeral_gib      = 100
   run_parse_workers      = 8
   run_deadline           = "6h"

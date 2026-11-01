@@ -21,7 +21,7 @@
 #
 #   ac1  the run role holds the everyday evidence permissions and a read of the token, nothing
 #        more: no read of the password, no s3:DeleteObject or s3:DeleteObjectVersion; the run's
-#        network has no inbound rule; the run task is 8 vCPU, 16 GB, 100 GiB, arm64, under its
+#        network has no inbound rule; the run task is 8 vCPU, 32 GB, 100 GiB, arm64, under its
 #        deadline, pinned by digest; its schedule starts after the login, disabled by default;
 #        each schedule sits alone in its own group, and each scheduler role trusts that group's
 #        ARN only (Scheduler's confused-deputy rule; apply B in dev, 2026-10-24);
@@ -1280,12 +1280,12 @@ run "the_run_task_runs_the_pinned_image_as_the_run_role_under_its_deadline" {
 
   assert {
     condition = (
-      aws_ecs_task_definition.run[0].cpu == "8192" && aws_ecs_task_definition.run[0].memory == "16384"
+      aws_ecs_task_definition.run[0].cpu == "8192" && aws_ecs_task_definition.run[0].memory == "32768"
       && aws_ecs_task_definition.run[0].ephemeral_storage[0].size_in_gib == 100
       && aws_ecs_task_definition.run[0].runtime_platform[0].cpu_architecture == "ARM64"
       && aws_ecs_task_definition.run[0].requires_compatibilities == toset(["FARGATE"])
     )
-    error_message = "Fargate, 8 vCPU, 16 GB, 100 GiB of ephemeral storage, arm64 (ADR-0020 (1) 2)."
+    error_message = "Fargate, 8 vCPU, 32 GB, 100 GiB of ephemeral storage, arm64 (ADR-0020 (1) 2, amended by v1-e40-t30)."
   }
 
   assert {

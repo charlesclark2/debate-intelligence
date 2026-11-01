@@ -157,9 +157,43 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-01
 
 **Notes:**
+
+The panel now tells the coach the truth, and it gives a command that actually publishes.
+1. **ac1 passes.**
+   * Red: 6 failed (five `KeyError`s on the missing field, which are the tests' own reads, and one
+     panel assertion). The two that passed are the word-for-word pins of a publish's refusal, which
+     must hold the old text.
+   * Green: 8, and the node criterion passes (92).
+   * All the PM's mutants are caught, with 5 and 6 each in two forms, plus 7 and 8. The crashing
+     first 6a was discarded, not counted, which is right.
+   * The two "the named command publishes" tests run the hint's command, which proves the hint
+     rather than just pinning its text.
+2. **Deviation accepted: "This dry run wrote no report."** Since v1-e32-t30 a dry run writes caches,
+   so "nothing was written" would be untrue. The spec's intent, that no report exists to read, is
+   what the coach needs.
+3. **Decisions accepted:**
+   * `error.details.publish_command`, present only on a dry run's scan refusal, as t33 did for
+     `retry_after_seconds`;
+   * "as typed" judged by Click's parameter source at every level, never a default, an environment
+     variable or a resolved value;
+   * declaration order and long spellings;
+   * the literal `debate-research`;
+   * comparing the source by name, because Typer vendors Click;
+   * both consequences of never adding what wasn't typed (`--confirm-prod`, a live mode), each
+     refused by its own gate with its own hint.
+4. **Runbook lines:** none needed changing, as checked. Step 3's reader printing `publish_command`
+   is not filed, since step 4's block carries guards a pasted command wouldn't.
+5. **Follow-ups, the PM's rulings:**
+   * **A smoke check for the dry run's scan refusal:** noted for the next E32 task that touches
+     `tests/smoke`, not filed alone.
+   * **The panel wrapping a long command:** not filed. `--json`'s field is the copyable form.
+6. **Closing checks:** the affected set (82 files) stopped at 35% at its limit with no failure, at a
+   load of 32, and is left to the PR's `ci` under agreement 10. The always-run list (374), ruff,
+   pyright, lint-imports, thin handlers and the specs are clean.
+7. **Merge:** a plain `scripts/task pr` once `ci` is green. No operator step follows.

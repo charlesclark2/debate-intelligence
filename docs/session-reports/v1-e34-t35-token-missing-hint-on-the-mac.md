@@ -174,9 +174,38 @@ None. The full affected set is left to the pull request's `ci` under agreement 1
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-31
 
 **Notes:**
+
+This is small and exact, and the check of the two neighbouring codes is worth more than its size.
+1. **ac1 passes.**
+   * Red: 1 failed at the Mac hint's assertion.
+   * The bucket-mode test passed on the start commit, which proves the hand-written old text is the
+     cloud's, word for word. That is the right way to pin "unchanged".
+   * Green: 4, and the node criterion passes (4).
+   * All seven mutants are caught: the PM's four plus 1b and the 4b/4c variants. 1b shows the words
+     needed their own mode guard.
+2. **Decisions accepted:**
+   * `fix_for`'s existing `bucket_mode`, with no new parameter;
+   * the words in `_WHAT_STOPPED_A_RUN` behind a mode-only set, since `_what_stopped_it` also builds
+     the cloud's message;
+   * the fix command staying `caselist pull`, with the login in the hint, as t33's keychain codes do;
+   * "on this machine" rather than "on this Mac";
+   * no smoke check, since a real monitor around `run_pull` covers the surface.
+3. **The neighbouring codes, the PM's rulings:**
+   * **`CASELIST_TOKEN_UNREADABLE` (the same Mac-only gap):** one p3 E34 task in the next batch,
+     following this task's pattern (logout, then login, outside bucket mode only).
+   * **`CASELIST_AUTH_EXPIRED`'s cloud notice naming the Mac's login:** one p2 E40 task in the next
+     batch. It tells the operator to do the one thing the cloud runbook forbids (a second login), so
+     it outranks the cosmetic gaps. In bucket mode the cure is the Wednesday login, as
+     `caselist-cloud-run.md` says.
+4. **Closing checks:** the affected set (298 files through two hub modules) stopped at 11% at its
+   limit with nothing failing, and is left to the PR's `ci` under agreement 10. The always-run list
+   (374), every file naming the run-notice code (802), ruff, pyright, lint-imports, thin handlers,
+   the doc checks and the specs are clean.
+5. **Merge:** a plain `scripts/task pr` once `ci` is green. No operator step follows. This is v1.1
+   work.

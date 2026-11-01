@@ -103,7 +103,7 @@ CHECK_AN_OLDER_BUILD_READS=this-builds-camp-manifests "${VENV}/bin/python" -m py
 Both printed the same lines but for the reader's path:
 
 ```text
-reader: the debate_core source at <venv>/lib/python3.12/site-packages/debate_core
+reader: the debate_core source at <the venv's site-packages>/debate_core
 placed: this build's manifest; the keys this source's rows lack: openev_camp_word; its rows are this source's own but for them: True
 publish: succeeded True; status in sync: True
 next pull: openev-640 already_imported, openev-700 already_imported, openev-900 download

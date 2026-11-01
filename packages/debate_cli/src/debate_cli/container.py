@@ -1300,8 +1300,11 @@ class ServiceContainer:
             FileDoiCache,
             crossref_doi_client,
         )
-        from debate_core.integrations.local import FsSnapshotStore, SqliteArticleRepository
-        from debate_core.integrations.local.sqlite_repos import SqliteCardRepository
+        from debate_core.integrations.local import (
+            FsSnapshotStore,
+            SqliteArticleRepository,
+            SqliteCardRepository,
+        )
         from debate_core.integrations.models.prompt_registry import PromptRegistry
 
         settings = self.settings

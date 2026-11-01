@@ -148,12 +148,14 @@ def test_doctor_reports_the_environment_as_json() -> None:
     # configured evidence profiles (v1-e34-t22), the search pilot's index build and publish
     # (v1-e39-t02), the coach's pilot accounts (v1-e39-t05), and the check of the stores the weekly
     # index stage would find unparsed (v1-e34-t30), the file builder's build, quality check and
-    # suggestion (v1-e33-t03), and its publish (v1-e33-t05) the last.
+    # suggestion (v1-e33-t03), its publish (v1-e33-t05), and the card cutting behind `cut`
+    # (v1-e06-t06) the last.
     # A later epic adding one adds it here too: this is the list an operator reads to find out
     # what this installation is wired for.
     assert data["services"] == [
         "article_fetch",
         "bucket_write_guard",
+        "card_cutting",
         "caselist_import",
         "caselist_parse",
         "caselist_publish",

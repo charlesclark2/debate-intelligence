@@ -62,7 +62,7 @@ __all__ = ["MAXIMUM_PART_BYTES", "OBJECT_REPLACEMENT", "UnreadableDocument", "re
 MAXIMUM_PART_BYTES: Final = 64 * 1024 * 1024
 """The largest part the reader opens, uncompressed: the manifest part's limit, far above a card file."""
 
-OBJECT_REPLACEMENT: Final = "￼"
+OBJECT_REPLACEMENT: Final = "\ufffc"
 """What the reader reads in place of anything Word shows that is not text."""
 
 _W: Final = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
@@ -110,8 +110,8 @@ _CHARACTERS: Final = {
     _W + "ptab": "\t",
     _W + "br": "\n",
     _W + "cr": "\n",
-    _W + "noBreakHyphen": "‑",
-    _W + "softHyphen": "­",
+    _W + "noBreakHyphen": "\u2011",
+    _W + "softHyphen": "\u00ad",
 }
 
 #: Body-level elements that hold no text a reader sees.

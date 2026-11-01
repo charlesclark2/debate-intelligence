@@ -54,7 +54,7 @@ from debate_core.evidence.docx_verify import (
 from debate_core.evidence.manifest import CardManifest
 
 STYLES: Final = TEAM_DEFAULT.style_profile
-OBJECT: Final = "￼"
+OBJECT: Final = "\ufffc"
 """What the reader reads in place of anything Word shows that is not text: a picture, a symbol."""
 SHIFT: Final = len(MARKER)
 

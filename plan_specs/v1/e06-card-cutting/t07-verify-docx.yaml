@@ -65,7 +65,7 @@ spec:
         Added by the PM, 2026-10-26. A tampered snapshot reference fails verify with its own
         reason code, and an untampered one passes, by tests shown failing first.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

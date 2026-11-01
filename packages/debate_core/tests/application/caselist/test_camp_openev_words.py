@@ -81,6 +81,13 @@ def test_a_section_that_is_not_camps_to_words_is_refused(openev: object, message
     assert isinstance(refused.value, ConfigurationError)
 
 
+def test_unknown_gets_no_word_even_when_a_table_lists_it_as_a_camp() -> None:
+    with pytest.raises(InvalidCampAliases, match="'UNKNOWN' is not a camp of the table"):
+        CampAliases.from_document(
+            {"camps": CAMPS | {"UNKNOWN": None}, "openev": {"UNKNOWN": "CASCADE"}}, source="t"
+        )
+
+
 def test_an_edited_tables_words_are_read_from_the_path_given(tmp_path: Path) -> None:
     edited = tmp_path / "aliases.yaml"
     edited.write_text("camps:\n  Ridgeline:\n    - RLI\nopenev:\n  Ridgeline: RDI7\n", encoding="utf-8")

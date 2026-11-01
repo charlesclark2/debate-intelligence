@@ -241,9 +241,39 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-01
 
 **Notes:**
+
+The gate now reads what it claims to read, and it fails toward refusing wherever the policy's
+wording is ambiguous. That is the right direction for a safety gate.
+1. **ac1 passes.**
+   * Red: 21 failed against the old gate. The policy-shaped open fixture was allowed by the old gate
+     in the core test, the live CLI run and the recording CLI run. At red the live run got past the
+     gate and stopped only at the test wiring, so no model could be reached.
+   * Green: 139, and the node criterion now selects and passes five tests (before, it selected
+     none).
+2. **Mutants:** all 12 are caught, the PM's four plus eight on the new reads (column by header,
+   table scope, word boundary).
+3. **The question: A.** Reopened, Re-opened and Opened refuse. A reopened question is open, and the
+   PM context listed "reopened" only as an example of substring matching.
+4. **Deviation accepted:** the synthetic rows moved under the heading and table header, with each
+   case's meaning unchanged.
+5. **Decisions accepted:**
+   * the open-word rule, with hyphens joined and underscores and asterisks not, failing toward
+     refusing;
+   * the Status column found by its header;
+   * the first table between the heading and the next heading;
+   * the fixture's second table taken from Permitted uses, as the real file has it (the PM's "scope
+     table" was wrong);
+   * escaped pipes kept inside their cell.
+6. **The search:** nothing else reads a document by a bare row number. The listed table readers go
+   by heading or first-cell text.
+7. **Closing checks:** the affected set (219 files) stopped at its limit at about 8% with no failure,
+   and is left to the PR's `ci` under agreement 10. The gate's importers, the landscape CLI tests and
+   the always-run list (683), ruff, pyright, lint-imports, thin handlers and the specs are clean.
+8. **Merge:** a plain `scripts/task pr` once `ci` is green. No operator step follows. Version 1.20
+   passes the new gate.

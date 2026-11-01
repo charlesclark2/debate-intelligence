@@ -384,6 +384,19 @@ still verified. `VerifyManifest`
 ([`debate_core.application.verify_manifest`](../../packages/debate_core/src/debate_core/application/verify_manifest.py),
 `v1-e03-t06`) reports it.
 
+Three more come from `VerifyManifest` since `v1-e06-t07`, also never from the verifier, and each makes
+the card `UNVERIFIED` whatever the verifier said:
+
+| Found by `VerifyManifest` | Reason code |
+|---|---|
+| A version-2 manifest's reference to the card's snapshot differs from the stored record (`sha256`, normalized text hash, normalizer or extractor version, `retrieved_at`, `canonical_url`), or is missing | `SNAPSHOT_REFERENCE_MISMATCH` |
+| A .docx body changes the card's quoted words beyond the edit policy: a word changed, added, joined or partly deleted | `MANUAL_EDIT`, with the `evidence_text` range and the body range |
+| A .docx body holds no card for a manifest card | `BODY_CARD_MISSING` |
+
+A bracketed interpolation in a .docx body is not a reason: the card stays `VERIFIED`, with the warning
+`INTERPOLATION_PRESENT` and the offset it is read before
+([`debate_core.evidence.docx_verify`](../../packages/debate_core/src/debate_core/evidence/docx_verify.py)).
+
 The first differing offset is in **evidence-text coordinates**: an index into the card's
 `evidence_text`. For a card with no omissions, the snapshot offset is `evidence_start_offset` plus
 it; past an omission, add the lengths of the omissions before it too. When one text is a prefix of the other, it is the shorter one's

@@ -50,7 +50,7 @@ def profile_data_dir(environment: Environment, *, bundled_config_root: Path | No
         raw = cast(Mapping[str, Any], BUILTIN_PROFILES[environment]["storage"])["data_dir"]
         source = f"built-in:{environment.value}"
     try:
-        return StorageSettings(data_dir=raw).data_dir
+        return StorageSettings.model_validate({"data_dir": raw}).data_dir
     except ValidationError as error:
         raise ConfigurationError(
             f"invalid configuration: storage.data_dir (from {source}) is not a path", field="storage.data_dir"

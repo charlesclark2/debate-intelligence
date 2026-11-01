@@ -62,7 +62,7 @@ v2.3's extension work.
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 55 | 252 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 110 | 90 | 500 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 69 | 55 | 299 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 69 | 56 | 299 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 16 | 11 | 114 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
@@ -379,7 +379,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [files check and files publish warn when a built file's style profile is not the running one](plan_specs/v1/e33-file-builder/t10-sidecar-style-profile-warning.yaml) `v1-e33-t10-sidecar-style-profile-warning` | Pending | 1 | 1.0 |
 | [files suggest drafts a CP file a coach can build on: a CP text slot first, no other position's blocks, and plank-dependent blocks marked](plan_specs/v1/e33-file-builder/t11-suggest-drafts-a-cp-file-a-coach-can-build-on.yaml) `v1-e33-t11-suggest-drafts-a-cp-file-a-coach-can-build-on` | Succeeded | 1 | 2.0 |
 | [files check and files build name each warned or failed card, its check and why, as the quality report does](plan_specs/v1/e33-file-builder/t12-files-check-names-each-warned-card.yaml) `v1-e33-t12-files-check-names-each-warned-card` | Succeeded | 1 | 1.0 |
-| [A CP draft keeps a block an affirmative-side position places, marked to check against the plan](plan_specs/v1/e33-file-builder/t13-cp-draft-keeps-aff-side-blocks-marked.yaml) `v1-e33-t13-cp-draft-keeps-aff-side-blocks-marked` | Pending | 1 | 1.0 |
+| [A CP draft keeps a block an affirmative-side position places, marked to check against the plan](plan_specs/v1/e33-file-builder/t13-cp-draft-keeps-aff-side-blocks-marked.yaml) `v1-e33-t13-cp-draft-keeps-aff-side-blocks-marked` | Succeeded | 1 | 1.0 |
 | [A coach-edited list of plan-mechanism words in the topic config marks a CP draft's plan-dependent blocks](plan_specs/v1/e33-file-builder/t14-plan-mechanism-words-in-the-topic-config.yaml) `v1-e33-t14-plan-mechanism-words-in-the-topic-config` | Pending | 1 | 1.0 |
 | [A built file still holding the CP text placeholder is warned, and a CP draft has a smoke check](plan_specs/v1/e33-file-builder/t15-unreplaced-cp-text-slot-warned.yaml) `v1-e33-t15-unreplaced-cp-text-slot-warned` | Pending | 1 | 1.0 |
 

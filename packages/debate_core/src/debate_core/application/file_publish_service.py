@@ -102,6 +102,7 @@ from debate_core.domain.file_provenance import (
 )
 from debate_core.domain.file_recipe import FileRecipe, RecipeStatus, render_location
 from debate_core.evidence.file_checks.report import (
+    CheckResult,
     CheckStatus,
     FileQualityReport,
     QualityCheck,
@@ -139,6 +140,7 @@ class FileRefusalCode(StrEnum):
     """Why a built file is not published, in the order the gate asks."""
 
     QUALITY_REPORT_MISSING = "QUALITY_REPORT_MISSING"
+    QUALITY_REPORT_OUTDATED = "QUALITY_REPORT_OUTDATED"
     QUALITY_REPORT_STALE = "QUALITY_REPORT_STALE"
     BUILT_FROM_A_DRAFT = "BUILT_FROM_A_DRAFT"
     RECIPE_STATUS_UNRECORDED = "RECIPE_STATUS_UNRECORDED"
@@ -214,6 +216,7 @@ class FilePlan:
     metadata: BuiltFileMetadata | None = field(default=None, repr=False)
     staged: _Staged | None = field(default=None, repr=False)
     warned_checks: tuple[QualityCheck, ...] = ()
+    warnings: tuple[CheckResult, ...] = ()
 
     @property
     def refused(self) -> bool:
@@ -241,6 +244,7 @@ class PublishOutcome:
     written: tuple[str, ...] = ()
     skipped: tuple[str, ...] = ()
     warned_checks: tuple[QualityCheck, ...] = ()
+    warnings: tuple[CheckResult, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

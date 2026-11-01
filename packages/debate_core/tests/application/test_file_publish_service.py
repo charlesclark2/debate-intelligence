@@ -19,7 +19,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Any, Final, cast
 
 import jsonschema
 import pytest
@@ -52,7 +52,7 @@ from debate_core.domain.built_file_metadata import BuiltFileMetadata
 from debate_core.domain.caselist import Side
 from debate_core.domain.file_provenance import FileProvenanceManifest
 from debate_core.domain.file_recipe import FileRecipe
-from debate_core.evidence.file_checks.report import QualityCheck
+from debate_core.evidence.file_checks.report import CHECKER_VERSION, CheckStatus, QualityCheck
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
 from debate_core.integrations.docx_file_writer.writer import DocxEvidenceFileWriter
 from debate_core.integrations.docx_parser.parser import DebateDocxParser
@@ -177,6 +177,8 @@ class World:
     record: InMemoryAppendOnlyRecord = field(default_factory=lambda: InMemoryAppendOnlyRecord("suppression"))
     rows: list[OccurrenceRecord] = field(default_factory=lambda: [])
     bucket_built: int = 0
+    offline: bool = False
+    """No bucket, not even moto's: asking for one fails the test (:func:`offline_world`)."""
 
     @property
     def suppression(self) -> RecordedSuppressionList:
@@ -254,6 +256,8 @@ class World:
     def service(self) -> FilePublishService:
         def bucket() -> EvidenceObjectStore:
             self.bucket_built += 1
+            if self.offline:
+                raise AssertionError("publish asked for a bucket: the file was let through the gate")
             return self.bucket
 
         return FilePublishService(bucket=bucket, quality=self.quality(), files_dir=self.files_dir)
@@ -300,6 +304,18 @@ class World:
 def world(tmp_path: Path, evidence_bucket: str, s3_client: S3Client) -> World:
     store = S3EvidenceObjectStore(bucket=evidence_bucket, client=s3_client)
     return World(root=tmp_path, bucket=RecordingBucket(store), client=s3_client, bucket_name=evidence_bucket)
+
+
+@pytest.fixture
+def offline_world(tmp_path: Path) -> World:
+    """A world with no bucket at all: for what the gate refuses, which never builds a bucket client."""
+    return World(
+        root=tmp_path,
+        bucket=cast("RecordingBucket", None),
+        client=cast("S3Client", None),
+        bucket_name="",
+        offline=True,
+    )
 
 
 def recipe_hash_of(docx: Path) -> str:
@@ -908,3 +924,130 @@ def test_a_quality_report_that_is_not_one_is_missing_and_a_missing_sidecar_fails
     assert outcome.refusal.code is FileRefusalCode.QUALITY_FAILED
     assert QualityCheck.SIDECAR in outcome.refusal.failing_checks
     assert world.object_keys() == []
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e33-t16: a report written by an older version of the checks is named as such, not as missing
+# ------------------------------------------------------------------------------------------------
+
+#: The version `v1-e33-t15` replaced, by hand: its reports have no `placeholders-replaced` check.
+OLDER_CHECKER: Final = "2026.10.27-file-checks-2"
+
+
+def rewrite_report(docx: Path, change: Any) -> None:
+    """The built file's `.quality.json` with `change` applied to its JSON; the `.docx` left as built."""
+    report = docx.with_name(f"{docx.name}.quality.json")
+    document = json.loads(report.read_bytes())
+    change(document)
+    report.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+
+
+def as_the_older_checker_wrote_it(document: dict[str, Any]) -> None:
+    """What `files check` wrote before t15: another version, and no `placeholders-replaced` check."""
+    document["checker_version"] = OLDER_CHECKER
+    document["checks"] = [one for one in document["checks"] if one["check"] != "placeholders-replaced"]
+    document["results"] = [one for one in document["results"] if one["check"] != "placeholders-replaced"]
+
+
+def only_its_version_older(document: dict[str, Any]) -> None:
+    """A report the model still reads, but written by another version of the checks."""
+    document["checker_version"] = OLDER_CHECKER
+
+
+@pytest.mark.parametrize("older", [as_the_older_checker_wrote_it, only_its_version_older])
+def test_a_report_from_an_older_version_of_the_checks_is_refused_naming_both_versions_and_no_path(
+    offline_world: World, older: Any
+) -> None:
+    """Every built, unpublished file was refused as missing after t15's bump; it is older, and says so.
+
+    The second case still reads as a report, and is PASS for these bytes: it is refused all the same.
+    """
+    world = offline_world
+    docx = world.built({"fingerprint": world.add(SOURCE_ONE)})
+    rewrite_report(docx, older)
+
+    outcome = only(world.publish(docx))
+
+    assert outcome.status is PublishStatus.REFUSED
+    assert outcome.refusal.code == "QUALITY_REPORT_OUTDATED"
+    assert OLDER_CHECKER in outcome.refusal.message and CHECKER_VERSION in outcome.refusal.message
+    assert "/" not in outcome.refusal.message and docx.name not in outcome.refusal.message
+    assert outcome.refusal.hint == f"Check it with `debate-research files check {docx}`, then publish again."
+    assert world.bucket_built == 0
+
+
+def test_an_older_report_is_refused_by_a_dry_run_too_and_files_check_lets_it_through(
+    offline_world: World,
+) -> None:
+    world = offline_world
+    docx = world.built({"fingerprint": world.add(SOURCE_ONE)})
+    rewrite_report(docx, as_the_older_checker_wrote_it)
+
+    assert only(world.publish(docx, dry_run=True)).refusal.code == "QUALITY_REPORT_OUTDATED"
+
+    asyncio.run(world.quality().check(docx))
+    assert only(world.publish(docx, dry_run=True)).status is PublishStatus.WOULD_PUBLISH
+
+
+@pytest.mark.parametrize(
+    "report",
+    [
+        pytest.param(None, id="absent"),
+        pytest.param("{}", id="no-checker-version"),
+        pytest.param("not json", id="not-json"),
+        pytest.param('{"checker_version": 3}', id="checker-version-not-text"),
+        pytest.param("current-version-unreadable", id="current-version-unreadable"),
+    ],
+)
+def test_a_report_that_is_absent_or_unreadable_stays_missing(
+    offline_world: World, report: str | None
+) -> None:
+    """Only a report naming another version of the checks is older; one of this version that does not
+    read is not a report this build reads, as before."""
+    world = offline_world
+    docx = world.built({"fingerprint": world.add(SOURCE_ONE)})
+    path = docx.with_name(f"{docx.name}.quality.json")
+    if report is None:
+        path.unlink()
+    elif report == "current-version-unreadable":
+        rewrite_report(docx, lambda document: document.pop("checks"))
+    else:
+        path.write_text(report, encoding="utf-8")
+
+    outcome = only(world.publish(docx))
+
+    assert outcome.refusal.code is FileRefusalCode.QUALITY_REPORT_MISSING
+    assert (
+        outcome.refusal.message
+        == "synthetic-file.docx.quality.json is missing or is not a quality report this build reads"
+    )
+    assert outcome.refusal.hint == f"Check it with `debate-research files check {docx}`, then publish again."
+    assert world.bucket_built == 0
+
+
+def test_a_warned_file_carries_each_warned_result_and_a_clean_one_none(offline_world: World) -> None:
+    """PM amendment 2026-10-31: publish prints the warned checks' findings, as `files check` does."""
+    world = offline_world
+    docx = world.built(
+        {"fingerprint": world.add(SOURCE_WITHOUT_A_SHORT_CITE)},
+        {"analytic": CP_TEXT_SLOT},
+        name="warned-file",
+    )
+    clean = world.built({"fingerprint": world.add(SOURCE_ONE)}, name="clean-file")
+
+    quiet, warned = world.publish(docx.parent, dry_run=True).outcomes
+
+    assert (warned.slug, warned.status) == ("warned-file", PublishStatus.WOULD_PUBLISH)
+    assert [(one.check, one.status, one.card_position, one.message) for one in warned.warnings] == [
+        (QualityCheck.CITE_PRESENT, CheckStatus.WARN, 1, "the card has no short cite"),
+        (
+            QualityCheck.PLACEHOLDERS_REPLACED,
+            CheckStatus.WARN,
+            None,
+            "the analytic is still the placeholder for the counterplan's text that `files suggest` drafts: "
+            "write the text the team reads in its place, then build again",
+        ),
+    ]
+    assert warned.warned_checks == (QualityCheck.CITE_PRESENT, QualityCheck.PLACEHOLDERS_REPLACED)
+    assert (quiet.slug, quiet.status, quiet.warnings) == ("clean-file", PublishStatus.WOULD_PUBLISH, ())
+    assert clean.parent == docx.parent

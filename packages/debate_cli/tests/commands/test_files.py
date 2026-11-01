@@ -926,6 +926,10 @@ def test_files_build_check_and_publish_warn_of_the_cp_text_slot_and_publish_goes
     assert published.exit_code == ExitCode.OK, published.output
     shown = " ".join(published.stdout.split())
     assert "1 PUBLISHED. Warned, not blocked: politics-da-slot-left: placeholders-replaced" in shown
+    assert named_after_the_table(published.stdout)[-2:] == [
+        "Warned, not blocked in politics-da-slot-left:",
+        SLOT_LEFT,
+    ]
     assert len(keys_in(dev_bucket, DEV_BUCKET)) == 5
 
 
@@ -1038,3 +1042,79 @@ def test_files_publish_re_check_warns_of_another_style_profile_and_its_refusal_s
 
     panel = " ".join(invoke(*arguments).stderr.replace("│", " ").split())
     assert other_profile_warning(running) in panel
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e33-t16: publish names a report from an older version of the checks, and prints each warning
+# ------------------------------------------------------------------------------------------------
+
+#: The checks' version before `v1-e33-t15`'s bump, by hand; its reports had no `placeholders-replaced`.
+OLDER_CHECKER: Final = "2026.10.27-file-checks-2"
+
+
+def publish_dry_run(world: Planted, docx: Path) -> tuple[str, ...]:
+    return (
+        "files",
+        "publish",
+        "--env",
+        "dev",
+        str(docx),
+        "--dry-run",
+        "--recipes",
+        str(world.corpus.recipe.parent),
+    )
+
+
+def test_files_publish_refuses_a_report_from_an_older_version_of_the_checks_naming_both(
+    world: Planted, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """As t15's bump left every built, unpublished file: its report is older, not missing. A dry run."""
+    docx = built_policy_file(world)
+    report = docx.with_name(f"{docx.name}.quality.json")
+    document = json.loads(report.read_text(encoding="utf-8"))
+    current = document["checker_version"]
+    assert current != OLDER_CHECKER
+    document["checker_version"] = OLDER_CHECKER
+    document["checks"] = [one for one in document["checks"] if one["check"] != "placeholders-replaced"]
+    document["results"] = [one for one in document["results"] if one["check"] != "placeholders-replaced"]
+    report.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+    as_dev(world, monkeypatch, tmp_path)
+
+    refused = invoke("--json", *publish_dry_run(world, docx))
+
+    assert refused.exit_code == ExitCode.DOMAIN_FAILURE, refused.output
+    error = envelope(refused)["error"]
+    assert error["code"] == "QUALITY_REPORT_OUTDATED"
+    (file,) = error["details"]["files"]
+    message = file["refusal"]["message"]
+    assert OLDER_CHECKER in message and current in message
+    assert "/" not in message and docx.name not in message
+    assert (
+        file["refusal"]["hint"] == f"Check it with `debate-research files check {docx}`, then publish again."
+    )
+
+    panel = " ".join(invoke(*publish_dry_run(world, docx)).stderr.replace("│", " ").split())
+    assert "[QUALITY_REPORT_OUTDATED]" in panel and OLDER_CHECKER in panel and current in panel
+    assert "debate-research files check" in panel
+
+
+def test_files_publish_prints_each_warning_of_a_file_it_lets_through_as_files_check_does(
+    world: Planted, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """PM amendment 2026-10-31, from t10's follow-up: the profile WARN's own line, not only `sidecar`."""
+    docx = built_policy_file(world)
+    running = DebateDocxParser().profile_version
+    rewrite_sidecar(docx, lambda document: document.update(style_profile_version=OTHER_PROFILE))
+    as_dev(world, monkeypatch, tmp_path)
+
+    shown = invoke(*publish_dry_run(world, docx))
+
+    assert shown.exit_code == ExitCode.OK, shown.output
+    assert named_after_the_table(shown.stdout)[-2:] == [
+        f"Warned, not blocked in {docx.stem}:",
+        f"WARN sidecar: {other_profile_warning(running)}",
+    ]
+    (one,) = envelope(invoke("--json", *publish_dry_run(world, docx)))["data"]["files"]
+    assert [(found["status"], found["check"], found["message"]) for found in one["warnings"]] == [
+        ("WARN", "sidecar", other_profile_warning(running))
+    ]

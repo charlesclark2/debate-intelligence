@@ -53,7 +53,7 @@ spec:
         check's finding line as `files check` does, messages only, and a `QUALITY_FAILED` refusal
         still carries the sidecar's warnings; by tests shown failing first.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

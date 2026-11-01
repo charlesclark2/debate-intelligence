@@ -804,6 +804,12 @@ MEMORY_STOPPED: Final[dict[str, tuple[Callable[[Plan], None], str]]] = {
         lambda plan: run_container_after(plan, image=f"{REPOSITORY}@sha256:{'3' * 64}"),
         RUN_DEFINITION + " also changes ['image']",
     ),
+    "the digest line replaced as well": (
+        lambda plan: change_of(plan, RUN_DEFINITION)["before"].update(
+            container_definitions=container_definitions("run", OLD_DIGEST)
+        ),
+        RUN_DEFINITION + " also changes ['image']",
+    ),
     "a run task on another image than the owner file's": (
         the_memory_change_for(OLD_DIGEST),
         RUN_DEFINITION + "'s image is " + REPOSITORY + "@" + OLD_DIGEST + ", expected the digest in "

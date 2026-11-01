@@ -427,8 +427,11 @@ class CaselistParseService:
             minimum_sources=self._minimum_sources,
         )
 
-    async def run(self, plan: ParsePlan) -> ParseRunReport:
+    async def run(self, plan: ParsePlan, *, progress: Callable[[int], None] | None = None) -> ParseRunReport:
         """Parse what `plan` names, then rebuild the version directory's aggregates.
+
+        `progress`, if given, is called with how many of `plan.to_parse` are done after each one is
+        written (`v1-e40-t32`): a count, never which source.
 
         Raises :class:`~debate_core.application.caselist.occurrence_table_guard.NewerFingerprintTable`,
         having written nothing, when the table this run would replace is stamped with a newer
@@ -442,7 +445,7 @@ class CaselistParseService:
         parsed = cards = 0
         unsupported: Counter[str] = Counter()
         failed: Counter[str] = Counter()
-        for job, result in self._runner.run(self._parser, self._jobs(plan)):
+        for done, (job, result) in enumerate(self._runner.run(self._parser, self._jobs(plan)), start=1):
             source = by_digest[job.source.sha256]
             entry, document = self._record(plan, source, result)
             await self._store.write_source(plan.caselist, plan.version, entry, document)
@@ -456,6 +459,8 @@ class CaselistParseService:
                 logger.debug(
                     "caselist parse %s: %s failed, %s", plan.caselist, source.sha256[:12], entry.reason
                 )
+            if progress is not None:
+                progress(done)
         totals = await self._rebuild(plan)
         report = ParseRunReport(
             plan=plan,

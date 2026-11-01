@@ -46,6 +46,7 @@ import pytest
 from tests.fixtures.parse_pipeline.build_parse_world import BODIES, WEEKS, digest_of
 
 from debate_cli.exit_codes import ExitCode
+from debate_core.application.caselist import backfile_import, memory_high_water
 from debate_core.application.caselist.backfile_import import BACKFILE_LEDGER_KEY
 from debate_core.application.caselist.run_state import RUN_STATE_BUNDLE_KEY
 
@@ -620,6 +621,199 @@ def test_an_upload_a_backfile_import_refused_at_a_held_path_is_found_from_anothe
     assert planned["exit_code"] == ExitCode.OK, planned
     sources = {one["sha256"]: one for one in planned["data"]["sources"]}
     assert sources[digest_of("cardmirror")]["inclusion"] == "held_at_import", sorted(sources)
+
+
+# ------------------------------------------------------------------------------------------------
+# What it logs as it goes (v1-e40-t32)
+# ------------------------------------------------------------------------------------------------
+#
+# The first cloud import was killed for memory at 71 minutes and left an empty log: its result is one
+# line at the end. Each step now writes a line to stderr as it starts and as it ends, and the parse as
+# it goes, while stdout keeps its one result. The synthetic archive plants schools, team codes, a
+# tournament and file names (the table at the top); no line may carry any of them, or a path.
+
+STEPS: Final = ("restore", "download", "import", "parse", "publish", "publish_parsed")
+PLANTED: Final = (
+    "Maple Grove", "Cedar Hollow", "Westfield", "QX", "ZaLu", "XY", "Lakeside", "Round", "Quarters",
+    ".docx", ".pdf", ".zip", archive_name(BACKFILE, ARCHIVE_DATE), "/", "\\",
+)  # fmt: skip
+"""Every school, team, tournament and file name in the archive, and a path's separators."""
+RESULT_KEYS: Final = {"schema_version", "status", "command", "data", "error"}
+RESULT_DATA_KEYS: Final = {
+    "caselist", "season", "applied", "archive_date", "archive_bytes", "in_inbox", "already_imported",
+    "backfile_downloads_left", "inside_no_import_window", "no_import_window_ends", "space", "refusals",
+    "import",
+}  # fmt: skip
+RESULT_IMPORT_KEYS: Final = {
+    "downloaded_bytes", "members", "stored", "suppressed", "held_by_request", "sources_uploaded",
+    "sources_skipped", "bundle", "parsed", "unsupported", "failed", "cards", "parsed_uploaded",
+    "archive_left_inbox", "step_seconds",
+}  # fmt: skip
+"""The result line's shape before `v1-e40-t32`, read from `import_as_json` at its start commit."""
+
+
+@pytest.fixture
+def no_cgroup(backfiles: tuple[World, Site], tmp_path: Path) -> tuple[World, Site]:
+    """The Mac's case wherever the test runs: a CI runner's own cgroup would otherwise be read."""
+    backfiles[0].monkeypatch.setattr(memory_high_water, "CGROUP_ROOT", tmp_path / "no-cgroup-here")
+    return backfiles
+
+
+def execute_with_lines(world: World) -> tuple[dict[str, Any], list[dict[str, Any]], str]:
+    """The import's one result on stdout, its step lines on stderr, and the whole of stderr."""
+    result = world.invoke("--json", "caselist", "backfile-import", "--caselist", BACKFILE, "--execute")
+    out = [line for line in result.stdout.splitlines() if line.strip()]
+    assert len(out) == 1, f"stdout holds exactly the result: {result.stdout!r}"
+    envelope = json.loads(out[0])
+    envelope["exit_code"] = result.exit_code
+    lines = [json.loads(line) for line in result.stderr.splitlines() if '"event": ' in line]
+    return envelope, lines, result.stderr
+
+
+def events(lines: list[dict[str, Any]]) -> list[tuple[str, str]]:
+    return [(line["event"], line["data"]["step"]) for line in lines if line["event"] != "parse_progress"]
+
+
+def test_each_step_logs_its_start_and_its_end_in_order_with_its_seconds_and_counts(
+    no_cgroup: tuple[World, Site],
+) -> None:
+    world, _ = no_cgroup
+
+    envelope, lines, _ = execute_with_lines(world)
+
+    assert envelope["exit_code"] == ExitCode.OK, envelope
+    assert events(lines) == [(event, step) for step in STEPS for event in ("step_started", "step_ended")]
+    assert {line["command"] for line in lines} == {"caselist backfile-import"}
+    assert all("status" not in line for line in lines), "a reader of results passes over a step line"
+    ended = {line["data"]["step"]: line["data"] for line in lines if line["event"] == "step_ended"}
+    result = envelope["data"]["import"]
+    assert {step: ended[step]["seconds"] for step in STEPS} == result["step_seconds"]
+    assert ended["download"]["counts"] == {"downloaded_bytes": len(zipped(MEMBERS))}
+    assert ended["import"]["counts"] == {
+        "members": 4,
+        "stored": result["stored"],
+        "suppressed": 0,
+        "held_by_request": 0,
+    }
+    assert ended["parse"]["counts"] == {"parsed": 3, "unsupported": 1, "failed": 0, "cards": 4}
+    assert ended["publish"]["counts"] == {
+        "sources_uploaded": result["sources_uploaded"],
+        "sources_skipped": result["sources_skipped"],
+    }
+    assert ended["publish"]["counts"]["sources_uploaded"] > 0
+    assert ended["publish_parsed"]["counts"] == {"parsed_uploaded": result["parsed_uploaded"]}
+    assert ended["publish_parsed"]["counts"]["parsed_uploaded"] > 0
+    assert set(ended["restore"]["counts"]) == {"state_files", "parsed_objects", "parsed_bytes", "parsed_kept"}
+    started = [line["data"] for line in lines if line["event"] == "step_started"]
+    assert all(set(data) == {"step", "counts"} and data["counts"] == {} for data in started)
+
+
+def test_the_parse_says_how_far_it_got_between_its_start_and_its_end(no_cgroup: tuple[World, Site]) -> None:
+    """Four sources to parse, well inside five minutes: the line once they are counted, and the last."""
+    world, _ = no_cgroup
+
+    _, lines, _ = execute_with_lines(world)
+
+    order = [(line["event"], line["data"]["step"]) for line in lines]
+    start, end = order.index(("step_started", "parse")), order.index(("step_ended", "parse"))
+    progress = [line["data"] for line in lines if line["event"] == "parse_progress"]
+    assert [index for index, line in enumerate(lines) if line["event"] == "parse_progress"] == list(
+        range(start + 1, end)
+    )
+    assert [line["counts"] for line in progress] == [
+        {"sources_done": 0, "sources_left": 4},
+        {"sources_done": 4, "sources_left": 0},
+    ]
+
+
+def test_with_no_interval_the_parse_says_so_after_every_source(no_cgroup: tuple[World, Site]) -> None:
+    world, _ = no_cgroup
+    world.monkeypatch.setattr(backfile_import, "PARSE_PROGRESS_INTERVAL_SECONDS", 0.0)
+
+    _, lines, _ = execute_with_lines(world)
+
+    assert [
+        (line["data"]["counts"]["sources_done"], line["data"]["counts"]["sources_left"])
+        for line in lines
+        if line["event"] == "parse_progress"
+    ] == [(0, 4), (1, 3), (2, 2), (3, 1), (4, 0)]
+
+
+def test_no_line_names_a_school_a_team_a_file_or_a_path(no_cgroup: tuple[World, Site]) -> None:
+    world, _ = no_cgroup
+    world.monkeypatch.setattr(backfile_import, "PARSE_PROGRESS_INTERVAL_SECONDS", 0.0)
+
+    envelope, lines, stderr = execute_with_lines(world)
+
+    assert envelope["exit_code"] == ExitCode.OK, envelope
+    assert len(lines) == 2 * len(STEPS) + 5
+    assert str(world.data_dir) not in stderr
+    for line in stderr.splitlines():
+        assert not [word for word in PLANTED if word in line], line
+
+
+def test_the_memory_figures_are_on_each_end_and_progress_line_when_a_cgroup_reads(
+    backfiles: tuple[World, Site], tmp_path: Path
+) -> None:
+    world, _ = backfiles
+    cgroup = tmp_path / "stand-in-cgroup"
+    cgroup.mkdir()
+    (cgroup / "memory.peak").write_text("123456789\n", encoding="ascii")
+    world.monkeypatch.setattr(memory_high_water, "CGROUP_ROOT", cgroup)
+
+    _, lines, _ = execute_with_lines(world)
+
+    measured = [line["data"] for line in lines if line["event"] in ("step_ended", "parse_progress")]
+    assert len(measured) == len(STEPS) + 2
+    for data in measured:
+        assert set(data["memory"]) == {"container_peak_bytes", "cgroup", "main_process_peak_bytes"}, data
+        assert (data["memory"]["container_peak_bytes"], data["memory"]["cgroup"]) == (123_456_789, "v2")
+        assert data["memory"]["main_process_peak_bytes"] > 0
+    assert all("memory" not in line["data"] for line in lines if line["event"] == "step_started")
+
+
+def test_a_container_figure_that_cannot_be_read_is_left_out_not_zero(no_cgroup: tuple[World, Site]) -> None:
+    world, _ = no_cgroup
+
+    _, lines, _ = execute_with_lines(world)
+
+    measured = [line["data"] for line in lines if line["event"] in ("step_ended", "parse_progress")]
+    assert measured
+    for data in measured:
+        assert set(data["memory"]) == {"main_process_peak_bytes"}, data
+
+
+def test_the_result_line_keeps_its_shape(no_cgroup: tuple[World, Site]) -> None:
+    world, _ = no_cgroup
+
+    envelope, _, _ = execute_with_lines(world)
+
+    assert set(envelope) - {"exit_code"} == RESULT_KEYS
+    assert (envelope["status"], envelope["command"]) == ("ok", "caselist backfile-import")
+    assert set(envelope["data"]) == RESULT_DATA_KEYS
+    assert set(envelope["data"]["import"]) == RESULT_IMPORT_KEYS
+    assert set(envelope["data"]["import"]["step_seconds"]) == set(STEPS)
+
+
+def test_a_step_that_raises_says_it_failed_and_nothing_after_it_starts(
+    no_cgroup: tuple[World, Site],
+) -> None:
+    world, site = no_cgroup
+    site.while_fetching.append(
+        lambda: world.client.copy_object(
+            Bucket=world.bucket,
+            Key=RUN_STATE_BUNDLE_KEY,
+            CopySource={"Bucket": world.bucket, "Key": RUN_STATE_BUNDLE_KEY},
+            Metadata={"rewritten": "by a removal"},
+            MetadataDirective="REPLACE",
+        )
+    )
+
+    envelope, lines, _ = execute_with_lines(world)
+
+    assert envelope["error"]["code"] == "BUNDLE_CHANGED_SINCE_RESTORE", envelope
+    assert events(lines)[-2:] == [("step_started", "publish"), ("step_failed", "publish")]
+    assert "publish_parsed" not in {step for _, step in events(lines)}
 
 
 # ------------------------------------------------------------------------------------------------

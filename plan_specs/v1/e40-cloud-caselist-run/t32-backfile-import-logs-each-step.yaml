@@ -23,6 +23,14 @@ spec:
     counts, and during the parse a line every few minutes with sources done and left. Counts and
     step names only: never a school, a team, a file name or a path. The runbook's watch block
     gains a read of the last step line, filtered as the counts block is.
+    (PM amendment 2026-10-31, the PM's context for this task.) Each step-end and progress line also
+    carries the container's memory high-water mark so far, in bytes, read from its cgroup
+    (`memory.peak` on cgroup v2, or v1's `memory.max_usage_in_bytes`), and the main process's own
+    peak (`resource.getrusage`), so that a growing main process and growing workers can be told
+    apart. Either is left out, not zero, when it cannot be read, as on the Mac. This is the
+    measurement v1-e40-t30's follow-up asked for; the report records how a reader turns it into a
+    share of the task's 32 GB, and which cgroup version AWS's documentation says Fargate platform
+    1.4.0 gives.
   priority: 3
   constraints:
     packages: [debate_core.application, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, docs/runbooks, tests/docs]
@@ -41,7 +49,7 @@ spec:
         progress, no line names a school, team, file or path, and the runbook reads the last
         step line, by tests shown failing first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

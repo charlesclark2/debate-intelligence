@@ -46,10 +46,12 @@ from debate_cli.exit_codes import ExitCode
 from debate_cli.options.bucket_environment import CONFIRM_PROD_FLAG
 from debate_cli.output import CommandFailure, JsonValue, TableSpec
 from debate_core.application.caselist.backfile_import import (
+    IMPORT_COMMAND,
     BackfileImportRefused,
     BackfilePlan,
     BackfileReport,
     Refusal,
+    StepLine,
 )
 from debate_core.application.caselist.backfile_survey import (
     FIRST_BACKFILE_SEASON_START,
@@ -58,10 +60,18 @@ from debate_core.application.caselist.backfile_survey import (
     SurveyedCaselist,
     season_label,
 )
+from debate_core.application.caselist.memory_high_water import MemoryHighWater
 from debate_core.application.settings import ConfigurationError, Environment
 from debate_core.domain.season import current_season_start
 
-__all__ = ["backfile_import", "backfile_survey", "current_season_start", "import_as_json", "survey_as_json"]
+__all__ = [
+    "backfile_import",
+    "backfile_survey",
+    "current_season_start",
+    "import_as_json",
+    "step_line_as_json",
+    "survey_as_json",
+]
 
 
 def backfile_survey(
@@ -244,7 +254,7 @@ def backfile_import(
         return
     try:
         with terminated_on_sigterm():
-            report = asyncio.run(service.run(caselist))
+            report = asyncio.run(service.run(caselist, on_line=lambda line: _write_step_line(cli, line)))
     except BackfileImportRefused as refused:
         _refuse(cli, ctx, refused.refusals, None)
     payload = import_as_json(report.plan, report)
@@ -276,6 +286,52 @@ def _refuse(
     )
     cli.output.failure(failure, command=command_name(ctx))
     raise typer.Exit(code=failure.exit_code)
+
+
+def _write_step_line(cli: CliContext, line: StepLine) -> None:
+    """A step's line on stderr as it starts, ends or goes (`v1-e40-t32`); stdout keeps the result."""
+    cli.output.event_line(IMPORT_COMMAND, str(line.event), step_line_as_json(line), text=_step_sentence(line))
+
+
+def step_line_as_json(line: StepLine) -> dict[str, JsonValue]:
+    """A step line's `data`: the step, its seconds, its counts, and the memory figures that could be read.
+
+    A figure that could not be read is left out, never zero (the PM's amendment of 2026-10-31).
+    """
+    data: dict[str, JsonValue] = {"step": line.step}
+    if line.seconds is not None:
+        data["seconds"] = round(line.seconds, 1)
+    data["counts"] = {name: count for name, count in line.counts.items()}
+    memory = _memory_as_json(line.memory)
+    if memory:
+        data["memory"] = memory
+    return data
+
+
+def _memory_as_json(memory: MemoryHighWater | None) -> dict[str, JsonValue]:
+    if memory is None:
+        return {}
+    data: dict[str, JsonValue] = {}
+    if memory.container_peak_bytes is not None:
+        data["container_peak_bytes"] = memory.container_peak_bytes
+        data["cgroup"] = memory.cgroup
+    if memory.main_process_peak_bytes is not None:
+        data["main_process_peak_bytes"] = memory.main_process_peak_bytes
+    return data
+
+
+def _step_sentence(line: StepLine) -> str:
+    said = f"{IMPORT_COMMAND}: {line.step} {str(line.event).replace('_', ' ')}"
+    if line.seconds is not None:
+        said += f" at {line.seconds:.1f} s"
+    if line.counts:
+        said += "; " + ", ".join(f"{name} {count:,}" for name, count in line.counts.items())
+    memory = line.memory
+    if memory is not None and memory.container_peak_bytes is not None:
+        said += f"; container peak {memory.container_peak_bytes:,} bytes (cgroup {memory.cgroup})"
+    if memory is not None and memory.main_process_peak_bytes is not None:
+        said += f"; main process peak {memory.main_process_peak_bytes:,} bytes"
+    return said
 
 
 def import_as_json(plan: BackfilePlan, report: BackfileReport | None) -> dict[str, JsonValue]:

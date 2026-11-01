@@ -277,6 +277,17 @@ async def test_a_first_run_parses_every_source_and_reports_the_hand_derived_coun
 
 
 @pytest.mark.anyio
+async def test_progress_hears_how_many_sources_are_done_after_each_one(world: World) -> None:
+    """What a backfile import's progress lines count (`v1-e40-t32`): a number, never which source."""
+    service = world.service()
+    heard: list[int] = []
+
+    await service.run(await service.plan(CASELIST), progress=heard.append)
+
+    assert heard == list(range(1, EXPECTED["after_0908"]["sources"] + 1))
+
+
+@pytest.mark.anyio
 async def test_the_occurrence_table_has_a_row_per_card_per_disclosure_named_by_its_digest(
     world: World,
 ) -> None:

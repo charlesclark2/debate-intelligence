@@ -43,6 +43,15 @@ or the parse (the PM's ruling Q5):
    rewrote it, and saving this copy over it would bring back what the removal took out.
 4. **Locked**: publish the parsed store.
 
+## What it logs as it goes (`v1-e40-t32`)
+
+Its result is one line when it ends; a task killed part-way leaves none. So each step says when it
+starts and when it ends (or fails), with its seconds and its counts, through the `on_line` callback
+of :meth:`BackfileImportService.run`, and the parse says how far it has got every
+:data:`PARSE_PROGRESS_INTERVAL_SECONDS`. Each end and progress line carries the memory high-water
+marks so far (:mod:`~debate_core.application.caselist.memory_high_water`, the PM's amendment of
+2026-10-31). A line holds a step's name and numbers, and nothing else.
+
 Nothing here touches the search index: backfiles stay out of the student search pilot's index until
 `v1-e39-t18` decides. Nothing here classifies or builds a landscape.
 
@@ -56,10 +65,11 @@ import contextlib
 import hashlib
 import tempfile
 import time
-from collections.abc import Callable, Generator, Sequence
+from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
+from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, Protocol
 from zoneinfo import ZoneInfo
@@ -68,9 +78,10 @@ from debate_core.application.caselist.backfile_survey import season_label, seaso
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.import_service import CaselistImportService, Classification
 from debate_core.application.caselist.manifest import manifest_key, write_manifest
+from debate_core.application.caselist.memory_high_water import MemoryHighWater, read_memory_high_water
 from debate_core.application.caselist.publish_service import SourceResult
 from debate_core.application.caselist.run_lock import BucketWriteGuard
-from debate_core.application.caselist.run_state import RUN_STATE_BUNDLE_KEY, RunState
+from debate_core.application.caselist.run_state import RUN_STATE_BUNDLE_KEY, RestoreReport, RunState
 from debate_core.application.caselist_sync import (
     ArchiveReader,
     DownloadLedger,
@@ -98,14 +109,18 @@ __all__ = [
     "IMPORT_COMMAND",
     "NO_IMPORT_WINDOW_ZONE",
     "PARSED_STORE_RATIO",
+    "PARSE_PROGRESS_INTERVAL_SECONDS",
     "BackfileArchiveSource",
     "BackfileImportRefused",
     "BackfileImportService",
     "BackfilePlan",
     "BackfileReport",
     "BundleChangedSinceRestore",
+    "ParseProgress",
     "Refusal",
     "SpaceNeeded",
+    "StepEvent",
+    "StepLine",
     "in_no_import_window",
     "no_import_window_ends",
     "space_needed",
@@ -131,6 +146,78 @@ PARSED_STORE_RATIO: Final = 4
 
 FREE_SPACE_HEADROOM: Final = 1.25
 """A quarter on top of the estimate (the PM's ruling Q4), computed as `estimate * 5 / 4`, rounded up."""
+
+
+PARSE_PROGRESS_INTERVAL_SECONDS: Final = 300.0
+"""How often the parse says how far it has got: five minutes. The parse is most of an import's 1.5 to
+2.5 hours, so this is 18 to 30 lines, a dozen points of the memory's climb before a kill like the one
+at 71 minutes, and six between two of the runbook's half-hourly looks at the task."""
+
+
+class StepEvent(StrEnum):
+    """What a :class:`StepLine` says happened."""
+
+    STARTED = "step_started"
+    ENDED = "step_ended"
+    FAILED = "step_failed"
+    """The step raised: a refusal, a changed bundle, a SIGTERM. A kill for memory leaves no line."""
+    PARSE_PROGRESS = "parse_progress"
+
+
+@dataclass(frozen=True, slots=True)
+class StepLine:
+    """One line of an import's log as it goes. A step's name and numbers: never a path or a name."""
+
+    event: StepEvent
+    step: str
+    seconds: float | None = None
+    """Since the step started; `None` on its start line."""
+    counts: Mapping[str, int] = field(default_factory=dict[str, int])
+    memory: MemoryHighWater | None = None
+    """On an end, failure or progress line."""
+
+
+class ParseProgress:
+    """The parse's progress lines: one once it knows how many sources it has, then one each time a
+    source finishes :data:`PARSE_PROGRESS_INTERVAL_SECONDS` or more after the last line, and one when
+    the last is done, so that a kill in the aggregates' rebuild shows every source parsed."""
+
+    def __init__(
+        self,
+        emit: Callable[[StepLine], None],
+        *,
+        monotonic: Callable[[], float],
+        memory: Callable[[], MemoryHighWater],
+        interval: float,
+    ) -> None:
+        self._emit = emit
+        self._monotonic = monotonic
+        self._memory = memory
+        self._interval = interval
+        self._started = self._last = monotonic()
+        self._total = 0
+
+    def start(self, total: int) -> None:
+        self._total = total
+        self._line(0, self._monotonic())
+
+    def __call__(self, done: int) -> None:
+        now = self._monotonic()
+        if done < self._total and now - self._last < self._interval:
+            return
+        self._line(done, now)
+
+    def _line(self, done: int, now: float) -> None:
+        self._last = now
+        self._emit(
+            StepLine(
+                StepEvent.PARSE_PROGRESS,
+                "parse",
+                seconds=now - self._started,
+                counts={"sources_done": done, "sources_left": self._total - done},
+                memory=self._memory(),
+            )
+        )
 
 
 class BackfileImportRefused(DomainError):
@@ -302,6 +389,8 @@ class BackfileImportService:
         parsed_version: The parsed store's version directory this build writes.
         clock: Now, in UTC.
         volume: Reads a directory's volume; :func:`read_volume` unless a test stubs it.
+        monotonic: The steps' and the parse progress's seconds.
+        memory: The memory high-water marks for the log lines.
     """
 
     def __init__(
@@ -327,6 +416,8 @@ class BackfileImportService:
         clock: Callable[[], datetime],
         volume: Callable[[Path], VolumeReading] | None = None,
         home_moved: Callable[[], str | None] | None = None,
+        monotonic: Callable[[], float] = time.monotonic,
+        memory: Callable[[], MemoryHighWater] = read_memory_high_water,
     ) -> None:
         self._settings = caselist_settings
         self._bucket_mode = bucket_mode
@@ -348,6 +439,8 @@ class BackfileImportService:
         self._parsed_version = parsed_version
         self._clock = clock
         self._volume = volume
+        self._monotonic = monotonic
+        self._memory = memory
 
     # ------------------------------------------------------------------------------------------
     # The dry run
@@ -495,8 +588,10 @@ class BackfileImportService:
     # The import
     # ------------------------------------------------------------------------------------------
 
-    async def run(self, caselist: str) -> BackfileReport:
-        """The import, in the four steps of the module docstring.
+    async def run(
+        self, caselist: str, *, on_line: Callable[[StepLine], None] | None = None
+    ) -> BackfileReport:
+        """The import, in the four steps of the module docstring, each told to `on_line` as it goes.
 
         Raises :class:`BackfileImportRefused` for anything the plan refuses, before anything is
         downloaded, and for a locked step that would start inside the window; and
@@ -508,28 +603,41 @@ class BackfileImportService:
         assert plan.archive is not None and plan.archive.archive_date is not None
         assert self._run_state is not None and self._bucket is not None
         report = BackfileReport(plan=plan)
+        emit = on_line if on_line is not None else _say_nothing
         state = self._run_state()
         needs_download = not plan.in_inbox and not plan.already_imported
-        with self._step(report, "restore"), self._locked():
-            await state.restore([caselist], parsed_version=self._parsed_version)
+        with self._step(report, "restore", emit) as counts, self._locked():
+            counts.update(_restored(await state.restore([caselist], parsed_version=self._parsed_version)))
             bundle = await self._bundle_tag()
             if needs_download:
                 await self._record_the_download()
         if not plan.already_imported:
-            with self._step(report, "download"):
+            with self._step(report, "download", emit) as counts:
                 downloaded = await self._download(plan.archive)
                 report.downloaded_bytes = 0 if plan.in_inbox else downloaded.byte_size
-            with self._step(report, "import"):
+                counts["downloaded_bytes"] = report.downloaded_bytes
+            with self._step(report, "import", emit) as counts:
                 await self._import(plan.archive, downloaded, report)
-        with self._step(report, "parse"):
-            version = await self._parse_it(caselist, report)
-        with self._step(report, "publish"), self._locked():
+                counts.update(
+                    members=report.members,
+                    stored=report.stored,
+                    suppressed=report.suppressed,
+                    held_by_request=sum(report.held_by_request.values()),
+                )
+        with self._step(report, "parse", emit) as counts:
+            version = await self._parse_it(caselist, report, emit)
+            counts.update(
+                parsed=report.parsed, unsupported=report.unsupported, failed=report.failed, cards=report.cards
+            )
+        with self._step(report, "publish", emit) as counts, self._locked():
             if await self._bundle_tag() != bundle:
                 raise BundleChangedSinceRestore
             await self._publish_sources(caselist, plan.archive.archive_date.isoformat(), state, report)
+            counts.update(sources_uploaded=report.sources_uploaded, sources_skipped=report.sources_skipped)
         if report.bundle_saved and report.parse_within_threshold:
-            with self._step(report, "publish_parsed"), self._locked():
+            with self._step(report, "publish_parsed", emit) as counts, self._locked():
                 await self._publish_parsed(caselist, version, report)
+                counts["parsed_uploaded"] = report.parsed_uploaded
         if report.sources_published and report.bundle_saved:
             report.archive_left_inbox = self._leave_the_inbox(plan.archive)
         return report
@@ -553,12 +661,24 @@ class BackfileImportService:
             yield
 
     @contextmanager
-    def _step(self, report: BackfileReport, name: str) -> Generator[None]:
-        started = time.monotonic()
+    def _step(
+        self, report: BackfileReport, name: str, emit: Callable[[StepLine], None]
+    ) -> Generator[dict[str, int]]:
+        """Times step `name` into `report.steps`, and tells `emit` of its start and its end or failure.
+
+        The body fills the counts it yields, which its end line carries.
+        """
+        emit(StepLine(StepEvent.STARTED, name))
+        counts: dict[str, int] = {}
+        started = self._monotonic()
         try:
-            yield
-        finally:
-            report.steps[name] = time.monotonic() - started
+            yield counts
+        except BaseException:
+            report.steps[name] = self._monotonic() - started
+            emit(StepLine(StepEvent.FAILED, name, report.steps[name], counts, self._memory()))
+            raise
+        report.steps[name] = self._monotonic() - started
+        emit(StepLine(StepEvent.ENDED, name, report.steps[name], counts, self._memory()))
 
     async def _bundle_tag(self) -> str | None:
         assert self._bucket is not None
@@ -628,10 +748,14 @@ class BackfileImportService:
         report.suppressed = imported.counts.get(Classification.SUPPRESSED, 0)
         report.held_by_request = dict(imported.held_by_request)
 
-    async def _parse_it(self, caselist: str, report: BackfileReport) -> str:
+    async def _parse_it(self, caselist: str, report: BackfileReport, emit: Callable[[StepLine], None]) -> str:
+        progress = ParseProgress(
+            emit, monotonic=self._monotonic, memory=self._memory, interval=PARSE_PROGRESS_INTERVAL_SECONDS
+        )
         service = self._parse()
         planned = await service.plan(caselist)
-        parsed = await service.run(planned)
+        progress.start(len(planned.to_parse))
+        parsed = await service.run(planned, progress=progress)
         report.parsed = parsed.parsed
         report.unsupported = sum(parsed.unsupported.values())
         report.failed = sum(parsed.failed.values())
@@ -676,6 +800,20 @@ class BackfileImportService:
         except OSError:
             return False
         return True
+
+
+def _say_nothing(line: StepLine) -> None:
+    del line
+
+
+def _restored(restored: RestoreReport) -> dict[str, int]:
+    """The restore's counts: how many state files, never their names."""
+    return {
+        "state_files": len(restored.state_files),
+        "parsed_objects": restored.parsed_objects,
+        "parsed_bytes": restored.parsed_bytes,
+        "parsed_kept": restored.parsed_kept,
+    }
 
 
 def _plan(

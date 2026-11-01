@@ -735,8 +735,12 @@ VERIFIER_CODE_TO_REASON: Final = {
     ReasonCode.ARTICLE_MISMATCH: CardFailureReason.EVIDENCE_UNVERIFIED,
     ReasonCode.PROVENANCE_MISMATCH: CardFailureReason.EVIDENCE_UNVERIFIED,
     ReasonCode.CARD_INVALID: CardFailureReason.EVIDENCE_UNVERIFIED,
+    ReasonCode.SNAPSHOT_REFERENCE_MISMATCH: CardFailureReason.EVIDENCE_UNVERIFIED,
+    ReasonCode.MANUAL_EDIT: CardFailureReason.EVIDENCE_UNVERIFIED,
+    ReasonCode.BODY_CARD_MISSING: CardFailureReason.EVIDENCE_UNVERIFIED,
 }
-"""Every verifier code and the card failure it becomes, written out by hand."""
+"""Every verifier code and the card failure it becomes, written out by hand. The last four are
+`verify`'s, never the verifier's (`v1-e03-t06`, `v1-e06-t07`); a card cut here never carries them."""
 
 
 @pytest.mark.parametrize("code", list(ReasonCode))

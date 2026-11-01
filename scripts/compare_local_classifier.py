@@ -575,13 +575,14 @@ async def _score_sample(arguments: argparse.Namespace) -> int:
 # ------------------------------------------------------------------------------------------------
 
 
-def _recorded_proxy_threshold(directory: Path, topic_id: str) -> float | None:
-    """The proxy's threshold the coach sample recorded, when `sample` wrote one under `directory`."""
+def _recorded_proxy_threshold(directory: Path, topic_id: str) -> tuple[bool, float | None]:
+    """Whether `sample` wrote a coach sample under `directory`, and the proxy's threshold it recorded."""
     _, items_path = sample_paths(directory, topic_id)
     if not items_path.is_file():
-        return None
+        return False, None
     with items_path.open(encoding="utf-8") as stream:
-        return read_sample(stream).thresholds.get(STRATIFIED_BY)
+        thresholds = read_sample(stream).thresholds
+    return STRATIFIED_BY in thresholds, thresholds.get(STRATIFIED_BY)
 
 
 async def _train_queue_order(arguments: argparse.Namespace) -> int:
@@ -624,10 +625,11 @@ async def _train_queue_order(arguments: argparse.Namespace) -> int:
     print(
         f"Its confidence at {TARGET_PRECISION:.0%} held-out precision, from which it suggests: {threshold}."
     )
-    recorded = _recorded_proxy_threshold(directory, table.topic_id)
-    if recorded is not None:
+    sampled, recorded = _recorded_proxy_threshold(directory, table.topic_id)
+    if sampled:
         same = "the same" if recorded == comparison.threshold else "a different one: the table has changed"
-        print(f"The coach sample recorded {recorded:.3f} for the {STRATIFIED_BY} model: {same}.")
+        shown = "none" if recorded is None else f"{recorded:.3f}"
+        print(f"The coach sample recorded {shown} for the {STRATIFIED_BY} model: {same}.")
     print(f"Wrote the review queue's order model to {location}. It orders the queue and places no card.")
     print(f"Runtime {time.perf_counter() - started:.1f} s.")
     return 0

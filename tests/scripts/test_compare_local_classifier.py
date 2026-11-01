@@ -32,6 +32,10 @@ from debate_core.application.ports.suppression import (
     SuppressionEntry,
     disclosure_digest,
 )
+from debate_core.application.review_queue_order import ReviewQueueOrdering, read_model_file
+from debate_core.integrations.landscape.classification_store import LocalQueueOrderModelStore
+from debate_core.integrations.landscape.yaml_taxonomy_repository import YamlTaxonomyRepository
+from debate_core.integrations.local.parsed_store import LocalParsedStore
 from debate_core.integrations.local.suppression_list import local_suppression_list_file
 from debate_core.testing.landscape_store import PARSER_VERSION, PlantedCard, PlantedCaselist
 
@@ -169,7 +173,7 @@ def test_features_prints_the_hand_counted_placements(
     assert "deficit spending crowds out investment" in text
 
 
-def test_the_four_commands_write_only_under_the_data_directory(
+def test_the_five_commands_write_only_under_the_data_directory(
     world: tuple[Path, Path, list[str]],
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -194,6 +198,7 @@ def test_the_four_commands_write_only_under_the_data_directory(
         writer.writerows({**row, "position": "none"} for row in rows)
     before[labels] = labels.read_bytes()
     assert run(world, "score-sample", "--labels", str(labels)) == 0
+    assert run(world, "train-queue-order") == 0
     after = {path: data for path, data in files_under(tmp_path).items() if data_dir not in path.parents}
     assert after == before
     written = {path.relative_to(output(world)).as_posix() for path in files_under(output(world))}
@@ -203,6 +208,7 @@ def test_the_four_commands_write_only_under_the_data_directory(
         f"{TOPIC}-coach-sample.csv",
         f"{TOPIC}-coach-sample.jsonl",
         f"{TOPIC}-coach-sample-score.json",
+        f"{TOPIC}-review-order-model.json",
     }
     out = capsys.readouterr().out.casefold()
     assert not any(name in out for name in NAMES)
@@ -234,6 +240,51 @@ def test_compare_and_sample_on_the_planted_store(
     kept = (output(world) / f"{TOPIC}-coach-sample.jsonl").read_text(encoding="utf-8")
     assert len(kept.splitlines()) == 11
     assert "deficit" not in kept and "states solve" not in kept
+
+
+def test_train_queue_order_writes_the_proxy_with_t21s_threshold_and_a_run_orders_by_it(
+    world: tuple[Path, Path, list[str]], capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_dir, config_dir, digests = world
+    assert run(world, "features") == 0
+    assert run(world, "compare") == 0
+    assert run(world, "sample") == 0
+    capsys.readouterr()
+    assert run(world, "train-queue-order") == 0
+    lines = printed(capsys)
+    counts = json.loads((output(world) / f"{TOPIC}-comparison.json").read_text(encoding="utf-8"))
+    proxy = next(model for model in counts["models"] if model["model"] == "proxy")
+    recorded = proxy["held_out"]["confidence_at_target"]
+    text = (output(world) / f"{TOPIC}-review-order-model.json").read_text(encoding="utf-8")
+    model_file = read_model_file(text)
+    assert model_file.model.suggest_from == recorded
+    assert model_file.model.without_placing_headings
+    assert model_file.trained_cards == proxy["trained_cards"]
+    assert model_file.sources == tuple(sorted(digests))
+    assert (model_file.caselist, model_file.topic_id, model_file.taxonomy_version) == (
+        CASELIST,
+        TOPIC,
+        "1.0.0",
+    )
+    shown = "none reaches it" if recorded is None else f"{recorded:.3f}"
+    assert lines[0].startswith(
+        f"Trained the proxy model on {proxy['trained_cards']} labelled cards of 9 documents"
+    )
+    assert lines[1] == f"Its confidence at 90% held-out precision, from which it suggests: {shown}."
+    sampled = "none" if recorded is None else f"{recorded:.3f}"
+    assert lines[2] == f"The coach sample recorded {sampled} for the proxy model: the same."
+    assert lines[3].startswith("Wrote the review queue's order model to ")
+    assert not any(name in text.casefold() for name in NAMES)
+    taxonomies = YamlTaxonomyRepository.load(config_dir)
+    loaded = asyncio.run(
+        ReviewQueueOrdering(
+            models=LocalQueueOrderModelStore(data_dir),
+            parsed_store=LocalParsedStore(data_dir),
+            suppression=RecordedSuppressionList(local_suppression_list_file(data_dir)),
+        ).load(CASELIST, TOPIC, taxonomies.taxonomy(TOPIC))
+    )
+    assert loaded.model == model_file.model
+    assert loaded.note.startswith("Review queue order: by the local proxy model's confidence, highest first")
 
 
 def test_score_sample_scores_the_coachs_labels_and_leaves_out_a_removed_source(
@@ -280,6 +331,8 @@ def test_a_table_a_removal_has_reached_is_refused(
     suppress(data_dir, digests[1], f"{school}/{code}/{school}-{code}-Neg-{TOURNAMENT}-Round 2.docx")
     assert run(world, "sample") == 2
     assert "a removal has reached 1 of the table's 9 sources" in capsys.readouterr().err
+    assert run(world, "train-queue-order") == 2
+    assert "a removal has reached 1 of the table's 9 sources" in capsys.readouterr().err
 
 
 def test_a_table_placed_under_another_taxonomy_version_is_refused(
@@ -298,7 +351,7 @@ def test_a_debate_variable_or_a_running_pull_stops_every_command(
     world: tuple[Path, Path, list[str]], capsys: pytest.CaptureFixture[str]
 ) -> None:
     pull = [("uv", "uv run debate-research caselist pull --caselist hspolicy99")]
-    for command in ("features", "compare", "sample"):
+    for command in ("features", "compare", "sample", "train-queue-order"):
         assert run(world, command, environ={"DEBATE_STORAGE__DATA_DIR": "/elsewhere"}) == 2
         assert "DEBATE_STORAGE__DATA_DIR is set" in capsys.readouterr().err
         assert run(world, command, processes=lambda: pull) == 2

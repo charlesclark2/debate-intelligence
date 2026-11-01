@@ -18,6 +18,7 @@ import json
 import os
 import shlex
 import shutil
+from array import array
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
@@ -49,6 +50,7 @@ from debate_core.application.landscape_seeding import SeedReading
 from debate_core.application.ports.classification_store import ClassificationStore
 from debate_core.application.ports.suppression import ReasonCode, SuppressionAction, SuppressionEntry
 from debate_core.application.position_classification import ClassificationRun, PositionClassificationService
+from debate_core.application.review_queue_order import QueueOrderModelFile, model_file_text
 from debate_core.application.settings import load_settings
 from debate_core.application.structured_output import StructuredOutputGuard
 from debate_core.application.sync_runs import (
@@ -59,9 +61,10 @@ from debate_core.application.sync_runs import (
     SyncRunRecord,
 )
 from debate_core.arguments.landscape.model_stage import DEFAULT_BATCH_SIZE, NameScan
+from debate_core.arguments.landscape.queue_order import QueueOrderModel
 from debate_core.domain.model_contracts import ModelParams, ModelPrompt, ModelResponse, TaskClass
 from debate_core.integrations.docx_parser import DebateDocxParser
-from debate_core.integrations.landscape.classification_store import review_queue_path
+from debate_core.integrations.landscape.classification_store import queue_order_model_path, review_queue_path
 from debate_core.integrations.landscape.yaml_taxonomy_repository import YamlTaxonomyRepository
 from debate_core.integrations.local.parsed_store import LocalParsedStore
 from debate_core.integrations.local.suppression_list import local_suppression_list_file
@@ -250,6 +253,58 @@ def test_report_writes_the_bundle_and_json_names_paths_counts_methods_and_model_
         "acceptance_log": None,
     }
     assert data["notice"] is None
+
+
+def test_the_review_queues_order_line_says_it_is_off_without_a_model_and_on_with_one(
+    world: SyntheticRun,
+) -> None:
+    """`v1-e32-t26`: the container reads the order model under the data directory; nothing is placed by it."""
+    off = (
+        "Review queue order: off, today's order kept: no review-order model is trained for "
+        f"{CASELIST} on {SYNTHETIC_RUN_TOPIC} (`scripts/compare_local_classifier.py train-queue-order`)."
+    )
+    first = landscape(world, "--caselist", CASELIST, "--no-publish")
+    assert first.exit_code == ExitCode.OK, first.output
+    assert _data(first)["review_queue"]["order"] == off
+    text = landscape(world, "--caselist", CASELIST, "--no-publish", json_output=False)
+    assert text.exit_code == ExitCode.OK, text.output
+    assert off in text.output.splitlines()
+
+    entries = asyncio.run(LocalParsedStore(world.data_dir).read_entries(CASELIST, PARSER_VERSION))
+    model = QueueOrderModel(
+        classes=("single-payer-aff", "spending-da"),
+        vocabulary=("t:spending",),
+        idf=array("d", [1.0]),
+        coefficients=array("d", [1.0]),
+        intercepts=(0.0,),
+        suggest_from=0.5,
+    )
+    model_file = QueueOrderModelFile(
+        caselist=CASELIST,
+        version=PARSER_VERSION,
+        topic_id=SYNTHETIC_RUN_TOPIC,
+        taxonomy_version="1.0.0",
+        through=None,
+        seed=21,
+        trained_cards=7,
+        sources=tuple(sorted(entry.source_sha256 for entry in entries)),
+        suppressed_at_build=(),
+        model=model,
+    )
+    path = queue_order_model_path(world.data_dir, CASELIST, SYNTHETIC_RUN_TOPIC)
+    path.parent.mkdir(parents=True)
+    path.write_text(model_file_text(model_file), encoding="utf-8")
+    second = landscape(world, "--caselist", CASELIST, "--no-publish")
+    assert second.exit_code == ExitCode.OK, second.output
+    assert _data(second)["review_queue"]["order"] == (
+        "Review queue order: by the local proxy model's confidence, highest first (trained on 7 cards); "
+        "a suggestion is shown at 0.50 or above; nothing is placed by it."
+    )
+    assert (
+        _data(second)["classification"]["cards_by_method"]
+        == _data(first)["classification"]["cards_by_method"]
+    )
+    assert _data(second)["counts"] == _data(first)["counts"]
 
 
 def test_the_command_identifies_each_aff_round_through_t09s_plan_texts(world: SyntheticRun) -> None:

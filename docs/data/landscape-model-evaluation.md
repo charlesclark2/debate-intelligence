@@ -173,3 +173,38 @@ Counted by the breakdown. The hits themselves were read in the operator's termin
 * In the prompt inputs, 1 hit is a taxonomy word.
 * In the cassettes, 332 hits are taxonomy words and 43 tournament-list hits are a team's name.
 * In the repair cassette, 112 hits are taxonomy words and 36 tournament-list hits are a team's name.
+
+### What the hits are (the breakdown's marks)
+
+A second JSON-only run (2026-11-01) counted each hit's marks: whether its words are a JSON key of the
+text, words of the committed taxonomy, or words of the cards that text sent.
+
+| Field | Hits | A JSON key | A taxonomy word | Neither: names in the cards sent |
+|---|---|---|---|---|
+| Prompt inputs, across fields (school) | 47 | 47 | 0 | |
+| Prompt inputs, heading path (tournament list) | 9 | 0 | 0 | **9** |
+| Prompt inputs, tag | 1 | 0 | 1 | |
+| Cassettes, across fields | 7 | 7 | 0 | |
+| Cassettes, model rationale | 66 | 60 | 6 | |
+| Cassettes, taxonomy positions | 318 | 0 | 318 | |
+| Cassettes, cassette metadata | 7 | 0 | 7 | |
+| Cassettes, heading path and tag | 10 | 0 | 1 | **9** (the same as the inputs') |
+| Repair cassette, repaired prompt | 166 | 50 | 110 | **6** (the repaired batch's, again) |
+| Repair cassette, model rationale | 14 | 14 | 0 | |
+| Repair cassette, cassette metadata | 2 | 0 | 2 | |
+| **All** | **647** | **178** | **445** | **24** |
+
+* **The school in every text is a JSON key.** One school on the caselist's list spells the same as a key
+  of the prompt input's JSON, so the scan finds it once per card (47 in the inputs) and in every cassette.
+  It is the same word, not a card's. The model's rationales use it too (60 of their 66 hits); their other
+  6 are taxonomy words, and no rationale hit repeats a name the cards sent.
+* **The team-code word in every cassette is taxonomy vocabulary.** All 13 team-code hits in the cassettes
+  are words of the committed taxonomy: everyday words that are also words of a team's code.
+* **The real names are in the heading paths, 9 of them.** They are on the scan's third list (disclosing
+  teams' schools, codes and tournaments) and are neither a key nor a taxonomy word. The session read them,
+  when the terminal listing reached it, as tournament and team names that headings carry. The scrub
+  takes the disclosing team's own names and the caselist's schools out of a heading, not other teams'
+  tournaments or codes.
+* **The repair cassette holds the repaired batch again.** All 182 of its hits repeat its repaired prompt,
+  6 of them the heading names. The evaluation's scan does not read it.
+

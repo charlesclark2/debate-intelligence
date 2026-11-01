@@ -53,7 +53,7 @@ spec:
         aggregates are byte-identical to today's on synthetic stores and on the Mac's
         hspolicy26 store; by tests shown failing first.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -1626,7 +1626,10 @@ def test_a_dry_runs_scan_refusal_says_it_wrote_no_report_and_names_the_publish_c
         "This dry run wrote no report. Read each hit's line above. If none names a team, publish with "
         f"`{command}`."
     )
-    assert error["message"] == f"the scan found 1 hit(s) not yet accepted (digest {digest}); nothing was published"
+    assert (
+        error["message"]
+        == f"the scan found 1 hit(s) not yet accepted (digest {digest}); nothing was published"
+    )
     assert not (planted_world.data_dir / "reports").exists()
     assert _keys(buckets, DEV_BUCKET) == []
 
@@ -1729,7 +1732,9 @@ def test_the_command_a_dry_run_over_a_restored_copy_names_publishes_from_the_cop
     _place_the_lock(buckets, held_until=None)
     copy = _restored_copy(tmp_path / "copy-root", planted_tags=PLANTED_TOURNAMENT)
 
-    dry = landscape(stale_world, "--caselist", CASELIST, "--restored-copy", str(copy), "--publish", "--dry-run")
+    dry = landscape(
+        stale_world, "--caselist", CASELIST, "--restored-copy", str(copy), "--publish", "--dry-run"
+    )
     assert dry.exit_code == ExitCode.DOMAIN_FAILURE, dry.output
     details = _data_of_failure(dry)
     command = details["publish_command"]

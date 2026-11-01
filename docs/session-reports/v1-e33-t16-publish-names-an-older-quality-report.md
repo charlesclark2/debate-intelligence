@@ -221,9 +221,46 @@ None. The affected set, over two minutes here, is left to the pull request's `ci
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-31
 
 **Notes:**
+
+The coach now sees why a file is refused and what each warning says, without running another command.
+1. **ac1 passes.**
+   * Red over a skeleton: 4 + 3 failed, all at assertions. The `only_its_version_older` case failed
+     at the offline world's bucket assertion, which is exactly the hole the forbidden entry names.
+     The five `stays_missing` cases passed at red because they pin behaviour that is kept.
+   * Green: the node criterion passes (42), and so does the added CLI criterion (10).
+   * All 17 mutants are caught, the PM's six among them. Mutant 4, an older report published when it
+     still reads, is the one that matters most.
+2. **ac2 passes.** A warned file's finding lines are printed as `files check` prints them and are
+   carried in `--json`. t10's refusal test is unchanged.
+3. **The hint's path: accepted as built, and the follow-up is not filed.** The forbidden entry is
+   about what the refusal reports, not about echoing back the command the coach just typed in their
+   own terminal. The hint holds the `.docx` path exactly as typed, as every publish hint has since
+   t05, and nothing is logged or uploaded. The message itself names no path, and mutants 6 and 6b
+   hold that.
+4. **Deviations accepted:**
+   * The codes are documented in `docs/data/built-file-metadata.md`, where the gate's codes already
+     live. The PM's next batch adds `docs/data` to the spec's packages.
+   * The second node criterion for the CLI tests.
+5. **Decisions accepted:**
+   * "Older" means "another version than this build's", with a message that is true either way;
+   * the version is read from the raw JSON before the model, so a report that still reads is refused
+     too;
+   * where MISSING ends (no file, not JSON, no version, a non-text version, or this version but
+     unreadable);
+   * OUTDATED is checked before STALE;
+   * the warnings come from publish's own re-check, the report that is uploaded;
+   * `warnings` per file in `--json`, shaped like `.quality.json`'s results;
+   * the offline world, with no bucket at all, for refusals. The one real upload with warnings
+     stays t15's moto test, which catches 5d.
+6. **Closing checks:** the affected set (88 files) stopped at 41% at its limit with every result so
+   far a pass, and is left to the PR's `ci` under agreement 10. The changed areas and the always-run
+   list (549), ruff, pyright, lint-imports, thin handlers, the doc checks and the specs are clean.
+7. **Merge:** a plain `scripts/task pr` once `ci` is green. No operator step follows. A coach holding
+   a file built before checks-3 now sees `QUALITY_REPORT_OUTDATED` and runs `files check`, as the
+   hint says.

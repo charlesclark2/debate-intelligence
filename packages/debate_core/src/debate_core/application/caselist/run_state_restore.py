@@ -29,9 +29,17 @@ while it reads. The lock object is the only thing it writes to
 the bucket. Every other write goes to the named directory: :class:`RunStateRestore` is given a
 :class:`RunState` and a suppression list over that directory, never over this environment's own.
 
-**The directory** must be new or empty, and must be neither this environment's data directory nor
-inside it nor holding it. A copy restored over another store would mix the two, and its newest
-parsed generation, which a later parse or publish reads, could be the other store's.
+**The directory** must be new or empty, and must be neither data directory, dev's or prod's, nor
+inside one nor holding one, whichever environment the restore runs in (`v1-e40-t24`). A copy restored
+over another store would mix the two, and its newest parsed generation, which a later parse or publish
+reads, could be the other store's; and a restore into the other environment's data directory, while
+that is absent or empty, would leave the marker in a live data directory. The paths are compared real:
+`~`, `..`, a trailing slash and every symbolic link resolved, a directory not made yet through its
+nearest existing parent, and letter case folded, as the Mac's file system folds it. The running
+environment's data directory is the one its settings resolved to; the other's, and the running one's
+without this shell's overrides, are :func:`~debate_core.application.environment_data_dirs.profile_data_dir`'s.
+An environment whose data directory cannot be resolved refuses every directory, since none can be
+checked against it.
 
 **The marker** (`v1-e40-t21`). The restore's first write to the directory is
 :data:`RESTORED_COPY_MARKER` at its root: the environment, the bucket, the time of the restore and the
@@ -39,7 +47,7 @@ build's tag, never a caselist, a school or a path. The annual purge and the land
 leftover copy by it at any depth. It is written whole or not at all, before anything is restored, so a
 restore that stops part-way, a source missing or no room for the sources among the reasons, leaves it
 beside what it restored. A refusal before the lock is taken, or by the lock, writes no directory at
-all. The data directory is refused, so it never holds one.
+all. A data directory is refused, so it never holds one.
 
 **What is logged** is counts. The directory is the operator's own path, and never logged.
 """
@@ -65,6 +73,7 @@ from debate_core.application.caselist.suppression import RecordedSuppressionList
 from debate_core.application.errors import DomainError
 
 __all__ = [
+    "DataDirectory",
     "RESTORED_COPY_MARKER",
     "RESTORE_COMMAND",
     "RestoreTargetRefused",
@@ -93,20 +102,47 @@ class RestoreTargetRefused(DomainError):
         super().__init__(f"nothing was restored: {reason}")
 
 
-def restore_target_refusal(target: Path, *, live_data_dir: Path) -> str | None:
+@dataclass(frozen=True, slots=True)
+class DataDirectory:
+    """One environment's data directory, which a restore never writes into, inside or holds (`v1-e40-t24`)."""
+
+    environment: str
+    path: Path | None
+    """`None` when that environment's settings could not be resolved: then every directory is refused."""
+
+
+def restore_target_refusal(
+    target: Path, *, environment: str, data_dirs: Sequence[DataDirectory]
+) -> str | None:
     """Why a copy may not be restored into `target`, or `None` when it may. Reads, never writes.
 
-    Both paths are compared resolved, so a symbolic link to the data directory is the data
-    directory.
+    `environment` is the one the restore runs in. Every path is compared real (the module docstring), so
+    a symbolic link to a data directory is that data directory.
     """
-    resolved = target.expanduser().resolve()
-    live = live_data_dir.expanduser().resolve()
-    if resolved == live:
-        return "the directory named is this environment's own data directory; name a new, empty one"
-    if live in resolved.parents:
-        return "the directory named is inside this environment's own data directory; name one outside it"
-    if resolved in live.parents:
-        return "the directory named holds this environment's own data directory; name a new, empty one"
+    # Red skeleton: today's behaviour, the running environment's data directory alone.
+    data_dirs = list(data_dirs)[:1]
+    lives: list[tuple[str, Path]] = []
+    for data_dir in data_dirs:
+        if data_dir.path is None:
+            return (
+                f"{data_dir.environment}'s data directory could not be resolved from its settings, so the "
+                f"directory named cannot be checked against it; `DEBATE_ENV={data_dir.environment} "
+                "debate-research config show` says why"
+            )
+        lives.append((data_dir.environment, _real(data_dir.path)))
+    resolved = _real(target)
+    for owner, live in lives:
+        whose = (
+            f"this environment's own data directory ({environment}'s)"
+            if owner == environment
+            else f"{owner}'s data directory, which a restore in {environment} stays out of too"
+        )
+        if _folded(resolved) == _folded(live):
+            return f"the directory named is {whose}; name a new, empty one beside the data directories"
+        if _folded(live) in _folded(resolved).parents:
+            return f"the directory named is inside {whose}; name one beside the data directories, outside it"
+        if _folded(resolved) in _folded(live).parents:
+            return f"the directory named holds {whose}; name a new, empty one beside the data directories"
     if resolved.exists() and not resolved.is_dir():
         return "the path named is not a directory"
     if resolved.is_dir() and any(resolved.iterdir()):
@@ -115,6 +151,16 @@ def restore_target_refusal(target: Path, *, live_data_dir: Path) -> str | None:
             "name a new, empty one"
         )
     return None
+
+
+def _real(path: Path) -> Path:
+    """`path` with `~`, `..` and every symbolic link resolved; a part not made yet is kept as named."""
+    return path.expanduser().resolve()
+
+
+def _folded(path: Path) -> Path:
+    """`path` in one letter case: the Mac's file system finds `PROD` at `prod`."""
+    return path  # Red skeleton: no case folding, as before.
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,9 +203,9 @@ class RunStateRestore:
         state_in: The run's state in the bucket, over a given data directory.
         suppression_in: The suppression list over a given data directory's copy and the bucket's.
         sources_in: The raw sources of a copy restored into a given directory (`--with-sources`).
-        live_data_dir: This environment's own data directory, which is refused.
+        data_dirs: Both environments' data directories, which are refused (`v1-e40-t24`).
         parsed_version: The parsed store's version directory this build reads.
-        environment: This environment's name, for the marker.
+        environment: This environment's name, for the marker and the refusal.
         bucket: The bucket restored from, for the marker.
         build_tag: This build's release tag, for the marker; `None` from a source checkout.
         clock: Now, in UTC: the marker's time of the restore.
@@ -171,7 +217,7 @@ class RunStateRestore:
         state_in: Callable[[Path], RunState],
         suppression_in: Callable[[Path], RecordedSuppressionList],
         sources_in: Callable[[Path], RestoredSources],
-        live_data_dir: Path,
+        data_dirs: Sequence[DataDirectory],
         parsed_version: str,
         environment: str,
         bucket: str,
@@ -181,7 +227,7 @@ class RunStateRestore:
         self._state_in = state_in
         self._suppression_in = suppression_in
         self._sources_in = sources_in
-        self._live_data_dir = Path(live_data_dir)
+        self._data_dirs = tuple(data_dirs)
         self._parsed_version = parsed_version
         self._environment = environment
         self._bucket = bucket
@@ -190,7 +236,7 @@ class RunStateRestore:
 
     def refusal(self, target: Path) -> str | None:
         """Why `target` is refused, or `None`: see :func:`restore_target_refusal`."""
-        return restore_target_refusal(target, live_data_dir=self._live_data_dir)
+        return restore_target_refusal(target, environment=self._environment, data_dirs=self._data_dirs)
 
     async def restore(
         self,

@@ -14,9 +14,10 @@ bucket or arrives with another digest (:mod:`debate_core.application.caselist.ru
 
 Bucket mode only: it holds the bucket's run lock while it restores, so no runner is part-way through its
 week, and it writes nothing to the bucket but the lock.
-Everything else it writes is under the directory named, which must be new or empty and is never this
-environment's data directory. The first is a marker naming the directory as a restored copy
-(`debate-research-restored-copy.json`, `v1-e40-t21`), which the runbooks find leftover copies by.
+Everything else it writes is under the directory named, which must be new or empty and is never either
+environment's data directory, dev's or prod's, nor inside or holding one (`v1-e40-t24`). The first is a
+marker naming the directory as a restored copy (`debate-research-restored-copy.json`, `v1-e40-t21`),
+which the runbooks find leftover copies by.
 What it restores, and what it refuses, is :mod:`debate_core.application.caselist.run_state_restore`'s.
 In prod it also needs `--confirm-prod`, because holding prod's lock would turn away a scheduled run.
 
@@ -56,7 +57,8 @@ def restore_run_state(
     into: Annotated[
         Path,
         typer.Option(
-            "--into", help="A new or empty directory to restore the copy into. Never the data directory."
+            "--into",
+            help=("A new or empty directory for the copy: beside the data directories, never in one."),
         ),
     ],
     caselist: Annotated[
@@ -193,7 +195,10 @@ def _refused(reason: str, settings: Settings) -> CommandFailure:
         message=f"nothing was restored, and the run lock was not taken: {reason}",
         exit_code=ExitCode.DOMAIN_FAILURE,
         details={"environment": settings.environment.value},
-        hint="Name a new or empty directory outside the data directory, for example one beside it.",
+        hint=(
+            "Name a new or empty directory outside both data directories, dev's and prod's, for example "
+            "one beside them."
+        ),
     )
 
 

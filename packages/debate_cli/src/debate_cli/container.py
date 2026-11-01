@@ -149,7 +149,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, cast
 
-from debate_cli.build_info import current_build_info
+from debate_cli.build_info import bundled_config_root, current_build_info
 from debate_cli.exit_codes import codes_exit_as_a_retrieval_failure
 from debate_core.application.aff_assignment import AffAssignmentService
 from debate_core.application.analytic_texts import AnalyticTextService
@@ -182,7 +182,7 @@ from debate_core.application.caselist.run_lock import (
     HolderKind,
 )
 from debate_core.application.caselist.run_state import RunState
-from debate_core.application.caselist.run_state_restore import RunStateRestore
+from debate_core.application.caselist.run_state_restore import DataDirectory, RunStateRestore
 from debate_core.application.caselist.run_state_seed import RunStateSeed
 from debate_core.application.caselist.run_state_sources import RestoredSources
 from debate_core.application.caselist.status_service import CaselistStatusService
@@ -205,6 +205,7 @@ from debate_core.application.caselist_sync import (
     ParseOwed,
     why_no_search_index_stage,
 )
+from debate_core.application.environment_data_dirs import profile_data_dir
 from debate_core.application.evidence_profiles import (
     MODEL_PROFILE_SETTING,
     ConfiguredProfile,
@@ -1712,13 +1713,29 @@ class ServiceContainer:
             state_in=state_in,
             suppression_in=self._suppression_list_in,
             sources_in=sources_in,
-            live_data_dir=self.settings.storage.data_dir,
+            data_dirs=self._data_dirs_a_restore_refuses(),
             parsed_version=DebateDocxParser().parser_version,
             environment=self.settings.environment.value,
             bucket=self.settings.storage.s3.bucket or "",
             build_tag=current_build_info().tag,
             clock=self.clock(),
         )
+
+    def _data_dirs_a_restore_refuses(self) -> list[DataDirectory]:
+        """This run's data directory, then dev's and prod's from their own profiles (`v1-e40-t24`).
+
+        Dev's and prod's are read without this shell's overrides, which are the running environment's
+        alone, so the running environment's appears twice when an override moves it: both are refused.
+        One whose profile cannot be read is `None`, and the restore then refuses every directory.
+        """
+        data_dirs = [DataDirectory(self.settings.environment.value, self.settings.storage.data_dir)]
+        for environment in (Environment.DEV, Environment.PROD):
+            try:
+                path = profile_data_dir(environment, bundled_config_root=bundled_config_root())
+            except ConfigurationError:
+                path = None
+            data_dirs.append(DataDirectory(environment.value, path))
+        return data_dirs
 
     def bucket_run(self) -> BucketRun:
         """What `caselist pull` does around its run for the bucket's run lock and state (`v1-e40-t04`)."""

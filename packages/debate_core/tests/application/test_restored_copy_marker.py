@@ -28,6 +28,7 @@ import pytest
 from debate_core.application.caselist.run_state import RestoreReport, RunState
 from debate_core.application.caselist.run_state_restore import (
     RESTORED_COPY_MARKER,
+    DataDirectory,
     RestoreTargetRefused,
     RunStateRestore,
 )
@@ -92,7 +93,7 @@ class World:
             state_in=self.state_in,
             suppression_in=suppression_in,
             sources_in=sources_in,
-            live_data_dir=self.live,
+            data_dirs=[DataDirectory("dev", self.live)],
             parsed_version="v1",
             environment="dev",
             bucket=BUCKET,

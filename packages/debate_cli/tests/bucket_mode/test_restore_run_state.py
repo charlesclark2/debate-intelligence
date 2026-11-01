@@ -9,6 +9,9 @@ directory. The restore must:
 * write only under the directory named, and leave this environment's data directory as it was;
 * refuse the data directory itself, a directory inside it or holding it, and one that is not empty,
   before it takes the lock;
+* refuse the other environment's data directory the same way, in dev and in prod, whether it is absent,
+  empty or in use, as it refuses its own data directory without this shell's override, and accept a
+  sibling beside them (`v1-e40-t24`);
 * be refused, like any runner, while another holds the lease, and in local mode or on a bucket never
   seeded;
 * leave the marker (`v1-e40-t21`) at the copy's root, naming the environment, the bucket, the time and
@@ -60,6 +63,18 @@ def seeded(world: World) -> Path:
     assert pulled["exit_code"] == ExitCode.OK, pulled
     world.seed()
     return world.data_dir
+
+
+@pytest.fixture(autouse=True)
+def prods_data_directory(world: World) -> Path:
+    """Prod's profile in the world's profile directory, naming a data directory apart from dev's.
+
+    Not made, which is the case `v1-e40-t24` is for; apart, so that a directory holding it holds only
+    it. Without the profile, prod's would be the built-in one under the real home folder.
+    """
+    prod = world.root / "prod-home" / "prod"
+    (world.root / "profiles" / "prod.toml").write_text(f'[storage]\ndata_dir = "{prod}"\n', encoding="utf-8")
+    return prod
 
 
 def restore(world: World, into: Path, *more: str) -> dict[str, Any]:
@@ -359,6 +374,139 @@ def test_a_fresh_machines_data_directory_not_yet_made_is_refused_too(
         refused["error"]["message"]
     )
     assert not fresh.exists()
+
+
+# ------------------------------------------------------------------------------------------------
+# The other environment's data directory, and its own without the override (`v1-e40-t24`)
+# ------------------------------------------------------------------------------------------------
+
+
+def in_state(directory: Path, state: str) -> Path:
+    """`directory` absent, made and empty, or holding a store."""
+    if state != "absent":
+        directory.mkdir(parents=True)
+    if state == "in use":
+        (directory / "debate.sqlite3").write_bytes(b"a live database\n")
+    return directory
+
+
+def a_link_to(directory: Path, tmp_path: Path) -> Path:
+    link = tmp_path / "link-to-the-other-data-directory"
+    link.symlink_to(directory, target_is_directory=True)
+    return link
+
+
+OTHERS: Final[dict[str, tuple[Callable[[Path, Path], Path], str]]] = {
+    "its data directory": (lambda other, tmp_path: other, "is {}'s data directory"),
+    "a directory inside it": (lambda other, tmp_path: other / "copy", "is inside {}'s data directory"),
+    "a directory holding it": (lambda other, tmp_path: other.parent, "holds {}'s data directory"),
+    "a symbolic link to it": (a_link_to, "is {}'s data directory"),
+}
+"""Each directory refused for the other environment's sake, and the reason given, naming it."""
+
+
+def nothing_written(world: World) -> None:
+    assert RUN_LOCK_KEY not in world.object_keys(), "the lock was not taken"
+    assert list(world.root.rglob(RESTORED_COPY_MARKER)) == [], "no marker anywhere"
+
+
+@WITH_AND_WITHOUT_SOURCES
+@pytest.mark.parametrize("state", ["absent", "empty", "in use"])
+@pytest.mark.parametrize("which", sorted(OTHERS))
+def test_a_dev_restore_refuses_prods_data_directory_before_the_lock_is_taken(
+    world: World, tmp_path: Path, prods_data_directory: Path, which: str, state: str, extra: tuple[str, ...]
+) -> None:
+    world.mode("bucket")
+    prod = in_state(prods_data_directory, state)
+    make, reason = OTHERS[which]
+
+    refused = restore(world, make(prod, tmp_path), *extra)
+
+    assert refused["exit_code"] == ExitCode.DOMAIN_FAILURE, refused
+    assert refused["error"]["code"] == "RESTORE_TARGET_REFUSED", refused["error"]
+    assert reason.format("prod") in refused["error"]["message"], refused["error"]["message"]
+    assert "the run lock was not taken" in refused["error"]["message"]
+    assert "outside both data directories, dev's and prod's" in refused["error"]["hint"]
+    assert str(tmp_path) not in json.dumps(refused["error"]), "no path in the refusal"
+    nothing_written(world)
+    assert prod.exists() == (state != "absent")
+    if state != "absent":
+        assert sorted(path.name for path in prod.iterdir()) == (
+            [] if state == "empty" else ["debate.sqlite3"]
+        )
+
+
+@pytest.mark.parametrize("state", ["absent", "in use"])
+@pytest.mark.parametrize("which", sorted(OTHERS))
+def test_a_prod_restore_refuses_devs_data_directory_before_the_lock_is_taken(
+    world: World, tmp_path: Path, which: str, state: str
+) -> None:
+    """The converse, in prod with --confirm-prod. Dev's profile names a data directory apart from prod's."""
+    dev = in_state(world.root / "dev-home" / "dev", state)
+    (world.root / "profiles" / "dev.toml").write_text(f'[storage]\ndata_dir = "{dev}"\n', encoding="utf-8")
+    (world.root / "profiles" / "prod.toml").write_text(
+        f'[storage]\ndata_dir = "{world.root / "prod-data"}"\n'
+        '[storage.s3]\nbucket = "debate-prod-evidence-moto"\nregion = "us-east-1"\n'
+        'aws_profile = "debate-dev-evidence"\n',
+        encoding="utf-8",
+    )
+    world.monkeypatch.setenv("DEBATE_ENV", "prod")
+    for name in ("DEBATE_STORAGE__DATA_DIR", "DEBATE_CASELIST__API_BASE_URL"):
+        world.monkeypatch.delenv(name)
+    world.mode("bucket")
+    make, reason = OTHERS[which]
+
+    refused = restore(world, make(dev, tmp_path), "--confirm-prod")
+
+    assert refused["error"]["code"] == "RESTORE_TARGET_REFUSED", refused["error"]
+    assert reason.format("dev") in refused["error"]["message"], refused["error"]["message"]
+    assert "which a restore in prod stays out of too" in refused["error"]["message"]
+    nothing_written(world)
+    assert dev.exists() == (state != "absent")
+
+
+def test_its_own_data_directory_is_refused_though_this_shell_points_elsewhere(
+    world: World, tmp_path: Path
+) -> None:
+    """Dev's profile names `data`; this shell's override, another. The profile's is still dev's."""
+    world.mode("bucket")
+    world.use(tmp_path / "an-override")
+
+    refused = restore(world, tmp_path / "data")
+
+    assert refused["error"]["code"] == "RESTORE_TARGET_REFUSED", refused["error"]
+    assert "is this environment's own data directory (dev's)" in refused["error"]["message"]
+    nothing_written(world)
+
+
+def test_a_prod_profile_that_cannot_be_read_refuses_every_directory(world: World, tmp_path: Path) -> None:
+    """Prod's data directory is not known, so no directory can be shown to be outside it."""
+    world.mode("bucket")
+    (world.root / "profiles" / "prod.toml").write_text("[storage\n", encoding="utf-8")
+
+    refused = restore(world, tmp_path / "copy")
+
+    assert refused["error"]["code"] == "RESTORE_TARGET_REFUSED", refused["error"]
+    assert "prod's data directory could not be resolved from its settings" in refused["error"]["message"]
+    nothing_written(world)
+
+
+@pytest.mark.parametrize("beside", ["dev's", "prod's"])
+def test_a_sibling_beside_a_data_directory_is_restored_into(
+    world: World, tmp_path: Path, prods_data_directory: Path, beside: str
+) -> None:
+    """Named like the data directory it sits beside, as the runbooks name theirs: a prefix, not a parent."""
+    live = seeded(world)
+    prods_data_directory.parent.mkdir()
+    near = live if beside == "dev's" else prods_data_directory
+    copy = near.parent / f"{near.name}-journey-copy"
+
+    restored = restore(world, copy)
+
+    assert restored["exit_code"] == ExitCode.OK, restored
+    assert (copy / RESTORED_COPY_MARKER).is_file()
+    assert not prods_data_directory.exists()
+    assert list(live.rglob(RESTORED_COPY_MARKER)) == []
 
 
 # ------------------------------------------------------------------------------------------------

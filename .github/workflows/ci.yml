@@ -24,7 +24,9 @@
 #     part is not a list of directories: tests/pytest_plugins/run_in_parts.py deals every test file's
 #     tests round the parts, so the parts are level without anyone balancing them and no part can
 #     be forgotten. tests/scripts/test_ci_workflow_test_job.py collects every part and proves that
-#     together they are exactly the unsplit selection.
+#     together they are exactly the unsplit selection. That proof collects the whole suite nine times,
+#     so it runs in the `partition-proof` job, on every push and on a pull request that changes what
+#     it proves, and the parts leave its `partition_proof` marker out (v1-e41-t15).
 #   * A pull request into dev runs the tests its changes reach (v1-e01-t38): scripts/ci_test_selection.py
 #     reads scripts/affected_tests.py's selection against the pull request's base commit, always-run
 #     list included, and the parts deal that list. Every other run is the whole default selection: a
@@ -32,6 +34,9 @@
 #     into dev that changes shared test ground (this file among it), whose base is not in the
 #     checkout, or whose selection fails or comes back empty. It fails toward more tests, never
 #     fewer, and the job summary says how many test files ran and, for the whole selection, why.
+#     The `test-selection` job chooses once and hands the choice to every part (v1-e41-t15). When it
+#     chooses no test, which only ROADMAP.md and docs/README.md alone do (the bot's refresh pull
+#     request, and the run it dispatches on its branch), the parts are skipped and `ci` accepts it.
 #     The push run on dev is the whole selection, and the dev pre-release waits for it, so a test the
 #     selection missed fails before any release; a red push run on dev is fixed by the next pull
 #     request before anything else merges (working agreement 10).

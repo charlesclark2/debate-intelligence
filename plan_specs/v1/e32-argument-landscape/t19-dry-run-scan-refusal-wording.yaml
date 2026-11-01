@@ -39,7 +39,7 @@ spec:
         --dry-run and with --accept-scan-hits and the digest, in the panel and the JSON; a
         publish refused by the scan reads as before; tests shown failing first.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

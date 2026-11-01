@@ -1,4 +1,4 @@
-"""Write the test files one `test` part of ci.yml runs, and say why in the job summary (v1-e01-t38).
+"""Choose the test files ci.yml's `test` parts run, and say why in the job summary (v1-e01-t38).
 
 A pull request into dev runs the tests its changes reach: `scripts/affected_tests.py`'s selection
 (v1-e01-t28), read against the pull request's base commit, with its always-run list and its
@@ -11,18 +11,28 @@ whole-selection rule for shared test ground. Every other run is the whole defaul
 * and, on a pull request into dev, a selection that names the whole selection, a base commit that
   is not in the checkout, a selection that fails, or one that comes back empty.
 
-It fails toward more tests, never fewer. The output file holds one test file per line, for pytest
-to read as `@FILE`. For the whole selection it is empty: pytest given no paths runs every path in
-`testpaths`, which is exactly the command the parts ran before this task. If this script itself
-cannot run, the workflow step empties the file, so a crash here is also the whole selection.
+One change runs no test at all (v1-e41-t15): ROADMAP.md and docs/README.md alone, which
+refresh-generated-files.yml regenerates from the tree. The tests that read such files read
+fixtures, and ci.yml's spec-validate checks the real files' links and descriptions on every run.
+The bot's pull request is opened with the workflow token, which starts no pull_request run, so the
+bot dispatches ci on its branch; that run is compared with origin/dev, and it too runs no test when
+the branch changes only those files. Until then each refresh pull request ran all eight parts.
 
-Each part runs this for itself and deals the same list round the parts (run_in_parts.py), so the
-parts together are exactly the selection; tests/scripts/test_ci_workflow_test_job.py proves it.
-Nothing here reads a secret or uses the network: the base commit comes with the checkout.
+It fails toward more tests, never fewer. The choice is written in `$GITHUB_OUTPUT`'s format:
+`run_parts`, whether the parts run at all, and `test_files`, one test file per line, for pytest to
+read as `@FILE`. For the whole selection the list is empty: pytest given no paths runs every path
+in `testpaths`. If this script itself cannot run, the workflow step hands the parts the whole
+selection, so a crash here is also the whole selection.
 
-Usage, as ci.yml's `test` job runs it:
+ci.yml's `test-selection` job runs this once and hands the choice to every part, which deals the
+same list round the parts (run_in_parts.py), so the parts together are exactly the selection;
+tests/scripts/test_ci_workflow_test_job.py proves it. Until v1-e41-t15 every part ran this for
+itself, 17 to 33 seconds eight times over. Nothing here reads a secret or uses the network: the
+base commit and origin/dev come with the checkout.
+
+Usage, as ci.yml's `test-selection` job runs it:
   python scripts/ci_test_selection.py --event pull_request --base-branch dev --base-sha SHA \\
-      --ref-name 123/merge --output selection.txt --summary "$GITHUB_STEP_SUMMARY"
+      --ref-name 123/merge --outputs outputs.txt --summary "$GITHUB_STEP_SUMMARY"
 """
 
 from __future__ import annotations
@@ -38,24 +48,49 @@ import affected_tests
 
 # The one target branch whose pull requests run only the tests their changes reach.
 AFFECTED_SET_BRANCH = "dev"
+# What refresh-generated-files.yml regenerates, and the branch it pushes them to (v1-e01-t16).
+GENERATED_FILES = frozenset({"ROADMAP.md", "docs/README.md"})
+GENERATED_FILES_BRANCH = "bot/refresh-generated-files"
+# The parts read `test_files` from an environment variable, and Linux refuses one over 128 KiB.
+# 650 test files name about 42 KB.
+LONGEST_LIST_FOR_THE_PARTS = 100_000
 
 
 @dataclass(frozen=True)
 class Choice:
-    """The test files to run, or None for the whole default selection, and why."""
+    """The test files to run, None for the whole default selection or none at all, and why."""
 
     tests: tuple[str, ...] | None
     reason: str
     total: int = 0
+
+    @property
+    def runs_parts(self) -> bool:
+        return self.tests != ()
 
 
 def whole(reason: str) -> Choice:
     return Choice(None, reason)
 
 
+def nothing(reason: str) -> Choice:
+    return Choice((), reason)
+
+
+def only_generated_files(changes: list[affected_tests.Change]) -> bool:
+    """Whether the changes are regenerated generated files and nothing else; deleting one is not."""
+    return bool(changes) and all(change.path in GENERATED_FILES and not change.deleted for change in changes)
+
+
 def choose(root: Path, event: str, base_branch: str, base_sha: str, ref_name: str) -> Choice:
+    return handed_to_the_parts(chosen(root, event, base_branch, base_sha, ref_name))
+
+
+def chosen(root: Path, event: str, base_branch: str, base_sha: str, ref_name: str) -> Choice:
     if event == "push":
         return whole(f"a push to {ref_name or 'a branch'} runs the whole selection")
+    if event == "workflow_dispatch" and ref_name == GENERATED_FILES_BRANCH:
+        return dispatched_on_the_generated_files_branch(root)
     if event != "pull_request":
         return whole(f"a {event or 'run with no event name'} runs the whole selection")
     if base_branch != AFFECTED_SET_BRANCH:
@@ -69,6 +104,8 @@ def choose(root: Path, event: str, base_branch: str, base_sha: str, ref_name: st
         )
     try:
         changes = affected_tests.changed_files(root, base_sha, "HEAD", None)
+        if only_generated_files(changes):
+            return nothing("the pull request changes only the generated files")
         selection = affected_tests.select(affected_tests.Tree.working(root), changes)
     except (Exception, SystemExit) as error:  # affected_tests stops with SystemExit when git fails
         return whole(f"the selection failed ({error})")
@@ -84,6 +121,32 @@ def choose(root: Path, event: str, base_branch: str, base_sha: str, ref_name: st
     )
 
 
+def dispatched_on_the_generated_files_branch(root: Path) -> Choice:
+    """The run refresh-generated-files.yml dispatches for its pull request, which no pull_request run
+    checks: what the branch changes since it left dev, whatever its last commit did."""
+    base = f"origin/{AFFECTED_SET_BRANCH}"
+    try:
+        changes = affected_tests.changed_files(root, base, "HEAD", None)
+    except (Exception, SystemExit) as error:
+        return whole(f"{GENERATED_FILES_BRANCH} could not be compared with {base} ({error})")
+    if only_generated_files(changes):
+        return nothing(f"{GENERATED_FILES_BRANCH} changes only the generated files")
+    return whole(
+        f"{GENERATED_FILES_BRANCH} changes more than the generated files, "
+        "and a dispatch runs the whole selection"
+    )
+
+
+def handed_to_the_parts(choice: Choice) -> Choice:
+    """The choice, or the whole selection when its list is too long for the parts to be handed."""
+    if (
+        choice.tests
+        and len("".join(f"{test}\n" for test in choice.tests).encode()) > LONGEST_LIST_FOR_THE_PARTS
+    ):
+        return whole(f"the {len(choice.tests)} test files chosen are too long to hand to the parts")
+    return choice
+
+
 def commit_exists(root: Path, revision: str) -> bool:
     completed = subprocess.run(
         ["git", "cat-file", "-e", f"{revision}^{{commit}}"], cwd=root, capture_output=True, check=False
@@ -92,6 +155,12 @@ def commit_exists(root: Path, revision: str) -> bool:
 
 
 def summary(choice: Choice) -> str:
+    if not choice.runs_parts:
+        return (
+            "### Tests: none\n\n"
+            f"No test part runs, because {choice.reason}. spec-validate still checks every document's "
+            "links and descriptions.\n"
+        )
     if choice.tests is None:
         return (
             "### Tests: the whole default selection\n\n"
@@ -111,7 +180,8 @@ def github_outputs(choice: Choice) -> str:
     `test_files`, one test file per line, which is empty for the whole default selection."""
     delimiter = f"test_files_{uuid.uuid4().hex}"
     listing = "".join(f"{test}\n" for test in choice.tests or ())
-    return f"run_parts=true\ntest_files<<{delimiter}\n{listing}{delimiter}\n"
+    run_parts = "true" if choice.runs_parts else "false"
+    return f"run_parts={run_parts}\ntest_files<<{delimiter}\n{listing}{delimiter}\n"
 
 
 def main(argv: list[str] | None = None) -> int:

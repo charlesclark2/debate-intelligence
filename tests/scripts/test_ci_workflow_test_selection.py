@@ -339,7 +339,10 @@ def test_an_empty_selection_when_python_changed_runs_the_whole_selection(tmp_pat
 # --------------------------------------------------------------------------------------------
 
 GENERATED_FILES_BRANCH = "bot/refresh-generated-files"
-REGENERATED: dict[str, str | None] = {"ROADMAP.md": "# Roadmap\n\nOne more task.\n", "docs/README.md": "# Docs\n"}
+REGENERATED: dict[str, str | None] = {
+    "ROADMAP.md": "# Roadmap\n\nOne more task.\n",
+    "docs/README.md": "# Docs\n",
+}
 
 
 def assert_none(ran: Ran, why: str) -> None:
@@ -352,7 +355,11 @@ def assert_none(ran: Ran, why: str) -> None:
 
 @pytest.mark.parametrize(
     "change",
-    [REGENERATED, {"ROADMAP.md": REGENERATED["ROADMAP.md"]}, {"docs/README.md": REGENERATED["docs/README.md"]}],
+    [
+        REGENERATED,
+        {"ROADMAP.md": REGENERATED["ROADMAP.md"]},
+        {"docs/README.md": REGENERATED["docs/README.md"]},
+    ],
     ids=["both", "roadmap", "docs-index"],
 )
 def test_a_pull_request_into_dev_changing_only_the_generated_files_runs_no_test_part(
@@ -388,12 +395,14 @@ def test_the_generated_files_and_anything_else_still_select_tests(
 
     assert ran.run_parts == "true"
     assert ran.tests, "an affected set, not nothing and not the whole selection"
-    assert ALWAYS <= set(ran.tests)
+    assert set(ran.tests) >= ALWAYS
     if f"{CORE}/domain.py" in change:
-        assert THE_DOMAIN_CHANGE_REACHES <= set(ran.tests)
+        assert set(ran.tests) >= THE_DOMAIN_CHANGE_REACHES
 
 
-def test_a_pull_request_into_main_changing_only_the_generated_files_is_still_a_promotion(tmp_path: Path) -> None:
+def test_a_pull_request_into_main_changing_only_the_generated_files_is_still_a_promotion(
+    tmp_path: Path,
+) -> None:
     root = tmp_path / "repo"
     base_sha = pull_request(root, REGENERATED)
 
@@ -482,8 +491,10 @@ def test_an_affected_set_too_long_to_hand_to_the_parts_runs_the_whole_selection(
     monkeypatch.syspath_prepend(str(REPO_ROOT / "scripts"))
     import ci_test_selection
 
-    def affected(count: int) -> object:
-        tests = tuple(f"packages/debate_core/tests/test_a_rather_long_module_name_{n:05}.py" for n in range(count))
+    def affected(count: int) -> ci_test_selection.Choice:
+        tests = tuple(
+            f"packages/debate_core/tests/test_a_rather_long_module_name_{n:05}.py" for n in range(count)
+        )
         return ci_test_selection.Choice(tests, "the tests that 3 changed files reach", 9000)
 
     fits = ci_test_selection.handed_to_the_parts(affected(1000))
@@ -493,4 +504,4 @@ def test_an_affected_set_too_long_to_hand_to_the_parts_runs_the_whole_selection(
     assert "too long to hand to the parts" in too_long.reason
     listing = "".join(f"{test}\n" for test in affected(3000).tests or ())
     assert len(listing.encode()) > ci_test_selection.LONGEST_LIST_FOR_THE_PARTS
-    assert ci_test_selection.LONGEST_LIST_FOR_THE_PARTS < 128 * 1024 - len("TEST_FILES=")
+    assert 128 * 1024 - len("TEST_FILES=") > ci_test_selection.LONGEST_LIST_FOR_THE_PARTS

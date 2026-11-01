@@ -230,7 +230,10 @@ def test_a_part_measures_no_coverage_on_any_event_but_a_push() -> None:
     assert "PYTEST_ADDOPTS" not in CI_WORKFLOW.read_text(encoding="utf-8")
     # Only the path filter and the selection decide whether the job runs: pull requests, pushes and
     # dispatches alike.
-    assert test["if"] == "needs.changes.outputs.python == 'true' && needs.test-selection.outputs.run_parts == 'true'"
+    assert (
+        test["if"]
+        == "needs.changes.outputs.python == 'true' && needs.test-selection.outputs.run_parts == 'true'"
+    )
     # Exactly one pytest step runs on any event, and every step that has to do with coverage runs on
     # a push alone.
     pytest_steps = [step for step in test["steps"] if " pytest " in step.get("run", "")]

@@ -38,7 +38,6 @@ from typing import Any
 
 import pytest
 import yaml
-
 from tests.scripts.test_ci_workflow_site_changes import (
     DISPATCH,
     PULL_REQUEST_INTO_DEV,
@@ -123,7 +122,11 @@ def test_the_selection_job_hands_on_its_steps_answer_and_every_part_reads_it() -
     }
     test = jobs()["test"]
     assert sorted(test["needs"]) == sorted(["changes", SELECTION_JOB])
-    [write_down] = [step for step in test["steps"] if SELECTION_FILE in step.get("run", "") and " pytest " not in step["run"]]
+    [write_down] = [
+        step
+        for step in test["steps"]
+        if SELECTION_FILE in step.get("run", "") and " pytest " not in step["run"]
+    ]
     assert write_down["env"] == {"TEST_FILES": f"${{{{ needs.{SELECTION_JOB}.outputs.test_files }}}}"}
     pytest_steps = [step for step in test["steps"] if " pytest " in step.get("run", "")]
     assert len(pytest_steps) == 2
@@ -134,7 +137,9 @@ def test_the_selection_job_hands_on_its_steps_answer_and_every_part_reads_it() -
 
 def test_the_selection_job_checks_out_the_history_it_compares_and_holds_no_token() -> None:
     selection = jobs()[SELECTION_JOB]
-    [checkout] = [step for step in selection["steps"] if str(step.get("uses", "")).startswith("actions/checkout@")]
+    [checkout] = [
+        step for step in selection["steps"] if str(step.get("uses", "")).startswith("actions/checkout@")
+    ]
     # A pull request's base commit, and origin/dev for the bot's dispatched run (v1-e41-t15).
     assert checkout["with"] == {"persist-credentials": False, "fetch-depth": 0}
     assert "permissions" not in selection
@@ -170,7 +175,9 @@ TWO_FILES_CHOSEN = (
 )
 
 
-def run_the_selection_step(tmp_path: Path, status: int, outputs: str) -> tuple[subprocess.CompletedProcess[str], dict[str, str]]:
+def run_the_selection_step(
+    tmp_path: Path, status: int, outputs: str
+) -> tuple[subprocess.CompletedProcess[str], dict[str, str]]:
     """The selection step in its own shell, as a runner's default `bash -e` runs it, with `uv`
     standing in for the script: it writes `outputs` where it is told to and exits with `status`.
     Returns the step's result and its outputs, read from `$GITHUB_OUTPUT` as the runner reads them."""
@@ -217,7 +224,9 @@ def run_the_selection_step(tmp_path: Path, status: int, outputs: str) -> tuple[s
 def run_the_part_step(tmp_path: Path, test_files: str) -> str:
     """A part's step that writes down the chosen test files, as `bash -e` runs it; returns the file."""
     [step] = [
-        step for step in jobs()["test"]["steps"] if SELECTION_FILE in step.get("run", "") and " pytest " not in step["run"]
+        step
+        for step in jobs()["test"]["steps"]
+        if SELECTION_FILE in step.get("run", "") and " pytest " not in step["run"]
     ]
     runner_temp = tmp_path / "part-runner-temp"
     runner_temp.mkdir()
@@ -249,7 +258,9 @@ def test_what_the_script_chose_reaches_every_part_as_one_test_file_per_line(tmp_
 
 
 def test_the_whole_selection_reaches_every_part_as_an_empty_file(tmp_path: Path) -> None:
-    _, outputs = run_the_selection_step(tmp_path, status=0, outputs="run_parts=true\ntest_files<<end_x\nend_x\n")
+    _, outputs = run_the_selection_step(
+        tmp_path, status=0, outputs="run_parts=true\ntest_files<<end_x\nend_x\n"
+    )
 
     assert outputs == {"run_parts": "true", "test_files": ""}
     assert run_the_part_step(tmp_path, outputs["test_files"]) == ""
@@ -311,7 +322,9 @@ def test_ci_reads_each_jobs_gates_from_the_jobs_own_condition() -> None:
 
 def every_need_passed() -> dict[str, dict[str, Any]]:
     """`toJSON(needs)` for a run in which every job `ci` needs ran and passed."""
-    needs: dict[str, dict[str, Any]] = {name: {"result": "success", "outputs": {}} for name in jobs()["ci"]["needs"]}
+    needs: dict[str, dict[str, Any]] = {
+        name: {"result": "success", "outputs": {}} for name in jobs()["ci"]["needs"]
+    }
     needs["changes"]["outputs"] = dict.fromkeys(jobs()["changes"]["outputs"], "true")
     needs[SELECTION_JOB]["outputs"] = {"run_parts": "true", "test_files": ""}
     return needs
@@ -370,6 +383,15 @@ def test_ci_fails_when_a_part_failed_or_was_cancelled(tmp_path: Path, result: st
     status, lines = run_ci(tmp_path, needs)
     assert status == 1
     assert verdict_of(lines, "test") == f"FAIL  test: {result}"
+
+
+def test_ci_fails_when_a_part_failed_whatever_its_gates_say(tmp_path: Path) -> None:
+    """A gate that says 'false' excuses a skip, never a failure."""
+    needs = no_tests_chosen()
+    needs["test"] = {"result": "failure", "outputs": {}}
+    status, lines = run_ci(tmp_path, needs)
+    assert status == 1
+    assert verdict_of(lines, "test") == "FAIL  test: failure"
 
 
 def test_ci_fails_when_the_parts_were_skipped_though_tests_were_chosen(tmp_path: Path) -> None:
@@ -439,7 +461,9 @@ def evaluated(text: str, context: Mapping[str, str | None]) -> str | bool | None
     return EXPRESSION.sub(as_text, text)
 
 
-def a_run(event: str, run_id: int, *, pull_request: int | None = None, ref: str = "refs/heads/dev") -> dict[str, str | None]:
+def a_run(
+    event: str, run_id: int, *, pull_request: int | None = None, ref: str = "refs/heads/dev"
+) -> dict[str, str | None]:
     return {
         "github.event_name": event,
         "github.run_id": str(run_id),
@@ -490,7 +514,10 @@ def test_pushes_to_dev_or_main_are_never_cancelled_however_quickly_they_land(bra
 
 
 def test_dispatched_runs_are_never_cancelled() -> None:
-    dispatches = [a_run("workflow_dispatch", run_id, ref="refs/heads/bot/refresh-generated-files") for run_id in (201, 202)]
+    dispatches = [
+        a_run("workflow_dispatch", run_id, ref="refs/heads/bot/refresh-generated-files")
+        for run_id in (201, 202)
+    ]
     assert cancelled(dispatches) == []
 
 
@@ -570,7 +597,9 @@ def test_the_proof_has_a_job_of_its_own_that_runs_its_marked_tests_and_nothing_e
             "test_the_parts_together_are_exactly_an_affected_set_and_each_holds_some_of_the_always_run_list",
         ]
     }
-    markers = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["pytest"]["ini_options"]["markers"]
+    markers = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["pytest"][
+        "ini_options"
+    ]["markers"]
     assert any(marker.startswith(f"{PARTITION_PROOF}:") for marker in markers)
 
 
@@ -584,7 +613,12 @@ def test_the_parts_leave_the_proof_to_its_job() -> None:
 def test_the_proof_runs_on_a_pull_request_that_changes_what_it_proves(path: str) -> None:
     for context in (PULL_REQUEST_INTO_DEV, PULL_REQUEST_INTO_MAIN):
         assert changes_outputs([path], context)[PARTITION_PROOF] == "true", path
-        assert changes_outputs(["packages/debate_core/src/debate_core/__init__.py", path], context)[PARTITION_PROOF] == "true"
+        assert (
+            changes_outputs(["packages/debate_core/src/debate_core/__init__.py", path], context)[
+                PARTITION_PROOF
+            ]
+            == "true"
+        )
 
 
 @pytest.mark.parametrize(

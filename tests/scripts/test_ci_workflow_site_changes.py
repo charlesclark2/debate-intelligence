@@ -383,13 +383,20 @@ def test_the_generated_files_alone_select_no_python_job() -> None:
         outputs = changes_outputs(changed, PULL_REQUEST_INTO_DEV)
         assert outputs["python"] == "false", changed
         assert set(outputs.values()) == {"false"}, outputs
-    assert changes_outputs([*GENERATED_FILES, "docs/process/working-agreements.md"], PULL_REQUEST_INTO_DEV)["python"] == "true"
+    assert (
+        changes_outputs([*GENERATED_FILES, "docs/process/working-agreements.md"], PULL_REQUEST_INTO_DEV)[
+            "python"
+        ]
+        == "true"
+    )
     # The same two files the selection script and the bot's workflow name.
     sys.path.insert(0, str(REPO_ROOT / "scripts"))
     import ci_test_selection
 
     assert sorted(ci_test_selection.GENERATED_FILES) == sorted(GENERATED_FILES)
-    refresh = (REPO_ROOT / ".github" / "workflows" / "refresh-generated-files.yml").read_text(encoding="utf-8")
+    refresh = (REPO_ROOT / ".github" / "workflows" / "refresh-generated-files.yml").read_text(
+        encoding="utf-8"
+    )
     assert "git diff --quiet -- ROADMAP.md docs/README.md" in refresh
     assert yaml.safe_load(refresh)["env"]["BRANCH"] == ci_test_selection.GENERATED_FILES_BRANCH
 

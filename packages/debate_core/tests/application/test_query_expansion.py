@@ -271,12 +271,12 @@ def test_the_committed_taxonomy_resolves_the_spec_spellings_and_typed_variants(
     [
         pytest.param(
             first_argument_with(templates={"uniqueness": [{"text": "{query} now"}]}),
-            ["test-da", "impact"],
+            ["argument test-da has no template for the need impact"],
             id="a need with no templates",
         ),
         pytest.param(
             first_argument_with(templates={"uniqueness": [{"text": "{query} now"}], "impact": []}),
-            ["test-da", "impact"],
+            ["argument test-da has no template for the need impact"],
             id="a need with an empty template list",
         ),
         pytest.param(
@@ -293,11 +293,11 @@ def test_the_committed_taxonomy_resolves_the_spec_spellings_and_typed_variants(
         pytest.param(
             first_argument_with(
                 templates={
-                    "uniqueness": [{"text": "{query} {agenda}"}],
+                    "uniqueness": [{"text": "{query} now"}, {"text": "{agenda} vote"}],
                     "impact": [{"text": "{query} impact"}],
                 }
             ),
-            ["agenda", "variables does not declare"],
+            ["test-da/uniqueness", "'{agenda} vote' names agenda, which variables does not declare"],
             id="a template naming an undeclared variable",
         ),
         pytest.param(

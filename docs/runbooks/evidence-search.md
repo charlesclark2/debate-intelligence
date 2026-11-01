@@ -1600,6 +1600,54 @@ Success looks like the record's JSON, then a sha256. The record applies when its
 is that last line, and its `suppression.entries` is then the list the published index was last
 checked against. Without a record, `aws s3 cp` prints a `404` and the line after it.
 
+## When the record means nothing is rebuilt or published again
+
+`v1-e39-t25`. The record above stops two things from redoing work it already describes.
+
+**The weekly stage skips the rebuild.** A bucket-mode run starts from an empty working copy, into
+which `caselist restore-run-state` brings back the published `manifest.json` and, when it stands
+beside that manifest, `checked-against.json`. The restored manifest names the list the index was first
+built from, so on its own it differs from the bucket's list and the stage would rebuild the same index
+every week, minutes of the run, only to find it identical and not publish it. Now the stage compares
+the sources with the record as well. It skips the rebuild when the record's stores (each version
+directory and occurrence digest), suppression list sha256 and parser version are what the stage would
+build from, and the restored manifest's fingerprint version, format version and provenance limit are
+this build's. The stage's row then reads:
+
+| Stage row | What happened | What to do |
+|---|---|---|
+| `skipped`, `unchanged since <id>, which checked-against.json beside its restored manifest says was checked against these sources, so it is not rebuilt` … `which current.json names: nothing to build or publish` | Nothing changed since the record was written. Nothing was built, and nothing was written to the bucket, not even the lock. | Nothing. |
+
+Any difference rebuilds, as before: a store with new rows, a longer list (the rebuild then writes the
+record again), or another parser. A record naming another manifest's digest is not read here either:
+the stage checks `manifest_sha256` against the restored manifest's own bytes, and rebuilds. The stage's
+`--json` keys are unchanged; the reason says it.
+
+**`tub index publish --newest` on the index `current.json` already names** uploads nothing of the
+index again and never moves the pointer, so no environment's function downloads an unchanged index
+again. It runs the same checks as any publish first (versions, and the gzip object against the
+manifest, so a restored directory without its files is refused as before). Then:
+
+- **What this build of it read differs from what the index is recorded as checked against** (a
+  rebuild on this Mac under a longer list that stopped nothing): it writes `checked-against.json`
+  and nothing else. The table is titled `Search index <id> already current: what it was checked
+  against recorded`; the `--json` result's `written` is the record's key alone, `pointer` is
+  `current.json` as it still is, and one key a publish's result does not have, `recorded`, holds
+  the record and what it replaced.
+- **It is what the index is already recorded as checked against**: it is refused with
+  `SEARCH_INDEX_ALREADY_CURRENT` and writes nothing. That is the end; there is nothing to publish.
+
+On any other index `--newest` publishes as it always has. `--index <directory>` publishes the
+directory it names whole even when `current.json` already names it, as before. Both write through
+the run's lock in bucket mode,
+as `v1-e39-t19`'s record does: a run that lost its lease writes no record, and `tub index publish`
+fails with `RUN_LOCK_LOST`.
+
+**Older builds.** Neither change adds an object or a field: the record is `v1-e39-t19`'s, unchanged,
+and the skip only reads. So `v1.1.0-dev.200`, installed on the Mac, reads a bucket this writes exactly
+as it reads one `v1-e39-t19` wrote. Its own `tub index publish --newest` still republishes the current
+index whole; that is the behaviour this replaces, and it is safe, only wasteful.
+
 ## Moving the index to format 2
 
 `v1-e39-t13` changed the index's format from 1 to 2: its words are stemmed, so `grow` finds

@@ -19,7 +19,12 @@ it lands, are theirs. What is decided here is when each is asked, in the order t
    build's own manifest is computed by: each store's `occurrences_sha256` and the list's `sha256`.
 3. **Build, offline, when they differ** from the newest local index's manifest under
    `<data_dir>/tub-index/`, or when that index was built by other versions or settings
-   (:func:`built_from`). Otherwise the newest local index is the one the stage keeps current.
+   (:func:`built_from`). Otherwise the newest local index is the one the stage keeps current. A
+   manifest a bucket-mode run restored names the sources the index was first built from; when a
+   `checked-against.json` was restored beside it, naming that manifest by its sha256, the stage
+   compares the sources with the record instead (:func:`recorded_beside`, `v1-e39-t25`). So an
+   index the record already says was checked against these sources is not rebuilt every week on
+   the cloud, only to be found identical and not published.
 4. **Publish it, when a session exists and the published `current.json` names another index**, to
    this environment's bucket. Without a session the stage is pending: "built, publish pending". The
    next run with a session finds `current.json` behind and publishes that same index, without a
@@ -78,6 +83,7 @@ reason names a directory by its role.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import shutil
 from collections.abc import Awaitable, Callable, Sequence
@@ -102,12 +108,15 @@ from debate_core.application.search_index_build import (
 )
 from debate_core.application.search_index_publish import (
     ALLOW_SHRINK_FLAG,
+    CHECKED_AGAINST_NAME,
+    CheckedAgainstRecord,
     CurrentSearchIndexUnreadable,
     SearchIndexFilesDamaged,
     SearchIndexPublishService,
     SearchIndexVersionMismatch,
     SearchIndexWouldShrink,
     UnreadableSearchIndexManifest,
+    read_checked_against,
     read_search_index_manifest,
 )
 from debate_core.domain.search_index import (
@@ -131,6 +140,7 @@ __all__ = [
     "built_from",
     "local_indexes",
     "newest_local_index",
+    "recorded_beside",
     "remove_superseded",
     "restored_from_the_bucket",
     "size_warnings",
@@ -173,6 +183,11 @@ class LocalSearchIndex:
     """What its build left out as no card, for an index this run built; `None` for one read back from
     its directory, since the count is not in the manifest (`v1-e39-t12`, PM ruling 2026-10-22)."""
 
+    recorded: CheckedAgainstRecord | None = None
+    """The record beside a restored manifest the stage kept this index for (`v1-e39-t25`), or `None`.
+    `manifest` is then the restored one as of the record (:meth:`CheckedAgainstRecord.applied_to`):
+    what the index was last checked against, so its counts, and any record due, are the record's."""
+
     @property
     def index_id(self) -> str:
         return self.manifest.index_id
@@ -181,6 +196,26 @@ class LocalSearchIndex:
 def restored_from_the_bucket(index: LocalSearchIndex) -> bool:
     """Whether `index` is a published manifest a bucket-mode run restored (:data:`RESTORED_INDEX_MARKER`)."""
     return (index.directory / RESTORED_INDEX_MARKER).exists()
+
+
+def recorded_beside(index: LocalSearchIndex) -> CheckedAgainstRecord | None:
+    """The `checked-against.json` beside `index`'s manifest, when it is a record of that manifest.
+
+    A restore brings it back only beside the manifest it names (`v1-e39-t19`). It is read again here
+    against the manifest's own bytes, by index id and `manifest_sha256`, so that a record left over
+    beside another manifest, or one this build cannot read, is never what an index is kept for.
+    """
+    try:
+        raw = (index.directory / CHECKED_AGAINST_NAME).read_bytes()
+        manifest_sha256 = hashlib.sha256(
+            (index.directory / SEARCH_INDEX_MANIFEST_NAME).read_bytes()
+        ).hexdigest()
+    except OSError:
+        return None
+    record = read_checked_against(raw)
+    if record is None or record.index_id != index.index_id or record.manifest_sha256 != manifest_sha256:
+        return None
+    return record
 
 
 def newest_local_index(out: Path) -> LocalSearchIndex | None:
@@ -479,8 +514,9 @@ class SearchIndexRefresh:
         except Exception as failed:
             return self._failed(f"the index was not built; {_locally(newest)}", failed, newest, login_only)
 
-        # 3. Build when they differ from the newest local index's.
-        current = newest if newest is not None and self._reusable(newest, sources) else None
+        # 3. Build when they differ from the newest local index's, or from its restored record's.
+        current = self._reusable(newest, sources) if newest is not None else None
+        built_now = current is None
         if current is None:
             try:
                 built = await self._builder.build(
@@ -492,8 +528,12 @@ class SearchIndexRefresh:
                 )
             current = LocalSearchIndex(built.directory, built.manifest, built.not_cards)
             seen.built = current
-        built_now = current is not newest
         said = f"built {current.index_id}" if built_now else f"unchanged since {current.index_id}"
+        if current.recorded is not None:
+            said += (
+                f", which {CHECKED_AGAINST_NAME} beside its restored manifest says was checked against these "
+                "sources, so it is not rebuilt"
+            )
         said += f" ({_size_sentence(_counts(current, built=built_now, published=False))})"
         if current.not_cards is not None:
             said += f"; {not_cards_sentence(current.not_cards)}"
@@ -624,26 +664,33 @@ class SearchIndexRefresh:
         if self._reconcile is not None:
             await self._reconcile()
 
-    def _reusable(self, newest: LocalSearchIndex, sources: SearchIndexSources) -> bool:
-        """The newest local index is an index of `sources`, and, where it may be published, whole.
+    def _reusable(self, newest: LocalSearchIndex, sources: SearchIndexSources) -> LocalSearchIndex | None:
+        """The newest local index, when it is an index of `sources` and, where it may be published, whole.
 
         Its files are checked against its manifest before it is reused for a publish: a damaged one
-        would otherwise fail every run's publish from then on, with nothing to rebuild it.
+        would otherwise fail every run's publish from then on, with nothing to rebuild it. A restored
+        manifest that is not of `sources` is kept when the record restored beside it is
+        (:func:`recorded_beside`, `v1-e39-t25`), as of that record; `None` means build.
         """
-        if not built_from(
-            newest.manifest,
-            sources,
-            parser_version=self._parser_version,
-            provenance_limit=self._provenance_limit,
-        ):
-            return False
+        if not self._built_from(newest.manifest, sources):
+            recorded = recorded_beside(newest) if restored_from_the_bucket(newest) else None
+            if recorded is None or not self._built_from(
+                checked := recorded.applied_to(newest.manifest), sources
+            ):
+                return None
+            return replace(newest, manifest=checked, recorded=recorded)
         if self._publisher is None or restored_from_the_bucket(newest):
-            return True
+            return newest
         try:
             self._publisher.check(newest.directory)
         except (SearchIndexFilesDamaged, SearchIndexVersionMismatch, UnreadableSearchIndexManifest):
-            return False
-        return True
+            return None
+        return newest
+
+    def _built_from(self, manifest: SearchIndexManifest, sources: SearchIndexSources) -> bool:
+        return built_from(
+            manifest, sources, parser_version=self._parser_version, provenance_limit=self._provenance_limit
+        )
 
     def _pending(self, said: str, why: str) -> str:
         return (

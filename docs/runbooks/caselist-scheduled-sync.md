@@ -1533,6 +1533,13 @@ that index was built by another build than the one on your `PATH`. Or it is the 
 naming a store and two counts: see [The shrink guard](#the-shrink-guard). `--newest` and `--index` are
 refused together; `--index <directory>` publishes one directory you name instead.
 
+**When `current.json` already names the newest index**, as after a rebuild under a longer suppression
+list whose new entries stopped nothing, `--newest` uploads nothing of it again and leaves the pointer
+alone (`v1-e39-t25`). It writes only `checked-against.json`, in a table titled `already current`, or
+it is refused with `SEARCH_INDEX_ALREADY_CURRENT` when that record already says the same. Either way
+the index is published and there is nothing more to do: see the evidence-search runbook's
+[When the record means nothing is rebuilt or published again](evidence-search.md#when-the-record-means-nothing-is-rebuilt-or-published-again).
+
 **An index built without a session read this Mac's copy of the suppression list alone.** That is safe
 while this Mac is the only machine that imports and removes: every removal writes both copies, so
 this Mac's is never behind the bucket's. It is the same condition

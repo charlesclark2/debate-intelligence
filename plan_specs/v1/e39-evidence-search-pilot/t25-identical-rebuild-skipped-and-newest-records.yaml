@@ -44,7 +44,7 @@ spec:
         or refuses, never the object, manifest or pointer, by tests shown failing first
         (object versions counted, as t19 counted them).
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

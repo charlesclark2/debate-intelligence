@@ -83,7 +83,7 @@ spec:
         the registry from it, by an installed-build smoke test; a refused model call exits
         with the non-retryable code, by test.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -1661,7 +1661,7 @@ index whole; that is the behaviour this replaces, and it is safe, only wasteful.
 ## Moving the index to format 2
 
 `v1-e39-t13` changed the index's format from 1 to 2: its words are stemmed, so `grow` finds
-`growing`, and search by passage needs it ([the index's data model](../data/search-index.md#the-schema-format-version-2)).
+`growing`, and search by passage needs it ([the index's data model](../data/search-index.md#the-schema-format-version-3)).
 A function from `v1-e39-t13` on reads both formats; an older one reads format 1 only and refuses a
 format 2 index. So the function goes first and the index second, in this order, once in dev after
 the task merges and once in prod at its promotion. Agreement 11 applies to every block: a dry run or

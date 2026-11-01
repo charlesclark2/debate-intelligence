@@ -376,12 +376,9 @@ def test_a_built_file_still_holding_the_cp_text_slot_is_built_and_warned_naming_
 
     assert result.status is BuildStatus.BUILT and result.quality is not None
     assert result.failing_checks == ()
-    (finding,) = result.quality.findings
-    assert (finding.check, finding.status, finding.section_path) == (
-        QualityCheck.PLACEHOLDERS_REPLACED,
-        CheckStatus.WARN,
-        ("Synthetic pocket", "Synthetic block"),
-    )
+    assert [(one.check, one.status, one.section_path) for one in result.quality.findings] == [
+        (QualityCheck.PLACEHOLDERS_REPLACED, CheckStatus.WARN, ("Synthetic pocket", "Synthetic block"))
+    ]
     first, _ = world.add(SOURCE_ONE)
     out = world.root / "elsewhere"
     result = world.build(world.recipe([{"fingerprint": first.fingerprint}]), out_dir=out)

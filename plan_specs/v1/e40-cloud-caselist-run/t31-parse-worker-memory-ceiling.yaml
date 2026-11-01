@@ -64,7 +64,7 @@ spec:
         own where they can be read and leave them out where they cannot, and offline builds of
         `v1.1.0-dev.251` and `v1.1.0-dev.200` read those details; by tests shown failing first.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

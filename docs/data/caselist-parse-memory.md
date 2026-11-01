@@ -13,8 +13,10 @@ the aggregate rebuild starts. The rebuild then holds every card of the caselist 
 at once, about 0.8 GB more per 250 sources of `hspolicy26`, so the main process alone needs about
 13 GB for the full `hspolicy26` store (a straight line through two measured subsets, not measured
 whole). A whole season's backfile is larger. A memory ceiling on each worker would not have
-prevented the kill of 2026-10-31. The task stopped here, as its PM context asks
-(`docs/session-reports/v1-e40-t31-parse-worker-memory-ceiling.md`).
+prevented the kill of 2026-10-31. The task stopped here, as its PM context asked, and the PM's ruling
+of 2026-11-01 dropped the ceiling: a rebuild that streams the cards is `v1-e40-t36`, and the weekly run
+now records each stage's memory high-water marks
+([caselist-cloud-run.md](../runbooks/caselist-cloud-run.md#the-runs-memory-figures)).
 
 ## Where it was measured
 

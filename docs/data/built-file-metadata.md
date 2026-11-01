@@ -23,6 +23,18 @@ files/<topic>/<side>/<position>/<slug>/<recipe hash, first 12>/
     metadata.json                   what the file is; written last
 ```
 
+**A camp card's camp paths stay on this machine (`v1-e33-t07`).** When a built file holds a camp
+card whose occurrence row carried camp path digests, `files build` also writes
+`<slug>.docx.camp-paths.json` beside the sidecar: `schema_version` 1, `sidecar_sha256` (the SHA-256
+of the sidecar's bytes) and `cards`, each a camp card's `position` and its sorted
+`camp_path_disclosures`, the digest of `openev/<release>/<row path>` of each path its file is at in
+its release. They are not in the sidecar because every earlier build reads the sidecar with a model
+that refuses a key it does not know. `files check`, and the check `files publish` runs before it
+sends anything, give the digests to the sidecar's camp cards when `sidecar_sha256` is the sidecar's,
+and then flag a camp card only when every one of its camp paths is withdrawn, never the same file
+from another release; without the file, a camp card is flagged by any withdrawn path of its source,
+as before. A rebuild with no such card removes the file. `files publish` does not send it.
+
 * `<topic>` and `<position>` are the recipe's ids (kebab-case, as the landscape taxonomy names
   them), `<side>` is `aff`, `neg`, `pro` or `con`, and `<slug>` is the built file's name without
   `.docx`, which `files build` takes from the recipe's file name. A slug is kebab-case, at most 100

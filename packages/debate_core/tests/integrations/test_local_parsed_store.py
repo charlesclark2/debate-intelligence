@@ -19,9 +19,11 @@ from pathlib import Path
 from typing import Final
 
 import pytest
+from pydantic import ValidationError
 
 from debate_core.application.ports.parsed_store import (
     AGGREGATE_NAMES,
+    CampPathRecord,
     DocumentRecord,
     OccurrenceRecord,
     ParsedStore,
@@ -515,16 +517,34 @@ def test_an_occurrence_spans_its_first_to_its_latest_snapshot(
         _occurrence("a" * 64, caselist=caselist, snapshot=snapshot, last_snapshot=last_snapshot)
 
 
-@pytest.mark.parametrize("record", [SourceEntry, DocumentRecord, OccurrenceRecord])
+#: Fields named for a camp path that hold its digest, never the path (`v1-e33-t07`; the PM named them).
+CAMP_PATH_DIGEST_FIELDS = {"camp_path_disclosures", "camp_path_disclosure"}
+
+
+@pytest.mark.parametrize("record", [SourceEntry, DocumentRecord, OccurrenceRecord, CampPathRecord])
 def test_no_record_has_a_field_for_a_path_school_team_tournament_or_round(record: type[StoreRecord]) -> None:
-    """The store never gains a field naming who disclosed what; `docs/data/parsed-card-store.md`."""
+    """The store never gains a field naming who disclosed what; `docs/data/parsed-card-store.md`.
+
+    A camp path's digest is the one exception, and only a field that refuses anything but a digest.
+    """
     named = {
         name
         for name in record.model_fields
         for word in ("path", "school", "team", "tournament", "round", "debater")
         if word in name
     }
-    assert named == set()
+    assert named <= CAMP_PATH_DIGEST_FIELDS
+    if not named:
+        return
+    camp_row = _occurrence("a" * 64, caselist="openev", snapshot="2031-policy", last_snapshot="2031-policy")
+    given = {**camp_row.model_dump(), "occurrence_table_sha256": "b" * 64, "camp_path_disclosure": "c" * 64}
+    fields = {key: given[key] for key in record.model_fields if key in given and key != "record"}
+    record.model_validate(fields)
+    for name in named:
+        path = "openev-512-Synthetic_CP.docx"
+        with pytest.raises(ValidationError) as refused:
+            record.model_validate({**fields, name: (path,) if name.endswith("s") else path})
+        assert {error["loc"][0] for error in refused.value.errors()} == {name}
 
 
 def test_a_stored_document_refuses_to_carry_its_path(parsed: ParsedDocument) -> None:

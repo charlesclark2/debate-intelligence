@@ -135,12 +135,17 @@ class FileBuildRequest:
 
 @dataclass(frozen=True, slots=True)
 class BuiltEvidenceFile:
-    """A built file: the `.docx` bytes, its provenance sidecar, and what the writer warned about."""
+    """A built file: the `.docx` bytes, its provenance sidecar, and what the writer warned about.
+
+    `camp_paths_json` is the file of its camp cards' camp paths, written beside the sidecar
+    (:class:`~debate_core.domain.file_provenance.CampPathSidecar`), or None when no card has one.
+    """
 
     docx: bytes
     manifest: FileProvenanceManifest
     manifest_json: bytes
     warnings: tuple[str, ...] = field(default=())
+    camp_paths_json: bytes | None = None
 
 
 @runtime_checkable

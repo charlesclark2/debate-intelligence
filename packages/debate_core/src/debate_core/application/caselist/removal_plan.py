@@ -274,7 +274,7 @@ from debate_core.application.ports.caselist import CaselistRepository
 from debate_core.application.ports.caselist_source import openev_id_of_inbox_name
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey
 from debate_core.application.ports.evidence_versions import EvidenceVersionStore, ObjectVersion
-from debate_core.application.ports.parsed_store import AGGREGATE_NAMES
+from debate_core.application.ports.parsed_store import REBUILT_NAMES
 from debate_core.application.ports.providers import Clock
 from debate_core.application.ports.suppression import (
     REMOVAL_REASONS,
@@ -2348,7 +2348,7 @@ def _is_parsed_aggregate(key: str, caselist_prefix: str) -> bool:
     if not key.startswith(caselist_prefix):
         return False
     rest = key[len(caselist_prefix) :].split("/")
-    return len(rest) == 2 and rest[1] in AGGREGATE_NAMES
+    return len(rest) == 2 and rest[1] in REBUILT_NAMES
 
 
 def _names_digest(key: str, digest: str) -> bool:

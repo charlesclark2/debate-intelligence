@@ -82,6 +82,7 @@ from debate_core.application.caselist.occurrence_table_guard import (
 from debate_core.application.caselist.parse_sources import (
     DisclosureKey,
     EnumeratedSource,
+    camp_path_digests,
     disclosure_key,
     enumerate_sources,
     is_aggregated,
@@ -619,7 +620,7 @@ class CaselistParseService:
         for placement in placements:
             provenance = placement.card.provenance
             source = held[provenance.source_sha256]
-            for disclosure, first, last in spans[provenance.source_sha256]:
+            for disclosure, first, last, camp_paths in spans[provenance.source_sha256]:
                 rows.append(
                     OccurrenceRecord(
                         caselist=plan.caselist,
@@ -637,6 +638,7 @@ class CaselistParseService:
                         cluster_id=placement.cluster_id,
                         membership=placement.membership,
                         completeness=placement.card.completeness,
+                        camp_path_disclosures=camp_paths,
                     ),
                 )
         ordered = sorted(
@@ -736,18 +738,24 @@ class CaselistParseService:
 # ------------------------------------------------------------------------------------------------
 
 
-def _disclosure_spans(source: EnumeratedSource, state: SuppressionState) -> list[tuple[str | None, str, str]]:
-    """`(disclosure, first snapshot, latest snapshot)` for each live disclosure of `source`.
+def _disclosure_spans(
+    source: EnumeratedSource, state: SuppressionState
+) -> list[tuple[str | None, str, str, tuple[str, ...]]]:
+    """`(disclosure, first snapshot, latest snapshot, camp paths)` for each live disclosure of `source`.
 
     A caselist disclosure is a path, named by its digest: listed in fourteen weekly manifests, it
-    is still one disclosure. A camp file has no disclosure, so each release is its own.
+    is still one disclosure. A camp file has no disclosure, so each release is its own, and carries
+    the camp path digest of each live path of the file in that release (`v1-e33-t07`).
     """
     spans: dict[DisclosureKey, tuple[str, str]] = {}
     for disclosed in live_disclosures(source, state):
         key = disclosure_key(source, disclosed)
         first, last = spans.get(key, (disclosed.snapshot, disclosed.snapshot))
         spans[key] = (min(first, disclosed.snapshot), max(last, disclosed.snapshot))
-    return [(disclosure, first, last) for (disclosure, _), (first, last) in spans.items()]
+    return [
+        (disclosure, first, last, camp_path_digests(source, state, first))
+        for (disclosure, _), (first, last) in spans.items()
+    ]
 
 
 def _index_rows(

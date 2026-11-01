@@ -16,10 +16,11 @@ recorded digest with the file's.
 
 ## Aggregates last
 
-The per-source files go first. `index.jsonl`, `failures.jsonl` and `occurrences.jsonl` follow only
-when every per-source file is confirmed in the bucket, so the bucket never holds an index naming a
-file it does not hold. An aggregate the bucket holds with other bytes is replaced: it is rebuilt by
-every run. A per-source file the bucket holds with other bytes is a failure and is left alone, as
+The per-source files go first. `index.jsonl`, `failures.jsonl` and `occurrences.jsonl`, and the camp
+store's `camp_paths.jsonl` (`v1-e33-t07`), follow only when every per-source file is confirmed in
+the bucket, so the bucket never holds an index naming a file it does not hold. An aggregate the
+bucket holds with other bytes is replaced: it is rebuilt by every run. A per-source file the bucket
+holds with other bytes is a failure and is left alone, as
 `caselist publish` leaves a mismatched source: within one parser and profile version the same
 bytes always parse to the same file, so a difference means something a person should look at.
 
@@ -83,7 +84,7 @@ from debate_core.application.errors import (
     reported_error_message,
 )
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey
-from debate_core.application.ports.parsed_store import AGGREGATE_NAMES, OCCURRENCES_NAME, PARSED_PREFIX
+from debate_core.application.ports.parsed_store import OCCURRENCES_NAME, PARSED_PREFIX, REBUILT_NAMES
 from debate_core.application.ports.suppression import SuppressionList, SuppressionState
 
 __all__ = ["ParsedObjectOutcome", "ParsedPublishReport", "ParsedStorePublisher"]
@@ -195,7 +196,7 @@ class ParsedStorePublisher:
         await self._refuse_a_newer_table(caselist, version, local_keys, listed)
         sources = [key for key in local_keys if key.split("/")[2:3] == [_SOURCE_SEGMENT]]
         aggregates = [
-            key for key in local_keys if key.rsplit("/", 1)[-1] in AGGREGATE_NAMES and key.count("/") == 2
+            key for key in local_keys if key.rsplit("/", 1)[-1] in REBUILT_NAMES and key.count("/") == 2
         ]
 
         outcomes = list(

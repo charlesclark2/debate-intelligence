@@ -28,11 +28,12 @@ Counts are worked out by hand from the recipe each test writes. Every school and
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import zipfile
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, Final
 from xml.etree import ElementTree
@@ -40,6 +41,7 @@ from xml.etree import ElementTree
 import pytest
 import yaml
 
+from debate_core.application.caselist.suppression import RecordedSuppressionList
 from debate_core.application.file_build_service import (
     BuildFileRequest,
     BuildRefusalCode,
@@ -57,8 +59,14 @@ from debate_core.application.ports.evidence_file_writer import (
     FileBuildRequest,
 )
 from debate_core.application.ports.parsed_store import OccurrenceRecord, version_directory_name
-from debate_core.domain.caselist import Side
-from debate_core.domain.file_provenance import provenance_sidecar_name
+from debate_core.application.ports.suppression import (
+    ReasonCode,
+    SuppressionAction,
+    SuppressionEntry,
+    camp_path_disclosure,
+)
+from debate_core.domain.caselist import CampFile, Event, Side
+from debate_core.domain.file_provenance import camp_path_sidecar_name, provenance_sidecar_name
 from debate_core.evidence.file_checks.report import CheckStatus, QualityCheck
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
 from debate_core.evidence.style_profile_loader import load_style_profile
@@ -68,7 +76,7 @@ from debate_core.testing.docx_builder import build_docx, paragraph_xml, run_xml
 from debate_core.testing.fakes.caselist import InMemoryCaselistRepository
 from debate_core.testing.fakes.parsed_store import InMemoryParsedStore
 from debate_core.testing.fakes.persistence import InMemorySnapshotStore
-from debate_core.testing.fakes.suppression import empty_suppression_list
+from debate_core.testing.fakes.suppression import InMemoryAppendOnlyRecord
 from debate_core.testing.file_builder import (
     DEFAULT_DISCLOSURE,
     FileBuilderWorld,
@@ -186,6 +194,9 @@ class World:
     caselists: InMemoryCaselistRepository = field(default_factory=InMemoryCaselistRepository)
     rows: list[OccurrenceRecord] = field(default_factory=lambda: [])
     events: list[str] = field(default_factory=lambda: [])
+    suppressions: InMemoryAppendOnlyRecord = field(
+        default_factory=lambda: InMemoryAppendOnlyRecord("suppression list")
+    )
 
     def add(
         self, content: bytes, disclosure: SyntheticDisclosure | None = DEFAULT_DISCLOSURE
@@ -216,7 +227,7 @@ class World:
         quality_blobs: InMemorySnapshotStore | None = None,
     ) -> tuple[FileBuildService, RecordingQuality]:
         blobs = blobs if blobs is not None else self.files.snapshots
-        suppression = empty_suppression_list()
+        suppression = RecordedSuppressionList(self.suppressions)
         quality = RecordingQuality(
             FileQualityService(
                 parser=PARSER,
@@ -246,13 +257,14 @@ class World:
         name: str = "synthetic-file",
         status: str = "ready",
         pins: Mapping[str, Any] | None = None,
+        caselist: str = CASELIST,
     ) -> Path:
         document = {
             "schema_version": 1,
             "title": "Synthetic file",
             "topic": "synthetic-topic",
             "format": "POLICY",
-            "caselist": CASELIST,
+            "caselist": caselist,
             "position": "synthetic-position",
             "side": "AFF",
             "fingerprint_version": FINGERPRINT_VERSION,
@@ -898,3 +910,166 @@ def test_nothing_a_result_holds_names_a_school_or_team(world: World) -> None:
     shown = repr(result)
     for identity in ("Maple Grove", "QX", "Riverbend"):
         assert identity not in shown
+
+
+# ------------------------------------------------------------------------------------------------
+# A camp card's camp paths, from the occurrence row to `files check` (`v1-e33-t07` ac3)
+# ------------------------------------------------------------------------------------------------
+
+#: One synthetic camp file released twice, each release at its own row path.
+CAMP_RELEASES: Final = {
+    "2031-policy": "openev-512-Synthetic_Grid_CP.docx",
+    "2032-policy": "openev-640-Synthetic_Grid_CP.docx",
+}
+
+
+def add_camp_file(world: World, content: bytes) -> list[SourceCard]:
+    """`content` released in both releases: a row per card per release, carrying that release's camp path."""
+    cards = list(asyncio.run(world.files.add_source(content, disclosure=None)))
+    rows: list[OccurrenceRecord] = []
+    for release, path in CAMP_RELEASES.items():
+        rows += [
+            OccurrenceRecord.model_validate(
+                {
+                    **card.occurrence.model_dump(),
+                    "caselist": "openev",
+                    "snapshot": release,
+                    "last_snapshot": release,
+                    "disclosure": None,
+                    "camp": "Lanternfield Institute",
+                    "camp_path_disclosures": (camp_path_disclosure(release, path),),
+                }
+            )
+            for card in cards
+        ]
+        record = CampFile(
+            source_sha256=cards[0].occurrence.source_sha256,
+            camp="Lanternfield Institute",
+            year=int(release[:4]),
+            event=Event.POLICY,
+            file_title="Synthetic Grid CP",
+            snapshot=date(2026, 7, 30),
+        )
+        asyncio.run(world.caselists.record_camp_file(record))
+    asyncio.run(
+        world.store.write_aggregates("openev", PARSER.parser_version, index=(), failures=(), occurrences=rows)
+    )
+    return cards
+
+
+def camp_recipe(world: World) -> Path:
+    """The file's two cards, the first pinned in 2031's release and the second in 2032's."""
+    first, second = add_camp_file(world, SOURCE_ONE)
+    return world.recipe(
+        [
+            {
+                "fingerprint": card.fingerprint,
+                "pin": {
+                    "caselist": "openev",
+                    "source_sha256": card.occurrence.source_sha256,
+                    "element_index": card.occurrence.first_element_index,
+                    "snapshot": release,
+                },
+            }
+            for card, release in ((first, "2031-policy"), (second, "2032-policy"))
+        ],
+        caselist="openev",
+    )
+
+
+def withdraw(world: World, sha: str, release: str) -> None:
+    """A camp path withdrawn from one release after the file was built (`v1-e30-t14`)."""
+    entry = SuppressionEntry(
+        action=SuppressionAction.SUPPRESS,
+        sha256=sha,
+        disclosure=camp_path_disclosure(release, CAMP_RELEASES[release]),
+        recorded_at=datetime(2026, 10, 30, tzinfo=UTC),
+        reason=ReasonCode.REQUESTED_BY_CAMP,
+        request_id="RM-2026-09",
+    )
+    world.suppressions.lines.append(entry.to_line())
+
+
+def suppression_results(world: World, docx: Path) -> list[tuple[int | None, CheckStatus, str]]:
+    service, _ = world.service()
+    checked = asyncio.run(service.check(docx)).checked
+    return [
+        (result.card_position, result.status, result.message)
+        for result in checked.report.results
+        if result.check is QualityCheck.SUPPRESSION
+    ]
+
+
+def test_a_build_with_camp_cards_writes_their_camp_paths_beside_the_sidecar(world: World) -> None:
+    result = world.build(camp_recipe(world))
+    assert result.status is BuildStatus.BUILT
+    assert written(world.root) == [
+        "built/synthetic-topic/synthetic-file.docx",
+        "built/synthetic-topic/synthetic-file.docx.camp-paths.json",
+        "built/synthetic-topic/synthetic-file.docx.provenance.json",
+        "built/synthetic-topic/synthetic-file.docx.quality.json",
+        "built/synthetic-topic/synthetic-file.docx.quality.md",
+    ]
+    assert result.files is not None
+    sidecar = result.files.provenance.read_bytes()
+    camp_paths = json.loads(
+        result.files.docx.with_name(camp_path_sidecar_name(result.files.docx.name)).read_text(
+            encoding="utf-8"
+        )
+    )
+    assert camp_paths["sidecar_sha256"] == hashlib.sha256(sidecar).hexdigest()
+    assert camp_paths["cards"] == [
+        {
+            "position": 1,
+            "camp_path_disclosures": [camp_path_disclosure("2031-policy", CAMP_RELEASES["2031-policy"])],
+        },
+        {
+            "position": 2,
+            "camp_path_disclosures": [camp_path_disclosure("2032-policy", CAMP_RELEASES["2032-policy"])],
+        },
+    ]
+
+
+def test_files_check_flags_exactly_the_camp_card_whose_camp_path_was_withdrawn(world: World) -> None:
+    result = world.build(camp_recipe(world))
+    assert result.files is not None and result.status is BuildStatus.BUILT
+    withdraw(world, _camp_source(world), "2032-policy")
+    assert suppression_results(world, result.files.docx) == [
+        (1, CheckStatus.PASS, "no suppression in force covers the card"),
+        (2, CheckStatus.FAIL, "the card's camp path is withdrawn from its release (request RM-2026-09)"),
+    ]
+
+
+def test_files_check_without_the_camp_paths_file_flags_every_camp_card_of_the_source_as_before(
+    world: World,
+) -> None:
+    result = world.build(camp_recipe(world))
+    assert result.files is not None
+    result.files.docx.with_name(camp_path_sidecar_name(result.files.docx.name)).unlink()
+    withdraw(world, _camp_source(world), "2032-policy")
+    assert [(position, status) for position, status, _ in suppression_results(world, result.files.docx)] == [
+        (1, CheckStatus.FAIL),
+        (2, CheckStatus.FAIL),
+    ]
+
+
+def test_a_rebuild_with_no_camp_path_leaves_no_camp_paths_file_from_the_build_before(world: World) -> None:
+    result = world.build(camp_recipe(world))
+    assert result.files is not None
+    stale = result.files.docx.with_name(camp_path_sidecar_name(result.files.docx.name))
+    assert stale.is_file()
+    rows = [
+        row.evolve(camp_path_disclosures=())
+        for row in asyncio.run(world.store.read_occurrences("openev", PARSER.parser_version)) or ()
+    ]
+    asyncio.run(
+        world.store.write_aggregates("openev", PARSER.parser_version, index=(), failures=(), occurrences=rows)
+    )
+    assert world.build(world.root / "recipes" / "synthetic-file.yaml").status is BuildStatus.BUILT
+    assert not stale.exists()
+
+
+def _camp_source(world: World) -> str:
+    rows = asyncio.run(world.store.read_occurrences("openev", PARSER.parser_version))
+    assert rows
+    return rows[0].source_sha256

@@ -37,6 +37,7 @@ from debate_core.application.ports.suppression import (
     ReasonCode,
     SuppressionAction,
     SuppressionEntry,
+    camp_path_disclosure,
     disclosure_digest,
 )
 from debate_core.domain.card_occurrence import ClusterMembership
@@ -1144,9 +1145,19 @@ CAMP_HEADER = HEADER.replace("caselist: hsld26", "caselist: openev")
 
 
 def camp_occurrence(
-    fingerprint: str, source: str, element: int, *, release: str = "2031-policy", camp: str | None = CAMP
+    fingerprint: str,
+    source: str,
+    element: int,
+    *,
+    release: str = "2031-policy",
+    camp: str | None = CAMP,
+    paths: Sequence[str] = (),
 ) -> OccurrenceRecord:
-    """A camp file's card as the parse pipeline records it: one row per release, no disclosure."""
+    """A camp file's card as the parse pipeline records it: one row per release, no disclosure.
+
+    `paths` are the release-manifest row paths the file is at in that release; the row carries their
+    camp path digests (`v1-e33-t07`). None, as a row read from a table written before them.
+    """
     return OccurrenceRecord(
         caselist=OPENEV,
         snapshot=release,
@@ -1163,6 +1174,7 @@ def camp_occurrence(
         cluster_id=fingerprint,
         membership=ClusterMembership.UNLINKED,
         completeness=CardCompleteness.FULL,
+        camp_path_disclosures=tuple(sorted(camp_path_disclosure(release, path) for path in paths)),
     )
 
 
@@ -1362,6 +1374,120 @@ def test_resolve_a_caselist_pin_in_a_camp_recipe_reads_the_caselist_it_names() -
     pin = {"caselist": CASELIST, "source_sha256": SOURCE_1, "element_index": 5}
     resolved = built.resolve(recipe_text(card(CARD_A, pin=pin), card(CARD_B), header=CAMP_HEADER))
     assert (chosen(resolved), resolved.errors) == ([(SOURCE_1, 5, "PINNED"), (SOURCE_2, 1, "AUTO")], ())
+
+
+# A camp path withdrawn after the table was built (`v1-e33-t07`)
+
+CAMP_PATH = "openev-512-Synthetic_Grid_CP.docx"
+SECOND_CAMP_PATH = "openev-513-Synthetic_Grid_CP.docx"
+LATER_CAMP_PATH = "openev-640-Synthetic_Grid_CP.docx"
+
+
+def withdraw_camp_path(source: str, release: str, path: str, *, at: int = 2) -> SuppressionEntry:
+    """What a removal records when it withdraws one camp path of a file from one release (`v1-e30-t14`)."""
+    return SuppressionEntry(
+        action=SuppressionAction.SUPPRESS,
+        sha256=source,
+        disclosure=camp_path_disclosure(release, path),
+        recorded_at=datetime(2026, 10, at, tzinfo=UTC),
+        reason=ReasonCode.REQUESTED_BY_CAMP,
+        request_id="RM-2026-02",
+    )
+
+
+def one_file_in_two_releases() -> list[OccurrenceRecord]:
+    """One camp file released in 2030 at one path and in 2031 at another, as the parse writes them."""
+    return [
+        camp_occurrence(CARD_A, SOURCE_1, 5, release="2030-policy", paths=[CAMP_PATH]),
+        camp_occurrence(CARD_A, SOURCE_1, 5, release="2031-policy", paths=[LATER_CAMP_PATH]),
+    ]
+
+
+def test_resolve_auto_skips_a_camp_release_whose_camp_path_was_withdrawn_before_a_rebuild() -> None:
+    withdrawn = withdraw_camp_path(SOURCE_1, "2031-policy", LATER_CAMP_PATH)
+    before = camp_world(one_file_in_two_releases()).resolve(recipe_text(card(CARD_A), header=CAMP_HEADER))
+    after = camp_world(one_file_in_two_releases(), suppressions=[withdrawn]).resolve(
+        recipe_text(card(CARD_A), header=CAMP_HEADER)
+    )
+    assert [card.occurrence.snapshot for card in before.cards] == ["2031-policy"]
+    assert ([card.occurrence.snapshot for card in after.cards], after.errors) == (["2030-policy"], ())
+
+
+def test_resolve_auto_with_every_release_of_the_card_withdrawn_reports_suppressed_occurrence() -> None:
+    withdrawn = [
+        withdraw_camp_path(SOURCE_1, "2030-policy", CAMP_PATH),
+        withdraw_camp_path(SOURCE_1, "2031-policy", LATER_CAMP_PATH),
+    ]
+    resolved = camp_world(one_file_in_two_releases(), suppressions=withdrawn).resolve(
+        recipe_text(card(CARD_A), header=CAMP_HEADER)
+    )
+    assert (chosen(resolved), codes(resolved)) == ([], [("SUPPRESSED_OCCURRENCE", f"{ITEM}.fingerprint")])
+
+
+def test_resolve_a_camp_pin_to_the_release_a_path_was_withdrawn_from_is_refused_and_the_other_resolves() -> (
+    None
+):
+    withdrawn = [withdraw_camp_path(SOURCE_1, "2031-policy", LATER_CAMP_PATH)]
+    refused = camp_world(one_file_in_two_releases(), suppressions=withdrawn).resolve(
+        recipe_text(card(CARD_A, pin={**CAMP_PIN, "snapshot": "2031-policy"}))
+    )
+    kept = camp_world(one_file_in_two_releases(), suppressions=withdrawn).resolve(
+        recipe_text(card(CARD_A, pin={**CAMP_PIN, "snapshot": "2030-policy"}))
+    )
+    assert (chosen(refused), codes(refused)) == ([], [("SUPPRESSED_OCCURRENCE", f"{ITEM}.pin")])
+    assert "camp path" in refused.errors[0].message
+    assert ([card.occurrence.snapshot for card in kept.cards], kept.errors) == (["2030-policy"], ())
+
+
+def test_resolve_auto_skips_a_camp_row_with_camp_paths_whose_whole_source_is_suppressed() -> None:
+    """A row's camp paths add a question; the whole-source one is still asked first."""
+    rows = [
+        camp_occurrence(CARD_A, SOURCE_1, 5, release="2031-policy", paths=[LATER_CAMP_PATH]),
+        camp_occurrence(CARD_A, SOURCE_2, 9, release="2030-policy", paths=[CAMP_PATH]),
+    ]
+    resolved = camp_world(rows, suppressions=[suppress(SOURCE_1)]).resolve(
+        recipe_text(card(CARD_A), header=CAMP_HEADER)
+    )
+    assert (chosen(resolved), resolved.errors) == ([(SOURCE_2, 9, "AUTO")], ())
+
+
+def test_resolve_a_camp_row_with_no_camp_paths_is_resolved_as_before_a_withdrawal_of_one() -> None:
+    """A row from a table written before rows carried camp paths: the suppression list has nothing to ask."""
+    rows = [camp_occurrence(CARD_A, SOURCE_1, 5, release="2031-policy")]
+    withdrawn = [withdraw_camp_path(SOURCE_1, "2031-policy", LATER_CAMP_PATH)]
+    auto = camp_world(rows, suppressions=withdrawn).resolve(recipe_text(card(CARD_A), header=CAMP_HEADER))
+    pinned = camp_world(rows, suppressions=withdrawn).resolve(recipe_text(card(CARD_A, pin=CAMP_PIN)))
+    assert (chosen(auto), auto.errors) == ([(SOURCE_1, 5, "AUTO")], ())
+    assert (chosen(pinned), pinned.errors) == ([(SOURCE_1, 5, "PINNED")], ())
+
+
+def test_resolve_a_camp_row_at_two_paths_of_its_release_is_stopped_only_when_both_are_withdrawn() -> None:
+    rows = [camp_occurrence(CARD_A, SOURCE_1, 5, release="2031-policy", paths=[CAMP_PATH, SECOND_CAMP_PATH])]
+    one = [withdraw_camp_path(SOURCE_1, "2031-policy", CAMP_PATH)]
+    both = [*one, withdraw_camp_path(SOURCE_1, "2031-policy", SECOND_CAMP_PATH, at=3)]
+    kept = camp_world(rows, suppressions=one).resolve(recipe_text(card(CARD_A, pin=CAMP_PIN)))
+    stopped = camp_world(rows, suppressions=both).resolve(recipe_text(card(CARD_A, pin=CAMP_PIN)))
+    assert (chosen(kept), kept.errors) == ([(SOURCE_1, 5, "PINNED")], ())
+    assert (chosen(stopped), codes(stopped)) == ([], [("SUPPRESSED_OCCURRENCE", f"{ITEM}.pin")])
+
+
+def test_resolve_a_camp_path_withdrawn_from_one_release_does_not_reach_the_same_path_in_another() -> None:
+    """The release is in the digest: one row path in two releases' manifests is two camp paths."""
+    rows = [
+        camp_occurrence(CARD_A, SOURCE_1, 5, release="2030-policy", paths=[CAMP_PATH]),
+        camp_occurrence(CARD_A, SOURCE_1, 5, release="2031-policy", paths=[CAMP_PATH]),
+    ]
+    withdrawn = [withdraw_camp_path(SOURCE_1, "2031-policy", CAMP_PATH)]
+    resolved = camp_world(rows, suppressions=withdrawn).resolve(recipe_text(card(CARD_A), header=CAMP_HEADER))
+    assert ([card.occurrence.snapshot for card in resolved.cards], resolved.errors) == (["2030-policy"], ())
+
+
+def test_resolve_a_camp_card_carries_its_rows_camp_paths_to_the_writer() -> None:
+    resolved = camp_world(one_file_in_two_releases()).resolve(recipe_text(card(CARD_A, pin=CAMP_PIN)))
+    (camp_card,) = resolved.cards
+    assert camp_card.occurrence.camp_path_disclosures == (
+        camp_path_disclosure("2031-policy", LATER_CAMP_PATH),
+    )
 
 
 def test_resolve_camp_messages_name_no_camp_or_file_title() -> None:

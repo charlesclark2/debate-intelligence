@@ -26,6 +26,8 @@ parsed/hsld26/2026.09.20-docx-1/
     index.jsonl                        every source's entry, sorted by sha256
     failures.jsonl                     the entries of the sources that did not parse
     occurrences.jsonl                  every card, once per disclosure
+parsed/openev/2026.09.20-docx-1/
+    camp_paths.jsonl                   each camp row's live camp paths, as digests (v1-e33-t07)
 ```
 
 The per-source files fan out by the first four hex characters of the digest, as the blob store
@@ -350,6 +352,40 @@ Who disclosed a card is a join, not a field: compute `sha256(f"{caselist}/{path}
 row of the caselist's manifests and match it to `disclosure`. The digest is the same one the
 removal suppression list records a withdrawn disclosure under.
 
+**A camp row's camp paths (`v1-e33-t07`).** A camp row also carries, in memory,
+`camp_path_disclosures`: the digest of `openev/<release>/<row path>` for each path its file is at in
+its release, sorted, the digest a removal withdraws one camp path under (`v1-e30-t14`). Most files
+are at one path; the same bytes uploaded under two OpenEv ids give two. The parse writes the digests
+of the release's live paths, and a reader asks the suppression list about each: a camp row is
+stopped when its source is suppressed as a whole or every one of its camp paths is withdrawn, before
+any rebuild, and another release of the same file is not. The digests are **not** a key of
+`occurrences.jsonl`. Every earlier build reads that file with a model that refuses an unknown key,
+and refuses a record version it does not know, so a key there would make the table unreadable to
+them (`v1.1.0-dev.200`, `v1.1.0-dev.251`). They are kept in `camp_paths.jsonl` beside the table,
+below. A row read from a table with no such file beside it, or with one written for other bytes,
+carries none, and only its whole source stops it, as before this task.
+
+### `camp_path`: a line of `camp_paths.jsonl` (`openev` only)
+
+One line per camp path of each camp file in each release the table has rows for, sorted by release,
+source and digest, and only when the table has a camp row with a camp path; otherwise the file is
+removed. It carries the six fields every record does, the release as `snapshot`, and:
+
+| Field | What it is |
+|---|---|
+| `record` | `camp_path` |
+| `camp_path_disclosure` | SHA-256 of `openev/<release>/<row path>`: the camp path's pseudonym, never the path |
+| `occurrence_table_sha256` | SHA-256 of the `occurrences.jsonl` bytes it was written beside |
+
+The local store gives the digests of the lines whose `occurrence_table_sha256` is the SHA-256 of the
+table as read to that table's rows of the same release and source. A table rewritten since with
+other rows has other bytes, so its rows get none. An earlier build's rebuild of the same rows writes
+the same bytes (the rows carry no digest), so they keep the digests: a camp path withdrawn after it
+still stops its release for this build's readers. A line this build cannot read (a later build's
+shape) makes it give none at all. No earlier build opens the file. Like the
+other aggregates it is rebuilt by every run, published after the per-source files and deleted by a
+removal.
+
 **What the span means.** A weekly archive is a window of about a week's editing activity, not the
 whole caselist (`docs/data/caselist-backfill-2026-09.md`), so a manifest lists a path in the weeks
 a team uploaded or touched it. `last_snapshot` is the latest week that happened, not proof that the
@@ -422,7 +458,8 @@ evidence-store layout puts it and where a removal rewrites it.
 2026-10-10, which keeps the policy as it is). Keeping `parsed/` free of personal data means a
 removal has fewer places to clean, and a leak of `parsed/` alone names nobody; a reader that needs
 the team joins the manifests, which live under the same controls. `disclosure` is a pseudonym, not
-anonymisation: anyone holding the manifests can recompute it. Two tests in
+anonymisation: anyone holding the manifests can recompute it. So is `camp_path_disclosure`, of a camp
+path, which names no school or team. Two tests in
 [`test_local_parsed_store.py`](../../packages/debate_core/tests/integrations/test_local_parsed_store.py)
 hold the line. `test_no_record_has_a_field_for_a_path_school_team_tournament_or_round` checks the
 record models' field names. `test_no_file_names_the_disclosure_path_or_anything_in_it` scans every
@@ -434,11 +471,12 @@ already holds the whole file.
 
 ## How the aggregates are kept
 
-`index.jsonl`, `failures.jsonl` and `occurrences.jsonl` are rebuilt from scratch at the end of every
-run, from the per-source files of the current directory, the local manifests and the removal
-suppression list. Nothing is carried forward from the previous aggregate. Each aggregate leaves out
-a source the suppression list stops, and `occurrences.jsonl` also leaves out each withdrawn
-disclosure.
+`index.jsonl`, `failures.jsonl` and `occurrences.jsonl`, and `camp_paths.jsonl` in `openev`, are
+rebuilt from scratch at the end of every run, from the per-source files of the current directory, the
+local manifests and the removal suppression list. Nothing is carried forward from the previous
+aggregate. Each aggregate leaves out a source the suppression list stops, and `occurrences.jsonl`
+also leaves out each withdrawn disclosure, and each camp release whose every camp path is withdrawn
+(`v1-e33-t07`), whether or not this machine's release manifest has been rewritten yet.
 
 They also leave out each disclosure at a path a removal holds, in a snapshot the hold covers
 (`v1-e31-t26`): a later upload at the removed file's path, which a build from before `v1-e30-t13`
@@ -467,8 +505,12 @@ filed there as never parsed (`v1-e31-t09`). Another caselist's unreadable direct
 `caselist remove --execute` deletes, locally and in the bucket with every noncurrent version:
 
 * every per-source file named for a removed digest, in every version directory;
-* `index.jsonl`, `failures.jsonl` and `occurrences.jsonl` in every version directory of each caselist
-  the removal touched, because each may hold rows derived from the removed source or disclosure.
+* `index.jsonl`, `failures.jsonl` and `occurrences.jsonl`, and `camp_paths.jsonl` where there is
+  one, in every version directory of each caselist the removal touched, because each may hold rows
+  derived from the removed source or disclosure. A removal by a build from before `v1-e33-t07` leaves
+  `camp_paths.jsonl`. It was written for the table that removal deleted, so a table rebuilt without
+  the removed rows has other bytes and gets none of its digests; this build's next run or removal
+  replaces or deletes it.
 
 Until the next `caselist parse` the current directory has no aggregates, and readers treat that as
 "not built yet". The next run rebuilds them without the removed source, and `--publish` uploads

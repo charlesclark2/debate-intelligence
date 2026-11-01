@@ -763,6 +763,67 @@ def test_a_camp_card_whose_source_has_any_disclosure_suppressed_is_flagged(stand
     ]
 
 
+CAMP_PATH_2031: Final = "a1" * 32
+CAMP_PATH_2031_SECOND: Final = "a2" * 32
+CAMP_PATH_2032: Final = "b1" * 32
+
+
+def test_a_camp_card_is_flagged_by_its_own_camp_path_and_the_same_file_from_another_release_is_not(
+    standard: Checked,
+) -> None:
+    """`v1-e33-t07`: the sidecar names each camp card's camp paths, so one release's withdrawal is its own."""
+    first = standard[0].manifest.cards[0]
+    in_2031 = _camp(first, camp_path_disclosures=(CAMP_PATH_2031,))
+    in_2032 = _camp(
+        first,
+        position=2,
+        snapshot="2032-policy",
+        last_snapshot="2032-policy",
+        camp_year=2032,
+        provenance_line="[OpenEv: Cascade Institute 2032 — Policy, Climate Adv CP]",
+        camp_path_disclosures=(CAMP_PATH_2032,),
+    )
+    results = check_suppression(
+        [in_2031, in_2032],
+        SuppressionsInForce(disclosures={(first.source_sha256, CAMP_PATH_2032): "RM-2026-0014"}),
+    )
+    assert _not_passing(results) == [
+        (CheckStatus.FAIL, 2, "the card's camp path is withdrawn from its release (request RM-2026-0014)")
+    ]
+
+
+def test_a_camp_card_at_two_paths_of_its_release_is_flagged_only_when_both_are_withdrawn(
+    standard: Checked,
+) -> None:
+    entry = _camp(
+        standard[0].manifest.cards[0], camp_path_disclosures=(CAMP_PATH_2031, CAMP_PATH_2031_SECOND)
+    )
+    sha = entry.source_sha256
+    one = check_suppression([entry], SuppressionsInForce(disclosures={(sha, CAMP_PATH_2031): "RM-2026-0015"}))
+    both = check_suppression(
+        [entry],
+        SuppressionsInForce(
+            disclosures={(sha, CAMP_PATH_2031_SECOND): "RM-2026-0016", (sha, CAMP_PATH_2031): "RM-2026-0015"}
+        ),
+    )
+    assert _not_passing(one) == []
+    assert _not_passing(both) == [
+        (CheckStatus.FAIL, 1, "the card's camp path is withdrawn from its release (request RM-2026-0015)")
+    ]
+
+
+def test_a_camp_card_with_camp_paths_is_still_flagged_by_its_whole_source(standard: Checked) -> None:
+    entry = _camp(standard[0].manifest.cards[0], camp_path_disclosures=(CAMP_PATH_2031,))
+    results = check_suppression([entry], SuppressionsInForce(sources={entry.source_sha256: "RM-2026-0017"}))
+    assert _not_passing(results) == [
+        (
+            CheckStatus.FAIL,
+            1,
+            "the card's source is on the suppression list (request RM-2026-0017, the whole source)",
+        )
+    ]
+
+
 def test_a_suppression_flag_names_no_school_team_or_file(standard: Checked) -> None:
     entries = standard[0].manifest.cards
     results = check_suppression(

@@ -903,8 +903,14 @@ CAMP_SOURCE = build_docx(
 )
 
 
-def _as_camp_card(source: SourceCard, *, release: str = RELEASE, camp: str | None = CAMP) -> SourceCard:
-    """The same card as the parse pipeline records it in a camp release: no disclosure, one release."""
+def _as_camp_card(
+    source: SourceCard, *, release: str = RELEASE, camp: str | None = CAMP, camp_paths: tuple[str, ...] = ()
+) -> SourceCard:
+    """The same card as the parse pipeline records it in a camp release: no disclosure, one release.
+
+    `camp_paths` are the camp path digests its row carries (`v1-e33-t07`); none by default, as a row
+    read from a table written before them.
+    """
     occurrence = OccurrenceRecord.model_validate(
         {
             **source.occurrence.model_dump(),
@@ -913,6 +919,7 @@ def _as_camp_card(source: SourceCard, *, release: str = RELEASE, camp: str | Non
             "last_snapshot": release,
             "disclosure": None,
             "camp": camp,
+            "camp_path_disclosures": camp_paths,
         }
     )
     return dataclasses.replace(source, occurrence=occurrence, disclosure=None)
@@ -958,13 +965,17 @@ def _camp_build(
     release: str = RELEASE,
     camp_name: str | None = CAMP,
     record: CampFile | None = None,
+    camp_paths: tuple[str, ...] = (),
 ) -> CampBuild:
     """A disclosed card, then a camp card pinned by its release, in one block; or the camp card alone.
 
     The camp card's release record is `record`, or the standard one; with `camp_file=False`, none.
     """
     world, cards = _sources(parser, (SOURCE_ONE, SyntheticDisclosure()), (CAMP_SOURCE, None))
-    disclosed, camp = cards[0], _as_camp_card(cards[2], release=release, camp=camp_name)
+    disclosed, camp = (
+        cards[0],
+        _as_camp_card(cards[2], release=release, camp=camp_name, camp_paths=camp_paths),
+    )
     items = (
         [{"fingerprint": camp.fingerprint}]
         if camp_only
@@ -1057,6 +1068,45 @@ def test_camp_the_sidecar_records_the_camp_occurrence(parser: DebateDocxParser, 
     jsonschema.validate(
         json.loads(built.file.manifest_json), json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
     )
+
+
+#: Two camp path digests of the camp card's file in its release (`v1-e33-t07`).
+CAMP_PATHS = ("a1" * 32, "a2" * 32)
+
+
+def test_camp_the_sidecar_entry_carries_the_rows_camp_paths_and_the_sidecar_bytes_do_not(
+    parser: DebateDocxParser, built_at: datetime
+) -> None:
+    built = _camp_build(parser, built_at, camp_paths=CAMP_PATHS)
+    disclosed, camp = built.file.manifest.cards
+    assert (disclosed.camp_path_disclosures, camp.camp_path_disclosures) == ((), CAMP_PATHS)
+    for digest in CAMP_PATHS:
+        assert digest not in built.file.manifest_json.decode()
+    jsonschema.validate(
+        json.loads(built.file.manifest_json), json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    )
+
+
+def test_camp_the_camp_paths_file_names_the_camp_cards_paths_and_the_sidecars_sha256(
+    parser: DebateDocxParser, built_at: datetime
+) -> None:
+    built = _camp_build(parser, built_at, camp_paths=CAMP_PATHS)
+    assert built.file.camp_paths_json is not None
+    assert json.loads(built.file.camp_paths_json) == {
+        "schema_version": 1,
+        "sidecar_sha256": hashlib.sha256(built.file.manifest_json).hexdigest(),
+        "cards": [{"position": 2, "camp_path_disclosures": list(CAMP_PATHS)}],
+    }
+    read = FileProvenanceManifest.model_validate_json(built.file.manifest_json)
+    joined = read.with_camp_paths(built.file.manifest_json, built.file.camp_paths_json)
+    assert [entry.camp_path_disclosures for entry in joined.cards] == [(), CAMP_PATHS]
+
+
+def test_camp_a_file_with_no_camp_path_has_no_camp_paths_file(
+    parser: DebateDocxParser, built_at: datetime, standard: Built
+) -> None:
+    assert standard.file.camp_paths_json is None
+    assert _camp_build(parser, built_at).file.camp_paths_json is None
 
 
 def test_camp_a_sidecar_written_before_camp_cards_still_validates(standard: Built) -> None:

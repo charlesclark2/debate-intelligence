@@ -34,6 +34,10 @@ its prefix in the evidence layout (:func:`~debate_core.application.caselist.publ
 `raw/caselist/<slug>` or a camp file's `raw/openev/<year>`, as a bucket keeps them; without it the one
 `snapshots` store holds every source, as the local blob store does.
 
+Each camp card's entry carries its row's camp path digests (`v1-e33-t07`), and the built file comes
+with :attr:`~debate_core.application.ports.evidence_file_writer.BuiltEvidenceFile.camp_paths_json`
+beside its sidecar, so `files check` can tell which release's withdrawal names the card.
+
 ## Before a card is copied, it is found and checked
 
 The source's bytes come from the blob store by the occurrence's SHA-256 (which re-hashes what it
@@ -461,11 +465,14 @@ class DocxEvidenceFileWriter:
             )
 
         manifest = self._manifest(request, docx, located, placed, copies)
+        manifest_json = manifest.to_json_bytes()
+        camp_paths = manifest.camp_path_sidecar(manifest_json)
         return BuiltEvidenceFile(
             docx=docx,
             manifest=manifest,
-            manifest_json=manifest.to_json_bytes(),
+            manifest_json=manifest_json,
             warnings=manifest.warnings,
+            camp_paths_json=camp_paths.to_json_bytes() if camp_paths is not None else None,
         )
 
     # -- finding each card --------------------------------------------------------------------
@@ -710,6 +717,7 @@ class DocxEvidenceFileWriter:
                     provenance_line=_sidecar_provenance_line(occurrence, disclosure, release),
                     forbidden_characters_replaced=copied.forbidden_characters_replaced,
                     warnings=copied.warnings,
+                    camp_path_disclosures=occurrence.camp_path_disclosures,
                 )
             )
         return FileProvenanceManifest(

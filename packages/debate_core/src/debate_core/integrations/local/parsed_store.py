@@ -40,6 +40,7 @@ the caselist and version it was asked for, so another caselist's unreadable dire
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Iterable, Sequence
 from pathlib import Path
@@ -50,10 +51,12 @@ from debate_core.application.caselist.occurrence_table_guard import (
     profile_stamps_of_file,
 )
 from debate_core.application.ports.parsed_store import (
+    CAMP_PATHS_NAME,
     FAILURES_NAME,
     INDEX_NAME,
     OCCURRENCES_NAME,
     PARSED_PREFIX,
+    CampPathRecord,
     DocumentRecord,
     OccurrenceRecord,
     ParsedStoreRefusal,
@@ -149,7 +152,34 @@ class LocalParsedStore:
         return self._read_lines(SourceEntry, self._root / caselist / version / FAILURES_NAME)
 
     async def read_occurrences(self, caselist: str, version: str) -> tuple[OccurrenceRecord, ...] | None:
-        return self._read_lines(OccurrenceRecord, self._root / caselist / version / OCCURRENCES_NAME)
+        """The table, each camp row with the camp paths `camp_paths.jsonl` gives it (`v1-e33-t07`).
+
+        The digests are given only when the file names the SHA-256 of the table's bytes as read: a
+        table rewritten since with other bytes, or a file this build cannot read, gives none, and those
+        camp rows read as an earlier build wrote them.
+        """
+        directory = self._root / caselist / version
+        table, beside = directory / OCCURRENCES_NAME, directory / CAMP_PATHS_NAME
+        with refused_as_access_denied("read", _ROLE):
+            if not is_regular_file(beside):
+                return self._read_lines(OccurrenceRecord, table)
+            if not is_regular_file(table):
+                return None
+            digest = hashlib.sha256()
+            rows: list[OccurrenceRecord] = []
+            with table.open("rb") as stream:
+                for number, raw in enumerate(stream, start=1):
+                    digest.update(raw)
+                    line = raw.decode("utf-8")
+                    if line.strip():
+                        rows.append(self._record(OccurrenceRecord, line, table, number))
+            camp_paths = _camp_paths_of(beside, digest.hexdigest())
+        return tuple(
+            row.evolve(camp_path_disclosures=camp_paths[row.snapshot, row.source_sha256])
+            if (row.snapshot, row.source_sha256) in camp_paths
+            else row
+            for row in rows
+        )
 
     async def read_occurrence_stamps(self, caselist: str, version: str) -> frozenset[str] | None:
         path = self._root / caselist / version / OCCURRENCES_NAME
@@ -208,7 +238,13 @@ class LocalParsedStore:
         directory = self._root / caselist / version
         self._write_lines(directory / INDEX_NAME, index)
         self._write_lines(directory / FAILURES_NAME, failures)
-        self._write_lines(directory / OCCURRENCES_NAME, occurrences)
+        table = self._write_lines(directory / OCCURRENCES_NAME, occurrences)
+        camp_paths = _camp_path_records(occurrences, table)
+        if camp_paths:
+            self._write_lines(directory / CAMP_PATHS_NAME, camp_paths)
+        else:
+            with refused_as_access_denied("write", _ROLE):
+                (directory / CAMP_PATHS_NAME).unlink(missing_ok=True)
 
     # -- helpers ------------------------------------------------------------------------------
 
@@ -231,10 +267,12 @@ class LocalParsedStore:
                 f"{caselist}/{version} is an earlier generation of {parser_version}; it is never rewritten"
             )
 
-    def _write_lines(self, path: Path, records: Iterable[StoreRecord]) -> None:
-        text = "".join(f"{_render(record)}\n" for record in records)
+    def _write_lines(self, path: Path, records: Iterable[StoreRecord]) -> str:
+        """Write `records` whole, one per line; the SHA-256 of the bytes written."""
+        content = "".join(f"{_render(record)}\n" for record in records).encode("utf-8")
         with refused_as_access_denied("write", _ROLE), atomic_replacement(path) as incoming:
-            incoming.write_text(text, encoding="utf-8")
+            incoming.write_bytes(content)
+        return hashlib.sha256(content).hexdigest()
 
     def _read_lines[RecordT: StoreRecord](
         self, model: type[RecordT], path: Path
@@ -258,6 +296,48 @@ class LocalParsedStore:
         except ValueError as error:
             kind = "not JSON" if not line.strip().startswith("{") else f"not a {model.__name__}"
             raise UnreadableParsedStore(relative, number, kind) from error
+
+
+def _camp_path_records(occurrences: Sequence[OccurrenceRecord], table_sha256: str) -> list[CampPathRecord]:
+    """One line per camp path of each camp file in each release the table's rows carry."""
+    records: dict[tuple[str, str, str], CampPathRecord] = {}
+    for row in occurrences:
+        for path in row.camp_path_disclosures:
+            key = (row.snapshot, row.source_sha256, path)
+            if key not in records:
+                records[key] = CampPathRecord(
+                    caselist=row.caselist,
+                    snapshot=row.snapshot,
+                    source_sha256=row.source_sha256,
+                    parser_version=row.parser_version,
+                    profile_version=row.profile_version,
+                    fingerprint_version=row.fingerprint_version,
+                    camp_path_disclosure=path,
+                    occurrence_table_sha256=table_sha256,
+                )
+    return [records[key] for key in sorted(records)]
+
+
+def _camp_paths_of(path: Path, table_sha256: str) -> dict[tuple[str, str], tuple[str, ...]]:
+    """`(release, source) -> camp path digests` of the lines of `path` written beside `table_sha256`.
+
+    Empty when a line is not one this build reads: it may be a later build's, and the rows then read
+    as they would with no file beside them.
+    """
+    found: dict[tuple[str, str], set[str]] = {}
+    with path.open(encoding="utf-8") as stream:
+        for line in stream:
+            if not line.strip():
+                continue
+            try:
+                record = CampPathRecord.model_validate_json(line)
+            except ValueError:
+                return {}
+            if record.occurrence_table_sha256 == table_sha256:
+                found.setdefault((record.snapshot, record.source_sha256), set()).add(
+                    record.camp_path_disclosure
+                )
+    return {key: tuple(sorted(paths)) for key, paths in found.items()}
 
 
 def _render(record: StoreRecord) -> str:

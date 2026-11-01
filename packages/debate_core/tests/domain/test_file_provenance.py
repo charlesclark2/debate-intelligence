@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import UTC, datetime
 from typing import Any
 
@@ -12,6 +14,7 @@ from debate_core.domain.debate_files import FontSizeSpan, FormattingSpan
 from debate_core.domain.file_provenance import (
     FileProvenanceEntry,
     FileProvenanceManifest,
+    camp_path_sidecar_name,
     formatting_sha256,
     text_sha256,
 )
@@ -237,3 +240,145 @@ def test_a_sidecar_written_before_the_recipe_status_validates_with_none_and_reco
     assert draft.recipe_status is RecipeStatus.DRAFT
     with pytest.raises(ValidationError):
         FileProvenanceManifest.model_validate({**manifest([entry()]), "recipe_status": "approved"})
+
+
+# ------------------------------------------------------------------------------------------------
+# A camp card's camp paths, beside the sidecar (`v1-e33-t07`)
+# ------------------------------------------------------------------------------------------------
+
+PATH_2031 = "a1" * 32
+PATH_2031_SECOND = "a2" * 32
+
+ENTRY_KEYS_EVERY_EARLIER_BUILD_READS = {
+    "position",
+    "recipe_path",
+    "section_path",
+    "fingerprint",
+    "fingerprint_version",
+    "resolution",
+    "caselist",
+    "camp",
+    "camp_year",
+    "camp_event",
+    "camp_file_title",
+    "snapshot",
+    "last_snapshot",
+    "disclosure_digest",
+    "school",
+    "team_code",
+    "side",
+    "tournament",
+    "round",
+    "source_sha256",
+    "first_element_index",
+    "last_element_index",
+    "completeness",
+    "evidence_sha256",
+    "cite_sha256",
+    "formatting_sha256",
+    "tag_overridden",
+    "tag_authored_by",
+    "original_tag_sha256",
+    "provenance_line",
+    "forbidden_characters_replaced",
+    "warnings",
+    "provenance_mode",
+    "verification_status",
+}
+"""The keys of a sidecar entry `v1.1.0-dev.200` and `v1.1.0-dev.251` read, written out from their model."""
+
+
+def camp_manifest() -> FileProvenanceManifest:
+    return FileProvenanceManifest.model_validate(
+        manifest(
+            [
+                entry(),
+                camp_entry(position=2, camp_path_disclosures=(PATH_2031, PATH_2031_SECOND)),
+                camp_entry(position=3),
+            ]
+        )
+    )
+
+
+def test_a_camp_entry_carries_its_camp_paths_and_the_sidecar_keeps_the_keys_every_earlier_build_reads() -> (
+    None
+):
+    built = camp_manifest()
+    assert built.cards[1].camp_path_disclosures == (PATH_2031, PATH_2031_SECOND)
+    written = json.loads(built.to_json_bytes())
+    assert [set(card) for card in written["cards"]] == [ENTRY_KEYS_EVERY_EARLIER_BUILD_READS] * 3
+    assert PATH_2031 not in built.to_json_bytes().decode()
+
+
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({"camp_path_disclosures": (PATH_2031_SECOND, PATH_2031)}, "listed once each, sorted"),
+        ({"camp_path_disclosures": (PATH_2031, PATH_2031)}, "listed once each, sorted"),
+    ],
+    ids=["unsorted", "repeated"],
+)
+def test_camp_paths_are_listed_once_each_sorted(changes: dict[str, Any], message: str) -> None:
+    with pytest.raises(ValidationError, match=message):
+        FileProvenanceEntry.model_validate(camp_entry(**changes))
+
+
+def test_a_caselist_entry_is_at_no_camp_path() -> None:
+    with pytest.raises(ValidationError, match="only a camp card"):
+        FileProvenanceEntry.model_validate(entry(camp_path_disclosures=(PATH_2031,)))
+
+
+def test_the_camp_paths_file_names_each_camp_card_with_a_camp_path_and_the_sidecars_sha256() -> None:
+    built = camp_manifest()
+    sidecar = built.to_json_bytes()
+    camp_paths = built.camp_path_sidecar(sidecar)
+    assert camp_paths is not None
+    assert json.loads(camp_paths.to_json_bytes()) == {
+        "schema_version": 1,
+        "sidecar_sha256": hashlib.sha256(sidecar).hexdigest(),
+        "cards": [{"position": 2, "camp_path_disclosures": [PATH_2031, PATH_2031_SECOND]}],
+    }
+    assert camp_path_sidecar_name("grid.docx") == "grid.docx.camp-paths.json"
+
+
+def test_a_sidecar_with_no_camp_path_has_no_camp_paths_file() -> None:
+    built = FileProvenanceManifest.model_validate(manifest([entry(), camp_entry(position=2)]))
+    assert built.camp_path_sidecar(built.to_json_bytes()) is None
+
+
+def test_the_camp_paths_go_back_on_the_entries_of_the_sidecar_they_were_written_for() -> None:
+    built = camp_manifest()
+    sidecar = built.to_json_bytes()
+    camp_paths = built.camp_path_sidecar(sidecar)
+    assert camp_paths is not None
+    read = FileProvenanceManifest.model_validate_json(sidecar)
+    assert [card.camp_path_disclosures for card in read.cards] == [(), (), ()]
+    joined = read.with_camp_paths(sidecar, camp_paths.to_json_bytes())
+    assert [card.camp_path_disclosures for card in joined.cards] == [(), (PATH_2031, PATH_2031_SECOND), ()]
+
+
+@pytest.mark.parametrize(
+    "case",
+    ["another-sidecar", "absent", "not-json", "a-caselist-card", "no-such-position"],
+)
+def test_camp_paths_that_are_not_this_sidecars_give_none(case: str) -> None:
+    """Each camp card is then checked as before: a camp path suppression of its bytes flags it."""
+    built = camp_manifest()
+    sidecar = built.to_json_bytes()
+    camp_paths = built.camp_path_sidecar(sidecar)
+    assert camp_paths is not None
+    document = json.loads(camp_paths.to_json_bytes())
+    given: bytes | None
+    if case == "another-sidecar":
+        document["sidecar_sha256"] = hashlib.sha256(sidecar + b"\n").hexdigest()
+        given = json.dumps(document).encode()
+    elif case == "absent":
+        given = None
+    elif case == "not-json":
+        given = b"{"
+    else:
+        position = 1 if case == "a-caselist-card" else 9
+        document["cards"] = [{"position": position, "camp_path_disclosures": [PATH_2031]}]
+        given = json.dumps(document).encode()
+    read = FileProvenanceManifest.model_validate_json(sidecar)
+    assert [card.camp_path_disclosures for card in read.with_camp_paths(sidecar, given).cards] == [(), (), ()]

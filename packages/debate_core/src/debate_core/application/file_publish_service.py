@@ -102,6 +102,7 @@ from debate_core.domain.caselist import Event, Side
 from debate_core.domain.file_provenance import (
     PROVENANCE_SIDECAR_SUFFIX,
     FileProvenanceManifest,
+    camp_path_sidecar_name,
     provenance_sidecar_name,
 )
 from debate_core.domain.file_recipe import FileRecipe, RecipeStatus, render_location
@@ -424,6 +425,8 @@ class FilePublishService:
         docx_sha256 = hashlib.sha256(docx).hexdigest()
         sidecar_path = docx_path.with_name(provenance_sidecar_name(docx_path.name))
         sidecar = sidecar_path.read_bytes() if sidecar_path.is_file() else None
+        camp_paths_path = docx_path.with_name(camp_path_sidecar_name(docx_path.name))
+        camp_paths = camp_paths_path.read_bytes() if camp_paths_path.is_file() else None
 
         def refused(refusal: FileRefusal) -> FilePlan:
             return FilePlan(docx=docx_path, slug=slug, refusal=refusal)
@@ -472,7 +475,7 @@ class FilePublishService:
             )
         if report.status is not CheckStatus.PASS:
             return refused(_quality_refusal(report, docx_path, fresh=False))
-        fresh = await self._quality.check_file(docx, sidecar)
+        fresh = await self._quality.check_file(docx, sidecar, camp_paths)
         if fresh.status is not CheckStatus.PASS or manifest is None:
             return refused(_quality_refusal(fresh, docx_path, fresh=True))
         try:

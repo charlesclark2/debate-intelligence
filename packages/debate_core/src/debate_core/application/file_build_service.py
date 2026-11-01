@@ -67,7 +67,7 @@ from debate_core.application.ports.evidence_file_writer import (
 from debate_core.application.ports.parsed_store import OPENEV_STORE, ParsedStore, parse_version_directory
 from debate_core.application.ports.persistence import SnapshotStore
 from debate_core.application.ports.suppression import SuppressionList
-from debate_core.domain.file_provenance import provenance_sidecar_name
+from debate_core.domain.file_provenance import camp_path_sidecar_name, provenance_sidecar_name
 from debate_core.domain.file_recipe import FileRecipe, RecipeStatus
 from debate_core.evidence.file_checks.report import CheckStatus, FileQualityReport, QualityCheck
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
@@ -509,7 +509,12 @@ class FileBuildService:
         directory.mkdir(parents=True, exist_ok=True)
         docx_path = directory / name
         sidecar_path = directory / provenance_sidecar_name(name)
+        camp_paths_path = directory / camp_path_sidecar_name(name)
         _write_whole(sidecar_path, built.manifest_json)
+        if built.camp_paths_json is not None:
+            _write_whole(camp_paths_path, built.camp_paths_json)
+        else:
+            camp_paths_path.unlink(missing_ok=True)
         _write_whole(docx_path, built.docx)
         checked = await self._quality.check(docx_path)
         return (

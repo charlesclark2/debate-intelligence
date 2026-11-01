@@ -43,6 +43,17 @@ upload, which a build from before `v1-e30-t13` imported. Its bytes go to no buck
 disclosure is neither parsed nor in any aggregate, and its parsed file is not published
 (:func:`held_only_sources`). A source another live path discloses is parsed and published as before;
 only the held disclosure's occurrence rows go.
+
+## A camp file's paths (`v1-e33-t07`)
+
+A camp file has no disclosure, but each row of a release manifest is at a path, and a removal can
+withdraw one camp path from one release (`v1-e30-t14`). The list records that withdrawal under
+:func:`~debate_core.application.ports.suppression.camp_path_disclosure`, which the publisher already
+asks of a camp manifest's rows, and so does :func:`live_disclosures`: a release's rows go at the next
+parse whether or not this machine's manifest has been rewritten, and a release whose file another
+of its paths still holds keeps them. Each camp row carries the digests of its release's live paths
+(:func:`camp_path_digests`), so a reader of the table asks about a withdrawal made after it was built
+(:func:`occurrence_is_stopped`).
 """
 
 from __future__ import annotations
@@ -65,7 +76,13 @@ from debate_core.application.caselist.publish_plan import (
     validate_publish_target,
 )
 from debate_core.application.ports.evidence_store import ObjectKey
-from debate_core.application.ports.suppression import PathHoldEntry, SuppressionState, disclosure_digest
+from debate_core.application.ports.parsed_store import OccurrenceRecord
+from debate_core.application.ports.suppression import (
+    PathHoldEntry,
+    SuppressionState,
+    camp_path_disclosure,
+    disclosure_digest,
+)
 from debate_core.domain import Sha256Hex
 from debate_core.domain.caselist import SourceDocument, SourceFormat, SourceOrigin
 
@@ -78,7 +95,9 @@ __all__ = [
     "held_only_sources",
     "is_aggregated",
     "live_disclosure_keys",
+    "camp_path_digests",
     "live_disclosures",
+    "occurrence_is_stopped",
     "occurrence_row_key",
 ]
 
@@ -174,22 +193,51 @@ async def enumerate_sources(local: LocalEvidence, caselist: str) -> tuple[Enumer
 def live_disclosures(source: EnumeratedSource, state: SuppressionState) -> tuple[Disclosed, ...]:
     """The disclosures of `source` the suppression list neither stops nor holds the path of.
 
-    Stopped by the source or by its path; a camp file is checked by its digest alone, as the
-    publisher checks a camp manifest's rows. Held by the publisher's rule for a stored row
+    Stopped by the source or by its path: a caselist path by its disclosure digest, and a camp path
+    by its camp path digest, which has the release in it, as the publisher checks a camp manifest's
+    rows (`v1-e33-t07`). Held by the publisher's rule for a stored row
     (:func:`~debate_core.application.caselist.publish_plan.stored_row_hold`), which holds no camp
     file's row.
     """
     return tuple(
         disclosed
         for disclosed in source.disclosures
-        if not state.suppresses(
-            source.sha256,
-            disclosure=None
-            if source.caselist == OPENEV
-            else disclosure_digest(source.caselist, disclosed.path),
-        )
+        if not state.suppresses(source.sha256, disclosure=_path_digest(source, disclosed))
         and _hold_on(source, disclosed, state) is None
     )
+
+
+def camp_path_digests(source: EnumeratedSource, state: SuppressionState, release: str) -> tuple[str, ...]:
+    """The camp path digest of each live path of the camp file `source` in `release`, sorted.
+
+    What a camp occurrence row of that release carries (`v1-e33-t07`); empty for a caselist source.
+    """
+    if not source.is_camp_file:
+        return ()
+    return tuple(
+        sorted(
+            {
+                camp_path_disclosure(release, disclosed.path)
+                for disclosed in live_disclosures(source, state)
+                if disclosed.snapshot == release
+            }
+        )
+    )
+
+
+def occurrence_is_stopped(row: OccurrenceRecord, state: SuppressionState) -> bool:
+    """Whether the suppression list stops a stored occurrence row, asked of the row alone.
+
+    A row is stopped by its source suppressed as a whole, or by its disclosure withdrawn. A camp row
+    has no disclosure: it is stopped when every camp path it carries is withdrawn, so a release whose
+    file another path still holds keeps it, and another release of the same file is never asked
+    about (`v1-e33-t07`). A camp row written before rows carried camp paths has none, and only its
+    whole source stops it, as before. :meth:`SuppressionState.suppresses` answers for the whole
+    source too, so a camp row's whole source needs no question of its own.
+    """
+    if row.camp_path_disclosures:
+        return all(state.suppresses(row.source_sha256, disclosure=path) for path in row.camp_path_disclosures)
+    return state.suppresses(row.source_sha256, disclosure=row.disclosure)
 
 
 type DisclosureKey = tuple[Sha256Hex | None, str | None]
@@ -249,6 +297,13 @@ def held_only_sources(sources: Iterable[EnumeratedSource], state: SuppressionSta
                 held[source.sha256] = hold.request_id
                 break
     return held
+
+
+def _path_digest(source: EnumeratedSource, disclosed: Disclosed) -> Sha256Hex:
+    """The digest the suppression list withdraws one path of `source` under."""
+    if source.is_camp_file:
+        return camp_path_disclosure(disclosed.snapshot, disclosed.path)
+    return disclosure_digest(source.caselist, disclosed.path)
 
 
 def _hold_on(source: EnumeratedSource, disclosed: Disclosed, state: SuppressionState) -> PathHoldEntry | None:

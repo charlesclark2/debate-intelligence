@@ -26,6 +26,16 @@ disclosure, so its disclosure digest, school, team code, side, tournament and ro
 only a camp card names a camp. The camp fields are additions: a sidecar written before them has
 none of their keys and still validates.
 
+## A camp card's camp paths (`v1-e33-t07`)
+
+A camp entry carries :attr:`FileProvenanceEntry.camp_path_disclosures`, the digest of each path its
+file is at in its release, as its occurrence row did, so `files check` flags a camp card only when a
+suppression names its own camp paths. Every earlier build reads the sidecar with a model that refuses
+a key it does not know, so they are not written into it. They go into a second file beside it,
+`<file>.camp-paths.json` (:class:`CampPathSidecar`), naming the SHA-256 of the sidecar it belongs to,
+which no earlier build opens. :meth:`FileProvenanceManifest.with_camp_paths` puts them back on the
+entries when that SHA-256 is the sidecar's; otherwise each camp card is checked as before.
+
 ## The recipe's status (`v1-e33-t05`)
 
 `recipe_status` is the status of the recipe the file was built from, `ready` or `draft`, so that
@@ -57,11 +67,15 @@ from debate_core.domain.file_recipe import CAMP_STORE, RecipeStatus, TagAuthor
 from debate_core.domain.schema_export import JSON_SCHEMA_DIALECT
 
 __all__ = [
+    "CAMP_PATH_SIDECAR_SUFFIX",
     "FILE_PROVENANCE_SCHEMA_FILENAME",
     "FILE_PROVENANCE_SCHEMA_VERSION",
     "PROVENANCE_SIDECAR_SUFFIX",
+    "CampPathCard",
+    "CampPathSidecar",
     "FileProvenanceEntry",
     "FileProvenanceManifest",
+    "camp_path_sidecar_name",
     "formatting_sha256",
     "provenance_sidecar_name",
     "render_file_provenance_schema",
@@ -78,9 +92,18 @@ PROVENANCE_SIDECAR_SUFFIX: Final = ".provenance.json"
 """What a built file's name is followed by to name its sidecar: `nhi-politics.docx.provenance.json`."""
 
 
+CAMP_PATH_SIDECAR_SUFFIX: Final = ".camp-paths.json"
+"""What a built file's name is followed by to name its camp cards' camp paths (`v1-e33-t07`)."""
+
+
 def provenance_sidecar_name(docx_name: str) -> str:
     """The sidecar's file name for a built file's name: `<file>.provenance.json`."""
     return f"{docx_name}{PROVENANCE_SIDECAR_SUFFIX}"
+
+
+def camp_path_sidecar_name(docx_name: str) -> str:
+    """The camp paths' file name for a built file's name: `<file>.camp-paths.json`."""
+    return f"{docx_name}{CAMP_PATH_SIDECAR_SUFFIX}"
 
 
 def text_sha256(text: str) -> str:
@@ -216,6 +239,15 @@ class FileProvenanceEntry(DomainModel):
         default=VerificationStatus.UNVERIFIED,
         description="Always UNVERIFIED: a disclosed card has not been verified by the platform.",
     )
+    camp_path_disclosures: tuple[Sha256Hex, ...] = Field(
+        default=(),
+        exclude=True,
+        description=(
+            "For a camp card, the digest of each path its file is at in its release, sorted; empty "
+            "otherwise, and for a sidecar with no camp paths beside it. Never written into the sidecar: "
+            "it goes into `<file>.camp-paths.json`."
+        ),
+    )
 
     @model_validator(mode="after")
     def _check_entry(self) -> Self:
@@ -239,10 +271,13 @@ class FileProvenanceEntry(DomainModel):
         if self.caselist == CAMP_STORE:
             if any(one is not None for one in disclosed):
                 raise ValueError("a camp card names no disclosure: a camp file has no disclosure")
-        elif any(one is not None for one in camp):
+        elif any(one is not None for one in camp) or self.camp_path_disclosures:
             raise ValueError(
-                "only a camp card (caselist openev) names a camp, a year, an event or a file title"
+                "only a camp card (caselist openev) names a camp, a year, an event, a file title or a "
+                "camp path"
             )
+        if list(self.camp_path_disclosures) != sorted(set(self.camp_path_disclosures)):
+            raise ValueError("camp path digests are listed once each, sorted")
         return self
 
 
@@ -292,6 +327,70 @@ class FileProvenanceManifest(DomainModel):
         """The sidecar's bytes: two-space indented JSON, keys in model order, UTF-8, a final newline."""
         document = self.model_dump(mode="json")
         return (json.dumps(document, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+
+    def camp_path_sidecar(self, sidecar_json: bytes) -> CampPathSidecar | None:
+        """The camp paths of this sidecar's camp cards, for its bytes `sidecar_json`; None if none has one."""
+        cards = tuple(
+            CampPathCard(position=entry.position, camp_path_disclosures=entry.camp_path_disclosures)
+            for entry in self.cards
+            if entry.camp_path_disclosures
+        )
+        if not cards:
+            return None
+        return CampPathSidecar(sidecar_sha256=hashlib.sha256(sidecar_json).hexdigest(), cards=cards)
+
+    def with_camp_paths(self, sidecar_json: bytes, camp_paths_json: bytes | None) -> Self:
+        """This sidecar with each camp card's camp paths, from `camp_paths_json` if written for this sidecar.
+
+        `sidecar_json` is the sidecar's bytes as read. Camp paths written for other bytes, unreadable,
+        or naming a card that is not a camp card, give none: each camp card is then checked as before.
+        """
+        if camp_paths_json is None:
+            return self
+        try:
+            camp_paths = CampPathSidecar.model_validate_json(camp_paths_json)
+        except ValueError:
+            return self
+        if camp_paths.sidecar_sha256 != hashlib.sha256(sidecar_json).hexdigest():
+            return self
+        given = {card.position: card.camp_path_disclosures for card in camp_paths.cards}
+        camp = {entry.position for entry in self.cards if entry.caselist == CAMP_STORE}
+        if not set(given) <= camp:
+            return self
+        return self.evolve(
+            cards=tuple(
+                entry.evolve(camp_path_disclosures=given[entry.position])
+                if entry.position in given
+                else entry
+                for entry in self.cards
+            )
+        )
+
+
+class CampPathCard(DomainModel):
+    """One camp card's camp paths: its place in the file and the digests."""
+
+    position: int = Field(ge=1, description="The card's place in the file, as the sidecar gives it.")
+    camp_path_disclosures: tuple[Sha256Hex, ...] = Field(
+        min_length=1, description="Digest of `openev/<release>/<row path>` of each path, sorted."
+    )
+
+
+class CampPathSidecar(DomainModel):
+    """`<file>.camp-paths.json`: the camp paths of a built file's camp cards (`v1-e33-t07`).
+
+    Beside the sidecar rather than in it, because an earlier build refuses a sidecar with a key it does
+    not know. `sidecar_sha256` is the SHA-256 of the sidecar's bytes: written for one sidecar, it says
+    nothing about another.
+    """
+
+    schema_version: Literal[1] = Field(default=1, description="This file's shape: 1.")
+    sidecar_sha256: Sha256Hex = Field(description="SHA-256 of the provenance sidecar it belongs to.")
+    cards: tuple[CampPathCard, ...] = Field(min_length=1, description="Each camp card with a camp path.")
+
+    def to_json_bytes(self) -> bytes:
+        """Two-space indented JSON, keys in model order, UTF-8, a final newline, as the sidecar is."""
+        return (json.dumps(self.model_dump(mode="json"), indent=2) + "\n").encode("utf-8")
 
 
 def render_file_provenance_schema() -> dict[str, Any]:

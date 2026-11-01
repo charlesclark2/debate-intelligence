@@ -17,7 +17,7 @@ import hashlib
 import json
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, cast
 
@@ -47,9 +47,14 @@ from debate_core.application.file_recipes import RecipeResolver, load_recipe
 from debate_core.application.file_suggest_service import CP_TEXT_SLOT
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectInfo
 from debate_core.application.ports.parsed_store import OccurrenceRecord
-from debate_core.application.ports.suppression import ReasonCode, SuppressionAction, SuppressionEntry
+from debate_core.application.ports.suppression import (
+    ReasonCode,
+    SuppressionAction,
+    SuppressionEntry,
+    camp_path_disclosure,
+)
 from debate_core.domain.built_file_metadata import BuiltFileMetadata
-from debate_core.domain.caselist import Side
+from debate_core.domain.caselist import CampFile, Event, Side
 from debate_core.domain.file_provenance import FileProvenanceManifest
 from debate_core.domain.file_recipe import FileRecipe
 from debate_core.evidence.file_checks.report import CHECKER_VERSION, CheckStatus, QualityCheck
@@ -208,7 +213,12 @@ class World:
         return FileQualityService(parser=PARSER, snapshots=self.files.snapshots, suppression=self.suppression)
 
     def recipe(
-        self, items: Sequence[Mapping[str, Any]], *, name: str = "synthetic-file", status: str = "ready"
+        self,
+        items: Sequence[Mapping[str, Any]],
+        *,
+        name: str = "synthetic-file",
+        status: str = "ready",
+        caselist: str = CASELIST,
     ) -> Path:
         """A recipe of one pocket and one block, at `<files>/recipes/<topic>/<name>.yaml`, the default."""
         document = {
@@ -216,7 +226,7 @@ class World:
             "title": "Synthetic file",
             "topic": TOPIC,
             "format": "POLICY",
-            "caselist": CASELIST,
+            "caselist": caselist,
             "position": "synthetic-position",
             "side": "AFF",
             "fingerprint_version": FINGERPRINT_VERSION,
@@ -480,6 +490,52 @@ def test_a_pass_report_that_no_longer_holds_for_the_exact_bytes_is_refused(world
     assert outcome.refusal.failing_checks == (QualityCheck.SUPPRESSION,)
     assert "checked again now" in outcome.refusal.message
     assert world.object_keys() == []
+
+
+def test_the_check_run_now_reads_a_camp_cards_own_camp_paths_beside_the_sidecar(world: World) -> None:
+    """`v1-e33-t07`: a camp path of the same file withdrawn from another release does not stop this one."""
+    (card,) = asyncio.run(world.files.add_source(SOURCE_ONE, disclosure=None))
+    sha = card.occurrence.source_sha256
+    row = OccurrenceRecord.model_validate(
+        {
+            **card.occurrence.model_dump(),
+            "caselist": "openev",
+            "snapshot": "2031-policy",
+            "last_snapshot": "2031-policy",
+            "disclosure": None,
+            "camp": "Lanternfield Institute",
+            "camp_path_disclosures": (camp_path_disclosure("2031-policy", "openev-512-Synthetic_CP.docx"),),
+        }
+    )
+    asyncio.run(
+        world.store.write_aggregates(
+            "openev", PARSER.parser_version, index=(), failures=(), occurrences=[row]
+        )
+    )
+    record = CampFile(
+        source_sha256=sha,
+        camp="Lanternfield Institute",
+        year=2031,
+        event=Event.POLICY,
+        file_title="Synthetic CP",
+        snapshot=date(2026, 7, 30),
+    )
+    asyncio.run(world.caselists.record_camp_file(record))
+    docx = world.build(world.recipe([{"fingerprint": card.fingerprint}], caselist="openev")).files
+    assert docx is not None
+    elsewhere = SuppressionEntry(
+        action=SuppressionAction.SUPPRESS,
+        sha256=sha,
+        disclosure=camp_path_disclosure("2032-policy", "openev-640-Synthetic_CP.docx"),
+        recorded_at=datetime(2026, 10, 25, tzinfo=UTC),
+        reason=ReasonCode.REQUESTED_BY_CAMP,
+        request_id="RM-2026-10",
+    )
+    asyncio.run(world.suppression.append([elsewhere]))
+
+    outcome = only(world.publish(docx.docx))
+
+    assert (outcome.status, outcome.refusal) == (PublishStatus.PUBLISHED, None)
 
 
 def test_a_file_built_from_a_draft_is_refused_though_it_passes(world: World) -> None:

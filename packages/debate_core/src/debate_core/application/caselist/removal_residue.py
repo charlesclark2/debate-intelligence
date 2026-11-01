@@ -148,7 +148,7 @@ from debate_core.application.caselist.publish_plan import manifest_prefix, remot
 from debate_core.application.errors import StoreAccessDenied, error_code_of
 from debate_core.application.ports.evidence_store import ObjectKey
 from debate_core.application.ports.evidence_versions import EvidenceVersionStore, ObjectVersion
-from debate_core.application.ports.parsed_store import AGGREGATE_NAMES, PARSED_PREFIX
+from debate_core.application.ports.parsed_store import PARSED_PREFIX, REBUILT_NAMES
 from debate_core.application.ports.suppression import (
     ManifestRewriteRecord,
     RemovalLogEntry,
@@ -193,7 +193,7 @@ the completion and missed by the removal, which is not counted either."""
 MANIFEST_ROLE: Final = "manifest"
 """The role of a manifest's versions in the report; an aggregate's role is its file name."""
 
-_ROLES: Final = (MANIFEST_ROLE, *AGGREGATE_NAMES)
+_ROLES: Final = (MANIFEST_ROLE, *REBUILT_NAMES)
 """Every role, in the order the report gives them."""
 
 
@@ -448,7 +448,7 @@ def _aggregate_role(key: ObjectKey, aggregates: str) -> str | None:
     if not key.startswith(aggregates):
         return None
     rest = key[len(aggregates) :].split("/")
-    return rest[1] if len(rest) == 2 and rest[1] in AGGREGATE_NAMES else None
+    return rest[1] if len(rest) == 2 and rest[1] in REBUILT_NAMES else None
 
 
 def completed_removals(

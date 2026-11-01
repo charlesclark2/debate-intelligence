@@ -90,12 +90,16 @@ as its `snapshot`, and matches the row of that release at its source and element
 whose own `caselist` is `openev` lets AUTO choose among camp rows by the rule above, where the latest
 release is the one of the latest year, then the first by name (`2031-ld`, `2031-pf`, `2031-policy`).
 
-The suppression rule is the one every occurrence gets, asked the same way: with the row's source
-SHA-256 and its disclosure digest, which for a camp row is none. That is the question the parse
-pipeline asks of a camp file (:func:`~debate_core.application.caselist.parse_sources.live_disclosures`),
-so a camp row is stopped by its source suppressed as a whole, and not by one team's withdrawn
-disclosure of the same bytes. A camp path withdrawn from one release (`v1-e30-t14`) drops the row
-from that release's manifest, and the next `caselist parse --caselist openev` leaves its cards out.
+The suppression rule is the one every occurrence gets, asked of the row alone
+(:func:`~debate_core.application.caselist.parse_sources.occurrence_is_stopped`). A camp row has no
+disclosure; it carries the camp path digest of each path its file is at in its release
+(`v1-e33-t07`), the digest a removal withdraws one camp path under (`v1-e30-t14`). So a camp row is
+stopped by its source suppressed as a whole, or by every path of its release withdrawn, before any
+`caselist parse --caselist openev` rebuilds the table: the same file in another release is not, and
+nor is it by one team's withdrawn disclosure of the same bytes. The parse pipeline asks the same of
+each camp path (:func:`~debate_core.application.caselist.parse_sources.live_disclosures`). A camp
+row read from a table written before rows carried camp paths has none, and only its whole source
+stops it, as before.
 
 **What the camp's release record says.** The provenance line of a camp card, in the built file's
 sidecar, names its camp, year, event and file title (data-use policy, Attribution rules 2 and 3). The
@@ -119,6 +123,7 @@ import yaml
 from pydantic import ValidationError
 
 from debate_core.application.caselist.openev_manifest import openev_release_name
+from debate_core.application.caselist.parse_sources import occurrence_is_stopped
 from debate_core.application.caselist.publish_plan import stored_row_hold
 from debate_core.application.caselist.suppression import load_suppression_state
 from debate_core.application.errors import DomainError
@@ -894,7 +899,7 @@ class _Resolution:
             return None
         candidates: list[_Candidate] = []
         for row in rows:
-            if state.suppresses(row.source_sha256, disclosure=row.disclosure) or await self._held(row, state):
+            if occurrence_is_stopped(row, state) or await self._held(row, state):
                 continue
             candidates.append(_Candidate(row, await self._disclosure_of(row), await self._camp_file_of(row)))
         if not candidates:
@@ -969,11 +974,16 @@ class _Resolution:
                 "code, side, tournament or round; add the fields that say which one is meant",
             )
             return None
-        if any(state.suppresses(row.source_sha256, disclosure=row.disclosure) for row, _ in matching):
+        if any(occurrence_is_stopped(row, state) for row, _ in matching):
+            withdrawn = (
+                "the pinned release's camp path has been withdrawn from it"
+                if pin.caselist == OPENEV_STORE
+                else "the pinned disclosure has been withdrawn"
+            )
             self._error(
                 RecipeErrorCode.SUPPRESSED_OCCURRENCE,
                 where,
-                "the pinned disclosure has been withdrawn (removal suppression list); a pin to it is "
+                f"{withdrawn} (removal suppression list); a pin to it is "
                 "refused, never moved to another occurrence: pin another, or remove the pin",
             )
             return None

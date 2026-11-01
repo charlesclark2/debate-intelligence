@@ -11,9 +11,9 @@ sizes, seconds and memory only: no school, team, file name, path, digest or card
 the cards source by source took about 85 MiB off the peak at 250 `hspolicy26` sources and about 0.2 GB
 at 500. The peak is set by the near-duplicate clusterer's index of the distinct full card bodies
 (`CutIndex` in `debate_core/evidence/near_duplicates.py`), about 180 bytes per word of distinct body
-text: 930 MiB of the 1.24 GB peak at 250 sources. It grows with the caselist's distinct full bodies,
-not with every card, and it is outside this task's packages. The aggregates are byte for byte what
-the rebuild wrote before.
+text: 930 MiB of the 1.24 GB peak at 250 sources, and 5.43 GB of the 6.25 GB peak over the whole store.
+It grows with the caselist's distinct full bodies, not with every card, and it is outside this task's
+packages. The aggregates are byte for byte what the rebuild wrote before, over the whole store too.
 
 ## How it was measured
 
@@ -33,7 +33,13 @@ the rebuild wrote before.
 | 250 | 8,583 | source by source | 86.7 | about 200 MB | 1,239,453,696 | 1,517,043,712 | the same SHA-256 for `index.jsonl`, `failures.jsonl` and `occurrences.jsonl` |
 | 500 | not reached | one list | over 112, stopped (t31) | | over 2.15 GB | | |
 | 500 | not reached | source by source | over 115, stopped | about 263 MB | over 1.98 GB, 1.88 GB by 31 s | | |
-| 3,869 | 126,681 | source by source | | | not measured: the operator follow-up in the session report | | |
+| 3,869 | 126,681 | one list | | | not run: about 7.5 GB by the figures here, past Docker Desktop's 8 GB VM less its own use | | |
+| 3,869 | 126,681 | source by source | 536.1 | 516 MB at 162 s | 6,252,990,464 | 6,260,797,440 | the same SHA-256 as the store's own `index.jsonl`, `failures.jsonl` and `occurrences.jsonl`, which the one-list rebuild wrote |
+
+The whole store was run by the operator on 2026-11-01 (load average 3.93). Its per-source files are
+4,166,520,162 bytes; t31's 4,267,638,401 counted the aggregates beside them as well. No manifest,
+suppression file or per-source file was newer than the store's aggregates, and their stamps are this
+build's, so they are the one-list rebuild's output for the same store.
 
 The one-list peak at 250 is t31's figure to the megabyte, measured again here.
 
@@ -60,27 +66,48 @@ reading, and drew a straight line from it to "about 13 GB" for the whole store. 
 then in both versions: the one-list run was at about 290 MB at 23 seconds and reached 1.28 GB at 38,
 inside the clusterer. The cards held in one list cost about 85 MiB per 250 sources.
 
+### Over the whole store
+
+From the whole-store run's samples:
+
+| Phase | Seconds | Resident |
+|---|---|---|
+| Reading 3,825 parsed sources and giving each card to the placer | 0 to 162 | 166 MB to 516 MB |
+| Building `CutIndex` over 29,866 distinct full bodies | 162 to 216 | 516 MB to 5.95 GB |
+| MinHash bands, candidate pairs, joins and the cut step | 216 to about 505 | 5.95 GB to 6.25 GB |
+| The clusterer returns; linking, placing, ordering and writing the rows | about 505 to 536 | 2.3 GB to 2.8 GB |
+
+The last phase holds about 2 GB more than at 250 sources: the linker's word lists, one tuple of words
+per distinct full body (`FullCardWords`), which the one-list rebuild built too. It is below the
+clusterer's peak, but it is the next largest term, and a smaller `CutIndex` would leave it the peak.
+
 ## What the peak grows with now
 
 * **The distinct full bodies' text**, through `CutIndex`: about 30 bytes per character. Distinct bodies
   grow more slowly than sources, because later sources repeat earlier cards: 5,470 for the first 250
   sources, 29,866 for all 3,869.
+* **The linker's word lists** after the clusterer returns, one per distinct full body: about 2 GB over
+  the whole store.
 * **Each card, a little**: its fingerprint, its source, paragraph range and completeness, and each of
-  its rows' place in the table, a few hundred bytes. 126,681 cards and 144,841 rows are about 0.1 GB.
+  its rows' place in the table. By subtraction from the whole-store reading phase (516 MB, less the
+  166 MB it started at and about 176 MB of distinct body text the placer keeps for the clusterer),
+  roughly 1.4 KB per card, 0.17 GB for 126,681 cards.
 * **The largest source**, while it is read: one document at a time.
 
-**Estimates, not measurements.** The whole `hspolicy26` store: 29,866 bodies at 250's 5,883 characters
-each is about 176 million characters, about 5.1 GB of `CutIndex`, so a peak of about 5.5 GB, against
-about 6.8 GB for the one list (its cards add about 1.3 GB). `hspolicy25`'s archive is 3,958,272,657
-bytes, 3.6 times `hspolicy26`'s stored sources. If its distinct body text grew as fast as its bytes,
-its `CutIndex` alone would be about 18 GB; it grows more slowly than that, by how much is not known
-until a season is measured. The operator follow-up measures the whole `hspolicy26` store, which
-replaces the first estimate.
+**Measured, then estimated.** The whole `hspolicy26` store peaks at 6.25 GB; the estimate made from
+the subsets before it was run was 5.5 GB. The one list would have added about 1.3 GB of cards (85 MiB
+per 250 sources), about 7.5 GB, which was not run. `hspolicy25`'s archive is 3,958,272,657 bytes, 3.6
+times `hspolicy26`'s stored sources. If its distinct body text grew as fast as its bytes, its peak
+would be about 3.6 × 6.25 = 22.5 GB; it should grow more slowly than that, because later sources
+repeat earlier cards, but by how much is not known until a season is measured. The parse workers are
+stopped before the rebuild starts, so the rebuild has the task's memory to itself.
 
 ## What follows from it
 
 * A full season's rebuild in 32 GB depends on the clusterer's index, not on how the cards are read.
   Holding shingles as fixed-size hashes rather than strings, and not keeping each body's word list
   once its shingles are made, would shrink the largest term by several times. That is a change in
-  `debate_core.evidence`, where clustering is decided, and needs its own byte-identity proof; the
-  session report asks the PM about it.
+  `debate_core.evidence`, where clustering is decided, and needs its own byte-identity proof: the
+  PM's ruling of 2026-11-01 files it as its own task, with every hash match confirmed by comparing
+  strings, and keeps the run task at 32 GB until then. The linker's word lists are the next term
+  that task will meet.

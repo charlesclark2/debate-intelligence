@@ -283,3 +283,40 @@ sources; the near-duplicate clusterer's `CutIndex` is what dominates. The PM's s
    block whenever it suits, and before Thursday's image apply if that image carries this commit. The
    PM records the result in a batch and sets the Goal `Succeeded` if the three digests match.
 8. **Merge:** `scripts/task pr --partial` once `ci` is green.
+
+## The whole-store check (2026-11-01, after the PM review)
+
+The operator ran the report's follow-up block on 2026-11-01 (load average 3.93), unchanged by the
+sync. The streaming rebuild over a copy-on-write clone of the Mac's whole `hspolicy26` store, in the
+run image under a 7 GB cap:
+
+* `sources 3869 parsed 3825 cards 126681 occurrences 144841 clusters 21595 rebuild seconds 536.1`
+* `VmHWM 6252990464`, cgroup peak 6,260,797,440
+* `index.jsonl` `ba319604c47ec8c4e1a514730f886a5696051590c98a3f288ab915de192cbde7` (1,513,771 bytes),
+  `failures.jsonl` `5ce4108491dba880b92d4304e1b7ca25fc5422f1f450042efe8b044292d94d7f` (19,344),
+  `occurrences.jsonl` `2457484606ade21ea4a00d298f0ecc7430e2c5e029a40de5c01d5fbc0826e5c8` (99,585,124):
+  each equal to `shasum -a 256` of the store's own aggregates, which the one-list rebuild wrote.
+
+| Criterion | Status | Evidence |
+|---|---|---|
+| ac1, part 3: byte-identical on the Mac's `hspolicy26` store | PASS | 250 sources old against new (above), and the whole store against its own aggregates: the three digests above. |
+| ac1 as amended (2026-11-01): no card held past its source, measured before and after, byte-identical on synthetic stores and the whole store, by tests shown failing first | PASS | This report's evidence above, and this section. Its purpose, a season that fits, is the compact `CutIndex` task's. |
+
+**What the run adds to the measurement**, now in
+[`docs/data/caselist-rebuild-memory.md`](../data/caselist-rebuild-memory.md): the peak is 6.25 GB (the
+estimate was 5.5). Reading 3,825 sources took 162 s and reached 516 MB, and building `CutIndex` took
+it to 5.95 GB by 216 s. After the clusterer returns, the linker's word lists, one tuple per distinct
+full body (as the one-list rebuild had), hold about 2 GB: the next term the `CutIndex` task will meet.
+By a straight line in bytes, `hspolicy25` would peak at about 22.5 GB at most.
+
+**The phase is left `InProgress`**, as the PM's instruction of 2026-11-01 says, although every criterion
+of the amended ac1 now passes. For the PM, paste-ready:
+
+> v1-e40-t36's whole-store check matched: the streaming rebuild over all 3,869 hspolicy26 sources
+> wrote the store's own index, failures and occurrence files byte for byte (equal SHA-256), peaking
+> at 6.25 GB in 536 s. Every criterion of the amended ac1 now passes. Options: (a) set the Goal to
+> Succeeded (`uv run scripts/task_helper.py set-phase v1-e40-t36-parse-rebuild-streams-occurrence-rows Succeeded`),
+> and the operator runs `scripts/task pr` without `--partial`; (b) keep it InProgress and merge
+> `--partial` as planned. Recommendation: (a), since nothing is left open. Also for the CutIndex task:
+> after the clusterer returns, the linker's word tuples per distinct body hold about 2 GB over the
+> whole store, so shrinking CutIndex alone would leave that as the peak.

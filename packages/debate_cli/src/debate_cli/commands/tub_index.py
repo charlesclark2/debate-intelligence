@@ -207,8 +207,7 @@ def build_summary(built: BuiltSearchIndex) -> dict[str, JsonValue]:
 
 def publish_summary(published: PublishedSearchIndex) -> dict[str, JsonValue]:
     """The `--json` envelope's `data` for `publish`: the keys written, in order, the pointer, the index
-    it replaced, what `--allow-shrink` let through (`v1-e39-t14`), `null` when it was not needed, and
-    `recorded`, `null` for a publish (`v1-e39-t25`)."""
+    it replaced, and what `--allow-shrink` let through (`v1-e39-t14`), `null` when it was not needed."""
     allowed = published.allowed_shrink
     return {
         "index_id": published.index_id,
@@ -225,16 +224,16 @@ def publish_summary(published: PublishedSearchIndex) -> dict[str, JsonValue]:
             ],
             "current_unreadable": allowed.current_unreadable,
         },
-        "recorded": None,
     }
 
 
 def recorded_summary(recorded: RecordedCheck) -> dict[str, JsonValue]:
-    """`data` for `publish --newest` on the index `current.json` names (`v1-e39-t25`): `publish`'s keys.
+    """`data` for `publish --newest` on the index `current.json` names (`v1-e39-t25`).
 
-    `written` is the record's key alone, `pointer` is `current.json` as it was and still is, and
-    `replaced` is `null`, since nothing replaced the index. `recorded` holds the record written and
-    what the index was checked against before it.
+    Every key of :func:`publish_summary`, with `written` the record's key alone, `pointer`
+    `current.json` as it was and still is, and `replaced` `null`, since nothing replaced the index.
+    And one more, `recorded`: the record written and what the index was checked against before it.
+    A publish's `data` is unchanged, so `recorded` is how a script tells the two apart.
     """
     return {
         "index_id": recorded.record.index_id,

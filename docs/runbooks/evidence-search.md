@@ -1632,7 +1632,8 @@ manifest, so a restored directory without its files is refused as before). Then:
   rebuild on this Mac under a longer list that stopped nothing): it writes `checked-against.json`
   and nothing else. The table is titled `Search index <id> already current: what it was checked
   against recorded`; the `--json` result's `written` is the record's key alone, `pointer` is
-  `current.json` as it still is, and `recorded` holds the record and what it replaced.
+  `current.json` as it still is, and one key a publish's result does not have, `recorded`, holds
+  the record and what it replaced.
 - **It is what the index is already recorded as checked against**: it is refused with
   `SEARCH_INDEX_ALREADY_CURRENT` and writes nothing. That is the end; there is nothing to publish.
 

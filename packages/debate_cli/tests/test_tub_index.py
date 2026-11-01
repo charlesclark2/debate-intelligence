@@ -547,7 +547,7 @@ def test_tub_index_publish_newest_on_the_current_index_records_what_it_was_check
     first = built(parsed)
     published = invoke("--json", *NEWEST)
     assert published.exit_code == ExitCode.OK, published.stdout
-    assert envelope_of(published)["data"]["recorded"] is None, "a publish records nothing"
+    assert "recorded" not in envelope_of(published)["data"], "a publish's data is as it was"
     pointer = pointer_in(buckets, DEV_BUCKET)
     suppress_a_source_no_store_holds(parsed)
     assert built(parsed) == first, "the premise: the same index"

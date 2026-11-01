@@ -105,6 +105,7 @@ from debate_core.evidence.file_checks.placeholders import CP_TEXT_SLOT
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
 
 __all__ = [
+    "CHECK_AGAINST_THE_AFFIRMATIVE",
     "CHECK_AGAINST_THE_PLAN",
     "AffirmativeSideKept",
     "CP_TEXT_SLOT",
@@ -125,8 +126,14 @@ RECIPES_DIRECTORY: Final = "recipes"
 CHECK_AGAINST_THE_PLAN: Final = (
     "# Check this block against the affirmative's plan: its heading names a plank or mechanism of a plan."
 )
-"""The comment above a counterplan draft's block whose heading names a plank or mechanism of the plan, or
-whose heading places an aff or an advantage (`v1-e33-t13`)."""
+"""The comment above a counterplan draft's block whose heading names a plank or mechanism of the plan."""
+
+CHECK_AGAINST_THE_AFFIRMATIVE: Final = (
+    "# Check this block against the affirmative's plan: its heading names an affirmative or one of its "
+    "advantages."
+)
+"""The comment above a counterplan draft's block whose heading places an aff or an advantage (`v1-e33-t13`),
+and names no plank or mechanism of the plan (`v1-e33-t14`)."""
 
 #: The disclosure fields a pin adds, a step at a time and the least personal first, while its key
 #: matches more than one disclosure: a school and team code only when nothing else tells them apart.
@@ -324,7 +331,8 @@ class FileSuggestService:
             kept,
             pins,
             counterplan=counterplan,
-            marked=(affirmative_side | _naming_the_plan(run, kept)) if counterplan else frozenset(),
+            naming_the_plan=_naming_the_plan(run, kept) if counterplan else frozenset(),
+            affirmative_side=affirmative_side,
         )
         loaded = load_recipe(text)
         if loaded.recipe is None:
@@ -604,7 +612,8 @@ def _render(
     pins: Mapping[str, Mapping[str, Any]],
     *,
     counterplan: bool,
-    marked: frozenset[str],
+    naming_the_plan: frozenset[str],
+    affirmative_side: frozenset[str],
 ) -> str:
     """The draft's YAML, written by hand so each card carries its read count as a comment.
 
@@ -635,7 +644,7 @@ def _render(
         if one.block != block:
             first = block is None
             block = one.block
-            if block in marked:
+            if block in naming_the_plan | affirmative_side:  # SKELETON: one comment for both
                 lines.append(f"      {CHECK_AGAINST_THE_PLAN}")
             lines += [f"      - block: {_quoted(block)}", "        items:"]
             if counterplan and first:

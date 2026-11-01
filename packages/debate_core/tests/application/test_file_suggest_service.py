@@ -49,6 +49,7 @@ from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.suppression import RecordedSuppressionList
 from debate_core.application.file_recipes import RecipeResolver, load_recipe
 from debate_core.application.file_suggest_service import (
+    CHECK_AGAINST_THE_AFFIRMATIVE,
     CHECK_AGAINST_THE_PLAN,
     CP_TEXT_SLOT,
     AffirmativeSideKept,
@@ -207,8 +208,12 @@ def plant(
     on_record: Sequence[Team] = (QX, ZALU, BECO, XY, MNPR, RQ),
     files: Sequence[PlantedFile] = FILES,
     taxonomy: str = TAXONOMY,
+    mechanisms: str | None = None,
 ) -> World:
-    """The table above under `root`. Only the teams in `on_record` have their disclosures recorded."""
+    """The table above under `root`. Only the teams in `on_record` have their disclosures recorded.
+
+    `mechanisms` is the topic's plan-mechanism file (`v1-e33-t14`); None writes none, as for most topics.
+    """
     data_dir = root / "data"
     store = PlantedCaselist(data_dir, CASELIST)
     caselists = InMemoryCaselistRepository()
@@ -239,6 +244,9 @@ def plant(
     (config_dir / "taxonomies").mkdir(parents=True)
     (config_dir / "topics.yaml").write_text(TOPICS, encoding="utf-8")
     (config_dir / "taxonomies" / f"{TOPIC}.yaml").write_text(taxonomy, encoding="utf-8")
+    if mechanisms is not None:
+        (config_dir / "plan_mechanisms").mkdir()
+        (config_dir / "plan_mechanisms" / f"{TOPIC}.yaml").write_text(mechanisms, encoding="utf-8")
     return World(root=root, data_dir=data_dir, config_dir=config_dir, digests=digests, caselists=caselists)
 
 
@@ -894,15 +902,20 @@ def test_a_block_an_advantage_or_an_aff_places_is_kept_in_rank_order_and_others_
     assert result.left_out == ()
 
 
-def test_each_kept_affirmative_side_block_has_the_check_against_the_plan_comment_directly_above_it(
+def test_each_kept_affirmative_side_block_has_the_check_against_the_affirmative_comment_directly_above_it(
     sides_world: World,
 ) -> None:
+    """Changed on purpose by `v1-e33-t14` (the PM's amendment of 2026-10-31): t13 pinned the plank comment
+    here, which reads wrongly above an advantage's block; such a block now has its own comment."""
     text = sides_world.suggest(position="states-cp").path.read_text(encoding="utf-8")
     above = comment_above_each_block(text)
     assert list(above) == ["states cp", "cost advantage", "federal payer", "solvency"]
-    assert above["cost advantage"] == above["federal payer"] == CHECK_AGAINST_THE_PLAN
-    assert CHECK_AGAINST_THE_PLAN not in (above["states cp"], above["solvency"])
-    assert sum(line.strip() == CHECK_AGAINST_THE_PLAN for line in text.splitlines()) == 2
+    assert above["cost advantage"] == above["federal payer"] == CHECK_AGAINST_THE_AFFIRMATIVE
+    assert {above["states cp"], above["solvency"]}.isdisjoint(
+        {CHECK_AGAINST_THE_PLAN, CHECK_AGAINST_THE_AFFIRMATIVE}
+    )
+    assert sum(line.strip() == CHECK_AGAINST_THE_AFFIRMATIVE for line in text.splitlines()) == 2
+    assert CHECK_AGAINST_THE_PLAN not in text
 
 
 def test_the_counts_say_what_was_left_out_and_what_was_kept_as_affirmative_side(sides_world: World) -> None:
@@ -934,5 +947,216 @@ def test_a_draft_that_is_not_a_counterplans_keeps_an_advantages_block_unmarked_a
         ("cost advantage", [fingerprint_of("link")]),
     ]
     assert CP_TEXT_SLOT not in text and CHECK_AGAINST_THE_PLAN not in text
+    assert CHECK_AGAINST_THE_AFFIRMATIVE not in text
     assert result.other_positions is None
     assert result.affirmative_side_kept is None
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e33-t14: the coach's plan-mechanism words mark a counterplan draft's block whose heading holds one,
+# and a block an aff or an advantage places has its own comment
+# ------------------------------------------------------------------------------------------------
+
+MECHANISM_TAXONOMY: Final = f"""\
+schema_version: 1
+topic_id: {TOPIC}
+taxonomy_version: 1.0.0
+event: POLICY
+positions:
+  - {{id: states-cp, label: States CP, kind: cp, side: neg, aliases: [states cp]}}
+  - {{id: single-payer-aff, label: Single payer, kind: aff, side: aff, aliases: [single payer]}}
+  - {{id: cost-advantage, label: Cost advantage, kind: advantage, side: aff, aliases: [cost advantage],
+     parent: single-payer-aff}}
+  - {{id: federalism-advantage, label: Federalism advantage, kind: advantage, side: aff,
+     aliases: [preempt advantage], parent: single-payer-aff}}
+  - {{id: politics-da, label: Politics DA, kind: da, side: neg, aliases: [politics da]}}
+"""
+
+#: hspolicy26's seed, as the committed file holds it.
+SEED_MECHANISMS: Final = f"""\
+schema_version: 1
+topic_id: {TOPIC}
+words: [preempt, preemption, waiver, waive]
+"""
+
+PREEMPTION: Final = (*STATES, "Preemption")
+WAIVERS: Final = (*STATES, "Waivers")
+PREEMPTIVE: Final = (*STATES, "Preemptive Federalism")
+PREEMPT_ADVANTAGE: Final = (*STATES, "Preempt Advantage")
+
+#: Nine teams' 1NCs on 09-08, one file each: T1-T6 read the States CP, T7-T9 the aff's advantages.
+MECHANISM_FILES: Final[tuple[PlantedFile, ...]] = (
+    (
+        "kilo",
+        "2026-09-08",
+        (T1,),
+        (
+            (STATES, "fiat"),
+            (PREEMPTION, "solvency"),
+            (WAIVERS, "waivers"),
+            (PREEMPTIVE, "premiums"),
+            (STATES, "costs"),
+            (STATES, "payer"),
+        ),
+    ),
+    (
+        "lima",
+        "2026-09-08",
+        (T2,),
+        (
+            (STATES, "fiat"),
+            (PREEMPTION, "solvency"),
+            (WAIVERS, "waivers"),
+            (PREEMPTIVE, "premiums"),
+            (STATES, "costs"),
+        ),
+    ),
+    (
+        "mike",
+        "2026-09-08",
+        (T3,),
+        ((STATES, "fiat"), (PREEMPTION, "solvency"), (WAIVERS, "waivers"), (PREEMPTIVE, "premiums")),
+    ),
+    ("november", "2026-09-08", (T4,), ((STATES, "fiat"), (PREEMPTION, "solvency"), (WAIVERS, "waivers"))),
+    ("oscar", "2026-09-08", (T5,), ((STATES, "fiat"), (PREEMPTION, "solvency"))),
+    ("papa", "2026-09-08", (T6,), ((STATES, "fiat"),)),
+    ("romeo", "2026-09-08", (T7,), ((ADVANTAGE, "costs"), (PREEMPT_ADVANTAGE, "payer"))),
+    ("sierra", "2026-09-08", (T8,), ((ADVANTAGE, "costs"), (PREEMPT_ADVANTAGE, "payer"))),
+    ("tango", "2026-09-08", (T9,), ((ADVANTAGE, "costs"), ((*POLITICS, "Waivers"), "link"))),
+)
+"""Read under states-cp, all from T1-T6 under `States CP` or a heading below it that places nothing: `fiat`
+by 6 teams (rank 1), `solvency` by 5, `waivers` by 4, `premiums` by 3, `costs` by 2 and `payer` by 1.
+
+| Card | Its block | Placed under | The heading holds a seed word | The CP's draft |
+|---|---|---|---|---|
+| `fiat` | `states cp` | states-cp itself | no | kept, no comment |
+| `solvency` | `preemption` | nothing | `preemption`, listed | kept, the plank comment |
+| `waivers` | `waivers` | nothing | `waiver`, plural | kept, the plank comment |
+| `premiums` | `preemptive federalism` | nothing | no: `preemptive` is another word | kept, no comment |
+| `costs` | `cost advantage` (3 of 5) | cost-advantage, an advantage | no | kept, the aff comment |
+| `payer` | `preempt advantage` (2 of 3) | federalism-advantage | `preempt`, listed | kept, plank comment |
+
+No heading holds the aff's alias or opens with a plank label, so only the word list and the affirmative
+side mark a block here, and the aff comment is :data:`CHECK_AGAINST_THE_AFFIRMATIVE`. Nothing is left out.
+
+Read under politics-da, a DA: `link` by T9, under `Waivers` below `Politics DA`, which places nothing, so
+`Politics DA` above it places the card. Its draft's one block is `waivers`, which holds a seed word.
+"""
+
+
+def mechanism_world(root: Path, mechanisms: str | None) -> World:
+    return plant(
+        root,
+        on_record=(T1, T2, T3, T4, T5, T6, T7, T8, T9),
+        files=MECHANISM_FILES,
+        taxonomy=MECHANISM_TAXONOMY,
+        mechanisms=mechanisms,
+    )
+
+
+@pytest.fixture
+def seeded_world(tmp_path: Path) -> World:
+    return mechanism_world(tmp_path, SEED_MECHANISMS)
+
+
+MECHANISM_BLOCKS: Final = [
+    "states cp",
+    "preemption",
+    "waivers",
+    "preemptive federalism",
+    "cost advantage",
+    "preempt advantage",
+]
+
+
+def test_the_mechanism_world_drafts_every_block_in_rank_order_and_leaves_none_out(
+    seeded_world: World,
+) -> None:
+    result = seeded_world.suggest(position="states-cp")
+    text = result.path.read_text(encoding="utf-8")
+    assert [(block, [item.get("fingerprint") for item in items]) for block, items in items_of(text)] == [
+        ("states cp", [None, fingerprint_of("fiat")]),
+        ("preemption", [fingerprint_of("solvency")]),
+        ("waivers", [fingerprint_of("waivers")]),
+        ("preemptive federalism", [fingerprint_of("premiums")]),
+        ("cost advantage", [fingerprint_of("costs")]),
+        ("preempt advantage", [fingerprint_of("payer")]),
+    ]
+    assert result.other_positions == OtherPositionsLeftOut(blocks=0, cards=0)
+    assert result.affirmative_side_kept == AffirmativeSideKept(blocks=2, cards=2)
+
+
+def test_a_block_whose_heading_holds_a_listed_word_or_its_plural_has_the_plank_comment(
+    seeded_world: World,
+) -> None:
+    above = comment_above_each_block(
+        seeded_world.suggest(position="states-cp").path.read_text(encoding="utf-8")
+    )
+    assert list(above) == MECHANISM_BLOCKS
+    assert above["preemption"] == above["waivers"] == CHECK_AGAINST_THE_PLAN
+
+
+def test_a_heading_holding_a_listed_word_only_inside_another_word_is_not_marked(seeded_world: World) -> None:
+    above = comment_above_each_block(
+        seeded_world.suggest(position="states-cp").path.read_text(encoding="utf-8")
+    )
+    assert list(above) == MECHANISM_BLOCKS
+    for block in ("states cp", "preemptive federalism"):
+        assert not above[block].startswith("#"), block
+
+
+def test_an_advantages_block_has_the_affirmative_comment_and_not_the_plank_one(seeded_world: World) -> None:
+    above = comment_above_each_block(
+        seeded_world.suggest(position="states-cp").path.read_text(encoding="utf-8")
+    )
+    assert list(above) == MECHANISM_BLOCKS
+    assert above["cost advantage"] == CHECK_AGAINST_THE_AFFIRMATIVE
+
+
+def test_a_block_marked_both_ways_has_one_comment_the_plank_one(seeded_world: World) -> None:
+    lines = seeded_world.suggest(position="states-cp").path.read_text(encoding="utf-8").splitlines()
+    (at,) = [index for index, line in enumerate(lines) if line.strip() == '- block: "preempt advantage"']
+    assert lines[at - 1].strip() == CHECK_AGAINST_THE_PLAN
+    assert not lines[at - 2].strip().startswith("#")
+    assert sum(line.strip() == CHECK_AGAINST_THE_PLAN for line in lines) == 3
+    assert sum(line.strip() == CHECK_AGAINST_THE_AFFIRMATIVE for line in lines) == 1
+
+
+def test_a_topic_with_no_word_list_marks_only_what_t11_and_t13_marked(tmp_path: Path) -> None:
+    result = mechanism_world(tmp_path, None).suggest(position="states-cp")
+    above = comment_above_each_block(result.path.read_text(encoding="utf-8"))
+    assert list(above) == MECHANISM_BLOCKS
+    assert above["cost advantage"] == above["preempt advantage"] == CHECK_AGAINST_THE_AFFIRMATIVE
+    for block in ("states cp", "preemption", "waivers", "preemptive federalism"):
+        assert not above[block].startswith("#"), block
+    assert result.affirmative_side_kept == AffirmativeSideKept(blocks=2, cards=2)
+
+
+def test_a_listed_word_does_not_hold_in_a_longer_word_that_is_not_its_plural(tmp_path: Path) -> None:
+    """Only `waive` is listed: `waivers` is not `waive` with `s` or `es`, and `preempt` is not listed."""
+    only_waive = SEED_MECHANISMS.replace("[preempt, preemption, waiver, waive]", "[waive]")
+    above = comment_above_each_block(
+        mechanism_world(tmp_path, only_waive).suggest(position="states-cp").path.read_text(encoding="utf-8")
+    )
+    assert list(above) == MECHANISM_BLOCKS
+    for block in ("preemption", "waivers", "preemptive federalism"):
+        assert not above[block].startswith("#"), block
+    assert above["preempt advantage"] == CHECK_AGAINST_THE_AFFIRMATIVE
+
+
+def test_the_word_list_marks_only_a_counterplans_draft(tmp_path: Path) -> None:
+    """A DA's draft is as before, though its one block, `waivers`, holds `waiver`'s plural."""
+    result = mechanism_world(tmp_path, SEED_MECHANISMS).suggest(position="politics-da")
+    text = result.path.read_text(encoding="utf-8")
+    assert [(block, [item.get("fingerprint") for item in items]) for block, items in items_of(text)] == [
+        ("waivers", [fingerprint_of("link")])
+    ]
+    assert CHECK_AGAINST_THE_PLAN not in text and CHECK_AGAINST_THE_AFFIRMATIVE not in text
+    assert result.affirmative_side_kept is None
+
+
+def test_the_draft_with_both_comments_still_validates_and_loads(seeded_world: World) -> None:
+    text = seeded_world.suggest(position="states-cp").path.read_text(encoding="utf-8")
+    jsonschema.validate(yaml.safe_load(text), yaml.safe_load(SCHEMA.read_text(encoding="utf-8")))
+    loaded = load_recipe(text)
+    assert loaded.ok, loaded.errors

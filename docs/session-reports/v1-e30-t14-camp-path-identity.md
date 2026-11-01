@@ -572,3 +572,13 @@ held by a test that executes the prod removal and finds the other camp's row sti
 
 **Operator follow-up 1** after the merge: the re-derive in dev's data directory, then the publish
 to each bucket, for `2026-policy`.
+
+## Operator records (recorded by the PM, 2026-11-01)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac1, rows already in dev given their upstream identity | Operator follow-up 1 (dev and prod) | Dev `2026-policy` done; prod open | 2026-11-01: `v1-e40-t34`'s bucket-mode re-import of `2026-policy` in dev gave 106 rows their upstream identity, published the manifest and saved dev's bundle; the check after found nothing left to change. Dev's `2026-ld` (2 rows) was dry-run only and is not yet done |
+
+The Goal stays `InProgress` for prod's half, which waits for the next promotion, and for dev's `2026-ld` rows, done with it.

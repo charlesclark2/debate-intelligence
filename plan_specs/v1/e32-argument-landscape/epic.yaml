@@ -883,5 +883,28 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e32-t38-landscape-smoke-checks-order-line-and-dry-run-refusal
+    - id: t39
+      kind: Task
+      name: 'Why the model stage scored 36.8%: the evaluation broken down, and the scan''s hits listed in the operator''s terminal'
+      description: >-
+        Why the model stage scored 36.8%: the evaluation broken down, and the scan's hits
+        listed in the operator's terminal.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t39-model-evaluation-diagnosis.yaml
+        goalRef: v1-e32-t39-model-evaluation-diagnosis
+      dependsOn:
+      - t21
+      - t26
+      - t37
+      - ext-v1-e05-t05-structured-output-validation
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t39-model-evaluation-diagnosis reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t39-model-evaluation-diagnosis
 status:
   phase: Pending

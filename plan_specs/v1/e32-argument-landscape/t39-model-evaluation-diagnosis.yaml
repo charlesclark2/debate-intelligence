@@ -1,0 +1,120 @@
+# TASK v1-e32-t39-model-evaluation-diagnosis - Why the model stage scored 36.8%: the evaluation broken down, and the scan's hits listed in the operator's terminal
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t39-model-evaluation-diagnosis
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "Why the model stage scored 36.8%: the evaluation broken down, and the scan's hits listed in the operator's terminal"
+spec:
+  # Filed by the PM, 2026-11-01, from v1-e32-t07's first recorded evaluation (the operator's run of 2026-11-01) and the PM's ruling that day.
+  description: >-
+    v1-e32-t07's first recorded evaluation (the operator's, 2026-11-01: hspolicy26 at snapshot
+    2026-10-20, taxonomy 1.4.0, prompt landscape.classify_position 1.0.0) labelled 47 cards and
+    asked about 47 in 4 calls. One call's structured output failed validation, 8 cards were
+    refused NO_POSITION and 1 was placed below the threshold. Of the 38 counted, 14 named the
+    coach's position: 36.8% against the 85% bar, with 4 of the 38 cards the coach labelled none.
+    The scan found a school and a tournament in all 3 prompt-input texts, and a school, a
+    team-code word and a tournament in all 3 cassettes. The PM ruled no live model run until
+    this is diagnosed, and the cassettes are kept. This task finds where the gap is, offline, by
+    replaying those cassettes: no model call of any kind. v1-e32-t07 is InProgress and is
+    deliberately not a prerequisite. Build a breakdown, as a `landscape evaluate` option or a
+    sibling command, that the operator runs locally in replay mode. (1) Accuracy. Give each
+    labelled card one outcome: correct; a wrong position of the same kind; a wrong kind; placed
+    when the coach labelled it none; refused NO_POSITION (with the coach's label for it); below
+    the threshold; or lost to the call that failed validation (say how many cards that call
+    carried and what the guard did with them). Put the deterministic stage's placement of the
+    same card beside it, so the model is compared with what headings alone achieve. Give counts
+    by item kind, and a confusion table of position ids (taxonomy ids only, which are
+    committed). Find out whether the coach sample is all cards or only the cards a run sends to
+    the model (unplaced, or placed below the threshold), and give the accuracy on that subset,
+    because the bar applies to it. (2) The scan. List each hit in the operator's terminal only,
+    never in a file, report, log or JSON output: the text it is in (an input batch or a
+    cassette), its field (heading path, tag, short cite, excerpt, model rationale or cassette
+    metadata), its kind (school, team-code word or tournament), the matched words and a few
+    words either side. Counts by kind and field are written, and may be committed. Say whether
+    the hits are real names the scrub missed or ordinary words (a surname, a city, a common word
+    that is also a word of a team code). From synthetic cases, propose what the scrub and the
+    scan should each do. If false positives are to be accepted, the list of them is kept locally
+    and keyed by digest, never committed in clear. Record the counts, with no text, in
+    `docs/data/landscape-model-evaluation.md`, and send the PM the options as counts: the labels
+    (relabel or drop), the bar or the set it applies to, the prompt (what the wrong answers have
+    in common), the batch size or the schema, the scrub, the scan. This task changes no prompt,
+    threshold, taxonomy, scrub or scan rule; the fix is filed from its findings.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.arguments, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, tests/fixtures/landscape, docs/data, docs/runbooks]
+    forbidden:
+      - A model call of any kind, live or in a test (replay of committed or local cassettes only)
+      - A scan hit, card text, tag, heading, cite or coach label text in the report, docs/data, a log, JSON output or a test
+      - A change to the prompt, the review threshold, the taxonomy, the scrub or the scan rule
+      - A school, team code or debater name in a fixture
+      - Network or AWS access in a test
+  context:
+    - kind: TaskRef
+      name: v1-e32-t21-local-classifier-comparison
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e32-t26-review-queue-proxy-ordering
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e32-t37-model-use-gate-reads-the-open-questions-table
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e05-t05-structured-output-validation
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The breakdown and the terminal-only hit listing work on synthetic fixtures and
+        replay cassettes: every labelled card falls in exactly one outcome and the outcomes
+        sum to the labelled count, the deterministic placement is shown beside each, and
+        nothing hit-bearing reaches JSON output, a log or a file; by tests shown failing
+        first.
+    - id: ac2
+      description: >-
+        The operator's replay run over the kept cassettes (operator, recorded by the PM)
+        gives the counts recorded in docs/data/landscape-model-evaluation.md, and the PM has
+        the options.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t39-model-evaluation-diagnosis-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    Why the model stage scored 36.8%: the evaluation broken down, and the scan's hits listed in
+    the operator's terminal.
+  goalRef:
+    name: v1-e32-t39-model-evaluation-diagnosis
+  graph:
+    nodes:
+      - id: model-evaluation-diagnosis
+        kind: Task
+        name: Evaluation breakdown
+        description: >-
+          Why the model stage scored 36.8%: the evaluation broken down, and the scan's
+          hits listed in the operator's terminal.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Evaluation breakdown tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, packages/debate_cli/tests, -k, evaluat]
+status:
+  phase: Pending

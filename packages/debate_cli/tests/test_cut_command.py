@@ -8,7 +8,8 @@ container name:
 
 * `article_fetch_transport`: v1-e04-t06's :class:`~tests.fixtures.http.cassettes.ReplayTransport`
   over the committed cassettes, which answers from them and sends nothing;
-* `crossref_transport`: a mock that records every request and answers 404, so no lookup leaves;
+* `crossref_transport`: v1-e06-t01's respx-backed `CrossrefAnswers`, which answers only the DOIs a
+  test serves and keeps every request, so no lookup leaves;
 * `card_model_router`, only where a test says so: a counting wrapper, or scripted answers for a
   refused markup or a refused call. Otherwise the container builds the `test` profile's router, the
   fixture fake over the committed `tests/fixtures/model_outputs/`.
@@ -35,6 +36,7 @@ import docx
 import httpx
 import pytest
 from tests.fixtures.card.card_world import MODEL_OUTPUTS, NEWS_ARGUMENT, NEWS_NEED, CountingRouter
+from tests.fixtures.citation.citation_world import CrossrefAnswers
 from tests.fixtures.http.cassettes import ReplayTransport, cassette_names, load_cassette
 from typer.testing import CliRunner, Result
 
@@ -118,11 +120,9 @@ class Seams:
 
     transport: ReplayTransport
     router: ModelRouter | None = None
-    crossref_requests: list[str] = field(default_factory=list[str])
-
-    def crossref(self, request: httpx.Request) -> httpx.Response:
-        self.crossref_requests.append(str(request.url))
-        return httpx.Response(404)
+    crossref: CrossrefAnswers = field(default_factory=CrossrefAnswers)
+    expected_lookups: list[str] = field(default_factory=list[str])
+    """The Crossref requests a test expects, in order; none unless it says so."""
 
 
 @pytest.fixture
@@ -139,7 +139,7 @@ def seams(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Seams]:
     def with_seams(self: ServiceContainer, **arguments: Any) -> None:
         build(self, **arguments)
         self.override("article_fetch_transport", seams.transport)
-        self.override("crossref_transport", httpx.MockTransport(seams.crossref))
+        self.override("crossref_transport", httpx.MockTransport(seams.crossref.handle))
         self.override("clock", lambda: NOW)
         if seams.router is not None:
             self.override("card_model_router", seams.router)
@@ -147,7 +147,7 @@ def seams(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Seams]:
     monkeypatch.setattr(ServiceContainer, "__init__", with_seams)
     yield seams
     assert seams.transport.unrecorded == [], "a request no cassette recorded"
-    assert seams.crossref_requests == [], "the news article has no DOI, so Crossref is never asked"
+    assert [str(request.url) for request in seams.crossref.requests] == seams.expected_lookups
 
 
 @pytest.fixture
@@ -305,6 +305,54 @@ def test_every_shipped_format_profile_writes_the_card(seams: Seams, tmp_path: Pa
 
     assert result.exit_code == ExitCode.OK, result.output
     assert embedded_manifest(out)["cards"][0]["format_profile"] == profile
+
+
+JOURNAL_PDF_URL: Final = "https://journal.synthetic-conservation.example/doi/pdf/10.5555/jscs.2026.0012"
+JOURNAL_DOI: Final = "10.5555/jscs.2026.0012"
+JOURNAL_FULL_CITE: Final = (
+    "Okonkwo-Hale et al. 26 [Rhea Okonkwo-Hale and Tomas Lindqvist (Rhea Okonkwo-Hale, Department of "
+    'Ecology, University of Synthetic Studies); "Moral Hazard and the Return of Lost Species"; Journal of '
+    f"Synthetic Conservation Studies; April 20, 2026; {JOURNAL_PDF_URL}; accessed October 26, 2026]"
+)
+"""`tests/fixtures/citation/open-access-pdf.expected.json`'s full cite: every field from Crossref's answer."""
+JOURNAL_SELECTION: Final[dict[str, Any]] = {
+    "passages": [{"first_paragraph": 13, "last_paragraph": 13, "start_offset": 0, "end_offset": None}],
+    "tag": {
+        "text": "Revival funding cannot replace habitat protection",
+        "argument_role": "link",
+        "need_alignment": "direct",
+        "confidence": 0.8,
+    },
+    "rationale": "Paragraph 13 concludes that revival is no replacement for protection.",
+    "confidence": 0.75,
+}
+JOURNAL_MARKUP: Final[dict[str, Any]] = {
+    "spans": [
+        {"paragraph": 13, "start_offset": 0, "end_offset": 50, "style": "underline", "purpose": "claim"}
+    ],
+    "rationale": "The underline is the conclusion.",
+}
+"""P13 whole, underlined 0-50: "De-extinction is not a substitute for conservation", t04's paragraph."""
+
+
+def test_a_journal_pdf_is_cited_from_crossref_through_the_file_cache_and_asked_once(
+    seams: Seams, data_dir: Path, tmp_path: Path
+) -> None:
+    seams.crossref.serve(JOURNAL_DOI, "works-10.5555-jscs.2026.0012.json")
+    seams.expected_lookups = [f"https://api.crossref.org/works/{JOURNAL_DOI}"]
+    seams.router = ScriptedModelRouter([JOURNAL_SELECTION, JOURNAL_MARKUP, JOURNAL_SELECTION, JOURNAL_MARKUP])
+    first, again = tmp_path / "first.docx", tmp_path / "again.docx"
+
+    results = [cut(JOURNAL_PDF_URL, "--need", NEWS_NEED, "--output", str(path)) for path in (first, again)]
+
+    assert [result.exit_code for result in results] == [ExitCode.OK, ExitCode.OK], results[0].output
+    for path in (first, again):
+        paragraphs = read_paragraphs(path)
+        assert (paragraphs[1].text, paragraphs[2].underlined) == (
+            JOURNAL_FULL_CITE,
+            ["De-extinction is not a substitute for conservation"],
+        )
+    assert [path.name for path in (data_dir / "crossref").iterdir()] != [], "the answer is kept on disk"
 
 
 def test_progress_names_each_stage_in_order_on_stderr(seams: Seams, out: Path) -> None:

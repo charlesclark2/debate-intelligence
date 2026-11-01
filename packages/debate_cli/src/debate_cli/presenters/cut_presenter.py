@@ -8,9 +8,10 @@ document holds (ExportService). This module only puts those answers into words a
   `export`. Under `--json` each is an event object (:meth:`~debate_cli.output.CliOutput.event_line`),
   so stdout still carries one object. `select` is announced before the model is asked, because that
   is the stage a person waits on.
-* **The payload**: the card's id and status, the file, the source and snapshot, each failure reason,
-  each model call's provenance, and the manifest's identity: its version, time, cards, snapshot
-  references and the SHA-256 of the manifest bytes embedded in the document. Never evidence text or
+* **The payload**: the card's id and status (`status`, as `verify` names a card's), the file, the
+  source and snapshot, each failure reason, each model call's provenance, and the manifest's
+  identity: its version, time, cards, snapshot references and the SHA-256 of the manifest bytes
+  embedded in the document. Never evidence text or
   a model's words, as no `--json` payload carries them (:mod:`debate_cli.output`). The manifest itself,
   evidence included, is the one in the .docx.
 * **The failures**: a source that is not ACCESSIBLE (exit 3, the status with the canonical URL) and a
@@ -115,7 +116,7 @@ class CutProgress:
             "verify",
             f"{status} card {result.card.card_id}" + (f": {', '.join(codes)}" if codes else ""),
             card_id=result.card.card_id,
-            verification_status=status,
+            status=status,
             reasons=codes,
         )
 
@@ -134,7 +135,7 @@ def cut_payload(
     snapshot = report.snapshot
     return {
         "card_id": result.card.card_id,
-        "verification_status": result.verification.status.value,
+        "status": result.verification.status.value,
         "output": str(output),
         "format_profile": profile,
         "source": {

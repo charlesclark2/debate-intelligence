@@ -197,7 +197,7 @@ def test_cut_writes_a_verified_docx_from_a_stored_snapshot_and_replayed_answers_
     assert run.exit_code == ExitCode.OK, run.output
     data = run.envelope()["data"]
     assert isinstance(data, dict)
-    assert (data["verification_status"], data["reasons"], data["format_profile"]) == (
+    assert (data["status"], data["reasons"], data["format_profile"]) == (
         "VERIFIED",
         [],
         "team-default",

@@ -410,7 +410,7 @@ back; the words are `debate_cli.presenters.cut_presenter`'s.
 
 ```console
 $ uv run debate-research cut https://www.example.org/news/2026/10/some-story --need "revival diverts conservation money" --argument "Conservation DA" --output evidence.docx
-$ uv run debate-research --json cut https://www.example.org/report.pdf --need "habitat protection is cheaper" --output card.docx | jq '.data // .error.details | [.card_id, .verification_status]'
+$ uv run debate-research --json cut https://www.example.org/report.pdf --need "habitat protection is cheaper" --output card.docx | jq '.data // .error.details | [.card_id, .status]'
 $ DEBATE_MODEL_MODE=live uv run debate-research cut https://www.example.org/news/2026/10/some-story --need "revival diverts conservation money" --output evidence.docx
 ```
 

@@ -447,7 +447,7 @@ def test_an_unverified_card_under_json_exit_code_is_4_with_the_reasons_in_the_er
     error = document["error"]
     assert (error["code"], error["exit_code"]) == ("CARD_UNVERIFIED", 4)
     details = error["details"]
-    assert details["verification_status"] == "UNVERIFIED"
+    assert details["status"] == "UNVERIFIED"
     assert [(reason["reason"], reason["verifier_code"]) for reason in details["reasons"]] == [
         ("MODEL_OUTPUT_INVALID", None),
         ("EVIDENCE_UNVERIFIED", "CARD_INCOMPLETE"),
@@ -472,7 +472,7 @@ def test_json_writes_one_object_to_stdout_and_progress_to_stderr(
     assert (document["status"], document["command"], document["error"]) == ("ok", "cut", None)
     data = document["data"]
     [card] = stored_cards(data_dir)
-    assert (data["card_id"], data["verification_status"], data["reasons"]) == (
+    assert (data["card_id"], data["status"], data["reasons"]) == (
         card["card_id"],
         "VERIFIED",
         [],

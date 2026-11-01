@@ -504,3 +504,114 @@ def test_tub_index_publish_refuses_an_allow_shrink_reason_that_is_not_one_line(
     assert result.exit_code == ExitCode.USAGE_ERROR
     assert "--allow-shrink" in result.output
     assert keys_in(buckets, DEV_BUCKET) == set()
+
+
+# ------------------------------------------------------------------------------------------------
+# `--newest` on the index current.json names records instead of republishing (v1-e39-t25)
+# ------------------------------------------------------------------------------------------------
+
+NEWEST: Final = ("tub", "index", "publish", "--env", "dev", "--newest")
+
+
+def versions_in(client: S3Client, bucket: str) -> dict[str, int]:
+    """How many times each key was put: its versions in the versioned bucket."""
+    counted: dict[str, int] = {}
+    for version in client.list_object_versions(Bucket=bucket).get("Versions", []):
+        counted[str(version.get("Key"))] = counted.get(str(version.get("Key")), 0) + 1
+    return counted
+
+
+def published_whole(index_id: str, times: int = 1) -> dict[str, int]:
+    return {
+        f"reports/tub/search/{index_id}/search-index.sqlite.gz": times,
+        f"reports/tub/search/{index_id}/manifest.json": times,
+        "reports/tub/search/current.json": times,
+    }
+
+
+def suppress_a_source_no_store_holds(parsed: Path) -> None:
+    """An entry that stops nothing: the list's digest changes, and a rebuild is the same index."""
+    entry = SuppressionEntry(
+        action=SuppressionAction.SUPPRESS,
+        sha256="2" * 64,
+        recorded_at=datetime(2026, 10, 30, tzinfo=UTC),
+        reason=ReasonCode.REQUESTED_BY_TEAM,
+        request_id="RM-2026-98",
+    )
+    asyncio.run(RecordedSuppressionList(local_suppression_list_file(parsed)).append([entry]))
+
+
+def test_tub_index_publish_newest_on_the_current_index_records_what_it_was_checked_against(
+    parsed: Path, buckets: S3Client
+) -> None:
+    first = built(parsed)
+    published = invoke("--json", *NEWEST)
+    assert published.exit_code == ExitCode.OK, published.stdout
+    assert envelope_of(published)["data"]["recorded"] is None, "a publish records nothing"
+    pointer = pointer_in(buckets, DEV_BUCKET)
+    suppress_a_source_no_store_holds(parsed)
+    assert built(parsed) == first, "the premise: the same index"
+
+    result = invoke("--json", *NEWEST)
+
+    assert result.exit_code == ExitCode.OK, result.stdout
+    data = envelope_of(result)["data"]
+    record_key = f"reports/tub/search/{first.name}/checked-against.json"
+    assert set(data) == {"index_id", "written", "pointer", "replaced", "allowed_shrink", "recorded"}
+    assert (data["index_id"], data["written"], data["replaced"]) == (first.name, [record_key], None)
+    assert data["pointer"] == pointer == pointer_in(buckets, DEV_BUCKET)
+    assert data["recorded"]["key"] == record_key
+    assert data["recorded"]["checked_against"]["suppression"]["entries"] == 1
+    assert data["recorded"]["previously"]["suppression"]["entries"] == 0
+    assert data["recorded"]["checked_against"]["manifest_sha256"] == pointer["manifest_sha256"]
+    assert versions_in(buckets, DEV_BUCKET) == {**published_whole(first.name), record_key: 1}
+
+
+def test_tub_index_publish_newest_says_in_its_table_that_the_index_is_already_current(
+    parsed: Path, buckets: S3Client
+) -> None:
+    first = built(parsed)
+    assert invoke(*NEWEST).exit_code == ExitCode.OK
+    suppress_a_source_no_store_holds(parsed)
+    built(parsed)
+
+    result = invoke(*NEWEST)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    said = " ".join(result.stdout.split())
+    assert f"Search index {first.name} already current" in said
+    assert "were not uploaded again" in said
+    assert "the suppression list at 1 entries and 0 path holds, where it said 0 and 0" in said
+
+
+def test_tub_index_publish_newest_on_the_current_index_with_nothing_to_record_is_refused(
+    parsed: Path, buckets: S3Client
+) -> None:
+    directory = built(parsed)
+    assert invoke(*NEWEST).exit_code == ExitCode.OK
+    before = versions_in(buckets, DEV_BUCKET)
+
+    refused = invoke("--json", *NEWEST)
+
+    assert refused.exit_code == ExitCode.DOMAIN_FAILURE
+    error = envelope_of(refused)["error"]
+    assert error["code"] == "SEARCH_INDEX_ALREADY_CURRENT"
+    assert error["details"]["index_id"] == directory.name
+    assert "Nothing was written" in error["message"]
+    assert "--index" in error["hint"]
+    assert versions_in(buckets, DEV_BUCKET) == before == published_whole(directory.name)
+
+
+def test_tub_index_publish_index_on_the_current_index_publishes_it_whole_as_before(
+    parsed: Path, buckets: S3Client
+) -> None:
+    """`--index` names its directory and publishes it, whatever current.json names (unchanged)."""
+    directory = built(parsed)
+    publish = ("--json", "tub", "index", "publish", "--env", "dev", "--index", str(directory))
+    assert invoke(*publish).exit_code == ExitCode.OK
+
+    again = invoke(*publish)
+
+    assert again.exit_code == ExitCode.OK, again.stdout
+    assert envelope_of(again)["data"]["replaced"] == directory.name
+    assert versions_in(buckets, DEV_BUCKET) == published_whole(directory.name, times=2)

@@ -25,6 +25,13 @@ search index stage keeps current
 (:func:`~debate_core.application.search_index_refresh.newest_local_index`, `v1-e39-t09`). One of the
 two is required, and both together are refused.
 
+`--newest` on the index `current.json` already names uploads nothing of it again, and never moves the
+pointer, so no environment downloads an unchanged index (`v1-e39-t25`). It records beside the
+manifest what this build of it was checked against, as the weekly stage does (`v1-e39-t19`), or,
+when that is already what the index is recorded as checked against, it is refused with
+`SEARCH_INDEX_ALREADY_CURRENT` and writes nothing. `--index` publishes the directory it names as it
+always has.
+
 Every decision is :class:`~debate_core.application.search_index_build.SearchIndexBuildService`'s and
 :class:`~debate_core.application.search_index_publish.SearchIndexPublishService`'s; this is the surface.
 
@@ -63,12 +70,13 @@ from debate_core.application.search_index_publish import (
     ALLOW_SHRINK_FLAG,
     SHRINK_REASON_MAX_LENGTH,
     PublishedSearchIndex,
+    RecordedCheck,
 )
 from debate_core.application.search_index_refresh import SEARCH_INDEX_DIRECTORY, newest_local_index
 from debate_core.application.settings import Environment, Settings
 from debate_core.domain.search_index import DEFAULT_PROVENANCE_LIMIT
 
-__all__ = ["DEFAULT_OUT_DIRECTORY", "build", "build_summary", "publish", "publish_summary"]
+__all__ = ["DEFAULT_OUT_DIRECTORY", "build", "build_summary", "publish", "publish_summary", "recorded_summary"]
 
 DEFAULT_OUT_DIRECTORY = SEARCH_INDEX_DIRECTORY
 """Where `build` writes when `--out` is not given: `<data_dir>/tub-index`, where the weekly run's
@@ -164,8 +172,15 @@ def publish(
     service = cli.services.search_index_publish()
     cli.output.detail(f"publishing {index.name} to {cli.services.settings.storage.s3.bucket}")
     published = run_holding_the_bucket_lock(
-        cli, "tub index publish", lambda: service.publish(index, allow_shrink=allow_shrink)
+        cli,
+        "tub index publish",
+        lambda: service.publish_newest(index, allow_shrink=allow_shrink)
+        if newest
+        else service.publish(index, allow_shrink=allow_shrink),
     )
+    if isinstance(published, RecordedCheck):
+        cli.output.success(command_name(ctx), recorded_summary(published), display=_recorded_table(published))
+        return
     if published.allowed_shrink is not None:
         cli.output.note(f"published past the shrink guard with {ALLOW_SHRINK_FLAG}: {_allowed(published)}")
     cli.output.success(command_name(ctx), publish_summary(published), display=_publish_table(published))
@@ -183,7 +198,8 @@ def build_summary(built: BuiltSearchIndex) -> dict[str, JsonValue]:
 
 def publish_summary(published: PublishedSearchIndex) -> dict[str, JsonValue]:
     """The `--json` envelope's `data` for `publish`: the keys written, in order, the pointer, the index
-    it replaced, and what `--allow-shrink` let through (`v1-e39-t14`), `null` when it was not needed."""
+    it replaced, what `--allow-shrink` let through (`v1-e39-t14`), `null` when it was not needed, and
+    `recorded`, `null` for a publish (`v1-e39-t25`)."""
     allowed = published.allowed_shrink
     return {
         "index_id": published.index_id,
@@ -199,6 +215,28 @@ def publish_summary(published: PublishedSearchIndex) -> dict[str, JsonValue]:
                 for one in allowed.shrinks
             ],
             "current_unreadable": allowed.current_unreadable,
+        },
+        "recorded": None,
+    }
+
+
+def recorded_summary(recorded: RecordedCheck) -> dict[str, JsonValue]:
+    """`data` for `publish --newest` on the index `current.json` names (`v1-e39-t25`): `publish`'s keys.
+
+    `written` is the record's key alone, `pointer` is `current.json` as it was and still is, and
+    `replaced` is `null`, since nothing replaced the index. `recorded` holds the record written and
+    what the index was checked against before it.
+    """
+    return {
+        "index_id": recorded.record.index_id,
+        "written": [recorded.key],
+        "pointer": recorded.pointer.model_dump(mode="json"),
+        "replaced": None,
+        "allowed_shrink": None,
+        "recorded": {
+            "key": recorded.key,
+            "checked_against": recorded.record.model_dump(mode="json"),
+            "previously": recorded.replaced.model_dump(mode="json"),
         },
     }
 
@@ -308,6 +346,19 @@ def _build_table(built: BuiltSearchIndex) -> TableSpec:
             f"gzip object {manifest.gzip_object.bytes:,} bytes. "
             f"Parser {manifest.parser_version}, {manifest.fingerprint_version}, "
             f"SQLite {manifest.sqlite_version}."
+        ),
+    )
+
+
+def _recorded_table(recorded: RecordedCheck) -> TableSpec:
+    index_id = recorded.record.index_id
+    return TableSpec(
+        columns=["Written", "Key"],
+        rows=[["1", recorded.key]],
+        title=f"Search index {index_id} already current: what it was checked against recorded",
+        caption=(
+            f"current.json names {index_id} and is as it was; its gzip object and manifest were not "
+            f"uploaded again. {recorded.sentence[0].upper()}{recorded.sentence[1:]}."
         ),
     )
 

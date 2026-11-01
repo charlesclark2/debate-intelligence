@@ -96,6 +96,7 @@ __all__ = [
     "CurrentSearchIndexUnreadable",
     "PublishedSearchIndex",
     "RecordedCheck",
+    "SearchIndexAlreadyCurrent",
     "SearchIndexFilesDamaged",
     "SearchIndexPublishService",
     "SearchIndexStoreEmpty",
@@ -144,6 +145,25 @@ class SearchIndexFilesDamaged(DomainError):
         self.name = name
         self.reason = reason
         super().__init__(f"index {index_id}'s {name} {reason}; nothing past it was published")
+
+
+class SearchIndexAlreadyCurrent(DomainError):
+    """`tub index publish --newest` on the index `current.json` names, with nothing to record (`v1-e39-t25`).
+
+    What this build of it was built from is what the published index is already recorded as checked
+    against, by its manifest or the record beside it. Nothing was written.
+    """
+
+    def __init__(self, index_id: str) -> None:
+        self.index_id = index_id
+        self.hint = (
+            "Nothing needs publishing: the weekly run builds the next index when a store or the suppression "
+            "list changes, and `--index <directory>` publishes another index you name."
+        )
+        super().__init__(
+            f"index {index_id} is already current: current.json names it, and it is recorded as checked against "
+            "what this build of it read. Nothing was written, and current.json is as it was"
+        )
 
 
 class UnreadableSearchIndexManifest(DomainError):
@@ -386,6 +406,22 @@ class CheckedAgainstRecord(DomainModel):
             counts=manifest.counts,
         )
 
+    def applied_to(self, manifest: SearchIndexManifest) -> SearchIndexManifest:
+        """`manifest`, the one this record stands beside, as of what the record says (`v1-e39-t25`).
+
+        Its sources and counts are the record's, and the rest, the files and the versions the record
+        does not hold, its own: what the index was last checked against, as a manifest.
+        """
+        return manifest.model_copy(
+            update={
+                "parser_version": self.parser_version,
+                "stores": self.stores,
+                "snapshot": self.snapshot,
+                "suppression": self.suppression,
+                "counts": self.counts,
+            }
+        )
+
     def stands_beside(self, pointer: SearchIndexPointer) -> bool:
         """Whether this is a record of the index `pointer` names, beside the manifest it names."""
         return self.index_id == pointer.index_id and self.manifest_sha256 == pointer.manifest_sha256
@@ -403,6 +439,9 @@ class RecordedCheck:
     key: str
     replaced: CheckedAgainstRecord
     """What the index was checked against before: the record beside its manifest, or the manifest's own."""
+
+    pointer: SearchIndexPointer
+    """`current.json` as it was read, and is still: the record's write never touches it."""
 
     @property
     def sentence(self) -> str:
@@ -588,7 +627,7 @@ class SearchIndexPublishService:
                 "replaced_suppression_entries": replaced.suppression.entries,
             },
         )
-        return RecordedCheck(record=record, key=key, replaced=replaced)
+        return RecordedCheck(record=record, key=key, replaced=replaced, pointer=current.pointer)
 
     async def publish(self, directory: Path, *, allow_shrink: str | None = None) -> PublishedSearchIndex:
         """Upload the gzip object, then the manifest, then the pointer; each checked as it lands.
@@ -600,13 +639,35 @@ class SearchIndexPublishService:
         """
         reason = _shrink_reason(allow_shrink)
         manifest = self.check(directory)
-        unreadable: CurrentSearchIndexUnreadable | None = None
+        current, unreadable = await self._current_for(manifest, reason)
+        return await self._upload(directory, manifest, current, unreadable, reason)
+
+    async def publish_newest(
+        self, directory: Path, *, allow_shrink: str | None = None
+    ) -> PublishedSearchIndex | RecordedCheck:
+        """`tub index publish --newest`: :meth:`publish`, unless `current.json` already names the index."""
+        return await self.publish(directory, allow_shrink=allow_shrink)
+
+    async def _current_for(
+        self, manifest: SearchIndexManifest, reason: str | None
+    ) -> tuple[CurrentSearchIndex | None, CurrentSearchIndexUnreadable | None]:
+        """:meth:`current`, and the refusal an `--allow-shrink` reason passes when it cannot be read."""
         try:
-            current = await self.current(for_index=manifest.index_id)
+            return await self.current(for_index=manifest.index_id), None
         except CurrentSearchIndexUnreadable as refused:
             if reason is None:
                 raise
-            current, unreadable = None, refused
+            return None, refused
+
+    async def _upload(
+        self,
+        directory: Path,
+        manifest: SearchIndexManifest,
+        current: CurrentSearchIndex | None,
+        unreadable: CurrentSearchIndexUnreadable | None,
+        reason: str | None,
+    ) -> PublishedSearchIndex:
+        """The shrink guard, then the gzip object, the manifest and the pointer, as :meth:`publish` says."""
         allowed = check_index_size(
             manifest, current, minimum_share_percent=self._minimum_share_percent, allow_shrink=reason
         )

@@ -13,6 +13,7 @@ definitions in the upstream source, `ashtarcommunications/caselist` (read 2026-0
 | `caselist.json` | `GET /v1/caselists/{caselist}` | same; the path parameter is matched against `name`, which is why the client treats `name` as the slug |
 | `downloads.json` | `GET /v1/caselists/{caselist}/downloads` | `schemas/Download.js` (`name`, `url`) and `controllers/caselists/getBulkDownloads.js`, which lists `weekly/<caselist>/*.zip` in the site's object store. Archive names follow `controllers/download/weeklyArchives.js`: `<caselist>-weekly-<date>.zip` and `<caselist>-all-<date>.zip` |
 | `openev.json` | `GET /v1/openev` | `schemas/File.js`, plus the `openev` table's `name` column that the controller's `SELECT *` returns; `tags` appears both as an object and as the JSON string the column stores |
+| `openev_camp_words.json` | `GET /v1/openev` | The same shape, one camp file per form its `camp` can take: one address word of letters, one of letters and digits, and words with a space, a slash, a trailing newline, a hyphen or a letter outside A to Z, an empty word, `null`, no `camp` at all, and `UNKNOWN`. The pull keeps only the first two on a manifest row (`v1-e30-t31`) |
 
 Each file also carries a field no schema declares (`field_added_by_a_later_api_version`), because
 the models are required to tolerate unknown fields, and `downloads.json` carries a name that follows

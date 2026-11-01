@@ -4362,8 +4362,13 @@ class CaselistSyncService:
             imported_on=self._clock().date(),
             archive_sha256=downloaded.sha256,
             recorded_manifest=read_manifest_lines(path),
-            # Every row of it carries which upstream file it was (v1-e30-t14): digests and an id.
-            upstream=OpenEvUpstream(openev_id=selection.openev_id, path_sha256=path_sha256),
+            # Every row of it carries which upstream file it was (v1-e30-t14): digests and an id, and
+            # OpenEv's own camp word from the listing when it is one address word (v1-e30-t31).
+            upstream=OpenEvUpstream(
+                openev_id=selection.openev_id,
+                path_sha256=path_sha256,
+                camp=selection.file.camp if selection.file is not None else None,
+            ),
         )
         write_manifest_lines(report.manifest_lines, path)
         # Which bytes this id delivered, so that a later run can ask the suppression list about

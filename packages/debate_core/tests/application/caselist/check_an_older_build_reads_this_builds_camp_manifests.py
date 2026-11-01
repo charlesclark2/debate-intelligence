@@ -6,9 +6,10 @@ each printed. It writes nothing outside pytest's temporary directory.
 
 It carries out the stored history with the source it is run against, which writes that source's own
 manifest, then puts `stored_camp_manifests/written_by_this_build/2026-policy.jsonl` in its place:
-the same rows, each with `openev_id` and `upstream_path_sha256`. Then it does with that manifest
-everything that source does with one, and says whether each reader refused the two keys, ignored
-them or kept them:
+the same rows, each with the keys of :data:`ADDED` that source's own rows lack: `openev_id` and
+`upstream_path_sha256` for a source from before `v1-e30-t14`, and `openev_camp_word` for one from
+before `v1-e30-t31`. Then it does with that manifest everything that source does with one, and says
+whether each reader refused those keys, ignored them or kept them:
 
 * publishes it and asks for the status (the publisher and status read sources from the rows);
 * pulls the next week, which asks the rows what is already imported and merges a new camp file in;
@@ -63,34 +64,37 @@ from .test_sync_skips_suppressed_downloads import ESTUARY_SHA256, decisions, pul
 pytestmark = pytest.mark.anyio
 
 THIS_BUILDS = STORED / "written_by_this_build" / MANIFEST_NAME
-IDENTITY = ("openev_id", "upstream_path_sha256")
+ADDED = ("openev_id", "upstream_path_sha256", "openev_camp_word")
+"""The keys this build's rows carry that an older build's may not (`v1-e30-t14`, `v1-e30-t31`)."""
 
 
 def _source() -> str:
     import debate_core
 
-    return Path(debate_core.__file__).parents[4].name
+    package = Path(debate_core.__file__).parent
+    # An installed build is named by where it is installed; a source checkout by its directory.
+    return str(package) if package.parent.name == "site-packages" else package.parents[3].name
 
 
 def _by_path(lines: list[str]) -> dict[str, str]:
     return {json.loads(line)["path"]: line for line in lines if json.loads(line)["kind"] == "member"}
 
 
-def _without_the_keys(line: str) -> str:
-    """A manifest line as a build from before `v1-e30-t14` renders the same row."""
-    row = {key: value for key, value in json.loads(line).items() if key not in IDENTITY}
+def _without_the_keys(line: str, keys: tuple[str, ...]) -> str:
+    """A manifest line as a build whose rows lack `keys` renders the same row."""
+    row = {key: value for key, value in json.loads(line).items() if key not in keys}
     return json.dumps(row, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
-def _keys_as_written(before: dict[str, str], after: dict[str, str]) -> bool:
+def _keys_as_written(before: dict[str, str], after: dict[str, str], keys: tuple[str, ...]) -> bool:
     return all(
         json.loads(after[path]).get(key) == json.loads(line).get(key) and key in json.loads(after[path])
         for path, line in before.items()
-        for key in IDENTITY
+        for key in keys
     )
 
 
-def _kept(before: dict[str, str], after: dict[str, str]) -> str:
+def _kept(before: dict[str, str], after: dict[str, str], keys: tuple[str, ...]) -> str:
     """How the rows this build wrote came through: kept byte for byte, kept with the keys, or not."""
     common = [path for path in before if path in after]
     if all(after[path] == before[path] for path in common):
@@ -98,7 +102,7 @@ def _kept(before: dict[str, str], after: dict[str, str]) -> str:
     with_keys = [
         path
         for path in common
-        if all(json.loads(after[path]).get(key) == json.loads(before[path]).get(key) for key in IDENTITY)
+        if all(json.loads(after[path]).get(key) == json.loads(before[path]).get(key) for key in keys)
     ]
     changed = sorted(
         {
@@ -109,7 +113,7 @@ def _kept(before: dict[str, str], after: dict[str, str]) -> str:
         }
     )
     return (
-        f"kept the two keys as written on {len(with_keys)} of {len(common)} row(s); "
+        f"kept the keys as written on {len(with_keys)} of {len(common)} row(s); "
         f"field(s) it changed: {', '.join(changed) or 'none'}"
     )
 
@@ -123,16 +127,18 @@ async def test_this_source_reads_a_camp_manifest_as_this_build_writes_it(
     world = removal_world
     source = await two_pulls(world)
     own = release_lines(world)
+    written = {key for line in own for key in json.loads(line)}
+    lacks = tuple(key for key in ADDED if key not in written)
     release_manifest(world).write_bytes(THIS_BUILDS.read_bytes())
     placed = _by_path(release_lines(world))
     unchanged_but_the_keys = all(
-        {key: value for key, value in json.loads(line).items() if key not in IDENTITY} == json.loads(theirs)
+        {key: value for key, value in json.loads(line).items() if key not in lacks} == json.loads(theirs)
         for line, theirs in zip(release_lines(world), own, strict=True)
     )
     lines: list[str] = [
         f"reader: the debate_core source at {_source()}",
-        "placed: this build's manifest; its rows are this source's own but for the two keys: "
-        f"{unchanged_but_the_keys}",
+        f"placed: this build's manifest; the keys this source's rows lack: {', '.join(lacks) or 'none'}; "
+        f"its rows are this source's own but for them: {unchanged_but_the_keys}",
     ]
 
     def status_in_sync() -> CaselistStatusService:
@@ -153,8 +159,9 @@ async def test_this_source_reads_a_camp_manifest_as_this_build_writes_it(
         + ", ".join(f"openev-{one} {decision.value}" for one, decision in sorted(decisions(summary).items()))
     )
     lines.append(
-        f"its merge: this build's rows {_kept(placed, merged)}; the new row {NEXT_WEEK_ROW in merged}, "
-        f"with the keys {all(key in json.loads(merged.get(NEXT_WEEK_ROW, '{}')) for key in IDENTITY)}"
+        f"its merge: this build's rows {_kept(placed, merged, lacks)}; "
+        f"the new row {NEXT_WEEK_ROW in merged}, "
+        f"with the keys {all(key in json.loads(merged.get(NEXT_WEEK_ROW, '{}')) for key in lacks)}"
     )
 
     importer = OpenEvImportService(
@@ -169,9 +176,9 @@ async def test_this_source_reads_a_camp_manifest_as_this_build_writes_it(
         rederive_release(
             year=2026, event=Event.POLICY, recorded_manifest=lines_, aliases=aliases, suppression=state
         )
-        for lines_ in (mine, [_without_the_keys(line) for line in mine])
+        for lines_ in (mine, [_without_the_keys(line, lacks) for line in mine])
     )
-    same_but_the_keys = [_without_the_keys(line) for line in with_keys.manifest_lines] == list(
+    same_but_the_keys = [_without_the_keys(line, lacks) for line in with_keys.manifest_lines] == list(
         without.manifest_lines
     )
     rederived = await importer.reimport_metadata(
@@ -179,9 +186,9 @@ async def test_this_source_reads_a_camp_manifest_as_this_build_writes_it(
     )
     write_manifest_lines(rederived.manifest_lines, release_manifest(world))
     lines.append(
-        f"metadata re-import: this build's rows kept the two keys as written: "
-        f"{_keys_as_written(placed, _by_path(release_lines(world)))}; the same as its re-derive of its own "
-        f"manifest but for the two keys: {same_but_the_keys}"
+        f"metadata re-import: this build's rows kept the keys as written: "
+        f"{_keys_as_written(placed, _by_path(release_lines(world)), lacks)}; the same as its re-derive of "
+        f"its own manifest but for the keys: {same_but_the_keys}"
     )
 
     before_removal = _by_path(release_lines(world))
@@ -195,7 +202,7 @@ async def test_this_source_reads_a_camp_manifest_as_this_build_writes_it(
     left = {path: line for path, line in before_removal.items() if path not in ROWS[:2]}
     lines.append(
         f"removal of 512: completed {report.log_entry.outcome.value == 'COMPLETED'}; later upload(s) "
-        f"{', '.join(f'openev-{one}' for one in later)}; rows it kept {_kept(left, after_removal)}; "
+        f"{', '.join(f'openev-{one}' for one in later)}; rows it kept {_kept(left, after_removal, lacks)}; "
         f"512 and 640 gone {not set(ROWS[:2]) & set(after_removal)}"
     )
     publisher = CaselistPublishService(

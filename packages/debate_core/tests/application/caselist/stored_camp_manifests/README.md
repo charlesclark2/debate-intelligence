@@ -1,7 +1,8 @@
 # Stored camp manifests
 
 The camp release manifest three builds' own pulls write after the same history, and the takedown's
-records this build writes when it withdraws a camp path (`v1-e30-t14`). Nothing here is written by
+records this build writes when it withdraws a camp path (`v1-e30-t14`), with the listing's camp word
+on this build's rows since `v1-e30-t31`. Nothing here is written by
 hand, and nothing here is real camp content: the history is two pulls of the invented camp files
 under `tests/fixtures/openev/`, against moto, at a fixed clock (`camp_manifest_scenario.py`).
 
@@ -12,11 +13,13 @@ build writes is one an older build reads, and the reverse.
 |---|---|---|
 | `written_by_the_installed_build/2026-policy.jsonl` | The source of tag `v0.1.0-dev.122` (`d87febd`), the build the weekly agent is installed from | `manifests/openev/2026-policy.jsonl` after the history |
 | `written_by_the_start_commit/2026-policy.jsonl` | The source of `53a8743`, the commit on `dev` this task started from | The same. Byte for byte the file above |
-| `written_by_this_build/2026-policy.jsonl` | This task's source | The same rows, each with two more keys, `openev_id` and `upstream_path_sha256`, and the same summary row |
+| `written_by_this_build/2026-policy.jsonl` | This build's source | The same rows, each with three more keys, `openev_id` and `upstream_path_sha256` (`v1-e30-t14`) and `openev_camp_word` (`v1-e30-t31`), and the same summary row. Rewritten by `v1-e30-t31` with this build's own pull |
 | `written_by_this_build/suppression/` | This task's source | `suppression-list.jsonl` and `withdrawals.jsonl` after the history goes on: 800 pulled into `2027-policy` with 640's bytes, then 512 removed by `--source`, so 640 is withdrawn from its camp path. The list's second line is that camp path's entry; the record's one line names `openev` |
 
 The history is two pulls through the real sync: 512 first; then 640, 512 uploaded again at the same
-path, and 700, another camp's file of the same name. It runs on the `removal_world` fixture, so the
+path, and 700, another camp's file of the same name. Each listed file carries its upstream path's
+camp folder as its camp word (`Tamarack`, `Quillfeather`), which builds from before `v1-e30-t31` read
+and store nowhere, so their files are the same either way. It runs on the `removal_world` fixture, so the
 release also holds the fixture's hand-imported camp files. It uses nothing a build from before
 `v1-e30-t14` lacks, so the same function runs against all three sources. The installed build itself
 was not opened or run: its source is the tag its version names, exported with `git archive`.
@@ -86,9 +89,33 @@ above. The start commit's own model refuses the `openev` line because its `Withd
 caselist slug alone. No command of it parses the record: it appends to it, which reads lines and
 validates none, and its only readers, `withdrawals()` and the two joins, are called by tests alone.
 
+### Run against the earlier builds of `v1-e30-t31`
+
+On 2026-11-01 the check ran against the cloud run's image, `v1.1.0-dev.251`, and the Mac's installed
+build, `v1.1.0-dev.200`, each an offline stamped wheel in a venv of its own (the session report has the
+build steps). It measures which of the keys this build adds the reader's own rows lack, so against
+these builds, which have `v1-e30-t14`, that is the camp word alone. With `VENV` naming one of them:
+
+```bash
+CHECK_AN_OLDER_BUILD_READS=this-builds-camp-manifests "${VENV}/bin/python" -m pytest packages/debate_core/tests/application/caselist/check_an_older_build_reads_this_builds_camp_manifests.py -p no:cacheprovider -p no:randomly --no-cov -n 0 -q
+```
+
+Both printed the same lines but for the reader's path:
+
+```text
+reader: the debate_core source at <the venv's site-packages>/debate_core
+placed: this build's manifest; the keys this source's rows lack: openev_camp_word; its rows are this source's own but for them: True
+publish: succeeded True; status in sync: True
+next pull: openev-640 already_imported, openev-700 already_imported, openev-900 download
+its merge: this build's rows kept byte for byte (16 row(s)); the new row True, with the keys False
+metadata re-import: this build's rows kept the keys as written: True; the same as its re-derive of its own manifest but for the keys: True
+removal of 512: completed True; later upload(s) openev-640; rows it kept kept byte for byte (15 row(s)); 512 and 640 gone True
+publish again: succeeded True; status in sync: True
+```
+
 ## When these may change
 
 The older builds' files may not: a build that is installed does not change. `written_by_this_build/`
 is rewritten only by a change that is meant to change what a release manifest or a camp path's
-withdrawal records hold, and then its rows less the two keys must still be the older builds' rows
+withdrawal records hold, and then its rows less the added keys must still be the older builds' rows
 byte for byte: the test fails otherwise.

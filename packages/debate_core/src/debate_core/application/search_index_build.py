@@ -7,8 +7,9 @@ occurrence table and whose per-source files hold each card's text), the caselist
 occurrence), the removal suppression list
 (:class:`~debate_core.application.ports.suppression.SuppressionList`), and a
 :class:`~debate_core.application.ports.search_index.SearchIndexWriter`. No model is called and
-nothing reaches the network. The output is one directory, `<out>/<index id>/`, holding the SQLite
-file, its gzip object and :class:`~debate_core.domain.search_index.SearchIndexManifest`.
+nothing reaches the network. It also reads the camp releases' manifests on this machine, for each camp
+file's OpenEv id (`v1-e39-t16`, below). The output is one directory, `<out>/<index id>/`, holding the
+SQLite file, its gzip object and :class:`~debate_core.domain.search_index.SearchIndexManifest`.
 
 ## Which rows
 
@@ -82,11 +83,21 @@ exact fingerprint.
   first and last snapshot seen; the counts of files, teams and occurrences; and for each occurrence
   its source SHA-256 and disclosure digest, and for the first `provenance_limit` of them who
   disclosed it (school, team code, side, tournament and round as disclosed) or, for a camp card,
-  the camp, year, event and file title of its release.
+  the camp, year, event and file title of its release and, since format 3, its file's OpenEv id.
 * **Never stored:** a cutter mark, a file name or a disclosure path, the card's section headings and
   undertag, or any name from a document body. The ports this reads hold no path, and the
   :class:`~debate_core.application.ports.search_index.SearchDocument` handed to the writer has no
   field for one.
+
+## A camp file's OpenEv id (`v1-e39-t16`)
+
+A camp occurrence keeps the OpenEv id its release's manifest (`manifests/openev/<release>.jsonl`)
+records for its source, as
+:func:`~debate_core.application.caselist.openev_manifest.openev_ids_by_source` reads it, so its card
+page can link to the file on OpenEv. A row with no id gives none, and a manifest the importer did not
+write is :class:`SearchIndexStoreNotReady`, never read as no ids. The manifests are not among the
+digests the manifest records: a re-import that only adds ids to rows changes no store's digest, so the
+weekly run keeps its index until a store or a version changes.
 
 ## What a build is built from, read before it
 

@@ -81,10 +81,13 @@ kept, numbered among themselves. Timed read-only on the operator's Mac on 2026-1
 sources), about 2.1 ms a document, so roughly 100 s more for the whole dev store's 52,059. The full
 build is not re-timed here.
 
-## The schema, format version 2
+## The schema, format version 3
 
 `PRAGMA user_version` is the format version, and `PRAGMA application_id` is `0x54554253`
-(`TUBS`). **Format 2** (`v1-e39-t13`) differs from format 1 in one thing: the `search` table's
+(`TUBS`). **Format 3** (`v1-e39-t16`) differs from format 2 in one thing: `occurrences` has an
+`openev_id` column, the OpenEv id of a camp occurrence's file, which a camp card's page links to and
+no full-text table holds ([below](#a-camp-files-openev-id-format-3)). **Format 2** (`v1-e39-t13`)
+differs from format 1 in one thing: the `search` table's
 tokenizer puts FTS5's `porter` stemmer in front of `unicode61`, so `grow`, `grows` and `growing` are
 one token. Every other table, column and pragma is format 1's. A format 2 file is about 1.3% smaller
 than the format 1 file of the same rows, because stemming leaves fewer distinct tokens
@@ -97,7 +100,7 @@ journal and finishes with `VACUUM`, so it has no free pages.
 | Column | |
 |---|---|
 | `key` | `format_version`, `sqlite_feature_ceiling` |
-| `value` | `2`, `3.40.0` |
+| `value` | `3`, `3.40.0` |
 
 ### `documents`: one row per cluster
 
@@ -143,6 +146,38 @@ newer suppression list stops (`v1-e39-t07`). Only the first `provenance_limit` k
 | `provenance` | 1 when the provenance columns below are kept |
 | `side`, `school`, `team_code`, `tournament`, `round` | As disclosed, for a caselist occurrence with a disclosure on record |
 | `camp`, `camp_year`, `camp_event`, `camp_file_title` | The camp release, for a camp occurrence; the title only with its release record |
+| `openev_id` | Since format 3: the OpenEv id of a camp occurrence's file, as its release manifest records it; null for a caselist occurrence, and for a camp file whose manifest row carries no id |
+
+### A camp file's OpenEv id (format 3)
+
+The build reads each camp release's manifest, `manifests/openev/<year>-<event>.jsonl` in this
+machine's evidence store (the cloud run restores every manifest from its run-state bundle before
+it builds), and gives a camp occurrence the `openev_id` of the stored member row whose `sha256` is
+its source. The id is on a row since `v1-e30-t14`: the pull writes it, and so does a hand import of
+a file named `openev-<id>-...`. A file at two paths of one release has the smaller of its ids, the
+first upload of those bytes. A row from before `v1-e30-t14`, a row with a null id, a release with no
+manifest and a caselist occurrence give null. A manifest the importer did not write stops the
+build (`SEARCH_INDEX_STORE_NOT_READY`, naming its key and line, never the line), rather than being
+read as no ids. Like the camp release's other columns, the id is kept only with the provenance, for
+the first `provenance_limit` occurrences.
+
+The card page builds "Open on OpenEv" from this value alone
+(`debate_core.domain.search_source_links`), never from the camp, year or title. The address is
+`https://opencaselist.com/openev/<id>`, a constant (`OPENEV_FILE_URL_TEMPLATE`) that nothing in the
+repository pins: the repository holds the API the pull uses, not a page a browser opens. It is
+checked once, by hand, on dev ([the runbook](../runbooks/evidence-search.md#moving-the-index-to-format-3)).
+
+**How many have one, 2026-10-31.** Counted on the operator's Mac, read-only, counts only. The
+`openev` store (`2026.10.20-docx-6`) holds 102 camp files with cards, all in `2026-policy`, from the
+`v1-e30-t06` hand import of 2026-09-26. None of their 106 manifest rows has an `openev_id` key, since
+they were written before `v1-e30-t14`. None is named `openev-<id>-...`, so `caselist
+reimport-openev-metadata` would give them no id either, and the delivery record and the sync's run
+records name no id for any of them. The `2026-ld` release's 2 rows were pulled on 2026-10-14 and are
+named `openev-<id>-...`, so a re-import would give them ids, but both parsed `UNSUPPORTED`, with no
+card. So **0 of the 102** camp files with cards get an id without a re-parse, and none gets one by any
+other means the repository has. A camp file the pull imports from now on carries one. The cloud run's
+store was seeded from this Mac at the cutover (2026-10-26) and was not counted here: that would be a
+read of the bucket.
 
 ### `search`: the full-text index
 
@@ -201,13 +236,16 @@ those ids afterwards, with `+d.doc_id IN shared`: without the `+`, SQLite drives
 rowid at a time and BM25's statistics are worked out again for each, 1.2 s against 35 ms for one
 eight-word passage on the measurement index. Two words with one stem (`grow`, `growing`) each count.
 
-**Formats 1 and 2 are both read** (the PM's ruling of 2026-10-23), so the function can be deployed
-before the first format 2 index is published, and search never goes down for it. On a format 1
+**Formats 1, 2 and 3 are all read** (the PM's ruling of 2026-10-23, and `v1-e39-t16`), so the
+function can be deployed before the first index of the format it writes is published, and search
+never goes down for it. On formats 1 and 2 no camp card has an OpenEv link, since neither has the
+column. On a format 1
 index a plain search runs as it always did and the page says words are matched exactly as typed
 until the next weekly update; a passage search is not run and the page says it is not available
 until then; a prefix works. The holder refuses any other format, and a pointer, manifest and file
 that disagree about the format, with a message: an index already loaded goes on serving, and with
-none the page says search is not available. It never fails a query for it.
+none the page says search is not available. It never fails a query for it. The message names the
+formats it reads: `its format version is not one this build reads, 1, 2 or 3`.
 
 **The time budget has a known limit** (accepted by the PM, 2026-10-20). A search that runs past its
 budget, 2 s by default, returns what it has fetched, flagged partial. SQLite's progress handler checks
@@ -247,6 +285,9 @@ from `test_evidence_search_scale.py`'s two operator checks, which print timings 
 * **A camp file title** (`camp_file_title`, the importer's title without extension, camp, year or lab
   initials) is stored for a camp card's provenance line and is in no FTS5 table either (PM ruling
   2026-10-20); a test checks that a word found only in one matches nothing.
+* **A camp file's OpenEv id** (`openev_id`, format 3) is stored for the card page's link and is in no
+  FTS5 table; a test checks that a query for an id's digits matches nothing, and that `search` has
+  the four columns alone.
 * **Never stored:** a cutter mark, a disclosure path or a caselist file name, a card's section
   headings and undertag, a name from a document body. The ports the build reads hold no path, and
   the cite's trailing cutter mark is removed before it is stored.

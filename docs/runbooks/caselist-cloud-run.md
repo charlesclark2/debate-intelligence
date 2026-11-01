@@ -740,6 +740,40 @@ permission set.
 Keep at most four pushes between applies: the repository keeps the five newest images, and a task
 definition pins one by digest.
 
+**The search index's format: dev's function first** (`v1-e39-t16`). The run's index stage builds
+dev's search index in the format its image writes, and dev's pilot function refuses an index of a
+format it does not read ([Moving the index to format 3](evidence-search.md#moving-the-index-to-format-3)).
+So before the digest line is replaced, check that dev's function reads the format the image you
+pushed writes. The block reads the function's image, finds the commit its tag names, and compares
+the format each commit writes, from its `search_index.py`: a build reads the format it writes and
+every earlier one, as each has so far. It reads AWS and changes nothing. `TAG` is the release the
+push used ([Step 5](#step-5--build-the-first-image-and-push-it) sets it).
+
+**Operator command** (expected runtime seconds)
+Where: `$WT`, in the shell that ran the push
+```bash
+cd "$WT"
+if [ -z "$TAG" ]; then echo "STOP: TAG is not set; set it to the release the push used"; else git fetch --quiet origin && git fetch --quiet origin tag "$TAG" && URI="$(AWS_PROFILE=debate-admin aws lambda get-function --region us-east-1 --function-name debate-dev-tub --query Code.ImageUri --output text)" && FUNCTION_TAG="$(AWS_PROFILE=debate-admin aws ecr describe-images --region us-east-1 --repository-name debate-dev-tub --image-ids "imageDigest=${URI##*@}" --query 'imageDetails[0].imageTags[0]' --output text)" && python3 -I - "$TAG" "${FUNCTION_TAG%%-uncommitted-*}" <<'FORMAT'
+import re, subprocess, sys
+def writes(commit):
+    shown = subprocess.run(["git", "show", commit + ":packages/debate_core/src/debate_core/domain/search_index.py"], capture_output=True, text=True)
+    found = re.search(r"^SEARCH_INDEX_FORMAT_VERSION: Final = ([0-9]+)$", shown.stdout, re.MULTILINE)
+    return int(found.group(1)) if found else None
+image, function = writes(sys.argv[1]), writes(sys.argv[2])
+if image is None or function is None:
+    print("STOP: cannot read the format of " + (sys.argv[1] if image is None else "dev's function at " + sys.argv[2]) + "; take this to the PM")
+elif function < image:
+    print("STOP: the image writes index format " + str(image) + " and dev's function, at " + sys.argv[2] + ", reads " + str(function) + " at most: deploy dev's function first (evidence-search.md, Moving the index to format " + str(image) + ")")
+else:
+    print("OK: the image writes index format " + str(image) + " and dev's function, at " + sys.argv[2] + ", reads it")
+FORMAT
+fi
+```
+Success looks like `OK: the image writes index format 3 and dev's function, at <commit>, reads it`.
+A `STOP` line stops this section: do not replace the digest line. Deploy dev's function as the line
+says, run this block again, and go on only after `OK`. A failed `aws` call prints its own error and
+no `OK`. For prod at the promotion the same check reads `debate-prod-tub`.
+
 **Replacing the digest line.** Step 6's append block stops on a line that is already there, so a new
 image's line replaces the old one with this block, after the push has written
 `/tmp/caselist-run-deploy.txt`. It changes that one line and nothing else, and stops when the file

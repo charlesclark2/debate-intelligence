@@ -744,7 +744,10 @@ aws s3 cp "s3://${BUCKET}/reports/sync/run-lock.json" - --profile debate-dev-evi
 ```
 Success looks like `free dev` (or `held dev expired`), then `"status": "ok"`. `held dev` without
 `expired`: a runner holds the lock; wait, and read it again. `CASELIST_AUTH_EXPIRED`: log the Mac in
-(`debate-research caselist auth login`, with `DEBATE_ENV=dev`), then read it again.
+(`debate-research caselist auth login`, with `DEBATE_ENV=dev`), then read it again. A code that
+starts `KEYCHAIN_`, or `NO_KEYCHAIN`, is the Mac's keychain refusing the token store, not
+OpenCaselist: [caselist-scheduled-sync.md](caselist-scheduled-sync.md), "When something goes
+wrong", gives each one's fix (`v1-e34-t33`).
 
 **The week, on the Mac.** A real pull: it downloads the week's archives within the day's five,
 imports, publishes, parses and refreshes the index, holding the lock throughout. Its first part

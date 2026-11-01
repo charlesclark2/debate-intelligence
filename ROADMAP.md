@@ -61,14 +61,14 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 55 | 252 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 112 | 92 | 502 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 114 | 92 | 504 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 71 | 63 | 302 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 16 | 11 | 114 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 29 | 21 | 166 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 28 | 24 | 92 |
-| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 44 | 25 | 80 |
+| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 46 | 25 | 82 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -216,7 +216,8 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [The annual purge, as one runbook](plan_specs/v1/e30-caselist-ingestion/t28-annual-purge-runbook.yaml) `v1-e30-t28-annual-purge-runbook` | Succeeded | 1 | 2.0 |
 | [A removal lists raw/ and parsed/ again after deleting, and stops incomplete if a version survived](plan_specs/v1/e30-caselist-ingestion/t29-removal-confirms-raw-and-parsed-deletes.yaml) `v1-e30-t29-removal-confirms-raw-and-parsed-deletes` | Succeeded | 1 | 1.0 |
 | [Inbox deletions fsync the inbox directory, so a removed archive cannot come back after a power cut](plan_specs/v1/e30-caselist-ingestion/t30-inbox-deletions-fsync-the-directory.yaml) `v1-e30-t30-inbox-deletions-fsync-the-directory` | Succeeded | 0 | 1.0 |
-| [The pull keeps OpenEv's own camp word on a camp file's manifest row](plan_specs/v1/e30-caselist-ingestion/t31-openev-camp-word-on-the-manifest-row.yaml) `v1-e30-t31-openev-camp-word-on-the-manifest-row` | Pending | 0 | 1.0 |
+| [The pull keeps OpenEv's own camp word on a camp file's manifest row](plan_specs/v1/e30-caselist-ingestion/t31-openev-camp-word-on-the-manifest-row.yaml) `v1-e30-t31-openev-camp-word-on-the-manifest-row` | Pending | 2 | 1.0 |
+| [Michigan's three camps are filed apart, as OpenEv files them, so their cards can link](plan_specs/v1/e30-caselist-ingestion/t32-michigan-split-into-openevs-three-camps.yaml) `v1-e30-t32-michigan-split-into-openevs-three-camps` | Pending | 1 | 2.0 |
 
 #### [E31 — Debate File Parsing](plan_specs/v1/e31-debate-file-parsing/epic.yaml)
 
@@ -295,6 +296,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [A keychain failure under launchd names its cause, and clearing a token already gone is no error](plan_specs/v1/e34-caselist-sync/t33-keychain-errors-named.yaml) `v1-e34-t33-keychain-errors-named` | Succeeded | 1 | 2.0 |
 | [Earlier seasons' complete archives, from 2021-22 on, imported and parsed as backfiles](plan_specs/v1/e34-caselist-sync/t34-backfile-seasons-import.yaml) `v1-e34-t34-backfile-seasons-import` | Succeeded | 1 | 4.0 |
 | [A Mac run stopped for a missing token says to log in again](plan_specs/v1/e34-caselist-sync/t35-token-missing-hint-on-the-mac.yaml) `v1-e34-t35-token-missing-hint-on-the-mac` | Succeeded | 1 | 0.5 |
+| [A Mac run stopped for an unreadable token says to log out and log in again](plan_specs/v1/e34-caselist-sync/t36-token-unreadable-hint-on-the-mac.yaml) `v1-e34-t36-token-unreadable-hint-on-the-mac` | Pending | 1 | 0.5 |
 
 
 ### v1.2 — Argument landscape & file building
@@ -511,7 +513,7 @@ Whitefish Bay Debate has a public, mobile-friendly team website: team informatio
 
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
-| [District donation process](plan_specs/v1/e38-donations/t01-district-donation-process.yaml) `v1-e38-t01-district-donation-process` | Pending | 0 | 6.0 |
+| [District donation process](plan_specs/v1/e38-donations/t01-district-donation-process.yaml) `v1-e38-t01-district-donation-process` | Pending | 1 | 6.0 |
 | [Donation page](plan_specs/v1/e38-donations/t02-donation-page.yaml) `v1-e38-t02-donation-page` | Pending | 4 | 9.0 |
 | [Opt-in donor recognition](plan_specs/v1/e38-donations/t03-donor-recognition.yaml) `v1-e38-t03-donor-recognition` | Pending | 3 | 6.0 |
 
@@ -593,7 +595,8 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [A Mac pull refused because the weekly run moved to prod is recorded as skipped, with its own notice](plan_specs/v1/e40-cloud-caselist-run/t29-pull-refused-by-the-move-is-skipped.yaml) `v1-e40-t29-pull-refused-by-the-move-is-skipped` | Pending | 1 | 1.0 |
 | [The run task gets 32 GB, so a full re-parse or a backfile import is not killed for memory](plan_specs/v1/e40-cloud-caselist-run/t30-run-task-memory-fits-a-full-parse.yaml) `v1-e40-t30-run-task-memory-fits-a-full-parse` | InProgress | 1 | 1.0 |
 | [A parse worker over its share of memory fails its file, not the whole run](plan_specs/v1/e40-cloud-caselist-run/t31-parse-worker-memory-ceiling.yaml) `v1-e40-t31-parse-worker-memory-ceiling` | Pending | 1 | 2.0 |
-| [A backfile import logs each step as it ends, so a task killed part-way shows how far it got](plan_specs/v1/e40-cloud-caselist-run/t32-backfile-import-logs-each-step.yaml) `v1-e40-t32-backfile-import-logs-each-step` | Pending | 0 | 1.0 |
+| [A backfile import logs each step as it ends, so a task killed part-way shows how far it got](plan_specs/v1/e40-cloud-caselist-run/t32-backfile-import-logs-each-step.yaml) `v1-e40-t32-backfile-import-logs-each-step` | Pending | 1 | 1.0 |
+| [A cloud run refused for an expired login says the Wednesday login renews it, not to log in by hand](plan_specs/v1/e40-cloud-caselist-run/t33-expired-login-cloud-notice-names-the-wednesday-login.yaml) `v1-e40-t33-expired-login-cloud-notice-names-the-wednesday-login` | Pending | 2 | 1.0 |
 
 #### [E41 — Delivery Tooling Upkeep](plan_specs/v1/e41-delivery-tooling-upkeep/epic.yaml)
 
@@ -611,6 +614,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [An unknown DEBATE_ name in .env is refused, and files build tells a newer-stamped store to install the newer build](plan_specs/v1/e41-delivery-tooling-upkeep/t10-unknown-env-names-refused-and-newer-stamp-hint.yaml) `v1-e41-t10-unknown-env-names-refused-and-newer-stamp-hint` | Pending | 1 | 1.0 |
 | [Test selection no longer reads ast.walk( as a directory walk, and a contract keeps debate_api.container imported one way](plan_specs/v1/e41-delivery-tooling-upkeep/t11-selector-ast-walk-and-container-contract.yaml) `v1-e41-t11-selector-ast-walk-and-container-contract` | Succeeded | 1 | 1.0 |
 | [CI's pyright covers the scripts already clean, so they stay clean](plan_specs/v1/e41-delivery-tooling-upkeep/t12-pyright-covers-the-clean-scripts.yaml) `v1-e41-t12-pyright-covers-the-clean-scripts` | Pending | 1 | 0.5 |
+| [The image plan check refuses a schedule repointed at a revision registered before the apply](plan_specs/v1/e41-delivery-tooling-upkeep/t13-image-plan-check-known-revision-rule.yaml) `v1-e41-t13-image-plan-check-known-revision-rule` | Pending | 1 | 0.5 |
 
 
 ## V2

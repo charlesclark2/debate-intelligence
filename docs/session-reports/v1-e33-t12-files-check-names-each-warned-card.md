@@ -191,9 +191,43 @@ None. The affected set (200 files, over two minutes) runs in the pull request's 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-31
 
 **Notes:**
+
+What the States CP build needed a grep for is now on the screen, in the quality report's own words.
+1. **ac1 passes.**
+   * Red: 10 failed, each on the missing feature. The two clean-file tests' "prints as before" halves
+     passed red, as guards should.
+   * Green: 142. The node criterion passes (86).
+   * The before and after show the four lines in the `.quality.md`'s order. A clean file's stdout is
+     byte-identical.
+   * The JSON envelope gains exactly `quality.findings`, and the before and after are equal once it is
+     removed.
+2. **No card text.** Distinctive planted tag and cite words appear in none of the four streams, and
+   the card is still named. The messages are the checks' fixed sentences.
+3. **Mutants:** seven, all caught at assertions, run against this task's tests alone so that a change
+   to the shared wording had to be caught here. 5b's catch by the byte-for-byte test is exactly why
+   that test exists.
+4. **Deviations accepted.**
+   * **The edit to `debate_core.evidence.file_checks.report`** is what "don't build a second wording"
+     required, and `test_report.py`'s hand-written expectation holds the Markdown's bytes. The PM's
+     next batch adds `debate_core.evidence` to the spec's packages, with the ruling.
+   * **The full fingerprint in the JSON** matches every other `fingerprint` key and `.quality.json`'s
+     results, so a program can match the recipe. The printed line keeps the 12-character prefix.
+5. **Decisions accepted:**
+   * `quality.findings`, beside `failing_checks`, so each envelope gains one key;
+   * the `.quality.md`'s own heading;
+   * the colon for a whole-file result;
+   * paragraph and section parts printed as the Markdown prints them;
+   * stdout through `TableSpec.lines_below`, not stderr.
+6. **Follow-up (the QUALITY_FAILED hint pointing at the `.quality.md`):** folded into the planned p3
+   for the unreplaced CP text slot, which prints through `finding_line` and touches the same panel.
+   It is filed in the PM's next batch.
+7. **Closing checks:** the affected set (200 files, through `output.py`) stopped at about 19% at its
+   limit with nothing failing, and is left to the PR's `ci` under agreement 10. The changed areas and
+   the always-run list (865), ruff, pyright, lint-imports, thin handlers and the specs are clean.
+8. **Merge:** a plain `scripts/task pr` once `ci` is green.

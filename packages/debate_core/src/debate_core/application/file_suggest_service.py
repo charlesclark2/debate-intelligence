@@ -100,6 +100,7 @@ from debate_core.domain.file_recipe import HEADING_MAX_LENGTH, FileRecipe, Recip
 from debate_core.domain.landscape import Position, PositionKind, PositionSide, Taxonomy
 from debate_core.domain.landscape_classification import ItemKind, section_item_id
 from debate_core.domain.landscape_report import LandscapeCard, TopCard
+from debate_core.evidence.file_checks.placeholders import CP_TEXT_SLOT
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
 
 __all__ = [
@@ -119,8 +120,6 @@ __all__ = [
 RECIPES_DIRECTORY: Final = "recipes"
 """Under the files directory: where a draft goes by default, one directory per topic."""
 
-CP_TEXT_SLOT: Final = "[the counterplan text: write it here]"
-"""The analytic a counterplan's draft opens with, for the coach to replace: never a team's text."""
 
 CHECK_AGAINST_THE_PLAN: Final = (
     "# Check this block against the affirmative's plan: its heading names a plank or mechanism of a plan."

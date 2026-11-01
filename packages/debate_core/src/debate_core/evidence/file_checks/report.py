@@ -92,6 +92,7 @@ class QualityCheck(StrEnum):
     MANIFEST_ALIGNMENT = "manifest-alignment"
     PROVENANCE_COMPLETE = "provenance-complete"
     SUPPRESSION = "suppression"
+    PLACEHOLDERS_REPLACED = "placeholders-replaced"
 
 
 CHECK_DESCRIPTIONS: Final[dict[QualityCheck, str]] = {
@@ -110,6 +111,10 @@ CHECK_DESCRIPTIONS: Final[dict[QualityCheck, str]] = {
         "Each card's provenance is complete in the sidecar, and the file's text holds no provenance line."
     ),
     QualityCheck.SUPPRESSION: "No card comes from a source or disclosure on the suppression list.",
+    QualityCheck.PLACEHOLDERS_REPLACED: (
+        "No analytic is still the placeholder for the counterplan's text that `files suggest` drafts "
+        "(warned, never failed)."
+    ),
 }
 
 

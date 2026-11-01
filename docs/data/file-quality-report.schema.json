@@ -149,7 +149,8 @@
         "heading-structure",
         "manifest-alignment",
         "provenance-complete",
-        "suppression"
+        "suppression",
+        "placeholders-replaced"
       ],
       "title": "QualityCheck",
       "type": "string"

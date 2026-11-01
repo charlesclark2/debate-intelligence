@@ -42,6 +42,7 @@ from lxml import etree
 from debate_core.application.caselist.suppression import RecordedSuppressionList
 from debate_core.application.file_quality_service import FileQualityService, suppressions_in_force
 from debate_core.application.file_recipes import ResolvedRecipe
+from debate_core.application.file_suggest_service import CP_TEXT_SLOT
 from debate_core.application.ports.evidence_file_writer import BuiltEvidenceFile, FileBuildRequest
 from debate_core.application.ports.parsed_store import OccurrenceRecord
 from debate_core.application.ports.suppression import (
@@ -59,6 +60,7 @@ from debate_core.evidence.file_checks.report import (
     CheckStatus,
     FileQualityReport,
     QualityCheck,
+    finding_line,
 )
 from debate_core.integrations.docx_file_writer.writer import DocxEvidenceFileWriter
 from debate_core.integrations.docx_parser.package import W_NAMESPACE
@@ -334,6 +336,41 @@ def test_checking_changes_neither_the_built_file_nor_its_sidecar(
     assert (standard.path.read_bytes(), standard.sidecar.read_bytes()) == before
 
 
+def test_a_file_still_holding_the_cp_text_slot_passes_warned_naming_its_block(
+    parser: DebateDocxParser, tmp_path: Path
+) -> None:
+    """`v1-e33-t15`: the slot `files suggest` drafts is a WARN on its block, in both reports, never a FAIL.
+
+    Paragraph 4 by hand: the header analytic, the pocket, the hat, the block, then the slot.
+    """
+
+    def slot_first(cards: Sequence[SourceCard]) -> Sequence[tuple[str, Sequence[Mapping[str, Any]]]]:
+        one, two, three, four = cards
+        return (
+            ("Text and solvency", ({"analytic": CP_TEXT_SLOT}, {"fingerprint": one.fingerprint})),
+            ("Net benefit", tuple({"fingerprint": card.fingerprint} for card in (two, three, four))),
+        )
+
+    on_disk = build_to(tmp_path, parser, (SOURCE_ONE, SOURCE_TWO), slot_first)
+    report = check(parser, on_disk)
+
+    assert report.status is CheckStatus.PASS
+    assert failing(report) == set()
+    summary = report.summary(QualityCheck.PLACEHOLDERS_REPLACED)
+    assert (summary.status, summary.failures, summary.warnings) == (CheckStatus.WARN, 0, 1)
+    line = (
+        "WARN placeholders-replaced paragraph 4, under Synthetic pocket > Synthetic hat > Text and "
+        "solvency: the analytic is still the placeholder for the counterplan's text that `files suggest` "
+        "drafts: write the text the team reads in its place, then build again"
+    )
+    assert [finding_line(one) for one in report.findings] == [line]
+    markdown = on_disk.path.with_name("synthetic.docx.quality.md").read_text(encoding="utf-8")
+    assert (
+        "* **WARN** `placeholders-replaced` paragraph 4, under Synthetic pocket > Synthetic hat > Text and "
+        "solvency: the analytic is still the placeholder" in markdown
+    )
+
+
 def test_the_reports_hold_no_card_text_school_or_team_code(
     parser: DebateDocxParser, standard: OnDisk
 ) -> None:
@@ -381,7 +418,7 @@ CHECK_MODULES = [
 
 def test_no_check_calls_a_model() -> None:
     """The forbidden list's second item: nothing the checks or the service import or name reaches a model."""
-    assert len(CHECK_MODULES) == 5, CHECK_MODULES
+    assert len(CHECK_MODULES) == 6, CHECK_MODULES
     for path in CHECK_MODULES:
         text = path.read_text(encoding="utf-8")
         for word in ("ModelRouter", "model_router", "generate_structured", "bedrock", "integrations.models"):
@@ -715,6 +752,9 @@ def test_a_file_that_is_not_a_docx_fails(parser: DebateDocxParser, standard: OnD
     assert any(
         message.startswith("the built file does not parse: ")
         for message in messages(report, QualityCheck.EVIDENCE_IDENTITY)
+    )
+    assert messages(report, QualityCheck.PLACEHOLDERS_REPLACED)[0].startswith(
+        "the built file does not parse: "
     )
 
 

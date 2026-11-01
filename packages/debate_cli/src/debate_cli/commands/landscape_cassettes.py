@@ -63,15 +63,17 @@ from debate_core.application.cassette_filing import (
     CassetteDeleteRefused,
     caselist_cassettes,
     delete_caselist_cassettes,
+    delete_caselist_cassettes_for_removal,
     is_caselist_slug,
 )
 from debate_core.application.errors import DomainError, error_code_of
 from debate_core.application.settings import Environment
 
-__all__ = ["DIRECTORY_SHOWN", "cassettes", "cassettes_summary"]
+__all__ = ["DIRECTORY_SHOWN", "FOR_REMOVAL_FLAG", "cassettes", "cassettes_summary"]
 
 DIRECTORY_SHOWN: Final = "<data dir>/landscape/model-cassettes/"
 """The directory as the output names it: where it is in every data directory, never this machine's path."""
+FOR_REMOVAL_FLAG: Final = "--for-removal"
 
 
 def cassettes(
@@ -83,6 +85,14 @@ def cassettes(
             "--delete",
             help="Delete the cassettes this caselist alone names, given the dry run's code with --confirm. "
             "Shared and unattributed cassettes are kept.",
+        ),
+    ] = False,
+    for_removal: Annotated[
+        bool,
+        typer.Option(
+            FOR_REMOVAL_FLAG,
+            help="A takedown's form, for the removal runbook: count, and with --delete delete, every cassette "
+            "naming this caselist, shared ones too, and every unattributed one, behind a code of its own.",
         ),
     ] = False,
     confirmation: Annotated[
@@ -107,11 +117,12 @@ def cassettes(
     files = cli.services.landscape_cassettes()
     found = files.root.is_dir()
     try:
-        listed = (
-            delete_caselist_cassettes(files, caselist, confirmation=confirmation)
-            if delete
-            else caselist_cassettes(files, caselist)
-        )
+        if not delete:
+            listed = caselist_cassettes(files, caselist)
+        elif for_removal:
+            listed = delete_caselist_cassettes_for_removal(files, caselist, confirmation=confirmation)
+        else:
+            listed = delete_caselist_cassettes(files, caselist, confirmation=confirmation)
     except CassetteDeleteRefused as refused:
         _end(cli, ctx, _mismatch(refused, environment))
     except DomainError as error:

@@ -1,5 +1,8 @@
 """One caselist's cassettes, listed and deleted alone (`v1-e32-t31`), behind a code (`v1-e32-t34`).
 
+A removal's form (`v1-e32-t36`) deletes every copy instead, behind a code of its own: the tests at the
+end.
+
 The cassettes are recorded by the record-and-replay router over
 :class:`~debate_core.testing.fakes.model_router.ScriptedModelRouter`, so they are the files a run writes;
 no model is called. Every caselist is a synthetic slug, every prompt variable and answer invented.
@@ -22,6 +25,7 @@ from debate_core.application.cassette_filing import (
     CassetteDeleteRefused,
     caselist_cassettes,
     delete_caselist_cassettes,
+    delete_caselist_cassettes_for_removal,
     filed_under,
 )
 from debate_core.domain.model_contracts import ModelPrompt, ModelRequest, TaskClass
@@ -274,3 +278,160 @@ def test_the_code_covers_what_the_delete_changes_and_not_what_it_keeps_whole(cas
     run(record(cassettes, "another card only the kept caselist holds", KEPT))
 
     assert caselist_cassettes(files, PURGED).confirmation == code
+
+
+# --- The removal's form: every copy, behind its own code (v1-e32-t36) ---------------------------
+
+
+def confirmed_removal(cassettes: Path, caselist: str) -> CaselistCassettes:
+    """A removal given the code of the listing just before it, as `--for-removal --delete` is."""
+    files = CassetteDirectory(cassettes)
+    return delete_caselist_cassettes_for_removal(
+        files, caselist, confirmation=caselist_cassettes(files, caselist).removal_confirmation
+    )
+
+
+@pytest.fixture
+def coinciding(tmp_path: Path) -> Path:
+    """No shared and no unattributed cassette, so a purge and a removal would delete the same one.
+
+    Friday 2026-11-06's likely state: the first recordings, each naming the one caselist it ran for.
+    """
+
+    async def build() -> None:
+        await record(tmp_path, SOLE, PURGED)
+        await record(tmp_path, OTHER, KEPT)
+
+    run(build())
+    return tmp_path
+
+
+def test_a_removal_deletes_the_caselists_sole_shared_and_unattributed_cassettes(cassettes: Path) -> None:
+    before = snapshot(cassettes)
+
+    done = confirmed_removal(cassettes, PURGED)
+
+    assert (done.sole, done.shared, done.unattributed, done.others) == (
+        (name_of(cassettes, SOLE),),
+        (name_of(cassettes, SHARED),),
+        (name_of(cassettes, UNATTRIBUTED),),
+        1,
+    )
+    assert snapshot(cassettes) == {name_of(cassettes, OTHER): before[name_of(cassettes, OTHER)]}
+
+
+def test_a_removal_costs_the_other_caselist_a_re_recording_of_the_shared_cassette(cassettes: Path) -> None:
+    confirmed_removal(cassettes, PURGED)
+
+    for card in (SHARED, UNATTRIBUTED):
+        with pytest.raises(MissingFixtureError):
+            run(replay(cassettes, card, KEPT))
+    assert run(replay(cassettes, OTHER, KEPT)) == "states-cp"
+
+
+def test_a_second_removal_of_the_same_caselist_finds_nothing_of_it(cassettes: Path) -> None:
+    confirmed_removal(cassettes, PURGED)
+    before = snapshot(cassettes)
+
+    again = confirmed_removal(cassettes, PURGED)
+
+    assert (again.sole, again.shared, again.unattributed, again.others) == ((), (), (), 1)
+    assert snapshot(cassettes) == before
+
+
+@pytest.mark.parametrize("confirmation", [None, "", "0" * 12])
+def test_a_removal_without_its_listings_code_changes_nothing(cassettes: Path, confirmation: str | None) -> None:
+    files = CassetteDirectory(cassettes)
+    listed = caselist_cassettes(files, PURGED)
+    before = snapshot(cassettes)
+
+    with pytest.raises(CassetteDeleteRefused) as refused:
+        delete_caselist_cassettes_for_removal(files, PURGED, confirmation=confirmation)
+
+    assert refused.value.listed == listed
+    assert snapshot(cassettes) == before
+
+
+@pytest.mark.parametrize("directory", ["cassettes", "coinciding"])
+def test_a_purges_code_is_refused_by_a_removal_and_a_removals_by_a_purge(
+    directory: str, request: pytest.FixtureRequest
+) -> None:
+    """Even where the two deletes would reach the same cassettes, each form's code is its own."""
+    cassettes: Path = request.getfixturevalue(directory)
+    files = CassetteDirectory(cassettes)
+    listed = caselist_cassettes(files, PURGED)
+    before = snapshot(cassettes)
+
+    assert listed.removal_confirmation != listed.confirmation
+    with pytest.raises(CassetteDeleteRefused):
+        delete_caselist_cassettes_for_removal(files, PURGED, confirmation=listed.confirmation)
+    assert snapshot(cassettes) == before
+    with pytest.raises(CassetteDeleteRefused):
+        delete_caselist_cassettes(files, PURGED, confirmation=listed.removal_confirmation)
+    assert snapshot(cassettes) == before
+
+
+def test_on_a_coinciding_directory_the_two_forms_would_delete_the_same_cassette(coinciding: Path) -> None:
+    """What makes the test above's second case the hard one: the codes differ by the form alone."""
+    listed = caselist_cassettes(CassetteDirectory(coinciding), PURGED)
+
+    assert (listed.sole, listed.shared, listed.unattributed) == ((name_of(coinciding, SOLE),), (), ())
+
+
+def test_the_removals_code_is_twelve_hex_digits_and_the_same_for_the_same_listing(cassettes: Path) -> None:
+    files = CassetteDirectory(cassettes)
+
+    first, second = (caselist_cassettes(files, PURGED).removal_confirmation for _ in range(2))
+
+    assert re.fullmatch(r"[0-9a-f]{12}", first)
+    assert first == second
+    assert first != caselist_cassettes(files, KEPT).removal_confirmation
+
+
+@pytest.mark.parametrize(
+    ("card", "caselists"),
+    [
+        ("a new card of the purged caselist alone", (PURGED,)),
+        ("a new card both hold", (PURGED, KEPT)),
+        ("another card recorded before cassettes named caselists", ()),
+    ],
+)
+def test_the_removals_code_changes_when_a_cassette_the_removal_would_delete_appears(
+    cassettes: Path, card: str, caselists: tuple[str, ...]
+) -> None:
+    files = CassetteDirectory(cassettes)
+    stale = caselist_cassettes(files, PURGED).removal_confirmation
+    for caselist in caselists or (None,):
+        run(record(cassettes, card, caselist))
+    before = snapshot(cassettes)
+
+    with pytest.raises(CassetteDeleteRefused):
+        delete_caselist_cassettes_for_removal(files, PURGED, confirmation=stale)
+    assert snapshot(cassettes) == before
+
+
+def test_the_removals_code_does_not_cover_what_it_keeps(cassettes: Path) -> None:
+    files = CassetteDirectory(cassettes)
+    code = caselist_cassettes(files, PURGED).removal_confirmation
+
+    run(record(cassettes, "another card only the kept caselist holds", KEPT))
+
+    assert caselist_cassettes(files, PURGED).removal_confirmation == code
+
+
+def test_an_unreadable_cassette_stops_the_removal_before_anything_changes(cassettes: Path) -> None:
+    (cassettes / PROMPT_ID / f"{'0' * 64}.json").write_text("not json", encoding="utf-8")
+    before = snapshot(cassettes)
+
+    with pytest.raises(FixtureFileError):
+        delete_caselist_cassettes_for_removal(CassetteDirectory(cassettes), PURGED, confirmation="0" * 12)
+    assert snapshot(cassettes) == before
+
+
+@pytest.mark.parametrize("value", ["../synthld21", "synthld21/x", "Maple Grove", ""])
+def test_a_removal_takes_a_caselist_slug_and_nothing_else(cassettes: Path, value: str) -> None:
+    before = snapshot(cassettes)
+
+    with pytest.raises(ValueError, match="caselist"):
+        delete_caselist_cassettes_for_removal(CassetteDirectory(cassettes), value, confirmation=None)
+    assert snapshot(cassettes) == before

@@ -23,6 +23,16 @@ is not part of the match. A cassette instead names, beside the request and respo
    is refused with :class:`CassetteDeleteRefused` before anything changes. The caselist's slug is not
    in it: two caselists' codes agree only when neither names a cassette alone and both share the same
    ones, and then either code takes this caselist's name off those cassettes, which is what its own does.
+5. A removal (`v1-e32-t36`) is not a purge: a takedown has to reach every copy of the removed text, and a
+   shared cassette holds it for the other caselist too (PM ruling, 2026-10-31).
+   :func:`delete_caselist_cassettes_for_removal` deletes every cassette naming the caselist, sole and
+   shared, and every unattributed one, since one recorded before `v1-e32-t31` may hold the text. It
+   keeps only the cassettes naming other caselists alone; the cost to them is a re-recording, never a
+   wrong answer. It takes the listing's :attr:`~CaselistCassettes.removal_confirmation`, a code of its
+   own: a digest of the form and every cassette the removal deletes. The form is in it so that the two
+   codes never stand in for each other, even where the two deletes would reach the same cassettes (no
+   shared and no unattributed one), since each form's code is read off a dry run that described that
+   form's delete.
 
 No school, team code or path goes into a cassette: only the caselist's slug, which
 :func:`filed_under` refuses unless it is one.
@@ -50,6 +60,7 @@ __all__ = [
     "CassetteFiling",
     "caselist_cassettes",
     "delete_caselist_cassettes",
+    "delete_caselist_cassettes_for_removal",
     "filed_under",
     "filing_caselist",
     "is_caselist_slug",
@@ -134,6 +145,16 @@ class CaselistCassettes:
         shown = {"sole": list(self.sole), "shared": list(self.shared)}
         return hashlib.sha256(json.dumps(shown, sort_keys=True).encode()).hexdigest()[:CONFIRMATION_LENGTH]
 
+    @property
+    def removal_confirmation(self) -> str:
+        """The code :func:`delete_caselist_cassettes_for_removal` takes: the form, and what it deletes."""
+        return self.confirmation
+
+    @property
+    def for_removal(self) -> tuple[str, ...]:
+        """The cassettes a removal deletes: sole, shared and unattributed."""
+        return (*self.sole, *self.shared)
+
 
 def caselist_cassettes(files: CassetteFiles, caselist: str) -> CaselistCassettes:
     """What `files` holds of `caselist`, read and changed nothing. Raises `ValueError` for a non-slug."""
@@ -190,3 +211,15 @@ def delete_caselist_cassettes(
     for cassette in listed.sole:
         files.delete(cassette)
     return listed
+
+
+def delete_caselist_cassettes_for_removal(
+    files: CassetteFiles, caselist: str, *, confirmation: str | None
+) -> CaselistCassettes:
+    """Delete every cassette naming `caselist`, sole and shared, and every unattributed one; what it did.
+
+    Everything is listed first, so an unreadable cassette, or a `confirmation` that is not that listing's
+    :attr:`~CaselistCassettes.removal_confirmation` (:class:`CassetteDeleteRefused`), a purge's code
+    among them, stops the removal before anything changes.
+    """
+    return delete_caselist_cassettes(files, caselist, confirmation=confirmation)

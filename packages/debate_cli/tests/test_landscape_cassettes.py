@@ -5,6 +5,8 @@ itself, under `<data dir>/landscape/model-cassettes/` as the landscape model sta
 files are the ones a run leaves; no router is built and no model is called. Every caselist is a
 synthetic slug, and every prompt variable and answer is invented. The counts are distinct (3 sole, 2
 shared, 1 unattributed, 4 of the other caselist only), so a count reported under another's name shows.
+
+The removal's form, `--for-removal` (`v1-e32-t36`), is at the end.
 """
 
 from __future__ import annotations
@@ -420,3 +422,221 @@ def test_the_command_reads_the_directory_the_model_stage_records_to(
         container.landscape_model_stage(ModelMode.REPLAY, 1)
     assert recorded_to == [cassette_root(data_dir)]
     assert container.landscape_cassettes().root == cassette_root(data_dir)
+
+
+# ------------------------------------------------------------------------------------------------
+# The removal's form: every copy of the caselist's text, behind its own code (v1-e32-t36)
+# ------------------------------------------------------------------------------------------------
+
+
+def removal_code_of(*arguments: str) -> str:
+    return confirmation_of("--for-removal", *arguments)
+
+
+@pytest.fixture
+def coinciding(data_dir: Path) -> dict[str, list[Path]]:
+    """No shared and no unattributed cassette: a purge and a removal would delete the same three."""
+    return {
+        "sole": [write(data_dir, card, PURGED) for card in SOLE],
+        "other": [write(data_dir, card, KEPT) for card in OTHER],
+    }
+
+
+def test_the_removals_dry_run_counts_as_the_purges_and_prints_a_code_of_its_own(
+    data_dir: Path, cassettes: dict[str, list[Path]]
+) -> None:
+    before = tree(data_dir)
+
+    result = invoke("--caselist", PURGED, "--for-removal", "--json")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    data = envelope_of(result)["data"]
+    assert data.get("for_removal") is True
+    assert data["cassettes"] == COUNTS
+    assert (data["caselist"], data["environment"], data["directory"]) == (PURGED, "dev", DIRECTORY)
+    assert (data["directory_found"], data["deleted"]) == (True, False)
+    assert re.fullmatch(r"[0-9a-f]{12}", data["confirmation"])
+    assert data["confirmation"] != confirmation_of()
+    assert envelope_of(invoke("--caselist", PURGED, "--json"))["data"].get("for_removal") is False
+    assert tree(data_dir) == before
+
+
+def test_the_removals_dry_run_says_it_deletes_shared_and_unattributed_cassettes_too(
+    data_dir: Path, cassettes: dict[str, list[Path]]
+) -> None:
+    code = removal_code_of()
+
+    result = invoke("--caselist", PURGED, "--for-removal")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    text = flat(result.stdout)
+    assert (
+        f"Model cassettes of {PURGED} in dev, for a removal, in the landscape model stage's directory, "
+        f"{DIRECTORY}" in text
+    )
+    assert "3 this caselist's alone: a removal deletes them." in text
+    assert (
+        "2 shared with another caselist: a removal deletes them too, since they hold this caselist's "
+        "text; the other caselist records them again." in text
+    )
+    assert (
+        "1 unattributed, naming no caselist (recorded before v1-e32-t31): a removal deletes them too, "
+        "since one may hold this caselist's text." in text
+    )
+    assert "4 of other caselists only: untouched." in text
+    assert f"Dry run: nothing was changed. To carry it out, add: --delete --confirm {code}" in text
+
+
+def test_the_removal_deletes_every_cassette_naming_the_caselist_and_every_unattributed_one(
+    data_dir: Path, cassettes: dict[str, list[Path]]
+) -> None:
+    kept_whole = {path: path.read_bytes() for path in cassettes["other"]}
+    code = removal_code_of()
+
+    result = invoke("--caselist", PURGED, "--for-removal", "--delete", "--confirm", code, "--json")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    data = envelope_of(result)["data"]
+    assert (data["deleted"], data.get("for_removal"), data["confirmation"]) == (True, True, None)
+    assert data["cassettes"] == COUNTS
+    for kind in ("sole", "shared", "unattributed"):
+        assert [path.exists() for path in cassettes[kind]] == [False] * len(cassettes[kind]), kind
+    assert tree(data_dir) == {
+        path.relative_to(cassette_root(data_dir)).as_posix(): before for path, before in kept_whole.items()
+    }
+    again = envelope_of(invoke("--caselist", PURGED, "--for-removal", "--json"))["data"]["cassettes"]
+    assert again == {"sole": 0, "shared": 0, "unattributed": 0, "other_caselists": 4}
+    kept = envelope_of(invoke("--caselist", KEPT, "--json"))["data"]["cassettes"]
+    assert kept == {"sole": 4, "shared": 0, "unattributed": 0, "other_caselists": 0}
+
+
+def test_the_removal_says_what_it_deleted_and_to_tell_the_pm(
+    data_dir: Path, cassettes: dict[str, list[Path]]
+) -> None:
+    code = removal_code_of()
+
+    result = invoke("--caselist", PURGED, "--for-removal", "--delete", "--confirm", code)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    text = flat(result.stdout)
+    assert "Deleted 3 cassette(s) only this caselist named." in text
+    assert "Deleted 2 shared cassette(s): the other caselist records them again." in text
+    assert "Deleted 1 unattributed cassette(s), since one may have held this caselist's text." in text
+    assert "4 of other caselists only: untouched." in text
+    assert "Tell the PM: this caselist's model evaluation is recorded again." in text
+
+
+@pytest.mark.parametrize("directory", ["cassettes", "coinciding"])
+def test_a_purges_code_is_refused_by_the_removal_and_a_removals_by_the_purge(
+    data_dir: Path, directory: str, request: pytest.FixtureRequest
+) -> None:
+    """On `coinciding` the two forms would delete the same three cassettes: the codes differ by form."""
+    request.getfixturevalue(directory)
+    purge_code, removal_code = confirmation_of(), removal_code_of()
+    before = tree(data_dir)
+
+    as_removal = invoke("--caselist", PURGED, "--for-removal", "--delete", "--confirm", purge_code, "--json")
+    as_purge = invoke("--caselist", PURGED, "--delete", "--confirm", removal_code, "--json")
+
+    for refused in (as_removal, as_purge):
+        assert refused.exit_code == ExitCode.DOMAIN_FAILURE, refused.output
+        assert envelope_of(refused)["error"]["code"] == "CONFIRMATION_MISMATCH"
+    assert tree(data_dir) == before
+
+
+@pytest.mark.parametrize("confirm", [[], ["--confirm", "0" * 12], ["--confirm", ""]])
+def test_a_removal_without_its_dry_runs_code_changes_nothing(
+    data_dir: Path, cassettes: dict[str, list[Path]], confirm: list[str]
+) -> None:
+    before = tree(data_dir)
+
+    result = invoke("--caselist", PURGED, "--for-removal", "--delete", *confirm, "--json")
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    error = envelope_of(result)["error"]
+    assert error["code"] == "CONFIRMATION_MISMATCH"
+    assert error["details"]["cassettes"] == COUNTS
+    assert tree(data_dir) == before
+
+
+def test_a_removals_code_from_before_an_unattributed_cassette_appeared_deletes_nothing(
+    data_dir: Path, cassettes: dict[str, list[Path]]
+) -> None:
+    code = removal_code_of()
+    write(data_dir, "eleventh")
+    before = tree(data_dir)
+
+    result = invoke("--caselist", PURGED, "--for-removal", "--delete", "--confirm", code, "--json")
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    assert envelope_of(result)["error"]["code"] == "CONFIRMATION_MISMATCH"
+    assert tree(data_dir) == before
+
+
+def test_a_removal_in_prod_also_needs_confirm_prod(
+    data_dir: Path, cassettes: dict[str, list[Path]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DEBATE_ENV", "prod")
+    code = removal_code_of()
+    before = tree(data_dir)
+
+    refused = invoke("--caselist", PURGED, "--for-removal", "--delete", "--confirm", code, "--json")
+
+    assert refused.exit_code == ExitCode.DOMAIN_FAILURE, refused.output
+    assert envelope_of(refused)["error"]["code"] == "CONFIRMATION_REQUIRED"
+    assert tree(data_dir) == before
+    done = invoke(
+        "--caselist", PURGED, "--for-removal", "--delete", "--confirm", code, "--confirm-prod", "--json"
+    )
+    assert done.exit_code == ExitCode.OK, done.output
+    assert [path.exists() for path in cassettes["shared"]] == [False, False]
+
+
+def test_where_the_model_stage_recorded_nothing_the_removal_says_so_and_creates_nothing(
+    data_dir: Path,
+) -> None:
+    listed = invoke("--caselist", PURGED, "--for-removal", "--json")
+
+    assert listed.exit_code == ExitCode.OK, listed.output
+    data = envelope_of(listed)["data"]
+    assert (data["directory_found"], data.get("for_removal")) == (False, True)
+    deleted = invoke("--caselist", PURGED, "--for-removal", "--delete", "--confirm", data["confirmation"])
+    assert deleted.exit_code == ExitCode.OK, deleted.output
+    assert "Deleted nothing." in flat(deleted.stdout)
+    assert not cassette_root(data_dir).exists()
+
+
+@pytest.mark.parametrize("json_flag", [[], ["--json"]])
+def test_no_removal_run_prints_or_logs_a_cassettes_content_its_name_or_a_path(
+    data_dir: Path,
+    cassettes: dict[str, list[Path]],
+    caplog: pytest.LogCaptureFixture,
+    json_flag: list[str],
+) -> None:
+    caplog.set_level(logging.DEBUG)
+    code = removal_code_of()
+
+    runs = [
+        invoke("--caselist", PURGED, "--for-removal", *json_flag),
+        invoke("--caselist", PURGED, "--for-removal", "--delete", *json_flag),
+        invoke("--caselist", PURGED, "--for-removal", "--delete", "--confirm", code, *json_flag),
+    ]
+
+    assert [run.exit_code for run in runs] == [ExitCode.OK, ExitCode.DOMAIN_FAILURE, ExitCode.OK]
+    for run in runs:
+        assert_names_nothing(run.stdout + run.stderr, data_dir, cassettes)
+    assert_names_nothing(logged(caplog), data_dir, cassettes)
+
+
+def test_an_unreadable_file_stops_the_removal_names_no_file_and_changes_nothing(
+    data_dir: Path, cassettes: dict[str, list[Path]]
+) -> None:
+    (cassette_root(data_dir) / PROMPT_ID / f"{SCHOOLISH}.json").write_text("{}", encoding="utf-8")
+    before = tree(data_dir)
+
+    result = invoke("--caselist", PURGED, "--for-removal", "--delete", "--confirm", "0" * 12, "--json")
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    assert envelope_of(result)["error"]["code"] == "CASSETTE_UNREADABLE"
+    assert SCHOOLISH not in result.output and "Maple" not in result.output
+    assert tree(data_dir) == before

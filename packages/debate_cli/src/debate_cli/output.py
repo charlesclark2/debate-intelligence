@@ -201,6 +201,7 @@ class CliOutput:
         self._mode = mode
         self._verbose = verbose
         self._stdout = stdout
+        self._stderr = stderr
         self._reported = False
         # Results are for whoever consumes the command; diagnostics are for whoever is watching.
         # highlight=False keeps Rich from colouring numbers and paths inside our own strings.
@@ -280,6 +281,27 @@ class CliOutput:
             return
         self._reported = True
         self._diagnostics.print(_render_failure(failure))
+
+    def event_line(self, command: str, event: str, data: Mapping[str, JsonValue], *, text: str) -> None:
+        """Write one line of a long command's progress to stderr as it happens (`v1-e40-t32`).
+
+        In JSON mode, an object of the envelope's shape with an `event` where a result has its
+        `status`: a log read by its `command` finds it, and a reader of results, who reads `status`,
+        passes over it. In Rich mode, `text`. Stdout keeps its one result either way. Flushed at once,
+        so that a process killed for memory has nothing of it left in a buffer.
+        """
+        if not self.is_json:
+            self._diagnostics.print(text, markup=False, soft_wrap=True)
+            return
+        line: dict[str, JsonValue] = {
+            "schema_version": SCHEMA_VERSION,
+            "command": command,
+            "event": event,
+            "data": dict(data),
+        }
+        stream = self._stderr if self._stderr is not None else sys.stderr
+        stream.write(json.dumps(line, ensure_ascii=False, default=str) + "\n")
+        stream.flush()
 
     def detail(self, message: str) -> None:
         """Write a diagnostic that is only interesting with `--verbose` (stderr, both modes)."""

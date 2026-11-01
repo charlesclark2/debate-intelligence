@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final
 
-from debate_cli.commands.caselist_reimport_in_bucket import bucket_reimport_summary
+from debate_cli.openev_reimport_in_bucket import bucket_reimport_summary
 from debate_cli.output import CliOutput, OutputMode
 from debate_core.application.caselist.openev_metadata_reimport import OpenEvMetadataReimport
 from debate_core.application.caselist.openev_metadata_reimport_in_bucket import BucketReimport

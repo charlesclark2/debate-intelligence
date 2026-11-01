@@ -95,7 +95,7 @@ re-uploads it. Exit codes are `import`'s.
 
 That is local mode. In bucket mode (dev since the cutover), the records are the cloud run's run-state
 bundle, and the command works on the bucket's copy instead (`v1-e40-t34`,
-:mod:`debate_cli.commands.caselist_reimport_in_bucket`): a dry run unless `--execute`, which holds the
+:mod:`debate_cli.openev_reimport_in_bucket`): a dry run unless `--execute`, which holds the
 bucket's run lock while it restores, re-derives, publishes the release manifest and saves the bundle.
 
 ## `caselist publish`
@@ -205,9 +205,9 @@ import typer
 from debate_cli.bucket_lock import run_holding_the_bucket_lock
 from debate_cli.caselist_events import EVENTS_BY_SLUG_PREFIX, event_for_caselist
 from debate_cli.caselist_publish_refusals import no_bucket, refuse, unconfirmed_production_write
-from debate_cli.commands.caselist_reimport_in_bucket import reimport_counts, reimport_in_bucket
 from debate_cli.context import cli_context, command_name
 from debate_cli.exit_codes import ExitCode, exit_code_for_failure_codes
+from debate_cli.openev_reimport_in_bucket import reimport_counts, reimport_in_bucket
 from debate_cli.options.bucket_environment import CONFIRM_PROD_FLAG
 from debate_cli.options.snapshot_date import parse_snapshot_date
 from debate_cli.output import CommandFailure, JsonValue, TableSpec

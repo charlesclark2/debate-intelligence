@@ -72,7 +72,12 @@ helper = load_helper()
 # --------------------------------------------------------------------------------------
 
 
-def spec_text(task: str, title: str, phase: str) -> str:
+def spec_text(task: str, title: str, phase: str, context: tuple[str, ...] = ()) -> str:
+    context_block = "".join(
+        f"    - kind: TaskRef\n      name: {name}\n      relation: dependsOn\n" for name in context
+    )
+    if context:
+        context_block = f"  context:\n{context_block}"
     return f"""# TASK {task} - {title}
 ---
 apiVersion: planspec.io/v1alpha1
@@ -89,7 +94,7 @@ metadata:
     debate/title: "{title}"
 spec:
   description: A fixture task for the scripts/task tests.
-status:
+{context_block}status:
   phase: {phase}
 ---
 apiVersion: planspec.io/v1alpha1
@@ -115,7 +120,7 @@ UV_STUB = """#!/usr/bin/env bash
     */task_helper.py)
       if [ -n "${{TASK_TEST_FAIL_HELPER:-}}" ] && [ "${{1:-}}" = "$TASK_TEST_FAIL_HELPER" ]; then
         printf 'forced failure in task_helper.py %s\\n' "$1" >&2
-        exit 1
+        exit "${{TASK_TEST_FAIL_CODE:-1}}"
       fi
       exec "{python}" "$script" "$@" ;;
   esac
@@ -147,10 +152,13 @@ class TaskRepo:
     log: Path
     env: dict[str, str]
 
-    def run(self, *args: str, fail_helper: str | None = None) -> subprocess.CompletedProcess[str]:
+    def run(
+        self, *args: str, fail_helper: str | None = None, fail_code: int = 1
+    ) -> subprocess.CompletedProcess[str]:
         env = dict(self.env)
         if fail_helper:
             env["TASK_TEST_FAIL_HELPER"] = fail_helper
+            env["TASK_TEST_FAIL_CODE"] = str(fail_code)
         return subprocess.run(
             [str(self.main / "scripts" / "task"), *args],
             cwd=self.main,
@@ -429,6 +437,93 @@ def test_a_refused_run_leaves_an_existing_branch_alone(repo: TaskRepo, command: 
     assert f"task/{task}" in result.stderr
     assert repo.git("rev-parse", f"task/{task}") == tip
     assert repo.registered_worktrees() == [repo.main]
+
+
+# --------------------------------------------------------------------------------------
+# start and its prerequisites: --force overrides an unmet one, never an unknown one (v1-e41-t09).
+# `task_helper.py prereqs` exits 1 when a prerequisite is not yet Succeeded and 2 when the spec
+# names one no task spec declares; until v1-e41-t09, start --force started the task on either.
+# --------------------------------------------------------------------------------------
+
+WAITING = "v1-e99-t04-waits-on-fresh"
+NAMES_UNKNOWN = "v1-e99-t05-names-an-unknown-task"
+UNKNOWN_PREREQUISITE = "v1-e99-t09-never-declared"
+
+
+def push_task(repo: TaskRepo, task: str, prerequisite: str) -> None:
+    """Add a Pending task whose spec.context names one prerequisite, as the PM would on dev."""
+    number, slug = task.split("-", 3)[2:]
+    spec = repo.main / "plan_specs" / "v1" / "e99-fixture" / f"{number}-{slug}.yaml"
+    spec.write_text(spec_text(task, f"A task that depends on {prerequisite}", "Pending", (prerequisite,)))
+    repo.git("add", "-A")
+    repo.git("commit", "--quiet", "-m", f"File {task}")
+    repo.git("push", "--quiet", "origin", "dev")
+
+
+def assert_nothing_created(repo: TaskRepo, task: str) -> None:
+    assert not repo.worktree(task).exists()
+    assert not repo.has_branch(task)
+    assert repo.registered_worktrees() == [repo.main]
+
+
+def test_start_refuses_a_task_whose_prerequisite_is_not_yet_succeeded(repo: TaskRepo) -> None:
+    push_task(repo, WAITING, FRESH)
+
+    result = repo.run("start", WAITING)
+
+    assert result.returncode == 1
+    assert f"BLOCKED {FRESH} (Pending)" in result.stdout
+    assert "prerequisites are not Succeeded on origin/dev" in result.stderr
+    assert "(override with --force)" in result.stderr
+    assert_nothing_created(repo, WAITING)
+
+
+def test_start_force_starts_a_task_whose_prerequisite_is_not_yet_succeeded(repo: TaskRepo) -> None:
+    push_task(repo, WAITING, FRESH)
+
+    result = repo.run("start", WAITING, "--force")
+
+    assert result.returncode == 0, result.stderr
+    assert "warning: starting despite unmet prerequisites (--force)" in result.stderr
+    wt = repo.worktree(WAITING)
+    assert repo.git("log", "-1", "--format=%s", cwd=wt) == f"Start {WAITING}"
+    assert (
+        "phase: InProgress"
+        in (wt / "plan_specs" / "v1" / "e99-fixture" / "t04-waits-on-fresh.yaml").read_text()
+    )
+
+
+@pytest.mark.parametrize("options", [(), ("--force",)], ids=["plain", "force"])
+def test_start_refuses_a_task_whose_prerequisite_no_task_spec_declares(
+    repo: TaskRepo, options: tuple[str, ...]
+) -> None:
+    push_task(repo, NAMES_UNKNOWN, UNKNOWN_PREREQUISITE)
+
+    result = repo.run("start", NAMES_UNKNOWN, *options)
+
+    assert result.returncode == 2, result.stderr
+    assert f"UNKNOWN {UNKNOWN_PREREQUISITE} (no task spec declares it)" in result.stdout
+    assert (
+        f"{NAMES_UNKNOWN}'s spec.context names {UNKNOWN_PREREQUISITE}, which no task spec declares"
+        in result.stderr
+    )
+    assert "--force does not override" in result.stderr
+    assert "starting despite" not in result.stderr
+    assert "(override with --force)" not in result.stderr
+    assert_nothing_created(repo, NAMES_UNKNOWN)
+
+
+def test_start_force_refuses_when_the_prerequisite_check_itself_fails(repo: TaskRepo) -> None:
+    """Only exit 1, a prerequisite not yet Succeeded, is --force's to override."""
+    push_task(repo, WAITING, FRESH)
+
+    result = repo.run("start", WAITING, "--force", fail_helper="prereqs", fail_code=3)
+
+    assert result.returncode == 3
+    assert "forced failure in task_helper.py prereqs" in result.stderr
+    assert "task_helper.py prereqs exited 3" in result.stderr
+    assert "starting despite" not in result.stderr
+    assert_nothing_created(repo, WAITING)
 
 
 # --------------------------------------------------------------------------------------

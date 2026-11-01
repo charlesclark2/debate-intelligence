@@ -170,31 +170,45 @@ def version_ids(client: S3Client, bucket: str) -> list[str]:
     return sorted(str(version.get("VersionId")) for version in listed)
 
 
-class WritesFirst:
-    """The lock object, with another writer's conditional write landing just before write number `nth`.
+class Interleaved:
+    """The lock object, with another writer's conditional write landing just after a read or a write of it.
 
-    What a lease lost between a take and the next write looks like to the runner that took it: the
-    version it holds is no longer the bucket's.
+    What a lease lost between a take and the next write looks like to the runner that took it, or a
+    lock changed between a release's read and its write: the version it holds is no longer the bucket's.
     """
 
-    def __init__(self, inner: S3LockObject, *, nth: int, other: Callable[[S3LockObject], None]) -> None:
+    def __init__(
+        self,
+        inner: S3LockObject,
+        *,
+        other: Callable[[S3LockObject], None],
+        after_read: int | None = None,
+        after_write: int | None = None,
+    ) -> None:
         self._inner = inner
-        self._nth = nth
         self._other = other
+        self._after_read = after_read
+        self._after_write = after_write
+        self._reads = 0
         self._writes = 0
         self.key = inner.key
 
     def read(self) -> LockObject | None:
-        return self._inner.read()
+        found = self._inner.read()
+        self._reads += 1
+        if self._reads == self._after_read:
+            self._other(self._inner)
+        return found
 
     def create(self, body: bytes) -> str:
         return self._inner.create(body)
 
     def replace(self, body: bytes, *, etag: str) -> str:
+        written = self._inner.replace(body, etag=etag)
         self._writes += 1
-        if self._writes == self._nth:
+        if self._writes == self._after_write:
             self._other(self._inner)
-        return self._inner.replace(body, etag=etag)
+        return written
 
 
 def another_runner_writes(body: dict[str, Any]) -> Callable[[S3LockObject], None]:
@@ -265,7 +279,7 @@ def test_the_move_does_not_write_over_a_lock_that_changed_after_it_took_it(
 ) -> None:
     """Its lease taken over between its take and its write: the write is refused, the other holder stays."""
     taker = held_by_another_runner(START)
-    racing = WritesFirst(store(s3_client, bucket), nth=2, other=another_runner_writes(taker))
+    racing = Interleaved(store(s3_client, bucket), other=another_runner_writes(taker), after_write=1)
 
     with pytest.raises(RunLockLost):
         move_in(s3_client, bucket, clock, lock_object=racing).move()
@@ -470,7 +484,7 @@ def test_the_release_does_not_write_over_a_lock_that_changed_after_it_read_it(
     clock.advance(timedelta(hours=1))
     rewritten = json.loads(json.dumps(MOVED_AT_START))
     rewritten["holder"]["build"] = "v1.1.0-dev.1000"
-    racing = WritesFirst(store(s3_client, bucket), nth=1, other=another_runner_writes(rewritten))
+    racing = Interleaved(store(s3_client, bucket), other=another_runner_writes(rewritten), after_read=1)
 
     with pytest.raises(LockObjectChanged):
         move_in(s3_client, bucket, clock, lock_object=racing).release()

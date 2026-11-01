@@ -382,6 +382,8 @@ def test_every_row_has_the_caselist_row_layout_plus_the_camp_fields(tmp_path: Pa
         # The row's upstream identity (v1-e30-t14): an id and a digest, never the upstream path.
         "openev_id",
         "upstream_path_sha256",
+        # OpenEv's own word for the camp, from the pull's listing (v1-e30-t31).
+        "openev_camp_word",
     }
 
     rows = manifest_rows(Harness(tmp_path / "openev").import_openev(FIRST).manifest_lines)
@@ -394,6 +396,8 @@ def test_every_row_has_the_caselist_row_layout_plus_the_camp_fields(tmp_path: Pa
         # as the sync names a download, `openev-417-…`; the rest sit in their camps' folders.
         named_id = 417 if row["path"] == "openev-417-TSF-Spillway Advantage.docx" else None
         assert (row["openev_id"], row["upstream_path_sha256"]) == (named_id, None), row["path"]
+        # Nor any listing, so no camp word, even for a file in a folder named as a camp word is.
+        assert row["openev_camp_word"] is None, row["path"]
     # `first_seen` (v1-e30-t08) counts a week against the caselist's earlier weeks; a release has
     # none, and the key is additive, so a reader of both kinds already handles its absence.
     weekly_only = {"first_seen"}

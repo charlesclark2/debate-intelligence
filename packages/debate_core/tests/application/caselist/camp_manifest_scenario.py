@@ -6,6 +6,10 @@ path, with 700, another camp's file of the same name, listed beside it. It uses 
 before `v1-e30-t14` lacks, so the same function runs against the installed build's source, the start
 commit's and this build's (`stored_camp_manifests/README.md`).
 
+Each listed file carries the camp word `GET /openev` gives it, its upstream path's camp folder, as the
+recorded listing does (`v1-e30-t31`). A build from before `v1-e30-t31` reads it and stores it nowhere,
+so its stored file is the same with or without them.
+
 Not a test module, and never collected.
 """
 
@@ -30,9 +34,15 @@ RELEASE_KEY = openev_manifest_key(YEAR, Event.POLICY)
 STORED = Path(__file__).parent / "stored_camp_manifests"
 MANIFEST_NAME = "2026-policy.jsonl"
 
-REVISION = ESTUARY.model_copy(update={"openev_id": 640})
+#: 512, as the listing gives it: with its camp word, the camp folder of its upstream path.
+LISTED_ESTUARY = ESTUARY.model_copy(update={"camp": "Tamarack"})
+REVISION = LISTED_ESTUARY.model_copy(update={"openev_id": 640})
 OTHER_CAMP = ESTUARY.model_copy(
-    update={"openev_id": 700, "path": f"openev/{YEAR}/Quillfeather/TSF-Estuary Solvency Advocate.docx"}
+    update={
+        "openev_id": 700,
+        "path": f"openev/{YEAR}/Quillfeather/TSF-Estuary Solvency Advocate.docx",
+        "camp": "Quillfeather",
+    }
 )
 #: A camp file listed after the history: what the next pull an older build makes imports into it.
 NEXT_WEEK = OpenEvFile(
@@ -40,6 +50,7 @@ NEXT_WEEK = OpenEvFile(
     path=f"openev/{YEAR}/Juniper/JDI-Harbor Tariffs Neg.docx",
     filename="JDI-Harbor Tariffs Neg.docx",
     year=YEAR,
+    camp="Juniper",
     tags=("policy",),
 )
 
@@ -54,6 +65,7 @@ NEXT_YEAR = OpenEvFile(
     path="openev/2027/Juniper/JDI-Canal Counterplan.docx",
     filename="JDI-Canal Counterplan.docx",
     year=2027,
+    camp="Juniper",
     tags=("policy",),
 )
 
@@ -67,7 +79,7 @@ NEXT_WEEK_ROW = "openev-900-JDI-Harbor_Tariffs_Neg.docx"
 
 async def two_pulls(world: RemovalWorld) -> FakeOpenEvSource:
     """512 pulled; then 640 and 700 pulled. Each pull imports, writes the manifest and publishes it."""
-    source = FakeOpenEvSource([(ESTUARY, ESTUARY_BODY)])
+    source = FakeOpenEvSource([(LISTED_ESTUARY, ESTUARY_BODY)])
     await pull(world, source)
     source.files = [(REVISION, REVISED_BODY), (OTHER_CAMP, OTHER_CAMP_BODY)]
     await pull(world, source)

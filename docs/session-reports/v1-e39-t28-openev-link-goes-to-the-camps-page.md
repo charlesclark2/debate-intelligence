@@ -286,9 +286,52 @@ Every test run was bounded with `.venv/bin/python scripts/hard_stop.py 115`, wit
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-31
 
 **Notes:**
+
+The count paid for itself. A link built from the stored camp would have been right for 2 files and
+a guess for 96. The mechanism now links only where the operator has confirmed the word.
+1. **ac1 passes** as recorded at the stop. The PM's ruling said it stands.
+2. **ac2 passes.**
+   * Red: 30 failed against a refuse-everything skeleton, all at assertions or unraised refusals.
+   * Green: 246, and the node criterion passes (77).
+   * All 18 mutants are caught: the PM's ten, plus 1b, the 3/4/9 variants, 11 and 12. 9b was a
+     survivor until it got its own test, before the counted run, and the report says so.
+   * The id-based address is gone (`git grep` finds nothing), and the format and the stored id are
+     unchanged.
+3. **ac3 is the operator's**, after the merge and dev's function deploy. The Goal stays
+   `InProgress` for it.
+4. **Deviations accepted:**
+   * **1:** stopping at the count, as the spec said.
+   * **2:** one top-level `openev:` section, which leaves the `camps` section's shape and the
+     importer's reading of it alone.
+   * **3:** the CLI test outside the packages. The PM's next batch adds `packages/debate_cli/tests`.
+5. **Decisions accepted:**
+   * the label uses the stored camp and the address uses the table's word;
+   * `today` comes from the app's clock, passed in, so the domain reads no clock (mutant 4c);
+   * the season rule moved into the domain, with the backfile command's behaviour pinned by a test;
+   * the table is loaded once at the function's start, and a malformed section stops the start,
+     never a link;
+   * the table's load-time refusals: not a mapping, not a camp, UNKNOWN, not one word, one word for
+     two camps;
+   * the stored id kept, for a later per-file link;
+   * a format 2 index showing the link, with t16's test changed on purpose;
+   * no smoke check, since ac3 checks the link live.
+6. **More words:** as committed, 2 of the 102 files link (UTNIF). Every word the operator confirms
+   is a one-line config change to `camp_aliases.yaml`'s `openev` section and the packaged-table
+   test's expected value. The PM files those through the next batch, as a config change, once the
+   operator reports which of the twelve pages open a camp's page.
+7. **Closing checks:** the affected set (396 files, mostly through `camp_aliases.yaml`) is left to
+   the PR's `ci` under agreement 10. Every area it reaches was run within the limit: always-run and
+   domain (1,513), API (1,102), caselist (1,759), the rest of application (2,948), bucket mode and
+   the other readers (290), the image-plan check (41). ruff, pyright over the whole repository,
+   lint-imports, thin handlers, the doc checks and the specs are clean.
+8. **Merge and order:**
+   * A plain `scripts/task pr` once `ci` is green.
+   * This merge removes the hold on run images carrying v1-e39-t16.
+   * Then dev's function deploy (follow-up 1), never on a Wednesday, followed by the coach's check
+     for ac3.

@@ -154,7 +154,7 @@ check after which one is still running. [`test_stand_ins.py`](test_stand_ins.py)
 
 | Marker | Meaning |
 |---|---|
-| `live` | Needs the network or a deployed environment. Excluded by default; the network guard is off for it. |
+| `live` | Needs the network or a deployed environment. Excluded by default; the network guard is off for it, and pytest's own process has the network for it, whatever the repository's `--disable-socket` says (`v1-e39-t26`). |
 | `canary` | Part of validate-dev's opt-in live canary tier. Always together with `live`. |
 | `in_process` | Drives the CLI inside pytest's own process (`CliRunner`, moto, respx), or tests the harness. `ci` runs it; validate-dev's recorded tier does not, because it would be testing the source. |
 | `dev`, `prod` | A live check aimed at that environment. `live` and `dev` together under `cloud/` is validate-dev's dev cloud tier. |
@@ -185,6 +185,7 @@ check after which one is still running. [`test_stand_ins.py`](test_stand_ins.py)
 | `test_site.py` | The public team website (`scripts/site_smoke.py`, `v1-e36-t05`, `v1-e36-t08`) | **Operator-run live**, after a site deploy. Not validate-dev: the site is deployed by hand, not per dev commit |
 | `test_live_canary.py` | One HEAD request from the installed build's own HTTP stack to the public page of the release it was installed from | **Live canary**, installed binary |
 | `test_smoke_harness.py` | The harness itself: which binary it runs, the refusals, the environment it builds | **In-process** |
+| `test_live_checks_reach_the_network.py` | A `live` check reaches a loopback server from pytest's own process, and the plain check after it is refused, with and without `--force-enable-socket`: [`socket_probes/live_then_plain_checks.py`](socket_probes/live_then_plain_checks.py) run in a pytest of its own with the repository's options (`v1-e39-t26`) | **In-process** |
 
 Until `v1-e01-t21` the publish, remove, pull and runs checks used moto and respx, which patch the
 process they run in, so they ran in `ci` against the source and validate-dev did not run them. They

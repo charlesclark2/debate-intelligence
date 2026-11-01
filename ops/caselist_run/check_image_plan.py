@@ -283,10 +283,16 @@ def check(changes: list[dict[str, Any]], owner: str) -> tuple[list[str], str]:
     return problems, said
 
 
+def check_memory(changes: list[dict[str, Any]], owner: str) -> tuple[list[str], str]:
+    """The run task's memory change (`v1-e40-t30`). Skeleton: refuses nothing yet."""
+    return [], "skeleton"
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Check a new run image's plan after the cutover.")
     parser.add_argument("plan", help="The saved plan as JSON: `terraform show -json <plan>`.")
     parser.add_argument("owner", help="The environment's owner.auto.tfvars.")
+    parser.add_argument("--memory", action="store_true", help="Check the run task's memory change instead.")
     arguments = parser.parse_args(argv)
     try:
         with open(arguments.plan, encoding="utf-8") as plan:
@@ -296,7 +302,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except (OSError, PlanUnreadable) as error:
         print(f"PLAN STOP: {error}")
         return 2
-    problems, said = check(changes, owner)
+    problems, said = (check_memory if arguments.memory else check)(changes, owner)
     if problems:
         print("PLAN STOP: " + "; ".join(problems))
         return 1

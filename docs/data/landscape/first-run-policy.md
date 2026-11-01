@@ -186,7 +186,8 @@ on 2026-10-24, and a later taxonomy version applies them.
 Read-only, on 2026-10-25, with no model call: hspolicy26's parsed store through 2026-10-20 (version
 `2026.10.20-docx-6`, 3,825 sources on `policy-2026-27-nhi`), placed by stage one from scratch with an
 empty in-memory cache, and the model stage's candidates captured instead of sent. 38.5 s to place, 54.5 s
-in all. The live run that ac5 records waits on the data-use policy's open question 4.
+in all. The live run that ac5 records waited on the data-use policy's open question 4, which version
+1.20 resolved on 2026-11-01.
 
 | Stage one, cards (taxonomy 1.2.0, threshold 0.6) | Count |
 |---|---|

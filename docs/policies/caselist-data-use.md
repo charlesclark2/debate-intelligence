@@ -3,12 +3,12 @@
 
 | | |
 |---|---|
-| Policy version | 1.19 |
-| Status | **Approved**, version 1.19, on the merge of its pull request (decided 2026-10-30). See [Approval](#approval). |
+| Policy version | 1.20 |
+| Status | **Approved**, version 1.20, on the merge of its pull request (decided 2026-11-01). See [Approval](#approval). |
 | Owner | Charlie Clark (product owner and head coach) |
 | Written by | v1-e30-t01-caselist-data-use-policy implementation session, 2026-09-19 |
 | Applies to | Everything the platform collects from OpenCaselist and OpenEv, and everything derived from it, in every environment |
-| Approved by | Charlie Clark, product owner and head coach, 2026-09-19 (versions 1.0 and 1.1), 2026-10-01 (versions 1.3 and 1.4), 2026-10-10 (versions 1.5 and 1.6), 2026-10-11 (version 1.7), 2026-10-13 (version 1.8), 2026-10-15 (version 1.9), 2026-10-19 (version 1.10), 2026-10-22 (versions 1.11 and 1.12) and 2026-10-24 (versions 1.13, 1.14 and 1.15) and 2026-10-25 (versions 1.16, 1.17 and 1.18) and 2026-10-30 (version 1.19) |
+| Approved by | Charlie Clark, product owner and head coach, 2026-09-19 (versions 1.0 and 1.1), 2026-10-01 (versions 1.3 and 1.4), 2026-10-10 (versions 1.5 and 1.6), 2026-10-11 (version 1.7), 2026-10-13 (version 1.8), 2026-10-15 (version 1.9), 2026-10-19 (version 1.10), 2026-10-22 (versions 1.11 and 1.12) and 2026-10-24 (versions 1.13, 1.14 and 1.15) and 2026-10-25 (versions 1.16, 1.17 and 1.18) and 2026-10-30 (version 1.19) and 2026-11-01 (version 1.20) |
 | Next review | Start of the 2027-28 season, or sooner if a source's terms change |
 
 This is the policy that governs how the Debate Intelligence Platform collects, stores, uses and
@@ -201,10 +201,20 @@ Conditions, all required:
 1. **Only through the ModelRouter** (E05, ADR-0005), to the provider configured for the
    environment (AWS Bedrock). No other provider, no direct SDK call, and — explicitly — no pasting
    disclosed text into a consumer chat interface.
-2. **No-training, no-retention terms confirmed in writing for the account before the first
-   full-corpus run.** Until that confirmation is recorded here, model classification runs against
-   synthetic fixtures only. This is [open question 4](#open-questions) and a
-   [gate on E32](#e32--model-classification-of-the-corpus). Separately, Bedrock's account data
+2. **No retention of our inputs, and no invocation logging, recorded for the account before the
+   first full-corpus run** ([open question 4](#open-questions), resolved by the coach on 2026-11-01,
+   version 1.20). What is recorded: AWS's
+   [data retention page](https://docs.aws.amazon.com/bedrock/latest/userguide/data-retention.html),
+   read 2026-11-01, says mode `none` writes no request or response data to durable storage and shares
+   nothing with the model provider; the
+   [data protection page](https://docs.aws.amazon.com/bedrock/latest/userguide/data-protection.html),
+   read the same day, says model providers have no access to prompts or completions; and the
+   operator's check of 2026-11-01 found no model-invocation logging configured in us-east-1,
+   us-east-2 or us-west-2. **A written no-training term was not found:** neither page states one
+   any longer, and the operator found none in the Amazon Bedrock section of the
+   [AWS Service Terms](https://aws.amazon.com/service-terms/), read 2026-11-01. The coach decided
+   that zero retention with no logging is sufficient, since inputs that are never stored cannot be
+   trained on later; if AWS publishes such a term, it is recorded here. Bedrock's account data
    retention mode is `none` (zero retention) in us-east-1, us-east-2 and us-west-2, the regions the
    inference profiles can run a call in, set by the operator on 2026-10-30 (version 1.19). Every model
    the routing files name that the account can call accepted calls under it. The setting is
@@ -572,9 +582,10 @@ first automated pull:
 ### E32 — model classification of the corpus
 
 1. This policy is approved.
-2. The provider's **no-training / no-retention terms are confirmed in writing** and recorded in
-   [Sources and terms](#sources-and-terms) ([open question 4](#open-questions)). Until then,
-   classification runs against synthetic fixtures only.
+2. The provider's **zero retention and the absence of invocation logging are recorded** for the
+   account ([Model provider use](#model-provider-use) condition 2; [open question 4](#open-questions),
+   resolved 2026-11-01, version 1.20). Met: classification over real disclosed text may run,
+   under the other conditions here.
 3. A scan of the prompt inputs and cassettes for a sample run shows **no school name, team code or
    debater name** (v1-e32-t07 acceptance criterion ac4).
 4. The circuit-wide report is verified to contain **no team codes** before it is shared with the
@@ -656,7 +667,7 @@ before the thing it gates.
 | 1 | What the OpenCaselist **privacy page** says about minors, about what the site itself publishes (school names, team codes, round reports), and about a withdrawal channel. The Terms & Conditions were read on 2026-09-19; the privacy page was not | **Accepted as a known gap**, 2026-09-19 | Charlie, when he next reads it | Nothing. Recorded in [Sources and terms](#sources-and-terms) when read |
 | 2 | Two points the Terms & Conditions leave unstated: **(a)** the download rate limit, which is binding "manual or automated" but is never given as a number; **(b)** whether the documented API at `api.opencaselist.com` is a "publicly supported interface" for *scheduled* downloads | **Resolved** 2026-09-19 — the maintainer confirmed scheduled archive downloads through the API are acceptable, rate limit 10 file downloads per minute (clause 12) | Charlie | — |
 | 3 | **OpenEv's distribution terms** and the per-camp licensing notes carried in the files | **Accepted as a known gap**, 2026-09-19 | Charlie, from the files and the camp sites | Nothing today — we redistribute nothing, so the risk is low. Revisit if camp files are ever handled differently from disclosures |
-| 4 | Confirmation that the model provider does not retain or train on our inputs: the **AWS Bedrock data-protection documentation** (Bedrock does not store prompts or completions and does not use them to train models), recorded here by URL and date read, **plus** a check that no model-invocation logging to a third-party destination is enabled in the account | **Open** | Operator, from the AWS documentation and the account's Bedrock settings | [E32 gate](#e32--model-classification-of-the-corpus). Not a blocker for this approval; it blocks the first full-corpus classification run |
+| 4 | Confirmation that the model provider does not retain or train on our inputs: the **AWS Bedrock data-protection documentation** (Bedrock does not store prompts or completions and does not use them to train models), recorded here by URL and date read, **plus** a check that no model-invocation logging to a third-party destination is enabled in the account | **Resolved** 2026-11-01 (version 1.20), by the coach's decision: zero retention (mode `none`, set 2026-10-30) and no invocation logging (checked 2026-11-01) are recorded; a written no-training term was not found in the docs or the AWS Service Terms read 2026-11-01, and the coach judged it unnecessary while nothing is retained ([Model provider use](#model-provider-use) condition 2) | Operator, from the AWS documentation and the account's Bedrock settings | [E32 gate](#e32--model-classification-of-the-corpus). Not a blocker for this approval; it blocks the first full-corpus classification run |
 | 5 | The removal contact address to publish in [Removal](#removal) | **Resolved** 2026-09-19 — `ctcb57@gmail.com` | Charlie | — |
 | 6 | Whether school or district review is needed before students (who may be minors) get accounts on the V2 tub. This policy does not answer it and is not legal advice | **Resolved for the E39 pilot** 2026-10-19 — Charlie reports that the school's activities director and IT approved the tool for students; IT's one condition is allowing the pilot's hostname through the school web filter, since students' Chromebooks can run little else. No district review is needed for the pilot. Asked again before the V2 tub, if its scope goes beyond the pilot's (uploads, sharing, other organizations) | Charlie, with the school | [E39 gate](#e39--student-evidence-search-pilot-v17) item 10; [v2-e35 gate](#v2-e35--debate-tub-v21) item 9 |
 | 7 | Whether a season's corpus may be kept beyond two seasons for year-over-year trend analysis | **Resolved** 2026-09-19 — no, for trend analysis. **Revised** 2026-10-25 (version 1.17): seasons from 2021-22 on are kept as backfiles for research and team files, never classified or reported, so trend analysis over them is still not a permitted use | Charlie | — |
@@ -674,7 +685,7 @@ before the thing it gates.
 
 ## Approval
 
-**Version 1.19 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
+**Version 1.20 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
 real corpus into dev, model classification over real disclosed text, and automated download (E34)
 are unblocked, each still subject to its own conditions in [Gates](#gates). Version 1.1 recorded
 the maintainer's confirmation of scheduled API downloads and the 10-per-minute rate limit.
@@ -874,19 +885,30 @@ import's working copy to [Prohibited uses](#prohibited-uses) 10, the one place v
 the others tighten it or record a fact. Charlie approved version 1.19 on 2026-10-30, and merging its
 pull request records the approval below. Nothing else changes.
 
+Version 1.20 resolves [open question 4](#open-questions), the gate on model classification of the
+real corpus ([E32](#e32--model-classification-of-the-corpus) item 2). It records AWS's data
+retention and data protection pages, read 2026-11-01, Bedrock's zero-retention mode set on
+2026-10-30, and the operator's check of 2026-11-01 that no model-invocation logging is configured in
+any of the three regions a call can run in. A written no-training term was looked for in those pages
+and in the Amazon Bedrock section of the AWS Service Terms and not found; the coach decided that zero
+retention with no logging suffices ([Model provider use](#model-provider-use) condition 2, reworded
+to say what is recorded). It loosens the policy, so it needs the coach's approval: Charlie approved
+version 1.20 on 2026-11-01, and merging its pull request records the approval below. Nothing else
+changes.
+
 The standing rule for every future version: until this table records an approval of that version,
 nothing this policy governs may happen under it.
 
 | Field | Value |
 |---|---|
-| Policy version | 1.19 (2026-10-30); 1.18, 1.17 and 1.16 (2026-10-25); 1.15, 1.14 and 1.13 (2026-10-24); 1.12 and 1.11 (2026-10-22); 1.10 (2026-10-19); 1.9 (2026-10-15); 1.8 (2026-10-13); 1.7 (2026-10-11); 1.6 and 1.5 (2026-10-10); 1.4 and 1.3 approved 2026-10-01, 1.3 including version 1.2's correction to rule 3; 1.0 and 1.1 approved 2026-09-19 |
+| Policy version | 1.20 (2026-11-01); 1.19 (2026-10-30); 1.18, 1.17 and 1.16 (2026-10-25); 1.15, 1.14 and 1.13 (2026-10-24); 1.12 and 1.11 (2026-10-22); 1.10 (2026-10-19); 1.9 (2026-10-15); 1.8 (2026-10-13); 1.7 (2026-10-11); 1.6 and 1.5 (2026-10-10); 1.4 and 1.3 approved 2026-10-01, 1.3 including version 1.2's correction to rule 3; 1.0 and 1.1 approved 2026-09-19 |
 | Approved by | Charlie Clark |
 | Role | Product owner and head coach |
-| Approval date | 2026-10-30 (version 1.19); 2026-10-25 (versions 1.18, 1.17 and 1.16; 1.15, 1.14 and 1.13: 2026-10-24; 1.12 and 1.11: 2026-10-22; 1.10: 2026-10-19; 1.9: 2026-10-15; 1.8: 2026-10-13; 1.7: 2026-10-11; 1.5 and 1.6: 2026-10-10; 1.3 and 1.4: 2026-10-01; 1.0 and 1.1: 2026-09-19) |
-| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.19, including the [clause register](#clause-register) read 2026-09-19 and the [community disclosure norms](#community-disclosure-norms), both confirmed by Charlie |
-| Open questions resolved at approval | **5** — removal contact address is `ctcb57@gmail.com`. **7** — two-season retention stands. **8** — resolved by a PM spec change to v1-e29-t03 / v1-e30-t07. **2** (version 1.1) — maintainer confirmed scheduled API downloads at 10 file downloads per minute. **6** (version 1.10) — the school's activities director and IT approved the tool for students; no district review for the E39 pilot |
+| Approval date | 2026-11-01 (version 1.20); 2026-10-30 (version 1.19); 2026-10-25 (versions 1.18, 1.17 and 1.16; 1.15, 1.14 and 1.13: 2026-10-24; 1.12 and 1.11: 2026-10-22; 1.10: 2026-10-19; 1.9: 2026-10-15; 1.8: 2026-10-13; 1.7: 2026-10-11; 1.5 and 1.6: 2026-10-10; 1.3 and 1.4: 2026-10-01; 1.0 and 1.1: 2026-09-19) |
+| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.20, including the [clause register](#clause-register) read 2026-09-19 and the [community disclosure norms](#community-disclosure-norms), both confirmed by Charlie |
+| Open questions resolved at approval | **5** — removal contact address is `ctcb57@gmail.com`. **7** — two-season retention stands. **8** — resolved by a PM spec change to v1-e29-t03 / v1-e30-t07. **2** (version 1.1) — maintainer confirmed scheduled API downloads at 10 file downloads per minute. **6** (version 1.10) — the school's activities director and IT approved the tool for students; no district review for the E39 pilot. **4** (version 1.20) — zero retention and no invocation logging recorded, by the coach's decision without a written no-training term |
 | Open questions accepted as known gaps | **1** — OpenCaselist privacy page unread. **3** — OpenEv distribution and per-camp terms unread |
-| Open questions left open | **4** — Bedrock data-protection terms, an E32 gate. **6** — for the V2 tub only, if its scope goes beyond the pilot's |
+| Open questions left open | **6** — for the V2 tub only, if its scope goes beyond the pilot's |
 
 A later version is approved by editing this table in a pull request, with the version bumped in
 the header and in [Review and change control](#review-and-change-control).

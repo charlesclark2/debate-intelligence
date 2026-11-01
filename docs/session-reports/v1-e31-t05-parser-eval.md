@@ -986,3 +986,13 @@ Added by the PM. Nothing above is changed, and this section is not a review.
 | ac5, the corpus health report | NOT RUN | PASS | 2026-10-31, `scripts/parser_corpus_health.py` on the Mac over the hsld26 weekly snapshots and the 2026-27 Policy camp files, parser `2026.10.27-docx-7`: 2,162 of 2,163 distinct `.docx` parsed, **0.9995** (target 0.98, met); the one failure counted by reason (`UNSUPPORTED_FORMAT`); 46 non-`.docx` counted apart. Counts only, read by the PM, committed as `docs/data/parser-corpus-health.md` |
 
 ac5 passes. The Goal stays `InProgress` for ac3, the corrected labels.
+
+## Operator records (recorded by the PM, 2026-11-01)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac3: targets recorded and met or ticketed | Recorded: PASS. Met or ticketed: open | PASS | The targets the baseline missed are ticketed by `v1-e31-t31-labelled-evaluation-gaps`, filed 2026-10-21, as the PM's close-out of that date recorded; a target met or ticketed is what ac3 asks. The PM's 2026-11-01 record named ac3 as still open in error |
+
+ac6, deleting the hand-unpacked archives once the evaluation no longer needs them, is the one criterion left: `v1-e31-t31` still reads them. The Goal stays `InProgress` for it.

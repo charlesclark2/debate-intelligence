@@ -436,3 +436,13 @@ by the threshold the coach's sample was measured at, and nothing is placed.
 8. **Merge:** a plain `scripts/task pr` once `ci` is green. After the merge, the operator trains the
    model on hspolicy26 from a checkout on dev (the report's block, run from that checkout instead of
    this worktree). That is not a criterion.
+
+## Operator follow-up done (recorded by the PM, 2026-11-01)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+The operator trained the order model on hspolicy26 from `tub-deploy-dev` at `8d27211` (this task's
+merge): `Trained the proxy model on 56922 labelled cards of 3425 documents (84 positions, 30303
+features; seed 21).`, `Its confidence at 90% held-out precision, from which it suggests: 0.500.`,
+`The coach sample recorded 0.500 for the proxy model: the same.`, written under
+`~/.debate-research/dev/landscape/local-classifier/hspolicy26/`, in 42.2 s.

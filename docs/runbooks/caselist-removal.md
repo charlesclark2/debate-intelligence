@@ -845,7 +845,9 @@ headings derived from the caselist's cards. Its commands refuse a table whose so
 reached, but nothing deletes the directory, so after `DONE` for a removal that touched a caselist,
 delete that caselist's directory here (PM ruling, 2026-10-25). Nothing of it is in a bucket. A coach
 sample deleted this way is drawn again with `scripts/compare_local_classifier.py features` and then
-`sample`; tell the PM if one was waiting to be labelled.
+`sample`; tell the PM if one was waiting to be labelled. The review queue's order model
+(`<topic>-review-order-model.json`, `v1-e32-t26`) goes with the directory: until it is trained again
+with `features` and then `train-queue-order`, the queue keeps its plain order and says so.
 
 **Operator command** (expected runtime a few seconds)
 Where: your Mac, anywhere. Change `hspolicy26` to the caselist the removal touched, and `dev` to

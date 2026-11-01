@@ -488,3 +488,14 @@ anything is sent, and gated on the policy rather than on good intentions.
    lists and the static checks passed.
 
 No re-review is needed. The PM records the evaluation and the live run when the operator runs them.
+
+## PM note: open question 4 resolved (2026-11-01)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+The data-use policy's version 1.20, approved by the coach on 2026-11-01, resolves open question 4,
+the gate this task's ac5 waited on: zero retention (mode `none`, 2026-10-30) and no model-invocation
+logging in us-east-1, us-east-2 and us-west-2 (the operator's check, 2026-11-01) are recorded, and the
+coach accepted them without a written no-training term, which neither AWS's Bedrock pages nor the AWS
+Service Terms state. ac5's live run over the newest hspolicy26 snapshot may now be scheduled; ac4
+still needs the coach-labelled 60-item set and its cassettes.

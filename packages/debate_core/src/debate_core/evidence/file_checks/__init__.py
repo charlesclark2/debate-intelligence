@@ -6,6 +6,7 @@ as somebody about to quote from it would, and say whether it is what the sidecar
 * :mod:`.identity`: each card's evidence text, cite and formatting are the source card's;
 * :mod:`.structure`: cites, duplicate cards, headings, the sidecar against the document, each card's
   provenance and the suppression list;
+* :mod:`.placeholders`: no analytic is still the CP text slot `files suggest` drafts (a WARN, `v1-e33-t15`);
 * :mod:`.report`: what the checks found, as `<file>.quality.json` and `<file>.quality.md`.
 
 Every check here is a function of parsed values. Reading the bytes, fetching the sources and writing

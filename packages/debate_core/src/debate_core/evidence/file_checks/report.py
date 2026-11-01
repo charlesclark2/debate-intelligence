@@ -50,7 +50,7 @@ __all__ = [
     "render_markdown",
 ]
 
-CHECKER_VERSION: Final = "2026.10.22-file-checks-2"
+CHECKER_VERSION: Final = "2026.10.31-file-checks-3"
 """Version of these checks, recorded in every report. Bumped whenever a check's verdict can change."""
 
 FILE_QUALITY_SCHEMA_FILENAME: Final = "file-quality-report.schema.json"

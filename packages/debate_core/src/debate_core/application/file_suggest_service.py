@@ -34,7 +34,8 @@ gets three things more, and every other position's draft is as it was:
 
 * **A slot for the counterplan's text.** Its first block opens with the analytic :data:`CP_TEXT_SLOT`,
   a placeholder for the coach to replace with the text the team reads. It is never a text from a team's
-  file or the landscape's quoted CP texts. `files build` writes it as it stands, like any analytic.
+  file or the landscape's quoted CP texts. `files build` writes it as it stands, like any analytic, and
+  the built file's quality report warns of it on its block (`v1-e33-t15`).
 * **No other position's block.** A block whose heading the position matcher places under another
   position, read as it reads a heading directly over a card, is left out with its cards, which go
   nowhere else in the draft. A heading that places nothing stays. The result counts what was left out

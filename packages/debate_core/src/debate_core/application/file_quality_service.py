@@ -50,6 +50,7 @@ from debate_core.domain.file_provenance import (
 )
 from debate_core.domain.style_profile import StyleProfile
 from debate_core.evidence.file_checks.identity import SourceCardReading, check_identity
+from debate_core.evidence.file_checks.placeholders import check_placeholders
 from debate_core.evidence.file_checks.report import (
     CHECKER_VERSION,
     CheckResult,
@@ -95,6 +96,7 @@ _NEED_THE_DOCUMENT: Final = (
     QualityCheck.HEADING_STRUCTURE,
     QualityCheck.MANIFEST_ALIGNMENT,
     QualityCheck.PROVENANCE_COMPLETE,
+    QualityCheck.PLACEHOLDERS_REPLACED,
 )
 
 
@@ -201,6 +203,7 @@ class FileQualityService:
             results += check_cites(document.cards)
             results += check_duplicates(document.cards)
             results += check_headings(document, self._profile, known)
+            results += check_placeholders(document, known)
         if manifest is None:
             results.extend(
                 _not_checked(check, "not checked without a valid sidecar")

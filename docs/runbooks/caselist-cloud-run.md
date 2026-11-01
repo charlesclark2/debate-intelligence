@@ -1268,7 +1268,7 @@ rules, its refusals and its rebuild after a removal are [caselist-backfiles.md](
 this section is how the cloud runs it.
 
 * **The task.** The run's task definition, the revision Terraform made and the schedule starts: 8
-  vCPU, 16 GB, the run role, and the run's 6-hour deadline (an import is estimated at 1.5 to 2.5
+  vCPU, 32 GB since [The run task's memory](#the-run-tasks-memory) (`v1-e40-t30`), the run role, and the run's 6-hour deadline (an import is estimated at 1.5 to 2.5
   hours). Its 100 GiB of ephemeral storage holds the largest import, `hsld25`, which needs
   32,750,091,060 bytes free by t34's estimate with 25% headroom, beside the image and the restore.
   The module's tests hold that figure.
@@ -1535,16 +1535,53 @@ Success looks like the dry run's lines and `task <32 hex digits>`.
 **Watch it** every half hour with the dry run's `describe-tasks` block, until `STOPPED
 EssentialContainerExited 0`.
 
+**How far it got**, after a `STOPPED` that is not exit `0`, or at any time while it runs. The import
+writes a line to its log as each step starts and ends (restore, download, import, parse, publish,
+publish parsed), and during the parse one every five minutes (`v1-e40-t32`). Each is a JSON object
+with the result's `"command"` and an `"event"` in place of its `"status"`. This reads the last one,
+filtered to its step, seconds, counts and memory figures.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`, in the same shell
+```bash
+aws logs tail debate-dev-caselist-run --profile debate-dev-caselist-run-deployer --region us-east-1 --log-stream-names "run/run/${TASK_ID}" --since 6h | grep '"command": "caselist backfile-import"' | grep '"event": ' | tail -1 | grep -oE '"event": "[a-z_]+"|"step": "[a-z_]+"|"seconds": [0-9.]+|"counts": [{][^}]*[}]|"memory": [{][^}]*[}]'
+```
+
+What it says:
+
+* `"event": "step_ended"`: that step finished, after its `"seconds"`, with its `"counts"`; the next
+  had not started.
+* `"event": "step_started"`: it stopped inside that step. The step's line has no counts yet.
+* `"event": "parse_progress"`: it stopped in the parse, with `"sources_done"` and `"sources_left"`
+  as they were then, at most five minutes before. `"sources_left": 0` means every source was parsed
+  and it stopped while rebuilding the parsed store's aggregates.
+* `"event": "step_failed"`: that step raised. The result's `"code"`, in the counts block below, says
+  why.
+* Nothing printed: the task stopped before the import's first step, or the image predates
+  `v1-e40-t32`. Send the log's last lines (`aws logs tail` without the `grep`s) to the PM.
+
+**The memory figures** are on every end, failure and progress line, in bytes, as high-water marks
+since the task started. `"container_peak_bytes"` is the whole container's, every parse worker
+included, read from its cgroup (`"cgroup"` says `v1` or `v2`). Divided by 34359738368, the task's
+32768 MiB in bytes, it is the share of the task's memory the import reached; near 1 is where ECS
+stops it with `OutOfMemoryError`. On cgroup `v1` the figure counts the page cache as well, which the kernel
+reclaims before it kills anything, so a figure near 1 is not a kill by itself.
+`"main_process_peak_bytes"` is the import's own process; the container's less it is, at most, what
+the workers took. Either is left out when it could not be read. Send the PM the lines, with the
+exit code and stop reason from `describe-tasks`; for the first import, say which `"cgroup"` they
+name.
+
 **Its counts.**
 
 **Operator command** (expected runtime ~1 min)
 Where: `$WT`, in the same shell
 ```bash
-aws logs tail debate-dev-caselist-run --profile debate-dev-caselist-run-deployer --region us-east-1 --log-stream-names "run/run/${TASK_ID}" --since 6h | grep '"command": "caselist backfile-import"' | grep -oE '"status": "(ok|error)"|"applied": (true|false)|"downloaded_bytes": [0-9]+|"members": [0-9]+|"stored": [0-9]+|"suppressed": [0-9]+|"held_by_request": [{][^}]*[}]|"sources_uploaded": [0-9]+|"sources_skipped": [0-9]+|"parsed": [0-9]+|"unsupported": [0-9]+|"failed": [0-9]+|"cards": [0-9]+|"parsed_uploaded": [0-9]+|"archive_left_inbox": (true|false)|"(restore|download|import|parse|publish|publish_parsed)": [0-9.]+|"code": "[A-Z_]+"'
+aws logs tail debate-dev-caselist-run --profile debate-dev-caselist-run-deployer --region us-east-1 --log-stream-names "run/run/${TASK_ID}" --since 6h | grep '"command": "caselist backfile-import"' | grep -v '"event": ' | grep -oE '"status": "(ok|error)"|"applied": (true|false)|"downloaded_bytes": [0-9]+|"members": [0-9]+|"stored": [0-9]+|"suppressed": [0-9]+|"held_by_request": [{][^}]*[}]|"sources_uploaded": [0-9]+|"sources_skipped": [0-9]+|"parsed": [0-9]+|"unsupported": [0-9]+|"failed": [0-9]+|"cards": [0-9]+|"parsed_uploaded": [0-9]+|"archive_left_inbox": (true|false)|"(restore|download|import|parse|publish|publish_parsed)": [0-9.]+|"code": "[A-Z_]+"'
 ```
 Success looks like `"status": "ok"`, `"applied": true`, `"downloaded_bytes"` equal to the dry run's
 `archive_bytes`, and `"members"`, `"sources_uploaded"`, `"parsed"`, `"cards"` and `"parsed_uploaded"`
 each **above zero**, `"archive_left_inbox": true`, the six step times in seconds, any `"held_by_request"` counts, and no `"code"` line.
+The `grep -v` drops the step lines, which carry the same `"command"` and counts of the same names.
 A zero there is not a success, even with `"status": "ok"`: send the lines to the PM.
 `BACKFILE_IMPORT_INCOMPLETE` or `BUNDLE_CHANGED_SINCE_RESTORE`: start it again the next day; it
 resumes from what was published and does not download again. A window that opened part-way

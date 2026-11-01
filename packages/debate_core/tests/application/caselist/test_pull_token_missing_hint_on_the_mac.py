@@ -209,7 +209,7 @@ async def test_a_mac_run_stopped_by_token_missing_says_to_log_in_again(world: Wo
         pytest.param(
             CaselistTokenUnreadable("keyring"),
             "CASELIST_TOKEN_UNREADABLE",
-            "an error recorded as CASELIST_TOKEN_UNREADABLE",
+            "the caselist_token stored on this machine could not be read",
             id="token-unreadable",
         ),
         pytest.param(
@@ -223,16 +223,20 @@ async def test_a_mac_run_stopped_by_token_missing_says_to_log_in_again(world: Wo
 async def test_token_missing_hint_and_words_are_given_to_no_other_code_on_the_mac(
     world: World, error: Exception, code: str, stopped_on: str | None
 ) -> None:
-    """The two codes nearest a missing token keep what they had: no hint, and their own notice."""
+    """The two codes nearest a missing token keep their own notice: never the login hint or words.
+
+    An unreadable token has its own hint and words since `v1-e34-t36`
+    (`test_pull_token_unreadable_hint_on_the_mac.py`); an expired login has no hint on the Mac.
+    """
     await pull(world, the_service(world, StoppedBy(world, error), bucket_mode=False), bucket_mode=False)
 
     assert [type(one) for one in world.raised] == [type(error)]
     details = the_details(world)
     assert details["failure_codes"] == [code]
-    assert details.get("hint") is None
+    assert details.get("hint") != LOG_IN_AGAIN
 
     notification = the_one_notification(world)
-    assert notification.hint is None
+    assert notification.hint != LOG_IN_AGAIN
     assert "no caselist_token was stored" not in notification.text
     if stopped_on is not None:
         assert notification.message == f"{WHERE} stopped: {stopped_on}. {PERSON}"

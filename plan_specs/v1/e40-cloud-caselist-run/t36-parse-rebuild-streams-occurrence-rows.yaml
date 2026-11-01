@@ -30,6 +30,16 @@ spec:
     Measure the main process's peak before and after with t31's method and record both in
     `docs/data/caselist-parse-memory.md`. No parser or fingerprint version change, and no record
     shape change.
+    (PM amendment 2026-11-01, from the measurement.) The measurement
+    (`docs/data/caselist-rebuild-memory.md`) found the cards were not what made the rebuild large:
+    held in one list they cost about 85 MiB per 250 `hspolicy26` sources, and the peak is the
+    near-duplicate clusterer's `CutIndex` over the distinct full bodies (930 MiB of 1.24 GB at 250
+    sources). t31's straight line to 13 GB is superseded. A full season's rebuild that fits in the
+    run task moves to the PM's compact `CutIndex` task in `debate_core.evidence` (hashed shingles,
+    every hash match confirmed by comparing strings, byte-identical aggregates); the run task stays
+    at 32 GB until then. The rest of ac1 stands: no card held past its source, the aggregates
+    byte-identical on synthetic stores and on the Mac's whole `hspolicy26` store, by tests shown
+    failing first.
   priority: 1
   constraints:
     packages: [debate_core.application, debate_core.integrations, packages/debate_core/tests, docs/data, docs/runbooks]
@@ -51,7 +61,10 @@ spec:
         The rebuild's main-process peak no longer grows with every card of the caselist,
         measured before and after with t31's method and recorded in docs/data; the
         aggregates are byte-identical to today's on synthetic stores and on the Mac's
-        hspolicy26 store; by tests shown failing first.
+        hspolicy26 store; by tests shown failing first. (PM amendment 2026-11-01, from the
+        measurement.) Its purpose, a full season's rebuild that fits, moves to the compact
+        `CutIndex` task; the peak's growth through the clusterer's distinct full bodies is not
+        this criterion's.
 status:
   phase: InProgress
 ---

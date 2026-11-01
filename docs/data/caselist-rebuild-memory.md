@@ -3,9 +3,9 @@
 
 Measured for `v1-e40-t36` on 2026-11-01, with `v1-e40-t31`'s method, before and after the aggregate
 rebuild stopped holding every card of a caselist at once. It belongs beside t31's record,
-`docs/data/caselist-parse-memory.md`, which is on t31's branch and not yet on `dev`; this document
-corrects one reading in it (below). Counts, sizes, seconds and memory only: no school, team, file
-name, path, digest or card text (`docs/policies/caselist-data-use.md`).
+[caselist-parse-memory.md](caselist-parse-memory.md), and corrects one reading in it (below). Counts,
+sizes, seconds and memory only: no school, team, file name, path, digest or card text
+(`docs/policies/caselist-data-use.md`).
 
 **What it found: the rebuild no longer holds the cards, but that was not what made it large.** Reading
 the cards source by source took about 85 MiB off the peak at 250 `hspolicy26` sources and about 0.2 GB

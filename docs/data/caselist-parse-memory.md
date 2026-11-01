@@ -18,6 +18,12 @@ of 2026-11-01 dropped the ceiling: a rebuild that streams the cards is `v1-e40-t
 now records each stage's memory high-water marks
 ([caselist-cloud-run.md](../runbooks/caselist-cloud-run.md#the-runs-memory-figures)).
 
+**Superseded in part (2026-11-01, `v1-e40-t36`).** The straight line to about 13 GB, and the reading of
+the rebuild's 1.28 GB at 23 seconds and 2.06 GB at 38 seconds as the end of reading, are superseded by
+[caselist-rebuild-memory.md](caselist-rebuild-memory.md). Reading had ended before those moments: the
+rebuild was inside the near-duplicate clusterer, whose index of the distinct full bodies sets the peak.
+The cards held in one list cost about 85 MiB per 250 sources. The rest of this record stands.
+
 ## Where it was measured
 
 | | |
@@ -90,6 +96,9 @@ first K of the store's per-source files:
 | 250 | 281,249,032 | 8,583 | 1.28 GB at 23 s | 1.33 GB | 1.60 GB | 67 |
 | 500 | 535,753,890 | not reached | 2.06 GB at 38 s | over 2.15 GB, still placing at 112 s, stopped | not reached | over 112 |
 | 3,869 (whole) | 4,267,638,401 | 126,681 | about 12.6 GB by a straight line through the two above; not measured | | | |
+
+The "end of reading" column and the whole-store row are superseded (2026-11-01): see the note at the top
+and [caselist-rebuild-memory.md](caselist-rebuild-memory.md).
 
 The whole store's rebuild was started on the Mac clone too, and was at 1.32 GB and still reading when
 it was stopped at 98 seconds. It was not run to the end on either machine: Docker Desktop's VM has

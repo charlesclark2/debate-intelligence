@@ -156,7 +156,9 @@ async def test_a_row_the_word_is_refused_for_still_carries_the_key_as_null(world
 
 
 @pytest.mark.parametrize("written_by", OLDER_BUILDS)
-async def test_rows_written_before_carry_no_word_and_still_read(removal_world: RemovalWorld, written_by: str) -> None:
+async def test_rows_written_before_carry_no_word_and_still_read(
+    removal_world: RemovalWorld, written_by: str
+) -> None:
     """A manifest an older build wrote, then this build's pull of the listing merged into it."""
     world = removal_world
     theirs = members(await placed(world, written_by))
@@ -165,7 +167,10 @@ async def test_rows_written_before_carry_no_word_and_still_read(removal_world: R
     await pull(world, listed_source())
 
     merged = local_lines(world)
-    assert set(read_recorded_release(RELEASE_KEY, merged).rows) ^ (theirs.keys() | EXPECTED_WORDS.keys()) == set()
+    assert (
+        set(read_recorded_release(RELEASE_KEY, merged).rows) ^ (theirs.keys() | EXPECTED_WORDS.keys())
+        == set()
+    )
     assert {path: row for path, row in members(merged).items() if path in theirs} == theirs
     assert by_path(merged).items() >= by_path(release_lines_of(written_by)).items(), (
         "each row written before is kept byte for byte, still without the word"

@@ -445,9 +445,56 @@ The task Goal stays `InProgress`, because ac4 is open. No `set-phase` was run.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-01
 
 **Notes:**
+
+The expand stage is solid. The taxonomy validates whole on load. Model expansion is off by default,
+schema- and query-checked, and fails open. Every expansion is kept on the stored search. The Goal
+stays `InProgress` for ac4, the coach's review.
+
+1. **ac1–ac3 pass:**
+   * the whole committed taxonomy is checked, all 70 pairs;
+   * 16 broken-taxonomy cases are refused, each by its rule;
+   * the typed unknown-choice error lists the valid choices;
+   * ac2's expansion is compared with one written by hand from the YAML, run through the real
+     service on both repositories, and reloaded;
+   * ac3 uses committed fixtures, with nine malformed shapes never asked.
+2. **Red first:** 40 tests failed against a skeleton holding all five of the PM's mutants. 24 mutants
+   in 25 runs. The one survivor (the empty-pair check, masked by the always-renderable rule) was
+   pinned by its own message and caught in round two. That is a good catch.
+3. **The rulings on your questions:** all as recommended.
+   * **Q1, A.** Keep `Search.expansion`. `Search` is a `DomainEntity`, so a build from before this
+     task would refuse a stored search that carries the field. Nothing persists searches across
+     builds yet (there is no CLI until t05). t05 must say how its stored searches are read by older
+     installed builds, or that none read them. The PM adds that to t05.
+   * **Q2, A.** One id per argument across the landscape and search, and the two-way test is right.
+   * **Q3, A.** Keep `midterms-da`, with its aliases. The coach decides on a rename in his review.
+     The election is 2026-11-03.
+   * **Q4, A.** CPs and Ks stay out. The PM files a p3 E08 task for their needs (solvency, net
+     benefit, alternative, framework), in the coach's terms.
+   * **Q5, A.** Generic LD framing only. The de-extinction preset and topic arguments come after
+     v1-e32-t06 commits the resolution. The PM adds that to t06's follow-ups.
+4. **Deviations accepted:**
+   * the files outside the packages (the domain model, its schema, the prompt lock, the fixtures,
+     the README rows);
+   * the wider fallback (`ProviderError` and `BudgetExceededError`, while a registration bug still
+     raises), which the forbidden entry requires;
+   * the always-renderable pair rule;
+   * the reworded spec examples (a dated politics template would be stale within days);
+   * no smoke check until there is a CLI.
+5. **t05, ruled now:** `UnknownExpansionChoice` exits 2 as a usage error, because it is a choice the
+   person typed. The PM's batch writes this and Q1's note into t05.
+6. **Terminology checks:** no "harm(s)" and no "inherency", by test; no four-digit year in any
+   template; the topic preset matches `topics.yaml` word for word.
+7. **Closing checks:** the affected set is the whole selection, so it is left to `ci` (agreement
+   10). The bounded groups (375, 1,991, 4,972 and 146 passed), ruff, pyright, lint-imports, thin
+   handlers, the schemas and prompt locks, the specs and the doc checks are clean.
+8. **ac4, the coach's review:** the coach reads the sheet in this report and sends his corrections
+   (or "approved") to the PM. The PM's batch applies them to `config/argument_taxonomy.yaml`, flips
+   each entry's `review` to `coach_reviewed`, raises `taxonomy_version` if anything changed, records
+   ac4, and sets the Goal `Succeeded`. No edit to this branch is needed for it.
+9. **Merge:** `scripts/task pr --partial` once `ci` is green.

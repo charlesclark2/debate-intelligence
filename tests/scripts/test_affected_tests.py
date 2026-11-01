@@ -735,6 +735,66 @@ def test_a_module_named_only_in_an_f_strings_tail_is_data_not_a_read(workspace: 
     assert_selected(result, {"tests/scripts/test_reads_a_module_by_its_path.py"} | ALWAYS | READS_SOURCE)
 
 
+def reader(imports: str, body: str) -> dict[str, str]:
+    """A test that parses one named file, then does `body` with its syntax tree or a folder."""
+    return {
+        "tests/readers/test_reader.py": (
+            f"import ast\n{imports}from pathlib import Path\n\n\n"
+            "def test_reads():\n"
+            '    tree = ast.parse((Path(__file__).parent / "sample.py").read_text())\n'
+            f"{body}"
+        )
+    }
+
+
+# A walk on a name the file binds to the ast module walks a syntax tree, not a folder (v1-e41-t11).
+@pytest.mark.parametrize(
+    ("imports", "body"),
+    [
+        pytest.param("", "    assert list(ast.walk(tree))\n", id="ast.walk"),
+        pytest.param("import ast as syntax\n", "    assert list(syntax.walk(tree))\n", id="an alias of ast"),
+    ],
+)
+def test_a_syntax_tree_walk_on_one_named_file_is_not_a_directory_walk(
+    workspace: Workspace, imports: str, body: str
+) -> None:
+    result = describe(workspace, reader(imports, body), changed(f"{CORE}/nobody_imports.py"))
+    assert_selected(result, ALWAYS | READS_SOURCE)
+
+
+# Each of these lists a folder, or may: when in doubt the rule fails toward more tests.
+@pytest.mark.parametrize(
+    ("imports", "body"),
+    [
+        pytest.param("import os\n", '    assert list(os.walk("packages"))\n', id="os.walk"),
+        pytest.param("from os import walk\n", '    assert list(walk("packages"))\n', id="os's walk imported"),
+        pytest.param("", '    assert list(Path("packages").walk())\n', id="Path().walk"),
+        pytest.param("", "    assert list(Path(__file__).parent.walk())\n", id="a path's parent walked"),
+        pytest.param("", '    root = Path("packages")\n    assert list(root.walk())\n', id="a path variable"),
+        pytest.param("", '    assert list(Path("packages").rglob("*.py"))\n', id="rglob"),
+        pytest.param("", '    assert list(Path("packages").glob("*.py"))\n', id="glob"),
+        pytest.param("", '    assert list(Path("packages").iterdir())\n', id="iterdir"),
+        pytest.param(
+            "import os\n", '    assert list(ast.walk(tree)) and list(os.walk("packages"))\n', id="both walks"
+        ),
+        # `walk` here is ast's, but a bare call is not told apart from os's.
+        pytest.param("from ast import walk\n", "    assert list(walk(tree))\n", id="ast's walk imported"),
+        # The alias is also a parameter, which may be a path.
+        pytest.param(
+            "import ast as root\n",
+            "    assert tree\n\n\ndef files(root):\n    return list(root.walk())\n",
+            id="an alias rebound",
+        ),
+        pytest.param("", "    assert list(tree.ast.walk())\n", id="an attribute named ast"),
+    ],
+)
+def test_a_walk_that_may_list_a_folder_still_reads_every_python_change(
+    workspace: Workspace, imports: str, body: str
+) -> None:
+    result = describe(workspace, reader(imports, body), changed(f"{CORE}/nobody_imports.py"))
+    assert_selected(result, {"tests/readers/test_reader.py"} | ALWAYS | READS_SOURCE)
+
+
 def test_a_path_to_a_deleted_fixture_still_names_it(workspace: Workspace) -> None:
     workspace.delete("tests/fixtures/cards/a.json")
     assert_selected(

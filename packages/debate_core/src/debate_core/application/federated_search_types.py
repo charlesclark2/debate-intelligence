@@ -40,9 +40,9 @@ from debate_core.domain import (
     SearchStatus,
     Ulid,
 )
-from debate_core.domain.search import SearchExpansion
 from debate_core.domain.base import ORGANIZATION_ID_FIELD, OWNER_ID_FIELD
 from debate_core.domain.discovery import CandidateResult, ProviderHealth, ProviderQuery, ProviderStatus
+from debate_core.domain.search import SearchExpansion
 
 if TYPE_CHECKING:
     from debate_core.application.federated_dedupe import MergedCandidate
@@ -77,7 +77,7 @@ class ExpansionRequest(DomainModel):
         description="Values for the templates' variables, such as topic and bill; never query.",
     )
     use_model: bool = Field(
-        default=True,  # SKELETON: on by default
+        default=False,
         description=(
             "Also ask a model for extra queries (`--expand-llm`). Off unless asked for, and never "
             "needed: the templates' queries are asked whatever the model does."
@@ -86,7 +86,6 @@ class ExpansionRequest(DomainModel):
 
     @model_validator(mode="after")
     def _check_query_is_the_searchs(self) -> Self:
-        return self  # SKELETON
         if "query" in self.variables:
             raise ValueError("variables cannot set query: it is the search's own query")
         return self
@@ -107,7 +106,8 @@ class SearchRequest(DomainModel):
         ),
     )
     expansion: ExpansionRequest | None = Field(
-        default=None, description="The argument and need to expand the query by; None asks the query as typed."
+        default=None,
+        description="The argument and need to expand the query by; None asks the query as typed.",
     )
     owner_id: Ulid | None = Field(default=None, description=OWNER_ID_FIELD)
     organization_id: Ulid | None = Field(default=None, description=ORGANIZATION_ID_FIELD)

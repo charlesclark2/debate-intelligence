@@ -99,7 +99,8 @@ class ExpandedQuery(DomainModel):
     query: NonEmptyText = Field(description="The query text exactly as the providers were asked it.")
     origin: QueryOrigin = Field(description="A template's, or a model's suggestion.")
     template_id: NonEmptyText | None = Field(
-        default=None, description="`<argument>/<need>/<n>`, the n-th template of the pair; template queries only."
+        default=None,
+        description="`<argument>/<need>/<n>`, the n-th template of the pair; template queries only.",
     )
     template: NonEmptyText | None = Field(
         default=None, description="The template's text, its variables still in braces; template queries only."

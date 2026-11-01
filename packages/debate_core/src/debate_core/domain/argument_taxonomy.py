@@ -103,7 +103,7 @@ def template_variables(text: str) -> frozenset[str]:
     for _, field_name, format_spec, conversion in parsed:
         if field_name is None:
             continue
-        if False:
+        if not _VARIABLE_PATTERN.fullmatch(field_name) or format_spec or conversion:
             raise ValueError(
                 f"template {text!r} has the field {{{field_name}}}; a template names a variable as "
                 "{name}, with nothing else inside the braces"
@@ -194,7 +194,9 @@ class Argument(DomainModel):
         ),
     )
     review: ReviewStatus = Field(description="Whether the coach has reviewed this entry.")
-    note: NonEmptyText | None = Field(default=None, description="Anything the coach should know when reviewing.")
+    note: NonEmptyText | None = Field(
+        default=None, description="Anything the coach should know when reviewing."
+    )
     templates: dict[Slug, tuple[QueryTemplate, ...]] = Field(
         description="Each need's id, and the templates it expands into, in order."
     )
@@ -228,7 +230,6 @@ class ArgumentTaxonomy(DomainModel):
 
     @model_validator(mode="after")
     def _check_taxonomy(self) -> Self:
-        return self  # SKELETON: refuses nothing
         if not _SEMVER_PATTERN.fullmatch(self.taxonomy_version):
             raise ValueError(f"taxonomy_version {self.taxonomy_version!r} is not MAJOR.MINOR.PATCH")
         self._check_variables()
@@ -297,19 +298,18 @@ class ArgumentTaxonomy(DomainModel):
         """The argument `name` is the id or an alias of, compared as :func:`normalized_choice` says."""
         wanted = normalized_choice(name)
         return next(
-            (argument for argument in self.arguments if wanted in (argument.id, *argument.aliases)),
-            self.arguments[0],  # SKELETON: an unknown argument is taken as the first
+            (argument for argument in self.arguments if wanted in (argument.id, *argument.aliases)), None
         )
 
     def find_need(self, name: str) -> Need | None:
         """The need `name` is the id or an alias of, compared as :func:`normalized_choice` says."""
         wanted = normalized_choice(name)
-        return next((need for need in self.needs if wanted in (need.id, *need.aliases)), self.needs[0])
+        return next((need for need in self.needs if wanted in (need.id, *need.aliases)), None)
 
     def find_topic(self, topic_id: str) -> TopicPreset | None:
         """The topic preset with this id."""
         wanted = normalized_choice(topic_id)
-        return next((topic for topic in self.topics if topic.id == wanted), self.topics[0] if self.topics else None)
+        return next((topic for topic in self.topics if topic.id == wanted), None)
 
     def need(self, need_id: str) -> Need:
         """The need with exactly this id; `KeyError` when there is none."""

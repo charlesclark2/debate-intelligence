@@ -40,10 +40,11 @@ failed) makes the search PARTIAL, because the search did not get everything it a
 
 ## Storage
 
-The search record (with the expansion, when the expand stage made one), every call's record (the raw per-provider results) and the ranking, if a rank
-stage produced one, go through :class:`~debate_core.application.ports.SearchRepository` after the
-last stage, so a search can be reloaded by its id, audited and replayed. Times come from the
-injected :class:`~debate_core.application.ports.Clock`; the deadline itself is the event loop's,
+The search record (with its expansion, when the expand stage made one), every call's record (the
+raw per-provider results) and the ranking, if a rank stage produced one, go through
+:class:`~debate_core.application.ports.SearchRepository` after the last stage, so a search can be
+reloaded by its id, audited and replayed. Times come from the injected
+:class:`~debate_core.application.ports.Clock`; the deadline itself is the event loop's,
 because cancelling a call that is still running is the event loop's job.
 """
 

@@ -156,7 +156,13 @@ def run_stage(stage: QueryExpansionStage, request: SearchRequest) -> SearchState
 
 
 def template_query(
-    text: str, template_id: str, template: str, *, days: int | None, window: WindowSource, since: datetime | None
+    text: str,
+    template_id: str,
+    template: str,
+    *,
+    days: int | None,
+    window: WindowSource,
+    since: datetime | None,
 ) -> ExpandedQuery:
     return ExpandedQuery(
         query=text,
@@ -240,7 +246,9 @@ def test_the_committed_taxonomy_takes_topic_presets_word_for_word_from_committed
             assert " ".join(value.casefold().split()) in flat, f"{topic.id}: {value}"
 
 
-def test_the_committed_taxonomy_resolves_the_spec_spellings_and_typed_variants(committed: ArgumentTaxonomy) -> None:
+def test_the_committed_taxonomy_resolves_the_spec_spellings_and_typed_variants(
+    committed: ArgumentTaxonomy,
+) -> None:
     def argument(name: str) -> str | None:
         found = committed.find_argument(name)
         return None if found is None else found.id
@@ -284,40 +292,61 @@ def test_the_committed_taxonomy_resolves_the_spec_spellings_and_typed_variants(c
         ),
         pytest.param(
             first_argument_with(
-                templates={"uniqueness": [{"text": "{query} {agenda}"}], "impact": [{"text": "{query} impact"}]}
+                templates={
+                    "uniqueness": [{"text": "{query} {agenda}"}],
+                    "impact": [{"text": "{query} impact"}],
+                }
             ),
             ["agenda", "variables does not declare"],
             id="a template naming an undeclared variable",
         ),
         pytest.param(
-            first_argument_with(templates={"uniqueness": [{"text": "{bill} vote"}], "impact": [{"text": "{query} x"}]}),
+            first_argument_with(
+                templates={"uniqueness": [{"text": "{bill} vote"}], "impact": [{"text": "{query} x"}]}
+            ),
             ["test-da/uniqueness", "query and topic"],
             id="a pair whose every template needs an optional variable",
         ),
         pytest.param(
-            first_argument_with(templates={"uniqueness": [{"text": "{0} now"}], "impact": [{"text": "{query} x"}]}),
+            first_argument_with(
+                templates={"uniqueness": [{"text": "{0} now"}], "impact": [{"text": "{query} x"}]}
+            ),
             ["{0}"],
             id="a positional field",
         ),
         pytest.param(
-            first_argument_with(templates={"uniqueness": [{"text": "{query:>9}"}], "impact": [{"text": "{query} x"}]}),
+            first_argument_with(
+                templates={"uniqueness": [{"text": "{query:>9}"}], "impact": [{"text": "{query} x"}]}
+            ),
             ["{query}"],
             id="a format spec",
         ),
         pytest.param(
-            first_argument_with(templates={"uniqueness": [{"text": "{query"}], "impact": [{"text": "{query} x"}]}),
+            first_argument_with(
+                templates={"uniqueness": [{"text": "{query"}], "impact": [{"text": "{query} x"}]}
+            ),
             ["not valid"],
             id="an unclosed brace",
         ),
-        pytest.param(first_argument_with(aliases=["test-framework"]), ["test-framework"], id="an alias that is an id"),
-        pytest.param(first_argument_with(landscape_id="politics-da"), ["landscape_id"], id="a landscape id unlike the id"),
+        pytest.param(
+            first_argument_with(aliases=["test-framework"]), ["test-framework"], id="an alias that is an id"
+        ),
+        pytest.param(
+            first_argument_with(landscape_id="politics-da"),
+            ["landscape_id"],
+            id="a landscape id unlike the id",
+        ),
         pytest.param(first_argument_with(id="Test DA"), ["lower-case id"], id="an id that is not a slug"),
         pytest.param(
-            first_argument_with(templates={"uniqueness": [{"text": "{query} now", "recency_days": 0}], "impact": []}),
+            first_argument_with(
+                templates={"uniqueness": [{"text": "{query} now", "recency_days": 0}], "impact": []}
+            ),
             ["recency_days"],
             id="a window of zero days",
         ),
-        pytest.param(small_taxonomy(taxonomy_version="1.0"), ["MAJOR.MINOR.PATCH"], id="a version without patch"),
+        pytest.param(
+            small_taxonomy(taxonomy_version="1.0"), ["MAJOR.MINOR.PATCH"], id="a version without patch"
+        ),
         pytest.param(small_taxonomy(variables={"query": "q"}), ["topic"], id="topic not declared"),
         pytest.param(
             small_taxonomy(topics=[{"id": "t", "format": "LD", "variables": {"query": "x"}}]),
@@ -327,7 +356,9 @@ def test_the_committed_taxonomy_resolves_the_spec_spellings_and_typed_variants(c
         pytest.param(small_taxonomy(unexpected=1), ["unexpected"], id="an unknown key"),
     ],
 )
-def test_a_taxonomy_that_breaks_a_rule_is_refused_when_it_loads(document: dict[str, Any], words: list[str]) -> None:
+def test_a_taxonomy_that_breaks_a_rule_is_refused_when_it_loads(
+    document: dict[str, Any], words: list[str]
+) -> None:
     with pytest.raises(InvalidArgumentTaxonomy) as refused:
         parsed(document)
     message = str(refused.value)
@@ -345,6 +376,10 @@ def test_a_taxonomy_file_that_is_not_yaml_or_cannot_be_read_is_refused(tmp_path:
         load_argument_taxonomy(tmp_path / "missing.yaml")
 
 
+def choices_of(expansion: dict[str, Any]) -> dict[str, Any]:
+    return {"argument": "test-da", "need": "uniqueness"} | expansion
+
+
 @pytest.mark.parametrize(
     ("expansion", "kind", "value", "choices"),
     [
@@ -358,7 +393,9 @@ def test_the_taxonomy_refuses_an_unknown_choice_with_a_typed_error_listing_the_v
     expansion: dict[str, Any], kind: str, value: str, choices: tuple[str, ...]
 ) -> None:
     with pytest.raises(UnknownExpansionChoice) as refused:
-        expand(request_for(**({"argument": "test-da", "need": "uniqueness"} | expansion)))
+        expand(
+            SearchRequest(query="clinics", expansion=ExpansionRequest.model_validate(choices_of(expansion)))
+        )
     assert (refused.value.kind, refused.value.value, refused.value.choices) == (kind, value, choices)
     assert str(refused.value) == f"unknown {kind} {value!r}; the {kind}s are: {', '.join(choices)}"
 
@@ -568,7 +605,9 @@ MALFORMED_QUERY = "rural hospital staffing"
 
 def fixture_stage(prompts: PromptRegistry) -> tuple[QueryExpansionStage, FakeModelRouter]:
     router = FakeModelRouter(MODEL_OUTPUTS)
-    return QueryExpansionStage(TAXONOMY, clock=FixedClock(NOW), guard=StructuredOutputGuard(router, prompts)), router
+    return QueryExpansionStage(
+        TAXONOMY, clock=FixedClock(NOW), guard=StructuredOutputGuard(router, prompts)
+    ), router
 
 
 def scripted_stage(
@@ -587,7 +626,11 @@ def test_model_expansion_is_off_unless_the_request_asks_for_it(prompts: PromptRe
     state = run_stage(stage, request_for(HAPPY_QUERY))
     assert router.calls == []
     assert state.expansion is not None
-    assert (state.expansion.model_requested, state.expansion.model, state.expansion.warning) == (False, None, None)
+    assert (state.expansion.model_requested, state.expansion.model, state.expansion.warning) == (
+        False,
+        None,
+        None,
+    )
     assert ExpansionRequest(argument="test-da", need="link").use_model is False
 
 
@@ -597,14 +640,22 @@ def test_model_expansion_appends_validated_queries_with_rationale_and_prompt_met
     """The fixture answers three queries; the second repeats a template query and is asked once."""
     stage, _ = fixture_stage(prompts)
     provider = FakeSearchProvider("openalex")
-    outcome = asyncio.run(service_over(provider, stage, searches).search(request_for(HAPPY_QUERY, use_model=True)))
+    outcome = asyncio.run(
+        service_over(provider, stage, searches).search(request_for(HAPPY_QUERY, use_model=True))
+    )
 
     expansion = outcome.search.expansion
     assert expansion is not None
     model_since = NOW - timedelta(days=14)
     assert [(q.query, q.origin, q.rationale, q.since, q.window) for q in expansion.queries] == [
         ("community clinic funding now", QueryOrigin.TEMPLATE, None, model_since, WindowSource.NEED),
-        ("community clinic funding polling", QueryOrigin.TEMPLATE, None, NOW - timedelta(days=3), WindowSource.TEMPLATE),
+        (
+            "community clinic funding polling",
+            QueryOrigin.TEMPLATE,
+            None,
+            NOW - timedelta(days=3),
+            WindowSource.TEMPLATE,
+        ),
         (
             "community clinic funding state budget shortfall",
             QueryOrigin.MODEL,
@@ -621,9 +672,15 @@ def test_model_expansion_appends_validated_queries_with_rationale_and_prompt_met
         ),
     ]
     assert expansion.model is not None
-    assert (expansion.model.prompt_id, expansion.model.prompt_version) == (EXPAND_PROMPT_ID, EXPAND_PROMPT_VERSION)
+    assert (expansion.model.prompt_id, expansion.model.prompt_version) == (
+        EXPAND_PROMPT_ID,
+        EXPAND_PROMPT_VERSION,
+    )
     assert expansion.model.route.task_class is TaskClass.HIGH_VOLUME
-    assert (expansion.model.route.provider, expansion.model.route.model_id) == (ModelProvider.FAKE, FAKE_MODEL_ID)
+    assert (expansion.model.route.provider, expansion.model.route.model_id) == (
+        ModelProvider.FAKE,
+        FAKE_MODEL_ID,
+    )
     assert expansion.model_requested is True and expansion.warning is None
     assert [query.query for query in provider.queries] == [query.query for query in expansion.queries]
     assert asyncio.run(searches.get(outcome.search.search_id)).expansion == expansion
@@ -639,7 +696,10 @@ def test_model_expansion_of_a_malformed_output_falls_back_to_the_template_querie
 
     assert state.expansion is not None
     assert state.expansion.queries == templates_only.queries
-    assert [query.query for query in state.queries] == ["rural hospital staffing now", "rural hospital staffing polling"]
+    assert [query.query for query in state.queries] == [
+        "rural hospital staffing now",
+        "rural hospital staffing polling",
+    ]
     assert state.expansion.model is None
     assert state.expansion.warning == (
         "the model's queries did not validate after one repair; searched with the template queries alone "
@@ -653,23 +713,32 @@ def test_model_expansion_of_a_malformed_output_falls_back_to_the_template_querie
 @pytest.mark.parametrize(
     "answer",
     [
-        pytest.param({"queries": [{"query": "a b c d e f g h i j k l m", "rationale": "r"}]}, id="thirteen words"),
+        pytest.param(
+            {"queries": [{"query": "a b c d e f g h i j k l m", "rationale": "r"}]}, id="thirteen words"
+        ),
         pytest.param({"queries": [{"query": "clinic\nfunding", "rationale": "r"}]}, id="two lines"),
         pytest.param({"queries": [{"query": "https://example.org/clinics", "rationale": "r"}]}, id="a link"),
         pytest.param({"queries": [{"query": "www.example.org clinics", "rationale": "r"}]}, id="a bare host"),
-        pytest.param({"queries": [{"query": f"query {n}", "rationale": "r"} for n in range(4)]}, id="more than asked"),
+        pytest.param(
+            {"queries": [{"query": f"query {n}", "rationale": "r"} for n in range(4)]}, id="more than asked"
+        ),
         pytest.param({"queries": [{"query": "x" * 121, "rationale": "r"}]}, id="over 120 characters"),
         pytest.param({"queries": [{"query": "  ", "rationale": "r"}]}, id="blank"),
         pytest.param({"queries": [{"query": "clinic funding"}]}, id="no rationale"),
         pytest.param({"suggestions": ["clinic funding"]}, id="free text in another shape"),
     ],
 )
-def test_model_expansion_never_asks_a_query_that_fails_validation(prompts: PromptRegistry, answer: Any) -> None:
+def test_model_expansion_never_asks_a_query_that_fails_validation(
+    prompts: PromptRegistry, answer: Any
+) -> None:
     """Each answer is given twice, to the call and to its one repair, so both are refused."""
     stage, router = scripted_stage(prompts, answer, answer)
     state = run_stage(stage, request_for(use_model=True))
     assert len(router.calls) == 2
-    assert [query.query for query in state.queries] == ["community clinic funding now", "community clinic funding polling"]
+    assert [query.query for query in state.queries] == [
+        "community clinic funding now",
+        "community clinic funding polling",
+    ]
     assert state.expansion is not None and state.expansion.warning is not None
 
 
@@ -704,7 +773,10 @@ def test_model_expansion_that_cannot_reach_a_model_searches_with_the_templates(
     state = run_stage(stage, request_for(use_model=True))
     assert state.expansion is not None
     assert [query.origin for query in state.expansion.queries] == [QueryOrigin.TEMPLATE, QueryOrigin.TEMPLATE]
-    assert state.expansion.warning == f"the model could not be asked; searched with the template queries alone ({code})"
+    assert (
+        state.expansion.warning
+        == f"the model could not be asked; searched with the template queries alone ({code})"
+    )
 
 
 def test_model_expansion_without_a_model_configured_searches_with_the_templates() -> None:
@@ -712,7 +784,10 @@ def test_model_expansion_without_a_model_configured_searches_with_the_templates(
     state = run_stage(stage, request_for(use_model=True))
     assert state.expansion is not None
     assert len(state.queries) == 2
-    assert state.expansion.warning == "model expansion is not configured; searched with the template queries alone"
+    assert (
+        state.expansion.warning
+        == "model expansion is not configured; searched with the template queries alone"
+    )
 
 
 def test_model_expansion_that_only_repeats_the_templates_adds_nothing(prompts: PromptRegistry) -> None:
@@ -726,7 +801,9 @@ def test_model_expansion_that_only_repeats_the_templates_adds_nothing(prompts: P
     )
 
 
-def test_model_expansion_sends_the_registered_prompt_on_the_high_volume_route(prompts: PromptRegistry) -> None:
+def test_model_expansion_sends_the_registered_prompt_on_the_high_volume_route(
+    prompts: PromptRegistry,
+) -> None:
     stage, router = scripted_stage(prompts, {"queries": []}, max_model_queries=2)
     run_stage(stage, request_for(use_model=True))
     [call] = router.calls

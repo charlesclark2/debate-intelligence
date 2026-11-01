@@ -199,7 +199,7 @@ def _resolve(
             raise UnknownExpansionChoice("topic", wanted.topic_id, [entry.id for entry in taxonomy.topics])
         values.update(topic.variables)
     for name in wanted.variables:
-        if False:  # SKELETON: any variable
+        if name not in taxonomy.variables:
             settable = [variable for variable in taxonomy.variables if variable != "query"]
             raise UnknownExpansionChoice("variable", name, settable)
     values.update(wanted.variables)
@@ -245,7 +245,9 @@ def _same_query(text: str) -> str:
     return " ".join(text.casefold().split())
 
 
-def expand_with_templates(taxonomy: ArgumentTaxonomy, request: SearchRequest, *, now: datetime) -> SearchExpansion:
+def expand_with_templates(
+    taxonomy: ArgumentTaxonomy, request: SearchRequest, *, now: datetime
+) -> SearchExpansion:
     """The template queries for the request's argument and need, each with its date window.
 
     Raises :class:`UnknownExpansionChoice` for an argument, need, topic or variable the taxonomy
@@ -271,7 +273,7 @@ def expand_with_templates(taxonomy: ArgumentTaxonomy, request: SearchRequest, *,
         queries.append(
             _expanded(
                 text,
-                days=need.recency_days,  # SKELETON: the template's own window is ignored
+                days=template.recency_days if template.recency_days is not None else need.recency_days,
                 source=WindowSource.TEMPLATE if own_window else WindowSource.NEED,
                 filters=request.filters,
                 now=now,
@@ -294,7 +296,8 @@ def expand_with_templates(taxonomy: ArgumentTaxonomy, request: SearchRequest, *,
 def provider_queries(expansion: SearchExpansion, filters: SearchFilters) -> tuple[ProviderQuery, ...]:
     """What every provider is asked: each expanded query under the search's filters and its own `since`."""
     return tuple(
-        ProviderQuery(query=query.query, filters=filters.evolve(since=query.since)) for query in expansion.queries
+        ProviderQuery(query=query.query, filters=filters.evolve(since=query.since))
+        for query in expansion.queries
     )
 
 
@@ -325,7 +328,6 @@ def model_query_problems(expansion: QueryExpansion, *, max_queries: int) -> list
     The messages never quote the answer.
     """
     problems: list[OutputProblem] = []
-    return problems  # SKELETON: no check beyond the schema
     if len(expansion.queries) > max_queries:
         problems.append(
             OutputProblem(
@@ -344,7 +346,9 @@ def model_query_problems(expansion: QueryExpansion, *, max_queries: int) -> list
                 )
             )
         if "://" in text or "www." in text.casefold():
-            problems.append(OutputProblem(loc=where, type="query_is_a_link", msg="a query is words, not a link"))
+            problems.append(
+                OutputProblem(loc=where, type="query_is_a_link", msg="a query is words, not a link")
+            )
     return problems
 
 
@@ -415,13 +419,13 @@ class QueryExpansionStage:
                 policy=EXPANSION_POLICY,
                 check=partial(model_query_problems, max_queries=self._max_model_queries),
             )
-        except ModelOutputError as refused:  # SKELETON: never caught
-            raise
+        except ModelOutputError as refused:
             return self._fell_back(
-                expansion, "the model's queries did not validate after one repair", code=error_code_of(refused)
+                expansion,
+                "the model's queries did not validate after one repair",
+                code=error_code_of(refused),
             )
-        except (ProviderError, BudgetExceededError) as unavailable:  # SKELETON: never caught
-            raise
+        except (ProviderError, BudgetExceededError) as unavailable:
             return self._fell_back(expansion, "the model could not be asked", code=error_code_of(unavailable))
         seen = {_same_query(query.query) for query in expansion.queries}
         added: list[ExpandedQuery] = []
@@ -441,7 +445,9 @@ class QueryExpansionStage:
                 )
             )
         if not added:
-            return self._fell_back(expansion, "the model suggested no query the templates do not ask", code=None)
+            return self._fell_back(
+                expansion, "the model suggested no query the templates do not ask", code=None
+            )
         return expansion.evolve(queries=(*expansion.queries, *added), model=result.metadata)
 
     @staticmethod
@@ -452,4 +458,3 @@ class QueryExpansionStage:
             extra={"argument": expansion.argument, "need": expansion.need, "error_code": code},
         )
         return expansion.evolve(warning=warning)
-

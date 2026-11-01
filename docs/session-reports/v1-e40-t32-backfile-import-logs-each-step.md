@@ -214,9 +214,49 @@ None for this pull request. The PM is asked for one item on the first import aft
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-01
 
 **Notes:**
+
+The next import that dies will say where it died and how full the task was, which Saturday's could
+not.
+1. **ac1 passes.**
+   * Red against a skeleton that logs nothing: 20 of 26 failed. The six that passed are "left out,
+     never zero" and shape guards that only a mutant can fail, and the report says so.
+   * Green: 62, and 726 with the always-run list. The node criterion passes (48).
+   * All five of the PM's mutants are caught at assertions. The report also says, correctly, that
+     mutant 2's two `IndexError`s in the core progress tests are crashes and were not counted: the
+     catch is the names test.
+   * The runbook's two reads are run with `sh` over a synthetic log, which is the right test for a
+     runbook block.
+2. **The PM's amendment is met.** Both memory figures appear on end, failure and progress lines and
+   are absent, not zero, when unreadable. The report says how to read them against 32 GB, including
+   v1's page-cache caveat and why `RUSAGE_CHILDREN` reads near zero with a live pool.
+3. **Deviation 1: accepted.** AWS's documentation doesn't name the cgroup version, so the reader
+   tries v2 then v1 and each line says which it read. The first import on the new image answers the
+   question, and the PM records it.
+4. **Decisions accepted:**
+   * the one parse-pipeline change, a keyword-only `progress` callback at the end of the loop,
+     described precisely for the merge with v1-e33-t07. Whichever of the two merges second rebases
+     on it;
+   * stderr, flushed per line, so the single result on stdout and a SIGKILL lose nothing;
+   * the line shape, with no `"status"`, so result readers pass over step lines;
+   * the counts per step, and five-minute progress;
+   * the runbook's 32 GB bullet updated, after v1-e40-t30;
+   * Rich sentences on the Mac;
+   * no smoke check, since the smoke tier's backfile check refuses before any step.
+5. **Follow-ups, the PM's rulings:**
+   * **The next import and this image:** the hspolicy25 restart takes an image carrying this task
+     if one can be applied before the import's day, after v1-e40-t30's apply and dev's function
+     deploy (the image's format check needs it). Otherwise it runs on v1.1.0-dev.251 at 32 GB
+     without the lines rather than wait.
+   * **No `container_peak_bytes` on the first cloud lines:** filed only if it happens.
+6. **Closing checks:** the affected set (305 files through `output.py` and `caselist_parse.py`) is
+   left to the PR's `ci` under agreement 10. Core caselist (1,776), the import and start tests (62),
+   the always-run list with docs and the step tests (726), ruff, pyright, lint-imports, command
+   blocks and the specs are clean.
+7. **Merge:** a plain `scripts/task pr` once `ci` is green, after `scripts/task sync`. The sweep
+   batch changed this spec's `context` on dev. No operator step follows.

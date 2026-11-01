@@ -38,6 +38,7 @@ from debate_core.application.structured_output import REPAIR_PROMPT_ID, Structur
 from debate_core.arguments.landscape.evaluation_breakdown import (
     CardOutcome,
     outcome_counts,
+    refusals_by_label,
     weighted_accuracy,
 )
 from debate_core.arguments.landscape.scan_hits import HitField, HitKind, ScanHit
@@ -282,6 +283,8 @@ async def test_evaluation_breakdown_gives_every_labelled_card_one_outcome_summin
         assert {row: (card.outcome, card.refusal, card.answer) for row, card in by_row.items()} == {
             row: expected[:3] for row, expected in EXPECTED.items()
         }
+        assert {card.sample_row for card in result.cards if card.related} == {4}
+        assert refusals_by_label(result.cards) == {"NO_POSITION": {"none": 1, "position": 1}}
 
 
 @pytest.mark.anyio
@@ -383,6 +386,45 @@ async def test_evaluation_breakdown_lists_the_scans_hits_by_text_field_and_kind(
     ) == (9, 2, 0)
     assert (result.evaluation.cassettes.texts, result.evaluation.cassettes.schools) == (9, 1)
     assert result.evaluation.cassettes.other_names == 3
+
+
+@pytest.mark.anyio
+async def test_evaluation_breakdown_reads_only_this_prompts_repairs_filed_under_the_caselist(
+    tmp_path: Path, prompts: PromptRegistry
+) -> None:
+    """A repair cassette another caselist alone names, or of another prompt or version, is not listed."""
+    recording = RecordReplayModelRouter(
+        ScriptedByTag(), mode=ModelMode.RECORD, cassette_dir=tmp_path, environ={}
+    )
+    await broken_down(recording, prompts, tmp_path)
+    [repair, _] = texts_under(tmp_path / REPAIR_PROMPT_ID)
+    document = json.loads(repair)
+    foreign = json.dumps({**document, "caselists": ["hspolicy98"]})
+    variables = document["request"]["prompt"]["variables"]
+    other_version = json.dumps(
+        {
+            **document,
+            "request": {
+                **document["request"],
+                "prompt": {
+                    **document["request"]["prompt"],
+                    "variables": {**variables, "failed_prompt": f"{CLASSIFY_POSITION_PROMPT_ID}@0.9.0"},
+                },
+            },
+        }
+    )
+    replaying = RecordReplayModelRouter(None, mode=ModelMode.REPLAY, cassette_dir=tmp_path)
+
+    result = await break_down_labelled_cards(
+        READING,
+        TAXONOMY,
+        OVERRIDES,
+        LABELLED,
+        stage_over(replaying, prompts),
+        repair_cassette_texts=lambda: [*texts_under(tmp_path / REPAIR_PROMPT_ID), foreign, other_version],
+    )
+
+    assert result.repair_cassettes == 2
 
 
 @pytest.mark.anyio

@@ -68,6 +68,8 @@ __all__ = [
 
 _SLUG: Final = re.compile(CASELIST_SLUG_PATTERN)
 _FILING: Final[ContextVar[str | None]] = ContextVar("cassette_filing", default=None)
+REMOVAL_FORM: Final = "removal"
+"""In the removal's code, so that it is never a purge's code (whose digest names no form, `v1-e32-t34`)."""
 
 
 def is_caselist_slug(value: object) -> bool:
@@ -148,12 +150,13 @@ class CaselistCassettes:
     @property
     def removal_confirmation(self) -> str:
         """The code :func:`delete_caselist_cassettes_for_removal` takes: the form, and what it deletes."""
-        return self.confirmation
-
-    @property
-    def for_removal(self) -> tuple[str, ...]:
-        """The cassettes a removal deletes: sole, shared and unattributed."""
-        return (*self.sole, *self.shared)
+        shown = {
+            "form": REMOVAL_FORM,
+            "sole": list(self.sole),
+            "shared": list(self.shared),
+            "unattributed": list(self.unattributed),
+        }
+        return hashlib.sha256(json.dumps(shown, sort_keys=True).encode()).hexdigest()[:CONFIRMATION_LENGTH]
 
 
 def caselist_cassettes(files: CassetteFiles, caselist: str) -> CaselistCassettes:
@@ -222,4 +225,9 @@ def delete_caselist_cassettes_for_removal(
     :attr:`~CaselistCassettes.removal_confirmation` (:class:`CassetteDeleteRefused`), a purge's code
     among them, stops the removal before anything changes.
     """
-    return delete_caselist_cassettes(files, caselist, confirmation=confirmation)
+    listed = caselist_cassettes(files, caselist)
+    if confirmation != listed.removal_confirmation:
+        raise CassetteDeleteRefused(listed, confirmation)
+    for cassette in (*listed.sole, *listed.shared, *listed.unattributed):
+        files.delete(cassette)
+    return listed

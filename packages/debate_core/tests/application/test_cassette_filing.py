@@ -340,7 +340,9 @@ def test_a_second_removal_of_the_same_caselist_finds_nothing_of_it(cassettes: Pa
 
 
 @pytest.mark.parametrize("confirmation", [None, "", "0" * 12])
-def test_a_removal_without_its_listings_code_changes_nothing(cassettes: Path, confirmation: str | None) -> None:
+def test_a_removal_without_its_listings_code_changes_nothing(
+    cassettes: Path, confirmation: str | None
+) -> None:
     files = CassetteDirectory(cassettes)
     listed = caselist_cassettes(files, PURGED)
     before = snapshot(cassettes)

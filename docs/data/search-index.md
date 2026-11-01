@@ -192,7 +192,9 @@ request.
   `camp_aliases.yaml`, which is not OpenEv's own word for most camps. The table's `openev` section maps
   a canonical camp to OpenEv's word, filled only for camps whose page the operator has opened and seen
   list the camp's files. A camp with no word has no link, and so has `UNKNOWN`, whatever the table
-  says. A camp whose canonical name gathers spellings OpenEv files as two camps is given no word.
+  says. A camp whose canonical name gathers spellings OpenEv files as two camps is given no word,
+  and so is a bare name that may be any of several: `Michigan`, since `v1-e30-t32` files OpenEv's
+  three Michigan camps apart.
 * **The year** links from 2013, the oldest year on OpenEv's sidebar, to the current season plus one
   (`debate_core.domain.season`: a season starts on 1 August, and a topic year's camp files arrive in
   June and July). An occurrence past the provenance limit has no camp, so no link.
@@ -204,6 +206,36 @@ from the table and the 15th is `UNKNOWN`. 12 are one word of letters and digits 
 Of the three camp pages the operator confirmed, only UTNIF's word is a stored value. With the table's
 words as committed (UTNIF's alone), **2 of the 102** files link. The same 15 values are in all four
 local indexes (formats 1 and 2).
+
+**Michigan's three camps, 2026-11-01 (`v1-e30-t32`).** The table merged `Michigan7`, `Michigan
+Classic`, `MNDI` and `Michigan National Debate Institute` into one camp, `Michigan`, which OpenEv files
+as three: `MNDI`, `UM7` and `UMC`. It now files them as `MNDI`, `Michigan7` and `Michigan Classic`, each
+with its word, and a bare `Michigan` stays `Michigan`, with no word. Counted on the operator's Mac,
+read-only, counts only: 40 of the 102 stored camp files were `Michigan`, all `2026-policy`, each with one
+manifest path and no camp folder, all in the release's `<title> - <camp> <year> <initials>` shape. 5 name
+`Michigan Classic`, 1 names `MNDI`, and 34 name only a bare `Michigan`: none names `Michigan7`,
+`Michigan 7`, the long MNDI name, `UM7` or `UMC`. Re-derived with the new table, the 40 become 34
+`Michigan`, 5 `Michigan Classic` and 1 `MNDI`: 6 rows change camp and none its title. So **6** of
+Michigan's 40 can link; the 34 bare names say nothing that tells the three camps apart.
+
+Each place that holds a camp file's camp learns the new one this way. None needs a parser or
+fingerprint version bump: the camp is in no fingerprint and in no parse's skip key, so no file is
+parsed again for it.
+
+| Where | How it learns the new camp |
+|---|---|
+| `caselist_camp_files` and the release manifest's rows | `caselist reimport-openev-metadata`, from the recorded paths: no download, no blob read |
+| The parsed occurrence rows' `camp` | The next `caselist parse --caselist openev`, even one with nothing to parse: every run rebuilds the occurrence rows from the manifests' camps |
+| The search index's `camp` column | The next index build: it takes an occurrence's camp from the row, and the rebuilt rows change the store's digest the index stage compares |
+| A built file's sidecar | A file built after the rebuild; one built before keeps the camp it was built with |
+
+The per-source parsed documents keep the camp they were parsed with, in each card's provenance, until a
+`caselist parse --reparse`. Nothing that shows a camp card's camp reads them: the index, the built files
+and the card page take it from the occurrence rows.
+
+On the Mac's own store that is the route. Since the cutover dev's records are the cloud run's run-state
+bundle, which only a pull, a backfile import and a removal save, and the re-import is none of them, so
+dev's 40 files are not yet refiled (the session report of `v1-e30-t32` has the PM's question).
 
 ### `search`: the full-text index
 

@@ -1045,6 +1045,50 @@ async def test_a_camp_release_is_parsed_with_its_camp_and_no_disclosure(tmp_path
     } == {("OPENEV", "Cascade Institute", None)}
 
 
+@pytest.mark.anyio
+async def test_a_camp_refiled_in_its_manifest_reaches_the_occurrence_rows_at_the_next_run_unparsed(
+    tmp_path: Path,
+) -> None:
+    """`v1-e30-t32`: a metadata re-import rewrites the manifest row's camp; the next run, with nothing to
+    parse, rebuilds the occurrence rows with it. No parser or fingerprint version is bumped for it."""
+    world = World(data_dir=tmp_path / "evidence", zips_dir=tmp_path / "zips")
+    body = (
+        Path(__file__).resolve().parents[4]
+        / "tests/fixtures/debate_files/structural/cardmirror-camp-file.docx"
+    ).read_bytes()
+    sha = hashlib.sha256(body).hexdigest()
+    blob = world.data_dir / "blobs" / "sha256" / sha[0:2] / sha[2:4] / sha
+    blob.parent.mkdir(parents=True)
+    blob.write_bytes(body)
+    row = {
+        "kind": "member",
+        "classification": "NEW",
+        "path": "Climate Adv CP - Ridgeline Classic 2026 AB.docx",
+        "sha256": sha,
+        "byte_size": len(body),
+        "format": "DOCX",
+        "camp": "Ridgeline",
+        "imported_on": "2026-09-14",
+    }
+    manifest = world.data_dir / "objects" / "manifests" / "openev" / "2026-policy.jsonl"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(json.dumps(row) + "\n", encoding="utf-8")
+    service = world.service()
+    occurrences = world.store.root / "openev" / DOCX_PARSER_VERSION / "occurrences.jsonl"
+    await service.run(await service.plan("openev"))
+    assert {json.loads(line)["camp"] for line in occurrences.read_text().splitlines()} == {"Ridgeline"}
+
+    manifest.write_text(json.dumps(row | {"camp": "Ridgeline Classic"}) + "\n", encoding="utf-8")
+    parser = CountingParser()
+    again = world.service(parser)
+    report = await again.run(await again.plan("openev"))
+
+    assert (len(report.plan.to_parse), parser.parsed) == (0, [])
+    assert [json.loads(line)["camp"] for line in occurrences.read_text().splitlines()] == [
+        "Ridgeline Classic"
+    ] * 2
+
+
 # ------------------------------------------------------------------------------------------------
 # Failures listing
 # ------------------------------------------------------------------------------------------------

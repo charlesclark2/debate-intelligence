@@ -11,23 +11,36 @@
 # "spartan-debate-institute" and "SPARTAN_DEBATE_INSTITUTE". A spelling matches whole words only:
 # "SDI" matches "SDI - Politics DA" but not "SDIX Politics DA".
 #
-# No two camps may share a spelling; the loader refuses a table where they do.
+# No two camps may share a spelling; the loader refuses a table where they do. Spellings may overlap,
+# as `Michigan` is the first word of `Michigan Classic`: the matcher tries the longest spelling first
+# at each word, so "Michigan Classic 2026" is Michigan Classic and never Michigan, whatever the order
+# here, and a folder must be a spelling as a whole.
 #
 # `openev` maps a canonical camp to OpenEv's own word for it: the last part of the camp's page,
 # https://opencaselist.com/openev/<year>/<word>, which the search pilot's camp cards link to
 # (v1-e39-t28). Add a word only after opening that page and seeing the camp's files, since the
 # canonical name above is this table's choice, not OpenEv's. A camp with no word gets no link. Leave
-# out a camp whose spellings OpenEv files as two camps. A word is letters and digits only, and one
-# camp's alone.
+# out a camp whose spellings OpenEv files as two camps, or that may name more than one of OpenEv's
+# camps. A word is letters and digits only, and one camp's alone.
 camps:
   DDI:
     - Dartmouth
     - Dartmouth Debate Institute
-  Michigan:
-    - Michigan7
-    - Michigan Classic
-    - MNDI
+  # Michigan's three camps, filed apart as OpenEv files them (v1-e30-t32). Each canonical name is what
+  # a card's link and provenance line show ("Find on OpenEv: Michigan Classic 2026 camp page"), so it is
+  # the spelling the camps' own files use, and never a bare "Michigan", which names none of them alone.
+  # OpenEv's word and label are spellings too, so a file in an OpenEv camp folder reads.
+  Michigan7:
+    - Michigan 7
+    - UM7
+  Michigan Classic:
+    - UMC
+  MNDI:
     - Michigan National Debate Institute
+    - Michigan MNDI
+  # A bare "Michigan" may be any of the three, and nothing in a stored file's name tells which: OpenEv's
+  # label for UM7 is just "Michigan". It stays its own camp, with no OpenEv word and so no link.
+  Michigan: []
   Gonzaga:
     - GDI
     - Gonzaga Debate Institute
@@ -59,8 +72,9 @@ camps:
 
 openev:
   # From OpenEv's own 2026 "Files By Camp" list, read by the PM in the operator's signed-in browser on
-  # 2026-10-31, with the operator's word on Mean Green (OpenEv's "Mean Green Comet"). Michigan has no
-  # word: OpenEv files MNDI, UM7 and UMC as three camps, which this table merges (v1-e30-t32 splits it).
+  # 2026-10-31, with the operator's word on Mean Green (OpenEv's "Mean Green Comet"). Michigan's three
+  # camps are its MNDI ("Michigan (MNDI)"), UM7 ("Michigan") and UMC ("Michigan (Classic)"), from the
+  # same list (v1-e30-t32). A bare Michigan has no word: it may be any of the three.
   CNDI: CNDI
   DDI: DDI
   Emory: ENDI
@@ -69,6 +83,9 @@ openev:
   Harvard: HDC
   JDI: JDI
   Mean Green: MGC
+  Michigan7: UM7
+  Michigan Classic: UMC
+  MNDI: MNDI
   MSDI: MSDI
   NHSI: NHSI
   UTNIF: UTNIF

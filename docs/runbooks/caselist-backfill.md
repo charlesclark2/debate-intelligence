@@ -527,6 +527,26 @@ exits `0` with all 41 snapshots in sync. Prod holds no `testcl26`, so its status
 changed and both status results in a dated section of
 `docs/data/caselist-backfill-2026-09.md`.
 
+### After `v1-e30-t32`: Michigan's three camps
+
+`v1-e30-t32` files `Michigan7`, `Michigan Classic` and `MNDI` apart, as OpenEv files them, and keeps a
+bare `Michigan` as `Michigan`, with no OpenEv word. A re-derive of `2026-policy` with that table, measured
+read-only over the Mac's manifest on 2026-11-01 (counts only), changes 6 rows' camp and no title:
+
+| Camp | Files before | Files after |
+|---|---|---|
+| Michigan | 40 | 34 |
+| Michigan Classic | 0 | 5 |
+| MNDI | 0 | 1 |
+
+Every other camp is unchanged. The re-import is the same command as above, and a
+`caselist parse --caselist openev` after it rewrites the occurrence rows' camp from the manifest
+without parsing a file again; the next index build carries it to the card pages
+([the search index](../data/search-index.md#the-camp-cards-link-to-openev)). **Not in dev yet.** Since
+the cutover dev's records are the cloud run's run-state bundle, and the re-import writes only this
+Mac's copy, which a pull, a backfile import or a removal replaces from the bundle. Wait for the route
+the PM rules on (`v1-e30-t32`'s session report) before running it against dev.
+
 ## Resuming and recovering
 
 | What happened | What to do |

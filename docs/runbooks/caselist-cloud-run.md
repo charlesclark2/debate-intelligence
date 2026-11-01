@@ -778,12 +778,6 @@ A `STOP` line stops this section: do not replace the digest line. Deploy dev's f
 says, run this block again, and go on only after `OK`. A failed `aws` call prints its own error and
 no `OK`. For prod at the promotion the same check reads `debate-prod-tub`.
 
-**Hold (PM, 2026-10-31): no run image carrying `v1-e39-t16` until `v1-e39-t28` merges.** The OpenEv
-address `v1-e39-t16` builds is OpenEv's page for a year, not the file's (the operator's check,
-2026-10-31). A format 3 index from such an image would give every newly imported camp file that
-wrong link. `v1-e39-t28` moves the link to the camp's page and removes this paragraph. Deploying
-dev's function meanwhile is safe: the published index is format 2, and no stored camp file has an id.
-
 **Replacing the digest line.** Step 6's append block stops on a line that is already there, so a new
 image's line replaces the old one with this block, after the push has written
 `/tmp/caselist-run-deploy.txt`. It changes that one line and nothing else, and stops when the file

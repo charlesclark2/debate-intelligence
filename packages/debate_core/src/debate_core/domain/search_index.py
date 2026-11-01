@@ -87,8 +87,8 @@ STEMMED_FORMAT_VERSION: Final = 2
 """The first format whose words are stemmed, and so the first passage search runs on."""
 
 OPENEV_ID_FORMAT_VERSION: Final = 3
-"""The first format whose occurrences hold a camp file's OpenEv id, and so the first a camp card's
-"Open on OpenEv" link is built from."""
+"""The first format whose occurrences hold a camp file's OpenEv id, kept for a later per-file link.
+A camp card's link is built from its camp and year in every format since `v1-e39-t28`."""
 
 READABLE_SEARCH_INDEX_FORMAT_VERSIONS: Final = frozenset(
     {1, STEMMED_FORMAT_VERSION, SEARCH_INDEX_FORMAT_VERSION}

@@ -194,7 +194,9 @@ request.
   list the camp's files. A camp with no word has no link, and so has `UNKNOWN`, whatever the table
   says. A camp whose canonical name gathers spellings OpenEv files as two camps is given no word,
   and so is a bare name that may be any of several: `Michigan`, since `v1-e30-t32` files OpenEv's
-  three Michigan camps apart.
+  three Michigan camps apart. Since `v1-e30-t31` a row the pull writes also keeps the listing's own
+  word, `openev_camp_word` ([the camp release manifest](openev-release-manifest.md)). The index does
+  not read it yet.
 * **The year** links from 2013, the oldest year on OpenEv's sidebar, to the current season plus one
   (`debate_core.domain.season`: a season starts on 1 August, and a topic year's camp files arrive in
   June and July). An occurrence past the provenance limit has no camp, so no link.

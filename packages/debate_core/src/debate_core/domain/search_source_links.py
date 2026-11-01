@@ -74,6 +74,7 @@ from typing import Final
 from debate_core.domain.caselist import CASELIST_SLUG_PATTERN, TEAM_CODE_MAX_LENGTH
 from debate_core.domain.evidence_search import OccurrenceProvenance
 from debate_core.domain.file_recipe import CAMP_STORE
+from debate_core.domain.season import current_season_start
 
 __all__ = [
     "OPENCASELIST_LABEL",
@@ -162,8 +163,15 @@ def team_page_url(caselist: str, school: str, team_code: str) -> str | None:
 
 
 def openev_camp_page_url(word: object, year: object, *, today: date) -> str | None:
-    """A camp's page on OpenEv, from its OpenEv word and the release's year, or `None`."""
-    return None
+    """A camp's page on OpenEv, from its OpenEv word and the release's year, or `None` for a word that is
+    not one address word (or is `UNKNOWN`) and a year outside OpenEv's archive, as of `today`."""
+    if not isinstance(word, str) or _OPENEV_WORD.fullmatch(word) is None or word == _UNREAD:
+        return None
+    if isinstance(year, bool) or not isinstance(year, int):
+        return None
+    if not OPENEV_ARCHIVE_FIRST_YEAR <= year <= current_season_start(today) + 1:
+        return None
+    return OPENEV_CAMP_PAGE_TEMPLATE.format(year=year, word=word)
 
 
 def source_link(
@@ -188,4 +196,10 @@ def _openev_link(
     occurrence: OccurrenceProvenance, openev_words: Mapping[str, str], today: date
 ) -> SourceLink | None:
     """A camp occurrence's camp page on OpenEv, from its camp through the table and its year alone."""
-    return None
+    camp = occurrence.camp
+    if not occurrence.provenance or camp is None or camp == _UNREAD:
+        return None
+    url = openev_camp_page_url(openev_words.get(camp), occurrence.camp_year, today=today)
+    if url is None:
+        return None
+    return SourceLink(label=f"{OPENEV_LABEL}: {camp} {occurrence.camp_year} camp page", url=url)

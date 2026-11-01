@@ -12,6 +12,13 @@
 # "SDI" matches "SDI - Politics DA" but not "SDIX Politics DA".
 #
 # No two camps may share a spelling; the loader refuses a table where they do.
+#
+# `openev` maps a canonical camp to OpenEv's own word for it: the last part of the camp's page,
+# https://opencaselist.com/openev/<year>/<word>, which the search pilot's camp cards link to
+# (v1-e39-t28). Add a word only after opening that page and seeing the camp's files, since the
+# canonical name above is this table's choice, not OpenEv's. A camp with no word gets no link. Leave
+# out a camp whose spellings OpenEv files as two camps. A word is letters and digits only, and one
+# camp's alone.
 camps:
   DDI:
     - Dartmouth
@@ -49,3 +56,6 @@ camps:
     - Wake
   Wyoming:
     - Wyoming Forensics Institute
+
+openev:
+  UTNIF: UTNIF

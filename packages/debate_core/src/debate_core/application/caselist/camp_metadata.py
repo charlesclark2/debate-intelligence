@@ -72,6 +72,17 @@ separates it. Two camps claiming one spelling is refused when the table is loade
 (:class:`InvalidCampAliases`), since which of them a file would get would otherwise depend on the
 order the file happened to list them in.
 
+## OpenEv's word for each camp (`v1-e39-t28`)
+
+The table's `openev` section maps a canonical camp to OpenEv's own word for it, the last part of the
+camp's page, `https://opencaselist.com/openev/<year>/<word>`, which the search pilot's card page links
+to (:mod:`debate_core.domain.search_source_links`). The canonical name is this table's choice and not
+OpenEv's, so the two differ for most camps. A word is filled only once the operator has opened that
+page and seen the camp's files. A camp with no word has no link. Nor has a camp whose canonical name
+gathers spellings OpenEv files as two camps, so such a camp is given no word. The section names only
+camps of the table, never `UNKNOWN`, and each word is one address word of letters and digits, given
+to one camp. Matching never reads it: a file's camp, lab and title are the same with or without it.
+
 ## What is never here
 
 A camp is an institution and a file title is a document's name. Neither is personal data, but a
@@ -94,6 +105,7 @@ import yaml
 from debate_core.application.caselist.path_parser import source_format_for
 from debate_core.application.settings import ConfigurationError
 from debate_core.domain.caselist import SourceFormat
+from debate_core.domain.search_source_links import OPENEV_CAMP_WORD_PATTERN
 
 __all__ = [
     "CAMP_ALIASES_RESOURCE",
@@ -110,6 +122,9 @@ UNKNOWN_CAMP: Final = "UNKNOWN"
 
 CAMP_ALIASES_RESOURCE: Final = "camp_aliases.yaml"
 """The packaged alias table, beside this module."""
+
+#: One OpenEv address word, as the camp link checks it again (`v1-e39-t28`).
+_OPENEV_WORD: Final = re.compile(OPENEV_CAMP_WORD_PATTERN)
 
 #: A word, for matching: a run of letters and digits. Everything else separates words.
 _WORD: Final = re.compile(r"[^\W_]+")
@@ -210,11 +225,40 @@ class CampAliases:
                     raise InvalidCampAliases(
                         f"{source}: {spelling!r} is listed for both {claimed} and {camp}", source=source
                     )
-        return cls(by_words=by_words)
+        openev_words = _openev_words(table.get("openev") if table is not None else None, camps, source=source)
+        return cls(by_words=by_words, openev_words=openev_words)
 
     def camp_for(self, text: str) -> str | None:
         """The camp `text` names as a whole — a folder name — or `None`."""
         return self.by_words.get(_words(text))
+
+
+def _openev_words(section: object, camps: Mapping[object, object], *, source: str) -> dict[str, str]:
+    """The `openev` section, each canonical camp to its OpenEv word, refusing anything else."""
+    if section is None:
+        return {}
+    listed = _mapping(section)
+    if listed is None:
+        raise InvalidCampAliases(f"{source}: `openev` must map a camp to its OpenEv word", source=source)
+    words: dict[str, str] = {}
+    by_word: dict[str, str] = {}
+    for camp, word in listed.items():
+        if not isinstance(camp, str) or camp not in camps or camp == UNKNOWN_CAMP:
+            raise InvalidCampAliases(
+                f"{source}: the `openev` section's {camp!r} is not a camp of the table", source=source
+            )
+        if not isinstance(word, str) or _OPENEV_WORD.fullmatch(word) is None or word == UNKNOWN_CAMP:
+            raise InvalidCampAliases(
+                f"{source}: {word!r} is not one OpenEv address word (the OpenEv word of {camp})",
+                source=source,
+            )
+        claimed = by_word.setdefault(word, camp)
+        if claimed != camp:
+            raise InvalidCampAliases(
+                f"{source}: OpenEv word {word!r} is given to both {claimed} and {camp}", source=source
+            )
+        words[camp] = word
+    return words
 
 
 def load_camp_aliases(path: Path | None = None) -> CampAliases:

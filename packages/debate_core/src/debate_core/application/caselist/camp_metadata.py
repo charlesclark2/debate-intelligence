@@ -84,7 +84,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib import resources
 from pathlib import Path, PurePosixPath
 from typing import Final, cast
@@ -168,6 +168,9 @@ class CampAliases:
 
     by_words: Mapping[tuple[str, ...], str]
     """Each spelling as its case-folded words, mapped to the canonical camp name."""
+
+    openev_words: Mapping[str, str] = field(default_factory=dict[str, str])
+    """The `openev` section: a canonical camp to OpenEv's own address word for it (`v1-e39-t28`)."""
 
     @property
     def camps(self) -> tuple[str, ...]:

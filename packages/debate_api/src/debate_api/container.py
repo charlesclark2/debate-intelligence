@@ -49,6 +49,7 @@ from debate_api.configuration import PilotConfiguration, parse_cookie_keys
 from debate_api.landscape_markdown import render_bundle
 from debate_api.state import PilotServices
 from debate_core.application.card_download import CardDownloadService
+from debate_core.application.caselist.camp_metadata import load_camp_aliases
 from debate_core.application.evidence_search import EvidenceSearchService
 from debate_core.application.ports.persistence import SnapshotStore
 from debate_core.application.search_index_holder import SearchIndexHolder
@@ -190,6 +191,7 @@ def build_pilot_services(environ: Mapping[str, str]) -> PilotServices:
             prepare=render_bundle,
             clock=_now,
         ),
+        openev_camp_words=load_camp_aliases().openev_words,
         clock=_now,
     )
 

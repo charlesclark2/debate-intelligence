@@ -1,31 +1,45 @@
 """The card page's link out to where a card was published: a disclosed card's (`v1-e39-t11`) and,
-since `v1-e39-t16`, a camp card's file on OpenEv, from its stored OpenEv id.
+since `v1-e39-t28`, a camp card's camp page on OpenEv, from the camp's OpenEv word in the alias
+table and the year.
 
 An openCaselist team page is `https://opencaselist.com/<caselist>/<school>/<team code>`, the school
 and team code in the URL's own form: one word of letters, digits and hyphens. Every expected link
-is written by hand (working agreement 6). Every school, team code, camp and title is invented
+is written by hand (working agreement 6). Every school, team code, camp, OpenEv word and title is invented
 (data-use policy, rule 5). The landscape school view links each team by the same rule, from its
 caselist, school and team code (`v1-e32-t18`).
 """
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Mapping
+from datetime import date
+from typing import Any, Final
 
 import pytest
 
 from debate_core.domain.evidence_search import OccurrenceProvenance
 from debate_core.domain.search_source_links import (
     OPENCASELIST_ORIGIN,
-    OPENEV_FILE_URL_TEMPLATE,
+    OPENEV_ARCHIVE_FIRST_YEAR,
+    OPENEV_CAMP_PAGE_TEMPLATE,
     OPENEV_LABEL,
     NoTeamPage,
     SourceLink,
-    openev_file_url,
     source_link,
     team_page_url,
     why_no_team_page,
 )
+
+WORDS: Final = {"Cascade Institute": "CASCADE", "Ridgeline": "RDI7"}
+"""An invented alias table's OpenEv words: one camp with a space in its name, one without."""
+TODAY: Final = date(2026, 10, 31)
+"""In the season that started on 1 August 2026, so the archive runs to 2027."""
+
+
+def linked(
+    occurrence: OccurrenceProvenance, *, words: Mapping[str, str] = WORDS, today: date = TODAY
+) -> SourceLink | None:
+    return source_link(occurrence, openev_words=words, today=today)
 
 
 def disclosed(**changes: Any) -> OccurrenceProvenance:
@@ -83,7 +97,7 @@ def test_the_origin_is_opencaselists_own() -> None:
     ],
 )
 def test_a_disclosed_card_links_to_its_teams_page_on_opencaselist(changes: dict[str, Any], url: str) -> None:
-    assert source_link(disclosed(**changes)) == SourceLink(label="Open on openCaselist", url=url)
+    assert linked(disclosed(**changes)) == SourceLink(label="Open on openCaselist", url=url)
 
 
 @pytest.mark.parametrize(
@@ -119,82 +133,159 @@ def test_a_disclosed_card_links_to_its_teams_page_on_opencaselist(changes: dict[
 )
 def test_a_disclosed_card_whose_values_are_not_the_urls_form_has_no_link(changes: dict[str, Any]) -> None:
     """A school with a space is a display name, not the URL's form: the link would be wrong, so none."""
-    assert source_link(disclosed(**changes)) is None
+    assert linked(disclosed(**changes)) is None
 
 
 # ------------------------------------------------------------------------------------------------
-# Open on OpenEv (v1-e39-t16): a camp card links to its file, from the stored OpenEv id alone
+# Find on OpenEv (v1-e39-t28): a camp card links to its camp's page, the camp through the table's
+# OpenEv word, and the year
 # ------------------------------------------------------------------------------------------------
 
 
-def test_the_openev_address_is_the_constant_this_task_set() -> None:
-    """The repository pins no OpenEv page address: the shape is this constant's, until the coach's
-    check on dev confirms or replaces it (`v1-e39-t16`'s report, follow-up 1)."""
-    assert OPENEV_FILE_URL_TEMPLATE == "https://opencaselist.com/openev/{openev_id}"
-    assert OPENEV_LABEL == "Open on OpenEv"
+def test_the_openev_address_is_a_camps_page_by_year_and_word() -> None:
+    """The operator confirmed `https://opencaselist.com/openev/<year>/<camp>` on 2026-10-31."""
+    assert OPENEV_CAMP_PAGE_TEMPLATE == "https://opencaselist.com/openev/{year}/{word}"
+    assert OPENEV_ARCHIVE_FIRST_YEAR == 2013
+    assert OPENEV_LABEL == "Find on OpenEv"
 
 
 @pytest.mark.parametrize(
-    ("openev_id", "url"),
+    ("changes", "link"),
     [
-        (4021, "https://opencaselist.com/openev/4021"),
-        (1, "https://opencaselist.com/openev/1"),
-        (987654321, "https://opencaselist.com/openev/987654321"),
+        (
+            {},
+            SourceLink(
+                label="Find on OpenEv: Cascade Institute 2026 camp page",
+                url="https://opencaselist.com/openev/2026/CASCADE",
+            ),
+        ),
+        (
+            {"camp": "Ridgeline", "camp_year": 2019},
+            SourceLink(
+                label="Find on OpenEv: Ridgeline 2019 camp page",
+                url="https://opencaselist.com/openev/2019/RDI7",
+            ),
+        ),
     ],
 )
-def test_a_camp_card_links_to_its_file_on_openev_from_the_stored_id(openev_id: int, url: str) -> None:
-    assert source_link(camp(openev_id=openev_id)) == SourceLink(label="Open on OpenEv", url=url)
-    assert openev_file_url(openev_id) == url
+def test_a_camp_card_links_to_its_camps_page_through_the_tables_word(
+    changes: dict[str, Any], link: SourceLink
+) -> None:
+    assert linked(camp(**changes)) == link
 
 
-@pytest.mark.parametrize(
-    "changes",
-    [
-        {"camp_file_title": "4021"},
-        {"camp_file_title": "openev-4021 Invented Adv CP"},
-        {"camp_file_title": "Invented Adv CP", "camp": "4021"},
-        {"camp_file_title": None},
-    ],
-    ids=["a title that is a number", "a title naming an id", "a camp that is a number", "no title"],
-)
-def test_a_camp_card_without_a_stored_id_has_no_link_whatever_its_title_says(changes: dict[str, Any]) -> None:
-    """The link is the stored value's or nothing: never read out of a title, a camp or a file name."""
-    assert source_link(camp(**changes)) is None
-
-
-def test_the_link_follows_the_stored_id_and_nothing_else() -> None:
-    """Two cards of one file title and camp, two ids: two addresses. One id, two titles: one address."""
-    first = source_link(camp(openev_id=4021, camp_file_title="Invented Adv CP"))
-    second = source_link(camp(openev_id=4022, camp_file_title="Invented Adv CP"))
-    renamed = source_link(camp(openev_id=4021, camp_file_title="Another Invented Title", camp="Other Camp"))
-    assert first is not None and second is not None and renamed is not None
-    assert (first.url, second.url, renamed.url) == (
-        "https://opencaselist.com/openev/4021",
-        "https://opencaselist.com/openev/4022",
-        "https://opencaselist.com/openev/4021",
+def test_the_link_is_the_tables_word_and_the_year_and_nothing_else() -> None:
+    """Another title, event and OpenEv id: the same address. The stored camp is never the address."""
+    first = linked(camp())
+    retitled = linked(
+        camp(camp_file_title="Another Invented Title", camp_event="LD", openev_id=4021, snapshot="2026-ld")
+    )
+    renamed = linked(camp(), words={"Cascade Institute": "CASC2"})
+    one_word = linked(camp(camp="Ridgeline"))
+    assert first is not None and retitled is not None and renamed is not None and one_word is not None
+    assert (first.url, retitled.url, renamed.url, one_word.url) == (
+        "https://opencaselist.com/openev/2026/CASCADE",
+        "https://opencaselist.com/openev/2026/CASCADE",
+        "https://opencaselist.com/openev/2026/CASC2",
+        "https://opencaselist.com/openev/2026/RDI7",
     )
 
 
 @pytest.mark.parametrize(
+    ("changes", "words"),
+    [
+        ({"camp": "Ridgeline"}, {}),
+        ({"camp": "Lakeshore"}, WORDS),
+        ({"camp": "Lakeshore", "camp_file_title": "CASCADE"}, WORDS),
+        ({"camp": None}, WORDS),
+        ({"camp": "cascade institute"}, WORDS),
+    ],
+    ids=[
+        "an empty table",
+        "a camp the table has no word for",
+        "a title that is a word",
+        "no camp",
+        "another case",
+    ],
+)
+def test_a_camp_with_no_word_in_the_table_has_no_link(changes: dict[str, Any], words: dict[str, str]) -> None:
+    """Never the stored camp itself, a title or another camp's word: no word, no link."""
+    assert linked(camp(**changes), words=words) is None
+
+
+@pytest.mark.parametrize(
+    "words",
+    [{"UNKNOWN": "UNKNOWN"}, {"UNKNOWN": "CASCADE"}, WORDS | {"UNKNOWN": "RDI7"}],
+    ids=["its own word", "another camp's word", "beside other words"],
+)
+def test_unknown_never_links_whatever_the_table_says(words: dict[str, str]) -> None:
+    """`UNKNOWN` is the importer's "could not read": one word, and never a camp's address."""
+    assert linked(camp(camp="UNKNOWN"), words=words) is None
+
+
+@pytest.mark.parametrize(
+    "word",
+    [
+        "Cascade Inst",
+        "CASCADE/..",
+        "CASCADE?x=1",
+        "CASCADE\n",
+        "",
+        "Cäscade",
+        "https://example.test",
+        "UNKNOWN",
+    ],
+    ids=lambda word: repr(word)[:20],
+)
+def test_a_word_that_is_not_one_address_word_has_no_link(word: str) -> None:
+    """The table is checked when it is loaded; a word is checked again here, as a stored id was."""
+    assert linked(camp(), words={"Cascade Institute": word}) is None
+
+
+@pytest.mark.parametrize(
+    ("year", "today", "url"),
+    [
+        (2013, TODAY, "https://opencaselist.com/openev/2013/CASCADE"),
+        (2026, TODAY, "https://opencaselist.com/openev/2026/CASCADE"),
+        (2027, TODAY, "https://opencaselist.com/openev/2027/CASCADE"),
+        (2012, TODAY, None),
+        (2028, TODAY, None),
+        (2026, date(2026, 7, 31), "https://opencaselist.com/openev/2026/CASCADE"),
+        (2027, date(2026, 7, 31), None),
+        (2028, date(2027, 8, 1), "https://opencaselist.com/openev/2028/CASCADE"),
+        (None, TODAY, None),
+        (True, TODAY, None),
+        ("2026", TODAY, None),
+    ],
+    ids=lambda value: repr(value)[:20],
+)
+def test_the_year_runs_from_2013_to_the_current_season_plus_one(
+    year: object, today: date, url: str | None
+) -> None:
+    """OpenEv's sidebar starts at 2013, and a topic year's camp files arrive before its season starts."""
+    link = linked(camp(camp_year=year), today=today)
+    assert (link.url if link is not None else None) == url
+
+
+@pytest.mark.parametrize(
     "changes",
     [
+        {"provenance": False},
         {"provenance": False, "camp": None, "camp_year": None, "camp_event": None, "camp_file_title": None},
-        {"openev_id": 0},
-        {"openev_id": -4021},
-        {"openev_id": True},
     ],
-    ids=["past the provenance limit", "zero", "negative", "a boolean"],
+    ids=["its camp still held", "as the index keeps it"],
 )
-def test_a_camp_card_whose_stored_id_is_not_an_openev_id_has_no_link(changes: dict[str, Any]) -> None:
-    assert source_link(camp(**{"openev_id": 4021} | changes)) is None
+def test_a_camp_card_past_the_provenance_limit_has_no_link(changes: dict[str, Any]) -> None:
+    assert linked(camp(**changes)) is None
 
 
 def test_a_disclosed_card_never_links_to_openev_whatever_it_holds() -> None:
-    """A disclosed occurrence has no OpenEv id; given one, it still links to its team's page alone."""
-    assert source_link(disclosed(openev_id=4021)) == SourceLink(
+    """A disclosed occurrence given a camp, a year and an id still links to its team's page alone."""
+    holding = {"camp": "Cascade Institute", "camp_year": 2026, "openev_id": 4021}
+    assert linked(disclosed(**holding)) == SourceLink(
         label="Open on openCaselist", url="https://opencaselist.com/hsld26/Cedarbrook/LM"
     )
-    assert source_link(disclosed(openev_id=4021, school="Cedar Brook")) is None
+    assert linked(disclosed(**holding, school="Cedar Brook")) is None
 
 
 @pytest.mark.parametrize(
@@ -240,6 +331,6 @@ def test_a_team_whose_values_are_not_the_urls_form_has_no_page_and_says_why(
 
 
 def test_the_card_page_and_the_school_view_link_a_team_alike() -> None:
-    link = source_link(disclosed(caselist="hspolicy26", school="North-Cedarbrook", team_code="Ab12"))
+    link = linked(disclosed(caselist="hspolicy26", school="North-Cedarbrook", team_code="Ab12"))
     assert link is not None
     assert link.url == team_page_url("hspolicy26", "North-Cedarbrook", "Ab12")

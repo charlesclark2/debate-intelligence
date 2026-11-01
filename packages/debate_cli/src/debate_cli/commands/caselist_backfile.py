@@ -35,7 +35,6 @@ environment's.
 from __future__ import annotations
 
 import asyncio
-from datetime import date
 from typing import Annotated, NoReturn
 
 import typer
@@ -60,11 +59,9 @@ from debate_core.application.caselist.backfile_survey import (
     season_label,
 )
 from debate_core.application.settings import ConfigurationError, Environment
+from debate_core.domain.season import current_season_start
 
 __all__ = ["backfile_import", "backfile_survey", "current_season_start", "import_as_json", "survey_as_json"]
-
-SEASON_STARTS_IN_MONTH = 8
-"""A season runs 1 August to 31 July (docs/policies/caselist-data-use.md, Retention)."""
 
 
 def backfile_survey(
@@ -102,11 +99,6 @@ def backfile_survey(
 async def _survey(survey: BackfileSurvey, first: int, last: int, sizes: bool) -> BackfileSurveyResult:
     async with survey:
         return await survey.survey(first_season_start=first, last_season_start=last, sizes=sizes)
-
-
-def current_season_start(today: date) -> int:
-    """The year the season `today` falls in started: 2026 from 1 August 2026 to 31 July 2027."""
-    return today.year if today.month >= SEASON_STARTS_IN_MONTH else today.year - 1
 
 
 def _season_start(text: str, option: str) -> int:

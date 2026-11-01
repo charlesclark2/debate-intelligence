@@ -1,0 +1,77 @@
+# TASK v1-e32-t37-model-use-gate-reads-the-open-questions-table - The model-use gate reads open question 4 from the policy's open-questions table, not the first row numbered 4
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t37-model-use-gate-reads-the-open-questions-table
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "The model-use gate reads open question 4 from the policy's open-questions table, not the first row numbered 4"
+spec:
+  # Filed by the PM, 2026-10-31, found by the PM on 2026-11-01, checking v1-e32-t07's evaluation blocks.
+  description: >-
+    `model_use_gate` in `landscape_model_stage.py` takes the first line of the data-use policy
+    that starts with `| 4 |`. In the real policy that is row 4 of the clause register
+    (Acceptable Use, rate limits), not open question 4, so the gate would have let a live run
+    through while the question was open. Read the row from the table under the `## Open
+    questions` heading (by heading, then by the row's number), refuse when that table or row is
+    missing, and test it against the real policy file's shape (a test fixture copying its
+    tables' structure, with the question open and resolved) as well as the synthetic one. Say
+    what else in the repository reads the policy by row number.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, packages/debate_core/tests, debate_cli, packages/debate_cli/tests]
+    forbidden:
+      - A live model call in a test
+      - Network or AWS access in a test
+  context:
+    - kind: TaskRef
+      name: v1-e32-t05-landscape-cli
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The gate refuses when open question 4's status is open and allows when it is
+        resolved, reading the open-questions table, with an earlier table's row 4 ignored,
+        by tests shown failing first against today's gate.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t37-model-use-gate-reads-the-open-questions-table-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    The model-use gate reads open question 4 from the policy's open-questions table, not the
+    first row numbered 4.
+  goalRef:
+    name: v1-e32-t37-model-use-gate-reads-the-open-questions-table
+  graph:
+    nodes:
+      - id: model-use-gate-reads-the-open-questions
+        kind: Task
+        name: Policy gate row
+        description: >-
+          The model-use gate reads open question 4 from the policy's open-questions table,
+          not the first row numbered 4.
+        estimatedEffort: 30m
+        acceptanceCriteria:
+          - type: test_passes
+            name: Policy gate row tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/test_landscape_command.py, -k, model_use]
+status:
+  phase: Pending

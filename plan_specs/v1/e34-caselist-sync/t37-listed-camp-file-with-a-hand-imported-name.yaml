@@ -1,0 +1,77 @@
+# TASK v1-e34-t37-listed-camp-file-with-a-hand-imported-name - A listed camp file is not taken as already imported because a file of another camp shares its name
+# Epic: E34 Caselist Sync | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e34-t37-listed-camp-file-with-a-hand-imported-name
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+  annotations:
+    debate/title: "A listed camp file is not taken as already imported because a file of another camp shares its name"
+spec:
+  # Filed by the PM, 2026-10-31, from v1-e30-t31's follow-up (the PM's review, 2026-11-01).
+  description: >-
+    v1-e30-t31 found that `_match_listed_openev` decides a listed OpenEv file `already_imported`
+    when its file name equals a hand-imported row's in another folder, so a different camp's
+    file of the same name is never fetched. That keeps a hand-imported file from being
+    downloaded again, which is intended, but it can also keep out a different file. Count first,
+    read-only and counts only, over the Mac's sync run records: how many listed files were
+    decided `already_imported` by name alone, and how many of those name a different camp folder
+    than the row they matched. If any do, match by name only within the same camp folder (or by
+    digest where one is known), so a hand-imported file is still not fetched again; if none do,
+    report and stop.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, packages/debate_core/tests]
+    forbidden:
+      - Network access in a test (recorded listings only)
+      - A hand-imported file downloaded again
+  context:
+    - kind: TaskRef
+      name: v1-e34-t02-scheduled-sync
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The count is recorded before any rule; if it finds any, a same-named file of another
+        camp is fetched and a hand-imported file is not, by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e34-t37-listed-camp-file-with-a-hand-imported-name-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+spec:
+  description: >-
+    A listed camp file is not taken as already imported because a file of another camp shares
+    its name.
+  goalRef:
+    name: v1-e34-t37-listed-camp-file-with-a-hand-imported-name
+  graph:
+    nodes:
+      - id: listed-camp-file-with-a-hand-imported-na
+        kind: Task
+        name: Same name, other camp
+        description: >-
+          A listed camp file is not taken as already imported because a file of another
+          camp shares its name.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Same name, other camp tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, openev]
+status:
+  phase: Pending

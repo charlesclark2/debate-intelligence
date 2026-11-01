@@ -676,5 +676,33 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e39-t28-openev-link-goes-to-the-camps-page
+    - id: ext-v1-e30-t31-openev-camp-word-on-the-manifest-row
+      kind: External
+      name: 'Prerequisite from E30: The pull keeps OpenEv''s own camp word on a camp file''s manifest row'
+      description: >-
+        Cross-epic prerequisite owned by v1-e30-caselist-ingestion (release v1.1).
+      inputs:
+        goalRef: v1-e30-t31-openev-camp-word-on-the-manifest-row
+        specRef: plan_specs/v1/e30-caselist-ingestion/t31-openev-camp-word-on-the-manifest-row.yaml
+    - id: t29
+      kind: Task
+      name: 'A camp card''s OpenEv link takes the camp word the pull recorded, before the table''s'
+      description: >-
+        A camp card's OpenEv link takes the camp word the pull recorded, before the table's.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t29-openev-camp-word-from-the-row-into-the-index.yaml
+        goalRef: v1-e39-t29-openev-camp-word-from-the-row-into-the-index
+      dependsOn:
+      - ext-v1-e30-t31-openev-camp-word-on-the-manifest-row
+      - t28
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t29-openev-camp-word-from-the-row-into-the-index reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t29-openev-camp-word-from-the-row-into-the-index
 status:
   phase: Pending

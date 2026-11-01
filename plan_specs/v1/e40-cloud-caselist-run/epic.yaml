@@ -771,5 +771,54 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e40-t33-expired-login-cloud-notice-names-the-wednesday-login
+    - id: ext-v1-e30-t08-import-metadata-defects
+      kind: External
+      name: 'Prerequisite from E30: Importer metadata defects found by the backfill'
+      description: >-
+        Cross-epic prerequisite owned by v1-e30-caselist-ingestion (release v1.1).
+      inputs:
+        goalRef: v1-e30-t08-import-metadata-defects
+        specRef: plan_specs/v1/e30-caselist-ingestion/t08-import-metadata-defects.yaml
+    - id: t34
+      kind: Task
+      name: 'The OpenEv metadata re-import runs in bucket mode, so a camp table change reaches dev''s records'
+      description: >-
+        The OpenEv metadata re-import runs in bucket mode, so a camp table change reaches
+        dev's records.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t34-openev-metadata-reimport-in-bucket-mode.yaml
+        goalRef: v1-e40-t34-openev-metadata-reimport-in-bucket-mode
+      dependsOn:
+      - ext-v1-e30-t08-import-metadata-defects
+      - t04
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t34-openev-metadata-reimport-in-bucket-mode reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t34-openev-metadata-reimport-in-bucket-mode
+    - id: t35
+      kind: Task
+      name: 'A cloud run refused for an expired login names the Wednesday login in its own output too'
+      description: >-
+        A cloud run refused for an expired login names the Wednesday login in its own output
+        too.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t35-expired-login-cli-output-in-bucket-mode.yaml
+        goalRef: v1-e40-t35-expired-login-cli-output-in-bucket-mode
+      dependsOn:
+      - t33
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t35-expired-login-cli-output-in-bucket-mode reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t35-expired-login-cli-output-in-bucket-mode
 status:
   phase: Pending

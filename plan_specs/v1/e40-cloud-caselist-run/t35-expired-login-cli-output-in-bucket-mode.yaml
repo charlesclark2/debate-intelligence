@@ -1,0 +1,76 @@
+# TASK v1-e40-t35-expired-login-cli-output-in-bucket-mode - A cloud run refused for an expired login names the Wednesday login in its own output too
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t35-expired-login-cli-output-in-bucket-mode
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "A cloud run refused for an expired login names the Wednesday login in its own output too"
+spec:
+  # Filed by the PM, 2026-10-31, from v1-e40-t33's follow-up (the PM's review, 2026-11-01).
+  description: >-
+    v1-e40-t33 gave a bucket-mode run refused for an expired login the cloud's cure in its
+    notification and email. The run's own output still prints the exception's sentence, "Run
+    `debate-research caselist auth login` again", so the cloud run's log and `caselist runs
+    --json`'s `error_message` tell the operator to do what the cloud runbook forbids. In bucket
+    mode, give the CLI's output for `CASELIST_AUTH_EXPIRED` the cloud cure as its hint, as
+    `caselist_pull._hint_for` does for the other bucket-mode next steps, and say what
+    `error_message` records and whether it should keep the exception's own text. On the Mac
+    nothing changes.
+  priority: 3
+  constraints:
+    packages: [debate_cli, packages/debate_cli/tests, debate_core.application, packages/debate_core/tests, docs/runbooks]
+    forbidden:
+      - A change to the Mac's output for this code
+      - Network or AWS access in a test
+  context:
+    - kind: TaskRef
+      name: v1-e40-t33-expired-login-cloud-notice-names-the-wednesday-login
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        In bucket mode the command's output for an expired login names the Wednesday login
+        and not `caselist auth login`; on the Mac it is unchanged, asserted by its old text;
+        by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t35-expired-login-cli-output-in-bucket-mode-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    A cloud run refused for an expired login names the Wednesday login in its own output too.
+  goalRef:
+    name: v1-e40-t35-expired-login-cli-output-in-bucket-mode
+  graph:
+    nodes:
+      - id: expired-login-cli-output-in-bucket-mode
+        kind: Task
+        name: Expired login output
+        description: >-
+          A cloud run refused for an expired login names the Wednesday login in its own
+          output too.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Expired login output tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests, -k, auth_expired]
+status:
+  phase: Pending

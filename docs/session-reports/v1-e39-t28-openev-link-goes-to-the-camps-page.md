@@ -335,3 +335,13 @@ a guess for 96. The mechanism now links only where the operator has confirmed th
    * This merge removes the hold on run images carrying v1-e39-t16.
    * Then dev's function deploy (follow-up 1), never on a Wednesday, followed by the coach's check
      for ac3.
+
+## Operator records (recorded by the PM, 2026-11-01)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac3: after dev's function is deployed with this task, the coach opens one camp card's link on dev and it lands on that camp's page | NOT RUN | PASS | 2026-11-01: dev's function deployed from `tub-deploy-dev` at `babccae` (`scripts/tub_deploy.sh dev`, image `sha256:26a2da6c...`, `/healthz` ok through CloudFront), carrying this task and the 13 OpenEv words of the 2026-11-01 sweep batch. The operator opened camp cards on dev: a Michigan card showed no link, as the table holds no Michigan word, and a DDI card showed the link, which opened DDI's camp page on OpenEv |
+
+Every criterion passes, so the Goal is `Succeeded`.

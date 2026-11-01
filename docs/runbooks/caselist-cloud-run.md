@@ -742,7 +742,10 @@ definition pins one by digest.
 
 **Applied so far in dev:** `v1.1.0-dev.164` (run task definition revision 8), then `v1.1.0-dev.251` on
 2026-10-31: the push registered revision 9, and the apply, its plan read by the PM with
-`check_image_plan.py` printing `PLAN OK`, put the schedule and the login on revision 10.
+`check_image_plan.py` printing `PLAN OK`, put the schedule and the login on revision 10. On
+2026-11-01 v1-e40-t30's memory apply (`check_image_plan.py --memory`, `PLAN OK`) put the schedule on
+revision 11, the same image at 32 GB. The same day `v1.1.0-dev.289` was pushed for a hand-run import
+only, registering revision 12 (32 GB); the schedule stayed on 11 for Wednesday 2026-11-04.
 
 **The search index's format: dev's function first** (`v1-e39-t16`). The run's index stage builds
 dev's search index in the format its image writes, and dev's pilot function refuses an index of a

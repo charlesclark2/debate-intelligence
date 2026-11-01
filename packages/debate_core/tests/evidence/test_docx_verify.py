@@ -349,6 +349,15 @@ def test_diff_a_changed_word_is_a_manual_edit_with_both_ranges(card: Card) -> No
     )
 
 
+def test_diff_a_word_whose_case_changed_is_a_manual_edit(card: Card) -> None:
+    """"Every" is evidence [204, 209) and body [207, 212): a capital is part of the quotation."""
+    body = RENDERED_EVIDENCE.replace("“Every", "“every", 1)
+
+    assert compare_body(card, body, MARKER).manual_edits == (
+        ManualEdit(evidence_range=CharacterRange(204, 209), body_range=CharacterRange(207, 212)),
+    )
+
+
 def test_diff_letters_taken_out_of_a_word_are_a_manual_edit_not_a_deletion(card: Card) -> None:
     """ "failed" is evidence [31, 37); "fail" is body [31, 35)."""
     body = RENDERED_EVIDENCE.replace("failed", "fail", 1)

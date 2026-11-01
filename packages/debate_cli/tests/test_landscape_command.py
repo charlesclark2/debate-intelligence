@@ -16,6 +16,7 @@ import functools
 import hashlib
 import json
 import os
+import shlex
 import shutil
 from collections.abc import Iterator
 from datetime import UTC, datetime
@@ -1591,6 +1592,193 @@ def test_a_dry_run_tells_a_person_what_it_kept_in_the_text_caches(world: Synthet
 
 def _data_of_failure(result: Result) -> dict[str, Any]:
     return _error(result)["details"]
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e32-t19: a dry run's scan refusal says it wrote no report and names the publish command
+#
+# The PM's publish of hspolicy26 under taxonomy 1.2.0 (2026-10-24): a `--publish --dry-run` the scan
+# held back said "the report is written locally", though a dry run writes no report, and to "run
+# again with --accept-scan-hits", without saying to drop `--dry-run`. A dry run's refusal now names
+# the command as typed, without `--dry-run` and with `--accept-scan-hits <digest>`, in the hint and
+# in `--json`'s `error.details.publish_command`. Every expected command below is written out by hand,
+# in the order the command declares its options. A publish's refusal reads as before, word for word.
+# ------------------------------------------------------------------------------------------------
+
+LOCAL_BUNDLE = Path("reports") / "landscape" / CASELIST / "2026-09-15"
+
+
+def test_a_dry_runs_scan_refusal_says_it_wrote_no_report_and_names_the_publish_command(
+    planted_world: SyntheticRun, buckets: S3Client
+) -> None:
+    result = landscape(planted_world, "--caselist", CASELIST, "--publish", "--dry-run")
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    error = _error(result)
+    assert error["code"] == "SCAN_HITS_NOT_ACCEPTED"
+    digest = error["details"]["scan"]["digest"]
+    command = (
+        f"debate-research --json landscape report --caselist {CASELIST} --publish "
+        f"--config-dir {planted_world.config_dir} --accept-scan-hits {digest}"
+    )
+    assert error["details"]["publish_command"] == command
+    assert error["hint"] == (
+        "This dry run wrote no report. Read each hit's line above. If none names a team, publish with "
+        f"`{command}`."
+    )
+    assert error["message"] == f"the scan found 1 hit(s) not yet accepted (digest {digest}); nothing was published"
+    assert not (planted_world.data_dir / "reports").exists()
+    assert _keys(buckets, DEV_BUCKET) == []
+
+
+def test_a_dry_run_given_a_stale_digest_names_the_command_with_the_digest_of_these_hits(
+    planted_world: SyntheticRun, buckets: S3Client
+) -> None:
+    stale = "0" * 12
+    result = landscape(
+        planted_world, "--caselist", CASELIST, "--publish", "--dry-run", "--accept-scan-hits", stale
+    )
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    error = _error(result)
+    assert error["code"] == "SCAN_DIGEST_STALE"
+    digest = error["details"]["scan"]["digest"]
+    assert digest != stale
+    assert error["details"]["publish_command"] == (
+        f"debate-research --json landscape report --caselist {CASELIST} --publish "
+        f"--config-dir {planted_world.config_dir} --accept-scan-hits {digest}"
+    )
+    assert stale not in error["hint"]
+
+
+def test_a_dry_runs_scan_refusal_panel_says_it_wrote_no_report_and_names_the_publish_command(
+    planted_world: SyntheticRun, buckets: S3Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    digest = _error(landscape(planted_world, "--caselist", CASELIST, "--publish", "--dry-run"))["details"][
+        "scan"
+    ]["digest"]
+    monkeypatch.setenv("COLUMNS", "2000")
+
+    result = landscape(planted_world, "--caselist", CASELIST, "--publish", "--dry-run", json_output=False)
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    shown = _flat(result.output)
+    assert (
+        "This dry run wrote no report. Read each hit's line above. If none names a team, publish with "
+        f"`debate-research landscape report --caselist {CASELIST} --publish "
+        f"--config-dir {planted_world.config_dir} --accept-scan-hits {digest}`."
+    ) in shown
+    assert "written locally" not in shown
+    assert not (planted_world.data_dir / "reports").exists()
+
+
+def test_a_dry_runs_publish_command_echoes_every_option_typed_and_nothing_else(
+    planted_world: SyntheticRun, buckets: S3Client, tmp_path: Path
+) -> None:
+    out = tmp_path / "bundle-out"
+    result = runner.invoke(
+        create_app(),
+        [
+            "--verbose",
+            "landscape",
+            "report",
+            "--dry-run",
+            "--config-dir",
+            str(planted_world.config_dir),
+            "--max-model-items",
+            "5",
+            "--publish",
+            "--out",
+            str(out),
+            "--model-mode",
+            "none",
+            "--snapshot",
+            "2026-09-15",
+            "--caselist",
+            CASELIST,
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    details = _error(result)["details"]
+    assert details["publish_command"] == (
+        f"debate-research --verbose landscape report --caselist {CASELIST} --snapshot 2026-09-15 "
+        f"--out {out} --publish --model-mode none --max-model-items 5 "
+        f"--config-dir {planted_world.config_dir} --json --accept-scan-hits {details['scan']['digest']}"
+    )
+    assert not out.exists()
+
+
+def test_the_command_a_dry_run_names_publishes(planted_world: SyntheticRun, buckets: S3Client) -> None:
+    dry = landscape(planted_world, "--caselist", CASELIST, "--publish", "--dry-run")
+    program, *arguments = shlex.split(_error(dry)["details"]["publish_command"])
+
+    published = runner.invoke(create_app(), arguments)
+
+    assert program == "debate-research"
+    assert published.exit_code == ExitCode.OK, published.output
+    assert _data(published)["scan"]["accepted_now"] is True
+    assert _keys(buckets, DEV_BUCKET) == sorted(KEYS)
+
+
+def test_the_command_a_dry_run_over_a_restored_copy_names_publishes_from_the_copy_as_typed(
+    stale_world: SyntheticRun, buckets: S3Client, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("DEBATE_CASELIST__RUN_STATE", "bucket")
+    _place_the_lock(buckets, held_until=None)
+    copy = _restored_copy(tmp_path / "copy-root", planted_tags=PLANTED_TOURNAMENT)
+
+    dry = landscape(stale_world, "--caselist", CASELIST, "--restored-copy", str(copy), "--publish", "--dry-run")
+    assert dry.exit_code == ExitCode.DOMAIN_FAILURE, dry.output
+    details = _data_of_failure(dry)
+    command = details["publish_command"]
+    assert command == (
+        f"debate-research --json landscape report --caselist {CASELIST} --publish "
+        f"--config-dir {stale_world.config_dir} --restored-copy {copy} "
+        f"--accept-scan-hits {details['scan']['digest']}"
+    )
+    published = runner.invoke(create_app(), shlex.split(command)[1:])
+
+    assert published.exit_code == ExitCode.OK, published.output
+    assert set(KEYS) <= set(_keys(buckets, DEV_BUCKET))
+
+
+@pytest.mark.parametrize(
+    ("typed", "code"),
+    [
+        pytest.param((), "SCAN_HITS_NOT_ACCEPTED", id="no digest"),
+        pytest.param(("--accept-scan-hits", "0" * 12), "SCAN_DIGEST_STALE", id="a stale digest"),
+    ],
+)
+def test_a_publishs_scan_refusal_reads_as_before_word_for_word(
+    planted_world: SyntheticRun,
+    buckets: S3Client,
+    monkeypatch: pytest.MonkeyPatch,
+    typed: tuple[str, ...],
+    code: str,
+) -> None:
+    refused = landscape(planted_world, "--caselist", CASELIST, "--publish", *typed)
+
+    assert refused.exit_code == ExitCode.DOMAIN_FAILURE, refused.output
+    error = _error(refused)
+    assert error["code"] == code
+    digest = error["details"]["scan"]["digest"]
+    hint = (
+        f"Read each hit's line above. If none names a team, run again with --accept-scan-hits {digest}; "
+        f"the report is written locally at {planted_world.data_dir / LOCAL_BUNDLE}."
+    )
+    assert error["hint"] == hint
+    assert "publish_command" not in error["details"]
+    assert (planted_world.data_dir / LOCAL_BUNDLE / "report.md").is_file()
+
+    monkeypatch.setenv("COLUMNS", "2000")
+    shown = landscape(planted_world, "--caselist", CASELIST, "--publish", *typed, json_output=False)
+
+    assert shown.exit_code == ExitCode.DOMAIN_FAILURE, shown.output
+    assert hint in _flat(shown.output)
+    assert "dry run" not in _flat(shown.output).lower()
+    assert _keys(buckets, DEV_BUCKET) == []
 
 
 # ------------------------------------------------------------------------------------------------

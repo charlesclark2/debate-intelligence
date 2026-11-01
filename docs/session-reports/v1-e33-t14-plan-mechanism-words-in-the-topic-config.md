@@ -217,9 +217,48 @@ two-minute line here), not handed over.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-31
 
 **Notes:**
+
+The coach's two blocks are marked now. The count is what showed the seed alone would have missed one.
+1. **ac1 passes.**
+   * Red against a skeleton with real plumbing: 24 failed at assertions.
+   * Green: the node criterion passes (110).
+   * A topic with no file loads and marks exactly what t11 and t13 marked. Every t11 and t13 world
+     passes, and t11's marking test is unchanged.
+   * Eight mutants caught. Mutant 3, a topic without a list refused, fails 60 tests, which is the
+     guard the forbidden item needed.
+2. **The count.** It used t11's read-only method, with `find -newer` printing 0.
+   * Plank-rule marks go 1 → 3, affirmative-side 5, total 6 → 8.
+   * The coach's preemption and waiver blocks were unmarked before and are marked by the plank rule
+     after.
+   * You found why the seed alone wasn't enough (the waiver heading is the plural) without printing
+     either heading.
+3. **Decision 1, plurals with `s` or `es`: accepted.** The count asked for it, and it is the narrowest
+   rule that does it:
+   * `waive` still does not match `waiver` or `waived`, so mutant 2 stays a real break;
+   * a coach who wants another form lists it.
+4. **Decisions accepted:**
+   * matching on t11's normalized heading, with a hyphen read as a space;
+   * words 3 to 32 characters;
+   * duplicates refused;
+   * an empty list loads;
+   * t13's comment test changed on purpose, with the PM's wording;
+   * test file names that let the node's `-k` select them;
+   * the words carried on the run result, so no container change;
+   * nothing else reading the list, so an edit needs no refill.
+5. **Follow-ups:**
+   * file-recipes.md: whichever of t14 and t15 merges second rebases it;
+   * the marked-block counts in the presenter: not filed. The coach reads the draft, where the
+     comments are.
+6. **Closing checks:** the affected set (177 files) stopped at 65% at its limit with nothing failing,
+   and is left to the PR's `ci` under agreement 10. The changed areas and `tests/config` (1,067), the
+   always-run list (372), every CLI and smoke test naming `files suggest` (99), ruff, pyright,
+   lint-imports, thin handlers, the doc checks and the specs are clean.
+7. **Merge:** a plain `scripts/task pr` once `ci` is green. To add words, the coach edits
+   `config/landscape/plan_mechanisms/policy-2026-27-nhi.yaml` through a task or a PM batch, as a
+   config change.

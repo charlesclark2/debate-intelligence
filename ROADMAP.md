@@ -62,13 +62,13 @@ v2.3's extension work.
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 55 | 252 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 110 | 90 | 500 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 69 | 56 | 299 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 69 | 57 | 299 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 16 | 11 | 114 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 29 | 21 | 166 |
-| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 26 | 21 | 89 |
-| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 39 | 23 | 74 |
+| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 27 | 23 | 90 |
+| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 40 | 23 | 75 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -321,7 +321,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [An AWS budget alarm on the account's model spend, $100 a month with a first notice at $50](plan_specs/v1/e05-model-router/t16-bedrock-budget-alarm.yaml) `v1-e05-t16-bedrock-budget-alarm` | Succeeded | 1 | 2.0 |
 | [Dev back on the 5.5 models, and prod's Bedrock grant applied, once the quotas are restored](plan_specs/v1/e05-model-router/t17-switch-back-to-the-5-5-models.yaml) `v1-e05-t17-switch-back-to-the-5-5-models` | Blocked | 3 | 2.0 |
 | [The cost allocation tags are active by Terraform, so the budgets that filter on them never read zero again](plan_specs/v1/e05-model-router/t18-cost-allocation-tags-in-terraform.yaml) `v1-e05-t18-cost-allocation-tags-in-terraform` | Succeeded | 1 | 1.0 |
-| [The cost allocation tags' import blocks are removed once both tags are in state](plan_specs/v1/e05-model-router/t19-cost-allocation-tag-imports-removed.yaml) `v1-e05-t19-cost-allocation-tag-imports-removed` | InProgress | 1 | 0.5 |
+| [The cost allocation tags' import blocks are removed once both tags are in state](plan_specs/v1/e05-model-router/t19-cost-allocation-tag-imports-removed.yaml) `v1-e05-t19-cost-allocation-tag-imports-removed` | Succeeded | 1 | 0.5 |
 
 #### [E32 — Argument Landscape Reports](plan_specs/v1/e32-argument-landscape/epic.yaml)
 
@@ -544,8 +544,9 @@ Debaters search the team's evidence store from a school Chromebook or at home: a
 | [Smoke checks for tub index build, publish and prune, and a test of P4's shape](plan_specs/v1/e39-evidence-search-pilot/t22-tub-index-commands-smoke-and-p4-shape.yaml) `v1-e39-t22-tub-index-commands-smoke-and-p4-shape` | Succeeded | 1 | 2.0 |
 | [uvicorn's app factory lives in the composition root, so app.py stops reaching every adapter](plan_specs/v1/e39-evidence-search-pilot/t23-uvicorn-factory-in-the-composition-root.yaml) `v1-e39-t23-uvicorn-factory-in-the-composition-root` | Succeeded | 1 | 1.0 |
 | [A card or cart download skips the header page, and the student can name its pocket](plan_specs/v1/e39-evidence-search-pilot/t24-download-skips-the-header-page-and-names-its-pocket.yaml) `v1-e39-t24-download-skips-the-header-page-and-names-its-pocket` | Succeeded | 1 | 2.0 |
-| [The weekly index stage skips an identical rebuild its record already matches, and publish --newest on the current index records instead of republishing](plan_specs/v1/e39-evidence-search-pilot/t25-identical-rebuild-skipped-and-newest-records.yaml) `v1-e39-t25-identical-rebuild-skipped-and-newest-records` | Pending | 1 | 2.0 |
-| [The cloud smoke checks reach dev: a check marked live is let through pytest-socket, and validate-dev's cloud job proves it](plan_specs/v1/e39-evidence-search-pilot/t26-cloud-smoke-checks-reach-dev.yaml) `v1-e39-t26-cloud-smoke-checks-reach-dev` | InProgress | 0 | 1.0 |
+| [The weekly index stage skips an identical rebuild its record already matches, and publish --newest on the current index records instead of republishing](plan_specs/v1/e39-evidence-search-pilot/t25-identical-rebuild-skipped-and-newest-records.yaml) `v1-e39-t25-identical-rebuild-skipped-and-newest-records` | Succeeded | 1 | 2.0 |
+| [The cloud smoke checks reach dev: a check marked live is let through pytest-socket, and validate-dev's cloud job proves it](plan_specs/v1/e39-evidence-search-pilot/t26-cloud-smoke-checks-reach-dev.yaml) `v1-e39-t26-cloud-smoke-checks-reach-dev` | Succeeded | 0 | 1.0 |
+| [A smoke check runs publish --newest on the current index against an installed build](plan_specs/v1/e39-evidence-search-pilot/t27-newest-on-the-current-index-smoke-check.yaml) `v1-e39-t27-newest-on-the-current-index-smoke-check` | Pending | 1 | 1.0 |
 
 
 ### v1.8 — Weekly caselist run in the cloud
@@ -600,6 +601,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [validate_specs.py is clean under pyright, and task start refuses an unknown prerequisite even under --force](plan_specs/v1/e41-delivery-tooling-upkeep/t09-validate-specs-pyright-and-start-refuses-unknown.yaml) `v1-e41-t09-validate-specs-pyright-and-start-refuses-unknown` | Succeeded | 1 | 1.0 |
 | [An unknown DEBATE_ name in .env is refused, and files build tells a newer-stamped store to install the newer build](plan_specs/v1/e41-delivery-tooling-upkeep/t10-unknown-env-names-refused-and-newer-stamp-hint.yaml) `v1-e41-t10-unknown-env-names-refused-and-newer-stamp-hint` | Pending | 1 | 1.0 |
 | [Test selection no longer reads ast.walk( as a directory walk, and a contract keeps debate_api.container imported one way](plan_specs/v1/e41-delivery-tooling-upkeep/t11-selector-ast-walk-and-container-contract.yaml) `v1-e41-t11-selector-ast-walk-and-container-contract` | Succeeded | 1 | 1.0 |
+| [CI's pyright covers the scripts already clean, so they stay clean](plan_specs/v1/e41-delivery-tooling-upkeep/t12-pyright-covers-the-clean-scripts.yaml) `v1-e41-t12-pyright-covers-the-clean-scripts` | Pending | 1 | 0.5 |
 
 
 ## V2

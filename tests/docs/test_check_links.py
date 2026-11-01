@@ -311,7 +311,9 @@ def test_the_repository_check_reads_every_tracked_markdown_file() -> None:
         check=True,
         text=True,
     ).stdout.split()
-    assert [p.relative_to(REPO_ROOT).as_posix() for p in listed] == sorted(tracked)
+    # Sorted as paths, as the check sorts them: "docs/data/landscape/x.md" comes before
+    # "docs/data/landscape-y.md" as a path, and after it as a string.
+    assert listed == sorted(REPO_ROOT / name for name in tracked)
 
 
 def test_the_repository_has_anchors_to_verify() -> None:

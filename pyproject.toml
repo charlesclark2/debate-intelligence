@@ -620,6 +620,7 @@ markers = [
     "operator_data: needs data only the operator's machine holds; validate-dev's slow tier leaves it out",
     "dev: cloud smoke check targeting the dev environment",
     "prod: cloud smoke check targeting the prod environment",
+    "partition_proof: proves ci.yml's test parts together are the selection; ci.yml's partition-proof job runs it, the parts leave it out",
 ]
 
 [tool.coverage.run]

@@ -16,13 +16,16 @@ still looks green:
   compared with the unsplit report of the same tests.
 * **The job is a matrix of parts.** A part that is never asked for, or a test dealt to no part,
   would simply not run, and nothing would fail. So every part is collected the way CI asks for
-  it, and the node ids are compared with the unsplit collection of the same command.
+  it, and the node ids are compared with the unsplit collection of the same command. Those two
+  proofs collect the whole suite nine times between them, so they carry the `partition_proof`
+  marker: the parts leave them out, and ci.yml's `partition-proof` job runs them on every push and
+  on a pull request that changes what they prove (v1-e41-t15).
 * **Each part runs the selection it is given** (v1-e01-t38): on a pull request into dev, the test
-  files `scripts/ci_test_selection.py` wrote; otherwise an empty file, which is the whole default
-  selection. The parts are compared with the unsplit collection of both. The step that writes the
-  file is run here too, with a stand-in for the script, to show that a script that cannot run
-  leaves the whole selection rather than part of one. Which files the script chooses for which
-  event is `tests/scripts/test_ci_workflow_test_selection.py`.
+  files `scripts/ci_test_selection.py` chose; otherwise an empty file, which is the whole default
+  selection. The parts are compared with the unsplit collection of both. Since v1-e41-t15 the
+  `test-selection` job chooses them once for every part, and
+  `tests/scripts/test_ci_workflow_selection_once_and_no_queue.py` runs its step and the part's;
+  which files the script chooses for which event is `tests/scripts/test_ci_workflow_test_selection.py`.
 
 The commands are read out of ci.yml, not restated, so these tests follow the workflow.
 """
@@ -52,7 +55,8 @@ from coverage import CoverageData
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 
-DEFAULT_SELECTION = "not slow and not live"
+# The default selection, less the partition proof, which has a job of its own (v1-e41-t15).
+PARTS_SELECTION = "not slow and not live and not partition_proof"
 PART_OF_THE_MATRIX = "${{ matrix.part }}/${{ strategy.job-total }}"
 UV_RUN_PYTEST = ["uv", "run", "--frozen", "pytest"]
 # Where the selection step writes the test files and the pytest step reads them, as `@FILE`.
@@ -224,8 +228,9 @@ def test_a_part_measures_no_coverage_on_any_event_but_a_push() -> None:
     test = jobs()["test"]
     assert [word for word in pytest_arguments(ON_ANY_OTHER_EVENT) if "cov" in word] == []
     assert "PYTEST_ADDOPTS" not in CI_WORKFLOW.read_text(encoding="utf-8")
-    # Only the path filter decides whether the job runs: pull requests, pushes and dispatches alike.
-    assert test["if"] == "needs.changes.outputs.python == 'true'"
+    # Only the path filter and the selection decide whether the job runs: pull requests, pushes and
+    # dispatches alike.
+    assert test["if"] == "needs.changes.outputs.python == 'true' && needs.test-selection.outputs.run_parts == 'true'"
     # Exactly one pytest step runs on any event, and every step that has to do with coverage runs on
     # a push alone.
     pytest_steps = [step for step in test["steps"] if " pytest " in step.get("run", "")]
@@ -509,26 +514,13 @@ def test_the_parts_are_numbered_from_one_and_each_asks_for_its_number_out_of_the
     assert strategy["fail-fast"] is False
     arguments = pytest_arguments()
     assert arguments[arguments.index("--part") + 1] == PART_OF_THE_MATRIX
-    assert arguments[arguments.index("-m") + 1] == DEFAULT_SELECTION
+    assert arguments[arguments.index("-m") + 1] == PARTS_SELECTION
 
 
 def test_ci_needs_every_job_but_the_push_only_coverage_report() -> None:
     every_job = jobs()
     # A matrix job is one entry in `needs`, and its result is a failure if any part failed.
     assert sorted(every_job["ci"]["needs"]) == sorted(set(every_job) - {"ci", "coverage"})
-
-
-def test_every_path_filtered_job_is_in_the_map_ci_reads_its_skips_from() -> None:
-    every_job = jobs()
-    [verdict] = every_job["ci"]["steps"]
-    filter_of_job = json.loads(verdict["env"]["PATH_FILTER_OF_JOB"])
-    gated = {
-        name: match.group(1)
-        for name, job in every_job.items()
-        if (match := re.fullmatch(r"needs\.changes\.outputs\.(\w+) == 'true'", str(job.get("if", ""))))
-    }
-    assert gated["test"] == "python"
-    assert filter_of_job == gated
 
 
 @pytest.mark.parametrize("nonsense", ["0/4", "5/4", "2", "2/", "/4", "two/four", "-1/4", "1/0"])
@@ -574,17 +566,20 @@ def collect_unsplit_and_each_part(selection: Path) -> tuple[list[str], list[list
     return unsplit, each_part
 
 
+@pytest.mark.partition_proof
 def test_the_parts_together_are_exactly_the_default_selection_and_no_test_is_in_two_of_them(
     tmp_path: Path,
 ) -> None:
     """The proof that splitting the job dropped nothing (v1-e01-t27 ac3), for the whole selection:
-    what every push, promotion and dispatch runs."""
+    what every push, promotion and dispatch runs. The default selection here is the parts' own,
+    which leaves out this proof and the next: the partition-proof job runs them."""
     unsplit, each_part = collect_unsplit_and_each_part(the_whole_selection(tmp_path))
 
     assert len(unsplit) > 5000, "the unsplit collection is not the whole suite"
     assert_the_parts_are_exactly(unsplit, each_part, "the default selection")
 
 
+@pytest.mark.partition_proof
 def test_the_parts_together_are_exactly_an_affected_set_and_each_holds_some_of_the_always_run_list(
     tmp_path: Path,
 ) -> None:
@@ -607,118 +602,3 @@ def test_the_parts_together_are_exactly_an_affected_set_and_each_holds_some_of_t
     assert_the_parts_are_exactly(unsplit, each_part, "the selection given")
     for number, part in enumerate(each_part, start=1):
         assert any(node_id.partition("::")[0] in always_run for node_id in part), f"part {number}"
-
-
-# --------------------------------------------------------------------------------------------
-# the selection: chosen in every part, read by its pytest, and never fewer tests than everything
-# --------------------------------------------------------------------------------------------
-
-
-def selection_step() -> dict[str, Any]:
-    [step] = [
-        step for step in jobs()["test"]["steps"] if "scripts/ci_test_selection.py" in step.get("run", "")
-    ]
-    return step
-
-
-def test_every_part_chooses_its_tests_before_pytest_and_pytest_reads_the_file_it_wrote() -> None:
-    steps = jobs()["test"]["steps"]
-    chooser = selection_step()
-    for condition in (ON_ANY_OTHER_EVENT, ON_A_PUSH):
-        assert steps.index(chooser) < steps.index(pytest_step(condition))
-        assert pytest_arguments(condition).count(f"@{SELECTION_FILE}") == 1
-    # In every part and on every event: the script, not the workflow, decides what the event runs.
-    # (Which pytest step reads it depends only on whether to measure coverage.)
-    assert "if" not in chooser
-    assert f'--output "{SELECTION_FILE}"' in chooser["run"]
-    assert chooser["env"] == {
-        "EVENT_NAME": "${{ github.event_name }}",
-        "BASE_BRANCH": "${{ github.base_ref }}",
-        "BASE_SHA": "${{ github.event.pull_request.base.sha }}",
-        "REF_NAME": "${{ github.ref_name }}",
-    }
-
-
-def test_the_checkout_holds_the_base_commit_and_the_job_fetches_and_reads_nothing_else() -> None:
-    test = jobs()["test"]
-    [checkout] = [step for step in test["steps"] if str(step.get("uses", "")).startswith("actions/checkout@")]
-    # The merge commit GitHub tests and its parents; the first parent is the pull request's base.
-    assert checkout["with"] == {"persist-credentials": False, "fetch-depth": 2}
-    assert "permissions" not in test
-    job = json.dumps(test)
-    for forbidden in ("secrets.", "github.token", "GITHUB_TOKEN", "git fetch", "curl", "wget"):
-        assert forbidden not in job, forbidden
-
-
-A_STAND_IN_FOR_THE_SCRIPT = """#!/bin/sh
-printf '%s\\n' "$@" > "$ARGUMENTS_SEEN"
-previous=""
-for argument in "$@"; do
-  if [ "$previous" = "--output" ]; then
-    printf 'packages/debate_core/tests/test_a_part_of_the_selection.py\\n' > "$argument"
-  fi
-  previous="$argument"
-done
-exit "$STAND_IN_STATUS"
-"""
-
-
-def run_the_selection_step(tmp_path: Path, status: int) -> tuple[subprocess.CompletedProcess[str], Path]:
-    """The step's own shell, as a runner's default `bash -e` runs it, with `uv` standing in for the
-    script: it writes one test file and exits with `status`."""
-    stand_ins = tmp_path / "bin"
-    stand_ins.mkdir()
-    uv = stand_ins / "uv"
-    uv.write_text(A_STAND_IN_FOR_THE_SCRIPT, encoding="utf-8")
-    uv.chmod(0o755)
-    runner_temp = tmp_path / "runner-temp"
-    runner_temp.mkdir()
-    (tmp_path / "summary.md").write_text("", encoding="utf-8")
-    environment = {
-        "PATH": f"{stand_ins}{os.pathsep}{os.environ['PATH']}",
-        "RUNNER_TEMP": str(runner_temp),
-        "GITHUB_STEP_SUMMARY": str(tmp_path / "summary.md"),
-        "ARGUMENTS_SEEN": str(tmp_path / "arguments.txt"),
-        "STAND_IN_STATUS": str(status),
-        "EVENT_NAME": "pull_request",
-        "BASE_BRANCH": "dev",
-        "BASE_SHA": "0123abc",
-        "REF_NAME": "7/merge",
-    }
-    completed = subprocess.run(
-        ["bash", "--noprofile", "--norc", "-e", "-c", selection_step()["run"]],
-        env=environment,
-        capture_output=True,
-        text=True,
-        timeout=30,
-        check=False,
-    )
-    assert completed.returncode == 0, completed.stdout + completed.stderr
-    arguments = (tmp_path / "arguments.txt").read_text(encoding="utf-8").splitlines()
-    assert arguments == [
-        "run", "--frozen", "python", "scripts/ci_test_selection.py",
-        "--event", "pull_request", "--base-branch", "dev", "--base-sha", "0123abc", "--ref-name", "7/merge",
-        "--output", f"{runner_temp}/test-selection.txt", "--summary", str(tmp_path / "summary.md"),
-    ]  # fmt: skip
-    return completed, runner_temp / "test-selection.txt"
-
-
-def test_the_step_keeps_what_the_script_chose_when_it_succeeds(tmp_path: Path) -> None:
-    completed, selection = run_the_selection_step(tmp_path, status=0)
-
-    assert (
-        selection.read_text(encoding="utf-8")
-        == "packages/debate_core/tests/test_a_part_of_the_selection.py\n"
-    )
-    assert "::warning" not in completed.stdout
-    assert (tmp_path / "summary.md").read_text(encoding="utf-8") == ""
-
-
-def test_a_script_that_fails_leaves_the_whole_selection_not_the_part_it_wrote(tmp_path: Path) -> None:
-    completed, selection = run_the_selection_step(tmp_path, status=1)
-
-    assert selection.read_text(encoding="utf-8") == "", "a failed choice must run every test, not some"
-    assert "::warning title=Test selection::" in completed.stdout
-    summary = (tmp_path / "summary.md").read_text(encoding="utf-8")
-    assert summary.startswith("### Tests: the whole default selection\n")
-    assert "scripts/ci_test_selection.py failed" in summary

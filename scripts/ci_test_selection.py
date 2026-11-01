@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -105,13 +106,23 @@ def summary(choice: Choice) -> str:
     )
 
 
+def github_outputs(choice: Choice) -> str:
+    """The choice in `$GITHUB_OUTPUT`'s format: `run_parts`, whether the test parts run at all, and
+    `test_files`, one test file per line, which is empty for the whole default selection."""
+    delimiter = f"test_files_{uuid.uuid4().hex}"
+    listing = "".join(f"{test}\n" for test in choice.tests or ())
+    return f"run_parts=true\ntest_files<<{delimiter}\n{listing}{delimiter}\n"
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=(__doc__ or "").split("\n\n")[0])
     parser.add_argument("--event", required=True, help="github.event_name")
     parser.add_argument("--base-branch", default="", help="github.base_ref: a pull request's target")
     parser.add_argument("--base-sha", default="", help="github.event.pull_request.base.sha")
     parser.add_argument("--ref-name", default="", help="github.ref_name: the branch a push went to")
-    parser.add_argument("--output", type=Path, required=True, help="where to write the test files")
+    parser.add_argument(
+        "--outputs", type=Path, required=True, help="where to write the choice, in $GITHUB_OUTPUT's format"
+    )
     parser.add_argument("--summary", type=Path, help="a Markdown file to append the summary to")
     arguments = parser.parse_args(argv)
 
@@ -122,7 +133,7 @@ def main(argv: list[str] | None = None) -> int:
     if arguments.summary is not None:
         with arguments.summary.open("a", encoding="utf-8") as file:
             file.write(text)
-    arguments.output.write_text("".join(f"{test}\n" for test in choice.tests or ()), encoding="utf-8")
+    arguments.outputs.write_text(github_outputs(choice), encoding="utf-8")
     return 0
 
 

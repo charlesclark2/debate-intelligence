@@ -39,7 +39,11 @@ from debate_core.integrations.sns import SnsNotifier
 from . import test_inbox_retention as inbox_retention
 from .retry_rule import the_commands_retry_rule
 from .run_record_scenarios import AWS_LOGIN, World
-from .test_caselist_sync_bucket_mode_publish_hints_point_at_the_cloud import REPO_ROOT, points_at_the_mac, section
+from .test_caselist_sync_bucket_mode_publish_hints_point_at_the_cloud import (
+    REPO_ROOT,
+    points_at_the_mac,
+    section,
+)
 from .test_caselist_sync_names_the_cloud_cure_in_bucket_mode import BucketModeBracket
 from .test_inbox_retention import CASELIST
 from .test_pull_notification_says_retry_or_person import WHERE, the_one_notification, world
@@ -226,7 +230,7 @@ async def test_a_mac_run_refused_for_auth_expired_keeps_its_notice_word_for_word
 
 
 async def test_a_bucket_mode_run_refused_for_auth_expired_names_the_wednesday_login(world: World) -> None:
-    emails = await refused_for_an_expired_login(world, bucket_mode=True)
+    await refused_for_an_expired_login(world, bucket_mode=True)
 
     notification = the_one_notification(world)
     assert notification.title == LOGIN_EXPIRED_TITLE
@@ -269,7 +273,9 @@ async def test_a_bucket_mode_run_stopped_by_another_code_than_auth_expired_names
     world: World, error: Exception
 ) -> None:
     """The neighbouring codes keep `v1-e40-t28`'s cure: the next cloud run, and no login named."""
-    emails = await pull(world, the_service(world, StoppedBy(world, error), bucket_mode=True), bucket_mode=True)
+    emails = await pull(
+        world, the_service(world, StoppedBy(world, error), bucket_mode=True), bucket_mode=True
+    )
 
     assert [type(one) for one in world.raised] == [type(error)]
     notification = the_one_notification(world)

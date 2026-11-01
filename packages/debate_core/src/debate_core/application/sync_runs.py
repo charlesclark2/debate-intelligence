@@ -1259,6 +1259,26 @@ compare, and the next pull, scheduled or by hand, or `--publish-pending` compare
 (:func:`comparisons_owed_by_the_newest_run`). Before, nothing made the check but `caselist status`
 by hand, and this sentence said so."""
 
+CLOUD_AUTH_EXPIRED_RUNBOOK: Final = 'caselist-cloud-run.md, "A run refused for an expired login"'
+"""The runbook section a bucket-mode run refused for an expired login points to (`v1-e40-t33`)."""
+
+CLOUD_AUTH_EXPIRED_CURE: Final = (
+    "the next Wednesday 03:00 login renews the caselist_token, and the run after it takes up what this "
+    "run did not finish, from the run state saved in the bucket; a backfile import refused for it starts "
+    f"again after Thursday 00:00 ({CLOUD_AUTH_EXPIRED_RUNBOOK}); never a login by hand, which would be a "
+    "second login"
+)
+"""The fix of a run OpenCaselist refused for an expired login, in bucket mode (`v1-e40-t33`), as its
+details' `bucket_run` says it was; in :data:`CLOUD_NO_SESSION_CURE`'s shape: what puts it right, the
+runbook section, and what never to do.
+
+The cloud run's caselist_token is the token secret's, which the login task writes every Wednesday at
+03:00, three hours before the run, so `caselist auth login`, local mode's fix, would be a second login
+that week (`caselist-cloud-run.md`). The run after the login restores the run state the bucket holds,
+as :data:`CLOUD_UNFINISHED_RUN_CURE` says. A backfile import refused for it waits out the no-import
+window, which ends Thursday 00:00. A failed weekly login says so in its own email, with its own fix."""
+
+
 type RetryRule = Callable[[Sequence[str]], bool]
 """Whether a run that failed on exactly these error codes may succeed on a retry.
 
@@ -1338,6 +1358,11 @@ def notifications_for(
     bucket confirmed: an archive the cloud run downloaded and did not import, and a snapshot it
     captured and did not publish, ended with its task. A growing backlog's fix is the next cloud run
     once the day's downloads reset (:data:`CLOUD_BACKLOG_CURE`), not the pull again tomorrow.
+
+    **A bucket-mode run refused for an expired login names the Wednesday login** (`v1-e40-t33`), as the
+    details' `bucket_run` says it was (:data:`CLOUD_AUTH_EXPIRED_CURE`), never `caselist auth login`,
+    which in the cloud would be a second login. The title and message are unchanged, and so is the
+    Mac's notice.
     """
     where = f"Run {record.run_id} ({record.environment})"
     sent: list[Notification] = []
@@ -1369,7 +1394,7 @@ def notifications_for(
             Notification(
                 title="caselist pull stopped: OpenCaselist login expired",
                 message=f"{where} was refused by OpenCaselist and fetched nothing more.",
-                fix_command=AUTH_LOGIN_COMMAND,
+                fix_command=CLOUD_AUTH_EXPIRED_CURE if bucket is not None else AUTH_LOGIN_COMMAND,
             )
         )
     elif record.error_class is not None:

@@ -190,9 +190,50 @@ build. That is an observation, not a criterion of this task.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-31
 
 **Notes:**
+
+The weekly stage stops rebuilding what its record already proves current, and `--newest` stops
+re-shipping an unchanged index. The object-version counts prove both.
+1. **Validated against the code.**
+   * `recorded_beside` reads the record only when its `index_id` and `manifest_sha256` are the
+     manifest's own bytes' digest.
+   * `_reusable` consults it only for a directory a restore wrote, and keeps the index as of the
+     record (`applied_to`). That is why mutant 6, keeping the manifest's older state, would have set
+     the bucket's record back.
+   * Anything not `built_from` the sources after that rebuilds.
+   * Wednesday's docx-7 run will rebuild, as it should: the record's parser version won't match.
+2. **ac1 passes.**
+   * Red: 8 failed, all new behaviour. The guards passed red, as guards should.
+   * Green: 33. The node criterion passes (310).
+   * Versions are counted in moto: the skip adds nothing, not even a lock renewal. `--newest` under a
+     longer list adds exactly one record version, and under the same list it adds nothing and is
+     refused. A lost lease writes nothing.
+3. **Mutants:** eight, all caught at assertions. Mutant 4, the pointer re-put with the same bytes,
+   can only be seen by counting versions, which is why t19's method was asked for.
+4. **Deviation accepted:** caselist-scheduled-sync.md's `--newest` paragraph. That is where the
+   operator reads `--newest`'s success.
+5. **Decisions accepted:**
+   * the skip reported in the stage's reason, with no new counts field, for the same reason t19 gave;
+   * `--newest` running publish's checks first, so a restored directory is refused and never recorded
+     from (mutant 8);
+   * `SEARCH_INDEX_ALREADY_CURRENT` as a refusal, not a silent success;
+   * the publish `--json` kept at its five keys, with `recorded` only on the record's result;
+   * `--index` unchanged and pinned;
+   * dev.200 reads nothing new.
+6. **Follow-ups.**
+   * **The smoke check for `--newest` on the current index:** one p3 E39 task in the PM's next batch.
+   * **The doc lines:** already done. `docs/data/search-index.md` and
+     `docs/architecture/evidence-store-layout.md` gained the record's line in the PM's batch of
+     2026-11-01 (d).
+7. **Closing checks:** the affected set (255 files) stopped at 23% at its limit with nothing failing
+   (load 18), and is left to the PR's `ci` under agreement 10. The always-run list (372), the core
+   (323) and CLI (234) changed areas, ruff, pyright, lint-imports, thin handlers, the specs and the
+   doc checks are clean.
+8. **Merge:** a plain `scripts/task pr` once `ci` is green. It reaches the cloud with the deploy after
+   the pinned dev.251. After that, the first weekly run that finds a matching record reports
+   `skipped` with "not rebuilt".

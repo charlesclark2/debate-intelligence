@@ -99,6 +99,8 @@ class TableSpec:
     rows: Sequence[Sequence[str]]
     title: str | None = None
     caption: str | None = None
+    lines_below: Sequence[str] = ()
+    """Printed after the table, one per line, as written; none, and nothing follows the table."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -237,6 +239,8 @@ class CliOutput:
             return
         if isinstance(display, TableSpec):
             self._results.print(_render_table(display))
+            for line in display.lines_below:
+                self._results.print(line, markup=False, soft_wrap=True)
         elif display is not None:
             self._results.print(display, markup=False, soft_wrap=True)
 

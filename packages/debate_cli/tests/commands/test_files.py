@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import zipfile
 from collections.abc import Iterator
@@ -746,3 +747,133 @@ def test_files_publish_help_documents_its_exit_codes() -> None:
     help_text = " ".join(invoke("files", "publish", "--help").stdout.split())
     for words in ("Exit 0:", "Exit 1:", "--dry-run", "--confirm-prod", "--recipes"):
         assert words in help_text
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e33-t12: `files check` and `files build` name each warned or failed card, its check and why
+# ------------------------------------------------------------------------------------------------
+
+#: Card 2's tag and the rest of its cite, replaced in the built file by words no card has.
+PLANTED_TAG: Final = "Quillmarsh zephyr tag"
+PLANTED_CITE: Final = "Brindlewick Observatory"
+
+
+def without_card_twos_short_cite(docx: bytes) -> bytes:
+    """The built file with card 2's short cite blanked, and its tag and cite holding the planted words."""
+    source, target = BytesIO(docx), BytesIO()
+    with zipfile.ZipFile(source) as package, zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as out:
+        for info in package.infolist():
+            body = package.read(info.filename)
+            if info.filename == "word/document.xml":
+                changed = (
+                    body.replace(b"Achterberg 22", b"")
+                    .replace(b"Politics DA answers: synthetic claim number 2", PLANTED_TAG.encode())
+                    .replace(b"Synthetic Institute 2,", f"{PLANTED_CITE},".encode())
+                )
+                assert changed.count(PLANTED_TAG.encode()) == changed.count(PLANTED_CITE.encode()) == 1
+                body = changed
+            out.writestr(info, body)
+    return target.getvalue()
+
+
+def named_after_the_table(stdout: str) -> list[str]:
+    """The lines below the checks table's bottom border."""
+    lines = stdout.splitlines()
+    bottom = max(index for index, line in enumerate(lines) if line.startswith("└"))
+    return [line.strip() for line in lines[bottom + 1 :] if line.strip()]
+
+
+def test_files_check_names_each_warned_and_failed_card_its_check_and_why(world: Planted) -> None:
+    """Card 2 has no short cite (a WARN), a cite and tag that are not its source's (two FAILs), and the
+    file is not the bytes its sidecar describes (a FAIL with no card). Each sentence is the check's own."""
+    built = invoke("--json", "files", "build", str(world.corpus.recipe))
+    docx = Path(envelope(built)["data"]["files"]["docx"])
+    docx.write_bytes(without_card_twos_short_cite(docx.read_bytes()))
+    second = world.corpus.cards[1].fingerprint
+
+    shown = invoke("files", "check", str(docx))
+    assert shown.exit_code == ExitCode.DOMAIN_FAILURE, shown.output
+    named = named_after_the_table(shown.stdout)
+    digest, short = "[0-9a-f]{12}…", second[:12]
+    expected = [
+        r"Failures and warnings:",
+        rf"FAIL sidecar: the sidecar describes a file with SHA-256 {digest}, and this file is {digest}",
+        rf"FAIL evidence-identity card 2 \({short}\): the built card's cite differs from the source card's "
+        rf"\(built {digest}, source {digest}\)",
+        rf"FAIL evidence-identity card 2 \({short}\): the built card's tag differs from the source card's, "
+        r"and the sidecar records no override",
+        rf"WARN cite-present card 2 \({short}\): the card has no short cite",
+    ]
+    assert len(named) == len(expected), named
+    for line, pattern in zip(named, expected, strict=True):
+        assert re.fullmatch(pattern, line), (line, pattern)
+
+    as_json = envelope(invoke("--json", "files", "check", str(docx)))
+    findings = as_json["error"]["details"]["quality"]["findings"]
+    assert [(one["status"], one["check"], one["card_position"], one["fingerprint"]) for one in findings] == [
+        ("FAIL", "sidecar", None, None),
+        ("FAIL", "evidence-identity", 2, second),
+        ("FAIL", "evidence-identity", 2, second),
+        ("WARN", "cite-present", 2, second),
+    ]
+    assert findings[-1]["message"] == "the card has no short cite"
+
+
+def test_no_named_line_or_finding_holds_the_warned_cards_tag_cite_or_evidence(world: Planted) -> None:
+    built = invoke("--json", "files", "build", str(world.corpus.recipe))
+    docx = Path(envelope(built)["data"]["files"]["docx"])
+    docx.write_bytes(without_card_twos_short_cite(docx.read_bytes()))
+
+    shown = invoke("files", "check", str(docx))
+    as_json = invoke("--json", "files", "check", str(docx))
+    assert "card 2 (" in shown.stdout and '"card_position": 2' in as_json.stdout
+    for output in (shown.stdout, shown.stderr, as_json.stdout, as_json.stderr):
+        for words in (
+            PLANTED_TAG,
+            PLANTED_CITE,
+            "Synthetic Institute",
+            "synthetic claim",
+            "Synthetic evidence",
+        ):
+            assert words not in output
+
+
+def test_files_build_names_each_failed_card_after_the_table_and_in_json(
+    world: Planted, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """As the wired-quality test above: an empty blob store fails every card's evidence-identity."""
+    blind = FileQualityService(
+        parser=DebateDocxParser(), snapshots=InMemorySnapshotStore(), suppression=empty_suppression_list()
+    )
+    monkeypatch.setattr(ServiceContainer, "file_quality", lambda _self: blind)  # pyright: ignore[reportUnknownLambdaType]
+    why = "the source card cannot be read: the source's bytes are not in the blob store"
+
+    shown = invoke("files", "build", str(world.corpus.recipe))
+    assert shown.exit_code == ExitCode.DOMAIN_FAILURE, shown.output
+    assert named_after_the_table(shown.stdout) == [
+        "Failures and warnings:",
+        *(
+            f"FAIL evidence-identity card {card.number} ({card.fingerprint[:12]}): {why}"
+            for card in world.corpus.cards
+        ),
+    ]
+
+    shutil.rmtree(built_dir(world))
+    findings = envelope(invoke("--json", "files", "build", str(world.corpus.recipe)))["error"]["details"][
+        "quality"
+    ]["findings"]
+    assert [(one["card_position"], one["fingerprint"], one["message"]) for one in findings] == [
+        (card.number, card.fingerprint, why) for card in world.corpus.cards
+    ]
+
+
+def test_files_build_and_check_of_a_clean_file_print_nothing_after_the_table(world: Planted) -> None:
+    built = invoke("files", "build", str(world.corpus.recipe))
+    assert built.exit_code == ExitCode.OK, built.output
+    docx = next(built_dir(world).glob("*.docx"))
+    checked = invoke("files", "check", str(docx))
+    assert checked.exit_code == ExitCode.OK, checked.output
+    for stdout in (built.stdout, checked.stdout):
+        assert stdout.rstrip("\n").splitlines()[-1].startswith("└"), stdout
+        assert "Failures and warnings" not in stdout
+    assert envelope(invoke("--json", "files", "check", str(docx)))["data"]["quality"]["findings"] == []

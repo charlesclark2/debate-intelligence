@@ -11,7 +11,9 @@ first decides, on this machine and without the bucket, whether the file may be p
 Nothing of a file is uploaded unless every step passes, and each refusal names what failed:
 
 1. **A quality report beside it** (`<file>.docx.quality.json`, `v1-e33-t04`) that this build can read:
-   `QUALITY_REPORT_MISSING` otherwise.
+   `QUALITY_REPORT_MISSING` otherwise. A report written by another version of the checks than this
+   build's is `QUALITY_REPORT_OUTDATED` instead, naming both versions, whether or not it would still
+   read (`v1-e33-t16`): it is never published, and `files check` writes a current one.
 2. **For these bytes.** The report's `docx_sha256` is the SHA-256 of the `.docx` as read now:
    `QUALITY_REPORT_STALE` otherwise.
 3. **Not built from a draft** (PM amendment 2026-10-24). The sidecar records the recipe's status;
@@ -19,7 +21,8 @@ Nothing of a file is uploaded unless every step passes, and each refusal names w
    `RECIPE_STATUS_UNRECORDED`. Whatever the quality status.
 4. **PASS** (PM amendment 2026-10-21). The report's status is PASS: `QUALITY_FAILED` otherwise, with
    the failing checks as `files check` and `FileBuildResult.failing_checks` name them. A warning
-   never blocks; it is printed and recorded in `metadata.json`.
+   never blocks; it is recorded in `metadata.json`, and each warned result is carried for publish to
+   print as `files check` does (PM amendment 2026-10-31, `v1-e33-t16`).
 5. **PASS again, for the exact bytes uploaded.** The wired
    :class:`~debate_core.application.file_quality_service.FileQualityService` checks the bytes read in
    step 2 and the sidecar's bytes once more, so a source suppressed since the report was written stops
@@ -70,12 +73,13 @@ Card text, a school or a team code. Files are named by their slug and local path
 from __future__ import annotations
 
 import hashlib
+import json
 import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, cast
 
 import yaml
 from pydantic import ValidationError
@@ -102,6 +106,7 @@ from debate_core.domain.file_provenance import (
 )
 from debate_core.domain.file_recipe import FileRecipe, RecipeStatus, render_location
 from debate_core.evidence.file_checks.report import (
+    CHECKER_VERSION,
     CheckResult,
     CheckStatus,
     FileQualityReport,
@@ -217,6 +222,7 @@ class FilePlan:
     staged: _Staged | None = field(default=None, repr=False)
     warned_checks: tuple[QualityCheck, ...] = ()
     warnings: tuple[CheckResult, ...] = ()
+    """Every WARN result of the re-check, in its order: messages and places, never card text."""
 
     @property
     def refused(self) -> bool:
@@ -423,7 +429,16 @@ class FilePublishService:
             return FilePlan(docx=docx_path, slug=slug, refusal=refusal)
 
         report_path = docx_path.with_name(quality_report_names(docx_path.name)[0])
-        report = _read_report(report_path)
+        report, other_checker = _read_report(report_path)
+        if other_checker is not None:
+            return refused(
+                FileRefusal(
+                    FileRefusalCode.QUALITY_REPORT_OUTDATED,
+                    f"its quality report was written by version {other_checker} of the checks, and this "
+                    f"build runs {CHECKER_VERSION}",
+                    hint=f"Check it with `debate-research files check {docx_path}`, then publish again.",
+                )
+            )
         if report is None:
             return refused(
                 FileRefusal(
@@ -491,6 +506,7 @@ class FilePublishService:
             for key, body in zip(keys.in_order[:-1], bodies, strict=True)
         )
         warned = tuple(one.check for one in fresh.checks if one.warnings)
+        warnings = tuple(one for one in fresh.results if one.status is CheckStatus.WARN)
         metadata = BuiltFileMetadata(
             key_prefix=prefix,
             slug=slug,
@@ -525,6 +541,7 @@ class FilePublishService:
             metadata=metadata,
             staged=_Staged(keys=keys, bodies=(*bodies, metadata.to_json_bytes())),
             warned_checks=warned,
+            warnings=warnings,
         )
 
     def _recipe(
@@ -579,6 +596,7 @@ class FilePublishService:
             written=tuple(written),
             skipped=tuple(skipped),
             warned_checks=plan.warned_checks,
+            warnings=plan.warnings,
         )
 
 
@@ -594,6 +612,7 @@ def _planned(plan: FilePlan) -> PublishOutcome:
         status=PublishStatus.WOULD_PUBLISH,
         keys=plan.keys.in_order,
         warned_checks=plan.warned_checks,
+        warnings=plan.warnings,
     )
 
 
@@ -604,13 +623,27 @@ async def _recorded_digest(bucket: EvidenceObjectStore, key: str) -> str | None:
         return None
 
 
-def _read_report(path: Path) -> FileQualityReport | None:
+def _read_report(path: Path) -> tuple[FileQualityReport | None, str | None]:
+    """The report at `path`, or the checker version it records when that is not this build's.
+
+    `(None, version)` for a report written by another version of the checks, read or not: its verdict
+    is not this build's. `(None, None)` for no file, or one that names no version and is not a report.
+    """
     if not path.is_file():
-        return None
+        return None, None
+    content = path.read_bytes()
     try:
-        return FileQualityReport.model_validate_json(path.read_bytes())
+        document: object = json.loads(content)
+    except ValueError:
+        return None, None
+    fields = cast("dict[str, object]", document) if isinstance(document, dict) else {}
+    recorded = fields.get("checker_version")
+    if isinstance(recorded, str) and recorded and recorded != CHECKER_VERSION:
+        return None, recorded
+    try:
+        return FileQualityReport.model_validate_json(content), None
     except ValidationError:
-        return None
+        return None, None
 
 
 def _read_manifest(sidecar: bytes | None) -> FileProvenanceManifest | None:

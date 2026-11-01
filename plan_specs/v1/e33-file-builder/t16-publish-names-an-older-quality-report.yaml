@@ -23,6 +23,13 @@ spec:
     apart: an older report gets its own code, naming both checker versions and no path, with the
     same hint, and an absent report keeps `QUALITY_REPORT_MISSING`. Publish still refuses both.
     Say where the codes are documented and update the line there.
+
+    (PM amendment 2026-10-31, from v1-e33-t10's follow-up.) When publish lets a file through
+    with warnings, it prints only the warned check names (`Warned, not blocked: <slug>:
+    sidecar`). It also prints the warned checks' finding lines as `files check` does
+    (v1-e33-t12's `finding_line`), so a coach sees which profiles or parsers differ without
+    running `files check`: messages only, never a path or a card's text. A `QUALITY_FAILED`
+    refusal keeps carrying the sidecar's warnings in its message (v1-e33-t10).
   priority: 3
   constraints:
     packages: [debate_core.application, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, docs/runbooks]
@@ -40,6 +47,11 @@ spec:
         An older report is refused with its own code naming both checker versions, an absent
         one keeps `QUALITY_REPORT_MISSING`, a current one publishes as before; by tests
         shown failing first.
+    - id: ac2
+      description: >-
+        (PM amendment 2026-10-31.) A file publish lets through with warnings prints each warned
+        check's finding line as `files check` does, messages only, and a `QUALITY_FAILED` refusal
+        still carries the sidecar's warnings; by tests shown failing first.
 status:
   phase: InProgress
 ---
@@ -73,5 +85,9 @@ spec:
             name: Older report named tests pass
             command: uv
             args: [run, pytest, packages/debate_core/tests/application/test_file_publish_service.py]
+          - type: test_passes
+            name: files publish CLI tests pass, the warning lines included
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/commands/test_files.py, -k, publish]
 status:
   phase: Pending

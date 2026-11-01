@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -934,7 +934,7 @@ def test_a_quality_report_that_is_not_one_is_missing_and_a_missing_sidecar_fails
 OLDER_CHECKER: Final = "2026.10.27-file-checks-2"
 
 
-def rewrite_report(docx: Path, change: Any) -> None:
+def rewrite_report(docx: Path, change: Callable[[dict[str, Any]], object]) -> None:
     """The built file's `.quality.json` with `change` applied to its JSON; the `.docx` left as built."""
     report = docx.with_name(f"{docx.name}.quality.json")
     document = json.loads(report.read_bytes())

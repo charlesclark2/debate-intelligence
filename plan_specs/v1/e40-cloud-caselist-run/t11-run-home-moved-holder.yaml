@@ -39,7 +39,7 @@ spec:
         while a run holds it, every lock-taking command's refusal names it, and the release
         undoes it; tests shown failing first.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

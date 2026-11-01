@@ -1036,5 +1036,5 @@ def test_files_publish_re_check_warns_of_another_style_profile_and_its_refusal_s
     assert other_profile_warning(running) in file["refusal"]["message"]
     assert other_profile_warning(running) in error["message"]
 
-    panel = " ".join(invoke(*arguments).stderr.split())
+    panel = " ".join(invoke(*arguments).stderr.replace("│", " ").split())
     assert other_profile_warning(running) in panel

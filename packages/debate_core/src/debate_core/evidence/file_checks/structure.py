@@ -118,6 +118,12 @@ def check_sidecar(
 
     A sidecar written under another parser version is a WARN: the checks re-read both files with the
     running parser, and a card that reads differently under it fails the identity check by itself.
+
+    So is one written under another style profile (`v1-e33-t10`), for the same reason: the profile
+    decides where a card begins and ends, and the sidecar's paragraphs were found under its own. That
+    WARN names both profiles and says, once, that `evidence-identity` is where a card read differently
+    fails, so the per-card lines below it need no word of their own. A sidecar that cannot be read
+    records no profile, and gets neither.
     """
     check = QualityCheck.SIDECAR
     results = [
@@ -139,6 +145,16 @@ def check_sidecar(
                 CheckStatus.WARN,
                 f"the sidecar was written under parser {sidecar_parser_version}; the files were re-read "
                 f"with {parser_version}",
+            )
+        )
+    if sidecar_style_profile_version is not None and sidecar_style_profile_version != style_profile_version:
+        results.append(
+            _result(
+                check,
+                CheckStatus.WARN,
+                f"the sidecar was written under style profile {sidecar_style_profile_version}; the files "
+                f"were re-read with {style_profile_version}, and a card the two profiles read differently "
+                f"fails {QualityCheck.EVIDENCE_IDENTITY}",
             )
         )
     return results or [_result(check, CheckStatus.PASS, "the sidecar is valid and describes this file")]

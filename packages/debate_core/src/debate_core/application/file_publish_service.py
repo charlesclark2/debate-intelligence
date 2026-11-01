@@ -619,11 +619,22 @@ def _read_manifest(sidecar: bytes | None) -> FileProvenanceManifest | None:
 
 
 def _quality_refusal(report: FileQualityReport, docx_path: Path, *, fresh: bool) -> FileRefusal:
+    """QUALITY_FAILED naming the failing checks, and the sidecar's warnings, which may say why (`v1-e33-t10`).
+
+    A sidecar written under another parser or style profile is a WARN, and the `evidence-identity`
+    failures it explains name neither, so the refusal carries it.
+    """
     failing = tuple(one.check for one in report.checks if one.status is CheckStatus.FAIL)
     when = "checked again now" if fresh else "as its quality report records it"
+    warned = [
+        f"; {one.message}"
+        for one in report.results
+        if one.check is QualityCheck.SIDECAR and one.status is CheckStatus.WARN
+    ]
     return FileRefusal(
         FileRefusalCode.QUALITY_FAILED,
-        f"the file does not PASS, {when}: {', '.join(str(one) for one in failing) or 'no sidecar'} failed",
+        f"the file does not PASS, {when}: {', '.join(str(one) for one in failing) or 'no sidecar'} failed"
+        + "".join(warned),
         hint=f"See `debate-research files check {docx_path}`; only a PASS file is published.",
         failing_checks=failing,
     )

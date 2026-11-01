@@ -53,7 +53,7 @@ def said(lines: list[StepLine]) -> list[tuple[str, str, float | None, dict[str, 
 
 
 def test_the_backfile_parse_says_how_far_it_got_at_the_start_every_interval_and_at_the_last_source() -> None:
-    clock, lines = Clock(), []
+    clock, lines = Clock(), list[StepLine]()
     progress = progress_over(clock, lines)
 
     progress.start(10)
@@ -73,7 +73,7 @@ def test_the_backfile_parse_says_how_far_it_got_at_the_start_every_interval_and_
 
 def test_the_backfile_parse_interval_counts_from_its_last_line_not_from_the_start() -> None:
     """A slow source, then quick ones: the next line is 300 seconds after the one before it."""
-    clock, lines = Clock(), []
+    clock, lines = Clock(), list[StepLine]()
     progress = progress_over(clock, lines)
     progress.start(5)
 
@@ -89,7 +89,7 @@ def test_the_backfile_parse_interval_counts_from_its_last_line_not_from_the_star
 
 
 def test_a_backfile_parse_with_nothing_to_parse_says_so_once() -> None:
-    clock, lines = Clock(), []
+    clock, lines = Clock(), list[StepLine]()
 
     progress_over(clock, lines).start(0)
 

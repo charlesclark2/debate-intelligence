@@ -41,7 +41,7 @@ spec:
         resolved, reading the open-questions table, with an earlier table's row 4 ignored,
         by tests shown failing first against today's gate.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

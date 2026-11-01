@@ -61,7 +61,7 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 55 | 252 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 114 | 92 | 504 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 114 | 93 | 504 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 71 | 65 | 302 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 16 | 11 | 114 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
@@ -296,7 +296,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [A keychain failure under launchd names its cause, and clearing a token already gone is no error](plan_specs/v1/e34-caselist-sync/t33-keychain-errors-named.yaml) `v1-e34-t33-keychain-errors-named` | Succeeded | 1 | 2.0 |
 | [Earlier seasons' complete archives, from 2021-22 on, imported and parsed as backfiles](plan_specs/v1/e34-caselist-sync/t34-backfile-seasons-import.yaml) `v1-e34-t34-backfile-seasons-import` | Succeeded | 1 | 4.0 |
 | [A Mac run stopped for a missing token says to log in again](plan_specs/v1/e34-caselist-sync/t35-token-missing-hint-on-the-mac.yaml) `v1-e34-t35-token-missing-hint-on-the-mac` | Succeeded | 1 | 0.5 |
-| [A Mac run stopped for an unreadable token says to log out and log in again](plan_specs/v1/e34-caselist-sync/t36-token-unreadable-hint-on-the-mac.yaml) `v1-e34-t36-token-unreadable-hint-on-the-mac` | Pending | 1 | 0.5 |
+| [A Mac run stopped for an unreadable token says to log out and log in again](plan_specs/v1/e34-caselist-sync/t36-token-unreadable-hint-on-the-mac.yaml) `v1-e34-t36-token-unreadable-hint-on-the-mac` | Succeeded | 1 | 0.5 |
 
 
 ### v1.2 — Argument landscape & file building

@@ -189,9 +189,44 @@ PM question from v1-e32-t36 (landscape cassettes removal form), 2026-10-31.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-31
 
 **Notes:**
+
+A takedown now reaches every copy, and it does so before Friday's LD run records the first cassette.
+1. **ac1 passes.**
+   * The smoke check runs against the checkout's script (3 passed), and the four planted breaks (7a
+     to 7d) each fail it.
+   * It also runs against an offline stamped installed build (6 passed). Two breaks planted in the
+     installed copies each fail it, and the copies were restored with `cmp`. That goes further than
+     agreement 5 asks.
+2. **ac2 passes.**
+   * Red over a skeleton that routed the removal to the purge's delete: 15 failed, all at
+     assertions. The 62 passes are t34's tests plus cases a purge already satisfies, and the report
+     says so.
+   * Green: 78, and the runbook's tests pass (4, and 79 with the others).
+   * All seven of the PM's mutants are caught, plus s1 to s4 and the seven runbook mutants.
+   * s4 is a real find: a directory holding only unattributed cassettes would have read "nothing to
+     delete", and the removal would have been skipped.
+3. **Question 1: A, the shared digest shape.** The first shape's surviving 4c showed that the form
+   key decided nothing. With one shape, the form is the only difference on the coinciding
+   directory, and both dropping it and swapping it are caught. What the purge deletes, where it
+   checks the code, and its tests are unchanged, so the forbidden entry holds. No cassette exists
+   yet, and a purge's dry run and delete run from one checkout, so no printed code is invalidated.
+4. **Decisions accepted:**
+   * the name `--for-removal`, which names the procedure and so won't read as a stronger purge;
+   * no slug in the code, for t34's reason;
+   * `for_removal` in both forms' `--json`;
+   * the removal smoke-checked end to end, with planted counts that differ from the unit tests';
+   * the runbook section with its own heading, `CASELIST` and `REMOVAL_ENV`, and the `DEBATE_`
+     guard;
+   * unattributed cassettes deleted, with the reason in the output;
+   * annual-purge item 4 corrected to "no purge".
+5. **Closing checks:** the affected set (252 files through the root conftest, t34's route) is left
+   to the PR's `ci` under agreement 10. The always-run list with docs and smoke (552), the model and
+   cassette areas (755), all of core application (4,704), ruff, pyright, lint-imports, thin
+   handlers, the doc checks and the specs are clean.
+6. **Merge:** a plain `scripts/task pr` once `ci` is green. No operator step follows.

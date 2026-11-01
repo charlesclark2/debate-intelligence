@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "run_id": "20261104T120000Z",
+  "stages": [],
+  "failure_codes": [],
+  "hint": null,
+  "parse": null,
+  "parsed_stores_owed": [],
+  "search_index": null,
+  "held_by_request": {},
+  "manifests_published": 0,
+  "stage_times": [
+    {"stage": "select", "started_at": "2026-11-04T12:00:00Z", "finished_at": "2026-11-04T12:00:00Z", "memory": {"container_peak_bytes": 1073741824, "cgroup": "v2", "main_process_peak_bytes": 209715200}},
+    {"stage": "download", "started_at": "2026-11-04T12:00:00Z", "finished_at": "2026-11-04T12:00:00Z", "memory": {"container_peak_bytes": 1073741824, "cgroup": "v2", "main_process_peak_bytes": 209715200}},
+    {"stage": "import", "started_at": "2026-11-04T12:00:00Z", "finished_at": "2026-11-04T12:00:00Z", "memory": {"container_peak_bytes": 1073741824, "cgroup": "v2", "main_process_peak_bytes": 209715200}},
+    {"stage": "publish", "started_at": "2026-11-04T12:00:00Z", "finished_at": "2026-11-04T12:00:00Z", "memory": {"container_peak_bytes": 1073741824, "cgroup": "v2", "main_process_peak_bytes": 209715200}},
+    {"stage": "parse", "started_at": "2026-11-04T12:00:00Z", "finished_at": "2026-11-04T12:00:00Z", "memory": {"container_peak_bytes": 1073741824, "cgroup": "v2", "main_process_peak_bytes": 209715200}},
+    {"stage": "search_index", "started_at": "2026-11-04T12:00:00Z", "finished_at": "2026-11-04T12:07:00Z", "memory": {"container_peak_bytes": 3221225472, "cgroup": "v2", "main_process_peak_bytes": 943718400}},
+    {"stage": "landscape", "started_at": "2026-11-04T12:07:00Z", "finished_at": "2026-11-04T12:07:00Z", "memory": {"container_peak_bytes": 3221225472, "cgroup": "v2", "main_process_peak_bytes": 943718400}},
+    {"stage": "report", "started_at": "2026-11-04T12:07:00Z", "finished_at": "2026-11-04T12:07:00Z", "memory": {"container_peak_bytes": 3221225472, "cgroup": "v2", "main_process_peak_bytes": 943718400}},
+    {"stage": "retention", "started_at": "2026-11-04T12:07:00Z", "finished_at": "2026-11-04T12:07:00Z", "memory": {"container_peak_bytes": 3221225472, "cgroup": "v2", "main_process_peak_bytes": 943718400}}
+  ],
+  "data_volume": null,
+  "bucket_run": null
+}

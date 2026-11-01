@@ -556,6 +556,16 @@ run reads how full the data directory's volume is after every stage it times and
 reading (:attr:`RunSummary.data_volume`); past the threshold, the summary says so, so the volume is
 resized before a run fills it. Unset, the default and the Mac's case, nothing is read: a laptop's
 disk is not the run's to judge. A reading that fails costs the run its reading, never a stage.
+
+## How much memory each stage had used (`v1-e40-t31`)
+
+The parse's measurement (`docs/data/caselist-parse-memory.md`) found the run's main process is what
+grows, so the cloud task's size has to come from what real runs used. Each stage the run times also
+records, as it ended, the container's memory high-water mark (its cgroup's peak) and the main
+process's own, read by `v1-e40-t32`'s
+:func:`~debate_core.application.caselist.memory_high_water.read_memory_high_water`
+(:attr:`StageTime.memory`). Both are read on every machine; a figure that cannot be read, as the
+container's on the Mac, is left out of the summary, never written as zero.
 """
 
 from __future__ import annotations
@@ -592,6 +602,7 @@ from debate_core.application.caselist.manifest import (
     write_manifest,
     write_manifest_lines,
 )
+from debate_core.application.caselist.memory_high_water import MemoryHighWater, read_memory_high_water
 from debate_core.application.caselist.occurrence_table_guard import NewerFingerprintTable
 from debate_core.application.caselist.openev_import_service import (
     OpenEvImportReport,
@@ -832,7 +843,8 @@ in the parse stage's `reason`, which every build reads. Under version 5, `search
 is added: the search index stage's index id, sizes and warnings (:class:`SearchIndexStageCounts`),
 or `null` when the stage did not run. A key added, so the version stays. So are `stage_times` and
 `data_volume` (`v1-e40-t03`): when each stage started and ended, and how full the data directory's
-volume got, or `null` when the run read no volume.
+volume got, or `null` when the run read no volume. So is each stage time's `memory` (`v1-e40-t31`):
+the memory high-water marks that could be read as the stage ended, left out when none could.
 """
 RUN_SUMMARY_DIRECTORY: Final = "caselist-sync-runs"
 
@@ -1035,18 +1047,25 @@ class StageTime:
     stage: SyncStage
     started_at: datetime
     finished_at: datetime
+    memory: MemoryHighWater | None = None
+    """The memory high-water marks read as the stage ended (`v1-e40-t31`), or `None` when none was read."""
 
     @property
     def duration_seconds(self) -> float:
         return (self.finished_at - self.started_at).total_seconds()
 
     def as_json(self) -> dict[str, object]:
-        return {
+        body: dict[str, object] = {
             "stage": str(self.stage),
             "started_at": self.started_at.isoformat(),
             "finished_at": self.finished_at.isoformat(),
             "duration_seconds": round(self.duration_seconds, 3),
         }
+        figures = self.memory.as_json() if self.memory is not None else {}
+        if figures:
+            # Additive (`v1-e40-t31`): the version stays, and a figure that was not read is left out.
+            body["memory"] = figures
+        return body
 
 
 @dataclass(frozen=True, slots=True)
@@ -3208,6 +3227,10 @@ class CaselistSyncService:
             default, reads no volume.
         read_volume: How the data directory's volume is read; :func:`read_volume` unless a test
             stubs it.
+        read_memory: How the memory high-water marks are read as each stage ends (`v1-e40-t31`):
+            `v1-e40-t32`'s
+            :func:`~debate_core.application.caselist.memory_high_water.read_memory_high_water`
+            unless a test stubs it.
         backfile_caselists: `caselist.backfile_caselists`. A run asked for one of them, by
             `--caselist` or `--full-archive`, is refused with :class:`BackfileIsNotPulled` before
             anything is listed (`v1-e34-t34`).
@@ -3255,6 +3278,7 @@ class CaselistSyncService:
         later_manifests: LaterManifests | None = None,
         volume_warning_percent: int | None = None,
         read_volume: Callable[[Path], VolumeReading] = read_volume,
+        read_memory: Callable[[], MemoryHighWater] = read_memory_high_water,
         state_written: Callable[[Path], None] | None = None,
         after_publish: Callable[[], Awaitable[object]] | None = None,
         backfile_caselists: Sequence[str] = (),
@@ -3274,6 +3298,7 @@ class CaselistSyncService:
         self._after_publish = after_publish
         self._volume_warning_percent = volume_warning_percent
         self._read_volume = read_volume
+        self._read_memory = read_memory
         self._archives = archive_importer
         # The importer's own repository, local store and suppression list unless told otherwise, so
         # that no pull imports a weekly without measuring the later manifests again (`v1-e30-t18`).
@@ -3981,7 +4006,8 @@ class CaselistSyncService:
         await self._timed(SyncStage.REPORT, tally, lambda: self._report_stage(tally))
 
     async def _timed[T](self, stage: SyncStage, tally: _RunTally, work: Callable[[], Awaitable[T]]) -> T:
-        """Carry out one stage, recording when it started and ended, then read the volume (`v1-e40-t03`).
+        """Carry out one stage, recording when it started and ended and the memory high-water marks
+        as it ended (`v1-e40-t31`), then read the volume (`v1-e40-t03`).
 
         By the run's clock, which gives the summary its own start and finish, so a stage's times
         always lie within the run's.
@@ -3990,7 +4016,11 @@ class CaselistSyncService:
         try:
             return await work()
         finally:
-            tally.stage_times.append(StageTime(stage=stage, started_at=started, finished_at=self._clock()))
+            tally.stage_times.append(
+                StageTime(
+                    stage=stage, started_at=started, finished_at=self._clock(), memory=self._read_memory()
+                )
+            )
             self._read_volume_after(stage, tally)
 
     def _read_volume_after(self, stage: SyncStage, tally: _RunTally) -> None:

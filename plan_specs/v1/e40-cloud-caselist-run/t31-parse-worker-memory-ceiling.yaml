@@ -32,6 +32,16 @@ spec:
     high-water mark at the end of each stage and in its details, read as v1-e40-t32 reads it for an
     import (the cgroup's peak, and the main process's own), so the run task's size comes from a
     measurement. Record Wednesday 2026-11-04's figures if the run has them.
+    (PM amendment 2026-11-01, from the measurement.) The measurement
+    (`docs/data/caselist-parse-memory.md`) found the main process is what grows: a worker peaks at
+    most 632 MiB on the Mac's corpus and is stopped before the aggregate rebuild, which holds every
+    card of the caselist in the main process. The per-worker ceiling is dropped: on this corpus it
+    refuses nothing, it would not have stopped the kill, and doing it properly needs a parser change
+    and a failure reason older builds cannot read. A streaming rebuild is its own task,
+    v1-e40-t36. The scope is now the measurement (done) and the weekly run's memory figures: the
+    container's high-water mark (the cgroup's peak) and the main process's own, at the end of each
+    stage and in the run's details, read with v1-e40-t32's reader, left out rather than zero when
+    unreadable, and read by offline builds of `v1.1.0-dev.251` and `v1.1.0-dev.200`.
   priority: 2
   constraints:
     packages: [debate_core.application, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, infrastructure, docs/data, docs/runbooks]
@@ -49,11 +59,12 @@ spec:
         The measurement is recorded in `docs/data`, counts and sizes only, before any rule.
     - id: ac2
       description: >-
-        A worker over its ceiling ends as a `WorkerFailure` naming memory, the source is
-        recorded as failed, and the next source parses, by a test with a synthetic
-        memory-hungry parser; unset, there is no ceiling; tests shown failing first.
+        (PM amendment 2026-11-01, from the measurement.) Each stage the weekly run times, and
+        the run's details, carry the container's memory high-water mark and the main process's
+        own where they can be read and leave them out where they cannot, and offline builds of
+        `v1.1.0-dev.251` and `v1.1.0-dev.200` read those details; by tests shown failing first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan
@@ -67,21 +78,35 @@ metadata:
     debate/epic: v1-e40-cloud-caselist-run
 spec:
   description: >-
-    A parse worker over its share of memory fails its file, not the whole run.
+    The parse's memory measured, and the weekly run's memory figures recorded (PM amendment
+    2026-11-01, from the measurement: the per-worker ceiling is dropped).
   goalRef:
     name: v1-e40-t31-parse-worker-memory-ceiling
   graph:
     nodes:
-      - id: parse-worker-memory-ceiling
+      - id: parse-memory-measurement
         kind: Task
-        name: Worker memory ceiling
+        name: Parse memory measured
         description: >-
-          A parse worker over its share of memory fails its file, not the whole run.
+          Each worker's peak against its source's size, and the main process's growth over a
+          parse, recorded in docs/data, counts and sizes only.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: The measurement is recorded
+            path: docs/data/caselist-parse-memory.md
+      - id: run-memory-figures
+        kind: Task
+        name: Weekly run memory figures
+        description: >-
+          The weekly run records the container's memory high-water mark and the main process's
+          own at the end of each stage and in its details, which earlier builds still read.
+        dependsOn: [parse-memory-measurement]
         estimatedEffort: 2h
         acceptanceCriteria:
           - type: test_passes
-            name: Worker memory ceiling tests pass
+            name: Run memory figure tests pass
             command: uv
-            args: [run, pytest, packages/debate_core/tests, -k, parse_worker]
+            args: [run, pytest, packages/debate_core/tests, packages/debate_cli/tests, -k, memory_figures]
 status:
   phase: Pending

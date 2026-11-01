@@ -69,7 +69,11 @@ What a newer build knows beyond the record is kept **beside** it, keyed by run i
   and owe no comparison;
 * when each stage the run carried out started and ended, and, where the run reads its data volume,
   the fullest that volume got and the warning past `storage.volume_warning_percent`
-  (`v1-e40-t03`, ADR-0020 (1) 2).
+  (`v1-e40-t03`, ADR-0020 (1) 2);
+* the memory high-water marks as each of those stages ended, the container's and the main
+  process's, on the stage's own entry and left out where they could not be read (`v1-e40-t31`). Not
+  a key of the details' own: the details schema of `v1.1.0-dev.251` and `v1.1.0-dev.200` leaves a
+  stage entry open, and an earlier build reads the entry and passes over the figures.
 
 One line a run in :data:`SYNC_RUN_DETAILS_FILENAME`, next to the run log, and one object a run
 under :data:`SYNC_RUN_DETAILS_KEY_PREFIX`, next to the records' prefix and not under it: an older
@@ -526,15 +530,33 @@ class SearchIndexCounts(BaseModel):
     An added key, so details a build from before it wrote read as none recorded."""
 
 
+class MemoryFigures(BaseModel):
+    """The memory high-water marks so far, read as a stage ended, in bytes (`v1-e40-t31`): a stage's
+    :class:`~debate_core.application.caselist.memory_high_water.MemoryHighWater`.
+
+    The container's, from its cgroup, with the cgroup version it came from, and the main process's
+    own. A figure that could not be read is left out of the JSON, never written as zero or `null`.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    container_peak_bytes: int | None = Field(default=None, ge=0, exclude_if=lambda value: value is None)
+    cgroup: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    main_process_peak_bytes: int | None = Field(default=None, ge=0, exclude_if=lambda value: value is None)
+
+
 class StageTiming(BaseModel):
-    """When one stage started and ended: a summary's
-    :class:`~debate_core.application.caselist_sync.StageTime` (`v1-e40-t03`)."""
+    """When one stage started and ended, and the memory figures as it ended: a summary's
+    :class:`~debate_core.application.caselist_sync.StageTime` (`v1-e40-t03`, `v1-e40-t31`)."""
 
     model_config = ConfigDict(frozen=True, extra="ignore")
 
     stage: str
     started_at: datetime
     finished_at: datetime
+    memory: MemoryFigures | None = Field(default=None, exclude_if=lambda value: value is None)
+    """`None`, and left out, when nothing could be read, and in details a build from before
+    `v1-e40-t31` wrote: such a build passes over the key, which its schema leaves open."""
 
 
 class DataVolume(BaseModel):
@@ -897,7 +919,14 @@ def details_for_summary(summary: RunSummary, *, secrets: Sequence[str] = ()) -> 
         held_by_request=dict(summary.held_by_request),
         manifests_published=summary.manifests_published,
         stage_times=tuple(
-            StageTiming(stage=str(one.stage), started_at=one.started_at, finished_at=one.finished_at)
+            StageTiming(
+                stage=str(one.stage),
+                started_at=one.started_at,
+                finished_at=one.finished_at,
+                memory=MemoryFigures.model_validate(one.memory.as_json())
+                if one.memory is not None and one.memory.as_json()
+                else None,
+            )
             for one in summary.stage_times
         ),
         data_volume=DataVolume.model_validate(summary.data_volume.as_json())

@@ -98,6 +98,7 @@ from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
 
 __all__ = [
     "CHECK_AGAINST_THE_PLAN",
+    "AffirmativeSideKept",
     "CP_TEXT_SLOT",
     "RECIPES_DIRECTORY",
     "LeftOut",
@@ -184,6 +185,17 @@ class OtherPositionsLeftOut:
 
 
 @dataclass(frozen=True, slots=True)
+class AffirmativeSideKept:
+    """A counterplan draft's blocks whose heading the position matcher places under an aff or an advantage.
+
+    Kept with their cards, each with :data:`CHECK_AGAINST_THE_PLAN` above it (`v1-e33-t13`).
+    """
+
+    blocks: int
+    cards: int
+
+
+@dataclass(frozen=True, slots=True)
 class SuggestResult:
     path: Path
     caselist: str
@@ -196,6 +208,8 @@ class SuggestResult:
     left_out: tuple[LeftOut, ...] = ()
     other_positions: OtherPositionsLeftOut | None = None
     """What a counterplan's draft left out as another position's; None for any other position's draft."""
+    affirmative_side_kept: AffirmativeSideKept | None = None
+    """What a counterplan's draft kept under an aff's or advantage's heading; None for any other draft."""
     text: str = field(default="", repr=False)
 
 

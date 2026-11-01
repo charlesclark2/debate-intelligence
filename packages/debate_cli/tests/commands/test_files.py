@@ -47,6 +47,7 @@ from debate_cli.exit_codes import ExitCode
 from debate_core.application.caselist.parse_workers import InProcessParseRunner
 from debate_core.application.file_build_service import UnattributedCard
 from debate_core.application.file_quality_service import FileQualityService
+from debate_core.application.file_suggest_service import CP_TEXT_SLOT
 from debate_core.application.ports.suppression import ReasonCode, SuppressionAction, SuppressionEntry
 from debate_core.domain.file_provenance import provenance_sidecar_name
 from debate_core.integrations.docx_parser import DOCX_PARSER_VERSION, DebateDocxParser
@@ -877,3 +878,52 @@ def test_files_build_and_check_of_a_clean_file_print_nothing_after_the_table(wor
         assert stdout.rstrip("\n").splitlines()[-1].startswith("└"), stdout
         assert "Failures and warnings" not in stdout
     assert envelope(invoke("--json", "files", "check", str(docx)))["data"]["quality"]["findings"] == []
+
+
+#: The policy example's first analytic (paragraph 4: the header, the pocket, the hat, the block) put
+#: back to the CP text slot, as a coach who marked a counterplan's draft ready unchanged would build it.
+SLOT_LEFT: Final = (
+    "WARN placeholders-replaced paragraph 4, under Politics DA answers > Uniqueness > Non-unique - the "
+    "agenda is already stalled: the analytic is still the placeholder for the counterplan's text that "
+    "`files suggest` drafts: write the text the team reads in its place, then build again"
+)
+
+
+def recipe_with_the_slot(world: Planted) -> Path:
+    """The policy example, its first analytic the slot, beside it as a recipe of its own, status ready."""
+    document = yaml.safe_load(world.corpus.recipe.read_text(encoding="utf-8"))
+    items = document["structure"][0]["hats"][0]["blocks"][0]["items"]
+    assert "analytic" in items[0]
+    items[0] = {"analytic": CP_TEXT_SLOT}
+    document["status"] = "ready"
+    path = world.corpus.recipe.with_name("politics-da-slot-left.yaml")
+    path.write_text(yaml.safe_dump(document, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    return path
+
+
+def test_files_build_check_and_publish_warn_of_the_cp_text_slot_and_publish_goes_ahead(
+    world: Planted, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, dev_bucket: Any
+) -> None:
+    """`v1-e33-t15`: a WARN naming the block, printed as any other finding, and never a refusal."""
+    recipe = recipe_with_the_slot(world)
+
+    built = invoke("files", "build", str(recipe))
+    assert built.exit_code == ExitCode.OK, built.output
+    assert named_after_the_table(built.stdout) == ["Failures and warnings:", SLOT_LEFT]
+    docx = built_dir(world) / "politics-da-slot-left.docx"
+
+    checked = invoke("files", "check", str(docx))
+    assert checked.exit_code == ExitCode.OK, checked.output
+    assert named_after_the_table(checked.stdout) == ["Failures and warnings:", SLOT_LEFT]
+    quality = envelope(invoke("--json", "files", "check", str(docx)))["data"]["quality"]
+    assert quality["status"] == "PASS" and quality["failing_checks"] == []
+    assert [(one["status"], one["check"]) for one in quality["findings"]] == [
+        ("WARN", "placeholders-replaced")
+    ]
+
+    as_dev(world, monkeypatch, tmp_path)
+    published = invoke("files", "publish", "--env", "dev", str(docx), "--recipes", str(recipe.parent))
+    assert published.exit_code == ExitCode.OK, published.output
+    shown = " ".join(published.stdout.split())
+    assert "1 PUBLISHED. Warned, not blocked: politics-da-slot-left: placeholders-replaced" in shown
+    assert len(keys_in(dev_bucket, DEV_BUCKET)) == 5

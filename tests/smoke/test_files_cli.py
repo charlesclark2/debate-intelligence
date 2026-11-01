@@ -10,7 +10,11 @@ installed build:
   counted by hand from the recipe (`packages/debate_cli/tests/commands/test_files.py`);
 * **checks** the built file, PASS, and then a copy with one word of its evidence changed, FAIL;
 * **suggests** a draft for the recipe's position from the landscape, with no model, and builds it
-  with `--allow-draft`.
+  with `--allow-draft`;
+* **suggests a counterplan's draft** (`v1-e33-t15`) from the synthetic counterplan recipe in
+  `tests/fixtures/file_builder/counterplans/`, filed and parsed the same way with its position a
+  counterplan: the draft's first block opens with the CP text slot. Marked `status: ready` and
+  nothing else, it builds, and the build and `files check` warn of the slot on that block, PASS.
 
 Nothing is published and no stand-in is needed: nothing in these commands reaches a bucket, a model
 or the network, and the harness's network guard fails the check if anything tries. Unmarked, like the
@@ -29,18 +33,32 @@ from typing import Any
 
 import pytest
 import yaml
-from tests.fixtures.file_builder.example_corpus import EXAMPLES, ExampleCorpus, example_corpus
+from tests.fixtures.file_builder.example_corpus import COUNTERPLANS, EXAMPLES, ExampleCorpus, example_corpus
 from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from tests.smoke.installed_build import CliRun, InstalledCli
 
 from debate_cli.exit_codes import ExitCode
+from debate_core.application.file_suggest_service import CP_TEXT_SLOT
 
 EXAMPLE = "policy-nhi-politics-da-answers"
+COUNTERPLAN = "policy-nhi-states-cp"
 
 
 @pytest.fixture
 def world(installed_cli: InstalledCli, tmp_path: Path) -> Iterator[tuple[ExampleCorpus, Path]]:
     """The policy example imported and parsed into a dev profile of this check's own."""
+    yield planted(installed_cli, tmp_path, EXAMPLES / f"{EXAMPLE}.yaml", kind="da")
+
+
+@pytest.fixture
+def counterplan_world(installed_cli: InstalledCli, tmp_path: Path) -> Iterator[tuple[ExampleCorpus, Path]]:
+    """The synthetic counterplan recipe, its position a counterplan, imported and parsed the same way."""
+    yield planted(installed_cli, tmp_path, COUNTERPLANS / f"{COUNTERPLAN}.yaml", kind="cp")
+
+
+def planted(
+    installed_cli: InstalledCli, tmp_path: Path, recipe: Path, *, kind: str
+) -> tuple[ExampleCorpus, Path]:
     data_dir = tmp_path / "data"
     profiles = tmp_path / "profiles"
     profiles.mkdir()
@@ -51,7 +69,7 @@ def world(installed_cli: InstalledCli, tmp_path: Path) -> Iterator[tuple[Example
         encoding="utf-8",
     )
     installed_cli.configure(DEBATE_PROFILE_DIR=str(profiles), DEBATE_ENV="dev", DEBATE_STORAGE__DATA_DIR=None)
-    corpus = example_corpus(EXAMPLES / f"{EXAMPLE}.yaml", tmp_path / "corpus")
+    corpus = example_corpus(recipe, tmp_path / "corpus", kind=kind)
     imported = installed_cli.run(
         "--json",
         "caselist",
@@ -65,7 +83,7 @@ def world(installed_cli: InstalledCli, tmp_path: Path) -> Iterator[tuple[Example
     assert imported.exit_code == ExitCode.OK, imported.output
     parsed = installed_cli.run("--json", "caselist", "parse", "--caselist", corpus.caselist)
     assert parsed.exit_code == ExitCode.OK, parsed.output
-    yield corpus, data_dir
+    return corpus, data_dir
 
 
 def data_of(result: CliRun) -> dict[str, Any]:
@@ -163,3 +181,59 @@ def test_files_suggest_writes_a_draft_that_builds_with_allow_draft_offline_with_
     built = installed_cli.run("--json", "files", "build", str(draft), "--allow-draft")
     assert built.exit_code == ExitCode.OK, built.output
     assert data_of(built)["data"]["counts"]["cards_placed"] == len(corpus.cards)
+
+
+def test_files_suggest_drafts_a_counterplan_with_the_slot_first_and_a_build_of_it_unchanged_warns(
+    installed_cli: InstalledCli, counterplan_world: tuple[ExampleCorpus, Path]
+) -> None:
+    corpus, data_dir = counterplan_world
+    suggested = installed_cli.run(
+        "--json",
+        "files",
+        "suggest",
+        "--caselist",
+        corpus.caselist,
+        "--position",
+        "states-cp",
+        "--top",
+        "10",
+        "--config-dir",
+        str(corpus.config_dir),
+    )
+
+    assert suggested.exit_code == ExitCode.OK, suggested.output
+    data = data_of(suggested)["data"]
+    assert data["other_positions_left_out"] == {"blocks": 0, "cards": 0}
+    draft = Path(data["path"])
+    assert draft == data_dir / "files" / "recipes" / "nhi" / "states-cp-neg-draft.yaml"
+    text = draft.read_text(encoding="utf-8")
+    document = yaml.safe_load(text)
+    assert document["status"] == "draft"
+    pocket = document["structure"][0]
+    first_block = pocket["blocks"][0]
+    assert first_block["items"][0] == {"analytic": CP_TEXT_SLOT}
+    fingerprints = {item.get("fingerprint") for block in pocket["blocks"] for item in block["items"]}
+    assert fingerprints - {None} == {card.fingerprint for card in corpus.cards}
+
+    assert text.count("status: draft\n") == 1
+    draft.write_text(text.replace("status: draft\n", "status: ready\n"), encoding="utf-8")
+    built = installed_cli.run("--json", "files", "build", str(draft))
+
+    assert built.exit_code == ExitCode.OK, built.output
+    quality = data_of(built)["data"]["quality"]
+    assert quality["status"] == "PASS" and quality["failing_checks"] == []
+    assert [
+        (one["status"], one["check"], one["paragraph_index"], one["section_path"])
+        for one in quality["findings"]
+    ] == [("WARN", "placeholders-replaced", 3, [pocket["pocket"], first_block["block"]])]
+
+    docx = Path(data_of(built)["data"]["files"]["docx"])
+    checked = installed_cli.run("files", "check", str(docx))
+    assert checked.exit_code == ExitCode.OK, checked.output
+    shown = " ".join(checked.stdout.split())
+    assert (
+        f"WARN placeholders-replaced paragraph 3, under {pocket['pocket']} > {first_block['block']}: "
+        in shown
+    )
+    for identity in ("Maple Grove", "Cedar Hollow", '"QX"', "ZaLu", "Synthetic evidence"):
+        assert identity not in suggested.stdout + built.stdout + checked.stdout

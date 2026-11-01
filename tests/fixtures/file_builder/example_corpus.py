@@ -1,5 +1,9 @@
 """A synthetic corpus for one of t01's example recipes, as `files build` reads it (`v1-e33-t03` ac1, ac6).
 
+Also for the synthetic counterplan recipe in `counterplans/` (`v1-e33-t15`), whose position the taxonomy
+marks a counterplan (`kind="cp"`), so that `files suggest` drafts it as one: its first block opens with
+the CP text slot.
+
 t01's examples (`recipes/`) name fingerprints no card has: a fingerprint is a digest of a card's text,
 so no corpus can be made to match them. As `scripts/build_example_evidence_files.py` does for
 `v1-e33-t02` (PM ruling, 2026-10-19), each card reference gets one synthetic source of its own, and the
@@ -40,9 +44,12 @@ from debate_core.evidence.fingerprints import card_fingerprint
 from debate_core.integrations.docx_parser.parser import DebateDocxParser
 from debate_core.testing.docx_builder import build_docx, paragraph_xml, run_xml
 
-__all__ = ["EXAMPLES", "ExampleCard", "ExampleCorpus", "example_corpus"]
+__all__ = ["COUNTERPLANS", "EXAMPLES", "ExampleCard", "ExampleCorpus", "example_corpus"]
 
 EXAMPLES: Final = Path(__file__).resolve().parent / "recipes"
+
+#: A counterplan's recipe, beside t01's examples rather than among them (`v1-e33-t15`).
+COUNTERPLANS: Final = Path(__file__).resolve().parent / "counterplans"
 
 #: The heading every source files its card under, and the alias of the recipe's position.
 SOURCE_HEADING: Final = "Synthetic Position"
@@ -140,8 +147,12 @@ def _parsed_card(content: bytes, parser: DebateDocxParser) -> tuple[str, int]:
     return card_fingerprint(card).exact_fingerprint, card.provenance.first_element_index
 
 
-def example_corpus(example: Path, directory: Path) -> ExampleCorpus:
-    """The archive, rewritten recipe and landscape configuration for `example`, under `directory`."""
+def example_corpus(example: Path, directory: Path, *, kind: str = "da") -> ExampleCorpus:
+    """The archive, rewritten recipe and landscape configuration for `example`, under `directory`.
+
+    `kind` is the taxonomy's kind for the recipe's position: `da` for t01's examples, `cp` for a
+    counterplan's.
+    """
     document: dict[str, Any] = yaml.safe_load(example.read_text(encoding="utf-8"))
     caselist: str = document["caselist"]
     side = Side(document["side"])
@@ -190,7 +201,7 @@ def example_corpus(example: Path, directory: Path) -> ExampleCorpus:
     recipe_path = directory / example.name
     recipe_path.write_text(yaml.safe_dump(document, sort_keys=False, allow_unicode=True), encoding="utf-8")
     config_dir = directory / "config" / "landscape"
-    _write_landscape_config(config_dir, document, snapshot)
+    _write_landscape_config(config_dir, document, snapshot, kind)
     return ExampleCorpus(
         caselist=caselist,
         snapshot=snapshot,
@@ -202,8 +213,8 @@ def example_corpus(example: Path, directory: Path) -> ExampleCorpus:
     )
 
 
-def _write_landscape_config(config_dir: Path, document: dict[str, Any], snapshot: date) -> None:
-    """A topic covering the archive's snapshot, and the recipe's position read on the recipe's side."""
+def _write_landscape_config(config_dir: Path, document: dict[str, Any], snapshot: date, kind: str) -> None:
+    """A topic covering the archive's snapshot, and the recipe's position, of `kind`, read on its side."""
     side = Side(document["side"])
     position_side = "aff" if side in (Side.AFF, Side.PRO) else "neg"
     (config_dir / "taxonomies").mkdir(parents=True, exist_ok=True)
@@ -224,7 +235,7 @@ def _write_landscape_config(config_dir: Path, document: dict[str, Any], snapshot
         "taxonomy_version: 1.0.0\n"
         f"event: {document['format']}\n"
         "positions:\n"
-        f"  - {{id: {document['position']}, label: Synthetic position, kind: da, side: {position_side}, "
+        f"  - {{id: {document['position']}, label: Synthetic position, kind: {kind}, side: {position_side}, "
         f"aliases: [{SOURCE_HEADING_ALIAS}]}}\n",
         encoding="utf-8",
     )

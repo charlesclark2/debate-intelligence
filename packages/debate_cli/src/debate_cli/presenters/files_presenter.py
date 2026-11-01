@@ -407,7 +407,9 @@ def _quality_failure(
         message=f"the quality check FAILed: {', '.join(failing)}{where}",
         exit_code=ExitCode.DOMAIN_FAILURE,
         details=payload,
-        hint=hint if hint is not None else "Read the .quality.md beside the file for each card's finding.",
+        hint=hint
+        if hint is not None
+        else "Each finding is listed above; the .quality.md beside the file has the full report.",
         panel_details={"failing_checks": ", ".join(failing)},
     )
 

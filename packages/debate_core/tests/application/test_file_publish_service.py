@@ -44,6 +44,7 @@ from debate_core.application.file_publish_service import (
 )
 from debate_core.application.file_quality_service import FileQualityService
 from debate_core.application.file_recipes import RecipeResolver, load_recipe
+from debate_core.application.file_suggest_service import CP_TEXT_SLOT
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectInfo
 from debate_core.application.ports.parsed_store import OccurrenceRecord
 from debate_core.application.ports.suppression import ReasonCode, SuppressionAction, SuppressionEntry
@@ -501,6 +502,18 @@ def test_a_warning_never_blocks_and_is_recorded_in_the_metadata(world: World) ->
     assert outcome.warned_checks == (QualityCheck.CITE_PRESENT,)
     document = json.loads(world.body(f"{prefix_of(docx)}metadata.json"))
     assert (document["quality_warnings"], document["warned_checks"]) == (1, ["cite-present"])
+
+
+def test_a_file_still_holding_the_cp_text_slot_is_published_warned_not_blocked(world: World) -> None:
+    """`v1-e33-t15`: the slot is a warning like any other (PM ruling B on t11's question 1)."""
+    docx = world.built({"analytic": CP_TEXT_SLOT}, {"fingerprint": world.add(SOURCE_ONE)})
+
+    outcome = only(world.publish(docx))
+
+    assert outcome.status is PublishStatus.PUBLISHED
+    assert outcome.warned_checks == (QualityCheck.PLACEHOLDERS_REPLACED,)
+    document = json.loads(world.body(f"{prefix_of(docx)}metadata.json"))
+    assert (document["quality_warnings"], document["warned_checks"]) == (1, ["placeholders-replaced"])
 
 
 def test_a_refused_file_in_a_directory_does_not_stop_the_others_and_is_named(world: World) -> None:

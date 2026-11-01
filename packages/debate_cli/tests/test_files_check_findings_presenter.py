@@ -264,7 +264,11 @@ def test_a_failed_builds_and_checks_error_details_carry_the_findings() -> None:
 
 
 def test_a_file_with_no_warn_or_fail_prints_exactly_the_table_it_printed_before() -> None:
-    """The table as `v1-e33-t03` and `t04` printed it, written out by hand: nothing below it."""
+    """The table as `v1-e33-t03` and `t04` printed it, written out by hand: nothing below it.
+
+    With one row more since `v1-e33-t15`, `placeholders-replaced`, which a file without the CP text
+    slot passes.
+    """
     rows = [
         [check, "PASS", "0", "0"]
         for check in (
@@ -276,6 +280,7 @@ def test_a_file_with_no_warn_or_fail_prints_exactly_the_table_it_printed_before(
             "manifest-alignment",
             "provenance-complete",
             "suppression",
+            "placeholders-replaced",
         )
     ]
     columns = ["Check", "Status", "Failures", "Warnings"]
@@ -292,3 +297,12 @@ def test_a_file_with_no_warn_or_fail_prints_exactly_the_table_it_printed_before(
     assert after_the_table(check_rendered(checked(clean_results()))) == []
     payload: dict[str, Any] = dict(check_rendered(checked(clean_results())).payload)
     assert payload["quality"]["findings"] == []
+
+
+def test_the_quality_failed_hint_says_the_findings_are_listed_above_and_names_the_full_report() -> None:
+    """t12's follow-up (`v1-e33-t15`): the findings are printed above the panel now, card by card."""
+    hint = "Each finding is listed above; the .quality.md beside the file has the full report."
+    for rendered in (check_rendered(checked(RESULTS)), build_rendered(built(RESULTS))):
+        assert rendered.failure is not None
+        assert rendered.failure.code == "QUALITY_FAILED"
+        assert rendered.failure.hint == hint

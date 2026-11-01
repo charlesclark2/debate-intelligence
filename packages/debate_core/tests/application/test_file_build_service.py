@@ -367,7 +367,18 @@ def test_a_ready_recipe_still_holding_the_cp_text_slot_builds_the_placeholder_as
     assert json.loads(result.files.quality_json.read_text(encoding="utf-8"))["status"] == "PASS"
 
 
-def test_a_build_with_out_dir_writes_there(world: World) -> None:
+def test_a_built_file_still_holding_the_cp_text_slot_is_built_and_warned_naming_its_block(
+    world: World,
+) -> None:
+    """`v1-e33-t15`: built, PASS, and one WARN on the slot's block (PM ruling B on t11's question 1)."""
+    (first, _) = world.add(SOURCE_ONE)
+    result = world.build(world.recipe([{"analytic": CP_TEXT_SLOT}, {"fingerprint": first.fingerprint}]))
+
+    assert result.status is BuildStatus.BUILT and result.quality is not None
+    assert result.failing_checks == ()
+    assert [(one.check, one.status, one.section_path) for one in result.quality.findings] == [
+        (QualityCheck.PLACEHOLDERS_REPLACED, CheckStatus.WARN, ("Synthetic pocket", "Synthetic block"))
+    ]
     first, _ = world.add(SOURCE_ONE)
     out = world.root / "elsewhere"
     result = world.build(world.recipe([{"fingerprint": first.fingerprint}]), out_dir=out)

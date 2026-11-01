@@ -133,14 +133,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Final, Literal, cast
 
-from pydantic import (
-    BaseModel,
-    ConfigDict,
-    Field,
-    SerializerFunctionWrapHandler,
-    ValidationError,
-    model_serializer,
-)
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from debate_core.application.caselist.publish_plan import InvalidPublishTarget, validate_publish_target
 from debate_core.application.caselist.run_home_move import NEW_HOME
@@ -547,14 +540,9 @@ class MemoryFigures(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="ignore")
 
-    container_peak_bytes: int | None = Field(default=None, ge=0)
-    cgroup: str | None = None
-    main_process_peak_bytes: int | None = Field(default=None, ge=0)
-
-    @model_serializer(mode="wrap")
-    def _leave_out_what_was_not_read(self, handler: SerializerFunctionWrapHandler) -> dict[str, object]:
-        written: dict[str, object] = handler(self)
-        return {key: value for key, value in written.items() if value is not None}
+    container_peak_bytes: int | None = Field(default=None, ge=0, exclude_if=lambda value: value is None)
+    cgroup: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    main_process_peak_bytes: int | None = Field(default=None, ge=0, exclude_if=lambda value: value is None)
 
 
 class StageTiming(BaseModel):
@@ -566,16 +554,9 @@ class StageTiming(BaseModel):
     stage: str
     started_at: datetime
     finished_at: datetime
-    memory: MemoryFigures | None = None
-    """`None` when nothing could be read, and in details a build from before `v1-e40-t31` wrote: such
-    a build passes over the key, which its schema leaves open."""
-
-    @model_serializer(mode="wrap")
-    def _leave_out_no_figures(self, handler: SerializerFunctionWrapHandler) -> dict[str, object]:
-        written: dict[str, object] = handler(self)
-        if written.get("memory") is None:
-            written.pop("memory", None)
-        return written
+    memory: MemoryFigures | None = Field(default=None, exclude_if=lambda value: value is None)
+    """`None`, and left out, when nothing could be read, and in details a build from before
+    `v1-e40-t31` wrote: such a build passes over the key, which its schema leaves open."""
 
 
 class DataVolume(BaseModel):

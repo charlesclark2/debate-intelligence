@@ -91,7 +91,8 @@ def test_a_sidecar_that_cannot_be_read_fails_with_each_problem() -> None:
         docx_sha256=DOCX,
         sidecar_parser_version=None,
         parser_version="p1",
-        **SAME_PROFILE,
+        sidecar_style_profile_version=None,
+        style_profile_version=RUNNING_PROFILE,
     )
     assert _not_passing(results) == [
         (CheckStatus.FAIL, None, "the sidecar is not valid: cards.0.source_sha256: Field required"),

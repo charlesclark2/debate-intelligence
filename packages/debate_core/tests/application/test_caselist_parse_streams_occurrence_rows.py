@@ -307,7 +307,9 @@ class SyntheticStore:
 
     data_dir: Path
     caselist: str = CASELIST
-    documents: dict[str, tuple[Card, ...] | ParseFailureReason] = field(default_factory=dict)
+    documents: dict[str, tuple[Card, ...] | ParseFailureReason] = field(
+        default_factory=dict[str, tuple[Card, ...] | ParseFailureReason]
+    )
     manifests: defaultdict[str, list[dict[str, object]]] = field(default_factory=lambda: defaultdict(list))
 
     def source(
@@ -683,7 +685,7 @@ async def test_a_caselist_whose_sources_share_clusters_is_written_as_before(tmp_
     rows = lines(written[OCCURRENCES_NAME])
     # The preconditions, from the table above: a cluster spans three sources, an abbreviated card in
     # one source joins a full card's cluster in another, and the disclosure in three weeks is one row.
-    by_source = defaultdict(set)
+    by_source: defaultdict[object, set[object]] = defaultdict(set)
     for row in rows:
         by_source[row["cluster_id"]].add(row["source_sha256"])
     assert max(len(members) for members in by_source.values()) >= 3

@@ -156,10 +156,10 @@ def container(change: dict[str, Any], side: str) -> dict[str, Any] | None:
     return only if isinstance(only, dict) else None
 
 
-def task_definition_problems(address: str, change: dict[str, Any], digest: str | None) -> list[str]:
-    before, after = container(change, "before"), container(change, "after")
-    if before is None or after is None:
-        return [address + ": its container definitions cannot be read from the plan"]
+def container_problems(
+    address: str, before: dict[str, Any], after: dict[str, Any], keys: Sequence[str]
+) -> list[str]:
+    """Its environment, and each of `keys`, the same before and after."""
     problems = []
     old = {v["name"]: v["value"] for v in before.get("environment", [])}
     new = {v["name"]: v["value"] for v in after.get("environment", [])}
@@ -169,9 +169,17 @@ def task_definition_problems(address: str, change: dict[str, Any], digest: str |
             f"removes {sorted(set(old) - set(new))}, "
             f"changes {sorted(k for k in set(old) & set(new) if old[k] != new[k])}"
         )
-    keys = sorted(k for k in CONTAINER_KEYS if before.get(k) != after.get(k))
-    if keys:
-        problems.append(f"{address} also changes {keys}")
+    changed = sorted(k for k in keys if before.get(k) != after.get(k))
+    if changed:
+        problems.append(f"{address} also changes {changed}")
+    return problems
+
+
+def task_definition_problems(address: str, change: dict[str, Any], digest: str | None) -> list[str]:
+    before, after = container(change, "before"), container(change, "after")
+    if before is None or after is None:
+        return [address + ": its container definitions cannot be read from the plan"]
+    problems = container_problems(address, before, after, CONTAINER_KEYS)
     if digest is not None and not str(after.get("image", "")).endswith("@" + digest):
         problems.append(
             f"{address}'s image is {after.get('image')}, expected the digest in owner.auto.tfvars"
@@ -208,8 +216,12 @@ def state_problem(address: str, change: dict[str, Any]) -> str | None:
     return f"{address} is {before} -> {after}, expected {SCHEDULE_STATE} throughout"
 
 
-def check(changes: list[dict[str, Any]], owner: str) -> tuple[list[str], str]:
-    """The problems with the plan, and what `PLAN OK` says when there are none."""
+def screened(
+    changes: list[dict[str, Any]], owner: str
+) -> tuple[str | None, list[dict[str, Any]], list[str], dict[str, dict[str, Any]]]:
+    """What every mode checks first: the owner file's digest, the changes, the problems with them so
+    far (no digest, an Identity Center change, a change outside the module), and the module's changes
+    by key."""
     found_digest = DIGEST.search(owner)
     digest = found_digest.group(1) if found_digest else None
     changed = [found for found in changes if found["change"]["actions"] not in NOT_CHANGES]
@@ -229,6 +241,19 @@ def check(changes: list[dict[str, Any]], owner: str) -> tuple[list[str], str]:
     if outside:
         problems.append("a change outside module.caselist_run: " + ", ".join(sorted(outside)))
     inside = {key(found): found for found in rest if found["address"].startswith(MODULE)}
+    return digest, changed, problems, inside
+
+
+def counts(changed: list[dict[str, Any]]) -> str:
+    adds = sum("create" in found["change"]["actions"] for found in changed)
+    updates = sum(found["change"]["actions"] == ["update"] for found in changed)
+    destroys = sum("delete" in found["change"]["actions"] for found in changed)
+    return f"{adds} to add, {updates} to change, {destroys} to destroy"
+
+
+def check(changes: list[dict[str, Any]], owner: str) -> tuple[list[str], str]:
+    """The problems with the plan, and what `PLAN OK` says when there are none."""
+    digest, changed, problems, inside = screened(changes, owner)
 
     for address, expected in EXPECTED.items():
         found = inside.get(address)
@@ -249,11 +274,8 @@ def check(changes: list[dict[str, Any]], owner: str) -> tuple[list[str], str]:
     if unexpected:
         problems.append("an unexpected change in module.caselist_run: " + ", ".join(sorted(unexpected)))
 
-    adds = sum("create" in found["change"]["actions"] for found in changed)
-    updates = sum(found["change"]["actions"] == ["update"] for found in changed)
-    destroys = sum("delete" in found["change"]["actions"] for found in changed)
     said = (
-        f"{adds} to add, {updates} to change, {destroys} to destroy; the login and run task definitions "
+        f"{counts(changed)}; the login and run task definitions "
         f"replaced with the image {(digest or '')[:19]}... and nothing else in them changed; the two "
         f"schedules and their roles' policies repointed at the new revisions; both schedules "
         f"{SCHEDULE_STATE} throughout; nothing else changes"

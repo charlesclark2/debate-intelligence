@@ -59,11 +59,15 @@ What to read:
 
 ## 3. The hits, in the terminal
 
+**Do not paste or copy this step's output anywhere: not into a Claude session, a chat, a report or an
+issue.** Everything to send back is in step 2's JSON. This step is only for reading the hits.
+
 The same command without `--json`. It prints the counts again, then one numbered line per hit: the text
 (`input batch 2`, `cassette 1`, `repair cassette 1`), the field (heading path, tag, short cite, excerpt,
 model rationale, taxonomy positions, repaired prompt, cassette metadata, across fields), the kind
-(school, team-code word, tournament), whether a tournament hit's words are a team's name or a taxonomy
-word, and the matched words with four words either side.
+(school, team-code word, tournament), its marks (a team's name, a taxonomy word, a JSON key, in the
+cards sent), and the matched words with four words either side. Step 2's JSON counts the marks by
+field (`marks_by_field`).
 
 ```bash
 if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; else uv run debate-research landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample ~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv --sample-rows ~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl --breakdown; fi

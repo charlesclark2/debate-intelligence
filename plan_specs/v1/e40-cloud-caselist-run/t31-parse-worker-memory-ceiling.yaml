@@ -53,7 +53,7 @@ spec:
         recorded as failed, and the next source parses, by a test with a synthetic
         memory-hungry parser; unset, there is no ceiling; tests shown failing first.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -61,14 +61,14 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 55 | 252 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 109 | 90 | 499 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 66 | 55 | 296 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 110 | 90 | 500 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 69 | 55 | 299 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 16 | 11 | 114 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 29 | 21 | 166 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 26 | 21 | 89 |
-| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 39 | 20 | 74 |
+| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 39 | 22 | 74 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -253,6 +253,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Publish the parsed store without rebuilding it](plan_specs/v1/e31-debate-file-parsing/t30-parsed-store-publish-only.yaml) `v1-e31-t30-parsed-store-publish-only` | Succeeded | 1 | 2.0 |
 | [Where the labelled evaluation's missed cites, tags and highlights go, counted before any rule](plan_specs/v1/e31-debate-file-parsing/t31-labelled-evaluation-gaps.yaml) `v1-e31-t31-labelled-evaluation-gaps` | InProgress | 1 | 5.0 |
 | [A tag with a word left unbolded, above a cite, counted before any rule](plan_specs/v1/e31-debate-file-parsing/t32-bold-in-part-tags.yaml) `v1-e31-t32-bold-in-part-tags` | Pending | 1 | 3.0 |
+| [A pointer to another card (`<<AUTHOR 'YY FOR REFERENCE>>`) is never promoted to a cite](plan_specs/v1/e31-debate-file-parsing/t33-reference-pointers-are-not-cites.yaml) `v1-e31-t33-reference-pointers-are-not-cites` | Pending | 1 | 1.0 |
 
 #### [E34 — Scheduled Caselist Sync](plan_specs/v1/e34-caselist-sync/epic.yaml)
 
@@ -320,7 +321,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [An AWS budget alarm on the account's model spend, $100 a month with a first notice at $50](plan_specs/v1/e05-model-router/t16-bedrock-budget-alarm.yaml) `v1-e05-t16-bedrock-budget-alarm` | Succeeded | 1 | 2.0 |
 | [Dev back on the 5.5 models, and prod's Bedrock grant applied, once the quotas are restored](plan_specs/v1/e05-model-router/t17-switch-back-to-the-5-5-models.yaml) `v1-e05-t17-switch-back-to-the-5-5-models` | Blocked | 3 | 2.0 |
 | [The cost allocation tags are active by Terraform, so the budgets that filter on them never read zero again](plan_specs/v1/e05-model-router/t18-cost-allocation-tags-in-terraform.yaml) `v1-e05-t18-cost-allocation-tags-in-terraform` | Succeeded | 1 | 1.0 |
-| [The cost allocation tags' import blocks are removed once both tags are in state](plan_specs/v1/e05-model-router/t19-cost-allocation-tag-imports-removed.yaml) `v1-e05-t19-cost-allocation-tag-imports-removed` | Pending | 1 | 0.5 |
+| [The cost allocation tags' import blocks are removed once both tags are in state](plan_specs/v1/e05-model-router/t19-cost-allocation-tag-imports-removed.yaml) `v1-e05-t19-cost-allocation-tag-imports-removed` | InProgress | 1 | 0.5 |
 
 #### [E32 — Argument Landscape Reports](plan_specs/v1/e32-argument-landscape/epic.yaml)
 
@@ -378,6 +379,9 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [files check and files publish warn when a built file's style profile is not the running one](plan_specs/v1/e33-file-builder/t10-sidecar-style-profile-warning.yaml) `v1-e33-t10-sidecar-style-profile-warning` | Pending | 1 | 1.0 |
 | [files suggest drafts a CP file a coach can build on: a CP text slot first, no other position's blocks, and plank-dependent blocks marked](plan_specs/v1/e33-file-builder/t11-suggest-drafts-a-cp-file-a-coach-can-build-on.yaml) `v1-e33-t11-suggest-drafts-a-cp-file-a-coach-can-build-on` | Succeeded | 1 | 2.0 |
 | [files check and files build name each warned or failed card, its check and why, as the quality report does](plan_specs/v1/e33-file-builder/t12-files-check-names-each-warned-card.yaml) `v1-e33-t12-files-check-names-each-warned-card` | Succeeded | 1 | 1.0 |
+| [A CP draft keeps a block an affirmative-side position places, marked to check against the plan](plan_specs/v1/e33-file-builder/t13-cp-draft-keeps-aff-side-blocks-marked.yaml) `v1-e33-t13-cp-draft-keeps-aff-side-blocks-marked` | Pending | 1 | 1.0 |
+| [A coach-edited list of plan-mechanism words in the topic config marks a CP draft's plan-dependent blocks](plan_specs/v1/e33-file-builder/t14-plan-mechanism-words-in-the-topic-config.yaml) `v1-e33-t14-plan-mechanism-words-in-the-topic-config` | Pending | 1 | 1.0 |
+| [A built file still holding the CP text placeholder is warned, and a CP draft has a smoke check](plan_specs/v1/e33-file-builder/t15-unreplaced-cp-text-slot-warned.yaml) `v1-e33-t15-unreplaced-cp-text-slot-warned` | Pending | 1 | 1.0 |
 
 
 ### v1.3 — URL → verified card
@@ -577,7 +581,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [The leftover search drops its pre-marker list, and a report over a restored copy requires the marker](plan_specs/v1/e40-cloud-caselist-run/t23-restored-copy-marker-required.yaml) `v1-e40-t23-restored-copy-marker-required` | Pending | 1 | 1.0 |
 | [A restore refuses both environments' data directories, not only its own](plan_specs/v1/e40-cloud-caselist-run/t24-restore-refuses-either-data-directory.yaml) `v1-e40-t24-restore-refuses-either-data-directory` | Pending | 1 | 1.0 |
 | [In bucket mode the failed-publish banners and the CLI's next step point at the cloud run, not a publish from the Mac](plan_specs/v1/e40-cloud-caselist-run/t25-remaining-bucket-mode-publish-pending-hints.yaml) `v1-e40-t25-remaining-bucket-mode-publish-pending-hints` | Succeeded | 2 | 1.0 |
-| [A smoke check reads parses_owed from caselist runs and caselist status](plan_specs/v1/e40-cloud-caselist-run/t26-parses-owed-smoke-check.yaml) `v1-e40-t26-parses-owed-smoke-check` | Pending | 1 | 0.5 |
+| [A smoke check reads parses_owed from caselist runs and caselist status](plan_specs/v1/e40-cloud-caselist-run/t26-parses-owed-smoke-check.yaml) `v1-e40-t26-parses-owed-smoke-check` | Succeeded | 1 | 0.5 |
 | [store sync never moves reports/sync/, so a push of pulled copies cannot overwrite the run's lock or state files](plan_specs/v1/e40-cloud-caselist-run/t27-store-sync-leaves-the-run-state-alone.yaml) `v1-e40-t27-store-sync-leaves-the-run-state-alone` | Pending | 1 | 1.0 |
 | [The last bucket-mode wording pass: banners and the CLI name the next cloud run, and a cloud run's login hint names the task role](plan_specs/v1/e40-cloud-caselist-run/t28-last-bucket-mode-wording-pass.yaml) `v1-e40-t28-last-bucket-mode-wording-pass` | Succeeded | 1 | 2.0 |
 
@@ -595,7 +599,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [Test selection reads a run-shaped string in an f-string or a comparison, and a shell script's quoted command words](plan_specs/v1/e41-delivery-tooling-upkeep/t08-run-shaped-strings-read-wherever-they-stand.yaml) `v1-e41-t08-run-shaped-strings-read-wherever-they-stand` | Pending | 1 | 2.0 |
 | [validate_specs.py is clean under pyright, and task start refuses an unknown prerequisite even under --force](plan_specs/v1/e41-delivery-tooling-upkeep/t09-validate-specs-pyright-and-start-refuses-unknown.yaml) `v1-e41-t09-validate-specs-pyright-and-start-refuses-unknown` | Pending | 1 | 1.0 |
 | [An unknown DEBATE_ name in .env is refused, and files build tells a newer-stamped store to install the newer build](plan_specs/v1/e41-delivery-tooling-upkeep/t10-unknown-env-names-refused-and-newer-stamp-hint.yaml) `v1-e41-t10-unknown-env-names-refused-and-newer-stamp-hint` | Pending | 1 | 1.0 |
-| [Test selection no longer reads ast.walk( as a directory walk, and a contract keeps debate_api.container imported one way](plan_specs/v1/e41-delivery-tooling-upkeep/t11-selector-ast-walk-and-container-contract.yaml) `v1-e41-t11-selector-ast-walk-and-container-contract` | Pending | 1 | 1.0 |
+| [Test selection no longer reads ast.walk( as a directory walk, and a contract keeps debate_api.container imported one way](plan_specs/v1/e41-delivery-tooling-upkeep/t11-selector-ast-walk-and-container-contract.yaml) `v1-e41-t11-selector-ast-walk-and-container-contract` | Succeeded | 1 | 1.0 |
 
 
 ## V2

@@ -157,9 +157,34 @@ None. The affected set is left to the pull request's `ci` check under agreement 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-01
 
 **Notes:**
+
+This is t35's pattern applied faithfully, and the session saw the one place the pattern couldn't be
+copied.
+1. **ac1 passes.**
+   * Red: 2 failed (the Mac hint, and t35's neighbour case, which pinned the old Mac text this task
+     changes). The bucket-mode pin and token-missing guard passed at red, as they must.
+   * Green: 15, with t40-t33's file unedited and its bucket-mode `[token-unreadable]` case passing.
+   * The node criterion passes (3).
+   * All six mutants are caught, the PM's five plus the words said in bucket mode.
+2. **Decisions accepted:**
+   * **Matching by the error's code, not `isinstance`.** The layers contract forbids importing the
+     integration's class. The code is derived from the type, never the message, and the Mac test
+     uses the real class, so a rename would fail it.
+   * the one t35 test case edited on purpose, in the red commit, now asserting what its name says;
+   * t35's hint shape, with the cure checked to work on an unreadable record (delete never parses
+     it);
+   * the fix command staying `caselist pull`;
+   * no smoke check, as for t35.
+3. **Follow-up (moving `CaselistTokenUnreadable` into an application port):** not filed. Behaviour
+   is the same either way, and the code match is typed and tested.
+4. **Closing checks:** the affected set (303 files through two hub modules) is left to the PR's `ci`
+   under agreement 10. Core caselist (1,791), the always-run list (374), ruff, pyright, lint-imports,
+   thin handlers, command blocks and the specs are clean.
+5. **Merge:** a plain `scripts/task pr` once `ci` is green. No operator step follows. This is v1.1
+   work.

@@ -61,6 +61,19 @@ these runs:
   sampling `VmRSS` twice a second, in the Linux image capped at 7 GB. 250: 67 s, finished. 500:
   stopped at its 112 s limit while placing cards.
 
+### Checks before the report
+
+* `uv run scripts/affected_tests.py --run` (bounded by `scripts/hard_stop.py 115`): 42 files, the
+  always-run list and the docs tests. It was stopped at its 115 s limit at 89%, with no failure by
+  then. It runs past two minutes, so by agreement 10 it is left to the pull request's `ci` check.
+* Within the limit: `pytest tests/docs tests/architecture tests/specs -n auto -m "not slow and not live"`
+  → 510 passed in 21 s. `tests/architecture/test_single_interpreter_source.py` was run again after the
+  commit, since it reads tracked files → 55 passed.
+* `uv run ruff format --check .` → 1763 files already formatted. `uv run ruff check .` → all checks
+  passed. `uv run lint-imports` → 20 kept, 0 broken. No Python changed, so pyright was not run.
+* `uv run scripts/check_command_blocks.py --base origin/dev` → OK, this report included.
+  `uv run scripts/validate_specs.py` → OK: 562 files, 41 epics, 499 tasks, 22 releases.
+
 ## Files changed
 
 * `docs/data/caselist-parse-memory.md` (new): the measurement, counts and sizes only.

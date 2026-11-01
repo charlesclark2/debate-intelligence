@@ -88,12 +88,21 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from functools import cache
-from typing import Any, Final, cast
+from typing import Any, Final, Self, cast
 
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError as SchemaViolation
 from jsonschema.exceptions import best_match  # pyright: ignore[reportUnknownVariableType]
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, TypeAdapter, ValidationError, computed_field
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    TypeAdapter,
+    ValidationError,
+    computed_field,
+    model_validator,
+)
 from referencing import Registry, Resource
 
 from debate_core.application.errors import DomainError, NotFound
@@ -342,6 +351,17 @@ class CardVerdict(BaseModel):
         exclude_if=lambda warnings: not warnings,
         description="What a reader should know that changes no status, in body order. Absent when none.",
     )
+
+    @model_validator(mode="after")
+    def _status_agrees_with_reasons(self) -> Self:
+        """VERIFIED with no reason, anything else with at least one, as a VerificationResult must be.
+
+        A reason found beside the verifier's (a snapshot reference, the document body) must not be
+        carried by a card still marked VERIFIED, by this code or any later caller.
+        """
+        if (self.status is VerificationStatus.VERIFIED) == bool(self.reasons):
+            raise ValueError("a card verdict is VERIFIED exactly when it carries no reason")
+        return self
 
     @computed_field  # type: ignore[prop-decorator]
     @property

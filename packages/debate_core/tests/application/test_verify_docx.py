@@ -27,7 +27,6 @@ from tests.fixtures.verify.docx_world import (
     NEWS_CITE,
     NEWS_TAG,
     PROFILES,
-    TEAM_DEFAULT,
     NewsExport,
     edited,
     evidence_paragraph,
@@ -45,6 +44,7 @@ from debate_core.application.verify_manifest import (
     ManifestVerificationReport,
     NoManifest,
     ReportedRange,
+    ReportedReason,
     VerifyManifest,
 )
 from debate_core.domain import VerificationStatus
@@ -363,4 +363,12 @@ def test_docx_the_manifest_is_checked_before_the_body(export: NewsExport) -> Non
     assert verdict.reason_codes == (ReasonCode.TEXT_MISMATCH,)
 
 
-_ = TEAM_DEFAULT
+def test_docx_a_verdict_cannot_be_verified_and_carry_a_reason(export: NewsExport) -> None:
+    """Defence in depth: whatever finds a reason beside the verifier, the verdict cannot stay VERIFIED."""
+    verdict = verdict_of(verify(export, export.document))
+    manual_edit = ReportedReason(code=ReasonCode.MANUAL_EDIT, detail="the body changes evidence_text [0, 1)")
+
+    with pytest.raises(ValueError, match="VERIFIED exactly when it carries no reason"):
+        CardVerdict.model_validate({**verdict.model_dump(exclude={"reason_codes"}), "reasons": [manual_edit]})
+    with pytest.raises(ValueError, match="VERIFIED exactly when it carries no reason"):
+        CardVerdict.model_validate({**verdict.model_dump(exclude={"reason_codes"}), "status": "UNVERIFIED"})

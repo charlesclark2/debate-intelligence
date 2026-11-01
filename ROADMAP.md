@@ -61,14 +61,14 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 55 | 252 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 110 | 90 | 500 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 69 | 60 | 299 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 110 | 91 | 500 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 71 | 61 | 302 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 16 | 11 | 114 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 29 | 21 | 166 |
-| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 27 | 24 | 90 |
-| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 40 | 25 | 75 |
+| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 28 | 24 | 92 |
+| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 41 | 25 | 76 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -291,7 +291,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [doctor says when a store the weekly run will index has never been parsed](plan_specs/v1/e34-caselist-sync/t30-doctor-unparsed-store.yaml) `v1-e34-t30-doctor-unparsed-store` | Succeeded | 0 | 1.0 |
 | [The weekly run names caselist parse --publish-only where a publish-only finishes the stage](plan_specs/v1/e34-caselist-sync/t31-pull-fix-text-publish-only.yaml) `v1-e34-t31-pull-fix-text-publish-only` | Succeeded | 2 | 2.0 |
 | [The staleness hook reports a caselist stale when its latest run failed](plan_specs/v1/e34-caselist-sync/t32-failed-run-reads-stale.yaml) `v1-e34-t32-failed-run-reads-stale` | Succeeded | 1 | 2.0 |
-| [A keychain failure under launchd names its cause, and clearing a token already gone is no error](plan_specs/v1/e34-caselist-sync/t33-keychain-errors-named.yaml) `v1-e34-t33-keychain-errors-named` | Pending | 1 | 2.0 |
+| [A keychain failure under launchd names its cause, and clearing a token already gone is no error](plan_specs/v1/e34-caselist-sync/t33-keychain-errors-named.yaml) `v1-e34-t33-keychain-errors-named` | Succeeded | 1 | 2.0 |
 | [Earlier seasons' complete archives, from 2021-22 on, imported and parsed as backfiles](plan_specs/v1/e34-caselist-sync/t34-backfile-seasons-import.yaml) `v1-e34-t34-backfile-seasons-import` | Succeeded | 1 | 4.0 |
 
 
@@ -362,6 +362,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [A throttled landscape evaluation exits as retryable, and a throttled stop says how long to wait](plan_specs/v1/e32-argument-landscape/t33-landscape-evaluate-retry-exit.yaml) `v1-e32-t33-landscape-evaluate-retry-exit` | Succeeded | 1 | 1.0 |
 | [A command lists and deletes one caselist's model cassettes, and the annual purge calls it](plan_specs/v1/e32-argument-landscape/t34-landscape-cassettes-command.yaml) `v1-e32-t34-landscape-cassettes-command` | Succeeded | 1 | 1.0 |
 | [A CP text the landscape shows is whole: a text ending in a colon shows its planks, and a text split across paragraphs is joined](plan_specs/v1/e32-argument-landscape/t35-cp-texts-shown-whole.yaml) `v1-e32-t35-cp-texts-shown-whole` | Succeeded | 1 | 3.0 |
+| [landscape cassettes gains a smoke check and a removal form that reaches every copy](plan_specs/v1/e32-argument-landscape/t36-landscape-cassettes-smoke-check-and-removal-form.yaml) `v1-e32-t36-landscape-cassettes-smoke-check-and-removal-form` | Pending | 1 | 2.0 |
 
 #### [E33 — Evidence File Builder](plan_specs/v1/e33-file-builder/epic.yaml)
 
@@ -376,12 +377,13 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [A camp occurrence row carries its camp path's digest, so a camp-path withdrawal stops it before a rebuild](plan_specs/v1/e33-file-builder/t07-camp-path-on-occurrence-rows.yaml) `v1-e33-t07-camp-path-on-occurrence-rows` | Pending | 1 | 2.0 |
 | [Built files carry no provenance line; the sidecar keeps the provenance](plan_specs/v1/e33-file-builder/t08-provenance-line-one-function.yaml) `v1-e33-t08-provenance-line-one-function` | Succeeded | 0 | 1.0 |
 | [files build refuses a store written under another style profile, as it refuses another parser version](plan_specs/v1/e33-file-builder/t09-style-profile-version-refusal.yaml) `v1-e33-t09-style-profile-version-refusal` | Succeeded | 1 | 1.0 |
-| [files check and files publish warn when a built file's style profile is not the running one](plan_specs/v1/e33-file-builder/t10-sidecar-style-profile-warning.yaml) `v1-e33-t10-sidecar-style-profile-warning` | Pending | 1 | 1.0 |
+| [files check and files publish warn when a built file's style profile is not the running one](plan_specs/v1/e33-file-builder/t10-sidecar-style-profile-warning.yaml) `v1-e33-t10-sidecar-style-profile-warning` | Succeeded | 1 | 1.0 |
 | [files suggest drafts a CP file a coach can build on: a CP text slot first, no other position's blocks, and plank-dependent blocks marked](plan_specs/v1/e33-file-builder/t11-suggest-drafts-a-cp-file-a-coach-can-build-on.yaml) `v1-e33-t11-suggest-drafts-a-cp-file-a-coach-can-build-on` | Succeeded | 1 | 2.0 |
 | [files check and files build name each warned or failed card, its check and why, as the quality report does](plan_specs/v1/e33-file-builder/t12-files-check-names-each-warned-card.yaml) `v1-e33-t12-files-check-names-each-warned-card` | Succeeded | 1 | 1.0 |
 | [A CP draft keeps a block an affirmative-side position places, marked to check against the plan](plan_specs/v1/e33-file-builder/t13-cp-draft-keeps-aff-side-blocks-marked.yaml) `v1-e33-t13-cp-draft-keeps-aff-side-blocks-marked` | Succeeded | 1 | 1.0 |
 | [A coach-edited list of plan-mechanism words in the topic config marks a CP draft's plan-dependent blocks](plan_specs/v1/e33-file-builder/t14-plan-mechanism-words-in-the-topic-config.yaml) `v1-e33-t14-plan-mechanism-words-in-the-topic-config` | Succeeded | 1 | 1.0 |
 | [A built file still holding the CP text placeholder is warned, and a CP draft has a smoke check](plan_specs/v1/e33-file-builder/t15-unreplaced-cp-text-slot-warned.yaml) `v1-e33-t15-unreplaced-cp-text-slot-warned` | Succeeded | 1 | 1.0 |
+| [files publish names a quality report written by an older version of the checks, rather than calling it missing](plan_specs/v1/e33-file-builder/t16-publish-names-an-older-quality-report.yaml) `v1-e33-t16-publish-names-an-older-quality-report` | Pending | 1 | 1.0 |
 
 
 ### v1.3 — URL → verified card
@@ -547,6 +549,7 @@ Debaters search the team's evidence store from a school Chromebook or at home: a
 | [The weekly index stage skips an identical rebuild its record already matches, and publish --newest on the current index records instead of republishing](plan_specs/v1/e39-evidence-search-pilot/t25-identical-rebuild-skipped-and-newest-records.yaml) `v1-e39-t25-identical-rebuild-skipped-and-newest-records` | Succeeded | 1 | 2.0 |
 | [The cloud smoke checks reach dev: a check marked live is let through pytest-socket, and validate-dev's cloud job proves it](plan_specs/v1/e39-evidence-search-pilot/t26-cloud-smoke-checks-reach-dev.yaml) `v1-e39-t26-cloud-smoke-checks-reach-dev` | Succeeded | 0 | 1.0 |
 | [A smoke check runs publish --newest on the current index against an installed build](plan_specs/v1/e39-evidence-search-pilot/t27-newest-on-the-current-index-smoke-check.yaml) `v1-e39-t27-newest-on-the-current-index-smoke-check` | Pending | 1 | 1.0 |
+| [A camp card links to its camp's page on OpenEv, the address the operator confirmed](plan_specs/v1/e39-evidence-search-pilot/t28-openev-link-goes-to-the-camps-page.yaml) `v1-e39-t28-openev-link-goes-to-the-camps-page` | Pending | 1 | 2.0 |
 
 
 ### v1.8 — Weekly caselist run in the cloud
@@ -585,6 +588,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [A smoke check reads parses_owed from caselist runs and caselist status](plan_specs/v1/e40-cloud-caselist-run/t26-parses-owed-smoke-check.yaml) `v1-e40-t26-parses-owed-smoke-check` | Succeeded | 1 | 0.5 |
 | [store sync never moves reports/sync/, so a push of pulled copies cannot overwrite the run's lock or state files](plan_specs/v1/e40-cloud-caselist-run/t27-store-sync-leaves-the-run-state-alone.yaml) `v1-e40-t27-store-sync-leaves-the-run-state-alone` | Pending | 1 | 1.0 |
 | [The last bucket-mode wording pass: banners and the CLI name the next cloud run, and a cloud run's login hint names the task role](plan_specs/v1/e40-cloud-caselist-run/t28-last-bucket-mode-wording-pass.yaml) `v1-e40-t28-last-bucket-mode-wording-pass` | Succeeded | 1 | 2.0 |
+| [A Mac pull refused because the weekly run moved to prod is recorded as skipped, with its own notice](plan_specs/v1/e40-cloud-caselist-run/t29-pull-refused-by-the-move-is-skipped.yaml) `v1-e40-t29-pull-refused-by-the-move-is-skipped` | Pending | 1 | 1.0 |
 
 #### [E41 — Delivery Tooling Upkeep](plan_specs/v1/e41-delivery-tooling-upkeep/epic.yaml)
 

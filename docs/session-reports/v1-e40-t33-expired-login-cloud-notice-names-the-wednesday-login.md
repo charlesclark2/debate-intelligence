@@ -167,9 +167,39 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-01
 
 **Notes:**
+
+The cloud no longer tells the operator to do the one thing its runbook forbids.
+1. **ac1 passes.**
+   * Red: 4 failed (the bucket-mode notification and email, and the two runbooks). The Mac pin and
+     the neighbour codes passed before the change, as they must.
+   * Green: 8, and the node criterion passes (10).
+   * All seven mutants are caught, the PM's four plus 1b, 2b and 3b. Mutant 4 is caught through the
+     real `SnsNotifier`, which is the surface that actually reaches the operator.
+2. **The surfaces table is what the PM asked for.** Notification and email changed. The task-state
+   email and the banner were already right. The login task's own notice is right, and a hand login
+   after a failed weekly login replaces it rather than being a second one, which the new runbook
+   section says.
+3. **Decisions accepted:**
+   * t22's cure structure, with t28's words for what the next run takes up;
+   * the title and message unchanged, so the banner and the email subject hold;
+   * the backfile clause in the cure, pointing at the import refusal list;
+   * policy clause 10 read as the email being the escalation to Charlie, with the runbook sending a
+     refusal hours after a good login to the PM;
+   * one conditional expression, easy for t36 to extend. t36 is Mac-only, so the bucket-mode
+     neighbour pin for `CASELIST_TOKEN_UNREADABLE` stays right.
+4. **Follow-up, the PM's ruling:** the cloud run's log and `caselist runs --json`'s `error_message`
+   still carry the exception's "Run `debate-research caselist auth login` again". One p3 E40 task in
+   the next batch gives the CLI's bucket-mode output for this code the cure, as `_hint_for` does for
+   the others, with the Mac's output unchanged.
+5. **Closing checks:** the affected set (301 files through `sync_runs.py`) is left to the PR's `ci`
+   under agreement 10. Core caselist, sns and sync (1,889), the always-run list (374), bucket mode
+   (230), the runs, output and pull CLI tests (188), the runbook readers (219), ruff, pyright,
+   lint-imports, thin handlers, the doc checks and the specs are clean.
+6. **Merge:** a plain `scripts/task pr` once `ci` is green. No operator step follows. The cure reaches
+   the cloud with the first image that carries this task.

@@ -242,8 +242,8 @@ class Mac:
         listed = self.client.list_object_versions(Bucket=self.bucket, Prefix=RUN_LOCK_KEY)
         return [str(one.get("VersionId")) for one in listed.get("Versions", [])]
 
-    def run_records_in_the_bucket(self) -> list[str]:
-        listed = self.client.list_objects_v2(Bucket=self.bucket, Prefix="reports/sync-run")
+    def keys_in_the_bucket(self) -> list[str]:
+        listed = self.client.list_objects_v2(Bucket=self.bucket)
         return [str(one.get("Key")) for one in listed.get("Contents", [])]
 
 
@@ -296,7 +296,9 @@ async def test_a_pull_after_the_run_home_moved_is_recorded_skipped_with_its_own_
     assert_names_no_person_school_or_path(notification)
 
     assert mac.lock_versions() == versions, "the moved lock is left as the move wrote it"
-    assert mac.run_records_in_the_bucket() == [], "its record stays on this machine, as every lock refusal's"
+    assert mac.keys_in_the_bucket() == [RUN_LOCK_KEY], (
+        "its record, its details and its state stay on this machine, as every lock refusal's"
+    )
 
 
 async def test_a_pull_after_the_run_home_moved_keeps_the_record_every_earlier_build_reads(mac: Mac) -> None:

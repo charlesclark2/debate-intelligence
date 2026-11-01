@@ -27,7 +27,7 @@ spec:
     camp-path suppression exactly rather than flagging every camp card.
   priority: 3
   constraints:
-    packages: [debate_core.domain, debate_core.application, packages/debate_core/tests, docs/data]
+    packages: [debate_core.domain, debate_core.application, packages/debate_core/tests, docs/data, debate_core.integrations, debate_core.evidence.file_checks]
     forbidden:
       - A stored record an earlier build cannot read; a record shape change bumps its schema version and is shown read by the agent's build
       - A path, camp file name or school in a record or a log

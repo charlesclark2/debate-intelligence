@@ -923,5 +923,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e34-t36-token-unreadable-hint-on-the-mac
+    - id: t37
+      kind: Task
+      name: 'A listed camp file is not taken as already imported because a file of another camp shares its name'
+      description: >-
+        A listed camp file is not taken as already imported because a file of another camp
+        shares its name.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t37-listed-camp-file-with-a-hand-imported-name.yaml
+        goalRef: v1-e34-t37-listed-camp-file-with-a-hand-imported-name
+      dependsOn:
+      - t02
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t37-listed-camp-file-with-a-hand-imported-name reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t37-listed-camp-file-with-a-hand-imported-name
 status:
   phase: Pending

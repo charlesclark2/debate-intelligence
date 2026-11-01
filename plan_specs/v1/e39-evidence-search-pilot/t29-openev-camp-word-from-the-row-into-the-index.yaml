@@ -1,0 +1,78 @@
+# TASK v1-e39-t29-openev-camp-word-from-the-row-into-the-index - A camp card's OpenEv link takes the camp word the pull recorded, before the table's
+# Epic: E39 — Team Evidence Search (Student Pilot) | Release: v1.7 (Team evidence search pilot) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e39-t29-openev-camp-word-from-the-row-into-the-index
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+  annotations:
+    debate/title: "A camp card's OpenEv link takes the camp word the pull recorded, before the table's"
+spec:
+  # Filed by the PM, 2026-10-31, from v1-e30-t31's follow-up (the PM's review, 2026-11-01).
+  description: >-
+    v1-e30-t31 keeps OpenEv's own camp word on each manifest row the pull writes
+    (`openev_camp_word`). v1-e39-t28's link maps the stored canonical camp through the
+    hand-filled `openev:` table. Join the row's word into the index as v1-e39-t16 joins
+    `openev_id` (by `sha256`, from stored rows, with a deterministic choice when one file has
+    two words), and have the link prefer it, falling back to the table's word. Say whether this
+    needs an index format change; if it does, it comes with the deploy order v1-e39-t16 set
+    (dev's function first). Count first, read-only: how many stored rows carry the word (0 until
+    a build with t31 pulls).
+  priority: 3
+  constraints:
+    packages: [debate_core.domain, debate_core.application, packages/debate_core/tests, debate_api, packages/debate_api/tests, docs/data, docs/runbooks]
+    forbidden:
+      - A link built from anything but the row's word, the table's word and the year
+      - Network or AWS access in a test
+  context:
+    - kind: TaskRef
+      name: v1-e30-t31-openev-camp-word-on-the-manifest-row
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e39-t28-openev-link-goes-to-the-camps-page
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A camp card whose rows carry a word links with it, one without falls back to the
+        table, one with neither has no link; by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e39-t29-openev-camp-word-from-the-row-into-the-index-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+spec:
+  description: >-
+    A camp card's OpenEv link takes the camp word the pull recorded, before the table's.
+  goalRef:
+    name: v1-e39-t29-openev-camp-word-from-the-row-into-the-index
+  graph:
+    nodes:
+      - id: openev-camp-word-from-the-row-into-the-i
+        kind: Task
+        name: Row word into the index
+        description: >-
+          A camp card's OpenEv link takes the camp word the pull recorded, before the
+          table's.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Row word into the index tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, openev]
+status:
+  phase: Pending

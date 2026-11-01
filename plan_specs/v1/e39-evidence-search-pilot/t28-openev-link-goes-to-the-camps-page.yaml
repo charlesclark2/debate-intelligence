@@ -85,7 +85,7 @@ spec:
         link on dev and it lands on that camp's page, which lists the card's file (operator,
         recorded by the PM).
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -286,3 +286,13 @@ This is the change Wednesday needs, built so that a plan which does anything els
 8. **Merge:** `scripts/task pr --partial` once `ci` is green, because ac3, the apply, follows the
    merge. Then the report's blocks, with the plan line and the check's line sent to the PM before
    the apply.
+
+## Operator records (recorded by the PM, 2026-11-01)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac3: the operator's plan prints the expected Plan line and the check prints OK, read by the PM, and the apply before 2026-11-04 leaves the schedule on a 32 GB revision | NOT RUN | PASS | 2026-11-01 (Sunday, Chicago), worktree `caselist-credentials-dev` at `433f5d3`, as `DebateBreakGlassAdmin`: the plan's change lines were the run task definition `must be replaced` and the run scheduler policy and run schedule `updated in-place`, `Plan: 1 to add, 2 to change, 1 to destroy.`, with every Identity Center line a refresh; `check_image_plan.py --memory` printed `PLAN OK: ... memory 16384 -> 32768 ... the image sha256:a97c2394ee70... as before; ... the login task definition, its schedule and its policy unchanged`. Read by the PM. The apply: `Apply complete! Resources: 1 added, 2 changed, 1 destroyed.` The read-back: the schedule and Terraform both name `debate-dev-caselist-run:11`, `8192 32768`, `ENABLED` |
+
+Every criterion passes, so the Goal is `Succeeded`. Wednesday 2026-11-04's run is the first full re-parse on 32 GB.

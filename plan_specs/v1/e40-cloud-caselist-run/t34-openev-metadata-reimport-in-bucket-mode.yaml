@@ -1,0 +1,91 @@
+# TASK v1-e40-t34-openev-metadata-reimport-in-bucket-mode - The OpenEv metadata re-import runs in bucket mode, so a camp table change reaches dev's records
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t34-openev-metadata-reimport-in-bucket-mode
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "The OpenEv metadata re-import runs in bucket mode, so a camp table change reaches dev's records"
+spec:
+  # Filed by the PM, 2026-10-31, from v1-e30-t32's question 1 (the PM's ruling (a), 2026-11-01).
+  description: >-
+    `caselist reimport-openev-metadata` re-derives a release's camp metadata from its recorded
+    paths with no download (v1-e30-t08), and v1-e30-t32 relies on it to refile Michigan's files
+    under the split table. Since the cutover, dev's records are the cloud run's run-state
+    bundle, which only a pull, a backfile import and a removal save, so a re-import on the Mac
+    changes a copy the next cloud run replaces. Give the re-import a bucket-mode form, following
+    `caselist remove`'s pattern: take the dev run lock, restore the bundle, re-derive, publish
+    the release manifest, save the bundle, release the lock, with a dry run that prints the
+    counts it would change (camps by name, warnings) and changes nothing. It refuses during the
+    no-import window and on a Wednesday as the import does, and in prod needs `--confirm-prod`.
+    The next cloud run's parse and index stages then carry the camp to the occurrence rows and
+    the cards (v1-e30-t32's route table). Add the operator blocks to the runbook: the dry run,
+    the PM reads its counts, then the run. v1-e30-t32's report notes that the 2026-ld release's
+    2 rows change their warnings under any table; say what the dry run shows for them.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, docs/runbooks, tests/docs]
+    forbidden:
+      - A download, or network or AWS access in a test
+      - A school, student or lab name in a log or the report
+      - A run without the run lock
+  context:
+    - kind: TaskRef
+      name: v1-e30-t08-import-metadata-defects
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e40-t04-run-state-on-s3
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        In bucket mode, the re-import takes the lock, restores, re-derives, publishes the
+        manifest and saves the bundle; its dry run changes nothing and prints the counts; it
+        refuses in the window, on a Wednesday and in prod without the flag; by tests shown
+        failing first.
+    - id: ac2
+      description: >-
+        The operator's dry run on dev, read by the PM, then the run, leaves dev's bundle
+        with Michigan's 6 files refiled (operator, recorded by the PM).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t34-openev-metadata-reimport-in-bucket-mode-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    The OpenEv metadata re-import runs in bucket mode, so a camp table change reaches dev's
+    records.
+  goalRef:
+    name: v1-e40-t34-openev-metadata-reimport-in-bucket-mode
+  graph:
+    nodes:
+      - id: openev-metadata-reimport-in-bucket-mode
+        kind: Task
+        name: Bucket mode re-import
+        description: >-
+          The OpenEv metadata re-import runs in bucket mode, so a camp table change
+          reaches dev's records.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Bucket mode re-import tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests, -k, reimport]
+status:
+  phase: Pending

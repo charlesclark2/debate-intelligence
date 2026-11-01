@@ -232,12 +232,11 @@ def occurrence_is_stopped(row: OccurrenceRecord, state: SuppressionState) -> boo
     has no disclosure: it is stopped when every camp path it carries is withdrawn, so a release whose
     file another path still holds keeps it, and another release of the same file is never asked
     about (`v1-e33-t07`). A camp row written before rows carried camp paths has none, and only its
-    whole source stops it, as before.
+    whole source stops it, as before. :meth:`SuppressionState.suppresses` answers for the whole
+    source too, so a camp row's whole source needs no question of its own.
     """
     if row.camp_path_disclosures:
-        return state.suppresses_source(row.source_sha256) or all(
-            state.suppresses(row.source_sha256, disclosure=path) for path in row.camp_path_disclosures
-        )
+        return all(state.suppresses(row.source_sha256, disclosure=path) for path in row.camp_path_disclosures)
     return state.suppresses(row.source_sha256, disclosure=row.disclosure)
 
 

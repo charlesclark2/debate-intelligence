@@ -158,9 +158,33 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-31
 
 **Notes:**
+
+The smoke check t08 left owed. It covers exactly what Thursday's read uses: `caselist runs --remote`
+over the bucket's file.
+1. **ac1 passes on both builds.** The checkout's script gives 3 passed. A stamped build, built offline
+   and installed outside the checkout, gives 3 passed, and the harness confirmed its commit and tag.
+   Mutants 1 and 2 were also caught on the installed build, not only on the source.
+2. **The check is honest about its inputs.**
+   * The file is written by t08's own `ParseOwed.owe`, and its name is asserted.
+   * The bucket key is written out as the contract with the cloud run.
+   * The expected `--json` and sentences are written by hand from t08's code (agreement 6).
+   * The bucket's empty object is planted by hand, and mutant 4b proves that step is what tests the
+     zero-size branch.
+3. **Mutants.** Ten, all caught at assertions. You noticed the first version's catches of 1 and 2
+   were `KeyError` crashes, added `parses_owed_in()` to make them assertions, and re-ran every
+   mutant. That is agreement 8 applied properly.
+4. **Decisions accepted:**
+   * two synthetic weeks imported and published first, because `status` refuses an empty store;
+   * `--remote` checked, which is the only way mutant 6 is caught;
+   * "no parse owed" read as `'parse owed' not in` the lower-cased table.
+5. **Closing checks:** the affected set (57 files) stopped at about 92% at its limit with nothing
+   failing, and is left to the PR's `ci` under agreement 10. The neighbours (20), the always-run list
+   (369), ruff, pyright on the new file, lint-imports, the specs and the doc checks are clean.
+6. **Merge:** a plain `scripts/task pr` once `ci` is green. It changes nothing in the image, so Monday's
+   deploy doesn't wait for it.

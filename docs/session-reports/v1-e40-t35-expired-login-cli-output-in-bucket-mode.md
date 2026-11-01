@@ -184,9 +184,47 @@ None. This build reaches the cloud run with the next caselist-run image, as ever
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-01
 
 **Notes:**
+
+The fix t33 started is now complete. A bucket-mode run refused for an expired login no longer tells
+anyone to log in by hand: not in the command's output, the CloudWatch log or `caselist runs --json`.
+On the Mac every word is unchanged.
+
+1. **ac1:** 7 of the new file's tests failed against the start code, each on an assertion, while
+   the seven Mac pins passed. All 15 pass now, through the real command (CliRunner, moto and the
+   respx stand-in answering 401). Every expected sentence is written by hand.
+2. **Decisions accepted:**
+   * **Replaced, not added to:** the refusal as the message and t33's cure as the hint. The code,
+     details and exit status are unchanged.
+   * **The clause-10 sentence dropped in bucket mode** is right. The runbook section the cure names
+     carries the escalation, and a second wording would drift. If the escalation should reach the
+     log, it goes into `CLOUD_AUTH_EXPIRED_CURE`, so the notice gets it too.
+   * **`error_message`** is still a string, so every build reads it. The cure stays out of it
+     because of the message limit and because the record holds no fixes.
+   * **"Bucket mode"** means exactly what t33 and `_hint_for` mean by it.
+   * **The camp download path** and **the backfile import** are both covered. Good catches.
+   * **`CaselistAuthExpired.refusal` as a property** keeps the CLI's `details` (built from `vars()`)
+     unchanged.
+3. **Checked by the PM:**
+   * `_camp_download_refused` moved from `str(refused)` to `message_for`, which falls through to
+     `reported_error_message`. For a `DomainError` that is the same text, except that an empty
+     message now gives the class name, which is better.
+   * The context manager catches only `CaselistAuthExpired`, and only in bucket mode (mutant 3).
+4. **Mutants:** 10, the PM's three kinds among them, all caught at assertions. The 4b slip was
+   noticed and redone properly.
+5. **Closing checks:** the affected set (361 files) is left to the PR's `ci` under agreement 10. The
+   bounded groups (1,860, 444, 138, 129 and 892 passed), ruff, pyright, lint-imports, thin handlers
+   and the doc and spec checks are clean.
+6. **Follow-ups:** the PM files both in the next batch as one E40 p3 task, a table of code → cloud
+   cure:
+   * `CASELIST_TOKEN_MISSING` and `CASELIST_TOKEN_UNREADABLE` get their cloud cures in a bucket-mode
+     command's output;
+   * the notice's failed-stage arm names the Wednesday login for a download that failed on
+     `CASELIST_AUTH_EXPIRED`.
+7. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`, and there is no
+   operator follow-up.

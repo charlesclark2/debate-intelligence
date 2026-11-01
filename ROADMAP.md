@@ -61,7 +61,7 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 55 | 252 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 112 | 91 | 502 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 112 | 92 | 502 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 71 | 63 | 302 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 16 | 11 | 114 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
@@ -294,7 +294,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [The staleness hook reports a caselist stale when its latest run failed](plan_specs/v1/e34-caselist-sync/t32-failed-run-reads-stale.yaml) `v1-e34-t32-failed-run-reads-stale` | Succeeded | 1 | 2.0 |
 | [A keychain failure under launchd names its cause, and clearing a token already gone is no error](plan_specs/v1/e34-caselist-sync/t33-keychain-errors-named.yaml) `v1-e34-t33-keychain-errors-named` | Succeeded | 1 | 2.0 |
 | [Earlier seasons' complete archives, from 2021-22 on, imported and parsed as backfiles](plan_specs/v1/e34-caselist-sync/t34-backfile-seasons-import.yaml) `v1-e34-t34-backfile-seasons-import` | Succeeded | 1 | 4.0 |
-| [A Mac run stopped for a missing token says to log in again](plan_specs/v1/e34-caselist-sync/t35-token-missing-hint-on-the-mac.yaml) `v1-e34-t35-token-missing-hint-on-the-mac` | Pending | 1 | 0.5 |
+| [A Mac run stopped for a missing token says to log in again](plan_specs/v1/e34-caselist-sync/t35-token-missing-hint-on-the-mac.yaml) `v1-e34-t35-token-missing-hint-on-the-mac` | Succeeded | 1 | 0.5 |
 
 
 ### v1.2 — Argument landscape & file building
@@ -591,7 +591,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [store sync never moves reports/sync/, so a push of pulled copies cannot overwrite the run's lock or state files](plan_specs/v1/e40-cloud-caselist-run/t27-store-sync-leaves-the-run-state-alone.yaml) `v1-e40-t27-store-sync-leaves-the-run-state-alone` | Pending | 1 | 1.0 |
 | [The last bucket-mode wording pass: banners and the CLI name the next cloud run, and a cloud run's login hint names the task role](plan_specs/v1/e40-cloud-caselist-run/t28-last-bucket-mode-wording-pass.yaml) `v1-e40-t28-last-bucket-mode-wording-pass` | Succeeded | 1 | 2.0 |
 | [A Mac pull refused because the weekly run moved to prod is recorded as skipped, with its own notice](plan_specs/v1/e40-cloud-caselist-run/t29-pull-refused-by-the-move-is-skipped.yaml) `v1-e40-t29-pull-refused-by-the-move-is-skipped` | Pending | 1 | 1.0 |
-| [The run task gets 32 GB, so a full re-parse or a backfile import is not killed for memory](plan_specs/v1/e40-cloud-caselist-run/t30-run-task-memory-fits-a-full-parse.yaml) `v1-e40-t30-run-task-memory-fits-a-full-parse` | Pending | 1 | 1.0 |
+| [The run task gets 32 GB, so a full re-parse or a backfile import is not killed for memory](plan_specs/v1/e40-cloud-caselist-run/t30-run-task-memory-fits-a-full-parse.yaml) `v1-e40-t30-run-task-memory-fits-a-full-parse` | InProgress | 1 | 1.0 |
 | [A parse worker over its share of memory fails its file, not the whole run](plan_specs/v1/e40-cloud-caselist-run/t31-parse-worker-memory-ceiling.yaml) `v1-e40-t31-parse-worker-memory-ceiling` | Pending | 1 | 2.0 |
 | [A backfile import logs each step as it ends, so a task killed part-way shows how far it got](plan_specs/v1/e40-cloud-caselist-run/t32-backfile-import-logs-each-step.yaml) `v1-e40-t32-backfile-import-logs-each-step` | Pending | 0 | 1.0 |
 

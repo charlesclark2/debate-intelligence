@@ -262,9 +262,47 @@ None now. The dev refile waits for ruling 1.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-01
 
 **Notes:**
+
+The split is right, the count shows honestly how little of Michigan it can reach, and the session
+was right not to hand the operator a refile that the next cloud run would undo.
+1. **ac1 passes.** 40 Michigan files: 5 Classic, 1 MNDI, 34 bare. This was taken read-only before
+   any rule, with the manifests' SHA-256 checked unchanged.
+2. **ac2 passes in the repository, and its dev refile is open.**
+   * Red: 30 + 1 failed, all assertions. The matcher invariants passed at red because the old code
+     already kept them, and mutant 2 is what tests them.
+   * Green: the node criterion passes (521), and so does all of core caselist (1,833).
+   * All six of the PM's mutants (3 in two forms) and the occurrence-source mutant are caught.
+     Mutant 4 is caught by a blob store that refuses to read bytes, which is the right proof of "no
+     download".
+3. **Question 1: (a).** The re-import in bucket mode becomes one p3 task in the PM's next batch, in
+   E40, the run-state owner, following `caselist remove`'s pattern: lock, restore, re-derive, publish
+   the manifest, save the bundle, with a dry run. The next alias-table change needs it too. This
+   Goal stays `InProgress` until that refile runs on dev.
+4. **Question 2: (a), the default.** A bare Michigan stays `Michigan` with no word. Reading the
+   release's naming habits is an inference, and a wrong camp page is worse than no link. The
+   operator's private check (b) stays available if the coach asks for those 34 cards.
+5. **Deviations accepted:**
+   * **1:** the mechanism tested, with dev's refile held for the ruling.
+   * **2:** the session ran the read-only count itself, under a second, on files already on the Mac.
+6. **Decisions accepted:**
+   * the canonical names `Michigan7`, `Michigan Classic` and `MNDI`, which are what the label
+     shows;
+   * OpenEv's words and labels as spellings, with no stored file moved by them;
+   * a bare Michigan beside a specific one in a name is `UNKNOWN`;
+   * `Michigan: []`;
+   * the real camp names with invented titles in the refile test, and an invented family for the
+     overlap tests.
+7. **The 2026-ld warnings note** is useful for reading the bucket-mode re-import's dry run. The
+   follow-up task carries it.
+8. **Closing checks:** the affected set (352 files through the packaged table) is left to the PR's
+   `ci` under agreement 10. The table's readers, docs, the camp smoke tests and the always-run list
+   (993), core caselist (1,833), ruff, pyright, lint-imports, thin handlers, the doc checks and the
+   specs are clean.
+9. **Merge:** `scripts/task pr --partial` once `ci` is green, because ac2's dev refile waits for the
+   bucket-mode re-import task and its operator run.

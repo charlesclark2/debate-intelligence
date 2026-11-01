@@ -188,9 +188,42 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-31
 
 **Notes:**
+
+Both leftovers closed. Mutant 3 turned up a real point: pyright alone cannot tell a typing fix that
+changes acceptance from one that doesn't.
+1. **pyright:** 10 errors → 0, with no `cast` and no ignore. The containers are typed as what they
+   really hold, `str | None` where the validator keeps a missing value to refuse it later. That is
+   the smallest true statement, and the `SpecTree` comment says why.
+2. **Unchanged acceptance, shown three ways:**
+   * dev's tree prints the same OK line;
+   * `--status` is byte-identical;
+   * the 1,496-tree differential run of the old and new validators gives identical outcomes, and is
+     shown not to be vacuous (mutant 3 gave 20 different).
+
+   The one intended difference, a `TypeError` crash becoming a named refusal, refuses either way, and
+   the red test covers it.
+3. **start.** `prereqs`' code is captured past `set -e` with `||` and decided by a `case`:
+   * exit 1 starts under `--force`, with the warning;
+   * exit 2 refuses with or without it;
+   * anything else refuses with its code.
+
+   Mutant 4, a bare call stopped by `set -e`, shows why the capture is written that way.
+4. **Mutants:** five, all caught at assertions. Mutant 3 in two fields, each pyright-clean, accepted a
+   graph node naming nothing, and the new missing-value tests are the only thing that catches it.
+5. **Deviations accepted.**
+   * Exit 2 without `--force` gets its own message, because the old one advised the override that no
+     longer works.
+   * `--force` no longer overrides a helper failure other than exit 1. That is the right reading of
+     "override an unmet prerequisite".
+6. **Follow-up: yes, one p3 E41 task in the next PM batch.** CI's pyright `include` gains
+   `scripts/validate_specs.py`, `scripts/task_helper.py` and `scripts/affected_tests.py` by name.
+   The other eight scripts' 12 errors are left out of scope until someone clears them.
+7. **Closing checks:** the affected set ran whole within the limit (39 files, 1,831 passed). ruff,
+   pyright, lint-imports (20), shellcheck and the specs are clean.
+8. **Merge:** a plain `scripts/task pr` once `ci` is green.

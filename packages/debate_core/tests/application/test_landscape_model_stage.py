@@ -102,6 +102,74 @@ async def test_evidence_is_read_for_the_wanted_cards_only() -> None:
     assert found == {(SHA, 3): "second card's words"}
 
 
+# ------------------------------------------------------------------------------------------------
+# v1-e32-t37: the gate reads question 4 from the table under `## Open questions`
+#
+# The real policy has three rows numbered 4: the clause register's (rate limits), the permitted uses'
+# (parsing and indexing), and open question 4. Before this task the gate read the first, so it allowed
+# a live run while question 4 was open. `policy_shaped` copies the real file's tables in its order.
+# ------------------------------------------------------------------------------------------------
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
+REAL_POLICY = REPOSITORY_ROOT / "docs" / "policies" / "caselist-data-use.md"
+
+OPEN_QUESTIONS_HEADER = (
+    "| # | Question | Status | Who resolves it | What it blocks |\n|---|---|---|---|---|\n"
+)
+QUESTION_FOUR_OPEN = "**Open**"
+QUESTION_FOUR_RESOLVED = (
+    "**Resolved** 2026-11-01 (version 1.20), by the coach's decision: zero retention and no invocation "
+    "logging are recorded"
+)
+
+
+def policy_shaped(question_four_status: str) -> str:
+    """A policy with the real file's tables in order: a clause register, permitted uses, open questions."""
+    return (
+        "# Caselist and OpenEv data-use policy\n\n"
+        "## Sources and terms\n\n### Clause register\n\n"
+        "| # | Clause | What it says | What it means for us |\n|---|---|---|---|\n"
+        "| 3 | Our Stuff | No rights in the Services are granted | There is no implied licence |\n"
+        "| 4 | Acceptable Use — rate limits | No downloading beyond set rate limits | The maintainer set "
+        "a rate (clause 12) |\n"
+        "| 5 | Acceptable Use — security | No circumventing security | The operator's own login |\n\n"
+        "## Permitted uses\n\n| # | Use | Conditions |\n|---|---|---|\n"
+        "| 4 | **Parsing, hashing, fingerprinting** of the corpus | Derived artefacts inherit the rules |\n\n"
+        "## Open questions\n\n"
+        "**Accepted** means the coach approved the policy without the answer; **open** means the answer "
+        "is still needed before the thing it gates.\n\n"
+        f"{OPEN_QUESTIONS_HEADER}"
+        "| 3 | **OpenEv's distribution terms** | **Accepted as a known gap**, 2026-09-19 | The coach | "
+        "Nothing today |\n"
+        "| 4 | Confirmation that the model provider does not retain or train on our inputs | "
+        f"{question_four_status} | Operator | [E32 gate](#e32--model-classification-of-the-corpus) |\n"
+        "| 5 | The removal contact address | **Resolved** 2026-09-19 | The coach | — |\n\n"
+        "## Review and change control\n\n- Reviewed each season.\n"
+    )
+
+
+def test_the_gate_refuses_while_the_open_questions_table_leaves_question_four_open() -> None:
+    refusal = model_use_gate(policy_shaped(QUESTION_FOUR_OPEN))
+    assert refusal is not None
+    assert "open question 4" in refusal
+    assert "still open" in refusal
+
+
+def test_the_gate_allows_once_the_open_questions_table_resolves_question_four() -> None:
+    assert model_use_gate(policy_shaped(QUESTION_FOUR_RESOLVED)) is None
+
+
+def test_the_gate_allows_under_the_policy_in_this_checkout() -> None:
+    """Version 1.20 resolved question 4 (2026-11-01). Reopening it fails this test, as it should."""
+    assert model_use_gate(REAL_POLICY.read_text(encoding="utf-8")) is None
+
+
+def test_the_gate_ignores_an_open_status_in_an_earlier_row_four() -> None:
+    """A row 4 before the heading whose third cell says open does not refuse a resolved question 4."""
+    earlier = "| 4 | Acceptable Use | Still **Open** | x |\n\n"
+    assert model_use_gate(earlier + policy_shaped(QUESTION_FOUR_RESOLVED)) is None
+
+
 OPEN = (
     "| 4 | Confirmation that the model provider does not retain inputs | **Open** | Operator | E32 gate |\n"
 )
@@ -112,20 +180,96 @@ ANSWERED = (
 OTHER = "| 3 | OpenEv terms | **Open** | x | y |\n"
 
 
+def under_the_heading(rows: str) -> str:
+    """The synthetic rows, as the open-questions table they stand for."""
+    return f"## Open questions\n\n{OPEN_QUESTIONS_HEADER}{rows}"
+
+
 def test_the_gate_refuses_while_question_four_is_open() -> None:
-    refusal = model_use_gate(OTHER + OPEN)
+    refusal = model_use_gate(under_the_heading(OTHER + OPEN))
     assert refusal is not None
     assert "open question 4" in refusal
 
 
 def test_the_gate_opens_once_question_four_is_answered() -> None:
-    assert model_use_gate(OTHER + ANSWERED) is None
+    assert model_use_gate(under_the_heading(OTHER + ANSWERED)) is None
 
 
 def test_the_gate_refuses_with_no_policy_no_row_or_no_status() -> None:
     assert model_use_gate(None) is not None
-    assert model_use_gate("| 3 | OpenEv terms | **Answered** | x | y |\n") is not None
-    assert model_use_gate("| 4 | the question | | x | y |\n") is not None
+    assert model_use_gate(under_the_heading("| 3 | OpenEv terms | **Answered** | x | y |\n")) is not None
+    assert model_use_gate(under_the_heading("| 4 | the question | | x | y |\n")) is not None
+    assert model_use_gate(under_the_heading("| 4 | the question |   | x | y |\n")) is not None
+
+
+@pytest.mark.parametrize(
+    ("policy", "missing"),
+    [
+        pytest.param(OPEN_QUESTIONS_HEADER + ANSWERED, "no `## Open questions` heading", id="no-heading"),
+        pytest.param(
+            "## Open Questions to come\n\n" + OPEN_QUESTIONS_HEADER + ANSWERED, "heading", id="other-heading"
+        ),
+        pytest.param(
+            "## Open questions\n\nNone yet.\n\n## Approval\n\n" + OPEN_QUESTIONS_HEADER + ANSWERED,
+            "no table",
+            id="table-after-the-next-heading",
+        ),
+        pytest.param("## Open questions\n\nNone yet.\n", "no table", id="no-table"),
+        pytest.param(under_the_heading(OTHER), "no question 4", id="no-row"),
+        pytest.param(
+            "## Open questions\n\n| # | Question | Answer |\n|---|---|---|\n"
+            "| 4 | the question | **Answered** |\n",
+            "no Status column",
+            id="no-status-column",
+        ),
+    ],
+)
+def test_the_gate_refuses_and_names_what_it_could_not_find(policy: str, missing: str) -> None:
+    refusal = model_use_gate(policy)
+    assert refusal is not None
+    assert missing in refusal
+
+
+def test_the_gate_reads_the_status_column_by_its_header() -> None:
+    """Columns in another order: the Status cell is found by name, not as the third cell."""
+    policy = (
+        "## Open questions\n\n| # | Status | Question |\n|---|---|---|\n"
+        "| 4 | **Resolved** 2026-11-01 | Is the provider's no-retention term recorded? |\n"
+    )
+    assert model_use_gate(policy) is None
+    assert model_use_gate(policy.replace("**Resolved** 2026-11-01", "**Open**")) is not None
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        "**Open**",
+        "Open",
+        "OPEN — waiting on the AWS documentation",
+        "Still open.",
+        "_open_",
+        "**Reopened** 2026-12-01",
+        "Re-opened when the terms changed",
+        "Opened 2026-11-05",
+        "**Resolved** for the pilot; open for the V2 tub",
+    ],
+)
+def test_open_as_a_word_refuses(status: str) -> None:
+    assert model_use_gate(policy_shaped(status)) is not None
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        "**Resolved** 2026-11-01, recorded in the open-questions table",
+        "**Resolved** 2026-11-01; read beside OpenEv's and OpenCaselist's terms",
+        "**Resolved** 2026-11-01 for the open-source archives",
+        "**Answered** (2026-11-02)",
+        "**Accepted as a known gap**, 2026-09-19",
+    ],
+)
+def test_a_word_containing_open_does_not_refuse(status: str) -> None:
+    assert model_use_gate(policy_shaped(status)) is None
 
 
 # ------------------------------------------------------------------------------------------------

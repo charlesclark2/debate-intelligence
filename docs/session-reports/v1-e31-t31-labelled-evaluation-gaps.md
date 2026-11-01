@@ -963,3 +963,25 @@ Recorded under the review above, which stands. The two edits the first review as
    has published all four caselists.
 
 No further review is needed.
+
+## PM record, 2026-10-31: the store diff and the coach's sample
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+Operator follow-up B, run 2026-10-31 from the `tub-deploy-dev` worktree at `origin/dev` `66182c0` (the
+script is unchanged since this task). The sample is `coach-sample-20261031.csv`, seed 20261027.
+
+| Caselist | Version read | Sources read | Failed | Gaining a cite (tag style, line under a tag) | Cites gaining a line | Other |
+|---|---|---|---|---|---|---|
+| hsld26 | `2026.10.20-docx-6` | 5,999 of 5,999 | 0 | 319, 1,759 | 890 | none |
+| hspf26 | `2026.10.20-docx-6` | 3,592 of 3,592 | 0 | 233, 3,667 | 855 | 1 card: `full_cite+rule_ids+section_path` |
+| hspolicy26 | `2026.10.27-docx-7` | 3,825 of 3,825 | 0 | none | none | none |
+| openev | `2026.10.20-docx-6` | 102 of 102 | 0 | 6, 166 | 259 | none |
+
+* hspolicy26 had already been parsed on `docx-7` on this Mac (2026-10-31, for v1-e33-t05's prod file),
+  so it diffs against itself; the other three carry the comparison. The PM accepts the one hspf26 card
+  whose cite and section path both moved: one in 3,592 sources, and Wednesday's re-parse carries it.
+* **The coach's sample:** 7,262 candidates in 3,413 files, 20 rows written. The coach's verdicts:
+  **19 cite, 1 not cite, 0 unsure**. The bar (18 of 20) is met, so rule (2) stays and a run image
+  carrying `docx-7` may be applied. The one `not cite` was a pointer to another card
+  (`<<AUTHOR 'YY FOR REFERENCE>>`), which v1-e31-t33 takes out of rule (2).

@@ -1,0 +1,81 @@
+# TASK v1-e33-t13-cp-draft-keeps-aff-side-blocks-marked - A CP draft keeps a block an affirmative-side position places, marked to check against the plan
+# Epic: E33 Evidence File Builder | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e33-t13-cp-draft-keeps-aff-side-blocks-marked
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e33-file-builder
+  annotations:
+    debate/title: "A CP draft keeps a block an affirmative-side position places, marked to check against the plan"
+spec:
+  # Filed by the PM, 2026-10-31, from v1-e33-t11's question 3, the coach's answer B (2026-10-31).
+  description: >-
+    v1-e33-t11 leaves out of a counterplan's draft every block whose heading the position
+    matcher places under another position. On hspolicy26 that was 15 of 83 blocks, 5 of them (6
+    cards) placed under an advantage. In a CP file a block under an advantage's heading is often
+    the counterplan's solvency for that advantage, which the coach wants kept. Keep a block
+    placed under an affirmative-side position (taxonomy kind `aff` or `advantage`), with t11's
+    "check it against the affirmative's plan" comment above it; keep leaving out a block placed
+    under any other kind (T, DA, another CP, K). The command's `other_positions_left_out` counts
+    only what is left out, and the result says how many affirmative-side blocks were kept.
+    Measure on the Mac's hspolicy26 store, read-only and counts only as t11 did, before and
+    after.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, docs/guides]
+    forbidden:
+      - A team's text written into a draft
+      - A non-CP position's draft changed
+      - A real disclosed file in a fixture
+  context:
+    - kind: TaskRef
+      name: v1-e33-t11-suggest-drafts-a-cp-file-a-coach-can-build-on
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        In a CP draft, a block an aff or advantage places is kept with the
+        check-against-the-plan comment, a block any other kind places is still left out, the
+        counts say which, and a non-CP draft is byte for byte as before, with the hspolicy26
+        counts before and after; tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e33-t13-cp-draft-keeps-aff-side-blocks-marked-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e33-file-builder
+spec:
+  description: >-
+    A CP draft keeps a block an affirmative-side position places, marked to check against the
+    plan.
+  goalRef:
+    name: v1-e33-t13-cp-draft-keeps-aff-side-blocks-marked
+  graph:
+    nodes:
+      - id: cp-draft-keeps-aff-side-blocks-marked
+        kind: Task
+        name: Aff-side blocks kept
+        description: >-
+          A CP draft keeps a block an affirmative-side position places, marked to check
+          against the plan.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Aff-side blocks kept tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, suggest]
+status:
+  phase: Pending

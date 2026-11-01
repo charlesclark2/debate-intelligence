@@ -25,7 +25,8 @@ spec:
     warnings prints as today.
   priority: 3
   constraints:
-    packages: [debate_cli, packages/debate_cli/tests, debate_core.application, packages/debate_core/tests]
+    # PM ruling 2026-10-31: the shared wording lives in debate_core.evidence.file_checks.report.
+    packages: [debate_cli, packages/debate_cli/tests, debate_core.application, packages/debate_core/tests, debate_core.evidence]
     forbidden:
       - A key removed or renamed in a --json envelope
       - A card's tag, cite or text printed

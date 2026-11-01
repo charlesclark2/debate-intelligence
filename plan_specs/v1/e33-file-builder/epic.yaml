@@ -353,5 +353,65 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e33-t12-files-check-names-each-warned-card
+    - id: t13
+      kind: Task
+      name: 'A CP draft keeps a block an affirmative-side position places, marked to check against the plan'
+      description: >-
+        A CP draft keeps a block an affirmative-side position places, marked to check
+        against the plan.
+      inputs:
+        specRef: plan_specs/v1/e33-file-builder/t13-cp-draft-keeps-aff-side-blocks-marked.yaml
+        goalRef: v1-e33-t13-cp-draft-keeps-aff-side-blocks-marked
+      dependsOn:
+      - t11
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e33-t13-cp-draft-keeps-aff-side-blocks-marked reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e33-t13-cp-draft-keeps-aff-side-blocks-marked
+    - id: t14
+      kind: Task
+      name: 'A coach-edited list of plan-mechanism words in the topic config marks a CP draft''s plan-dependent blocks'
+      description: >-
+        A coach-edited list of plan-mechanism words in the topic config marks a CP draft's
+        plan-dependent blocks.
+      inputs:
+        specRef: plan_specs/v1/e33-file-builder/t14-plan-mechanism-words-in-the-topic-config.yaml
+        goalRef: v1-e33-t14-plan-mechanism-words-in-the-topic-config
+      dependsOn:
+      - t11
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e33-t14-plan-mechanism-words-in-the-topic-config reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e33-t14-plan-mechanism-words-in-the-topic-config
+    - id: t15
+      kind: Task
+      name: 'A built file still holding the CP text placeholder is warned, and a CP draft has a smoke check'
+      description: >-
+        A built file still holding the CP text placeholder is warned, and a CP draft has a
+        smoke check.
+      inputs:
+        specRef: plan_specs/v1/e33-file-builder/t15-unreplaced-cp-text-slot-warned.yaml
+        goalRef: v1-e33-t15-unreplaced-cp-text-slot-warned
+      dependsOn:
+      - t12
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e33-t15-unreplaced-cp-text-slot-warned reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e33-t15-unreplaced-cp-text-slot-warned
 status:
   phase: Pending

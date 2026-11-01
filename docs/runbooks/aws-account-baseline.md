@@ -151,18 +151,16 @@ alerts.
 
 Terraform keeps both Active:
 [`modules/cost_allocation_tags`](../../infrastructure/modules/cost_allocation_tags/), called from
-`budgets.tf` (`v1-e05-t18`). In this account they were activated by hand on 2026-10-30, and the
-root's two `import` blocks adopt them into state without changing them; see
+`budgets.tf` (`v1-e05-t18`). In this account they were activated by hand on 2026-10-30 and adopted
+into state on 2026-10-31 by two `import` blocks, which were then removed (`v1-e05-t19`); see
 [applying the cost allocation tags](#applying-the-cost-allocation-tags). Destroying either resource
 sets its tag Inactive again, so a plan that destroys one is never applied.
 
 **In a new account, this cannot happen in step 4.** A tag key only becomes activatable once AWS has
 seen a resource carrying it, so the keys do not exist until step 4 has created the tagged resources,
-and they can take up to 24 hours to appear afterwards. While the `import` blocks are in `budgets.tf`,
-a plan in an account where AWS has not yet seen both keys fails with `Cannot import non-existent
-remote object`. In a new account, take the two `import` blocks out of your copy of `budgets.tf`
-for step 4. That apply creates everything else and fails on the two tags. Once the check below lists
-both keys, plan and apply again.
+and they can take up to 24 hours to appear afterwards. Step 4's apply creates everything else and
+fails on the two tags. Once the check below lists both keys, plan and apply again: the plan creates
+the two tags, which sets each one Active.
 
 Check whether the keys have surfaced yet:
 
@@ -694,14 +692,28 @@ Step 5 says how a new account gets there.
 
 ### Applying the cost allocation tags
 
-From a worktree of its own at `origin/dev`, never in the main checkout, and never on a Wednesday,
-like [the model spend budget](#applying-a-change-to-the-budget). This root also holds the permission
-sets and the budgets, so the plan check below refuses any change but the two tags. The order: the
-worktree, the sign-in, the tfvars, the plan, the check, **the PM's read**, the apply.
+Done on 2026-10-31 (`v1-e05-t18`), from the `cost-allocation-tags-apply` worktree at `origin/dev`
+`fd9a789`. Both tags were already Active (the operator's hand change of 2026-10-30), so two `import`
+blocks in `budgets.tf` adopted them. The plan read `Plan: 2 to import, 0 to add, 0 to change, 0 to
+destroy.`, the plan check below printed `PLAN OK: two changes, Project imported and Environment
+imported, each Active; nothing else changes; permission set or assignment changes: 0; budget changes:
+0`, and the PM read both. The apply wrote only Terraform's state: `cost allocation tags in state: 2`,
+and AWS read both tags back as Active. A plan after it read `No changes. Your infrastructure matches
+the configuration.`, with `-detailed-exitcode` 0.
 
-Both tags were already Active (the operator's hand change of 2026-10-30), so the two `import` blocks
-in `budgets.tf` adopt them: the plan reads each tag from AWS and shows it imported with nothing to
-change, and the apply writes only Terraform's state. It makes no call that changes a tag.
+The two `import` blocks were then removed (`v1-e05-t19`): with both tags in state they did nothing,
+and in a new account they would fail the whole root's plan until AWS had listed both keys.
+
+### Planning this root after the imports
+
+Any later plan of the organization root is checked the same way. From a worktree of its own at
+`origin/dev`, never in the main checkout, and never on a Wednesday, like
+[the model spend budget](#applying-a-change-to-the-budget). This root also holds the permission sets
+and the budgets, so the plan check below refuses any change but the two tags. The order: the
+worktree, the sign-in, the tfvars, the plan, the check, **the PM's read**.
+
+In this account both tags are in state and Active, so the plan has nothing to do and there is nothing
+to apply. Any change in the plan is the PM's to read first.
 
 **Shell variables**, used by every block below.
 
@@ -718,17 +730,17 @@ git -C "$MAIN" fetch origin
 test -d "$WT" || git -C "$MAIN" worktree add --detach "$WT" origin/dev
 ```
 
-**Every time: the worktree at `origin/dev`, with the module merged.**
+**Every time: the worktree at `origin/dev`, with the import blocks removed.**
 
 ```bash
 cd "$WT" || echo "STOP: the worktree is missing: $WT"
 git fetch origin
 git switch --detach origin/dev
-test -f infrastructure/modules/cost_allocation_tags/main.tf && echo "ok: $(pwd) at origin/dev $(git rev-parse --short HEAD), cost_allocation_tags merged" || echo "NOT MERGED: origin/dev has no v1-e05-t18"
+if test -f infrastructure/modules/cost_allocation_tags/main.tf && ! grep -q '^import {' infrastructure/bootstrap/organization/budgets.tf; then echo "ok: $(pwd) at origin/dev $(git rev-parse --short HEAD), import blocks removed"; else echo "NOT MERGED: origin/dev has no v1-e05-t19"; fi
 git status --porcelain | grep -v 'terraform.tfvars' | head -3
 ```
-Success looks like `ok: <the worktree> at origin/dev <commit>, cost_allocation_tags merged`, and
-nothing after it. `NOT MERGED` means the pull request has not merged into `dev`: stop and wait.
+Success looks like `ok: <the worktree> at origin/dev <commit>, import blocks removed`, and nothing
+after it. `NOT MERGED` means the pull request has not merged into `dev`: stop and wait.
 
 **Sign in, and confirm the identity the plan runs as**, `debate-admin`, as for the budget. The block
 prints the role's name, not its account.
@@ -782,24 +794,24 @@ else
   AWS_PROFILE=debate-admin terraform -chdir="$ORG" plan -input=false -no-color -out=cost-allocation-tags.tfplan > "$PLAN_TXT" 2>&1
   tail -3 "$PLAN_TXT"
 fi
-grep -E '^Plan:|^Error:|will be destroyed|must be replaced' "$PLAN_TXT"
+grep -E '^No changes|^Plan:|^Error:|will be destroyed|must be replaced' "$PLAN_TXT"
 ```
 
 **What to read, and what stops you.** The `grep` prints exactly
-`Plan: 2 to import, 0 to add, 0 to change, 0 to destroy.`, and no `Error:`, `will be destroyed` or
-`must be replaced` line. Any `to change` above `0` stops you: a tag found Inactive (someone reset it
-after 2026-10-30) or drift elsewhere in the root, and the PM decides before anything is applied.
-`Cannot import non-existent remote object` means AWS no longer lists that key. No `Plan:` line at all
-means the plan failed or was refused: read the end of the file. Don't judge the plan by counting
-`aws_ssoadmin` lines in the text: `Refreshing state...` and read lines name every permission set the
-root reads, and they inflate a text count. The check below counts change entries in the plan's JSON
-instead.
+`No changes. Your infrastructure matches the configuration.`, and no `Plan:`, `Error:`,
+`will be destroyed` or `must be replaced` line. A `Plan:` line stops you: a tag found Inactive
+(someone reset it after 2026-10-30) shows as `1 to change`, and anything else is drift elsewhere in
+the root; the PM decides before anything is applied. No `No changes` or `Plan:` line at all means the
+plan failed or was refused: read the end of the file. Don't judge the plan by counting `aws_ssoadmin`
+lines in the text: `Refreshing state...` and read lines name every permission set the root reads, and
+they inflate a text count. The check below counts change entries in the plan's JSON instead.
 
-**The plan checked against exactly that shape.** `PLAN OK` only when the plan's change entries are
-the two tags, each imported with nothing to change (or, in an account where import blocks are gone,
-created), each `Active`, and nothing else. A change entry is any resource with an action other than
-`no-op` or `read`, or one being imported. It counts permission set, account assignment and budget
-entries among them by type, and prints no account id and no address.
+**The plan checked against exactly that shape.** `PLAN OK` only when the plan holds the two tags,
+each unchanged (or created, in a new account; or imported with nothing to change, as `v1-e05-t18`'s
+plan did), each `Active`, and no other change and no other cost allocation tag. A tag that is
+destroyed, replaced, updated or planned Inactive is refused. A change entry is any resource with an
+action other than `no-op` or `read`, or one being imported. The check counts permission set, account
+assignment and budget entries among them by type, and prints no account id and no address.
 
 **Operator command** (expected runtime ~1 min)
 Where: `$WT`
@@ -813,19 +825,23 @@ tags = {
     'module.cost_allocation_tags.aws_ce_cost_allocation_tag.this["Project"]': "Project",
     'module.cost_allocation_tags.aws_ce_cost_allocation_tag.this["Environment"]': "Environment",
 }
+resources = plan.get("resource_changes", [])
 entries = [
-    c for c in plan.get("resource_changes", [])
+    c for c in resources
     if c["change"]["actions"] not in (["no-op"], ["read"]) or c["change"].get("importing")
 ]
 grants = sum(1 for c in entries if c["type"].startswith("aws_ssoadmin_"))
 budgets = sum(1 for c in entries if c["type"].startswith("aws_budgets_"))
 problems = []
-others = sorted(c["address"] + " " + "/".join(c["change"]["actions"]) for c in entries if c["address"] not in tags)
+others = sorted(
+    c["address"] + " " + "/".join(c["change"]["actions"]) for c in resources
+    if c["address"] not in tags and (c in entries or c["type"] == "aws_ce_cost_allocation_tag")
+)
 if others:
     problems.append("other changes: " + ", ".join(others))
 how = []
 for address, key in tags.items():
-    found = [c for c in entries if c["address"] == address]
+    found = [c for c in resources if c["address"] == address]
     if len(found) != 1:
         problems.append("the %s tag is in the plan %d times, not once" % (key, len(found)))
         continue
@@ -833,49 +849,34 @@ for address, key in tags.items():
     actions = change["actions"]
     importing = change.get("importing")
     after = change.get("after") or {}
-    if actions == ["no-op"] and importing and importing.get("id") == key:
+    if actions == ["no-op"] and not importing:
+        how.append(key + " unchanged")
+    elif actions == ["no-op"] and importing and importing.get("id") == key:
         how.append(key + " imported")
     elif actions == ["create"] and not importing:
         how.append(key + " created")
     else:
-        problems.append("the %s tag is %s%s, not imported unchanged or created" % (key, "/".join(actions), " on import" if importing else ""))
+        problems.append("the %s tag is %s%s, not unchanged, imported unchanged or created" % (key, "/".join(actions), " on import" if importing else ""))
     if (after.get("tag_key"), after.get("status")) != (key, "Active"):
         problems.append("the %s tag is planned as %s %s" % (key, after.get("tag_key"), after.get("status")))
 counts = "permission set or assignment changes: %d; budget changes: %d" % (grants, budgets)
 if problems:
     print("PLAN NOT OK: " + " | ".join(problems) + " | " + counts)
 else:
-    print("PLAN OK: two changes, %s, each Active; nothing else changes; %s" % (" and ".join(how), counts))
+    print("PLAN OK: the two tags, %s, each Active; nothing else changes; %s" % (" and ".join(how), counts))
 COSTTAGSPLAN
 ```
-Success looks like one line, `PLAN OK: two changes, Project imported and Environment imported, each
-Active; nothing else changes; permission set or assignment changes: 0; budget changes: 0`.
+Success looks like one line, `PLAN OK: the two tags, Project unchanged and Environment unchanged,
+each Active; nothing else changes; permission set or assignment changes: 0; budget changes: 0`.
 `PLAN NOT OK` names what differs: send it to the PM and do not apply. A tag found Inactive reads
-`the Environment tag is update on import, not imported unchanged or created`. The plan check and
-the plan's text both go to the PM, who reads them before the apply.
+`the Environment tag is update, not unchanged, imported unchanged or created`; a tag the plan
+destroys reads `the Project tag is delete, ...`. A plan in which neither tag appears at all reads
+`the Project tag is in the plan 0 times, not once`: it is not a plan of this root. The plan check and
+the plan's text both go to the PM.
 
-**The apply.** Only after the PM's word on the plan, the same day, and not on a Wednesday. It then
-lists the two tags in state and reads their status back from AWS.
-
-**Operator command** (expected runtime ~1 min)
-Where: `$WT`
-```bash
-cd "$WT"
-ORG=infrastructure/bootstrap/organization
-if [ "$(date +%A)" = "Wednesday" ]; then
-  echo "STOP: it is Wednesday, the cloud run's day; apply on another day"
-elif env | grep -qE '^(TF_VAR_|TF_WORKSPACE=|TF_DATA_DIR=|TF_CLI_ARGS|AWS_ACCESS_KEY_ID=|AWS_SECRET_ACCESS_KEY=|AWS_SESSION_TOKEN=)'; then
-  echo "STOP: a Terraform override or AWS keys are set in this shell"
-else
-  AWS_PROFILE=debate-admin terraform -chdir="$ORG" apply -input=false -no-color cost-allocation-tags.tfplan | tail -3
-  echo "cost allocation tags in state: $(AWS_PROFILE=debate-admin terraform -chdir="$ORG" state list | grep -c '^module\.cost_allocation_tags\.aws_ce_cost_allocation_tag\.this')"
-  aws ce list-cost-allocation-tags --profile debate-admin --tag-keys Project Environment --query 'CostAllocationTags[].[TagKey,Status]' --output text | sort
-fi
-```
-Success looks like `Apply complete! Resources: 2 imported, 0 added, 0 changed, 0 destroyed.`, then
-`cost allocation tags in state: 2`, then `Environment Active` and `Project Active`. A state count of
-`0` means the apply did not run. `Saved plan is stale` means something changed in between: go back to
-the plan. Never `-target`, and never change the tags in the console afterwards.
+**No apply follows.** A plan the check passes in this account has no changes, and the `no-op`
+entries it found are the two tags in state. A `PLAN NOT OK`, or a `Plan:` line in the text, goes to
+the PM, who decides what follows; never `-target`, and never change the tags in the console.
 
 ## Recurring checks
 

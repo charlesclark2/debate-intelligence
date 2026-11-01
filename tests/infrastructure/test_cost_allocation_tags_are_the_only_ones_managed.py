@@ -8,6 +8,11 @@ manage a third tag without failing them. This test reads the `.tf` files: the on
 declares nothing else, and the organization root calls the module once. The module reads no data
 source and calls no module either: it needs neither, and the organization root also holds the
 permission sets.
+
+The root's two `import` blocks adopted the tags on 2026-10-31 and were then removed
+(`v1-e05-t19`): once both tags are in state they do nothing, and in a new account they fail the
+whole root's plan until AWS has listed both keys. No `import` block under `infrastructure/` names a
+cost allocation tag again.
 """
 
 from __future__ import annotations
@@ -22,6 +27,8 @@ ORGANIZATION_DIR = INFRASTRUCTURE / "bootstrap" / "organization"
 
 BLOCK = re.compile(r'^\s*(resource|data|module)\s+"([^"]+)"(?:\s+"([^"]+)")?', re.MULTILINE)
 MODULE_SOURCE = re.compile(r'^\s*source\s*=\s*"([^"]+)"', re.MULTILINE)
+IMPORT_BLOCK = re.compile(r"^\s*import\s*\{(.*?)^\s*\}", re.MULTILINE | re.DOTALL)
+IMPORT_TO = re.compile(r"^\s*to\s*=\s*(.+?)\s*$", re.MULTILINE)
 
 
 def _tf_files(directory: Path) -> list[Path]:
@@ -61,3 +68,14 @@ def test_the_organization_root_calls_the_module_once() -> None:
     ]
 
     assert sources.count("../../modules/cost_allocation_tags") == 1
+
+
+def test_no_import_block_adopts_a_cost_allocation_tag() -> None:
+    targets = [
+        (tf_file.relative_to(REPO_ROOT).as_posix(), target)
+        for tf_file in _tf_files(INFRASTRUCTURE)
+        for body in IMPORT_BLOCK.findall(tf_file.read_text(encoding="utf-8"))
+        for target in IMPORT_TO.findall(body)
+    ]
+
+    assert [found for found in targets if "aws_ce_cost_allocation_tag" in found[1]] == []

@@ -91,22 +91,10 @@ module "cost_allocation_tags" {
   source = "../../modules/cost_allocation_tags"
 }
 
-# Both tags were already Active when this module arrived, so they are imported rather than created:
-# the plan reads each tag's status from AWS and shows it imported with nothing to change, which is
-# how the PM sees they are Active before the apply. A tag found Inactive would show as updated to
-# Active instead, and the runbook's plan check refuses that until the PM has read it.
-#
-# Inert once the tags are in state. In a new account they fail the plan until AWS has seen both keys
-# (up to 24 hours after the first tagged resource): the runbook's step 5.
-import {
-  to = module.cost_allocation_tags.aws_ce_cost_allocation_tag.this["Project"]
-  id = "Project"
-}
-
-import {
-  to = module.cost_allocation_tags.aws_ce_cost_allocation_tag.this["Environment"]
-  id = "Environment"
-}
+# Both tags were already Active when this module arrived, so two import blocks adopted them into
+# state, applied on 2026-10-31 (v1-e05-t18). They were removed once both tags were in state
+# (v1-e05-t19): here they did nothing more, and in a new account they would fail the whole root's
+# plan until AWS has seen both keys. A new account creates the tags instead (the runbook's step 5).
 
 # The monitor's tag key is a variable; the module's keys are fixed. If they ever differ, the monitor
 # filters on a key nothing keeps Active and reads $0.

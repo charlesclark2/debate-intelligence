@@ -1,0 +1,77 @@
+# TASK v1-e33-t16-publish-names-an-older-quality-report - files publish names a quality report written by an older version of the checks, rather than calling it missing
+# Epic: E33 Evidence File Builder | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e33-t16-publish-names-an-older-quality-report
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e33-file-builder
+  annotations:
+    debate/title: "files publish names a quality report written by an older version of the checks, rather than calling it missing"
+spec:
+  # Filed by the PM, 2026-10-31, from v1-e33-t15's follow-up (the PM's review, 2026-10-31).
+  description: >-
+    A built file whose quality report was written by an older checker version (as every
+    unpublished file was after v1-e33-t15's bump to `2026.10.31-file-checks-3`) is refused by
+    `files publish` as `QUALITY_REPORT_MISSING`, which reads as if the report were absent,
+    though the hint (run `files check`) is right. In `file_publish_service.py`, tell the two
+    apart: an older report gets its own code, naming both checker versions and no path, with the
+    same hint, and an absent report keeps `QUALITY_REPORT_MISSING`. Publish still refuses both.
+    Say where the codes are documented and update the line there.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, docs/runbooks]
+    forbidden:
+      - Publishing a file whose report is older (it stays a refusal)
+      - A path or a card's text in a refusal
+      - Network or AWS access in a test
+  context:
+    - kind: TaskRef
+      name: v1-e33-t15-unreplaced-cp-text-slot-warned
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        An older report is refused with its own code naming both checker versions, an absent
+        one keeps `QUALITY_REPORT_MISSING`, a current one publishes as before; by tests
+        shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e33-t16-publish-names-an-older-quality-report-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e33-file-builder
+spec:
+  description: >-
+    files publish names a quality report written by an older version of the checks, rather than
+    calling it missing.
+  goalRef:
+    name: v1-e33-t16-publish-names-an-older-quality-report
+  graph:
+    nodes:
+      - id: publish-names-an-older-quality-report
+        kind: Task
+        name: Older report named
+        description: >-
+          files publish names a quality report written by an older version of the checks,
+          rather than calling it missing.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Older report named tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_file_publish_service.py]
+status:
+  phase: Pending

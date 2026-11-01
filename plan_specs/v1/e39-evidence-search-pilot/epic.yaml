@@ -657,5 +657,24 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e39-t27-newest-on-the-current-index-smoke-check
+    - id: t28
+      kind: Task
+      name: 'A camp card links to its camp''s page on OpenEv, the address the operator confirmed'
+      description: >-
+        A camp card links to its camp's page on OpenEv, the address the operator confirmed.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t28-openev-link-goes-to-the-camps-page.yaml
+        goalRef: v1-e39-t28-openev-link-goes-to-the-camps-page
+      dependsOn:
+      - t16
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t28-openev-link-goes-to-the-camps-page reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t28-openev-link-goes-to-the-camps-page
 status:
   phase: Pending

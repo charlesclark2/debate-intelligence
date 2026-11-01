@@ -1,0 +1,79 @@
+# TASK v1-e40-t29-pull-refused-by-the-move-is-skipped - A Mac pull refused because the weekly run moved to prod is recorded as skipped, with its own notice
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t29-pull-refused-by-the-move-is-skipped
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "A Mac pull refused because the weekly run moved to prod is recorded as skipped, with its own notice"
+spec:
+  # Filed by the PM, 2026-10-31, from v1-e40-t11's follow-up (the PM's review, 2026-10-31, ruling 6).
+  description: >-
+    Since v1-e40-t11, once `caselist move-run-home` has made dev's lock holder `moved`, a
+    `caselist pull` on the Mac is refused with `RUN_HOME_MOVED`. Its run record says failed, and
+    the Mac's notifier gives the generic failed-run notice. Record it as skipped, with
+    `RUN_HOME_MOVED` as the reason, and give it a notice of its own saying the weekly run now
+    runs from prod and this pull did nothing (the wording is the session's), naming no person,
+    school or path. A refusal because a runner holds the lock keeps today's record and wording.
+    Say which readers of run records (the status command, the run history that
+    `docs/data/caselist-sync-runs.md` describes) know skipped, and whether such a status already
+    exists; reuse it if it does.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, docs/runbooks]
+    forbidden:
+      - Network or AWS access in a test
+      - A real notification posted by a test
+      - Another lock refusal recorded as skipped
+  context:
+    - kind: TaskRef
+      name: v1-e40-t11-run-home-moved-holder
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A pull refused by the move records skipped with `RUN_HOME_MOVED` and gives its own
+        notice; a pull refused by a runner's hold is unchanged; by tests shown failing
+        first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t29-pull-refused-by-the-move-is-skipped-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    A Mac pull refused because the weekly run moved to prod is recorded as skipped, with its own
+    notice.
+  goalRef:
+    name: v1-e40-t29-pull-refused-by-the-move-is-skipped
+  graph:
+    nodes:
+      - id: pull-refused-by-the-move-is-skipped
+        kind: Task
+        name: Skipped after the move
+        description: >-
+          A Mac pull refused because the weekly run moved to prod is recorded as skipped,
+          with its own notice.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Skipped after the move tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, run_home_moved]
+status:
+  phase: Pending

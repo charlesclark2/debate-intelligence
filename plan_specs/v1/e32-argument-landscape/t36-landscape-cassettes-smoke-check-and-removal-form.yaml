@@ -1,0 +1,87 @@
+# TASK v1-e32-t36-landscape-cassettes-smoke-check-and-removal-form - landscape cassettes gains a smoke check and a removal form that reaches every copy
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t36-landscape-cassettes-smoke-check-and-removal-form
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "landscape cassettes gains a smoke check and a removal form that reaches every copy"
+spec:
+  # Filed by the PM, 2026-10-31, from v1-e32-t34's questions 1 and 3 (the PM's review, 2026-10-31).
+  description: >-
+    Two additions to `debate-research landscape cassettes` (v1-e32-t34). (1) A smoke check in
+    tests/smoke/test_landscape_smoke.py against the installed binary (agreement 5): an empty
+    data directory exits 0 with `directory_found` false and creates nothing, and a planted
+    synthetic cassette directory counts sole, shared and unattributed as the planting says. (2)
+    A removal form. A purge deletes a caselist's sole-owned cassettes only; a takedown has to
+    reach every copy of the removed text, and a shared cassette holds it for the other caselist
+    too (PM ruling, 2026-10-31). `landscape cassettes --caselist <slug> --for-removal` lists
+    and, behind its own confirmation code, deletes every cassette naming the caselist (sole and
+    shared) and every unattributed one (which may hold it), keeping the cassettes that name only
+    other caselists; in prod `--confirm-prod` too. The other caselist's cost is a re-recording,
+    never a wrong answer. A purge code is refused by the removal form and a removal code by the
+    purge. Then `caselist-removal.md`'s paragraph on the model stage's cassettes runs it, dry
+    run then delete, and still tells the PM; tests/docs checks that the paragraph names the
+    command and the code.
+  priority: 3
+  constraints:
+    packages: [debate_cli, packages/debate_cli/tests, debate_core.application, packages/debate_core/tests, docs/runbooks, tests/docs, tests/smoke]
+    forbidden:
+      - A cassette's content or name, or a path, in any output or log
+      - A model call or network access in a test
+      - The purge's delete changed (it stays sole-owned only)
+  context:
+    - kind: TaskRef
+      name: v1-e32-t34-landscape-cassettes-command
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The smoke check runs against the checkout's script and an installed build, and fails
+        against a break, shown in the report.
+    - id: ac2
+      description: >-
+        The removal form deletes a caselist's sole, shared and unattributed cassettes behind
+        its own code and keeps those naming only other caselists; each form refuses the
+        other's code; the removal runbook's paragraph runs it; by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t36-landscape-cassettes-smoke-check-and-removal-form-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    landscape cassettes gains a smoke check and a removal form that reaches every copy.
+  goalRef:
+    name: v1-e32-t36-landscape-cassettes-smoke-check-and-removal-form
+  graph:
+    nodes:
+      - id: landscape-cassettes-smoke-check-and-remo
+        kind: Task
+        name: Cassettes removal form
+        description: >-
+          landscape cassettes gains a smoke check and a removal form that reaches every
+          copy.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Cassettes removal form tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests, -k, cassette]
+status:
+  phase: Pending

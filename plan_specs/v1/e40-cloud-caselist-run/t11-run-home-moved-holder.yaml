@@ -24,7 +24,8 @@ spec:
     names the holder and where the run now lives. Needed before the promotion.
   priority: 3
   constraints:
-    packages: [debate_core.application, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, docs/runbooks]
+    # PM ruling 2026-10-31 (deviation): the smoke check agreement 5 asks for.
+    packages: [debate_core.application, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, docs/runbooks, tests/smoke]
     forbidden:
       - A holder written without the lock
       - Network or AWS access in any test

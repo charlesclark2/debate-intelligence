@@ -62,7 +62,7 @@ v2.3's extension work.
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 55 | 252 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 115 | 94 | 505 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 73 | 66 | 304 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 73 | 67 | 304 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 16 | 11 | 114 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
@@ -368,7 +368,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [A command lists and deletes one caselist's model cassettes, and the annual purge calls it](plan_specs/v1/e32-argument-landscape/t34-landscape-cassettes-command.yaml) `v1-e32-t34-landscape-cassettes-command` | Succeeded | 1 | 1.0 |
 | [A CP text the landscape shows is whole: a text ending in a colon shows its planks, and a text split across paragraphs is joined](plan_specs/v1/e32-argument-landscape/t35-cp-texts-shown-whole.yaml) `v1-e32-t35-cp-texts-shown-whole` | Succeeded | 1 | 3.0 |
 | [landscape cassettes gains a smoke check and a removal form that reaches every copy](plan_specs/v1/e32-argument-landscape/t36-landscape-cassettes-smoke-check-and-removal-form.yaml) `v1-e32-t36-landscape-cassettes-smoke-check-and-removal-form` | Succeeded | 1 | 2.0 |
-| [The model-use gate reads open question 4 from the policy's open-questions table, not the first row numbered 4](plan_specs/v1/e32-argument-landscape/t37-model-use-gate-reads-the-open-questions-table.yaml) `v1-e32-t37-model-use-gate-reads-the-open-questions-table` | Pending | 1 | 0.5 |
+| [The model-use gate reads open question 4 from the policy's open-questions table, not the first row numbered 4](plan_specs/v1/e32-argument-landscape/t37-model-use-gate-reads-the-open-questions-table.yaml) `v1-e32-t37-model-use-gate-reads-the-open-questions-table` | Succeeded | 1 | 0.5 |
 | [The landscape smoke check reads the review queue's order line and a dry run's scan refusal](plan_specs/v1/e32-argument-landscape/t38-landscape-smoke-checks-order-line-and-dry-run-refusal.yaml) `v1-e32-t38-landscape-smoke-checks-order-line-and-dry-run-refusal` | Pending | 2 | 1.0 |
 
 #### [E33 — Evidence File Builder](plan_specs/v1/e33-file-builder/epic.yaml)

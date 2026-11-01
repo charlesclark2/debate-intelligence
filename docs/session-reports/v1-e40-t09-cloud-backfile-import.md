@@ -321,3 +321,21 @@ Added by the PM. Nothing above is changed, and this section is not a review.
 | ac2, the dry run on Fargate in dev | NOT RUN | PASS | 2026-10-31, `hspolicy25`, a task of `debate-dev-caselist-run` revision 8 (image `sha256:81656bbf…`, `v1.1.0-dev.164`), started by hand from `caselist-credentials-dev`: stopped `EssentialContainerExited`, exit `0`; the result line `"status": "ok"`, `"applied": false`, `"archive_bytes": 3958272657`, `"already_imported": false`, `"backfile_downloads_left": 1`, `"inside_no_import_window": false`, `"required_bytes": 29687044928`, `"free_bytes": 105463214080`, `"enough": true`. Recorded in `docs/data/caselist-backfile-seasons.md` |
 
 ac2 passes. The Goal stays `InProgress` for ac3, the four imports: `hspolicy25` after Monday 2026-11-02's image apply, then one a day outside the no-import window.
+
+## The first import, killed for memory (recorded by the PM, 2026-10-31)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| | |
+|---|---|
+| Caselist | `hspolicy25`, after its dry run of 2026-10-31 (`ok`, nothing applied) |
+| Task definition | revision 10 (`v1.1.0-dev.251`), 8 vCPU, 16 GB, `DEBATE_PARSE__WORKERS=8` |
+| Started / stopped (Chicago) | 2026-10-31 21:32 / 22:43, 71 minutes |
+| ECS | `STOPPED`, `EssentialContainerExited`, exit `137`; container reason `OutOfMemoryError: container killed due to memory usage` |
+| Its log | empty: the import writes its result line only when it ends, so the step it died in is not known. The parse is the likeliest at 71 minutes |
+| What it left | nothing published; the archive was on the task's own volume and went with it; the run lock's lease lapsed after 30 minutes and is taken over automatically |
+
+The day's download budget is spent until 24 hours after the start, 2026-11-01 21:32 Chicago. The
+import is started again only after `v1-e40-t30` (the run task at 32 GB) is applied, outside the
+Tuesday 06:00 to Thursday 00:00 window and never on a Wednesday. `v1-e40-t31` (a worker memory
+ceiling) and `v1-e40-t32` (a log line per step) follow from it. ac3 stays open.

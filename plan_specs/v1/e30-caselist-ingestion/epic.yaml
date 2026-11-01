@@ -772,5 +772,22 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e30-t30-inbox-deletions-fsync-the-directory
+    - id: t31
+      kind: Task
+      name: 'The pull keeps OpenEv''s own camp word on a camp file''s manifest row'
+      description: >-
+        The pull keeps OpenEv's own camp word on a camp file's manifest row.
+      inputs:
+        specRef: plan_specs/v1/e30-caselist-ingestion/t31-openev-camp-word-on-the-manifest-row.yaml
+        goalRef: v1-e30-t31-openev-camp-word-on-the-manifest-row
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e30-t31-openev-camp-word-on-the-manifest-row reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e30-t31-openev-camp-word-on-the-manifest-row
 status:
   phase: Pending

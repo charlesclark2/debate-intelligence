@@ -885,5 +885,24 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e34-t34-backfile-seasons-import
+    - id: t35
+      kind: Task
+      name: 'A Mac run stopped for a missing token says to log in again'
+      description: >-
+        A Mac run stopped for a missing token says to log in again.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t35-token-missing-hint-on-the-mac.yaml
+        goalRef: v1-e34-t35-token-missing-hint-on-the-mac
+      dependsOn:
+      - t33
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t35-token-missing-hint-on-the-mac reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t35-token-missing-hint-on-the-mac
 status:
   phase: Pending

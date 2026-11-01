@@ -97,10 +97,14 @@ the task's volume **105,463,214,080**, beside the 29,687,044,928 it needs.
 
 | Caselist | Date (Chicago) | Revision | Downloaded bytes | Members | Stored | Suppressed | Held | Sources uploaded | Parsed | Cards | Parsed objects uploaded | Steps (s) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `hspolicy25` | not yet run | | | | | | | | | | | |
+| `hspolicy25` | 2026-10-31, killed for memory (below); not yet imported | 10 | | | | | | | | | | |
 | `hsld25` | not yet run | | | | | | | | | | | |
 | `hspolicy24` | not yet run | | | | | | | | | | | |
 | `hsld24` | not yet run | | | | | | | | | | | |
+
+**The first attempt, 2026-10-31.** `hspolicy25` on revision 10 (8 vCPU, 16 GB, 8 parse workers) was
+killed at 71 minutes: ECS recorded `OutOfMemoryError`, exit 137. It logged nothing first and published
+nothing. It is started again after `v1-e40-t30` gives the run task 32 GB.
 
 **The weekly run after the first import** (ac3): not yet run. Its run id, outcome and minutes, and
 the three weeks before it, go here.

@@ -1,0 +1,72 @@
+# TASK v1-e40-t32-backfile-import-logs-each-step - A backfile import logs each step as it ends, so a task killed part-way shows how far it got
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t32-backfile-import-logs-each-step
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "A backfile import logs each step as it ends, so a task killed part-way shows how far it got"
+spec:
+  # Filed by the PM, 2026-10-31, from the hspolicy25 import of 2026-10-31, which logged nothing before it was killed.
+  description: >-
+    `caselist backfile-import` writes its result as one `--json` line when it ends. Killed at 71
+    minutes on 2026-10-31, it left an empty log, so nobody can say whether it was downloading,
+    importing, parsing or publishing. Log one line as each step starts and ends (restore,
+    download, import, parse, publish, publish parsed), with the step, its seconds and its
+    counts, and during the parse a line every few minutes with sources done and left. Counts and
+    step names only: never a school, a team, a file name or a path. The runbook's watch block
+    gains a read of the last step line, filtered as the counts block is.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, docs/runbooks, tests/docs]
+    forbidden:
+      - A school, team, file name or path in a log line
+      - Network or AWS access in a test
+  context: []
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Each step logs its start and end with seconds and counts, the parse logs its
+        progress, no line names a school, team, file or path, and the runbook reads the last
+        step line, by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t32-backfile-import-logs-each-step-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    A backfile import logs each step as it ends, so a task killed part-way shows how far it got.
+  goalRef:
+    name: v1-e40-t32-backfile-import-logs-each-step
+  graph:
+    nodes:
+      - id: backfile-import-logs-each-step
+        kind: Task
+        name: Import step lines
+        description: >-
+          A backfile import logs each step as it ends, so a task killed part-way shows how
+          far it got.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Import step lines tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, backfile]
+status:
+  phase: Pending

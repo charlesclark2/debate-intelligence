@@ -306,9 +306,58 @@ PM questions from v1-e06-t06-cut-command (2026-11-01)
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-01
 
 **Notes:**
+
+v1.3's headline command is built, and it fails closed. A URL in, a verified card out, or an explicit
+status and exit code. No business logic sits in the CLI.
+
+1. **ac1–ac5 pass:**
+   * ac1 reads the .docx back: the tag, the cite, the underlining worked out by hand from the
+     offsets, and the embedded manifest, which `verify` then accepts.
+   * ac2 covers all four retrieval statuses, with no file, no card row and zero model calls.
+   * ac3 shows the banner and every reason.
+   * ac5 is proven on two installed builds: red on a wheel stamped by the old script, green on this
+     branch's.
+2. **Red first and mutants:** 20 of 22 tests failed against the skeleton, and the pinned wiring
+   lists, verify's wording and stamp_build each went red too. All six mutants were caught, including
+   the PM's four.
+3. **Exit codes:** written into the spec as the PM's dated amendment. `exit_code_for` needed no change;
+   `CARD_UNVERIFIED = 4` is the only new member.
+4. **The rulings on your questions:**
+   * **Q1, (a).** Keep it. One rule for every `--json` payload: no evidence text. The manifest
+     `verify` reads is the one inside the document. Write ac4's amendment into the spec: "the
+     CutResult with the embedded manifest's identity (version, generated_at, card ids, snapshot
+     references, SHA-256 of the embedded bytes)".
+   * **Q2, (a).** Add `scripts/stamp_build.py` and `tests/scripts` to `constraints.packages` in the
+     same dated amendment. Deviation 2 is accepted.
+   * **Q3, (a).** Keep `DEBATE_MODEL_MODE` as the one control, defaulting to replay. Follow-up 2 (a
+     `cut`-specific hint that says `DEBATE_MODEL_MODE=live`) is filed by the PM as a p3 task.
+   * **Q4.** Cutting from a stored pasted copy is valuable: library-access articles that the fetcher
+     sees as paywalled. The PM files one E06 p2 task for it. The card carries USER_SUPPLIED
+     provenance and is verified against that snapshot. Until it lands, `fetch`'s exit-3 hint says the
+     copy can be stored, not cut. The coach may veto this.
+5. **Decisions accepted:**
+   * `--need` is required;
+   * prompts and profiles come from the build itself;
+   * `LOCAL_OWNER_ID`;
+   * `_NoCardEditsYet`;
+   * refusals before any connection;
+   * the temp-file-and-rename write;
+   * the progress mapping;
+   * the test seams.
+6. **The lock edited by hand** (Decision 9) is accepted. python-docx was already locked as a dev
+   dependency, `uv lock --check --offline` accepts it, and `ci`'s `uv sync --locked` checks it again.
+7. **Checks:** the affected set is the whole selection after the pyproject edit, so it is left to
+   `ci` (agreement 10). The bounded changed areas (753, then 132 passed), ruff, pyright, lint-imports,
+   thin handlers, the specs and the doc checks are clean.
+8. **The operator follow-up** (a live cut on dev) is optional and needs a dev pre-release carrying this
+   installed on the Mac. The Mac's CLI is dev.289, which has no `cut`. It does not hold the merge.
+   The PM gives the install and the cut one block at a time when the coach picks an article.
+9. **Before the PR:** write the dated PM amendment (ac4's wording and the two packages) into the spec,
+   then run validate_specs and commit. Don't edit this report further.
+10. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`.

@@ -49,12 +49,19 @@ spec:
     (`ModelAccessDenied`, `ModelRequestRejected`, as v1-e05-t09 rules) and the cases v1-e06-t02's
     ruling calls could not run (a missing or damaged snapshot, an unregistered prompt); nothing is
     saved and no card id is printed. The description's "5 model/config error" is superseded.
+    (PM amendment 2026-11-01, from the PM review.) `--json` prints the CutResult with the
+    embedded manifest's identity, not the manifest itself: the manifest holds evidence text,
+    which no `--json` payload carries (`debate_cli/output.py`), and the whole manifest is the one
+    embedded in the .docx. Bundling `prompts/` and `config/format_profiles/` into the installed
+    build is `scripts/stamp_build.py`'s, with its tests under `tests/scripts`.
   priority: 1
   constraints:
     # PM amendment 2026-10-27: the command's tests and smoke check, and verify's exit-2 wording.
     # PM amendment 2026-10-27, from v1-e06-t04's follow-up 1: python-docx in debate-core's docx
     # extra, and the lock.
-    packages: [debate_cli, packages/debate_cli/tests, tests/smoke, packages/debate_core/pyproject.toml, uv.lock]
+    # PM amendment 2026-11-01, from the PM review: the stamp step that bundles prompts/ and the
+    # format profiles, and its tests.
+    packages: [debate_cli, packages/debate_cli/tests, tests/smoke, packages/debate_core/pyproject.toml, uv.lock, scripts/stamp_build.py, tests/scripts]
     forbidden:
       - Business logic (selection, verification, citation merging) in debate_cli
       - Exit code 0 when the exported card is not VERIFIED
@@ -84,8 +91,10 @@ spec:
         contains the UNVERIFIED banner.
     - id: ac4
       description: >-
-        `--json` writes a single JSON object (CutResult with manifest) to stdout with progress output sent
-        to stderr, and `cut --help` documents every option and exit code.
+        (PM amendment 2026-11-01, from the PM review) `--json` writes a single JSON object to stdout,
+        the CutResult with the embedded manifest's identity (version, generated_at, card ids,
+        snapshot references, SHA-256 of the embedded bytes), with progress output sent to stderr, and
+        `cut --help` documents every option and exit code.
     - id: ac5
       description: >-
         (PM amendment 2026-10-19) An installed wheel holds `prompts/` and the command loads

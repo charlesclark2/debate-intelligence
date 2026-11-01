@@ -52,6 +52,13 @@ team, run again with `--accept-scan-hits <digest>`, which is accepted only while
 the hits the run finds. Accepted hits are remembered on this machine, so next week stops only on new
 ones.
 
+A `--publish --dry-run` the scan holds back is refused the same way, and writes no report, so its hint
+says so and names the command to run (`v1-e32-t19`): the command as typed, without `--dry-run` and with
+`--accept-scan-hits <digest>`. `--json` carries that command as `error.details.publish_command`, a key
+only a dry run's refusal has. It echoes only what was typed, root options such as `--json` among them,
+in the order the command declares them: never a default, an environment variable or a value the run
+resolved, such as the newest snapshot.
+
 ## `--dry-run`
 
 Writes nothing but the plan-text and analytic-text caches: not the classification cache, the review
@@ -134,12 +141,14 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import shlex
 from datetime import date
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated, Final, NoReturn
+from typing import Annotated, Any, Final, NoReturn
 
 import typer
+from typer.core import TyperOption
 
 from debate_cli.bucket_lock import run_holding_the_bucket_lock
 from debate_cli.context import CliContext, cli_context, command_name
@@ -323,7 +332,7 @@ def report(
     except LandscapeRequestRefused as refused:
         _end(cli, ctx, _usage_failure(refused))
     payload = run_summary(result, settings, restored_copy=copy)
-    failure = _publish_failure(result, payload)
+    failure = _publish_failure(result, payload, ctx)
     if failure is None or not cli.output.is_json:
         cli.output.success(command_name(ctx), payload, display=_display(result, settings))
     if failure is not None:
@@ -592,8 +601,14 @@ def _usage_failure(refused: LandscapeRequestRefused) -> CommandFailure:
     )
 
 
-def _publish_failure(result: LandscapeRunResult, payload: dict[str, JsonValue]) -> CommandFailure | None:
-    """A publish the scan held back: exit 1, after the result and its hits are printed."""
+def _publish_failure(
+    result: LandscapeRunResult, payload: dict[str, JsonValue], ctx: typer.Context
+) -> CommandFailure | None:
+    """A publish the scan held back: exit 1, after the result and its hits are printed.
+
+    A dry run's refusal says it wrote no report and names the command to publish with (`v1-e32-t19`),
+    in the hint and in `details["publish_command"]`; a publish's reads as it did before.
+    """
     refused = result.publish.refused if result.publish is not None else None
     if refused is None:
         return None
@@ -608,17 +623,64 @@ def _publish_failure(result: LandscapeRunResult, payload: dict[str, JsonValue]) 
             f"the scan found {len(scan.pending)} hit(s) not yet accepted (digest {scan.digest}); "
             "nothing was published"
         )
+    details = payload
+    hint = (
+        f"Read each hit's line above. If none names a team, run again with --accept-scan-hits "
+        f"{scan.digest}; the report is written locally at {result.directory}."
+    )
+    if result.dry_run:
+        command = _publish_command(ctx, scan.digest)
+        details = {**payload, "publish_command": command}
+        hint = (
+            "This dry run wrote no report. Read each hit's line above. If none names a team, publish "
+            f"with `{command}`."
+        )
     return CommandFailure(
         code=refused.value,
         message=message,
         exit_code=ExitCode.DOMAIN_FAILURE,
-        details=payload,
-        hint=(
-            f"Read each hit's line above. If none names a team, run again with --accept-scan-hits "
-            f"{scan.digest}; the report is written locally at {result.directory}."
-        ),
+        details=details,
+        hint=hint,
         panel_details={"digest": scan.digest, "hits_not_yet_accepted": len(scan.pending)},
     )
+
+
+_NOT_IN_THE_PUBLISH_COMMAND: Final = frozenset({"dry_run", "accept_scan_hits"})
+
+
+def _publish_command(ctx: typer.Context, digest: str) -> str:
+    """The command as typed, without `--dry-run` and with `--accept-scan-hits <digest>` (`v1-e32-t19`).
+
+    From the program down to `report`, each command's options read from the command line, in the order
+    the command declares them: never a default, an environment variable or a value the run resolved.
+    """
+    # Walked with `Any`, as `command_name` walks it: Typer vendors Click privately, so its context,
+    # parameter and parameter-source types are not importable. A source is told by its name.
+    nodes: list[Any] = []
+    node: Any = ctx
+    while node is not None:
+        nodes.append(node)
+        node = node.parent
+    words: list[str] = []
+    for node in reversed(nodes):
+        words.append("debate-research" if node.parent is None else str(node.info_name))
+        words += _typed_options(node)
+    return shlex.join([*words, "--accept-scan-hits", digest])
+
+
+def _typed_options(node: Any) -> list[str]:
+    words: list[str] = []
+    for option in node.command.params:
+        name = option.name
+        source = node.get_parameter_source(name) if name is not None else None
+        if name in _NOT_IN_THE_PUBLISH_COMMAND or source is None or source.name != "COMMANDLINE":
+            continue
+        value = node.params[name]
+        if isinstance(option, TyperOption) and option.is_flag:
+            words.append(option.opts[0] if value else option.secondary_opts[0])
+        else:
+            words += [option.opts[0], str(value)]
+    return words
 
 
 def run_summary(

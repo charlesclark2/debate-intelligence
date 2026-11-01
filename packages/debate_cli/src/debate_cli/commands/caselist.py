@@ -93,6 +93,11 @@ never writes a blob, a digest or a key. The manifest's bytes change, so `caselis
 the release as drifted until `caselist publish --caselist openev --snapshot <year>-<event>`
 re-uploads it. Exit codes are `import`'s.
 
+That is local mode. In bucket mode (dev since the cutover), the records are the cloud run's run-state
+bundle, and the command works on the bucket's copy instead (`v1-e40-t34`,
+:mod:`debate_cli.openev_reimport_in_bucket`): a dry run unless `--execute`, which holds the
+bucket's run lock while it restores, re-derives, publishes the release manifest and saves the bundle.
+
 ## `caselist publish`
 
 ::
@@ -202,6 +207,7 @@ from debate_cli.caselist_events import EVENTS_BY_SLUG_PREFIX, event_for_caselist
 from debate_cli.caselist_publish_refusals import no_bucket, refuse, unconfirmed_production_write
 from debate_cli.context import cli_context, command_name
 from debate_cli.exit_codes import ExitCode, exit_code_for_failure_codes
+from debate_cli.openev_reimport_in_bucket import reimport_counts, reimport_in_bucket
 from debate_cli.options.bucket_environment import CONFIRM_PROD_FLAG
 from debate_cli.options.snapshot_date import parse_snapshot_date
 from debate_cli.output import CommandFailure, JsonValue, TableSpec
@@ -422,11 +428,27 @@ def reimport_openev_metadata(
         bool,
         typer.Option("--dry-run", help="Report what would change and write nothing at all."),
     ] = False,
+    execute: Annotated[
+        bool,
+        typer.Option("--execute", help="In bucket mode, carry it out. Without it, bucket mode is a dry run."),
+    ] = False,
+    confirm_prod: Annotated[
+        bool, typer.Option(CONFIRM_PROD_FLAG, help="Required with --execute in the production environment.")
+    ] = False,
 ) -> None:
     """Re-derive camp and title for camp files already imported. Downloads nothing."""
     cli = cli_context(ctx)
     cli.services.settings  # noqa: B018 - loaded first, so a broken profile is reported before a bad flag
+    if dry_run and execute:
+        raise typer.BadParameter(
+            "--dry-run and --execute ask for opposite things; pass one", param_hint="--execute"
+        )
     aliases = load_camp_aliases(camp_aliases)
+    if cli.services.bucket_write_guard().bucket_mode:
+        reimport_in_bucket(
+            cli, ctx, year=year, event=event, aliases=aliases, execute=execute, confirm_prod=confirm_prod
+        )
+        return
     manifest_path = cli.services.evidence_object_path(openev_manifest_key(year, event))
 
     report = _run(
@@ -1488,27 +1510,7 @@ def openev_metadata_reimport_summary(
     institution, and no path, title or file name appears here. `manifest` is the path written, or
     `null` when nothing was (a dry run, or a manifest already right).
     """
-    return {
-        "release": report.release,
-        "year": report.year,
-        "event": str(report.event),
-        "applied": report.applied,
-        "manifest_key": report.manifest_key,
-        "rows": report.rows,
-        "rows_changed": report.rows_changed,
-        "titles_changed": report.titles_changed,
-        "warnings_changed": report.warnings_changed,
-        "camps_before": dict(report.camps_before),
-        "camps_after": dict(report.camps_after),
-        "unknown_before": report.unknown_before,
-        "unknown_after": report.unknown_after,
-        "camp_files_updated": report.camp_files_updated,
-        "camp_files_missing": report.camp_files_missing,
-        "blobs_missing": report.blobs_missing,
-        "identities_added": report.identities_added,
-        "manifest_changed": report.manifest_changed,
-        "manifest": str(manifest) if manifest is not None else None,
-    }
+    return {**reimport_counts(report), "manifest": str(manifest) if manifest is not None else None}
 
 
 def _reimport_table(report: OpenEvMetadataReimport, manifest: Path | None) -> TableSpec:

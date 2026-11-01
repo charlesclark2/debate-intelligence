@@ -272,6 +272,9 @@ if TYPE_CHECKING:  # pragma: no cover - imported for the type checker only; see 
 
     from debate_core.application.caselist.backfile_import import BackfileImportService
     from debate_core.application.caselist.backfile_survey import BackfileSurvey
+    from debate_core.application.caselist.openev_metadata_reimport_in_bucket import (
+        OpenEvMetadataReimportInBucket,
+    )
     from debate_core.application.caselist_login import ScheduledLogin, SecretText, TabroomPasswordSecret
     from debate_core.integrations.docx_parser import DebateDocxParser
     from debate_core.integrations.local import SqliteDatabase
@@ -2284,6 +2287,38 @@ class ServiceContainer:
             parse=lambda: self._build_caselist_parse(suppression),
             parsed_publisher=self.parsed_publisher if bucket else None,
             parsed_version=DebateDocxParser().parser_version,
+            clock=self.clock(),
+        )
+
+    def openev_metadata_reimport_in_bucket(self) -> OpenEvMetadataReimportInBucket:
+        """`caselist reimport-openev-metadata` in bucket mode, on the bucket's run state (`v1-e40-t34`).
+
+        Over the command's lock and run state, `caselist publish`'s publisher, and an OpenEv importer
+        that reads the suppression list's local and bucket copies as one. The importer and the delivery
+        record are read only after the restore has replaced the database and the state files.
+        """
+        from debate_core.application.caselist.openev_metadata_reimport_in_bucket import (
+            OpenEvMetadataReimportInBucket,
+        )
+        from debate_core.integrations.local import FsSnapshotStore
+        from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
+
+        def importer() -> OpenEvImportService:
+            return OpenEvImportService(
+                caselists=SqliteCaselistRepository(self.database),
+                blobs=FsSnapshotStore(self.settings.storage.data_dir),
+                suppression=self.suppression_list(),
+            )
+
+        return OpenEvMetadataReimportInBucket(
+            guard=self.bucket_write_guard(),
+            lock=self.bucket_run_lock,
+            run_state=self.run_state,
+            bucket=self._evidence_bucket,
+            importer=importer,
+            publisher=self.caselist_publish,
+            upstream_paths=self.openev_upstream_paths,
+            manifest_path=self.evidence_object_path,
             clock=self.clock(),
         )
 

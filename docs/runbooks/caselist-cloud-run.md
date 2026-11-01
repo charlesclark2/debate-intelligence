@@ -1657,6 +1657,136 @@ removal's plan listed ([caselist-removal.md](caselist-removal.md), step 5): impo
 downloads nothing and spends no budget, so `"already_imported": true` and `"downloaded_bytes": 0` are
 its success. The window still applies.
 
+## A camp table change: the OpenEv metadata re-import
+
+When `camp_aliases.yaml` changes, camp files already imported keep the camp they were filed under
+until their release's metadata is re-derived (`v1-e30-t32` split Michigan into three camps this way).
+`caselist reimport-openev-metadata` re-derives camp, lab, title and warnings from the paths the release
+manifest recorded. It downloads nothing and reads no file's bytes. Since the cutover dev's records are
+the cloud run's run-state bundle, so in dev it runs in bucket mode (`v1-e40-t34`), on the bucket's
+copy, as `caselist remove` does:
+
+* **The dry run is the default.** It restores the bucket's run state into the working copy, re-derives
+  with nothing written, and prints each camp's file count before and after, with the titles and
+  warnings that change. It takes no lock and writes nothing to the bucket.
+* **`--execute`** holds the bucket's run lock from the restore to the end. It restores, re-derives,
+  corrects the camp-file records, publishes the release manifest (no source: they are all in the
+  bucket already) and saves the run-state bundle. A release whose metadata is already right is left
+  alone: nothing is published or saved.
+* **What refuses, before anything is restored:** the no-import window, Tuesday 06:00 to Thursday
+  00:00 America/Chicago, every Wednesday included (`INSIDE_NO_IMPORT_WINDOW`); a run holding the lock
+  (`RUN_LOCK_HELD`); the run's home moved to prod (`RUN_HOME_MOVED`); in prod, `--execute` without
+  `--confirm-prod` (`CONFIRMATION_REQUIRED`). A bundle that changed between the restore and the
+  publish, which only a removal could do, stops it with `BUNDLE_CHANGED_SINCE_RESTORE` and nothing
+  published: run it again.
+* **After it, nothing more by hand.** The next cloud run's parse stage carries the new camps to the
+  occurrence rows, and its search index stage carries them to the cards (`v1-e30-t32`'s route table).
+  Never `caselist publish` or `caselist parse --publish` from the Mac for it.
+
+**The working copy** is `$HOME/.debate-research/reimport-working-copy`, a directory of its own, so the
+Mac's own dev data directory is left as it is. Each command replaces its contents with the bucket's.
+
+### Michigan's refile (`v1-e30-t32`), after `v1-e40-t34` merges
+
+**The worktree**, `$WT` from "Before you start", moved to `origin/dev` with this task merged.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac
+```bash
+WT="$HOME/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/caselist-credentials-dev"
+cd "$WT" || echo "WT does not exist: $WT"
+git fetch origin
+git switch --detach origin/dev
+test -f packages/debate_core/src/debate_core/application/caselist/openev_metadata_reimport_in_bucket.py && echo "ok: origin/dev $(git rev-parse --short HEAD), the bucket-mode re-import merged" || echo "NOT MERGED: wait for v1-e40-t34 to merge into dev"
+aws sso login --profile debate-dev-evidence
+aws sts get-caller-identity --profile debate-dev-evidence --query Arn --output text
+```
+Success looks like `ok: origin/dev <commit>, the bucket-mode re-import merged`, then an ARN containing
+`AWSReservedSSO_DebateDevEvidenceOperator`.
+
+**The dry run**, of both camp releases dev holds. Not inside the window: Thursday to Monday, or a
+Tuesday before 06:00 Chicago.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`, a new terminal window
+```bash
+cd "$WT"
+COPY="$HOME/.debate-research/reimport-working-copy"
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+echo "running pull: ${PULL:-none}"
+if [[ -n "$PULL" ]] || env | grep -q '^DEBATE_'; then
+  echo "STOP: a caselist pull is running, or DEBATE_ overrides are set in this shell; nothing ran"
+else
+  for EVENT in policy ld; do
+    env DEBATE_ENV=dev DEBATE_STORAGE__DATA_DIR="$COPY" uv run debate-research caselist reimport-openev-metadata --year 2026 --event "$EVENT"
+  done
+fi
+```
+Success looks like two tables, each titled `openev 2026-<event> metadata, dev's run state (dry run)`,
+each caption ending `DRY RUN: the bucket's run state was restored into this machine's working copy;
+nothing was written to the bucket and the run lock was not taken.` and the command that carries it
+out. **Send both tables to the PM, who reads the counts before the run.** They hold camps and counts
+only. What to expect, from a read-only re-derive of the Mac's copy of both releases on 2026-11-01
+with this table (dev's bundle was seeded from that copy):
+
+* **`2026-policy`**: the three Michigan rows below, and every other camp the same before and after.
+  The caption says `105 file(s), 6 changed: 0 title(s) and 0 warning(s) changed, 6 camp-file
+  record(s) to correct`, and `102 not held in this working copy, which fetches no file`, which is
+  right: the working copy fetches no source. A camp file a cloud run has pulled since adds one to the
+  files, and to its own camp before and after alike. Its count of rows given their upstream identity can be
+  up to 106 (the Mac's copy gives every member row one; dev's may already carry them), and that
+  number does not move a camp.
+
+  | Camp | Files before | Files after |
+  |---|---|---|
+  | Michigan | 40 | 34 |
+  | Michigan Classic | 0 | 5 |
+  | MNDI | 0 | 1 |
+
+* **`2026-ld`**: every camp the same before and after, and `2 file(s), 2 changed: 0 title(s) and 2
+  warning(s) changed, 2 camp-file record(s) to correct`. **That is expected under any table**: a
+  warning has been reworded since those 2 files were imported (`v1-e30-t32`'s report). It moves no
+  camp, and the run below leaves `2026-ld` alone; re-deriving it is the PM's call.
+
+**What stops the run:** a `2026-policy` count that is not the table's (another camp moving, a title
+changing, Michigan not 40 to 34), any error code, or a `STOP` line. Send it to the PM. A refusal
+changed nothing: `INSIDE_NO_IMPORT_WINDOW` runs again after the window closes; `RUN_LOCK_HELD` runs
+again once the cloud run's task has stopped (`caselist runs --remote --last 1`).
+
+**The run**, after the PM's word, `2026-policy` alone.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`, a new terminal window
+```bash
+cd "$WT"
+COPY="$HOME/.debate-research/reimport-working-copy"
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+echo "running pull: ${PULL:-none}"
+if [[ -n "$PULL" ]] || env | grep -q '^DEBATE_'; then
+  echo "STOP: a caselist pull is running, or DEBATE_ overrides are set in this shell; nothing ran"
+else
+  env DEBATE_ENV=dev DEBATE_STORAGE__DATA_DIR="$COPY" uv run debate-research --json caselist reimport-openev-metadata --year 2026 --event policy --execute | grep -oE '"status": "(ok|error)"|"applied": (true|false)|"rows": [0-9]+|"rows_changed": [0-9]+|"camp_files_updated": [0-9]+|"manifest_published": ("[a-z]+"|null)|"bundle_saved": (true|false)|"code": "[A-Z_]+"'
+fi
+```
+Success looks like `"status": "ok"`, `"applied": true`, `"rows"` the dry run's file count (105 on
+the Mac's copy), `"rows_changed": 6`,
+`"camp_files_updated": 6`, `"manifest_published": "uploaded"`, `"bundle_saved": true`, and no
+`"code"` line. `"rows": 0`, or nothing printed, is no success: send the output to the PM.
+`"manifest_published": null` with `"rows_changed": 0` means the bundle already held the refile.
+`OPENEV_REIMPORT_INCOMPLETE` says what did not finish; run the same block again.
+
+**The check**, read-only: the dry run again, which restores the bundle the run saved.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`, in the same window
+```bash
+cd "$WT"
+env DEBATE_ENV=dev DEBATE_STORAGE__DATA_DIR="$COPY" uv run debate-research --json caselist reimport-openev-metadata --year 2026 --event policy | grep -oE '"rows": [0-9]+|"rows_changed": [0-9]+|"camp_files_updated": [0-9]+|"manifest_changed": (true|false)|"code": "[A-Z_]+"'
+```
+Success looks like `"rows"` as in the run, `"rows_changed": 0`, `"camp_files_updated": 0` and
+`"manifest_changed": false`: dev's bundle holds Michigan's 6 files refiled. Record the run's lines
+and these in the task's report. The next weekly cloud run carries the camps to the cards.
+
 ## Prod, at the pilot's promotion (follow-up)
 
 The same steps against `infrastructure/envs/prod`, from a checkout of `main`, with `prod` for `dev`

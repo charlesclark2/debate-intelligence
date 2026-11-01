@@ -203,6 +203,7 @@ BUCKET_WRITING: Final = {
     "caselist seed-run-state",
     "caselist restore-run-state",
     "caselist move-run-home",
+    "caselist reimport-openev-metadata",
     "landscape report",
     "tub index publish",
     "tub index prune",
@@ -220,7 +221,6 @@ NEVER_WRITE_A_BUCKET: Final = {
     "caselist cards",
     "caselist import",
     "caselist import-openev",
-    "caselist reimport-openev-metadata",
     "caselist runs",
     "caselist status",
     "caselist auth login",
@@ -337,6 +337,15 @@ def files_publish(world: World) -> Command:
     return lambda: world.run("files", "publish", "--env", "dev", str(built))
 
 
+def reimport_openev_metadata(world: World) -> Command:
+    """`v1-e40-t34`'s re-import in bucket mode, run on the Thursday after the second week: outside the
+    no-import window, which the Wednesday the setup leaves the clock on is inside."""
+    world.clock.now = datetime(2026, 10, 22, 14, 0, tzinfo=UTC)
+    return lambda: world.run(
+        "caselist", "reimport-openev-metadata", "--year", "2026", "--event", "policy", "--execute"
+    )
+
+
 def running(*arguments: str) -> Callable[[World], Command]:
     return lambda world: lambda: world.run(*arguments)
 
@@ -351,6 +360,7 @@ COMMANDS: Final[dict[str, Callable[[World], Command]]] = {
     "caselist unsuppress": unsuppress,
     "caselist remove": remove,
     "caselist restore-run-state": restore_run_state,
+    "caselist reimport-openev-metadata": reimport_openev_metadata,
     "files publish": files_publish,
 }
 """Each bucket-writing command but the pull and the seed, by the name it takes the lock under: its setup,

@@ -188,6 +188,8 @@ class Store:
     camp_files: list[CampFile] = field(default_factory=lambda: [])
     suppressions: list[SuppressionEntry] = field(default_factory=lambda: [])
     holds: list[PathHoldEntry] = field(default_factory=lambda: [])
+    manifests: dict[str, list[str]] = field(default_factory=lambda: {})
+    """Camp release manifests' lines, by key (`manifests/openev/2026-policy.jsonl`)."""
 
     def card(self, source: str, element: int, cluster: str, text: str, **fields: Any) -> Card:
         held = Card(source, element, cluster, parsed_card(source, element, text, **fields))
@@ -380,6 +382,7 @@ class Store:
                 writer=SqliteSearchIndexWriter(),
                 parser_version=PARSER,
                 event_for_caselist=event_for,
+                release_manifest_lines=lambda key: tuple(self.manifests.get(key, ())),
             )
         )
 
@@ -1027,6 +1030,142 @@ def test_search_index_camp_file_title_matches_nothing(tmp_path: Path) -> None:
     for word in ("Zanzibar", "Quorum", "Counterplan", '"Zanzibar Quorum Counterplan"', "Cascade"):
         assert built.matches(word) == 0, word
     assert built.matches('"invented camp evidence"') == 1, "the same query finds what is searchable"
+
+
+# ------------------------------------------------------------------------------------------------
+# A camp occurrence's OpenEv id, from its release manifest: stored, never searchable (v1-e39-t16)
+# ------------------------------------------------------------------------------------------------
+
+POLICY_RELEASE: Final = "manifests/openev/2026-policy.jsonl"
+OLDER_RELEASE: Final = "manifests/openev/2025-policy.jsonl"
+
+
+def release_row(path: str, sha256: str, openev_id: int | None, classification: str = "NEW") -> str:
+    """One member row of a release manifest, in the importer's shape, as far as the build reads it."""
+    return json.dumps(
+        {
+            "schema_version": 1,
+            "kind": "member",
+            "path": path,
+            "sha256": sha256,
+            "classification": classification,
+            "skip_reason": None,
+            "openev_id": openev_id,
+            "upstream_path_sha256": None,
+        }
+    )
+
+
+def camp_card(store: Store, source: str, cluster: str) -> Card:
+    return store.card(
+        source, 0, sha(cluster), "Invented camp evidence about invented trade", camp="Cascade Institute"
+    )
+
+
+def test_search_index_camp_occurrence_keeps_its_releases_openev_id(tmp_path: Path) -> None:
+    """Each release's manifest names the file's id in that release; the occurrence keeps its own."""
+    store = Store()
+    card = camp_card(store, S_ONE, "camp with ids")
+    store.released(card, "2026-policy", recorded=True)
+    store.released(card, "2025-policy", recorded=True)
+    store.manifests[POLICY_RELEASE] = [release_row("Invented Camp/adv-cp.docx", S_ONE, 4021)]
+    store.manifests[OLDER_RELEASE] = [release_row("Invented Camp/adv-cp.docx", S_ONE, 3999)]
+    built = store.service(tmp_path / "data", seed=3).build(tmp_path / "out", stores=(CAMP,))
+
+    assert built.query("SELECT source_sha256, snapshot, openev_id FROM occurrences ORDER BY ordinal") == [
+        (S_ONE, "2026-policy", 4021),
+        (S_ONE, "2025-policy", 3999),
+    ]
+
+
+def test_search_index_camp_occurrence_without_an_id_on_record_has_none(tmp_path: Path) -> None:
+    """A row from before `v1-e30-t14`, a row with a null id, and a release with no manifest: no id."""
+    store = Store()
+    older = camp_card(store, S_ONE, "camp row without the key")
+    unnamed = camp_card(store, S_TWO, "camp row with a null id")
+    unlisted = camp_card(store, S_THREE, "camp release without a manifest")
+    store.released(older, "2026-policy", recorded=True)
+    store.released(unnamed, "2026-policy", recorded=True)
+    store.released(unlisted, "2025-policy", recorded=True)
+    no_key = json.loads(release_row("Invented Camp/older.docx", S_ONE, None))
+    del no_key["openev_id"], no_key["upstream_path_sha256"]
+    store.manifests[POLICY_RELEASE] = [
+        json.dumps(no_key),
+        release_row("Invented Camp/unnamed.docx", S_TWO, None),
+    ]
+    built = store.service(tmp_path / "data").build(tmp_path / "out", stores=(CAMP,))
+
+    assert sorted(built.query("SELECT source_sha256, openev_id FROM occurrences")) == sorted(
+        [(S_ONE, None), (S_TWO, None), (S_THREE, None)]
+    )
+
+
+def test_search_index_caselist_occurrence_never_has_an_openev_id(tmp_path: Path) -> None:
+    """A team disclosed the camp file's bytes: its caselist occurrence links to the team, never to OpenEv."""
+    store = Store()
+    disclosed = store.card(S_ONE, 0, sha("disclosed camp bytes"), "Invented camp evidence about trade")
+    store.occurs(disclosed, disclosed_by=(SCHOOL, TEAM))
+    camp = camp_card(store, S_ONE, "the camp copy")
+    store.released(camp, "2026-policy", recorded=True)
+    store.manifests[POLICY_RELEASE] = [release_row("Invented Camp/adv-cp.docx", S_ONE, 4021)]
+    built = store.service(tmp_path / "data").build(tmp_path / "out", stores=(CASELIST, CAMP))
+
+    assert sorted(built.query("SELECT caselist, source_sha256, openev_id FROM occurrences")) == [
+        (CASELIST, S_ONE, None),
+        (CAMP, S_ONE, 4021),
+    ]
+
+
+def test_search_index_camp_occurrence_past_the_provenance_limit_keeps_no_openev_id(tmp_path: Path) -> None:
+    store = Store()
+    card = camp_card(store, S_ONE, "camp in two releases")
+    store.released(card, "2026-policy", recorded=True)
+    store.released(card, "2025-policy", recorded=True)
+    store.manifests[POLICY_RELEASE] = [release_row("Invented Camp/adv-cp.docx", S_ONE, 4021)]
+    store.manifests[OLDER_RELEASE] = [release_row("Invented Camp/adv-cp.docx", S_ONE, 3999)]
+    built = store.service(tmp_path / "data").build(tmp_path / "out", stores=(CAMP,), provenance_limit=1)
+
+    assert built.query("SELECT ordinal, provenance, openev_id FROM occurrences ORDER BY ordinal") == [
+        (0, 1, 4021),
+        (1, 0, None),
+    ]
+
+
+def test_search_index_openev_id_matches_nothing(tmp_path: Path) -> None:
+    """The id is in `occurrences` and in no FTS5 table: no query finds a card by it."""
+    store = Store()
+    card = camp_card(store, S_ONE, "camp id never searchable")
+    store.released(card, "2026-policy", recorded=True)
+    store.manifests[POLICY_RELEASE] = [release_row("Invented Camp/adv-cp.docx", S_ONE, 914273)]
+    built = store.service(tmp_path / "data").build(tmp_path / "out", stores=(CAMP,))
+
+    assert built.query("SELECT openev_id FROM occurrences") == [(914273,)]
+    for query in ("914273", '"914273"', "openev", "4021"):
+        assert built.matches(query) == 0, query
+    assert built.matches('"invented camp evidence"') == 1, "the same query finds what is searchable"
+    assert [row[1] for row in built.query("PRAGMA table_info(search)")] == [
+        "tag",
+        "cite",
+        "read_aloud",
+        "text",
+    ]
+
+
+def test_search_index_unreadable_release_manifest_is_not_read_as_no_ids(tmp_path: Path) -> None:
+    """A manifest the importer did not write stops the build, naming its key and line, never the line."""
+    store = Store()
+    card = camp_card(store, S_ONE, "camp with a broken manifest")
+    store.released(card, "2026-policy", recorded=True)
+    store.manifests[POLICY_RELEASE] = [
+        release_row("Invented Camp/adv-cp.docx", S_ONE, 4021),
+        '{"schema_version": 1, "kind": "member", "path": "Invented Camp/secret-title.docx"',
+    ]
+    with pytest.raises(SearchIndexStoreNotReady) as refused:
+        store.service(tmp_path / "data").build(tmp_path / "out", stores=(CAMP,))
+    assert str(refused.value) == (
+        "the parsed store of openev cannot be indexed: "
+        "manifests/openev/2026-policy.jsonl line 2 is not a usable manifest row: not JSON"
+    )
 
 
 # ------------------------------------------------------------------------------------------------

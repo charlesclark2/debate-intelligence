@@ -124,10 +124,17 @@ from enum import StrEnum
 from pathlib import Path
 from typing import ClassVar, Final
 
-from debate_core.application.caselist.publish_plan import stored_row_hold
+from debate_core.application.caselist.openev_manifest import openev_ids_by_source, read_recorded_release
+from debate_core.application.caselist.publish_plan import (
+    OPENEV,
+    UnreadableManifest,
+    snapshot_manifest_key,
+    stored_row_hold,
+)
 from debate_core.application.caselist.suppression import read_path_holds
 from debate_core.application.errors import DomainError
 from debate_core.application.ports.caselist import CaselistRepository
+from debate_core.application.ports.evidence_store import ObjectKey
 from debate_core.application.ports.parsed_store import (
     OPENEV_STORE,
     OccurrenceRecord,
@@ -379,6 +386,7 @@ class _Joined:
     row: OccurrenceRecord
     disclosure: Disclosure | None
     camp_file: CampFile | None
+    openev_id: int | None = None
 
     @property
     def attributed(self) -> bool:
@@ -416,11 +424,14 @@ class SearchIndexBuildService:
         writer: SearchIndexWriter,
         parser_version: str,
         event_for_caselist: Callable[[str], Event | None],
+        release_manifest_lines: Callable[[ObjectKey], Sequence[str]],
     ) -> None:
         """`parser_version` is the running parser's: its newest generation is the directory read.
 
         `event_for_caselist` names the event of a caselist slug, `None` for a slug this build does not
-        know; it is the CLI's table, passed in.
+        know; it is the CLI's table, passed in. `release_manifest_lines` reads this machine's manifest
+        at a key, no lines when it holds none: the camp releases' manifests give each camp file its
+        OpenEv id (`v1-e39-t16`).
         """
         self._store = parsed_store
         self._caselists = caselists
@@ -428,6 +439,7 @@ class SearchIndexBuildService:
         self._writer = writer
         self._parser_version = parser_version
         self._event_for_caselist = event_for_caselist
+        self._release_manifest_lines = release_manifest_lines
 
     async def sources(self, stores: Sequence[str]) -> SearchIndexSources:
         """Read what an index of `stores` would be built from, and its digests, building nothing.
@@ -602,7 +614,7 @@ class SearchIndexBuildService:
         versions: dict[str, str] = {}
         for caselist, (rows, store_state) in tables.items():
             versions[caselist] = store_state.version_directory
-            records = _Records(self._caselists)
+            records = _Records(self._caselists, self._release_manifest_lines)
             for row in rows:
                 key = (row.caselist, row.cluster_id)
                 members = grouped.setdefault(key, [])
@@ -613,7 +625,9 @@ class SearchIndexBuildService:
                 if held:
                     dropped.suppressed += 1
                     continue
-                members.append(_Joined(row, disclosure, await records.camp_file_of(row)))
+                members.append(
+                    _Joined(row, disclosure, await records.camp_file_of(row), records.openev_id_of(row))
+                )
         clusters: list[_Cluster] = []
         for caselist, cluster_id in sorted(grouped):
             members = grouped[(caselist, cluster_id)]
@@ -695,10 +709,14 @@ class _Dropped:
 class _Records:
     """The caselist records one store's rows join, read once per source."""
 
-    def __init__(self, caselists: CaselistRepository) -> None:
+    def __init__(
+        self, caselists: CaselistRepository, release_manifest_lines: Callable[[ObjectKey], Sequence[str]]
+    ) -> None:
         self._caselists = caselists
+        self._release_manifest_lines = release_manifest_lines
         self._disclosures: dict[tuple[str, str], tuple[Disclosure, ...]] = {}
         self._camp_files: dict[str, tuple[CampFile, ...]] = {}
+        self._openev_ids: dict[str, dict[str, int]] = {}
 
     async def disclosure_of(
         self, row: OccurrenceRecord, state: SuppressionState
@@ -746,6 +764,22 @@ class _Records:
             if _release_name(one.year, one.event) == row.snapshot
         ]
         return max(matching, key=lambda one: (one.snapshot, one.camp, one.file_title)) if matching else None
+
+    def openev_id_of(self, row: OccurrenceRecord) -> int | None:
+        """A camp row's OpenEv id: its file's, as its release's manifest records it; `None` without one.
+
+        A manifest this build cannot read is :class:`SearchIndexStoreNotReady`, never read as no ids.
+        """
+        if row.caselist != OPENEV_STORE:
+            return None
+        if row.snapshot not in self._openev_ids:
+            key = snapshot_manifest_key(OPENEV, row.snapshot)
+            try:
+                recorded = read_recorded_release(key, self._release_manifest_lines(key))
+            except UnreadableManifest as error:
+                raise SearchIndexStoreNotReady(OPENEV_STORE, str(error)) from None
+            self._openev_ids[row.snapshot] = openev_ids_by_source(recorded)
+        return self._openev_ids[row.snapshot].get(row.source_sha256)
 
 
 async def _all_pages[ItemT](read: Callable[[str | None], Awaitable[Page[ItemT]]]) -> tuple[ItemT, ...]:
@@ -867,6 +901,7 @@ def _occurrence(ordinal: int, joined: _Joined, *, provenance: bool) -> IndexedOc
             camp_year=camp_file.year if camp_file is not None else int(row.snapshot[:4]),
             camp_event=camp_file.event.value if camp_file is not None else _release_event(row.snapshot),
             camp_file_title=camp_file.file_title if camp_file is not None else None,
+            openev_id=joined.openev_id,
         )
     return base
 

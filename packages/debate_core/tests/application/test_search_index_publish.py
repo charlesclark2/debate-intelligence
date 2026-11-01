@@ -141,6 +141,7 @@ def build(tmp_path: Path, text: str) -> BuiltSearchIndex:
         writer=SqliteSearchIndexWriter(),
         parser_version=PARSER,
         event_for_caselist={CASELIST: Event.LD}.get,
+        release_manifest_lines=lambda _key: (),
     )
     return asyncio.run(service.build((CASELIST,), tmp_path / "out"))
 

@@ -323,7 +323,7 @@ def test_a_pointer_of_an_unknown_format_version_is_refused_before_anything_else_
     make_holder: Callable[[], SearchIndexHolder], bucket: InMemorySearchIndexSource, tmp_path: Path
 ) -> None:
     sqlite = built(tmp_path, document(1, "zephyr granite"))
-    bucket.publish(published_index(sqlite, documents_by_store={"hsld26": 1}, format_version=3))
+    bucket.publish(published_index(sqlite, documents_by_store={"hsld26": 1}, format_version=4))
     holder = make_holder()
 
     assert refusal_of(holder) is SearchIndexRefusal.UNKNOWN_FORMAT_VERSION
@@ -334,7 +334,7 @@ def test_a_manifest_of_an_unknown_format_version_is_refused(
     make_holder: Callable[[], SearchIndexHolder], bucket: InMemorySearchIndexSource, tmp_path: Path
 ) -> None:
     sqlite = built(tmp_path, document(1, "zephyr granite"))
-    index = published_index(sqlite, documents_by_store={"hsld26": 1}, manifest_format_version=3)
+    index = published_index(sqlite, documents_by_store={"hsld26": 1}, manifest_format_version=4)
     bucket.publish(index)
     holder = make_holder()
 

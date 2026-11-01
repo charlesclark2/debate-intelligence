@@ -63,6 +63,9 @@ class IndexedOccurrence:
     camp_year: int | None = None
     camp_event: str | None = None
     camp_file_title: str | None = None
+    openev_id: int | None = None
+    """The OpenEv id of a camp occurrence's file, from its release manifest (`v1-e39-t16`); `None` for a
+    caselist occurrence, and for a camp file whose manifest row carries no id."""
 
 
 @dataclass(frozen=True, slots=True)

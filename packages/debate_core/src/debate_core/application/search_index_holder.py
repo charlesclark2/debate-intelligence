@@ -123,6 +123,7 @@ from debate_core.domain.search_index import (
     SearchIndexManifest,
     SearchIndexPointer,
     index_object_key,
+    readable_formats_sentence,
 )
 
 __all__ = [
@@ -184,8 +185,7 @@ class SearchIndexRefusal(StrEnum):
 _REFUSAL_SENTENCES: Final = {
     SearchIndexRefusal.UNREADABLE_POINTER: "the pointer is not a search index pointer this build reads",
     SearchIndexRefusal.UNKNOWN_FORMAT_VERSION: (
-        "its format version is not one this build reads, "
-        + " or ".join(str(one) for one in sorted(READABLE_SEARCH_INDEX_FORMAT_VERSIONS))
+        f"its format version is not one this build reads, {readable_formats_sentence('or')}"
     ),
     SearchIndexRefusal.UNREADABLE_MANIFEST: "its manifest is not a search index manifest",
     SearchIndexRefusal.MANIFEST_DIGEST_MISMATCH: "its manifest is not the one the pointer names",

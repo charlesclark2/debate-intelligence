@@ -14,7 +14,8 @@ rows out, in the schema `docs/data/search-index.md` describes, and compresses th
   and filters by: event, caselist, camp, completeness, the formatting and font-size spans as JSON,
   the sides, first and last seen, the counts of files, teams and occurrences.
 * `occurrences`: every surviving occurrence of every document, `ordinal` 0 the representative. The
-  source SHA-256 and disclosure digest of each, and the provenance of the first few. **Nothing in
+  source SHA-256 and disclosure digest of each, and the provenance of the first few: for a camp
+  occurrence, its camp release and, since format 3 (`v1-e39-t16`), its file's OpenEv id. **Nothing in
   this table is searchable.**
 * `search`: an FTS5 table over `documents`' four searchable columns, `tag`, `cite`, `read_aloud` and
   `text`, as an external-content table, so the text is stored once. School, team code, tournament
@@ -142,6 +143,7 @@ SCHEMA_STATEMENTS: Final = (
   camp_year INTEGER,
   camp_event TEXT,
   camp_file_title TEXT,
+  openev_id INTEGER,
   PRIMARY KEY (doc_id, ordinal)
 ) WITHOUT ROWID""",
     "CREATE INDEX occurrences_by_source ON occurrences (source_sha256)",
@@ -160,8 +162,8 @@ _INSERT_DOCUMENT: Final = (
 _INSERT_OCCURRENCE: Final = (
     "INSERT INTO occurrences (doc_id, ordinal, caselist, source_sha256, disclosure, first_element_index, "
     "last_element_index, snapshot, last_snapshot, completeness, attributed, provenance, side, school, "
-    "team_code, tournament, round, camp, camp_year, camp_event, camp_file_title) "
-    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    "team_code, tournament, round, camp, camp_year, camp_event, camp_file_title, openev_id) "
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 )
 
 _FINISH: Final = (
@@ -193,6 +195,7 @@ def _occurrence_row(doc_id: int, one: IndexedOccurrence) -> tuple[object, ...]:
         one.camp_year,
         one.camp_event,
         one.camp_file_title,
+        one.openev_id,
     )
 
 

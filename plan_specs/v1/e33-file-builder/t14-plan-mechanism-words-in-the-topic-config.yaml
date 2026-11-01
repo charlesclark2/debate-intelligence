@@ -46,7 +46,7 @@ spec:
         whose heading holds one, a topic with no list behaves as before, and hspolicy26's
         preemption and waiver blocks are marked, by counts and tests shown failing first.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

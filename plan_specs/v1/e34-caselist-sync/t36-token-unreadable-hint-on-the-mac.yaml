@@ -39,7 +39,7 @@ spec:
         and has its own words; in bucket mode the notice is unchanged, asserted by its old
         text; by tests shown failing first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

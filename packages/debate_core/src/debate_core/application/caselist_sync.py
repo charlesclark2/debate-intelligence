@@ -6033,6 +6033,17 @@ _TOKEN_MISSING_ON_THIS_MACHINE_FIX: Final = (
 )
 """A run outside bucket mode that found no caselist_token (`v1-e34-t35`), in `v1-e34-t33`'s words."""
 
+_TOKEN_UNREADABLE_CODE: Final = "CASELIST_TOKEN_UNREADABLE"
+"""The code of the token store's `CaselistTokenUnreadable`, which is an adapter's error this layer
+may not import: told apart by its code, as `caselist runs` tells an expired login by its class name."""
+
+_TOKEN_UNREADABLE_ON_THIS_MACHINE_FIX: Final = (
+    "The caselist_token stored on this machine for the environment cannot be read: log out with "
+    "`debate-research caselist auth logout`, then log in again with `debate-research caselist auth login`."
+)
+"""A run outside bucket mode whose caselist_token could not be read (`v1-e34-t36`): the error's own
+fix, in `v1-e34-t35`'s words. The logout deletes the record without reading it."""
+
 
 def fix_for(error: BaseException, *, bucket_mode: bool = False) -> str | None:
     """The fix a refused store calls for, or `None` for a failure with no fix a sentence can state.
@@ -6049,7 +6060,8 @@ def fix_for(error: BaseException, *, bucket_mode: bool = False) -> str | None:
     run's token is in Secrets Manager, so only a run on this Mac meets one. A missing caselist_token
     carries the login outside bucket mode and nothing in it (`v1-e34-t35`): the cloud run's token is
     the secret the Wednesday login renews, which no login on this machine puts right, so its notice
-    stays as it was.
+    stays as it was. An unreadable caselist_token carries the logout and then the login outside bucket
+    mode, and nothing in it, for the same reason (`v1-e34-t36`).
 
     Public because the run monitor asks the same question of an error that ended a run before any
     stage could record it (`v1-e34-t19`): that run's notification carries the same fix.
@@ -6072,6 +6084,8 @@ def fix_for(error: BaseException, *, bucket_mode: bool = False) -> str | None:
         return error.hint
     if isinstance(error, CaselistTokenMissing) and not bucket_mode:
         return _TOKEN_MISSING_ON_THIS_MACHINE_FIX
+    if reported_error_code(error) == _TOKEN_UNREADABLE_CODE and not bucket_mode:
+        return _TOKEN_UNREADABLE_ON_THIS_MACHINE_FIX
     return None
 
 

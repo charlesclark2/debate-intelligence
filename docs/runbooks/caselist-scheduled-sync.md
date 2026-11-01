@@ -1900,10 +1900,12 @@ path; the code is chosen from the OSStatus alone. Before `v1-e34-t33` each of th
 | `KEYCHAIN_REFUSED_PROGRAM` | -25293, -67030 | The keychain could not confirm this program, or its own password | In Keychain Access, allow this build on the item `debate-research.opencaselist`, or delete the item and log in again; or the file backend, as above |
 | `KEYRING_UNAVAILABLE` | none | `keyring` found no keychain backend at all | Set `DEBATE_CASELIST__TOKEN_BACKEND=file` and log in again |
 | `CASELIST_TOKEN_MISSING` | none | No caselist_token is stored on this machine for the environment. The banner says so, with the fix as its hint (`v1-e34-t35`) | Log in again with `debate-research caselist auth login` |
+| `CASELIST_TOKEN_UNREADABLE` | none | A caselist_token is stored on this machine for the environment, but not as a record this program wrote. The banner says so, with the fix as its hint (`v1-e34-t36`) | Log out with `debate-research caselist auth logout`, which deletes the record without reading it, then log in again with `debate-research caselist auth login` |
 
 `CASELIST_TOKEN_MISSING` is a keychain with no item for the environment (-25300 reads as no token),
-or a file backend with no file. Its line in the table is for a run on this Mac. A cloud run that
-stops on it names the code and the next cloud run, as before: its token is the secret the Wednesday
+or a file backend with no file. Its line in the table is for a run on this Mac, and so is
+`CASELIST_TOKEN_UNREADABLE`'s. A cloud run that stops on either names the code and the next cloud
+run, as before: its token is the secret the Wednesday
 login renews ([caselist-cloud-run.md](caselist-cloud-run.md)). `caselist auth logout` of a token
 that is already gone succeeds and says there was nothing to delete. Any other OSStatus is still `INTERNAL_ERROR`; run
 the command again by hand with `--verbose` to see the keychain's message, and report it.

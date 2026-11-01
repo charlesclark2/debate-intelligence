@@ -1088,16 +1088,18 @@ _WHAT_STOPPED_A_RUN: Final = {
     "KEYCHAIN_DENIED": "the keychain was asked for the caselist_token and said no",
     "KEYCHAIN_REFUSED_PROGRAM": "the keychain refused this program",
     "CASELIST_TOKEN_MISSING": "no caselist_token was stored on this machine",
+    "CASELIST_TOKEN_UNREADABLE": "the caselist_token stored on this machine could not be read",
     UNMODELLED_ERROR_CODE: "an error nobody modelled, most likely a bug",
 }
 """What a run that stopped before a stage could record it says it stopped on, by the error's code
 (`v1-e34-t23`): in words, never the exception's class, which `v1-e34-t19` showed. A code with no
 words here is named by its code; the run's details hold the hint, and `caselist runs` the class."""
 
-_WORDS_OUTSIDE_BUCKET_MODE_ONLY: Final = frozenset({"CASELIST_TOKEN_MISSING"})
+_WORDS_OUTSIDE_BUCKET_MODE_ONLY: Final = frozenset({"CASELIST_TOKEN_MISSING", "CASELIST_TOKEN_UNREADABLE"})
 """Codes whose words in :data:`_WHAT_STOPPED_A_RUN` are said of a run on this machine alone
-(`v1-e34-t35`). A bucket-mode run names them by their code, as it did before they had words: the
-cloud run's token is the secret the Wednesday login renews, not one stored on this machine."""
+(`v1-e34-t35`, `v1-e34-t36`). A bucket-mode run names them by their code, as it did before they had
+words: the cloud run's token is the secret the Wednesday login renews, not one stored on this
+machine."""
 
 
 def _what_stopped_it(codes: Sequence[str], *, bucket_mode: bool) -> str:

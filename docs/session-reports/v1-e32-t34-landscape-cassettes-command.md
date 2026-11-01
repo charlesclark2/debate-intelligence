@@ -227,9 +227,52 @@ PM questions from v1-e32-t34 (landscape cassettes command), 2026-10-31.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-31
 
 **Notes:**
+
+The command is in place before Friday's LD run records the first real cassettes, which is why it was
+picked now.
+1. **ac1 passes.**
+   * Red on a refuse-nothing skeleton: 24 failed, all at assertions. The first draft's KeyErrors
+     were turned into assertion failures before the counted run, and the report says so.
+   * The new runbook tests are red against HEAD's step 4 (3 failed) and green on the new one.
+   * Green: 66, and the node criterion passes (23).
+   * All five of the PM's mutants are caught, with 3 and 4 each split into two forms.
+   * Of the session's own mutants, the two that survived were acted on:
+     * the slug in the code was dropped, with the reasoning recorded;
+     * the spent code is now pinned null after a delete.
+2. **The confirmation: accepted.** It follows `caselist retire` and `tub index prune` (12 hex digits,
+   a dry run by default, `--confirm-prod` in prod). The check lives inside
+   `delete_caselist_cassettes`, on the same listing the delete acts on, so no caller can delete what
+   it didn't list.
+3. **Decisions accepted:**
+   * its own command module;
+   * t33's exit codes;
+   * an unreadable cassette reported as `CASSETTE_UNREADABLE` with its class code and never its text,
+     since the mutant that removed the catch would print a misfiled file's name;
+   * a non-slug `--caselist` refused without being echoed;
+   * one container helper for the cassette directory, now shared by the model stage and evaluate;
+   * step 4's delete split in two, so an empty directory never blocks the classifier delete;
+   * no directory treated as today's normal state, exiting 0 and creating nothing;
+   * running it from the checkout, with the step saying what `No such command 'cassettes'` means.
+4. **Deviation 1 / Q2: A.** The `<data dir>/landscape/model-cassettes/` template with the
+   environment is enough, and a home-folder path carries a username. No amendment is needed.
+5. **Deviation 2 / Q1: A, combined with Q3 below.** One p3 E32 task adds the smoke check.
+6. **Deviation 3:** the affected set (250 files, through the root conftest) is left to the PR's
+   `ci` under agreement 10, as t31's was. The CLI files the change reaches by name (258), the
+   cassette, models and docs tests (754) and the always-run tests (334) were run within the limit.
+7. **Q3, takedowns: the PM's ruling.** A removal has to reach every copy of the removed text, so it
+   is not a purge. Until a command does it:
+   * `caselist-removal.md`'s paragraph stays as written (C). "That caselist's recordings" means
+     every cassette naming the caselist, shared ones included. The cost to the other caselist is a
+     re-recording, never a wrong answer.
+   * No unattributed cassette exists (there is no directory yet), and every cassette from Friday on
+     names its caselists, so the paragraph reaches every copy.
+   * The p3 E32 task above adds a removal form of this command: sole and shared, behind its own
+     code. The removal runbook then calls it. Keying it by source is not needed for that.
+8. **Merge:** a plain `scripts/task pr` once `ci` is green. No operator step follows. The command
+   first has something to count after Friday 2026-11-06's LD run.

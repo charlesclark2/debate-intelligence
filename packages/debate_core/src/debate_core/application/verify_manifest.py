@@ -9,7 +9,7 @@ the way the verifier always resolves them: the record through the article reposi
 content through ``SnapshotService.load`` with every integrity check. Nothing here builds a
 ``LoadedSnapshot``, reaches the network or calls a model.
 
-## Four outcomes
+## Five outcomes
 
 A run ends in exactly one of these, and the command maps each onto its own exit code:
 
@@ -23,6 +23,8 @@ A run ends in exactly one of these, and the command maps each onto its own exit 
 * **Verification could not run** (:class:`VerificationCouldNotRun`): a store could not be reached,
   or anything else the verifier lets propagate because it is not a verdict about the card
   (`v1-e03-t04`). It is never reported as a verdict, in either direction.
+* **A .docx with no manifest** (:class:`NoManifest`): a document the platform did not export, such as
+  a hand-cut team file. Nothing is verified; checking such files is V3's file intelligence, not this.
 
 ## Versions
 
@@ -35,6 +37,31 @@ A version above :data:`~debate_core.evidence.manifest.MANIFEST_VERSION` is refus
 is consulted, as :class:`NewerManifestVersion`. Its fields are a newer build's, so the schema's
 complaint about them (an unexpected key, a missing one) would describe the wrong problem; the
 message says to install a newer build instead.
+
+## Snapshot references (`v1-e06-t07`)
+
+A version-2 manifest's ``snapshots`` say, for each snapshot its cards were cut from, its raw and
+normalized hashes, its normalizer and extractor versions, when it was retrieved and from where. Each
+card's reference is checked against the stored snapshot record: a field that differs, or a card whose
+snapshot the manifest does not reference validly, is ``SNAPSHOT_REFERENCE_MISMATCH`` on that card,
+for a JSON manifest and an embedded one alike (the PM's amendment of 2026-10-26). A record that is
+not stored is left to the verifier, which reports ``SNAPSHOT_MISSING``. A version-1 manifest has no
+references, so nothing is compared.
+
+## A .docx (`v1-e06-t07`)
+
+A document whose bytes begin as a zip package does is read as a .docx the platform exported: its
+embedded manifest (:func:`~debate_core.evidence.docx_manifest_part.embedded_manifest_bytes`) is read
+and verified exactly as a JSON manifest is, and then its body
+(:func:`~debate_core.evidence.docx_reader.read_document_body`) is compared with each card under the
+edit policy (:mod:`debate_core.evidence.docx_verify`). A card whose body changes its quoted words is
+``MANUAL_EDIT``, and one the body does not hold at all ``BODY_CARD_MISSING``; a bracketed
+interpolation is a warning (``INTERPOLATION_PRESENT``) on a card that stays VERIFIED. The body is read
+in the format profile the cards name; a manifest whose cards name more than one profile, or one this
+build does not have, describes no document this build can read, and is an :class:`InvalidManifest`.
+So is a document whose manifest is damaged or whose body cannot be read. A body card no manifest card
+claims (a card pasted in by hand) has no verdict: the report lists its position, and it changes no
+card's status.
 
 ## A card that passes the schema but is not a Card
 
@@ -57,7 +84,7 @@ validation errors are reported by their location and message and never with thei
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from functools import cache
@@ -69,15 +96,34 @@ from jsonschema.exceptions import best_match  # pyright: ignore[reportUnknownVar
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, TypeAdapter, ValidationError, computed_field
 from referencing import Registry, Resource
 
-from debate_core.application.errors import DomainError
+from debate_core.application.errors import DomainError, NotFound
 from debate_core.application.evidence_verifier import EvidenceVerifier
+from debate_core.application.ports.persistence import ArticleRepository
 from debate_core.domain import Card, VerificationStatus, render_schemas
+from debate_core.domain.card import DEFAULT_FORMAT_PROFILE
 from debate_core.domain.schema_export import JSON_SCHEMA_DIALECT
+from debate_core.evidence.docx_manifest_part import (
+    EmbeddedManifestError,
+    NoEmbeddedManifest,
+    embedded_manifest_bytes,
+)
+from debate_core.evidence.docx_reader import UnreadableDocument, read_document_body
+from debate_core.evidence.docx_verify import (
+    BodyCard,
+    BodyComparison,
+    CharacterRange,
+    body_evidence,
+    compare_body,
+    match_body_cards,
+)
+from debate_core.evidence.format_profile import ResolvedFormatProfile
 from debate_core.evidence.manifest import (
     CARD_SCHEMA_REFERENCE,
     MANIFEST_VERSION,
     READABLE_MANIFEST_VERSIONS,
+    SNAPSHOTS_SINCE_VERSION,
     ManifestVersion,
+    SnapshotReference,
     render_card_manifest_schema,
 )
 from debate_core.evidence.verification_types import (
@@ -85,18 +131,25 @@ from debate_core.evidence.verification_types import (
     VerificationCheck,
     VerificationReason,
     VerificationResult,
+    WarningCode,
 )
 
 __all__ = [
     "INVALID_MANIFEST_CODE",
+    "NO_MANIFEST_CODE",
     "UNVERIFIED_CODE",
     "VERIFICATION_COULD_NOT_RUN_CODE",
     "VERIFY_RESULT_SCHEMA_FILENAME",
     "CardVerdict",
+    "DocumentCheck",
     "InvalidManifest",
+    "ManifestDocument",
     "ManifestVerificationReport",
     "NewerManifestVersion",
+    "NoManifest",
+    "ReportedRange",
     "ReportedReason",
+    "ReportedWarning",
     "VerificationCouldNotRun",
     "VerifyManifest",
     "read_manifest",
@@ -114,6 +167,12 @@ INVALID_MANIFEST_CODE: Final = "INVALID_MANIFEST"
 
 VERIFICATION_COULD_NOT_RUN_CODE: Final = "VERIFICATION_COULD_NOT_RUN"
 """The `--json` error code when verification stopped before every card had a verdict."""
+
+NO_MANIFEST_CODE: Final = "NO_MANIFEST"
+"""The `--json` error code when a .docx holds no embedded manifest (:class:`NoManifest`)."""
+
+_ZIP_SIGNATURE: Final = b"PK\x03\x04"
+"""How every .docx begins: a zip package's first local file header. No JSON document begins so."""
 
 
 # --------------------------------------------------------------------------------------------
@@ -182,9 +241,37 @@ class VerificationCouldNotRun(Exception):
         )
 
 
+class NoManifest(Exception):
+    """The .docx holds no embedded manifest, so there is nothing to verify it against.
+
+    A document the platform did not export: a hand-cut team file, or an export whose custom XML part
+    was lost. Not an :class:`InvalidManifest` (there is no manifest to be invalid) and not a
+    ``DomainError``, for the same reason as :class:`InvalidManifest`: a command that forgot to handle
+    it must not report it as a verdict.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(
+            "the document holds no embedded manifest; verify reads only .docx files debate-research exported"
+        )
+
+
 # --------------------------------------------------------------------------------------------
 # The report
 # --------------------------------------------------------------------------------------------
+
+
+class ReportedRange(BaseModel):
+    """``[start, end)`` in characters; empty where something was only added."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    start: int = Field(ge=0)
+    end: int = Field(ge=0)
+
+    @classmethod
+    def of(cls, character_range: CharacterRange) -> ReportedRange:
+        return cls(start=character_range.start, end=character_range.end)
 
 
 class ReportedReason(BaseModel):
@@ -200,12 +287,37 @@ class ReportedReason(BaseModel):
         default=None,
         description="For TEXT_MISMATCH only: the first index where the texts differ, in evidence_text.",
     )
+    evidence_range: ReportedRange | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        description="For MANUAL_EDIT only: the evidence_text range the body changed. Absent otherwise.",
+    )
+    body_range: ReportedRange | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        description=(
+            "For MANUAL_EDIT only: the range of the body's evidence (its paragraphs joined with a line "
+            "feed) that replaced it. Absent otherwise."
+        ),
+    )
 
     @classmethod
     def of(cls, reason: VerificationReason) -> ReportedReason:
         return cls(
             code=reason.code, detail=reason.detail, first_differing_offset=reason.first_differing_offset
         )
+
+
+class ReportedWarning(BaseModel):
+    """Something about a card a reader should know that leaves it VERIFIED (`v1-e06-t07`)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    code: WarningCode
+    detail: str = Field(description="For people. Gives offsets and lengths; never evidence or inserted text.")
+    evidence_offset: int | None = Field(
+        default=None, description="For INTERPOLATION_PRESENT: the evidence_text offset it is read before."
+    )
 
 
 class CardVerdict(BaseModel):
@@ -225,6 +337,11 @@ class CardVerdict(BaseModel):
     verifier_version: str | None = Field(
         description="The verifier's rules version; null when the card never reached the verifier."
     )
+    warnings: tuple[ReportedWarning, ...] = Field(
+        default=(),
+        exclude_if=lambda warnings: not warnings,
+        description="What a reader should know that changes no status, in body order. Absent when none.",
+    )
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -233,17 +350,31 @@ class CardVerdict(BaseModel):
         return tuple(dict.fromkeys(reason.code for reason in self.reasons))
 
     @classmethod
-    def of_result(cls, position: int, card: Card, result: VerificationResult) -> CardVerdict:
-        """The verdict the verifier reached on ``card``."""
+    def of_result(
+        cls,
+        position: int,
+        card: Card,
+        result: VerificationResult,
+        *,
+        more_reasons: Sequence[ReportedReason] = (),
+        warnings: Sequence[ReportedWarning] = (),
+    ) -> CardVerdict:
+        """The verdict the verifier reached on ``card``, with ``more_reasons`` found beside it.
+
+        VERIFIED only when the verifier says so and nothing else was found: a reason from the snapshot
+        reference or the document body makes the card UNVERIFIED whatever the verifier said.
+        """
+        reasons = (*(ReportedReason.of(reason) for reason in result.reasons), *more_reasons)
         return cls(
             position=position,
             card_id=card.card_id,
             tag=card.tag,
-            status=result.status,
-            reasons=tuple(ReportedReason.of(reason) for reason in result.reasons),
+            status=VerificationStatus.UNVERIFIED if reasons else result.status,
+            reasons=reasons,
             snapshot_id=result.snapshot_id,
             checks_run=tuple(check for check in VerificationCheck if check in result.checks_run),
             verifier_version=result.verifier_version,
+            warnings=tuple(warnings),
         )
 
     @classmethod
@@ -273,6 +404,23 @@ class CardVerdict(BaseModel):
         )
 
 
+class DocumentCheck(BaseModel):
+    """What was read of a .docx's body beside its manifest (`v1-e06-t07`)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    format_profile: str = Field(
+        description="The format profile the body was read in: the one its cards name."
+    )
+    body_cards: int = Field(ge=0, description="How many cards (tag paragraphs) the body holds.")
+    unclaimed_body_cards: tuple[int, ...] = Field(
+        description=(
+            "The positions, among the body's cards from 0, of those no manifest card claims, such as a "
+            "card pasted in by hand. They have no verdict and change no card's status."
+        )
+    )
+
+
 class ManifestVerificationReport(BaseModel):
     """Every card of one manifest, with its verdict, in manifest order."""
 
@@ -281,6 +429,11 @@ class ManifestVerificationReport(BaseModel):
     manifest_version: ManifestVersion = Field(description="The manifest's own manifest_version.")
     generated_at: AwareDatetime = Field(description="The manifest's own generated_at.")
     cards: tuple[CardVerdict, ...]
+    document: DocumentCheck | None = Field(
+        default=None,
+        exclude_if=lambda document: document is None,
+        description="For a .docx: what was read of its body. Absent for a JSON manifest.",
+    )
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -312,24 +465,104 @@ class ManifestVerificationReport(BaseModel):
 
 
 class VerifyManifest:
-    """Verifies every card of a manifest against the snapshots the verifier can reach."""
+    """Verifies every card of a manifest, or of a .docx's manifest and body, against the snapshots."""
 
-    def __init__(self, *, verifier: EvidenceVerifier) -> None:
+    def __init__(
+        self,
+        *,
+        verifier: EvidenceVerifier,
+        articles: ArticleRepository,
+        format_profiles: Callable[[], Mapping[str, ResolvedFormatProfile]] = dict,
+    ) -> None:
         self._verifier = verifier
+        self._articles = articles
+        # Called only for a .docx, so a JSON manifest verifies on a build whose profiles do not load.
+        self._format_profiles = format_profiles
 
     async def verify(self, document: bytes) -> ManifestVerificationReport:
-        """Read ``document`` as a card manifest and verify each card in it, in order.
+        """Read ``document`` as a card manifest, or as a .docx holding one, and verify each card in order.
 
-        Raises :class:`InvalidManifest` before verifying anything if the document is not a
+        Raises :class:`InvalidManifest` before verifying anything if the document is not a manifest (or
+        a .docx whose manifest or body cannot be read), :class:`NoManifest` for a .docx with no
         manifest, and :class:`VerificationCouldNotRun` if the verifier lets a failure through.
         """
-        manifest_version, generated_at, entries = read_manifest(document)
-        verdicts = [await self._verdict(position, entry) for position, entry in enumerate(entries)]
+        if document.startswith(_ZIP_SIGNATURE):
+            return await self._verify_docx(document)
+        manifest = read_manifest(document)
+        verdicts = [
+            await self._verdict(position, entry, manifest.references)
+            for position, entry in enumerate(manifest.cards)
+        ]
         return ManifestVerificationReport(
-            manifest_version=manifest_version, generated_at=generated_at, cards=tuple(verdicts)
+            manifest_version=manifest.manifest_version,
+            generated_at=manifest.generated_at,
+            cards=tuple(verdicts),
         )
 
-    async def _verdict(self, position: int, entry: Mapping[str, Any]) -> CardVerdict:
+    async def _verify_docx(self, document: bytes) -> ManifestVerificationReport:
+        try:
+            manifest = read_manifest(embedded_manifest_bytes(document))
+        except NoEmbeddedManifest as missing:
+            raise NoManifest() from missing
+        except EmbeddedManifestError as unreadable:
+            raise InvalidManifest(
+                "$", f"the document's embedded manifest cannot be read: {unreadable}"
+            ) from None
+        name, profile = self._profile_of(manifest.cards)
+        try:
+            body = read_document_body(document, profile.style_profile)
+        except UnreadableDocument as unreadable:
+            raise InvalidManifest("$", f"the document's body cannot be read: {unreadable}") from None
+        matched, unclaimed = match_body_cards([str(entry.get("tag", "")) for entry in manifest.cards], body)
+        verdicts = [
+            await self._verdict(
+                position,
+                entry,
+                manifest.references,
+                _BodyCheck(matched[position], profile.profile.omission_marker),
+            )
+            for position, entry in enumerate(manifest.cards)
+        ]
+        return ManifestVerificationReport(
+            manifest_version=manifest.manifest_version,
+            generated_at=manifest.generated_at,
+            cards=tuple(verdicts),
+            document=DocumentCheck(
+                format_profile=name,
+                body_cards=len(body.cards),
+                unclaimed_body_cards=tuple(card.position for card in unclaimed),
+            ),
+        )
+
+    def _profile_of(self, entries: Sequence[Mapping[str, Any]]) -> tuple[str, ResolvedFormatProfile]:
+        """The one format profile the cards name, which the body was rendered in, or InvalidManifest."""
+        names = [entry.get("format_profile", DEFAULT_FORMAT_PROFILE) for entry in entries]
+        first = names[0]
+        for position, name in enumerate(names):
+            if name != first:
+                raise InvalidManifest(
+                    f"$.cards[{position}].format_profile",
+                    f"names format profile {_quoted(str(name))} where cards[0] names {_quoted(str(first))}; "
+                    "a rendered document is written in one profile",
+                )
+        profiles = self._format_profiles()
+        profile = profiles.get(str(first))
+        if profile is None:
+            known = ", ".join(sorted(profiles)) or "none"
+            raise InvalidManifest(
+                "$.cards[0].format_profile",
+                f"names format profile {_quoted(str(first))}, which this build does not have ({known}), so "
+                "its body cannot be read",
+            )
+        return str(first), profile
+
+    async def _verdict(
+        self,
+        position: int,
+        entry: Mapping[str, Any],
+        references: Mapping[str, SnapshotReference | None] | None,
+        body: _BodyCheck | None = None,
+    ) -> CardVerdict:
         try:
             # JSON in, as a stored card is read back, so a card loads here exactly as it would there.
             card = Card.model_validate_json(json.dumps(entry))
@@ -337,9 +570,105 @@ class VerifyManifest:
             return CardVerdict.of_invalid_card(position, entry, invalid)
         try:
             result = await self._verifier.verify(card)
+            reasons = await self._reference_reasons(card, references)
         except DomainError as stopped:
             raise VerificationCouldNotRun(card_id=card.card_id, position=position, cause=stopped) from stopped
-        return CardVerdict.of_result(position, card, result)
+        warnings: list[ReportedWarning] = []
+        if body is not None:
+            body_reasons, warnings = body.check(position, card)
+            reasons = (*reasons, *body_reasons)
+        return CardVerdict.of_result(position, card, result, more_reasons=reasons, warnings=warnings)
+
+    async def _reference_reasons(
+        self, card: Card, references: Mapping[str, SnapshotReference | None] | None
+    ) -> tuple[ReportedReason, ...]:
+        """``SNAPSHOT_REFERENCE_MISMATCH`` when the manifest's reference is not the stored record."""
+        if references is None or card.snapshot_id is None:
+            return ()
+        snapshot_id = card.snapshot_id
+        if snapshot_id not in references:
+            return (_reference_mismatch(f"the manifest lists no reference to snapshot {snapshot_id}"),)
+        try:
+            record = await self._articles.get_snapshot(snapshot_id)
+        except NotFound:
+            return ()  # The verifier has reported SNAPSHOT_MISSING: there is no record to compare with.
+        reference = references[snapshot_id]
+        if reference is None:
+            return (
+                _reference_mismatch(
+                    f"the manifest's reference to snapshot {snapshot_id} is not one valid snapshot reference"
+                ),
+            )
+        stored = SnapshotReference.of(record)
+        differing = [
+            name
+            for name in SnapshotReference.model_fields
+            if getattr(reference, name) != getattr(stored, name)
+        ]
+        if not differing:
+            return ()
+        return (
+            _reference_mismatch(
+                f"the manifest's reference to snapshot {snapshot_id} differs from the stored snapshot record "
+                f"in {', '.join(differing)}"
+            ),
+        )
+
+
+def _reference_mismatch(detail: str) -> ReportedReason:
+    return ReportedReason(code=ReasonCode.SNAPSHOT_REFERENCE_MISMATCH, detail=detail)
+
+
+@dataclass(frozen=True, slots=True)
+class _BodyCheck:
+    """One manifest card's body card in a .docx, if it has one, and the marker its cuts are drawn with."""
+
+    body_card: BodyCard | None
+    omission_marker: str
+
+    def check(self, position: int, card: Card) -> tuple[tuple[ReportedReason, ...], list[ReportedWarning]]:
+        if self.body_card is None:
+            return (
+                ReportedReason(
+                    code=ReasonCode.BODY_CARD_MISSING,
+                    detail=f"the document body holds no card for cards[{position}]: no tag matches it",
+                ),
+            ), []
+        comparison = compare_body(card, body_evidence(card, self.body_card), self.omission_marker)
+        return _manual_edits(comparison), _interpolation_warnings(comparison)
+
+
+def _manual_edits(comparison: BodyComparison) -> tuple[ReportedReason, ...]:
+    return tuple(
+        ReportedReason(
+            code=ReasonCode.MANUAL_EDIT,
+            detail=(
+                f"the document body changes evidence_text [{edit.evidence_range.start}, "
+                f"{edit.evidence_range.end}) (body evidence [{edit.body_range.start}, "
+                f"{edit.body_range.end})); "
+                "only deletions of whole words, markup changes and bracketed interpolations leave the "
+                "quotation intact"
+            ),
+            evidence_range=ReportedRange.of(edit.evidence_range),
+            body_range=ReportedRange.of(edit.body_range),
+        )
+        for edit in comparison.manual_edits
+    )
+
+
+def _interpolation_warnings(comparison: BodyComparison) -> list[ReportedWarning]:
+    return [
+        ReportedWarning(
+            code=WarningCode.INTERPOLATION_PRESENT,
+            detail=(
+                f"a bracketed interpolation of {item.length} character(s) is read before evidence_text "
+                f"offset {item.anchor}; its words are the debater's, not the source's"
+                + ("" if item.recorded else ", and the card does not record it")
+            ),
+            evidence_offset=item.anchor,
+        )
+        for item in comparison.interpolations
+    ]
 
 
 # --------------------------------------------------------------------------------------------
@@ -349,8 +678,21 @@ class VerifyManifest:
 _GENERATED_AT: Final[TypeAdapter[datetime]] = TypeAdapter(AwareDatetime)
 
 
-def read_manifest(document: bytes) -> tuple[ManifestVersion, datetime, list[dict[str, Any]]]:
-    """``document``'s version, timestamp and card entries, once it is known to be a manifest.
+@dataclass(frozen=True, slots=True)
+class ManifestDocument:
+    """A document known to be a manifest: its version, timestamp, card entries and snapshot references."""
+
+    manifest_version: ManifestVersion
+    generated_at: datetime
+    cards: list[dict[str, Any]]
+    """Plain entries: each is made a ``Card`` on its own, so one invalid card cannot refuse the others."""
+    references: Mapping[str, SnapshotReference | None] | None
+    """By snapshot id; None for a version-1 manifest, which has none. An entry that is not one valid
+    reference (the model refuses it, or the id is listed twice) is None, so its cards are refused too."""
+
+
+def read_manifest(document: bytes) -> ManifestDocument:
+    """``document``'s version, timestamp, card entries and references, once it is known to be a manifest.
 
     Strict JSON (no duplicate keys, no ``NaN``), then a version newer than this build's refused
     (:class:`NewerManifestVersion`), then the published schema, then the timestamp, whose
@@ -382,7 +724,23 @@ def read_manifest(document: bytes) -> tuple[ManifestVersion, datetime, list[dict
         generated_at = _GENERATED_AT.validate_python(data["generated_at"])
     except ValidationError as invalid:
         raise InvalidManifest("$.generated_at", invalid.errors(include_url=False)[0]["msg"]) from invalid
-    return cast("ManifestVersion", data["manifest_version"]), generated_at, data["cards"]
+    manifest_version = cast("ManifestVersion", data["manifest_version"])
+    references = (
+        _references(data.get("snapshots", [])) if manifest_version >= SNAPSHOTS_SINCE_VERSION else None
+    )
+    return ManifestDocument(manifest_version, generated_at, data["cards"], references)
+
+
+def _references(entries: list[Any]) -> dict[str, SnapshotReference | None]:
+    references: dict[str, SnapshotReference | None] = {}
+    for entry in entries:
+        snapshot_id = str(entry["snapshot_id"])
+        try:
+            reference: SnapshotReference | None = SnapshotReference.model_validate(entry)
+        except ValidationError:
+            reference = None
+        references[snapshot_id] = None if snapshot_id in references else reference
+    return references
 
 
 @cache
@@ -558,7 +916,8 @@ def render_verify_result_schema() -> dict[str, Any]:
     The output is the CLI's standard envelope (``debate_cli.output``, ``schema_version`` 1) with
     this command's payloads in it: the report under ``data`` when every card is VERIFIED; the same
     report under ``error.details`` when some card is not; the failing path when the document is not
-    a manifest; and the card the run stopped at when verification could not run. The exit codes
+    a manifest; the document's name when a .docx holds no manifest; and the card the run stopped at
+    when verification could not run. The exit codes
     are written as numbers because ``debate_core`` cannot import the CLI's ``ExitCode``; the CLI's
     tests hold the two to each other. A bug (exit 70) has the CLI-wide envelope and is not
     described here.
@@ -598,6 +957,11 @@ def render_verify_result_schema() -> dict[str, Any]:
             "manifest": {"type": "string"},
         },
     }
+    no_manifest_details = {
+        "type": "object",
+        "required": ["document"],
+        "properties": {"document": {"type": "string"}},
+    }
     could_not_run_details = {
         "type": "object",
         "required": ["card_id", "position", "cause"],
@@ -612,9 +976,9 @@ def render_verify_result_schema() -> dict[str, Any]:
         "title": "debate-research verify --json output",
         "description": (
             "One JSON object on stdout per run. Exit 0: every card VERIFIED, report under data. "
-            "Exit 1: some card UNVERIFIED, report under error.details. Exit 2: usage error or a "
-            "manifest that fails its schema, with the failing JSON path. Exit 3: verification could "
-            "not run."
+            "Exit 1: some card UNVERIFIED, report under error.details. Exit 2: usage error, a "
+            "manifest that fails its schema, with the failing JSON path, or a .docx with no embedded "
+            "manifest (NO_MANIFEST). Exit 3: verification could not run."
         ),
         "type": "object",
         "additionalProperties": False,
@@ -639,6 +1003,12 @@ def render_verify_result_schema() -> dict[str, Any]:
                 "error",
                 {"type": "null"},
                 failure({"const": INVALID_MANIFEST_CODE}, 2, invalid_manifest_details),
+            ),
+            outcome(
+                "No manifest in the .docx (exit 2)",
+                "error",
+                {"type": "null"},
+                failure({"const": NO_MANIFEST_CODE}, 2, no_manifest_details),
             ),
             outcome(
                 "Usage error (exit 2)",

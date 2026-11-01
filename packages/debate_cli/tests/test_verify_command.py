@@ -11,16 +11,29 @@ case's tests, which count the offsets.
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any
 
+import docx
 import pytest
 import typer
 from tests.fixtures.card.card_world import CardWorld, news_request
 from tests.fixtures.permissions import needs_permissions, refused
 from tests.fixtures.verification.verification_world import run
+from tests.fixtures.verify.docx_world import (
+    CRITICS_SENTENCE,
+    NEWS_CARD_ID,
+    NewsExport,
+    edited,
+    news_card_with_the_critics_sentence_unmarked,
+    news_export,
+    render_with,
+    replace_in_evidence,
+    without_markup,
+)
 from tests.fixtures.verify.manifest_world import (
     ALL_VERIFIED,
     MIXED,
@@ -39,6 +52,7 @@ from debate_cli.exit_codes import ExitCode
 from debate_core.application.errors import StoreError, StoreUnavailable
 from debate_core.application.export_service import ExportService
 from debate_core.domain import SourceSnapshot, VerificationStatus
+from debate_core.evidence.manifest import serialize_manifest
 from debate_core.integrations.local import (
     BLOB_DIRECTORY,
     FsSnapshotStore,
@@ -102,6 +116,7 @@ def test_the_help_documents_every_exit_code() -> None:
         "0  every card is VERIFIED",
         "1  at least one card is UNVERIFIED (every card is still listed)",
         "2  usage error, a manifest that fails its JSON Schema, or one from a newer build",
+        "NO_MANIFEST for a .docx with no embedded manifest",
         "3  verification could not run, for example a store could not be read",
     ):
         assert line in result.stdout
@@ -138,6 +153,7 @@ def test_the_result_schema_uses_the_clis_exit_codes() -> None:
         "Every card VERIFIED (exit 0)": None,
         "Some card UNVERIFIED (exit 1)": ExitCode.DOMAIN_FAILURE,
         "Not a manifest (exit 2)": ExitCode.USAGE_ERROR,
+        "No manifest in the .docx (exit 2)": ExitCode.USAGE_ERROR,
         "Usage error (exit 2)": ExitCode.USAGE_ERROR,
         "Verification could not run (exit 3)": ExitCode.RETRIEVAL_FAILURE,
     }
@@ -218,7 +234,8 @@ def test_a_person_sees_a_row_for_every_card_of_the_mixed_manifest() -> None:
     result = invoke("verify", str(MIXED))
 
     assert result.exit_code == ExitCode.DOMAIN_FAILURE
-    rows = [line for line in result.stdout.splitlines() if line.startswith(("│ 0CARD", "│ 0AWAY"))]
+    # A card's first line; its snapshot id is the line beneath (`v1-e06-t07`).
+    rows = [line for line in result.stdout.splitlines() if line.startswith(("│ 0CARD", "│ 0AWAYCARD"))]
     assert len(rows) == 5, result.stdout
     assert ["UNVERIFIED" in row for row in rows] == [False, False, True, True, True]
     assert "CARD_INVALID" in rows[3]
@@ -616,3 +633,243 @@ def test_a_manifest_from_a_newer_build_exits_two_and_says_to_install_a_newer_bui
     )
     assert problem in " ".join(for_a_person.stderr.split())
     assert "card_manifest.v1.json" not in " ".join(for_a_person.stderr.split())
+
+
+# --------------------------------------------------------------------------------------------
+# A .docx the platform exported (v1-e06-t07)
+# --------------------------------------------------------------------------------------------
+#
+# t02's news card exported by ExportService with the production renderer, as `cut` writes it, then
+# changed through python-docx (tests/fixtures/verify/docx_world.py). The data directory holds the
+# card's snapshot, written by the real local adapters. Offsets are counted by hand: "two" is evidence
+# [18, 21) and "three" body [18, 23); "project" is evidence 156.
+
+DOCX_SNAPSHOT_ID = "0SNAP000000000000000000001"
+"""The news card's snapshot: the first id CitationWorld's sequential generator gives."""
+EVIDENCE_PHRASE = "edited elephant embryos"
+"""Words of the evidence that are in neither the tag nor the cite: no output may contain them."""
+
+
+@dataclass(frozen=True)
+class ExportedDocx:
+    export: NewsExport
+    data_dir: Path
+
+
+@pytest.fixture(scope="module")
+def docx_export(tmp_path_factory: pytest.TempPathFactory) -> ExportedDocx:
+    export = news_export()
+    data_dir = tmp_path_factory.mktemp("docx") / "data"
+    copy_snapshot(export.world, export.snapshot.snapshot, data_dir)
+    return ExportedDocx(export=export, data_dir=data_dir)
+
+
+@pytest.fixture
+def docx_world(monkeypatch: pytest.MonkeyPatch, docx_export: ExportedDocx) -> ExportedDocx:
+    """The export, with the command pointed at the data directory holding its snapshot."""
+    monkeypatch.setenv("DEBATE_STORAGE__DATA_DIR", str(docx_export.data_dir))
+    return docx_export
+
+
+def written(tmp_path: Path, document: bytes, name: str = "evidence.docx") -> Path:
+    path = tmp_path / name
+    path.write_bytes(document)
+    return path
+
+
+def test_docx_an_untouched_export_exits_zero_and_lists_its_card_verified_with_its_snapshot_id(
+    tmp_path: Path, docx_world: ExportedDocx
+) -> None:
+    path = written(tmp_path, docx_world.export.document)
+
+    for_a_person = invoke("verify", str(path))
+    as_json = invoke("--json", "verify", str(path))
+
+    assert for_a_person.exit_code == as_json.exit_code == ExitCode.OK, for_a_person.output
+    table = for_a_person.stdout
+    assert "1 of 1 card(s) verified" in table
+    row = next(line for line in table.splitlines() if line.startswith("│ 0CVT"))
+    assert NEWS_CARD_ID in row and "VERIFIED" in row
+    assert f"│ {DOCX_SNAPSHOT_ID}" in table
+    assert "Document body read in the team-default format profile." in table
+    report = envelope(as_json)["data"]
+    assert [(card["card_id"], card["status"], card["snapshot_id"]) for card in report["cards"]] == [
+        (NEWS_CARD_ID, "VERIFIED", DOCX_SNAPSHOT_ID)
+    ]
+    assert report["document"] == {
+        "format_profile": "team-default",
+        "body_cards": 1,
+        "unclaimed_body_cards": [],
+    }
+
+
+def test_docx_a_changed_word_exits_one_with_manual_edit_the_card_and_its_range(
+    tmp_path: Path, docx_world: ExportedDocx
+) -> None:
+    path = written(
+        tmp_path, edited(docx_world.export.document, replace_in_evidence("two years", "three years"))
+    )
+
+    as_json = invoke("--json", "verify", str(path))
+    for_a_person = invoke("verify", str(path))
+
+    assert as_json.exit_code == for_a_person.exit_code == ExitCode.DOMAIN_FAILURE
+    error = envelope(as_json)["error"]
+    assert (error["code"], error["exit_code"]) == ("UNVERIFIED", 1)
+    [card] = error["details"]["cards"]
+    assert (card["position"], card["status"], card["reason_codes"]) == (0, "UNVERIFIED", ["MANUAL_EDIT"])
+    assert (card["reasons"][0]["evidence_range"], card["reasons"][0]["body_range"]) == (
+        {"start": 18, "end": 21},
+        {"start": 18, "end": 23},
+    )
+    row = next(line for line in for_a_person.stdout.splitlines() if line.startswith("│ 0CVT"))
+    assert "UNVERIFIED" in row and "MANUAL_EDIT at 18-21" in row
+
+
+@pytest.mark.parametrize(
+    "change",
+    [without_markup, replace_in_evidence("the timeline was never realistic", "")],
+    ids=["underlining and highlighting taken off", "an underlined clause deleted whole"],
+)
+def test_docx_markup_taken_off_or_words_deleted_whole_keeps_the_card_verified_and_exits_zero(
+    tmp_path: Path, docx_world: ExportedDocx, change: Callable[[Any], None]
+) -> None:
+    result = invoke("--json", "verify", str(written(tmp_path, edited(docx_world.export.document, change))))
+
+    assert result.exit_code == ExitCode.OK, result.output
+    [card] = envelope(result)["data"]["cards"]
+    assert (card["status"], card["reason_codes"]) == ("VERIFIED", [])
+
+
+def test_docx_deleting_an_unmarked_sentence_keeps_the_card_verified_and_exits_zero(tmp_path: Path) -> None:
+    export = news_export(change_card=news_card_with_the_critics_sentence_unmarked)
+    data_dir = tmp_path / "data"
+    copy_snapshot(export.world, export.snapshot.snapshot, data_dir)
+    path = written(tmp_path, edited(export.document, replace_in_evidence(CRITICS_SENTENCE, "")))
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv("DEBATE_STORAGE__DATA_DIR", str(data_dir))
+        result = invoke("--json", "verify", str(path))
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert envelope(result)["data"]["verified"] == 1
+
+
+def test_docx_a_bracketed_interpolation_is_shown_as_a_warning_and_exits_zero(
+    tmp_path: Path, docx_world: ExportedDocx
+) -> None:
+    path = written(
+        tmp_path,
+        edited(docx_world.export.document, replace_in_evidence("the project", "the [Okapi Trust] project")),
+    )
+
+    as_json = invoke("--json", "verify", str(path))
+    for_a_person = invoke("verify", str(path))
+
+    assert as_json.exit_code == for_a_person.exit_code == ExitCode.OK
+    [card] = envelope(as_json)["data"]["cards"]
+    assert card["status"] == "VERIFIED"
+    assert [(warning["code"], warning["evidence_offset"]) for warning in card["warnings"]] == [
+        ("INTERPOLATION_PRESENT", 156)
+    ]
+    assert "INTERPOLATION_PRESENT (warning) at offset 156" in for_a_person.stdout
+    assert "Okapi" not in as_json.stdout + for_a_person.stdout + for_a_person.stderr
+
+
+def test_docx_with_no_embedded_manifest_exits_two_with_no_manifest(tmp_path: Path) -> None:
+    team_file = docx.Document()
+    team_file.add_paragraph("A hand-cut card", style="Heading 4")
+    team_file.add_paragraph("Someone 24")
+    team_file.save(str(tmp_path / "team.docx"))
+
+    as_json = invoke("--json", "verify", str(tmp_path / "team.docx"))
+    for_a_person = invoke("verify", str(tmp_path / "team.docx"))
+
+    assert as_json.exit_code == for_a_person.exit_code == ExitCode.USAGE_ERROR
+    error = envelope(as_json)["error"]
+    assert (error["code"], error["exit_code"], error["details"]) == (
+        "NO_MANIFEST",
+        2,
+        {"document": str(tmp_path / "team.docx")},
+    )
+    assert "verify reads only .docx files debate-research exported" in error["hint"]
+    assert "NO_MANIFEST" in for_a_person.stderr and for_a_person.stdout == ""
+    assert str(tmp_path) not in for_a_person.stderr.replace("\n", ""), "the panel names no path"
+
+
+def test_docx_whose_snapshot_is_not_on_this_machine_exits_one_with_snapshot_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, docx_export: ExportedDocx
+) -> None:
+    monkeypatch.setenv("DEBATE_STORAGE__DATA_DIR", str(tmp_path / "empty"))
+
+    result = invoke("--json", "verify", str(written(tmp_path, docx_export.export.document)))
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE
+    [card] = envelope(result)["error"]["details"]["cards"]
+    assert (card["status"], card["reason_codes"]) == ("UNVERIFIED", ["SNAPSHOT_MISSING"])
+
+
+@pytest.mark.parametrize("form", ["json", "docx"])
+def test_docx_and_json_a_tampered_snapshot_reference_exits_one_with_its_own_code(
+    tmp_path: Path, docx_world: ExportedDocx, form: str
+) -> None:
+    export = docx_world.export
+    [reference] = export.manifest.snapshots
+    manifest = export.manifest.model_copy(
+        update={"snapshots": (reference.model_copy(update={"extractor_version": "fixture-extractor/2"}),)}
+    )
+    document = serialize_manifest(manifest) if form == "json" else render_with(manifest, export)
+
+    result = invoke("--json", "verify", str(written(tmp_path, document, f"tampered.{form}")))
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE
+    [card] = envelope(result)["error"]["details"]["cards"]
+    assert card["reason_codes"] == ["SNAPSHOT_REFERENCE_MISMATCH"]
+    assert card["reasons"][0]["detail"].endswith("in extractor_version")
+
+
+@pytest.mark.parametrize(
+    ("arguments", "change"),
+    [
+        (("verify",), None),
+        (("--json", "verify"), None),
+        (("--verbose", "verify"), replace_in_evidence("two years", "three years")),
+        (("--json", "verify"), replace_in_evidence("the project", "the [Okapi Trust] project")),
+    ],
+    ids=["untouched, for a person", "untouched, as json", "manual edit, verbose", "interpolation, as json"],
+)
+def test_docx_verify_never_writes_to_the_document(
+    tmp_path: Path, docx_world: ExportedDocx, arguments: tuple[str, ...], change: Callable[[Any], None] | None
+) -> None:
+    document = docx_world.export.document if change is None else edited(docx_world.export.document, change)
+    path = written(tmp_path, document)
+    os.utime(path, ns=(1_700_000_000_000_000_000, 1_700_000_000_000_000_000))
+    before = path.stat()
+
+    invoke(*arguments, str(path))
+
+    after = path.stat()
+    assert path.read_bytes() == document
+    assert (after.st_mtime_ns, after.st_size) == (before.st_mtime_ns, before.st_size)
+    assert sorted(entry.name for entry in tmp_path.iterdir()) == ["evidence.docx"], (
+        "nothing written beside it"
+    )
+
+
+def test_docx_the_output_never_contains_evidence_text(tmp_path: Path, docx_world: ExportedDocx) -> None:
+    path = written(
+        tmp_path, edited(docx_world.export.document, replace_in_evidence("two years", "three years"))
+    )
+
+    for arguments in (("--json", "verify", str(path)), ("--verbose", "verify", str(path))):
+        result = invoke(*arguments)
+        assert result.exit_code == ExitCode.DOMAIN_FAILURE
+        assert EVIDENCE_PHRASE not in result.stdout + result.stderr
+        assert "three" not in result.stdout + result.stderr
+
+
+def test_docx_can_come_from_stdin(docx_world: ExportedDocx) -> None:
+    result = runner.invoke(create_app(), ["--json", "verify", "-"], input=docx_world.export.document)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert envelope(result)["data"]["document"]["format_profile"] == "team-default"

@@ -1208,7 +1208,8 @@ class ServiceContainer:
         The verifier reads snapshot records from the SQLite file and their content from the blob
         store under `storage.data_dir`, through ``SnapshotService.load``: the same records and
         blobs every card on this machine was cut from. Nothing here reaches the network; a snapshot
-        that is not in this data directory is a card the verifier reports as ``SNAPSHOT_MISSING``.
+        that is not in this data directory is a card the verifier reports as ``SNAPSHOT_MISSING``. A
+        .docx's body is read in the committed format profiles (`v1-e06-t07`).
         """
         return self.singleton("verify_manifest", self._build_verify_manifest)
 
@@ -1223,7 +1224,12 @@ class ServiceContainer:
             id_generator=_PortIdGenerator(),
         )
         articles = SqliteArticleRepository(self.database)
-        return VerifyManifest(verifier=EvidenceVerifier(articles=articles, snapshots=snapshots, clock=clock))
+        return VerifyManifest(
+            verifier=EvidenceVerifier(articles=articles, snapshots=snapshots, clock=clock),
+            articles=articles,
+            # A .docx's body is read in its cards' format profile (`v1-e06-t07`); loaded only for one.
+            format_profiles=self.format_profiles,
+        )
 
     def article_fetch(self) -> ArticleFetch:
         """Build `debate-research fetch` over the polite HTTP fetcher and this data directory (`v1-e04-t06`).

@@ -311,7 +311,8 @@ metadata, which is the same rule the rest of the platform follows (architecture 
 ## `debate-research verify`
 
 `debate-research verify <manifest.json>` (`v1-e03-t06-verify-command`) checks that every card in a
-card manifest is reproducible from its stored snapshot. Each card's evidence is cut again from the
+card manifest is reproducible from its stored snapshot, and `debate-research verify evidence.docx`
+(`v1-e06-t07`) does the same for a .docx debate-research exported, then checks its body. Each card's evidence is cut again from the
 snapshot and compared exactly; snapshots are read from this environment's data directory
 (`storage.data_dir`, from `DEBATE_ENV` or `DEBATE_STORAGE__DATA_DIR`) and never fetched. The work is
 `VerifyManifest`'s, in `debate_core.application.verify_manifest`; the command only reads the file,
@@ -321,12 +322,13 @@ renders the report and chooses the exit code.
 $ uv run debate-research verify cards.json
 $ uv run debate-research --json verify cards.json | jq '.data // .error.details | .cards[] | [.card_id, .status]'
 $ DEBATE_ENV=test DEBATE_STORAGE__DATA_DIR=/tmp/verify-data uv run debate-research verify tests/fixtures/verify/mixed.json
+$ uv run debate-research verify evidence.docx
 ```
 
 The manifest is `{"manifest_version": 1, "generated_at": ..., "cards": [<Card>, ...]}`, published as
 `packages/debate_core/schemas/card_manifest.v1.json`; each card is the domain `Card` and refers to
-`card.schema.json`. A person sees a table of card id, tag, status and reason codes (`--verbose` adds
-each reason's detail on stderr). `--json` prints one envelope, published as
+`card.schema.json`. A person sees a table of card id (with its snapshot id beneath), tag, status and
+reason codes (`--verbose` adds each reason's detail on stderr). `--json` prints one envelope, published as
 `packages/debate_core/schemas/verify_result.v1.json`: the report under `data` on exit 0, under
 `error.details` on exit 1.
 
@@ -335,6 +337,7 @@ each reason's detail on stderr). `--json` prints one envelope, published as
 | `0` | Every card is VERIFIED. |
 | `1` | The manifest was read and at least one card is UNVERIFIED. Every card is still listed. |
 | `2` | A usage error, or a file that is not a card manifest this build reads: not JSON, not valid against `card_manifest.v1.json`, or written by a newer build of debate-research. The failing JSON path is reported and nothing is verified. |
+| `2` (`NO_MANIFEST`) | A .docx with no embedded manifest, such as a hand-cut team file. verify reads only files debate-research exported; nothing is verified. |
 | `3` | Verification could not run, for example because a store could not be read. No card has a verdict. |
 
 Three rules worth knowing:
@@ -346,6 +349,29 @@ Three rules worth knowing:
   UNVERIFIED row with `CARD_INVALID`. The other cards are still verified; the run is not a `2`.
 * Exit `3` uses the CLI-wide `RETRIEVAL_FAILURE` number: the same command may succeed once the store
   can be read. It is never reported as `0` or `1`, because no card was judged.
+* A version-2 manifest's snapshot references (`sha256`, normalized text hash, normalizer and
+  extractor versions, `retrieved_at`, `canonical_url`) are checked against the stored snapshot
+  record. One that differs is `SNAPSHOT_REFERENCE_MISMATCH` on every card cut from that snapshot, in
+  a JSON manifest and an embedded one alike.
+
+### A .docx
+
+A document `debate-research cut` wrote carries its manifest, so verify needs nothing beside it. The
+cards in the manifest are verified as above, then the body is read in the format profile the cards
+name and each card's evidence paragraph is compared with its `evidence_text` under the edit policy:
+
+* deleting whole words or sentences, with or without the profile's ` … ` marker, and changing
+  underlining, highlighting or sizes leave the card VERIFIED;
+* a bracketed interpolation, `[like this]`, leaves it VERIFIED with the warning
+  `INTERPOLATION_PRESENT` and the offset it is read before;
+* any other change to the quoted words (a word changed or added, letters taken out of a word, two
+  words joined, a paragraph added under the evidence) makes it UNVERIFIED with `MANUAL_EDIT`, the
+  `evidence_text` range it replaced and the body range that replaced it, and the run exits `1`;
+* a card whose tag is no longer in the body is UNVERIFIED with `BODY_CARD_MISSING`; a card pasted
+  into the body that the manifest does not list is named under the table and judged by nothing.
+
+The body is read as Word shows it: tracked insertions count, tracked deletions and hidden text do
+not. Neither output quotes the evidence or an interpolation's words, and the file is only read.
 
 ## Not here yet
 

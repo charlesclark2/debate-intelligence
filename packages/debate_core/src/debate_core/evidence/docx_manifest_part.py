@@ -21,15 +21,22 @@ contract "Document libraries stay inside debate_core.integrations.docx_parser").
 file a student hands back, so it refuses a part that declares a document type (and with it any
 entity), a part larger than :data:`MAXIMUM_MANIFEST_PART_BYTES`, and a manifest element holding
 anything but text.
+
+:func:`embedded_manifest_bytes` is the same reader for a document held as bytes, which is how `verify`
+is handed one (`v1-e06-t07`). A document with no manifest part at all is
+:class:`NoEmbeddedManifest`, so that `verify` can tell a hand-cut team file, which it does not read,
+from a document whose manifest is damaged; a file that is not a zip package, or whose custom XML part
+is not XML, is an :class:`EmbeddedManifestError` like every other refusal.
 """
 
 from __future__ import annotations
 
 import hashlib
+import io
 import uuid
 import zipfile
 from pathlib import Path
-from typing import Final
+from typing import IO, Final
 from xml.etree import ElementTree
 from xml.sax.saxutils import escape
 
@@ -42,6 +49,8 @@ __all__ = [
     "MANIFEST_PROPERTIES_PART_NAME",
     "MAXIMUM_MANIFEST_PART_BYTES",
     "EmbeddedManifestError",
+    "NoEmbeddedManifest",
+    "embedded_manifest_bytes",
     "manifest_part_xml",
     "manifest_properties_xml",
     "read_embedded_manifest",
@@ -61,6 +70,10 @@ _DATASTORE_NAMESPACE: Final = "http://schemas.openxmlformats.org/officeDocument/
 
 class EmbeddedManifestError(ValueError):
     """A document's embedded manifest is missing, ambiguous, or not something this reader will open."""
+
+
+class NoEmbeddedManifest(EmbeddedManifestError):
+    """The document holds no manifest part at all: it was not exported by the platform, or lost its part."""
 
 
 def manifest_part_xml(manifest_bytes: bytes) -> bytes:
@@ -98,35 +111,57 @@ def _is_data_part(name: str) -> bool:
 
 def read_embedded_manifest_bytes(path: Path) -> bytes:
     """The manifest bytes embedded in the .docx at `path`, exactly as they were serialized."""
+    return _manifest_bytes(path, path.name)
+
+
+def embedded_manifest_bytes(document: bytes) -> bytes:
+    """The manifest bytes embedded in the .docx `document`, exactly as they were serialized.
+
+    Raises :class:`NoEmbeddedManifest` when it holds none, and :class:`EmbeddedManifestError` when it is
+    not a zip package, holds two, or holds one this reader will not open.
+    """
+    return _manifest_bytes(io.BytesIO(document), "the document")
+
+
+def _manifest_bytes(source: Path | IO[bytes], name: str) -> bytes:
     found: list[str] = []
-    with zipfile.ZipFile(path) as package:
+    try:
+        package = zipfile.ZipFile(source)
+    except zipfile.BadZipFile as error:
+        raise EmbeddedManifestError(f"{name} is not a .docx: it is not a zip package") from error
+    with package:
         for member in package.infolist():
             if not _is_data_part(member.filename):
                 continue
             if member.file_size > MAXIMUM_MANIFEST_PART_BYTES:
                 raise EmbeddedManifestError(
-                    f"{path.name}: custom XML part {member.filename} is {member.file_size} bytes, over the "
+                    f"{name}: custom XML part {member.filename} is {member.file_size} bytes, over the "
                     f"{MAXIMUM_MANIFEST_PART_BYTES} this reader opens"
                 )
             content = package.read(member)
             if b"<!DOCTYPE" in content or b"<!ENTITY" in content:
                 raise EmbeddedManifestError(
-                    f"{path.name}: custom XML part {member.filename} declares a document type, which no "
+                    f"{name}: custom XML part {member.filename} declares a document type, which no "
                     "manifest does; it is not opened"
                 )
-            root = ElementTree.fromstring(content)
+            try:
+                root = ElementTree.fromstring(content)
+            except ElementTree.ParseError as error:
+                raise EmbeddedManifestError(
+                    f"{name}: custom XML part {member.filename} is not well-formed XML"
+                ) from error
             if root.tag != MANIFEST_ELEMENT:
                 continue
             if len(root) or root.attrib:
                 raise EmbeddedManifestError(
-                    f"{path.name}: the manifest element in {member.filename} holds only the manifest's text"
+                    f"{name}: the manifest element in {member.filename} holds only the manifest's text"
                 )
             found.append(root.text or "")
     if len(found) != 1:
         count = "no embedded manifest" if not found else f"{len(found)} embedded manifests"
-        raise EmbeddedManifestError(
-            f"{path.name} holds {count}; a rendered document holds exactly one, in namespace "
-            f"{MANIFEST_NAMESPACE}"
+        error = NoEmbeddedManifest if not found else EmbeddedManifestError
+        raise error(
+            f"{name} holds {count}; a rendered document holds exactly one, in namespace {MANIFEST_NAMESPACE}"
         )
     return found[0].encode("utf-8")
 

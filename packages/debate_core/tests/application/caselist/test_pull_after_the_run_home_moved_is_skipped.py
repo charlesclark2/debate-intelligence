@@ -37,6 +37,7 @@ from typing import TYPE_CHECKING, Any, Final, NoReturn
 import jsonschema
 import pytest
 
+from debate_core.application import sync_runs
 from debate_core.application.caselist.bucket_run import BucketRun
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.publish_service import withheld_manifest_reason
@@ -402,3 +403,20 @@ async def test_a_local_mode_pull_refused_by_a_seeded_bucket_is_failed_not_skippe
     assert (mac.record()["outcome"], mac.record()["error_class"]) == ("failed", "BucketKeepsRunState")
     assert "skipped" not in mac.details()
     assert mac.the_one_notification().title == PERSON_TITLE
+
+
+# ------------------------------------------------------------------------------------------------
+# The runbook says what the banner says
+# ------------------------------------------------------------------------------------------------
+
+RUNBOOK = Path(__file__).resolve().parents[5] / "docs" / "runbooks" / "caselist-scheduled-sync.md"
+
+
+def test_the_runbook_quotes_the_notice_of_a_pull_after_the_run_home_moved_word_for_word() -> None:
+    section = RUNBOOK.read_text(encoding="utf-8").split("\n## What a notification says\n", 1)[1]
+    section = " ".join(section.split("\n## ", 1)[0].split())
+
+    assert (sync_runs.RUN_HOME_MOVED_TITLE, sync_runs.RUN_HOME_MOVED_FIX) == (MOVED_TITLE, MOVED_FIX)
+    assert f"{WHERE} {sync_runs.RUN_HOME_MOVED_NOTICE}" == MOVED_MESSAGE
+    for wording in (MOVED_TITLE, MOVED_MESSAGE, MOVED_FIX, "skipped (RUN_HOME_MOVED)", "none (skipped)"):
+        assert " ".join(wording.split()) in section, wording

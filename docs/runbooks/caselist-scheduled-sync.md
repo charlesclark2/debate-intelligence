@@ -815,6 +815,7 @@ enough to be shown whole too.
 | `caselist pull failed: retried once fixed` | The same, and the failure carries a fix to make first: a refusal by this Mac or by the bucket (`v1-e34-t23`) | `3` |
 | `caselist pull failed: needs a person` | The same, and at least one failure will be the same next week. Also a run that stopped on a bug | `1`, `70` |
 | `caselist pull skipped: another was running` | Another `caselist pull` held the run lock, so this one did nothing (`v1-e34-t23`) | `1` |
+| `caselist pull skipped: the weekly run moved to prod` | The weekly run's home has moved to prod, so dev's run lock is held for good and this pull did nothing (`v1-e40-t29`) | `1` |
 | `caselist pull finished with a failed stage` | Only a stage that did not have to finish failed: parse, report or retention | `0` |
 | `caselist pull: publish a manifest again` | Only the report stage failed, and only because the bucket's copy of a manifest differs from this Mac's. The run owes it again, and the next run publishes it (`v1-e34-t23`, `v1-e34-t26`) | `0` |
 | `caselist pull: a manifest drifted again` | The same, for a manifest a run had already owed again, published and seen confirmed, so it is not owed a third time (`v1-e34-t26`) | `0` |
@@ -859,6 +860,20 @@ person has nothing to do about it, so it has its own banner (`v1-e34-t23`):
 
 Its command is `debate-research caselist runs`, which shows what the other run recorded once it
 finishes. See [When something goes wrong](#when-something-goes-wrong) if no other run is going.
+
+**The weekly run moved to prod.** Once the pilot's promotion has moved the weekly run's home
+([caselist-cutover.md](caselist-cutover.md#the-dev-lock-held-for-good)), a dev `caselist pull` on this
+Mac is refused with `RUN_HOME_MOVED`, does nothing and exits `1`. Nothing broke: the weekly run runs
+from prod now, so the run is recorded as skipped and has its own banner (`v1-e40-t29`):
+
+> Run 20261104T110005Z (dev) skipped: the weekly run now runs from prod, so this pull did nothing. Nothing here needs a person.
+
+Its fix line is `none: prod's weekly cloud run records and announces its own runs`, and it names no
+path: not the lock's key, and not the build that moved it. `caselist runs` shows the run as `skipped
+(RUN_HOME_MOVED)`, failed on `none`, with the verdict `none (skipped)`. Its record still says `failed`
+(`RunHomeMoved`), the record every installed build reads, so a build from before `v1-e40-t29` shows
+`failed (RunHomeMoved)` for it, and gives a pull of its own the banner `caselist pull failed: needs a
+person`. Every other refusal by the lock keeps its banner and its record.
 
 **A manifest to publish again.** When the report stage's only finding is that the bucket's copy
 of a snapshot's manifest differs from this Mac's, the run puts the snapshot back into

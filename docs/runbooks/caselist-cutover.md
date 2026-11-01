@@ -964,6 +964,17 @@ cd "$HOME" && DEBATE_ENV=dev debate-research --json caselist move-run-home | gre
 Success looks like `"code": "RUN_HOME_MOVED"` and `the weekly run now runs from prod`. Record the move's
 date in `v1-e40-t11`'s follow-ups.
 
+**What a Mac pull shows after the move** (`v1-e40-t29`). A dev `caselist pull` on the Mac, by hand or from
+an agent still loaded, is refused the same way, `RUN_HOME_MOVED`, and exits `1` having listed, fetched and
+written nothing. Nothing broke, so it is recorded as skipped: the Mac's banner is `caselist pull skipped:
+the weekly run moved to prod`, saying the weekly run now runs from prod, that this pull did nothing and
+that nothing needs a person, and `caselist runs` shows it as `skipped (RUN_HOME_MOVED)`
+([caselist-scheduled-sync.md](caselist-scheduled-sync.md#what-a-notification-says) quotes both). Its
+record stays on the Mac, as every lock refusal's does: it reaches no bucket and no cloud log, so it neither
+counts as a recorded run for a late-run alarm nor trips one. A build from before `v1-e40-t29` shows the
+same refusal as a failed run, `caselist pull failed: needs a person`; one from before `v1-e40-t11` as
+`RUN_LOCK_WRONG_HOME`.
+
 ### Undoing the move: the release, only after the coach confirms
 
 A move made by mistake (before prod was seeded, say) is undone by its release, and by nothing else: an

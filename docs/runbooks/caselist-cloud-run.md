@@ -867,6 +867,122 @@ caselist; since `v1-e40-t08` it need not. An image built before `v1-e40-t22` say
 the weekly agent", which meant the Mac's agent; the cure is still a new image here. Never rebuild or
 publish the parsed store on the operator's Mac ([A failed parse stage](#a-failed-parse-stage)).
 
+## The run task's memory
+
+The run task gets 32 GB, 32768 MiB, in place of 16 GB (`v1-e40-t30`). The first cloud backfile import
+(`hspolicy25`, revision 10, 2026-10-31) was killed at 71 minutes with ECS's `OutOfMemoryError`, exit
+137, and Wednesday 2026-11-04's run is the first full re-parse in the cloud, on the same 8 workers
+([ADR-0020's amendment](../adr/0020-weekly-caselist-run-in-the-cloud.md)). The change is in Terraform
+once `v1-e40-t30` merges, and it reaches the schedule only by this apply. The CPU (8 vCPU), the 8 parse
+workers, the ephemeral volume, the image and the login task stay as they are.
+
+**When.** Never on a Wednesday, and **before 2026-11-04 06:00 Chicago**, so that Wednesday's run starts
+on 32 GB. Not while a task is running on the run's cluster, a backfile import included: the apply
+deregisters the revision such a task started from. The apply block refuses a Wednesday and a running
+task itself.
+
+**No image, so no hold.** This apply keeps `owner.auto.tfvars`'s digest (`v1.1.0-dev.251`), so the hold
+in [A new image, later](#a-new-image-later) on images carrying `v1-e39-t16` does not apply. Do not
+replace the digest line for this apply: the check refuses a plan that changes the image as well.
+
+**What the plan should be: `Plan: 1 to add, 2 to change, 1 to destroy.`** The run task definition is
+replaced (a new revision with `memory` `"16384" -> "32768"`, the old one deregistered; the one `must be
+replaced` line in the plan's text), the run schedule's target moves to the new revision, and the run
+scheduler role's policy, which names that revision, follows it. The login task definition, its
+schedule and its policy do not change, nor anything outside `module.caselist_run`, and never an account
+assignment or a permission set. The image apply's check would stop this plan, so the check runs with
+`--memory`, which passes this shape and nothing else.
+
+**Revisions a push registered.** `scripts/caselist_run_deploy.sh` registers its revision as a copy of
+the family's newest ACTIVE revision with only the image changed, so it takes that revision's size and
+sets none of its own. After this apply the newest is Terraform's 32 GB revision, so a later push
+carries 32 GB with no change to the script. A push between now and the apply would copy revision 10's
+16 GB: push no image until this is applied. Revision 9, which the push of `v1.1.0-dev.251` registered,
+stays as it is, at 16 GB; nothing starts it unless it is named. A backfile import starts the revision
+`--task-definition` names, read from Terraform's output in [Before each start](#before-each-start-both-profiles-the-network-and-the-revision):
+a `REVISION` read before this apply names the deregistered 16 GB revision, so read it again after.
+
+**The worktree, at a `dev` with `v1-e40-t30` in it.**
+
+**Operator command** (expected runtime seconds)
+Where: `$WT`
+```bash
+cd "$WT"
+git fetch origin
+git switch --detach origin/dev
+grep -q '^  run_memory             = "32768"$' infrastructure/modules/caselist_run/run_task.tf && grep -q -- '"--memory"' ops/caselist_run/check_image_plan.py && echo "ok: $(git rev-parse --short HEAD), the run task at 32768 and the check's --memory mode merged" || echo "NOT MERGED: wait for v1-e40-t30 to merge into dev"
+git status --porcelain | grep -v 'owner.auto.tfvars' | head -3
+```
+Success looks like `ok: <commit>, the run task at 32768 and the check's --memory mode merged`, and
+nothing after it. Sign in as break-glass as [Before you start](#before-you-start) does.
+
+**The plan, saved, and the check.** This block removes the last plan and its JSON first, so a plan that
+fails leaves nothing for the check or the apply to read. The plan's text stays in
+`/tmp/caselist-run-memory-plan.txt` for the PM.
+
+**Operator command** (expected runtime ~2 min)
+Where: `$WT`, signed in as break-glass
+```bash
+cd "$WT"
+rm -f infrastructure/envs/dev/caselist-run-memory.tfplan /tmp/caselist-run-memory-plan.json
+if env | grep -qE '^(TF_VAR_|TF_WORKSPACE=|TF_DATA_DIR=|TF_CLI_ARGS)'; then echo "STOP: a Terraform override is set in this shell"; else AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev init -input=false >/dev/null && AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev plan -input=false -no-color -out=caselist-run-memory.tfplan | tee /tmp/caselist-run-memory-plan.txt | tail -3; fi
+AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev show -json caselist-run-memory.tfplan > /tmp/caselist-run-memory-plan.json
+python3 -I ops/caselist_run/check_image_plan.py /tmp/caselist-run-memory-plan.json infrastructure/envs/dev/owner.auto.tfvars --memory
+```
+
+**What to read, and what stops you.** Send the PM the `Plan:` line and the check's line, the last two
+lines; the PM reads both, with the plan's text, before the apply.
+
+* `Plan: 1 to add, 2 to change, 1 to destroy.`, then `PLAN OK: 1 to add, 2 to change, 1 to destroy;
+  the run task definition replaced with its memory 16384 -> 32768 and nothing else in it changed, 8192
+  CPU units and the image sha256:<digest>... as before; the run schedule and its role's policy
+  repointed at the new revision; the run schedule ENABLED throughout; the login task definition, its
+  schedule and its policy unchanged; nothing else changes`, with the digest line's image: the only
+  shape that passes.
+* `PLAN STOP: ...` names each change that is not that shape, with its address and actions: an
+  Identity Center change anywhere, a change outside the module, a login change, an image change, a
+  memory other than 32768, any other change in the run task definition (its CPU, environment,
+  command, roles or storage), the run schedule left on the old revision, its state, or any other
+  change in the module. It goes to the PM before any apply. An Identity Center change is never
+  applied.
+* `PLAN STOP: the plan file is not JSON ...` or `... has no resource_changes ...` means the plan or
+  its `show` failed: read the lines above it, fix that and run the block again.
+
+**The apply, after the PM's word.** The block refuses a Wednesday in Chicago, a Terraform override in
+the shell, and a task running on the run's cluster, or a count of them it could not read.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`, after the PM's word, on any day but Wednesday, before 2026-11-04 06:00 Chicago
+```bash
+cd "$WT"
+RUNNING="$(AWS_PROFILE=debate-admin aws ecs list-tasks --region us-east-1 --cluster debate-dev-caselist-run --desired-status RUNNING --query 'length(taskArns)' --output text)" || RUNNING="unknown"
+if [ "$(TZ=America/Chicago date +%A)" = "Wednesday" ]; then echo "STOP: it is Wednesday in Chicago, the run's day; apply on another day"; elif env | grep -qE '^(TF_VAR_|TF_WORKSPACE=|TF_DATA_DIR=|TF_CLI_ARGS)'; then echo "STOP: a Terraform override is set in this shell"; elif [ "$RUNNING" = "0" ]; then AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev apply -input=false caselist-run-memory.tfplan; else echo "STOP: ${RUNNING} tasks running on debate-dev-caselist-run, or the count could not be read; apply when it is 0"; fi
+```
+Success looks like `Apply complete! Resources: 1 added, 2 changed, 1 destroyed.` No
+`-login-task-changed` email is expected: one means the login's task definition changed, and goes to
+the PM. If the PM allowed a plan the check stopped, the counts are that plan's.
+
+**The read-back: the revision the schedule starts has 32768.** The schedule's own target, read from
+Scheduler, beside Terraform's output; then that revision's CPU and memory, and nothing else of it.
+
+**Operator command** (expected runtime seconds)
+Where: `$WT`, after the apply
+```bash
+cd "$WT"
+SCHEDULED="$(AWS_PROFILE=debate-admin aws scheduler get-schedule --region us-east-1 --group-name debate-dev-caselist-run --name debate-dev-caselist-run --query Target.EcsParameters.TaskDefinitionArn --output text)"
+echo "scheduled: ${SCHEDULED}"
+echo "terraform: $(AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output -raw caselist_run_task_definition_arn)"
+AWS_PROFILE=debate-admin aws ecs describe-task-definition --region us-east-1 --task-definition "$SCHEDULED" --query 'taskDefinition.[cpu,memory]' --output text
+AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output caselist_run_schedule_state
+```
+Success looks like two equal `…:task-definition/debate-dev-caselist-run:<n>` ARNs, `<n>` above 10,
+then `8192	32768`, then `"ENABLED"`. `8192	16384` means the schedule is still on a 16 GB revision:
+stop and send the PM the four lines. The PM records the plan line, the check's line and this
+read-back for `v1-e40-t30`'s ac3.
+
+**Prod** gets 32 GB with its own first apply B, at the pilot's promotion: its task definition is created
+from the same module, so no separate step.
+
 ## A failed parse stage
 
 When the cloud run's parse stage does not publish a caselist's parsed store, the run names no

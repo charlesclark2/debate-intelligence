@@ -1024,6 +1024,23 @@ def test_the_memory_section_reads_back_only_the_scheduled_revisions_memory_and_c
     assert "--query 'taskDefinition.[cpu,memory]'" in read_back
 
 
+def inside_double_quotes(block: str) -> list[str]:
+    """The text inside each double-quoted string of a shell block (one with no heredoc or escaped quote)."""
+    found, quote, current = [], None, ""
+    for character in block:
+        if quote is None:
+            quote = character if character in "'\"" else None
+        elif character == quote:
+            if quote == '"':
+                found.append(current)
+            quote, current = None, ""
+        elif quote == '"':
+            current += character
+    return found
+
+
 def test_no_memory_section_block_puts_an_exclamation_mark_inside_double_quotes() -> None:
+    """zsh expands `!` inside double quotes when a block is pasted (agreement 9's neighbour)."""
+    assert inside_double_quotes('echo "a!b" \'c!d\' "e"') == ["a!b", "e"]
     for block in bash_blocks(memory_section()):
-        assert not re.search(r'"[^"\n]*![^"\n]*"', block), block
+        assert not [text for text in inside_double_quotes(block) if "!" in text], block

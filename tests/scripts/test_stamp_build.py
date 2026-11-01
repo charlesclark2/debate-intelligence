@@ -39,6 +39,7 @@ from debate_core.domain.model_contracts import (
     TaskClass,
 )
 from debate_core.integrations.models import RoutingPolicy, build_model_router
+from debate_core.integrations.models.prompt_registry import PromptRegistry
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
@@ -110,6 +111,7 @@ def checkout(tmp_path: Path) -> Path:
         shutil.copyfile(REPO_ROOT / relative, root / relative)
     (root / sb.CLI_PACKAGE).mkdir(parents=True)
     shutil.copytree(REPO_ROOT / "config", root / "config")
+    shutil.copytree(REPO_ROOT / "prompts", root / "prompts")
     return root
 
 
@@ -136,6 +138,9 @@ def test_stamp_bundles_the_committed_profiles_and_routing_files(checkout: Path, 
 
     bundled = checkout / sb.BUNDLED_CONFIG / "config"
     assert sorted(path.relative_to(bundled).as_posix() for path in bundled.rglob("*") if path.is_file()) == [
+        "format_profiles/flow.yaml",
+        "format_profiles/plain.yaml",
+        "format_profiles/team-default.yaml",
         "model_pricing.yaml",
         "model_routing.dev.yaml",
         "model_routing.example.yaml",
@@ -146,6 +151,42 @@ def test_stamp_bundles_the_committed_profiles_and_routing_files(checkout: Path, 
     ]
     # The E34 policy gate travels with the build.
     assert "api_enabled = true" in (bundled / "profiles" / "dev.toml").read_text(encoding="utf-8")
+
+
+def test_stamp_bundles_the_committed_prompts_and_their_lock_but_no_readme(
+    checkout: Path, tmp_path: Path
+) -> None:
+    """`cut` loads its prompt registry from this copy in an installed build (v1-e06-t06)."""
+    sb.stamp(checkout, info(), tmp_path / "dist")
+
+    bundled = checkout / sb.BUNDLED_CONFIG / "prompts"
+    assert sorted(path.relative_to(bundled).as_posix() for path in bundled.rglob("*") if path.is_file()) == [
+        "card/markup.md",
+        "card/select.md",
+        "landscape/classify_position.md",
+        "model/repair.md",
+        "prompts.lock.json",
+    ]
+    for prompt in ("card/select.md", "card/markup.md"):
+        assert (bundled / prompt).read_bytes() == (checkout / "prompts" / prompt).read_bytes()
+
+
+def test_the_bundled_prompts_load_as_the_checkouts_registry(checkout: Path, tmp_path: Path) -> None:
+    sb.stamp(checkout, info(), tmp_path / "dist")
+
+    bundled = PromptRegistry.load(checkout / sb.BUNDLED_CONFIG / "prompts").prompts
+    committed = PromptRegistry.load(REPO_ROOT / "prompts").prompts
+    assert [(prompt.label, prompt.body_sha256) for prompt in bundled] == [
+        (prompt.label, prompt.body_sha256) for prompt in committed
+    ]
+    assert {"card.select@1.0.0", "card.markup@1.0.0"} <= {prompt.label for prompt in bundled}
+
+
+def test_stamp_refuses_a_checkout_with_no_prompts(checkout: Path, tmp_path: Path) -> None:
+    shutil.rmtree(checkout / "prompts")
+
+    with pytest.raises(sb.StampError, match="no prompts"):
+        sb.stamp(checkout, info(), tmp_path / "dist")
 
 
 def test_stamp_refuses_a_pyproject_it_cannot_edit_unambiguously(checkout: Path, tmp_path: Path) -> None:
@@ -233,6 +274,25 @@ def test_a_wheel_without_the_bundled_pricing_file_is_refused(tmp_path: Path) -> 
     assert sb.check_wheels(dist, VERSION) == [
         f"debate_cli-{VERSION}-py3-none-any.whl: missing debate_cli/_bundled_config/config/model_pricing.yaml"
     ]
+
+
+@pytest.mark.parametrize(
+    "member",
+    [
+        "debate_cli/_bundled_config/prompts/card/select.md",
+        "debate_cli/_bundled_config/prompts/card/markup.md",
+        "debate_cli/_bundled_config/config/format_profiles/team-default.yaml",
+    ],
+)
+def test_a_wheel_without_cuts_prompts_or_its_default_format_profile_is_refused(
+    member: str, tmp_path: Path
+) -> None:
+    dist = good_dist(tmp_path / "dist")
+    members = cli_members()
+    del members[member]
+    write_wheel(dist, "debate_cli", VERSION, members, [f"debate-core=={VERSION}"])
+
+    assert sb.check_wheels(dist, VERSION) == [f"debate_cli-{VERSION}-py3-none-any.whl: missing {member}"]
 
 
 def test_a_version_mismatch_is_refused(tmp_path: Path) -> None:

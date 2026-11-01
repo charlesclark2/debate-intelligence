@@ -40,12 +40,28 @@ spec:
     dependency of debate-core through its `docx` extra, which the installed build carries, and
     the composition root passes `render_cards_docx` to ExportService. A smoke check shows the
     installed build writes a .docx.
+    (PM amendment 2026-11-01, the exit codes, which predate v1-e05-t09; written in by the session.)
+    `debate_cli/exit_codes.py` stays the only place a failure becomes an exit code. 0: a VERIFIED
+    card exported. 2: a usage error. 3: retrieval failed (PAYWALLED, ROBOTS_DISALLOWED, BLOCKED,
+    NOT_FOUND, printed with the canonical URL), and the retryable provider failures (outage,
+    throttle); no card is saved. 4: a new `CARD_UNVERIFIED` member for cut's own verdict; the card
+    is exported with its banner and each reason is printed. 1: a refused model call
+    (`ModelAccessDenied`, `ModelRequestRejected`, as v1-e05-t09 rules) and the cases v1-e06-t02's
+    ruling calls could not run (a missing or damaged snapshot, an unregistered prompt); nothing is
+    saved and no card id is printed. The description's "5 model/config error" is superseded.
+    (PM amendment 2026-11-01, from the PM review.) `--json` prints the CutResult with the
+    embedded manifest's identity, not the manifest itself: the manifest holds evidence text,
+    which no `--json` payload carries (`debate_cli/output.py`), and the whole manifest is the one
+    embedded in the .docx. Bundling `prompts/` and `config/format_profiles/` into the installed
+    build is `scripts/stamp_build.py`'s, with its tests under `tests/scripts`.
   priority: 1
   constraints:
     # PM amendment 2026-10-27: the command's tests and smoke check, and verify's exit-2 wording.
     # PM amendment 2026-10-27, from v1-e06-t04's follow-up 1: python-docx in debate-core's docx
     # extra, and the lock.
-    packages: [debate_cli, packages/debate_cli/tests, tests/smoke, packages/debate_core/pyproject.toml, uv.lock]
+    # PM amendment 2026-11-01, from the PM review: the stamp step that bundles prompts/ and the
+    # format profiles, and its tests.
+    packages: [debate_cli, packages/debate_cli/tests, tests/smoke, packages/debate_core/pyproject.toml, uv.lock, scripts/stamp_build.py, tests/scripts]
     forbidden:
       - Business logic (selection, verification, citation merging) in debate_cli
       - Exit code 0 when the exported card is not VERIFIED
@@ -75,15 +91,17 @@ spec:
         contains the UNVERIFIED banner.
     - id: ac4
       description: >-
-        `--json` writes a single JSON object (CutResult with manifest) to stdout with progress output sent
-        to stderr, and `cut --help` documents every option and exit code.
+        (PM amendment 2026-11-01, from the PM review) `--json` writes a single JSON object to stdout,
+        the CutResult with the embedded manifest's identity (version, generated_at, card ids,
+        snapshot references, SHA-256 of the embedded bytes), with progress output sent to stderr, and
+        `cut --help` documents every option and exit code.
     - id: ac5
       description: >-
         (PM amendment 2026-10-19) An installed wheel holds `prompts/` and the command loads
         the registry from it, by an installed-build smoke test; a refused model call exits
         with the non-retryable code, by test.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

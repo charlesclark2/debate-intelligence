@@ -22,12 +22,17 @@ What `stamp` does, and why:
   and `config/model_pricing.yaml` into `debate_cli/_bundled_config/config/`, so an installed build
   reads the profiles it was built and validated with (including the `[caselist] api_enabled` gate)
   from any working directory, and prices its model calls from the pricing file beside its routing
-  files: without it, a call under a budget limit is refused as unpriced (v1-e05-t12).
+  files: without it, a call under a budget limit is refused as unpriced (v1-e05-t12). The card
+  format profiles, `config/format_profiles/*.yaml`, go beside them, and the reviewed prompts, every
+  `prompts/**/*.md` but a README with `prompts/prompts.lock.json`, into
+  `debate_cli/_bundled_config/prompts/`: `cut` loads its prompt registry and its `--format` profile
+  from those copies (v1-e06-t06).
 
 `check-wheels` refuses a build that is not exactly the two expected wheels at the stamped version,
 whose debate_cli does not pin debate_core, that lacks the build info, the bundled profiles, routing
-files or pricing file, or that contains anything that looks like a secret or local data: `.env`
-files, a `secrets/` directory, a `caselist_token`, SQLite files, a `.debate-research` data directory.
+files, pricing file, `cut`'s two prompts or its default format profile, or that contains anything
+that looks like a secret or local data: `.env` files, a `secrets/` directory, a `caselist_token`,
+SQLite files, a `.debate-research` data directory.
 
 Standard library only.
 """
@@ -55,6 +60,8 @@ CLI_PACKAGE = Path("packages/debate_cli/src/debate_cli")
 BUILD_INFO_MODULE = CLI_PACKAGE / "_build_info.py"
 BUNDLED_CONFIG = CLI_PACKAGE / "_bundled_config"
 BUILD_INFO_ASSET = "build-info.json"
+PROMPTS = Path("prompts")
+PROMPT_LOCK = "prompts.lock.json"
 
 CHANNELS = ("dev", "stable")
 PEP440_RELEASE_OR_DEV = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(\.dev[1-9]\d*)?$")
@@ -71,6 +78,9 @@ REQUIRED_CLI_MEMBERS = (
     "debate_cli/_bundled_config/config/model_routing.dev.yaml",
     "debate_cli/_bundled_config/config/model_routing.prod.yaml",
     "debate_cli/_bundled_config/config/model_pricing.yaml",
+    "debate_cli/_bundled_config/config/format_profiles/team-default.yaml",
+    "debate_cli/_bundled_config/prompts/card/select.md",
+    "debate_cli/_bundled_config/prompts/card/markup.md",
 )
 
 FORBIDDEN_DIRECTORY_NAMES = frozenset({"secrets", ".debate-research", ".data", ".venv"})
@@ -135,17 +145,20 @@ def render_build_info_module(info: Mapping[str, str]) -> str:
 
 
 def bundle_configuration(repository: Path) -> list[Path]:
-    """Copy the committed profiles, routing files and pricing file into the CLI package; return them."""
+    """Copy the committed profiles, routing, pricing and format profile files and the prompts into the
+    CLI package; return them."""
     source = repository / "config"
     destination = repository / BUNDLED_CONFIG / "config"
     if destination.parent.exists():
         shutil.rmtree(destination.parent)
-    (destination / "profiles").mkdir(parents=True)
+    for subdirectory in ("profiles", "format_profiles"):
+        (destination / subdirectory).mkdir(parents=True)
     copied: list[Path] = []
     for pattern, subdirectory in (
         ("profiles/*.toml", "profiles"),
         ("model_routing.*.yaml", ""),
         ("model_pricing.yaml", ""),
+        ("format_profiles/*.yaml", "format_profiles"),
     ):
         for file in sorted(source.glob(pattern)):
             target = destination / subdirectory / file.name
@@ -153,6 +166,23 @@ def bundle_configuration(repository: Path) -> list[Path]:
             copied.append(target.relative_to(repository))
     if not any(path.name == "dev.toml" for path in copied):
         raise StampError(f"no config/profiles/dev.toml under {repository}; nothing to bundle")
+    copied.extend(_bundle_prompts(repository))
+    return copied
+
+
+def _bundle_prompts(repository: Path) -> list[Path]:
+    """Copy every prompt file, at its place under `prompts/`, and the lock; READMEs are not prompts."""
+    source = repository / PROMPTS
+    destination = repository / BUNDLED_CONFIG / PROMPTS
+    files = sorted(path for path in source.rglob("*.md") if path.name != "README.md" and path.is_file())
+    if not files:
+        raise StampError(f"no prompts under {source}; an installed build could not cut a card")
+    copied: list[Path] = []
+    for file in [*files, source / PROMPT_LOCK]:
+        target = destination / file.relative_to(source)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(file, target)
+        copied.append(target.relative_to(repository))
     return copied
 
 

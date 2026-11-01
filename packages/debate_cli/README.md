@@ -119,9 +119,10 @@ rather than writing an integer.
 | Code | Name | Means |
 |---|---|---|
 | 0 | `OK` | The command did what it was asked to do. |
-| 1 | `DOMAIN_FAILURE` | The command ran and the answer is a failure: a card is `UNVERIFIED`, a record was not found, a write lost its revision check, a profile setting names a profile the AWS config does not define, `DEBATE_REMOVAL_PROFILE` names a profile that is not signed in as the takedown role, `doctor` found a failed check (the interpreter's Unicode database is not the normalizer's pin, a wired integration does not import, or with `--evidence-profiles` a configured evidence profile is not defined). Running it again gives the same answer. |
+| 1 | `DOMAIN_FAILURE` | The command ran and the answer is a failure: `verify` found a card `UNVERIFIED`, a record was not found, a write lost its revision check, a profile setting names a profile the AWS config does not define, `DEBATE_REMOVAL_PROFILE` names a profile that is not signed in as the takedown role, `doctor` found a failed check (the interpreter's Unicode database is not the normalizer's pin, a wired integration does not import, or with `--evidence-profiles` a configured evidence profile is not defined). Running it again gives the same answer. |
 | 2 | `USAGE_ERROR` | The command line was wrong: unknown command or option, missing argument, no command given. Nothing was executed. |
 | 3 | `RETRIEVAL_FAILURE` | Something the command depends on did not answer, so there is no answer yet. An external provider — search, fetch, a model — failed or rate-limited the call, or a store could not be read or written: it was unavailable, the SSO session for it expired, or it refused access (the operating system refusing a data directory included). The same command may well succeed later. |
+| 4 | `CARD_UNVERIFIED` | `cut` made a card and the evidence verifier did not pass it: the card was saved and written `UNVERIFIED`, with its banner, and each reason was printed. Never `0`, and not `1`, so a script can tell a card that needs a person's look from a cut that could not run (`v1-e06-t06`). |
 | 70 | `INTERNAL_ERROR` | A bug: an exception the CLI does not model. It is reported by its class, never its message (below). 70 is `EX_SOFTWARE` from `sysexits.h`. |
 
 Exceptions are mapped by `exit_code_for`: `ProviderError` → 3; `StoreUnavailable`,
@@ -130,7 +131,8 @@ command, and so are `caselist remove`'s `TakedownPreflightFailed` and `RemovalIn
 of those three is what stopped them (`v1-e01-t20`); any other `DomainError` → 1, including
 `NotFound`; a usage error → 2; anything else → 70. A failure that is an *outcome* rather than an
 exception — `verify` finding an unverifiable card — is reported with `output.failure(...)` and then
-`raise typer.Exit(code=ExitCode.DOMAIN_FAILURE)`.
+`raise typer.Exit(code=ExitCode.DOMAIN_FAILURE)`; `cut` exporting an `UNVERIFIED` card does the same
+with `ExitCode.CARD_UNVERIFIED`.
 
 **Exit 70 names the exception's class, never its message** (`v1-e01-t25`). An exception the CLI
 does not model did not get its message from this project: an `OSError` quotes the path it failed
@@ -332,7 +334,7 @@ each reason's detail on stderr). `--json` prints one envelope, published as
 |---|---|
 | `0` | Every card is VERIFIED. |
 | `1` | The manifest was read and at least one card is UNVERIFIED. Every card is still listed. |
-| `2` | A usage error, or a file that is not a card manifest: not JSON, or not valid against `card_manifest.v1.json`. The failing JSON path is reported and nothing is verified. |
+| `2` | A usage error, or a file that is not a card manifest this build reads: not JSON, not valid against `card_manifest.v1.json`, or written by a newer build of debate-research. The failing JSON path is reported and nothing is verified. |
 | `3` | Verification could not run, for example because a store could not be read. No card has a verdict. |
 
 Three rules worth knowing:
@@ -394,3 +396,38 @@ be shown (`--json`, text on stdin, no terminal).
 | `1` | Refused, nothing stored: not a source URL, pasted text not attested, or pasted text rejected (blank, too short, too large). |
 | `2` | A usage error, for example `--paste` without `--source-url`, or a URL and `--paste` together. |
 | `3` | PAYWALLED, BLOCKED, ROBOTS_DISALLOWED, NOT_FOUND, UNSUPPORTED_TYPE or ERROR (`SOURCE_NOT_ACCESSIBLE`), or the fetcher could not run. No snapshot is stored. |
+
+## `debate-research cut`
+
+`debate-research cut <URL> --need "<research need>" --output evidence.docx` (`v1-e06-t06-cut-command`)
+turns one article into one card. `ArticleFetch` retrieves the page, or uses a snapshot stored within
+`articles.refetch_after_hours`; `CardService` asks the model (`card.select`, `card.markup`) where the
+evidence for the need is and what to underline, cuts that passage from the stored text, cites it
+(`CitationService`, with Crossref for a DOI) and verifies it; `ExportService` writes it in the
+`--format` profile (`team-default`, `flow` or `plain`, from `config/format_profiles/`) with its
+manifest embedded. The command only parses options, runs the three in order and reports what came
+back; the words are `debate_cli.presenters.cut_presenter`'s.
+
+```console
+$ uv run debate-research cut https://www.example.org/news/2026/10/some-story --need "revival diverts conservation money" --argument "Conservation DA" --output evidence.docx
+$ uv run debate-research --json cut https://www.example.org/report.pdf --need "habitat protection is cheaper" --output card.docx | jq '.data // .error.details | [.card_id, .status]'
+$ DEBATE_MODEL_MODE=live uv run debate-research cut https://www.example.org/news/2026/10/some-story --need "revival diverts conservation money" --output evidence.docx
+```
+
+The model is called only in `live` or `record` mode (`DEBATE_MODEL_MODE`); otherwise its answers are
+replayed from `<data dir>/cards/model-cassettes/`, and the `test` profile's fixture fake answers from
+`tests/fixtures/model_outputs/`. Cassettes hold the articles' numbered text, so they stay on this machine.
+Progress is one line per stage on stderr: `fetch`, `extract`, `select`, `verify`, `export`, as event
+objects under `--json`. A person then sees a table of the card id, status, file, source, snapshot,
+model calls and the manifest's SHA-256. `--json` prints one envelope: the card id and status, the file,
+the source, each failure reason, each model call's provenance and the embedded manifest's identity,
+under `data` on exit 0 and under `error.details` on exit 4. Neither holds evidence text; the manifest,
+evidence included, is the one in the .docx. Cards belong to one fixed local owner id until V2's accounts.
+
+| Exit | Means |
+|---|---|
+| `0` | The card is VERIFIED and was written to `--output`. |
+| `1` | The cut could not run, and nothing was saved or written: the model provider refused the call (`MODEL_ACCESS_DENIED`, `MODEL_REQUEST_REJECTED`), the snapshot is missing or damaged, a prompt is not registered, no answer was recorded for a replayed call, or the URL names no source. |
+| `2` | A usage error: no `--need`, a `--format` no profile has, an `--output` in a directory that does not exist. Nothing is fetched. |
+| `3` | The source is PAYWALLED, BLOCKED, ROBOTS_DISALLOWED, NOT_FOUND, UNSUPPORTED_TYPE or ERROR (`SOURCE_NOT_ACCESSIBLE`, with the status and the canonical URL), or the model provider did not answer or throttled the call. No card is saved and nothing is written. |
+| `4` | The card is UNVERIFIED (`CARD_UNVERIFIED`): saved, written with its banner, and each reason printed. |

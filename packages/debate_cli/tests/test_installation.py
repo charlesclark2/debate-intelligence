@@ -82,11 +82,14 @@ def test_the_container_wires_these_integrations() -> None:
     # factory for a record or live run; and for `fetch` (v1-e04-t06) `http_fetcher`, `html_extractor`
     # and `pdf_extractor` inside the article fetch factory; and `models.usage` at module level for the
     # usage log `usage` reads and every real model call is recorded in (v1-e05-t07); and
-    # `models.record_replay` inside the landscape cassettes factory and under TYPE_CHECKING (v1-e32-t34).
+    # `models.record_replay` inside the landscape cassettes factory and under TYPE_CHECKING (v1-e32-t34);
+    # and for `cut` (v1-e06-t06) `crossref_doi` inside the card cutting factory, whose other imports
+    # (`local`, `models.prompt_registry`, `models.factory`, `models.model_mode`, `bedrock`) are wired already.
     assert wired_integrations() == (
         "debate_core.integrations.bedrock",
         "debate_core.integrations.cloudwatch_audit",
         "debate_core.integrations.cognito",
+        "debate_core.integrations.crossref_doi",
         "debate_core.integrations.docx_file_writer.writer",
         "debate_core.integrations.docx_parser",
         "debate_core.integrations.html_extractor",
@@ -248,7 +251,7 @@ def test_the_check_exits_zero_and_reports_json_for_this_checkout(capsys: pytest.
     report = json.loads(capsys.readouterr().out)
     assert report["complete"] is True
     assert report["covered"] is True
-    assert len(report["imported"]) == len(report["wired"]) == 34
+    assert len(report["imported"]) == len(report["wired"]) == 35
 
 
 # ---------------------------------------------------------------------------------------------
@@ -377,8 +380,10 @@ def test_dropping_the_http_extra_leaves_the_client_without_httpx() -> None:
     """httpx has its own extra since v1-e04-t02 (PM ruling 2026-10-21), shared by every HTTP adapter."""
     gaps = undeclared_imports(_with_core_extras("aws,docx,extraction,opencaselist,tub"), wired_integrations())
 
-    # The article fetcher behind `fetch` (v1-e04-t06) takes httpx from the same extra.
+    # The article fetcher behind `fetch` (v1-e04-t06), and the Crossref client behind `cut`'s cites
+    # (v1-e06-t06), take httpx from the same extra.
     assert gaps == {
+        "debate_core.integrations.crossref_doi": {"httpx"},
         "debate_core.integrations.http_fetcher": {"httpx"},
         "debate_core.integrations.opencaselist": {"httpx"},
     }

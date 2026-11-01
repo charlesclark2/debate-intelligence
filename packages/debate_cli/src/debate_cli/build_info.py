@@ -5,9 +5,10 @@ A published build — a dev pre-release `vX.Y.Z-dev.N`, or later a stable `vX.Y.
 a source checkout never has (both are gitignored):
 
 * `_build_info.py`, holding the version, channel, commit SHA, build time, workflow run id and tag;
-* `_bundled_config/config/`, a copy of the committed profiles and routing files, so that an
-  installed build reads the configuration it was built and validated with from any working
-  directory — the launchd agent runs from `$HOME`, where there is no checkout to find.
+* `_bundled_config/config/`, a copy of the committed profiles, routing, pricing and card format
+  profile files, so that an installed build reads the configuration it was built and validated with
+  from any working directory — the launchd agent runs from `$HOME`, where there is no checkout to
+  find — and `_bundled_config/prompts/`, the reviewed prompts `cut` renders (`v1-e06-t06`).
 
 A source checkout has neither, and reports channel `local` with the commit from `git rev-parse`.
 

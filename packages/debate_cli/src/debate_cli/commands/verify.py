@@ -16,8 +16,10 @@ From :mod:`debate_cli.exit_codes`, and each one means exactly one thing here:
 
 * `0`: every card is VERIFIED.
 * `1`: the manifest was read and at least one card is UNVERIFIED. Every card is still reported.
-* `2`: the command line was wrong, or the file is not a card manifest: not JSON, or not valid
-  against `card_manifest.v1.json`. The failing JSON path is reported and nothing is verified.
+* `2`: the command line was wrong, or the file is not a card manifest this build reads: not JSON,
+  not valid against `card_manifest.v1.json`, or written by a newer build (`NewerManifestVersion`,
+  whose hint says to install a newer build). The failing JSON path is reported and nothing is
+  verified.
 * `3`: verification could not run, for example because a store could not be read. No card has a
   verdict, so this is never reported as `0` or `1`.
 
@@ -51,6 +53,7 @@ from debate_core.application.verify_manifest import (
     CardVerdict,
     InvalidManifest,
     ManifestVerificationReport,
+    NewerManifestVersion,
     VerificationCouldNotRun,
 )
 from debate_core.domain import VerificationStatus
@@ -73,7 +76,7 @@ def verify(
     Exit codes:
     0  every card is VERIFIED
     1  at least one card is UNVERIFIED (every card is still listed)
-    2  usage error, or a manifest that fails its JSON Schema (the failing JSON path is reported)
+    2  usage error, a manifest that fails its JSON Schema, or one from a newer build (its JSON path is shown)
     3  verification could not run, for example a store could not be read
     """
     cli = cli_context(ctx)
@@ -147,13 +150,23 @@ def _invalid_manifest(invalid: InvalidManifest, source: str) -> CommandFailure:
             "violations": invalid.violations,
             "manifest": source,
         },
-        hint="Nothing was verified. The schema is packages/debate_core/schemas/card_manifest.v1.json.",
+        hint=_invalid_manifest_hint(invalid),
         # The file's path is the one the command was given, which can be under a home directory: the
         # envelope keeps it, the panel does not (`v1-e30-t27`).
         panel_details=every_value_in_full(
             {"json_path": invalid.json_path, "problem": invalid.problem, "violations": invalid.violations}
         ),
     )
+
+
+def _invalid_manifest_hint(invalid: InvalidManifest) -> str:
+    """Where to look next: a newer build for a manifest one wrote, the schema for any other refusal."""
+    if isinstance(invalid, NewerManifestVersion):
+        return (
+            "Nothing was verified. A newer build of debate-research wrote this manifest; install a newer "
+            "build to verify it."
+        )
+    return "Nothing was verified. The schema is packages/debate_core/schemas/card_manifest.v1.json."
 
 
 def _could_not_run(stopped: VerificationCouldNotRun) -> CommandFailure:

@@ -101,7 +101,7 @@ def test_the_help_documents_every_exit_code() -> None:
     for line in (
         "0  every card is VERIFIED",
         "1  at least one card is UNVERIFIED (every card is still listed)",
-        "2  usage error, or a manifest that fails its JSON Schema",
+        "2  usage error, a manifest that fails its JSON Schema, or one from a newer build",
         "3  verification could not run, for example a store could not be read",
     ):
         assert line in result.stdout
@@ -114,8 +114,9 @@ def test_the_cli_readme_documents_every_exit_code() -> None:
     for row in (
         "| `0` | Every card is VERIFIED. |",
         "| `1` | The manifest was read and at least one card is UNVERIFIED. Every card is still listed. |",
-        "| `2` | A usage error, or a file that is not a card manifest: not JSON, or not valid against "
-        "`card_manifest.v1.json`. The failing JSON path is reported and nothing is verified. |",
+        "| `2` | A usage error, or a file that is not a card manifest this build reads: not JSON, not valid "
+        "against `card_manifest.v1.json`, or written by a newer build of debate-research. The failing JSON "
+        "path is reported and nothing is verified. |",
         "| `3` | Verification could not run, for example because a store could not be read. No card "
         "has a verdict. |",
     ):
@@ -287,6 +288,10 @@ def test_a_manifest_that_fails_its_schema_exits_two_with_the_failing_json_path(
         problem,
     )
     assert error["details"]["manifest"] == str(manifest)
+    assert (
+        error["hint"]
+        == "Nothing was verified. The schema is packages/debate_core/schemas/card_manifest.v1.json."
+    )
     assert f"the manifest is invalid at {json_path}: {problem}" in " ".join(for_a_person.stderr.split())
     assert for_a_person.stdout == "", "nothing was verified, so there is no table"
 
@@ -605,4 +610,9 @@ def test_a_manifest_from_a_newer_build_exits_two_and_says_to_install_a_newer_bui
         "$.manifest_version",
         problem,
     )
+    assert error["hint"] == (
+        "Nothing was verified. A newer build of debate-research wrote this manifest; install a newer build "
+        "to verify it."
+    )
     assert problem in " ".join(for_a_person.stderr.split())
+    assert "card_manifest.v1.json" not in " ".join(for_a_person.stderr.split())

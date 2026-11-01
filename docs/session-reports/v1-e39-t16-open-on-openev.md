@@ -361,3 +361,24 @@ that clear. The PM read both runbook diffs whole.
    * Wednesday 11-04's run is on `v1.1.0-dev.251`, which writes format 2, and the new function reads
      it.
    * The first run image carrying this task waits for the format check's `OK`.
+
+## Operator follow-up 3, the OpenEv address (recorded by the PM, 2026-10-31)
+
+Added by the PM after the PR. Nothing above is changed, and this section is not a review.
+
+The operator printed `https://opencaselist.com/openev/<id>` from the Mac's run records and opened it
+signed in. It is OpenEv's page for a **year**: the page read "Open Evidence Project" with the id as
+the year, and an empty file list. So `OPENEV_FILE_URL_TEMPLATE` is not a file's address.
+
+* A file's own address is the API's download by path,
+  `https://api.opencaselist.com/v1/download?path=openev/<year>/<camp>/<file name>`. The index does not
+  store the path, and a browser not signed in gets `{"message":"Not Authorized"}`.
+* A camp's page, `https://opencaselist.com/openev/<year>/<camp>` (confirmed for three 2026 camps),
+  lists each of the camp's files with its download, and sends a reader who is not signed in to the
+  sign-in page.
+
+No card shows the wrong link today: no stored camp file has an id, and the published index is
+format 2. `v1-e39-t28` (p2) moves the link to the camp's page, from the stored camp and year. Until it
+merges, no run image carrying this task is applied (`caselist-cloud-run.md`, A new image, later).
+Question 1's option (b), matching the hand-imported files to ids, is not filed: the camp's page
+needs no id.

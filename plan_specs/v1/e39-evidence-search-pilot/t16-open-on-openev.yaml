@@ -26,7 +26,8 @@ spec:
     before the first index of the new format, as v1-e39-t13's is.
   priority: 3
   constraints:
-    packages: [debate_core.application, debate_core.domain, debate_core.integrations, debate_api, packages/debate_core/tests, packages/debate_api/tests, docs/data]
+    # PM ruling 2026-10-31 (deviation 2): the container's wiring, format_two_index and both runbooks' deploy order.
+    packages: [debate_core.application, debate_core.domain, debate_core.integrations, debate_api, packages/debate_core/tests, packages/debate_api/tests, docs/data, debate_cli, debate_core.testing, docs/runbooks]
     forbidden:
       - A link built from anything but the stored OpenEv value
       - The OpenEv value made searchable

@@ -26,7 +26,8 @@ spec:
     that its draft opens with the slot.
   priority: 3
   constraints:
-    packages: [debate_core.evidence, debate_core.application, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, tests/fixtures/file_builder, tests/smoke]
+    # PM ruling 2026-10-31 (deviation): the quality report schema its drift test regenerates.
+    packages: [debate_core.evidence, debate_core.application, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, tests/fixtures/file_builder, tests/smoke, docs/data]
     forbidden:
       - A FAIL for the placeholder (publish must go ahead)
       - A real disclosed file in a fixture

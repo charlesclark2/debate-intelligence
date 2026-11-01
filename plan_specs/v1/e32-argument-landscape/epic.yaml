@@ -823,5 +823,24 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e32-t35-cp-texts-shown-whole
+    - id: t36
+      kind: Task
+      name: 'landscape cassettes gains a smoke check and a removal form that reaches every copy'
+      description: >-
+        landscape cassettes gains a smoke check and a removal form that reaches every copy.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t36-landscape-cassettes-smoke-check-and-removal-form.yaml
+        goalRef: v1-e32-t36-landscape-cassettes-smoke-check-and-removal-form
+      dependsOn:
+      - t34
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t36-landscape-cassettes-smoke-check-and-removal-form reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t36-landscape-cassettes-smoke-check-and-removal-form
 status:
   phase: Pending

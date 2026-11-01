@@ -1,0 +1,106 @@
+# TASK v1-e39-t28-openev-link-goes-to-the-camps-page - A camp card links to its camp's page on OpenEv, the address the operator confirmed
+# Epic: E39 — Team Evidence Search (Student Pilot) | Release: v1.7 (Team evidence search pilot) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e39-t28-openev-link-goes-to-the-camps-page
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+  annotations:
+    debate/title: "A camp card links to its camp's page on OpenEv, the address the operator confirmed"
+spec:
+  # Filed by the PM, 2026-10-31, from v1-e39-t16's operator follow-up 3, checked by the operator on 2026-10-31.
+  description: >-
+    v1-e39-t16 built Open on OpenEv from the stored OpenEv id, at
+    `https://opencaselist.com/openev/<id>`. The operator's check of 2026-10-31 found that
+    address is OpenEv's page for a year: `/openev/9199` opened Open Evidence Project 9199 with
+    an empty list. A file's own address is the API's download by path
+    (`https://api.opencaselist.com/v1/download?path=openev/<year>/<camp>/<file name>`), which
+    needs the path, which the index does not store, and answers `Not Authorized` to a browser
+    not signed in. A camp's page, `https://opencaselist.com/openev/<year>/<camp>` (the operator
+    confirmed `HDC`, `UM7` and `UTNIF` for 2026), lists each of the camp's files with its
+    download, and sends a reader who is not signed in to openCaselist's sign-in page. So the
+    link becomes the camp's page, built from the `camp` and `camp_year` the index already stores
+    for a camp occurrence (formats 1, 2 and 3), and from nothing else: never the title, the
+    event, the OpenEv id or the request. Count first, read-only and counts only, over the Mac's
+    `openev` store and dev's index: how many distinct camp values there are, how many are one
+    address word (letters and digits, the shape of the three confirmed), and how many of the 102
+    camp files with cards would get a link. Name no camp in the report beyond the three the
+    operator confirmed. A camp that is not one such word, a year outside OpenEv's archive (2013
+    to the current season), or an occurrence past the provenance limit gives no link. Change
+    `OPENEV_FILE_URL_TEMPLATE` and its note, the label (it opens the camp's page, not the file,
+    so it says so, with the camp and year beside it), the module docstring,
+    `docs/data/search-index.md`, and `evidence-search.md`'s format 3 section (step 3's check is
+    done; record its result). Say what the stored id is still kept for. No index format change,
+    unless the count shows the stored camp is not the address's word, in which case stop and
+    report. Since camp and year are in every format, the link shows on the format 2 index as
+    soon as dev's function carries this task. Remove the hold that `caselist-cloud-run.md` puts
+    on a run image carrying v1-e39-t16 until this task merges.
+  priority: 2
+  constraints:
+    packages: [debate_core.domain, debate_core.application, packages/debate_core/tests, debate_api, packages/debate_api/tests, docs/data, docs/runbooks, tests/docs]
+    forbidden:
+      - A link built from a file title, the event, the OpenEv id or anything the request carries
+      - A school, student or lab name in the report or in a link
+      - A network call in a session or a test (the operator opens the pages)
+  context:
+    - kind: TaskRef
+      name: v1-e39-t16-open-on-openev
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Counts first: the distinct camp values, how many are one address word, and how many
+        of the 102 camp files with cards get a link, recorded in the report with no camp
+        named beyond the three confirmed.
+    - id: ac2
+      description: >-
+        A camp card whose stored camp is one address word and whose year is in OpenEv's
+        archive links to `https://opencaselist.com/openev/<year>/<camp>` in a new tab with
+        no opener and no referrer, with a label that says it opens the camp's page; any
+        other camp card has none; the id-based address is gone; a disclosed card is
+        unchanged; by tests shown failing first.
+    - id: ac3
+      description: >-
+        After dev's function is deployed with this task, the coach opens one camp card's
+        link on dev and it lands on that camp's page, which lists the card's file (operator,
+        recorded by the PM).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e39-t28-openev-link-goes-to-the-camps-page-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+spec:
+  description: >-
+    A camp card links to its camp's page on OpenEv, the address the operator confirmed.
+  goalRef:
+    name: v1-e39-t28-openev-link-goes-to-the-camps-page
+  graph:
+    nodes:
+      - id: openev-link-goes-to-the-camps-page
+        kind: Task
+        name: Camp page link
+        description: >-
+          A camp card links to its camp's page on OpenEv, the address the operator
+          confirmed.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Camp page link tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/domain, -k, source_link]
+status:
+  phase: Pending

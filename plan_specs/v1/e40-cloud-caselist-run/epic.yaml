@@ -663,5 +663,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e40-t28-last-bucket-mode-wording-pass
+    - id: t29
+      kind: Task
+      name: 'A Mac pull refused because the weekly run moved to prod is recorded as skipped, with its own notice'
+      description: >-
+        A Mac pull refused because the weekly run moved to prod is recorded as skipped, with
+        its own notice.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t29-pull-refused-by-the-move-is-skipped.yaml
+        goalRef: v1-e40-t29-pull-refused-by-the-move-is-skipped
+      dependsOn:
+      - t11
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t29-pull-refused-by-the-move-is-skipped reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t29-pull-refused-by-the-move-is-skipped
 status:
   phase: Pending

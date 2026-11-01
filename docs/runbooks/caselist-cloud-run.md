@@ -740,6 +740,10 @@ permission set.
 Keep at most four pushes between applies: the repository keeps the five newest images, and a task
 definition pins one by digest.
 
+**Applied so far in dev:** `v1.1.0-dev.164` (run task definition revision 8), then `v1.1.0-dev.251` on
+2026-10-31: the push registered revision 9, and the apply, its plan read by the PM with
+`check_image_plan.py` printing `PLAN OK`, put the schedule and the login on revision 10.
+
 **The search index's format: dev's function first** (`v1-e39-t16`). The run's index stage builds
 dev's search index in the format its image writes, and dev's pilot function refuses an index of a
 format it does not read ([Moving the index to format 3](evidence-search.md#moving-the-index-to-format-3)).
@@ -773,6 +777,12 @@ Success looks like `OK: the image writes index format 3 and dev's function, at <
 A `STOP` line stops this section: do not replace the digest line. Deploy dev's function as the line
 says, run this block again, and go on only after `OK`. A failed `aws` call prints its own error and
 no `OK`. For prod at the promotion the same check reads `debate-prod-tub`.
+
+**Hold (PM, 2026-10-31): no run image carrying `v1-e39-t16` until `v1-e39-t28` merges.** The OpenEv
+address `v1-e39-t16` builds is OpenEv's page for a year, not the file's (the operator's check,
+2026-10-31). A format 3 index from such an image would give every newly imported camp file that
+wrong link. `v1-e39-t28` moves the link to the camp's page and removes this paragraph. Deploying
+dev's function meanwhile is safe: the published index is format 2, and no stored camp file has an id.
 
 **Replacing the digest line.** Step 6's append block stops on a line that is already there, so a new
 image's line replaces the old one with this block, after the push has written
@@ -897,7 +907,7 @@ look into ([A parse stage over its failure rate](#a-parse-stage-over-its-failure
 
 **Never run `caselist parse --caselist <slug> --publish` on the operator's Mac**, nor `--publish-only`.
 There it rebuilds the Mac's own, older working copy and publishes that over the parsed store the
-cloud run owns. A run on an image built before `v1-e40-t18` (today's is `v1.1.0-dev.164`) still names
+cloud run owns. A run on an image built before `v1-e40-t18` (the run's image was `v1.1.0-dev.164` until 2026-10-31, and `v1.1.0-dev.251`, which carries it, since) still names
 `caselist parse --caselist <slug> --publish` in its email; the rule holds for that email too, and the
 cure is the one above. (The rule is the PM's, 2026-10-30, from `v1-e34-t31`'s review; `v1-e40-t18`
 made the run say it.)
@@ -966,8 +976,8 @@ aws logs tail debate-dev-caselist-run --profile debate-dev-caselist-run-deployer
 
 **Never run `aws sso login && debate-research caselist pull --publish-pending` on the operator's
 Mac** for a cloud run. It publishes from the working copy of the machine it runs on, and the cloud
-run's working copy ended with its task. A run on an image built before `v1-e40-t22` (today's is
-`v1.1.0-dev.164`) still names that command as its fix; the rule holds for that email too.
+run's working copy ended with its task. A run on an image built before `v1-e40-t22` (the run's image was
+`v1.1.0-dev.164` until 2026-10-31, and `v1.1.0-dev.251`, which carries it, since) still names that command as its fix; the rule holds for that email too.
 
 ## A parse stage over its failure rate
 
@@ -1048,7 +1058,7 @@ exist means the run's details did not reach the bucket either: tell the PM.
 
 **Never run `caselist pull --publish-pending` on the operator's Mac** for a cloud run. It publishes
 from the working copy of the machine it runs on, and the cloud run's working copy ended with its task.
-A run on an image built before `v1-e40-t25` (today's is `v1.1.0-dev.164`) still names that command as
+A run on an image built before `v1-e40-t25` (the run's image was `v1.1.0-dev.164` until 2026-10-31, and `v1.1.0-dev.251`, which carries it, since) still names that command as
 its fix; the rule holds for that email too.
 
 ## A manifest published again

@@ -413,5 +413,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e33-t15-unreplaced-cp-text-slot-warned
+    - id: t16
+      kind: Task
+      name: 'files publish names a quality report written by an older version of the checks, rather than calling it missing'
+      description: >-
+        files publish names a quality report written by an older version of the checks,
+        rather than calling it missing.
+      inputs:
+        specRef: plan_specs/v1/e33-file-builder/t16-publish-names-an-older-quality-report.yaml
+        goalRef: v1-e33-t16-publish-names-an-older-quality-report
+      dependsOn:
+      - t15
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e33-t16-publish-names-an-older-quality-report reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e33-t16-publish-names-an-older-quality-report
 status:
   phase: Pending

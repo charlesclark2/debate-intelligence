@@ -25,7 +25,7 @@ The file is written by t08's own writer, `ParseOwed.owe`, at `PARSE_OWED_FILENAM
 asserts that name is `caselist-sync-parse-owed.json`. The check passes on the checkout's script and on
 an offline stamped and installed build. Ten mutants each failed it at an assertion: the PM's four
 (split into seven), the file's name, and `--remote` reading this machine's file. Mutants 1 and 2 also
-failed it on the installed build. Nothing outside `tests/smoke` changed.
+failed it on the installed build. Nothing outside `tests/smoke` changed. The affected set (57 files) ran past two minutes and was stopped at about 92% with nothing failed, so it is left to the pull request's `ci` check (working agreement 10).
 
 **Please look at first:** `caselist status` refuses a store with no manifest on either side
 (`NO_CASELIST_EVIDENCE`, exit 1). So the data-directory and nothing-owed checks first import and
@@ -100,12 +100,13 @@ present before reading it. Every mutant above was run against `da759b5`.
 |---|---|
 | The new file, checkout's script (`-n 0 -p no:randomly`) | `3 passed in 14.14s` |
 | Neighbours: `test_caselist_runs.py`, `test_caselist_publish_smoke.py`, `test_smoke_harness.py` and the new file, `-m "not live"` | `20 passed, 1 warning in 13.15s`. The warning is `test_smoke_harness.py`'s own deliberate `getaddrinfo` probe |
-| `uv run scripts/affected_tests.py --run`, under the 115 s hard stop | AFFECTED_RESULT |
-| `uv run --frozen ruff format --check .` / `ruff check .` | RUFF_RESULT |
+| `.venv/bin/python scripts/hard_stop.py 115 uv run scripts/affected_tests.py --run` | It chose 57 of 613 test files (9.3%) from 4 changed files: 2,558 tests on 11 workers. The 115 s limit stopped it at about 92% (33 full progress lines), with no failure, error or skip up to then, and no pytest process left over. The run takes more than two minutes, so under working agreement 10 the full affected set is left to the pull request's `ci` check, which runs the same selection. Within the limit: |
+| The always-run list: `tests/architecture`, `tests/specs`, `test_app.py`, `test_help_rendering.py`, `test_container_factories.py` (`-n auto -m "not slow and not live"`) | `369 passed in 19.31s` |
+| `uv run --frozen ruff format --check .` / `ruff check .` | `1700 files already formatted` / `All checks passed!` |
 | `.venv/bin/pyright tests/smoke/test_caselist_parses_owed.py` | `0 errors, 0 warnings, 0 informations`. No package changed, so no package to run it on |
-| `uv run --frozen lint-imports` | LINT_IMPORTS_RESULT |
+| `uv run --frozen lint-imports` | `Contracts: 19 kept, 0 broken.` |
 | `uv run scripts/validate_specs.py` | `OK: 539 files, 41 epics, 476 tasks, 22 releases` |
-| `scripts/check_command_blocks.py`, `scripts/check_links.py` | DOCS_RESULT |
+| `scripts/check_command_blocks.py --base origin/dev`, `scripts/check_links.py`, `scripts/docs_index.py --check-descriptions` | `OK: no '#' comments in 626 shell code blocks in 204 Markdown files` / `OK: 3170 relative links and anchors in 495 Markdown files` / `All 61 indexed documents under docs/ have a description` |
 
 ## Files changed
 

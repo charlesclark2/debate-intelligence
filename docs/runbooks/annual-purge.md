@@ -563,7 +563,10 @@ else
   echo "STOP: step 3 marked no ${CASELIST} PURGE"
 fi
 ```
-Success looks like a `deleted:` or `nothing to delete:` line.
+Success looks like a `deleted:` or `nothing to delete:` line. The review queue's order model
+(`v1-e32-t26`) is in that directory and goes with it; it is trained again with
+`scripts/compare_local_classifier.py features` and then `train-queue-order` when that caselist's
+landscape is next built.
 
 **Then delete the cassettes**, unless the dry run said there is nothing to delete. Set `CASSETTES_CODE`
 to the code after `--confirm` in the dry run's last line. The command lists again and deletes only if

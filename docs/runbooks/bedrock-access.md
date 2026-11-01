@@ -369,6 +369,10 @@ unknown-operation error means this AWS CLI is older than the command: update it,
 
 ## Step 6 — The data-use checks (the policy's open question 4)
 
+**Done 2026-11-01:** both were collected and the policy's version 1.20 resolved open question 4
+(no invocation logging in the three regions; no written no-training term found, accepted by the
+coach on zero retention). Run this step again only if the account's Bedrock settings change.
+
 [The data-use policy](../policies/caselist-data-use.md)'s open question 4 needs two things before
 the first full-corpus classification run. Recording them in the policy is the PM's; this step only
 collects them.

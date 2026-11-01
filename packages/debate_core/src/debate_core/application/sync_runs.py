@@ -129,7 +129,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Final, Literal, cast
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, SerializerFunctionWrapHandler, ValidationError, model_serializer
 
 from debate_core.application.caselist.publish_plan import InvalidPublishTarget, validate_publish_target
 from debate_core.application.caselist.run_home_move import NEW_HOME
@@ -526,9 +526,29 @@ class SearchIndexCounts(BaseModel):
     An added key, so details a build from before it wrote read as none recorded."""
 
 
+class MemoryFigures(BaseModel):
+    """The memory high-water marks so far, read as a stage ended, in bytes (`v1-e40-t31`): a stage's
+    :class:`~debate_core.application.caselist.memory_high_water.MemoryHighWater`.
+
+    The container's, from its cgroup, with the cgroup version it came from, and the main process's
+    own. A figure that could not be read is left out of the JSON, never written as zero or `null`.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    container_peak_bytes: int | None = Field(default=None, ge=0)
+    cgroup: str | None = None
+    main_process_peak_bytes: int | None = Field(default=None, ge=0)
+
+    @model_serializer(mode="wrap")
+    def _leave_out_what_was_not_read(self, handler: SerializerFunctionWrapHandler) -> dict[str, object]:
+        written: dict[str, object] = handler(self)
+        return {key: value for key, value in written.items() if value is not None}
+
+
 class StageTiming(BaseModel):
-    """When one stage started and ended: a summary's
-    :class:`~debate_core.application.caselist_sync.StageTime` (`v1-e40-t03`)."""
+    """When one stage started and ended, and the memory figures as it ended: a summary's
+    :class:`~debate_core.application.caselist_sync.StageTime` (`v1-e40-t03`, `v1-e40-t31`)."""
 
     model_config = ConfigDict(frozen=True, extra="ignore")
 
@@ -536,16 +556,15 @@ class StageTiming(BaseModel):
     started_at: datetime
     finished_at: datetime
     memory: MemoryFigures | None = None
+    """`None` when nothing could be read, and in details a build from before `v1-e40-t31` wrote: such
+    a build passes over the key, which its schema leaves open."""
 
-
-class MemoryFigures(BaseModel):
-    """The memory high-water marks read as a stage ended (`v1-e40-t31`)."""
-
-    model_config = ConfigDict(frozen=True, extra="ignore")
-
-    container_peak_bytes: int | None = Field(default=None, ge=0)
-    cgroup: str | None = None
-    main_process_peak_bytes: int | None = Field(default=None, ge=0)
+    @model_serializer(mode="wrap")
+    def _leave_out_no_figures(self, handler: SerializerFunctionWrapHandler) -> dict[str, object]:
+        written: dict[str, object] = handler(self)
+        if written.get("memory") is None:
+            written.pop("memory", None)
+        return written
 
 
 class DataVolume(BaseModel):
@@ -908,7 +927,14 @@ def details_for_summary(summary: RunSummary, *, secrets: Sequence[str] = ()) -> 
         held_by_request=dict(summary.held_by_request),
         manifests_published=summary.manifests_published,
         stage_times=tuple(
-            StageTiming(stage=str(one.stage), started_at=one.started_at, finished_at=one.finished_at)
+            StageTiming(
+                stage=str(one.stage),
+                started_at=one.started_at,
+                finished_at=one.finished_at,
+                memory=MemoryFigures.model_validate(one.memory.as_json())
+                if one.memory is not None and one.memory.as_json()
+                else None,
+            )
             for one in summary.stage_times
         ),
         data_volume=DataVolume.model_validate(summary.data_volume.as_json())

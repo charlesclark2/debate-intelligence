@@ -1044,12 +1044,17 @@ class StageTime:
         return (self.finished_at - self.started_at).total_seconds()
 
     def as_json(self) -> dict[str, object]:
-        return {
+        body: dict[str, object] = {
             "stage": str(self.stage),
             "started_at": self.started_at.isoformat(),
             "finished_at": self.finished_at.isoformat(),
             "duration_seconds": round(self.duration_seconds, 3),
         }
+        figures = self.memory.as_json() if self.memory is not None else {}
+        if figures:
+            # Additive (`v1-e40-t31`): the version stays, and a figure that was not read is left out.
+            body["memory"] = figures
+        return body
 
 
 @dataclass(frozen=True, slots=True)
@@ -3211,6 +3216,10 @@ class CaselistSyncService:
             default, reads no volume.
         read_volume: How the data directory's volume is read; :func:`read_volume` unless a test
             stubs it.
+        read_memory: How the memory high-water marks are read as each stage ends (`v1-e40-t31`):
+            `v1-e40-t32`'s
+            :func:`~debate_core.application.caselist.memory_high_water.read_memory_high_water`
+            unless a test stubs it.
         backfile_caselists: `caselist.backfile_caselists`. A run asked for one of them, by
             `--caselist` or `--full-archive`, is refused with :class:`BackfileIsNotPulled` before
             anything is listed (`v1-e34-t34`).
@@ -3986,7 +3995,8 @@ class CaselistSyncService:
         await self._timed(SyncStage.REPORT, tally, lambda: self._report_stage(tally))
 
     async def _timed[T](self, stage: SyncStage, tally: _RunTally, work: Callable[[], Awaitable[T]]) -> T:
-        """Carry out one stage, recording when it started and ended, then read the volume (`v1-e40-t03`).
+        """Carry out one stage, recording when it started and ended and the memory high-water marks
+        as it ended (`v1-e40-t31`), then read the volume (`v1-e40-t03`).
 
         By the run's clock, which gives the summary its own start and finish, so a stage's times
         always lie within the run's.
@@ -3995,7 +4005,9 @@ class CaselistSyncService:
         try:
             return await work()
         finally:
-            tally.stage_times.append(StageTime(stage=stage, started_at=started, finished_at=self._clock()))
+            tally.stage_times.append(
+                StageTime(stage=stage, started_at=started, finished_at=self._clock(), memory=self._read_memory())
+            )
             self._read_volume_after(stage, tally)
 
     def _read_volume_after(self, stage: SyncStage, tally: _RunTally) -> None:

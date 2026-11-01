@@ -40,6 +40,17 @@ class MemoryHighWater:
     """`v2` or `v1`: which cgroup the container's figure came from."""
     main_process_peak_bytes: int | None = None
 
+    def as_json(self) -> dict[str, int | str]:
+        """The figures that could be read, and nothing for one that could not: never a zero."""
+        figures: dict[str, int | str] = {}
+        if self.container_peak_bytes is not None:
+            figures["container_peak_bytes"] = self.container_peak_bytes
+            if self.cgroup is not None:
+                figures["cgroup"] = self.cgroup
+        if self.main_process_peak_bytes is not None:
+            figures["main_process_peak_bytes"] = self.main_process_peak_bytes
+        return figures
+
 
 def read_memory_high_water(cgroup_root: Path | None = None) -> MemoryHighWater:
     """The container's peak from its cgroup and the main process's from `getrusage`, as far as each reads."""

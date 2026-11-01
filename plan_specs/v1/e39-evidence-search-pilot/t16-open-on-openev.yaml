@@ -46,7 +46,7 @@ spec:
         The index format is bumped once and a holder given another format refuses it with a
         message; the deploy order is in the runbook.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

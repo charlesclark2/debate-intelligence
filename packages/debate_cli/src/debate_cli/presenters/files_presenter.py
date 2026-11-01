@@ -141,7 +141,9 @@ def suggest_rendered(result: SuggestResult) -> Rendered:
     """`files suggest`: where the draft went, and its cards by rank with what each pin names.
 
     A counterplan's draft also says how many blocks and cards it left out as another position's
-    (`v1-e33-t11`): `other_positions_left_out`, null for any other position's draft.
+    (`v1-e33-t11`): `other_positions_left_out`, null for any other position's draft. And how many it
+    kept, marked, under a heading an aff or an advantage places (`v1-e33-t13`): `affirmative_side_kept`,
+    null for any other position's draft too.
     """
     payload: dict[str, JsonValue] = {
         "path": str(result.path),
@@ -171,6 +173,11 @@ def suggest_rendered(result: SuggestResult) -> Rendered:
             if result.other_positions is None
             else {"blocks": result.other_positions.blocks, "cards": result.other_positions.cards}
         ),
+        "affirmative_side_kept": (
+            None
+            if result.affirmative_side_kept is None
+            else {"blocks": result.affirmative_side_kept.blocks, "cards": result.affirmative_side_kept.cards}
+        ),
     }
     rows = [
         [
@@ -188,6 +195,12 @@ def suggest_rendered(result: SuggestResult) -> Rendered:
         left += (
             f" A counterplan's draft: {other.blocks} block(s) holding {other.cards} card(s) left out, "
             "their heading another position's."
+        )
+    kept = result.affirmative_side_kept
+    if kept is not None:
+        left += (
+            f" {kept.blocks} block(s) holding {kept.cards} card(s) kept under an aff's or advantage's "
+            "heading, marked to check against the plan."
         )
     display = TableSpec(
         columns=["Rank", "Teams", "Fingerprint", "Block", "Pin also names"],

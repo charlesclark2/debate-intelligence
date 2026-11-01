@@ -36,7 +36,12 @@ topicality block that sat in the same 1NC, is left out with its cards, and the c
 names no position stays. A block whose heading names a plank or mechanism of the plan (an
 affirmative's alias or tag keyword in the taxonomy, or a plank label such as `Plank 2`) stays, with
 the comment `# Check this block against the affirmative's plan` above it: its cards may make sense
-only against a plan that has that plank. Any other position's draft is written as before.
+only against a plan that has that plank. A block whose heading names an affirmative or one of its
+advantages is not left out but kept, where its most-read card puts it and with the same comment above
+it, because in a CP file it is often the counterplan's solvency for that advantage; the table and
+`--json` (`affirmative_side_kept`) count those blocks and cards, and a block naming any other kind of
+position (a DA, another CP, a K, a T) is still left out (`v1-e33-t13`). Any other position's draft is
+written as before.
 
 ## A recipe holds no evidence
 

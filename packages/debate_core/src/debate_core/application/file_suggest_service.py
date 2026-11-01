@@ -39,6 +39,12 @@ gets three things more, and every other position's draft is as it was:
   position, read as it reads a heading directly over a card, is left out with its cards, which go
   nowhere else in the draft. A heading that places nothing stays. The result counts what was left out
   (:class:`OtherPositionsLeftOut`).
+* **Except an affirmative-side one, marked (`v1-e33-t13`).** A block whose heading places an aff or an
+  advantage (:data:`_AFFIRMATIVE_SIDE_KINDS`) stays, with :data:`CHECK_AGAINST_THE_PLAN` above it: in a
+  CP file it is often the counterplan's solvency for that advantage. It keeps its cards in rank order
+  and its place in the draft, by its most-read card, like any block that stays. A block any other kind
+  places (a DA, another CP, a K, a T, a theory argument, or LD's and PF's kinds) is still left out. The
+  result counts what was kept this way (:class:`AffirmativeSideKept`).
 * **Blocks that depend on the plan, marked.** A block whose heading names a plank or mechanism of the
   plan gets the comment :data:`CHECK_AGAINST_THE_PLAN` above it, and stays. A heading names one when it
   holds, as whole words, an alias or tag keyword of one of the taxonomy's affirmatives (each is one plan,
@@ -119,12 +125,17 @@ CP_TEXT_SLOT: Final = "[the counterplan text: write it here]"
 CHECK_AGAINST_THE_PLAN: Final = (
     "# Check this block against the affirmative's plan: its heading names a plank or mechanism of a plan."
 )
-"""The comment above a counterplan draft's block whose heading names a plank or mechanism of the plan."""
+"""The comment above a counterplan draft's block whose heading names a plank or mechanism of the plan, or
+whose heading places an aff or an advantage (`v1-e33-t13`)."""
 
 #: The disclosure fields a pin adds, a step at a time and the least personal first, while its key
 #: matches more than one disclosure: a school and team code only when nothing else tells them apart.
 _NARROWING_STEPS: Final = (("side",), ("tournament",), ("round",), ("school", "team_code"))
 _NARROWING: Final = tuple(name for step in _NARROWING_STEPS for name in step)
+
+#: The kinds of an affirmative-side position: a counterplan's draft keeps, marked, a block one of them
+#: places, and leaves out a block any other kind places (`v1-e33-t13`).
+_AFFIRMATIVE_SIDE_KINDS: Final = frozenset({PositionKind.AFF, PositionKind.ADVANTAGE})
 
 
 class SuggestRefused(DomainError):
@@ -265,8 +276,9 @@ class FileSuggestService:
             )
         counterplan = position.kind is PositionKind.CP
         other_positions: OtherPositionsLeftOut | None = None
+        affirmative_side: frozenset[str] = frozenset()
         if counterplan:
-            ranked, other_positions = _without_other_positions(run, position, ranked)
+            ranked, other_positions, affirmative_side = _without_other_positions(run, position, ranked)
             if not ranked:
                 raise SuggestRefused(
                     f"each of the most-read card(s) of {position.id} sits in a block whose heading places "
@@ -312,7 +324,7 @@ class FileSuggestService:
             kept,
             pins,
             counterplan=counterplan,
-            marked=_naming_the_plan(run, kept) if counterplan else frozenset(),
+            marked=(affirmative_side | _naming_the_plan(run, kept)) if counterplan else frozenset(),
         )
         loaded = load_recipe(text)
         if loaded.recipe is None:
@@ -340,6 +352,7 @@ class FileSuggestService:
             ),
             left_out=tuple(sorted(left_out, key=lambda one: one.rank)),
             other_positions=other_positions,
+            affirmative_side_kept=_affirmative_side_kept(kept, affirmative_side) if counterplan else None,
             text=text,
         )
 
@@ -447,18 +460,32 @@ def _commonest_heading(copies: Sequence[LandscapeCard], position: Position) -> s
 
 def _without_other_positions(
     run: LandscapeRunResult, position: Position, ranked: Sequence[_Ranked]
-) -> tuple[list[_Ranked], OtherPositionsLeftOut]:
-    """`ranked` without the blocks whose heading the position matcher places under another position."""
-    if run.taxonomy is None or run.overrides is None:
+) -> tuple[list[_Ranked], OtherPositionsLeftOut, frozenset[str]]:
+    """`ranked` without the blocks whose heading the position matcher places under another position.
+
+    A block an aff or an advantage places stays: it is in the headings returned, for the comment above it.
+    """
+    taxonomy = run.taxonomy
+    if taxonomy is None or run.overrides is None:
         raise AssertionError("a landscape run reports the taxonomy and overrides it placed under")
-    matcher = PositionMatcher(run.taxonomy, run.overrides)
-    elsewhere = {
-        one.block
-        for one in ranked
-        if matcher.place(_directly_under(one)).position_id not in (None, position.id)
-    }
-    kept = [one for one in ranked if one.block not in elsewhere]
-    return kept, OtherPositionsLeftOut(blocks=len(elsewhere), cards=len(ranked) - len(kept))
+    matcher = PositionMatcher(taxonomy, run.overrides)
+    elsewhere: dict[str, PositionKind] = {}
+    for one in ranked:
+        placed = matcher.place(_directly_under(one)).position_id
+        if placed not in (None, position.id):
+            elsewhere[one.block] = taxonomy.position(placed).kind
+    affirmative_side = frozenset(
+        block for block, kind in elsewhere.items() if kind in _AFFIRMATIVE_SIDE_KINDS
+    )
+    left_out = elsewhere.keys() - affirmative_side
+    kept = [one for one in ranked if one.block not in left_out]
+    return kept, OtherPositionsLeftOut(blocks=len(left_out), cards=len(ranked) - len(kept)), affirmative_side
+
+
+def _affirmative_side_kept(kept: Sequence[_Ranked], affirmative_side: frozenset[str]) -> AffirmativeSideKept:
+    """How many of the draft's blocks, and their cards, are under a heading an aff or an advantage places."""
+    held = [one for one in kept if one.block in affirmative_side]
+    return AffirmativeSideKept(blocks=len({one.block for one in held}), cards=len(held))
 
 
 def _directly_under(one: _Ranked) -> MatchItem:
@@ -581,8 +608,8 @@ def _render(
 ) -> str:
     """The draft's YAML, written by hand so each card carries its read count as a comment.
 
-    A counterplan's first block opens with :data:`CP_TEXT_SLOT`, and each block in `marked` has
-    :data:`CHECK_AGAINST_THE_PLAN` above it.
+    A counterplan's first block opens with :data:`CP_TEXT_SLOT`, and each block in `marked` (one naming
+    the plan or one an aff or an advantage places) has :data:`CHECK_AGAINST_THE_PLAN` above it.
     """
     through = run.snapshot.isoformat()
     lines = [

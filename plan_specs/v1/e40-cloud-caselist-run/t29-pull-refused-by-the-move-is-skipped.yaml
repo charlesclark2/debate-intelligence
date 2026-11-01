@@ -25,6 +25,10 @@ spec:
     Say which readers of run records (the status command, the run history that
     `docs/data/caselist-sync-runs.md` describes) know skipped, and whether such a status already
     exists; reuse it if it does.
+    (PM amendment 2026-11-01, from the session's deviation 1, accepted.) Record it as skipped in the
+    run's details (`"skipped": "RUN_HOME_MOVED"`, no failure code), with its own notice; its record stays
+    `failed` / `RunHomeMoved`, the one every installed build reads, since an earlier build drops a record
+    whose outcome it does not know.
   priority: 3
   constraints:
     packages: [debate_core.application, debate_core.integrations, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, docs/runbooks]

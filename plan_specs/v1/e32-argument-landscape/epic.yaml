@@ -842,5 +842,46 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e32-t36-landscape-cassettes-smoke-check-and-removal-form
+    - id: t37
+      kind: Task
+      name: 'The model-use gate reads open question 4 from the policy''s open-questions table, not the first row numbered 4'
+      description: >-
+        The model-use gate reads open question 4 from the policy's open-questions table, not
+        the first row numbered 4.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t37-model-use-gate-reads-the-open-questions-table.yaml
+        goalRef: v1-e32-t37-model-use-gate-reads-the-open-questions-table
+      dependsOn:
+      - t05
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t37-model-use-gate-reads-the-open-questions-table reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t37-model-use-gate-reads-the-open-questions-table
+    - id: t38
+      kind: Task
+      name: 'The landscape smoke check reads the review queue''s order line and a dry run''s scan refusal'
+      description: >-
+        The landscape smoke check reads the review queue's order line and a dry run's scan
+        refusal.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t38-landscape-smoke-checks-order-line-and-dry-run-refusal.yaml
+        goalRef: v1-e32-t38-landscape-smoke-checks-order-line-and-dry-run-refusal
+      dependsOn:
+      - t26
+      - t19
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t38-landscape-smoke-checks-order-line-and-dry-run-refusal reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t38-landscape-smoke-checks-order-line-and-dry-run-refusal
 status:
   phase: Pending

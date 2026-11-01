@@ -1,0 +1,89 @@
+# TASK v1-e40-t36-parse-rebuild-streams-occurrence-rows - The aggregate rebuild reads cards source by source, so it no longer holds a whole caselist's cards in memory
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t36-parse-rebuild-streams-occurrence-rows
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "The aggregate rebuild reads cards source by source, so it no longer holds a whole caselist's cards in memory"
+spec:
+  # Filed by the PM, 2026-10-31, from v1-e40-t31's measurement (docs/data/caselist-parse-memory.md), the PM's ruling of 2026-11-01.
+  description: >-
+    v1-e40-t31 measured what killed the hspolicy25 import: not the parse workers (at most 632
+    MiB each, stopped before the rebuild) but the aggregate rebuild in the main process.
+    `_occurrence_rows` in `caselist_parse.py` reads every parsed card of the caselist into one
+    list before placing them: 1.33 GB for 250 hspolicy26 sources, over 2.15 GB for 500, about 13
+    GB for its 3,869 by a straight line. A full season's backfile is larger, and 32 GB is likely
+    not enough for it. Rebuild the occurrence rows without holding every card: read the cards
+    source by source, keep only what placement (fingerprinting and clustering) needs, and write
+    the rows as they are made, or say why a part must stay whole and bound it. The aggregates it
+    writes (`occurrences.jsonl`, `index.jsonl`, `failures.jsonl`, `camp_paths.jsonl`) must be
+    byte-identical to today's for the same store: prove it on synthetic stores and, read-only,
+    on a copy of the Mac's hspolicy26 store, as an operator block if it runs past two minutes.
+    Measure the main process's peak before and after with t31's method and record both in
+    `docs/data/caselist-parse-memory.md`. No parser or fingerprint version change, and no record
+    shape change.
+  priority: 1
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, packages/debate_core/tests, docs/data, docs/runbooks]
+    forbidden:
+      - A change to any aggregate's bytes for the same store
+      - A parser, fingerprint or record schema version change
+      - A real source's text, name or path in the report or a test
+      - Network or AWS access in a test
+  context:
+    - kind: TaskRef
+      name: v1-e40-t30-run-task-memory-fits-a-full-parse
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e33-t07-camp-path-on-occurrence-rows
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The rebuild's main-process peak no longer grows with every card of the caselist,
+        measured before and after with t31's method and recorded in docs/data; the
+        aggregates are byte-identical to today's on synthetic stores and on the Mac's
+        hspolicy26 store; by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t36-parse-rebuild-streams-occurrence-rows-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    The aggregate rebuild reads cards source by source, so it no longer holds a whole caselist's
+    cards in memory.
+  goalRef:
+    name: v1-e40-t36-parse-rebuild-streams-occurrence-rows
+  graph:
+    nodes:
+      - id: parse-rebuild-streams-occurrence-rows
+        kind: Task
+        name: Streaming rebuild
+        description: >-
+          The aggregate rebuild reads cards source by source, so it no longer holds a
+          whole caselist's cards in memory.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Streaming rebuild tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, caselist_parse or occurrence]
+status:
+  phase: Pending

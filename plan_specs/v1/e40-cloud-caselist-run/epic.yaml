@@ -820,5 +820,73 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e40-t35-expired-login-cli-output-in-bucket-mode
+    - id: ext-v1-e33-t07-camp-path-on-occurrence-rows
+      kind: External
+      name: 'Prerequisite from E33: A camp occurrence row carries its camp path''s digest, so a camp-path withdrawal stops it before a rebuild'
+      description: >-
+        Cross-epic prerequisite owned by v1-e33-file-builder (release v1.2).
+      inputs:
+        goalRef: v1-e33-t07-camp-path-on-occurrence-rows
+        specRef: plan_specs/v1/e33-file-builder/t07-camp-path-on-occurrence-rows.yaml
+    - id: t36
+      kind: Task
+      name: 'The aggregate rebuild reads cards source by source, so it no longer holds a whole caselist''s cards in memory'
+      description: >-
+        The aggregate rebuild reads cards source by source, so it no longer holds a whole
+        caselist's cards in memory.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t36-parse-rebuild-streams-occurrence-rows.yaml
+        goalRef: v1-e40-t36-parse-rebuild-streams-occurrence-rows
+      dependsOn:
+      - t30
+      - ext-v1-e33-t07-camp-path-on-occurrence-rows
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t36-parse-rebuild-streams-occurrence-rows reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t36-parse-rebuild-streams-occurrence-rows
+    - id: t37
+      kind: Task
+      name: 'Redaction no longer takes two apostrophes for a quoted path and removes the words between them'
+      description: >-
+        Redaction no longer takes two apostrophes for a quoted path and removes the words
+        between them.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t37-redact-keeps-text-between-apostrophes.yaml
+        goalRef: v1-e40-t37-redact-keeps-text-between-apostrophes
+      dependsOn:
+      - t11
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t37-redact-keeps-text-between-apostrophes reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t37-redact-keeps-text-between-apostrophes
+    - id: t38
+      kind: Task
+      name: 'A lock refusal is not reported as a run that stopped before its stages'
+      description: >-
+        A lock refusal is not reported as a run that stopped before its stages.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t38-landscape-staleness-ignores-lock-refusals.yaml
+        goalRef: v1-e40-t38-landscape-staleness-ignores-lock-refusals
+      dependsOn:
+      - t29
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t38-landscape-staleness-ignores-lock-refusals reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t38-landscape-staleness-ignores-lock-refusals
 status:
   phase: Pending

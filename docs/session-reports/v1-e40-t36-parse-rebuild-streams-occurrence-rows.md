@@ -320,3 +320,38 @@ of the amended ac1 now passes. For the PM, paste-ready:
 > `--partial` as planned. Recommendation: (a), since nothing is left open. Also for the CutIndex task:
 > after the clusterer returns, the linker's word tuples per distinct body hold about 2 GB over the
 > whole store, so shrinking CutIndex alone would leave that as the peak.
+
+## PM review (second)
+
+**Verdict:** ACCEPTED
+
+**Reviewed by / date:** PM (Claude), 2026-11-01
+
+**Notes:**
+
+The whole-store check matched, so the Goal goes to `Succeeded`. The first review stands and is not
+edited.
+
+1. **The streaming rebuild matches the old one byte for byte on all 3,869 `hspolicy26` sources.**
+   `index.jsonl`, `failures.jsonl` and `occurrences.jsonl` equal the store's own aggregates, which
+   the one-list rebuild wrote. 3,825 sources were parsed, giving 126,681 cards, 144,841 occurrences
+   and 21,595 clusters. No source was refused by the new `ValueError`, so that rule holds on real
+   data.
+2. **Every criterion of the amended ac1 passes.** Option (a) is taken: set the Goal to `Succeeded`.
+3. **The measurement:**
+   * The peak is 6.25 GB in 536 s, against the 5.5 GB estimate.
+   * Reading the sources reached 516 MB; `CutIndex` took the peak to 5.95 GB.
+   * The linker's per-body word tuples hold about 2 GB after the clusterer returns.
+   * At most about 22.5 GB for `hspolicy25` fits the run task's 32 GB.
+4. **The PM's next batch files the compact `CutIndex` task.** Its scope includes the linker's word
+   tuples, so that shrinking `CutIndex` alone does not leave them as the peak. It stays p2: by this
+   measurement a full season fits in 32 GB on this build.
+5. **The sync's work is done:** the dated superseded note in `caselist-parse-memory.md`, the spec's
+   amendment, and the "not yet on dev" wording gone.
+6. **Before the PR:**
+   * Set the phase with `uv run scripts/task_helper.py set-phase
+     v1-e40-t36-parse-rebuild-streams-occurrence-rows Succeeded`.
+   * Run `scripts/task sync` (dev is four commits ahead, `v1-e40-t35` among them).
+   * Run validate_specs and the tests the sync touches, then commit.
+7. **Merge:** a plain `scripts/task pr` (not `--partial`) once `ci` is green.
+

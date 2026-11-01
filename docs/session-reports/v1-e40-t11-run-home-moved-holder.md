@@ -239,9 +239,51 @@ dev lock held for good" section, by a build that contains this merge.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-31
 
 **Notes:**
+
+The promotion's step 3 now has its command. The older-build finding is exactly the kind of thing the
+runbook needed to know before the day.
+1. **ac1 passes.**
+   * Red against a skeleton that refuses nothing: 21 failed, every new test failing for its own reason.
+   * Green: the core file (24), with the run-lock suite (43), and the CLI moved-holder tests (17).
+   * The node criterion passes (70).
+   * The lock-taking table lists 16 paths with how each meets the lock, and every one is tested after
+     the move, local mode and a prod runner pointed at dev's bucket included.
+2. **Mutants.** Nine variants of the five, all caught at assertions. 1a first survived because its
+   racing writer landed after the mutant's re-read. Moving the race, committing that alone and
+   re-running is the right fix, and it shows the conditional write is really what the test sees. 1b
+   is caught by a hook that mirrors v1-e40-t07's bucket deny, which is the right stand-in.
+3. **Older builds.** dev.200 and dev.251 run against the new holder by their own `run_lock.py`:
+   * as dev, they refuse and write nothing (`RUN_LOCK_WRONG_HOME`);
+   * as prod pointed at dev's bucket, they take the lock over.
+
+   That needs `DEBATE_ENV=prod`, an override naming dev's bucket and a profile that can write it, which
+   prod's role cannot (ADR-0010 rule 4). The runbook now names the constraint, and every block checks
+   for the override.
+4. **Decisions accepted:**
+   * `caselist move-run-home`, a dry run by default, with `--execute`, `--release` and
+     `--release --execute`;
+   * refused in prod before anything is read, so no `--confirm-prod`;
+   * the holder naming the runner kind and build, never a person, with no lease;
+   * `RUN_HOME_MOVED` as its own code;
+   * the coach's confirmation as a runbook rule;
+   * e39-t25's API untouched.
+
+   **Decision 4: no far-future lease.** The spec says the holder never expires, the case it would guard
+   is already blocked by prod's role, and a year-3000 date would be a surprise for the next reader of
+   the lock body. Leave it as built.
+5. **Deviation accepted:** the smoke check, which agreement 5 asks for. The PM's next batch adds
+   `tests/smoke` to the spec's packages, with the ruling.
+6. **Follow-up:** the pull refused by the move getting its own banner and `skipped` rather than
+   `failed`. One p3 E40 task in the PM's next batch. It matters only for a Mac hand run after the
+   promotion.
+7. **Closing checks:** the affected set (289 files, `run_lock.py` and `container.py` are hubs) is left
+   to the PR's `ci` under agreement 10. The run-state selection (70), bucket_mode (186), the always-run
+   list and changed areas (524), prune and landscape (101), the new smoke check, ruff, CI's pyright,
+   lint-imports, thin handlers, the doc checks and the specs are clean.
+8. **Merge:** a plain `scripts/task pr` once `ci` is green. Nothing here is used until the promotion.

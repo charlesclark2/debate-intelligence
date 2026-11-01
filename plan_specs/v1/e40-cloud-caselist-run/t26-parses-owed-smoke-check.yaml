@@ -36,7 +36,7 @@ spec:
         The smoke check passes on the checkout's script and an installed build, and fails
         against a break that drops `parses_owed` from either command's --json.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

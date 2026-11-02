@@ -35,7 +35,9 @@ whose debate_cli does not pin debate_core, that lacks the build info, the bundle
 files, pricing file, `cut`'s two prompts or its default format profile, `search`'s taxonomy, ranking
 table, `--expand-llm` prompt or any feed list the checkout commits, or that contains anything that
 looks like a secret or local data: `.env` files, a `secrets/` directory, a `caselist_token`, SQLite
-files, a `.debate-research` data directory. It runs in the checkout the wheels were built from
+files and their sidecars, a `.debate-research` data directory, a `tests/` or `fixtures/` directory, a
+test module (`conftest.py`, `test_*.py`), or a `.docx` other than the file writer's template, which
+would be a debate file (v1-e09-t06). It runs in the checkout the wheels were built from
 (`--repository`), and refuses when that checkout commits no feed list to compare with.
 
 Standard library only.
@@ -98,6 +100,14 @@ FEEDS = "feeds"
 
 FORBIDDEN_DIRECTORY_NAMES = frozenset({"secrets", ".debate-research", ".data", ".venv"})
 FORBIDDEN_SUFFIXES = (".sqlite", ".sqlite3", ".db")
+DATABASE_SIDECARS = ("-wal", "-shm", "-journal")
+"""What SQLite writes beside a database file, which holds its rows as much as the file does."""
+FIXTURE_DIRECTORY_NAMES = frozenset({"tests", "fixtures"})
+"""Directories of test code and recorded fixtures (v1-e09-t06): `debate_core.testing`, the shared
+fakes and contract suites other packages' tests import, is code and ships."""
+DOCX_TEMPLATE_DIRECTORY = "templates"
+"""The one place a wheel carries a .docx: the file writer's starting document. Any other .docx is a
+debate file, and team evidence never ships."""
 
 
 class StampError(Exception):
@@ -239,14 +249,22 @@ def forbidden_member(name: str) -> str | None:
     """Why a wheel member must not be published, or `None` if it is fine."""
     path = PurePosixPath(name)
     for part in path.parts[:-1]:
-        if part in FORBIDDEN_DIRECTORY_NAMES:
+        if part in FORBIDDEN_DIRECTORY_NAMES or part in FIXTURE_DIRECTORY_NAMES:
             return f"inside a {part}/ directory"
     if path.name == ".env" or path.name.startswith(".env."):
         return "a .env file"
     if "caselist_token" in path.name:
         return "a caselist_token file"
-    if path.name.endswith(FORBIDDEN_SUFFIXES):
+    if path.name.endswith(FORBIDDEN_SUFFIXES) or any(
+        path.name.endswith(suffix + sidecar) for suffix in FORBIDDEN_SUFFIXES for sidecar in DATABASE_SIDECARS
+    ):
         return "a database file"
+    if path.name == "conftest.py" or (
+        path.suffix == ".py" and (path.name.startswith("test_") or path.stem.endswith("_test"))
+    ):
+        return "a test module"
+    if path.suffix.lower() == ".docx" and path.parent.name != DOCX_TEMPLATE_DIRECTORY:
+        return "a debate file"
     return None
 
 

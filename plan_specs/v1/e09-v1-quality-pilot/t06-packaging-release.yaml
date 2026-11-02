@@ -32,7 +32,9 @@ spec:
     Boundaries: no PyPI publishing, no Docker images (V2), dev pre-releases are v1-e01-t09.
   priority: 2
   constraints:
-    packages: [.github/workflows, packages/debate_cli, packages/debate_core, CHANGELOG.md]
+    # PM ruling 2026-11-02 (1): scripts/ and tests/scripts/, where the release checks and their tests
+    # live, as the dev channel's (release_version.py, stamp_build.py) do.
+    packages: [.github/workflows, packages/debate_cli, packages/debate_core, CHANGELOG.md, scripts, tests/scripts]
     forbidden:
       - Publishing to public PyPI
       - Secrets, .env files, local data dirs or team evidence fixtures inside built wheels
@@ -82,12 +84,18 @@ spec:
     name: v1-e09-t06-packaging-release
   graph:
     nodes:
+      # PM ruling 2026-11-02 (2): the smallest mechanism that keeps the dev channel, the stamp and
+      # install_channel.sh unchanged, and no build-backend change without asking. uv_build reads only
+      # a static version, so the source stays packages/debate_cli/pyproject.toml (release_version.py's
+      # VERSION_SOURCE) and a test refuses a workspace pyproject that differs from it. The wheel test
+      # lives in tests/scripts/ under ruling (1).
       - id: version-source
         kind: Task
         name: Single version source and wheel hygiene
         description: >-
-          Dynamic version from one file for both packages, `--version` flag, and a wheel-contents test.
-        outputs: [packages/debate_core/src/debate_core/__about__.py]
+          One version for both packages, read from packages/debate_cli/pyproject.toml, with a test that
+          fails when a workspace pyproject differs from it; `--version` flag; and a wheel-contents test.
+        outputs: [packages/debate_cli/pyproject.toml, tests/scripts/test_wheel_contents.py]
         estimatedEffort: 2h
         acceptanceCriteria:
           - type: command_succeeds
@@ -97,7 +105,7 @@ spec:
           - type: test_passes
             name: Wheel contents test passes
             command: uv
-            args: [run, pytest, tests/packaging/test_wheel_contents.py]
+            args: [run, pytest, tests/scripts/test_wheel_contents.py]
       - id: changelog
         kind: Task
         name: CHANGELOG with release sections

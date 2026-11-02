@@ -501,9 +501,51 @@ def test_secrets_and_local_data_are_refused(member: str, tmp_path: Path) -> None
     assert any(member in problem for problem in sb.check_wheels(dist, VERSION))
 
 
+@pytest.mark.parametrize(
+    ("member", "reason"),
+    [
+        ("debate_core/tests/test_store.py", "inside a tests/ directory"),
+        ("debate_core/fixtures/http/cassettes/feed.yaml", "inside a fixtures/ directory"),
+        ("debate_cli/conftest.py", "a test module"),
+        ("debate_core/evidence/test_spans.py", "a test module"),
+        ("debate_core/evidence/spans_test.py", "a test module"),
+        ("debate_core/round_one_aff.docx", "a debate file"),
+        ("debate_core/integrations/docx_parser/samples/neg.docx", "a debate file"),
+        ("debate_core/store.sqlite3-wal", "a database file"),
+        ("debate_core/store.db-journal", "a database file"),
+        ("debate_core/store.sqlite-shm", "a database file"),
+    ],
+)
+def test_fixtures_test_modules_and_data_files_are_refused(member: str, reason: str, tmp_path: Path) -> None:
+    """v1-e09-t06 ac1: no fixtures, test code or data files ship, as well as no secrets."""
+    assert sb.forbidden_member(member) == reason
+
+    dist = good_dist(tmp_path / "dist")
+    write_wheel(dist, "debate_core", VERSION, {"debate_core/__init__.py": "", member: "x"}, ["pydantic>=2.9"])
+    assert f"debate_core-{VERSION}-py3-none-any.whl: {member} is {reason}" in sb.check_wheels(dist, VERSION)
+
+
 def test_ordinary_members_are_allowed() -> None:
     assert sb.forbidden_member("debate_cli/commands/config.py") is None
     assert sb.forbidden_member("debate_cli/_bundled_config/config/profiles/dev.toml") is None
+
+
+@pytest.mark.parametrize(
+    "member",
+    [
+        # The writer's own starting document, the one .docx a wheel carries.
+        "debate_core/integrations/docx_file_writer/templates/base.docx",
+        # Shared fakes and contract suites are code other packages' tests import, not fixtures.
+        "debate_core/testing/fakes/caselist.py",
+        "debate_core/testing/contracts/README.md",
+        "debate_core/application/cassette_filing.py",
+        "debate_core/integrations/local/migrations/0001_initial_schema.sql",
+        "debate_core/retrieval/data/public_suffix_list.dat",
+        "debate_core/evidence/contest_rules.py",
+    ],
+)
+def test_package_resources_that_look_like_test_data_are_allowed(member: str) -> None:
+    assert sb.forbidden_member(member) is None
 
 
 # --------------------------------------------------------------------------------------------

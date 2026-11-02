@@ -862,6 +862,7 @@ def service_over(
 ) -> FederatedSearchService:
     class Providers:
         providers = (provider,)
+        not_configured: dict[str, str] = {}  # noqa: RUF012 - read only, as the port's
 
         def health(self) -> tuple[()]:
             return ()

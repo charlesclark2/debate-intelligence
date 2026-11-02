@@ -118,3 +118,37 @@ def test_a_need_outside_the_arguments_family_exits_2_listing_its_needs(installed
     assert run.exit_code == ExitCode.USAGE_ERROR, run.output
     assert "framework-good" in run.stderr
     assert "internal-link" not in run.stderr
+
+
+def test_a_topic_alone_names_the_government_providers_it_could_not_ask(installed_cli: InstalledCli) -> None:
+    """v1-e07-t07: `--topic` stands alone, and the dev profile enables neither government provider."""
+    run = installed_cli.run(
+        "--json",
+        "search",
+        "health insurance",
+        "--topic",
+        "policy-2026-27-nhi",
+        "--providers",
+        "federal_register,govinfo",
+    )
+
+    assert run.exit_code == ExitCode.DOMAIN_FAILURE, run.output
+    error = run.envelope()["error"]
+    assert isinstance(error, dict)
+    assert (error["code"], error["exit_code"]) == ("NO_PROVIDER_ENABLED", 1)
+    details = error["details"]
+    assert isinstance(details, dict)
+    assert [(entry["provider"], entry["outcome"]) for entry in details["providers"]] == [
+        ("federal_register", "not configured"),
+        ("govinfo", "not configured"),
+    ]
+    assert "expansion" not in details or details["expansion"] is None
+
+
+def test_an_unknown_topic_exits_2_listing_the_topics(installed_cli: InstalledCli) -> None:
+    run = installed_cli.run(
+        "search", "health insurance", "--topic", "policy-2025-26-nhi", env={"COLUMNS": "200"}
+    )
+
+    assert run.exit_code == ExitCode.USAGE_ERROR, run.output
+    assert "policy-2026-27-nhi" in run.stderr

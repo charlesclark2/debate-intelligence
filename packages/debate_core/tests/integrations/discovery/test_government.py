@@ -30,17 +30,28 @@ from debate_core.application.errors import (
     ProviderRateLimited,
     ProviderUnavailable,
 )
+from debate_core.application.federated_search import (
+    FanOutStage,
+    FederatedSearchService,
+    SearchTopics,
+    selected_providers,
+)
+from debate_core.application.federated_search_types import ExpansionRequest, SearchRequest, SearchState
 from debate_core.application.ports.providers import SearchProvider
+from debate_core.application.query_expansion import UnknownExpansionChoice
 from debate_core.application.settings import HttpSettings, ProviderSettings, SearchProviderName
+from debate_core.domain.base import new_id
 from debate_core.domain.discovery import (
     BreakerState,
     CandidateResult,
     DatePrecision,
+    ProviderOutcome,
     ProviderQuery,
     ProviderResponse,
 )
 from debate_core.domain.enums import SourceType
 from debate_core.domain.search import SearchFilters
+from debate_core.integrations.discovery.data_gov import require_api_data_gov_key
 from debate_core.integrations.discovery.federal_register import (
     FEDERAL_REGISTER_DOCUMENTS_URL,
     FederalRegisterProvider,
@@ -48,8 +59,16 @@ from debate_core.integrations.discovery.federal_register import (
     documents_parameters,
     federal_register_factory,
 )
+from debate_core.integrations.discovery.feed_config import (
+    FeedConfig,
+    FeedConfigError,
+    load_feed_config,
+    load_feed_directory,
+    search_topic_ids,
+    topic_providers,
+)
 from debate_core.integrations.discovery.redaction import PROTECTED_LOGGERS, logger
-from debate_core.integrations.discovery.registry import ProviderRegistry
+from debate_core.integrations.discovery.registry import ProviderNotConfigured, ProviderRegistry
 from debate_core.testing.contracts.search_provider import (
     Recording,
     ReplayedProvider,
@@ -59,7 +78,9 @@ from debate_core.testing.contracts.search_provider import (
     TransportFailure,
     load_recording,
 )
-from debate_core.testing.fakes.clock_and_ids import FixedClock
+from debate_core.testing.fakes.clock_and_ids import FixedClock, SequentialIdGenerator
+from debate_core.testing.fakes.persistence import InMemorySearchRepository
+from debate_core.testing.fakes.providers import FakeSearchProvider
 
 pytestmark = pytest.mark.anyio
 
@@ -625,3 +646,337 @@ class TestFederalRegisterProviderOnAnEmptyResult(TestFederalRegisterProvider):
     @pytest.fixture
     def recording(self) -> Recording:
         return federal_register_recording("documents_empty")
+
+
+# ============================================================================================
+# The api.data.gov key
+# ============================================================================================
+
+MISSING_KEY: Final = "govinfo: no api.data.gov key (DEBATE_PROVIDERS__API_DATA_GOV_KEY)"
+
+
+def keyed_stand_in_factory(built: list[str]) -> Callable[[ProviderSettings], SearchProvider]:
+    """A stand-in for GovInfo's factory: it needs the key exactly as GovInfo's does, and answers nothing."""
+
+    def build(settings: ProviderSettings) -> SearchProvider:
+        built.append(require_api_data_gov_key(settings, "govinfo"))
+        return FakeSearchProvider("govinfo")
+
+    return build
+
+
+@pytest.mark.parametrize("key", [None, "", "   "], ids=["unset", "empty", "spaces"])
+def test_key_missing_leaves_govinfo_unbuilt_and_recorded_not_configured(key: str | None) -> None:
+    built: list[str] = []
+    registry = ProviderRegistry.from_settings(
+        provider_settings(SearchProviderName.GOVINFO, api_data_gov_key=key),
+        {SearchProviderName.GOVINFO: keyed_stand_in_factory(built)},
+        clock=FixedClock(),
+    )
+
+    assert built == []
+    assert registry.names == ()
+    assert registry.health() == ()
+    assert dict(registry.not_configured) == {"govinfo": MISSING_KEY}
+
+
+def test_key_present_builds_govinfo_with_that_key_and_no_other() -> None:
+    built: list[str] = []
+    registry = ProviderRegistry.from_settings(
+        provider_settings(SearchProviderName.GOVINFO),
+        {SearchProviderName.GOVINFO: keyed_stand_in_factory(built)},
+        clock=FixedClock(),
+    )
+
+    assert built == [API_DATA_GOV_KEY]
+    assert registry.names == ("govinfo",)
+    assert dict(registry.not_configured) == {}
+
+
+def test_key_is_never_the_shared_demo_key() -> None:
+    with pytest.raises(ProviderNotConfigured) as raised:
+        require_api_data_gov_key(provider_settings(api_data_gov_key=None), "govinfo")
+    assert raised.value.reason == MISSING_KEY
+    assert "DEMO_KEY" not in str(raised.value)
+
+
+async def test_key_missing_is_reported_not_configured_for_every_query_not_as_an_error() -> None:
+    registry = ProviderRegistry.from_settings(
+        provider_settings(
+            SearchProviderName.FEDERAL_REGISTER, SearchProviderName.GOVINFO, api_data_gov_key=None
+        ),
+        {
+            SearchProviderName.FEDERAL_REGISTER: lambda _: FakeSearchProvider("federal_register"),
+            SearchProviderName.GOVINFO: keyed_stand_in_factory([]),
+        },
+        clock=FixedClock(),
+    )
+    stage = FanOutStage(registry, clock=FixedClock(), deadline_seconds=5, topics=NHI_TOPICS)
+    request = SearchRequest(query="single payer", topic_id=NHI)
+
+    state = await stage.run(
+        SearchState.start(new_id(), request).evolve(
+            queries=(ProviderQuery(query="a"), ProviderQuery(query="b"))
+        )
+    )
+
+    outcomes = [
+        (status.provider, status.query.query, status.outcome, status.error)
+        for status in state.provider_statuses
+    ]
+    assert outcomes == [
+        ("federal_register", "a", ProviderOutcome.OK, None),
+        ("govinfo", "a", ProviderOutcome.NOT_CONFIGURED, MISSING_KEY),
+        ("federal_register", "b", ProviderOutcome.OK, None),
+        ("govinfo", "b", ProviderOutcome.NOT_CONFIGURED, MISSING_KEY),
+    ]
+    assert registry.health()[0].provider == "federal_register" and len(registry.health()) == 1
+
+
+@pytest.mark.usefixtures("bare_protected_loggers")
+def test_key_is_masked_in_every_protected_log_line_once_govinfo_is_built(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.DEBUG)
+    key = "datagov-unwrapped-Z3"
+    require_api_data_gov_key(provider_settings(api_data_gov_key=key), "govinfo")
+
+    for name in PROTECTED_LOGGERS:
+        logging.getLogger(name).warning("X-Api-Key: %s", key)
+
+    assert [record.getMessage() for record in caplog.records] == ["X-Api-Key: ***"] * len(PROTECTED_LOGGERS)
+
+
+# ============================================================================================
+# Topic enablement: a government provider runs only for a search whose topic lists it
+# ============================================================================================
+
+NHI: Final = "policy-2026-27-nhi"
+NHI_TOPICS: Final = SearchTopics(
+    known=(NHI, "pf-test-topic"),
+    providers={NHI: frozenset({"federal_register", "govinfo"}), "pf-test-topic": frozenset({"govinfo"})},
+)
+COMMITTED_FEEDS: Final = Path(__file__).resolve().parents[5] / "config" / "feeds"
+
+
+def topic_registry(*enabled: SearchProviderName) -> ProviderRegistry:
+    """Every named provider enabled and built as a stand-in that answers one result."""
+    return ProviderRegistry.from_settings(
+        provider_settings(*enabled),
+        {name: stand_in(name.value) for name in enabled},
+        clock=FixedClock(),
+    )
+
+
+def stand_in(name: str) -> Callable[[ProviderSettings], SearchProvider]:
+    result = CandidateResult(
+        provider=name, title=f"From {name}", url=f"https://{name.replace('_', '-')}.example.org/1"
+    )
+    return lambda _: FakeSearchProvider(name, default_results=(result,))
+
+
+async def fan_out(
+    registry: ProviderRegistry, request: SearchRequest, topics: SearchTopics = NHI_TOPICS
+) -> list[tuple[str, ProviderOutcome, str | None]]:
+    stage = FanOutStage(registry, clock=FixedClock(), deadline_seconds=5, topics=topics)
+    state = await stage.run(SearchState.start(new_id(), request))
+    return [(status.provider, status.outcome, status.error) for status in state.provider_statuses]
+
+
+ALL_FOUR: Final = (
+    SearchProviderName.OPENALEX,
+    SearchProviderName.FEDERAL_REGISTER,
+    SearchProviderName.RSS,
+    SearchProviderName.GOVINFO,
+)
+
+
+async def test_topic_that_lists_the_government_providers_asks_them_beside_the_others() -> None:
+    outcomes = await fan_out(topic_registry(*ALL_FOUR), SearchRequest(query="q", topic_id=NHI))
+    assert outcomes == [
+        ("openalex", ProviderOutcome.OK, None),
+        ("federal_register", ProviderOutcome.OK, None),
+        ("rss", ProviderOutcome.OK, None),
+        ("govinfo", ProviderOutcome.OK, None),
+    ]
+
+
+async def test_topic_absent_leaves_the_government_providers_neither_asked_nor_reported() -> None:
+    outcomes = await fan_out(topic_registry(*ALL_FOUR), SearchRequest(query="q"))
+    assert outcomes == [("openalex", ProviderOutcome.OK, None), ("rss", ProviderOutcome.OK, None)]
+
+
+async def test_topic_that_lists_only_govinfo_does_not_ask_the_federal_register() -> None:
+    outcomes = await fan_out(topic_registry(*ALL_FOUR), SearchRequest(query="q", topic_id="pf-test-topic"))
+    assert [name for name, _, _ in outcomes] == ["openalex", "rss", "govinfo"]
+
+
+async def test_topic_lists_a_provider_settings_do_not_enable_so_it_is_not_asked() -> None:
+    """Enabled AND on the topic: the topic alone never switches a provider on."""
+    registry = topic_registry(SearchProviderName.OPENALEX, SearchProviderName.GOVINFO)
+    outcomes = await fan_out(registry, SearchRequest(query="q", topic_id=NHI))
+    assert [name for name, _, _ in outcomes] == ["openalex", "govinfo"]
+
+
+async def test_topic_known_with_no_government_providers_asks_none_of_them() -> None:
+    topics = SearchTopics(known=(NHI,), providers={})
+    outcomes = await fan_out(topic_registry(*ALL_FOUR), SearchRequest(query="q", topic_id=NHI), topics)
+    assert [name for name, _, _ in outcomes] == ["openalex", "rss"]
+
+
+@pytest.mark.parametrize(
+    ("topic", "reason"),
+    [
+        (
+            None,
+            "federal_register: asked only for a search on a topic that lists it, "
+            "and this search names no topic",
+        ),
+        (
+            "pf-test-topic",
+            "federal_register: asked only for a search on a topic that lists it, and pf-test-topic does not",
+        ),
+    ],
+    ids=["no-topic", "topic-without-it"],
+)
+async def test_topic_gate_reports_a_government_provider_named_by_providers_as_not_configured(
+    topic: str | None, reason: str
+) -> None:
+    request = SearchRequest(query="q", topic_id=topic, providers=("federal_register", "openalex"))
+    outcomes = await fan_out(topic_registry(*ALL_FOUR), request)
+    assert outcomes == [
+        ("federal_register", ProviderOutcome.NOT_CONFIGURED, reason),
+        ("openalex", ProviderOutcome.OK, None),
+    ]
+
+
+def test_topic_selection_is_the_providers_the_stored_search_records() -> None:
+    registry = topic_registry(*ALL_FOUR)
+    assert selected_providers(SearchRequest(query="q"), registry.names, topics=NHI_TOPICS) == (
+        "openalex",
+        "rss",
+    )
+    assert selected_providers(SearchRequest(query="q", topic_id=NHI), registry.names, topics=NHI_TOPICS) == (
+        "openalex",
+        "federal_register",
+        "rss",
+        "govinfo",
+    )
+    assert selected_providers(
+        SearchRequest(query="q", topic_id=NHI), ("openalex",), not_configured=("govinfo",), topics=NHI_TOPICS
+    ) == ("openalex", "govinfo")
+
+
+async def test_topic_unknown_is_refused_with_the_valid_ones_before_any_provider_is_asked() -> None:
+    fakes = {name: FakeSearchProvider(name.value) for name in ALL_FOUR}
+    registry = ProviderRegistry.from_settings(
+        provider_settings(*ALL_FOUR),
+        {name: (lambda _, f=fake: f) for name, fake in fakes.items()},
+        clock=FixedClock(),
+    )
+    service = FederatedSearchService(
+        registry,
+        InMemorySearchRepository(),
+        clock=FixedClock(),
+        ids=SequentialIdGenerator(),
+        topics=NHI_TOPICS,
+    )
+    with pytest.raises(UnknownExpansionChoice) as raised:
+        await service.search(SearchRequest(query="q", topic_id="policy-2025-26-nhi"))
+    assert (
+        str(raised.value)
+        == "unknown topic 'policy-2025-26-nhi'; the topics are: policy-2026-27-nhi, pf-test-topic"
+    )
+    assert [fake.queries for fake in fakes.values()] == [[], [], [], []]
+
+
+def test_topic_id_is_left_out_of_a_requests_json_when_none() -> None:
+    assert "topic_id" not in SearchRequest(query="q").model_dump(mode="json")
+    assert SearchRequest(query="q", topic_id=NHI).model_dump(mode="json")["topic_id"] == NHI
+
+
+def test_topic_of_the_request_and_of_its_expansion_cannot_disagree() -> None:
+    with pytest.raises(ValueError, match="topic"):
+        SearchRequest(
+            query="q",
+            topic_id=NHI,
+            expansion=ExpansionRequest(argument="politics-da", need="link", topic_id="pf-test-topic"),
+        )
+
+
+# --------------------------------------------------------------------------------------------
+# Topic enablement: the feed files say which topics enable which government providers
+# --------------------------------------------------------------------------------------------
+
+FEED_FILE: Final = """\
+topic: health-insurance
+description: A test topic.
+feeds: []
+search_topics: [policy-2026-27-nhi]
+government_providers: [federal_register, govinfo]
+"""
+
+
+def test_topic_committed_feed_files_enable_both_government_providers_for_nhi_only() -> None:
+    configs = load_feed_directory(COMMITTED_FEEDS)
+    assert topic_providers(configs) == {NHI: frozenset({"federal_register", "govinfo"})}
+    assert search_topic_ids(configs) == (NHI,)
+
+
+def test_topic_feed_file_reads_its_search_topics_and_government_providers(tmp_path: Path) -> None:
+    path = tmp_path / "health-insurance.yaml"
+    path.write_text(FEED_FILE, encoding="utf-8")
+    config = load_feed_config(path)
+    assert config.search_topics == (NHI,)
+    assert config.government_providers == (SearchProviderName.FEDERAL_REGISTER, SearchProviderName.GOVINFO)
+
+
+@pytest.mark.parametrize(
+    ("text", "complaint"),
+    [
+        (FEED_FILE.replace("[federal_register, govinfo]", "[rss]"), "only government providers"),
+        (
+            FEED_FILE.replace("[federal_register, govinfo]", "[openalex, govinfo]"),
+            "only government providers",
+        ),
+        (FEED_FILE.replace("[federal_register, govinfo]", "[congress_gov]"), "government_providers"),
+        (FEED_FILE.replace("[federal_register, govinfo]", "[govinfo, govinfo]"), "twice"),
+        (FEED_FILE.replace("search_topics: [policy-2026-27-nhi]\n", ""), "no search_topics"),
+        (FEED_FILE.replace("[policy-2026-27-nhi]", "[Policy 2026]"), "search_topics"),
+    ],
+    ids=[
+        "a-news-provider",
+        "a-scholarly-provider",
+        "unknown-name",
+        "twice",
+        "no-topic-for-them",
+        "bad-topic-id",
+    ],
+)
+def test_topic_feed_file_mistake_fails_the_load(tmp_path: Path, text: str, complaint: str) -> None:
+    path = tmp_path / "health-insurance.yaml"
+    path.write_text(text, encoding="utf-8")
+    with pytest.raises(FeedConfigError, match=complaint):
+        load_feed_config(path)
+
+
+def test_topic_providers_of_two_files_naming_one_topic_are_joined() -> None:
+    first = FeedConfig(
+        topic="one",
+        description="One.",
+        search_topics=(NHI,),
+        government_providers=(SearchProviderName.GOVINFO,),
+    )
+    second = FeedConfig(
+        topic="two",
+        description="Two.",
+        search_topics=(NHI, "pf-test-topic"),
+        government_providers=(SearchProviderName.FEDERAL_REGISTER,),
+    )
+    plain = FeedConfig(topic="three", description="Three.", search_topics=("ld-test-topic",))
+    assert topic_providers((first, second, plain)) == {
+        NHI: frozenset({"govinfo", "federal_register"}),
+        "pf-test-topic": frozenset({"federal_register"}),
+        "ld-test-topic": frozenset(),
+    }
+    assert search_topic_ids((first, second, plain)) == (NHI, "pf-test-topic", "ld-test-topic")

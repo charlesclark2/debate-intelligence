@@ -232,7 +232,7 @@ from debate_core.application.federated_ranking import (
     FederatedRankStage,
     load_federated_ranking_config,
 )
-from debate_core.application.federated_search import FederatedSearchService
+from debate_core.application.federated_search import FederatedSearchService, SearchTopics
 from debate_core.application.federated_search_articles import ArticleMatchingStage
 from debate_core.application.federated_search_types import StagesInOrder
 from debate_core.application.file_build_service import FileBuildService
@@ -1451,9 +1451,11 @@ class ServiceContainer:
         """The discovery providers `providers.enabled` names, each wrapped in its breaker (`v1-e08-t05`).
 
         :meth:`~debate_core.integrations.discovery.registry.ProviderRegistry.from_settings` over this
-        build's four adapters: OpenAlex (`openalex_factory`, `v1-e07-t02`), Crossref
+        build's adapters: OpenAlex (`openalex_factory`, `v1-e07-t02`), Crossref
         (`crossref_factory`, `v1-e07-t03`, not enabled by default), the publisher feeds
-        (`feed_factory`) and Google News's RSS search (`google_news_factory`, `v1-e07-t05`). The feed
+        (`feed_factory`), Google News's RSS search (`google_news_factory`, `v1-e07-t05`) and the
+        Federal Register (`federal_register_factory`, `v1-e07-t07`, not enabled by default, and asked
+        only by a search on a topic whose feed file lists it). The feed
         providers read the committed `config/feeds/` topics and keep a
         :class:`~debate_core.integrations.discovery.feed_cache.FileFeedCache` in `<data dir>/feeds/`.
         A name enabled with no adapter in this build is the registry's configuration error.
@@ -1469,8 +1471,8 @@ class ServiceContainer:
     def _build_discovery_providers(self) -> ProviderRegistry:
         from debate_cli import package_version
         from debate_core.integrations.discovery.crossref import crossref_factory
+        from debate_core.integrations.discovery.federal_register import federal_register_factory
         from debate_core.integrations.discovery.feed_cache import FEED_CACHE_DIRECTORY, FileFeedCache
-        from debate_core.integrations.discovery.feed_config import FeedConfigError, load_feed_directory
         from debate_core.integrations.discovery.feeds import feed_factory
         from debate_core.integrations.discovery.google_news_rss import google_news_factory
         from debate_core.integrations.discovery.openalex import openalex_factory
@@ -1488,13 +1490,7 @@ class ServiceContainer:
             )
         topics: tuple[FeedConfig, ...] = ()
         if enabled & {SearchProviderName.RSS, SearchProviderName.GOOGLE_NEWS}:
-            directory = _committed_root(str(FEEDS_DIRECTORY)) / FEEDS_DIRECTORY
-            try:
-                topics = load_feed_directory(directory)
-            except (FeedConfigError, OSError) as error:
-                raise ConfigurationError(
-                    f"the topic feed lists did not load: {error}", field=str(FEEDS_DIRECTORY)
-                ) from None
+            topics = self._topic_feed_lists()
         clock = _PortClock(self.clock())
         version = package_version()
         cache = FileFeedCache(settings.storage.data_dir / FEED_CACHE_DIRECTORY)
@@ -1511,8 +1507,26 @@ class ServiceContainer:
             SearchProviderName.GOOGLE_NEWS: google_news_factory(
                 settings.http, version=version, clock=clock, topics=topics, cache=cache, transport=transport
             ),
+            SearchProviderName.FEDERAL_REGISTER: federal_register_factory(
+                settings.http, version=version, clock=clock, transport=transport
+            ),
         }
         return ProviderRegistry.from_settings(settings.providers, factories, clock=clock)
+
+    def _topic_feed_lists(self) -> tuple[FeedConfig, ...]:
+        """The committed `config/feeds/` topic files, read and checked once per container."""
+        return self.singleton("topic_feed_lists", self._load_topic_feed_lists)
+
+    def _load_topic_feed_lists(self) -> tuple[FeedConfig, ...]:
+        from debate_core.integrations.discovery.feed_config import FeedConfigError, load_feed_directory
+
+        directory = _committed_root(str(FEEDS_DIRECTORY)) / FEEDS_DIRECTORY
+        try:
+            return load_feed_directory(directory)
+        except (FeedConfigError, OSError) as error:
+            raise ConfigurationError(
+                f"the topic feed lists did not load: {error}", field=str(FEEDS_DIRECTORY)
+            ) from None
 
     def federated_search(self, *, model_expansion: bool) -> FederatedSearching:
         """What `debate-research search` runs: expand, fan out, dedupe, rank and store (`v1-e08-t05`).
@@ -1528,12 +1542,18 @@ class ServiceContainer:
         are stored in the same file. Both configuration files are read from an installed build's bundled
         copy or the source checkout this code runs from, as `cut`'s prompts are.
 
+        The topics a search may name (`--topic`) are the taxonomy's presets and every `search_topics` id in
+        the committed `config/feeds/` files, whose `government_providers` say which government providers
+        a search on each one asks (:class:`~debate_core.application.federated_search.SearchTopics`,
+        `v1-e07-t07`).
+
         `model_expansion` (`--expand-llm`) gives the expansion a structured-output guard over
         :meth:`_search_model_router`; without it the stage has none, so no model can be asked.
         """
         return self.singleton("federated_search", lambda: self._build_federated_search(model_expansion))
 
     def _build_federated_search(self, model_expansion: bool) -> FederatedSearching:
+        from debate_core.integrations.discovery.feed_config import search_topic_ids, topic_providers
         from debate_core.integrations.local import SqliteArticleRepository, SqliteSearchRepository
         from debate_core.integrations.models.prompt_registry import PromptRegistry
 
@@ -1550,6 +1570,13 @@ class ServiceContainer:
         if model_expansion:
             registry = PromptRegistry.load(_committed_prompts())
             guard = StructuredOutputGuard(self._search_model_router(registry), registry)
+        feed_lists = self._topic_feed_lists()
+        topics = SearchTopics(
+            known=tuple(
+                dict.fromkeys((*(topic.id for topic in taxonomy.topics), *search_topic_ids(feed_lists)))
+            ),
+            providers=topic_providers(feed_lists),
+        )
         providers = self.discovery_providers()
         service = FederatedSearchService(
             providers,
@@ -1557,6 +1584,7 @@ class ServiceContainer:
             clock=clock,
             ids=ids,
             deadline_seconds=settings.providers.search_deadline_seconds,
+            topics=topics,
             expand=QueryExpansionStage(taxonomy, clock=clock, guard=guard),
             normalize=DedupeStage(),
             rank=StagesInOrder(

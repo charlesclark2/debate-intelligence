@@ -8,6 +8,11 @@ Article without fetching it, and stores the search. What is here is the command-
 options, the request, and the exit code each outcome ends with (architecture proposal §11). The table,
 the JSON and the provider status footer are :mod:`debate_cli.presenters.search_presenter`'s.
 
+`--topic` names the debate topic the search is for (`policy-2026-27-nhi`). The Federal Register and
+GovInfo are asked only by a search on a topic whose feed file lists them (`config/feeds/`, v1-e07-t07),
+and only when `providers.enabled` lists them too; with `--argument` the topic's values also fill the
+expansion. An unknown topic exits 2 with the known ones.
+
 Search returns sources, not cards: nothing it prints or stores is evidence text, and no snippet or
 abstract is printed. A result's access is `UNKNOWN` until `fetch` or `cut` reads it.
 
@@ -106,7 +111,9 @@ def search(
     topic: Annotated[
         str | None,
         typer.Option(
-            "--topic", help="A topic preset whose values fill the expansion, e.g. policy-2026-27-nhi."
+            "--topic",
+            help="The debate topic the search is for, e.g. policy-2026-27-nhi: its government sources "
+            "are asked too, and with --argument its values fill the expansion.",
         ),
     ] = None,
     variables: Annotated[
@@ -172,6 +179,7 @@ def search(
         filters=_filters(since, until, max_results),
         providers=_providers(providers),
         expansion=_expansion(argument, need, topic, variables or [], expand_llm),
+        topic_id=topic,
     )
     if save is not None and not save.parent.is_dir():
         raise typer.BadParameter(f"{save.parent} is not a directory", param_hint="--save")
@@ -237,9 +245,11 @@ def _expansion(
 
     Whether the taxonomy has the argument, need, topic and variables is the expansion stage's to say,
     before any provider is asked: it raises the `UnknownExpansionChoice` that exits 2 with the choices.
+    `--topic` needs no pair: on its own it is the search's topic (v1-e07-t07), which the service checks
+    against the known topics in the same way.
     """
     if argument is None or need is None:
-        given = [flag for flag, value in (("--topic", topic), ("--var", variables or None)) if value]
+        given = ["--var"] if variables else []
         if use_model:
             given.append("--expand-llm")
         if argument is not None:

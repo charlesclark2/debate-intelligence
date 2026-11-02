@@ -1046,6 +1046,10 @@ class ProvidersOnHand:
     def providers(self) -> tuple[SearchProvider, ...]:
         return self._providers
 
+    @property
+    def not_configured(self) -> dict[str, str]:
+        return {}
+
     def health(self) -> tuple[ProviderHealth, ...]:
         return ()
 

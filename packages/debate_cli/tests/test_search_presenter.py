@@ -101,6 +101,10 @@ class WrappedCrossref:
     def providers(self) -> tuple[ResilientProvider, ...]:
         return (self.wrapped,)
 
+    @property
+    def not_configured(self) -> dict[str, str]:
+        return {}
+
     def health(self) -> tuple[ProviderHealth, ...]:
         return (self.wrapped.health(),)
 

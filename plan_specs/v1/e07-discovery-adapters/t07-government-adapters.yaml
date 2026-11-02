@@ -89,10 +89,19 @@ spec:
       # fan-out through DiscoveryProviders, which reports each call to one as not_configured.
       - packages/debate_core/src/debate_core/application/ports/providers.py
       - packages/debate_core/src/debate_core/application/federated_search.py
+      # Found while building: the port's new member reaches the six test stand-ins for DiscoveryProviders.
+      - packages/debate_core/tests/application/test_federated_search.py
+      - packages/debate_core/tests/application/test_federated_ranking.py
+      - packages/debate_core/tests/application/test_federated_search_articles.py
+      - packages/debate_core/tests/application/test_query_expansion.py
+      - packages/debate_cli/tests/test_search_presenter.py
       # PM ruling 2026-11-02 (stop question 5: A): SearchRequest.topic_id, left out of the stored JSON
       # when None, and `search --topic` on its own.
       - packages/debate_core/src/debate_core/application/federated_search_types.py
       - packages/debate_cli/src/debate_cli/commands/search.py
+      # The NHI topic file and its README (PM ruling 6).
+      - config/feeds/health-insurance.yaml
+      - config/feeds/README.md
       # The factories in the CLI's factory map, and the two lists that pin the container's integrations.
       - packages/debate_cli/src/debate_cli/container.py
       - packages/debate_cli/tests/commands/test_doctor.py

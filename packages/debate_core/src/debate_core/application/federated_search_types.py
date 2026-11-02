@@ -111,6 +111,15 @@ class SearchRequest(DomainModel):
         default=None,
         description="The argument and need to expand the query by; None asks the query as typed.",
     )
+    topic_id: NonEmptyText | None = Field(
+        default=None,
+        exclude_if=lambda topic_id: topic_id is None,
+        description=(
+            "The debate topic the search is for (`--topic`), such as policy-2026-27-nhi; it decides which "
+            "government providers are asked (v1-e07-t07). None asks none of them. Left out of the JSON "
+            "when None, so a request without one serializes as before."
+        ),
+    )
     owner_id: Ulid | None = Field(default=None, description=OWNER_ID_FIELD)
     organization_id: Ulid | None = Field(default=None, description=ORGANIZATION_ID_FIELD)
 
@@ -118,6 +127,15 @@ class SearchRequest(DomainModel):
     def _check_providers_name_someone(self) -> Self:
         if self.providers is not None and not self.providers:
             raise ValueError("providers names at least one provider; leave it out to ask every enabled one")
+        return self
+
+    @model_validator(mode="after")
+    def _check_one_topic(self) -> Self:
+        expanded = self.expansion.topic_id if self.expansion is not None else None
+        if self.topic_id is not None and expanded is not None and expanded != self.topic_id:
+            raise ValueError(
+                f"the search's topic {self.topic_id!r} and its expansion's topic {expanded!r} differ"
+            )
         return self
 
 

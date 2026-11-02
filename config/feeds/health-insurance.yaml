@@ -7,6 +7,10 @@
 # by being listed: the operator's feed check is what does that. Its run of 2026-10-22 had every
 # feed here answer HTTP 200 with every entry dated.
 #
+# The NHI Policy topic's searches (`search --topic policy-2026-27-nhi`) also ask the Federal Register
+# and GovInfo; no other search does (v1-e07-t07, PM ruling 2026-11-02). GovInfo needs an api.data.gov
+# key, DEBATE_PROVIDERS__API_DATA_GOV_KEY; without one the search reports it not configured.
+#
 # Google News is off. Its items can rarely be traced to the publisher's own URL without asking
 # Google, which the platform does not do (PM ruling 2026-10-22).
 topic: health-insurance
@@ -25,3 +29,5 @@ feeds:
     review: awaiting_coach_review
 google_news:
   enabled: false
+search_topics: [policy-2026-27-nhi]
+government_providers: [federal_register, govinfo]

@@ -13,6 +13,12 @@ an unknown key (a misspelled `goggle_news:`), a feed URL that is not absolute ht
 listed twice, or a `topic:` that is not the file's own name. :func:`load_feed_directory` reads every
 `*.yaml` in a directory, so a topic is added by adding a file.
 
+A file can also name the debate topics it applies to (`search_topics`, the ids `search --topic` takes)
+and the government providers a search on one of them asks (`government_providers`): the Federal
+Register and GovInfo run only for a search whose topic lists them, never for every search
+(v1-e07-t07; :data:`~debate_core.application.settings.TOPIC_ENABLED_PROVIDERS`).
+:func:`topic_providers` and :func:`search_topic_ids` read them for the search.
+
 Google News is off unless a topic turns it on (`google_news.enabled: true`), because the publisher URL
 of a Google News item can rarely be resolved without asking Google, which this platform does not do
 (PM ruling 2026-10-22); see :mod:`~debate_core.integrations.discovery.google_news_rss`.
@@ -30,6 +36,8 @@ from urllib.parse import urlsplit
 import yaml
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from debate_core.application.settings import TOPIC_ENABLED_PROVIDERS, SearchProviderName
+
 __all__ = [
     "FeedConfig",
     "FeedConfigError",
@@ -39,6 +47,8 @@ __all__ = [
     "feeds_of",
     "load_feed_config",
     "load_feed_directory",
+    "search_topic_ids",
+    "topic_providers",
 ]
 
 TOPIC_NAME: Final = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -98,6 +108,34 @@ class FeedConfig(_ConfigModel):
     google_news: GoogleNewsConfig = Field(
         default_factory=GoogleNewsConfig, description="Google News search for this topic; off by default."
     )
+    search_topics: tuple[Annotated[str, Field(pattern=TOPIC_NAME.pattern)], ...] = Field(
+        default=(),
+        description=(
+            "The debate topics this file applies to, as a search names them with --topic "
+            "(`policy-2026-27-nhi`); v1-e07-t07."
+        ),
+    )
+    government_providers: tuple[SearchProviderName, ...] = Field(
+        default=(),
+        description="The government providers a search on one of `search_topics` asks (v1-e07-t07).",
+    )
+
+    @model_validator(mode="after")
+    def _check_the_government_providers(self) -> Self:
+        others = [name.value for name in self.government_providers if name not in TOPIC_ENABLED_PROVIDERS]
+        if others:
+            allowed = ", ".join(sorted(name.value for name in TOPIC_ENABLED_PROVIDERS))
+            raise ValueError(
+                f"government_providers lists {', '.join(others)}; only government providers are enabled "
+                f"per topic ({allowed}), every other one by providers.enabled alone"
+            )
+        if len(set(self.government_providers)) != len(self.government_providers):
+            raise ValueError("government_providers lists a provider twice")
+        if self.government_providers and not self.search_topics:
+            raise ValueError("government_providers is set but there are no search_topics for them to run on")
+        if len(set(self.search_topics)) != len(self.search_topics):
+            raise ValueError("search_topics lists a topic twice")
+        return self
 
     @model_validator(mode="after")
     def _check_no_feed_twice(self) -> Self:
@@ -138,3 +176,21 @@ def feeds_of(topics: Sequence[FeedConfig]) -> tuple[FeedSource, ...]:
         for feed in topic.feeds:
             seen.setdefault(feed.url, feed)
     return tuple(seen.values())
+
+
+def topic_providers(topics: Sequence[FeedConfig]) -> dict[str, frozenset[str]]:
+    """Each debate topic the files name, with the government providers a search on it asks.
+
+    Joined across files: two files naming one topic give it the providers of both. A topic a file names
+    with no government providers is there with none.
+    """
+    enabled: dict[str, set[str]] = {}
+    for config in topics:
+        for topic in config.search_topics:
+            enabled.setdefault(topic, set()).update(name.value for name in config.government_providers)
+    return {topic: frozenset(names) for topic, names in enabled.items()}
+
+
+def search_topic_ids(topics: Sequence[FeedConfig]) -> tuple[str, ...]:
+    """Every debate topic the files name, each once, in file and then listing order."""
+    return tuple(dict.fromkeys(topic for config in topics for topic in config.search_topics))

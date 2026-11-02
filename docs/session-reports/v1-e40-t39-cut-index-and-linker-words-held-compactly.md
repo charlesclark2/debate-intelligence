@@ -259,9 +259,51 @@ there, and the session will write the blocks again.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-02
 
 **Notes:**
+
+Accepted, with the Goal `InProgress` until the operator's whole-store check. At 250 sources the
+peak fell from 1.24 GB to 0.30 GB. The index's step fell from 971 MB to 14 MB, and the linker's to
+nothing measurable. The three aggregates kept the same SHA-256.
+
+1. **The deviation (building before proposing, and not using sorted 64-bit arrays) is ruled (a):
+   accept the exact keys.**
+   * The reasoning holds: numpy isn't in debate_core or the image; a set of 64-bit hashes costs about
+     what exact keys do (your 94-bytes-a-word trial); and few pairs are compared.
+   * Holding 4-byte word numbers and making each shingle set when it's compared is smaller than the
+     arrays would be.
+   * The keys are exact, so the forbidden "hash match accepted without confirming the strings" can't
+     arise. The test that makes every key's hash collide shows that clusters don't move, and mutant 1
+     shows that an index reduced to hashes would move them.
+   * Building before the answer came was the operator-away rule applied to a reversible choice, and
+     you recorded it as such.
+2. **ac1:**
+   * Both memory tests fail against the start commit's code (about 204 and 54 bytes per word).
+   * The clustering answers match the oracle, which is the start commit's clusterer kept verbatim, on
+     a fixed corpus and 300 generated ones.
+   * t36's six byte tests now use that oracle.
+   * Real data: the 250 sources' three digests equal both the old code's and t36's, and so does the
+     5,470-body clustering digest.
+3. **Mutants:** 10, all caught. The `IndexError` crash wasn't counted and was replaced by an
+   assertion-catching form, which is right.
+4. **Decisions accepted:**
+   * shingle keys as word-number bytes, with a short body's key never equal to a five-word one;
+   * vocabulary order by fingerprint;
+   * the 262,144-shingle kept-set bound;
+   * `CutIndex` refusing another body's words.
+5. **Follow-ups:**
+   * MinHash's band buckets, about 0.3 GB over the whole store: the whole-store run decides whether
+     they need a task.
+   * The node's `-k` not selecting the new files: noted for future specs, which will name test files.
+6. **The operator's whole-store check (ac2)** gates any run image carrying this commit, not the merge.
+   The operator runs blocks 1 and 2 when he's back at a desk with Docker; block 3 is optional, because
+   t36's figures stand as the "before". The PM records the result and sets the Goal `Succeeded` if
+   the digests match.
+7. **Closing checks:** the affected set (328 files) is left to `ci` (agreement 10). The bounded runs
+   (248, 2,056, 2,262 and 179 passed), ruff, pyright, lint-imports, thin handlers, the specs and the
+   doc checks are clean.
+8. **Merge:** `scripts/task pr --partial` once `ci` is green.

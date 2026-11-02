@@ -7,6 +7,11 @@ rebuild stopped holding every card of a caselist at once. It belongs beside t31'
 sizes, seconds and memory only: no school, team, file name, path, digest or card text
 (`docs/policies/caselist-data-use.md`).
 
+**Since `v1-e40-t39` (2026-11-01) the clusterer's index and the linker's words are held as word
+numbers**, and the 250-source peak below fell from 1.24 GB to 0.30 GB: see
+[The compact index](#the-compact-index-v1-e40-t39). The rest of this record is t36's, as it was
+measured.
+
 **What it found: the rebuild no longer holds the cards, but that was not what made it large.** Reading
 the cards source by source took about 85 MiB off the peak at 250 `hspolicy26` sources and about 0.2 GB
 at 500. The peak is set by the near-duplicate clusterer's index of the distinct full card bodies
@@ -102,6 +107,48 @@ would be about 3.6 × 6.25 = 22.5 GB; it should grow more slowly than that, beca
 repeat earlier cards, but by how much is not known until a season is measured. The parse workers are
 stopped before the rebuild starts, so the rebuild has the task's memory to itself.
 
+## The compact index (`v1-e40-t39`)
+
+Measured on 2026-11-01 by `v1-e40-t39`, with the same method: the same 250 sources in a fresh
+copy-on-write clone for each run, the run image `v1.1.0-dev.289`, `docker run --network none -m 7g`,
+the code under test mounted read-only first on `PYTHONPATH`. "Strings" is the commit the task started
+from (`b480d79`), whose rebuild is t36's; "word numbers" is the task's. A second script marked each
+step of the placement as it ran, sampling `VmRSS` twice a second. Load average 4 to 8.
+
+`CutIndex` now holds each distinct body as the numbers of its words in one vocabulary, four bytes a
+word, and makes a body's shingle set when two bodies are compared, keeping the most recent up to a
+bound of 262,144 shingles. The linker reads full cards' words from the same numbers. Nothing per
+word or per shingle is a string any more (`debate_core/evidence/near_duplicates.py`, "How the bodies
+are held").
+
+| Run | Seconds | Main-process peak (`VmHWM`) | Container peak (cgroup) | Aggregates |
+|---|---|---|---|---|
+| strings | 72.5 | 1,243,557,888 | 1,535,889,408 | `index.jsonl` `e002eebc…`, `failures.jsonl` `3f9e9744…`, `occurrences.jsonl` `74c61b01…` |
+| word numbers | 54.4 | 297,107,456 | 575,619,072 | the same three SHA-256 values, which are also t36's at 250 sources and those of the clone's own aggregates |
+
+By step, from the second script's runs (strings 61.3 s, word numbers 55.4 s; `VmHWM` 1,243,529,216
+and 295,038,976):
+
+| Step | Strings | Word numbers |
+|---|---|---|
+| Reading 246 parsed sources, giving each card to the placer | 90 MB to 218 MB | 91 MB to 215 MB |
+| Building the index over 5,470 distinct bodies, 5,064,524 words | 218 MB to 1,190 MB: 971 MB | 215 MB to 229 MB: 14 MB, with the word numbers made just before it |
+| MinHash bands, candidate pairs, joins and the cut step: the most sampled | 1,242 MB | 293 MB |
+| The clusterer returns | 422 MB | 292 MB |
+| The linker is first asked about an abbreviated card | 490 MB: 68 MB more | 292 MB: nothing more |
+
+The linker's 68 MB is resident growth: its tuples of strings took memory the clusterer had just freed
+as well, so they hold more than that (about 60 bytes a word by `tracemalloc` in
+`test_card_placer_linker_words_held_compactly.py`, about 5 now). Clustering the same 5,470 bodies
+outside the rebuild gave the same cluster for every fingerprint, old code against new.
+
+**Over the whole store** the figures are the operator's, by the block in the task's session report.
+At t36's rate the index's 971 MB at 250 sources was 5.43 GB of the 6.25 GB whole-store peak, and the
+linker's tuples about 2 GB. The word numbers grow by about four bytes a word, so the index should
+hold well under 0.2 GB of the store's words. The term the clusterer now grows by most is its MinHash
+bands, unchanged by this task: 32 bucket keys per body, about 0.3 GB over the whole store by t36's
+samples. Until the operator's run, that is an estimate, not a measurement.
+
 ## What follows from it
 
 * A full season's rebuild in 32 GB depends on the clusterer's index, not on how the cards are read.
@@ -111,3 +158,5 @@ stopped before the rebuild starts, so the rebuild has the task's memory to itsel
   PM's ruling of 2026-11-01 files it as its own task, with every hash match confirmed by comparing
   strings, and keeps the run task at 32 GB until then. The linker's word lists are the next term
   that task will meet.
+* That task is `v1-e40-t39`: [The compact index](#the-compact-index-v1-e40-t39) above. It keeps no
+  hash at all: a shingle's key is its words' numbers, equal exactly when the words are.

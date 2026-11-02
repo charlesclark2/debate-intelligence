@@ -122,6 +122,29 @@ bodies, read from files in any order, in any process, produce the same ids. Whic
 equal similarity is refused, when joining both would put two texts that do not overlap together, is
 the one place a fingerprint decides.
 
+## How the bodies are held (`v1-e40-t39`)
+
+A season's distinct full bodies run to tens of millions of words, so :class:`CutIndex` keeps no
+string per word or per shingle. Each distinct word is numbered once, in :class:`BodyWords`, and a
+body is held as the numbers of its words, four bytes a word. A shingle is the bytes of its words'
+numbers (:func:`ordered_shingles`), and a body's shingle set is made from those numbers when two
+bodies are compared, then dropped; a few are kept, up to :data:`SHINGLE_SETS_KEPT` shingles, for
+the bodies compared most recently. A body's size, its two end shingles and which bodies hold which
+end are worked out once, while the index is built.
+
+A shingle key is not a hash of the shingle: two keys are equal exactly when their words are, since
+each number stands for one word. So nothing is matched by a hash alone. A set or a dict finds a key
+by its hash and then compares the key itself, and two different shingles whose hashes collide are
+two keys still; `test_cut_index_held_compactly.py` plants keys that all have one hash and gets the
+same clusters. The MinHash signature is still taken over each shingle's text, rebuilt from the
+numbers, so the same pairs become candidates as before.
+
+Before, the index held every body's words as a list of strings and its shingles as a set of strings,
+about 180 bytes a word: 5.43 GB of the whole `hspolicy26` rebuild's 6.25 GB peak
+(`docs/data/caselist-rebuild-memory.md`). Comparing bodies is rare enough that making their sets
+again costs little: at 250 of its sources the clusterer compared about 18,000 pairs, against about
+five million shingles signed for MinHash.
+
 ## What a cluster is not
 
 Clustering never touches the text a card displays. It reads normalized words and returns ids.
@@ -146,10 +169,11 @@ from __future__ import annotations
 import hashlib
 import re
 import struct
-from collections import defaultdict
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from array import array
+from collections import OrderedDict, defaultdict
+from collections.abc import Callable, Hashable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Final
+from typing import Final, overload
 
 from pydantic import Field
 
@@ -165,9 +189,12 @@ __all__ = [
     "MIN_CUT_SHARE",
     "MIN_OVERLAP_SHARE",
     "SHINGLE_SIZE",
+    "SHINGLE_SETS_KEPT",
     "SHORT_BODY_SHINGLES",
+    "BodyWords",
     "CutIndex",
     "NearDuplicateThresholds",
+    "SpelledWords",
     "Witnesses",
     "cluster_near_duplicates",
     "confirms_a_cut",
@@ -177,6 +204,7 @@ __all__ = [
     "joining_target",
     "matching_words",
     "minhash_signature",
+    "ordered_shingles",
     "shingles",
     "too_common",
     "witnesses",
@@ -217,15 +245,26 @@ MAX_CONTAINER_CLUSTERS: Final = 8
 """A short body whose end shingles are both held by more other clusters than this, as the clusters
 stand when it is considered, is left alone."""
 
+SHINGLE_SETS_KEPT: Final = 1 << 18
+"""Shingles, over all the sets kept, that :class:`CutIndex` keeps made between comparisons: the
+sets of the bodies compared most recently. A set larger than this is made each time it is asked for."""
+
 _SIGNATURE_BYTES: Final = 4 * MINHASH_PERMUTATIONS
 _SIGNATURE_LAYOUT: Final = struct.Struct(f"<{MINHASH_PERMUTATIONS}I")
 _EMPTY_SLOT: Final = 0xFFFFFFFF
+
+#: A word's number in :class:`BodyWords`: an unsigned 32-bit integer.
+_WORD_NUMBER: Final = "I"
+_WORD_NUMBER_BYTES: Final = 4
+#: The bytes of one shingle of :data:`SHINGLE_SIZE` words.
+_SHINGLE_BYTES: Final = SHINGLE_SIZE * _WORD_NUMBER_BYTES
 
 #: A hyphen at a line break, once whitespace has been collapsed: `commis- sion`.
 _LINE_BREAK_HYPHENATION: Final = re.compile(r"(?<=\w)- (?=\w)")
 _WORD: Final = re.compile(r"\w+")
 
 assert LSH_BANDS * LSH_ROWS_PER_BAND == MINHASH_PERMUTATIONS  # noqa: S101 - a module invariant
+assert array(_WORD_NUMBER).itemsize == _WORD_NUMBER_BYTES  # noqa: S101 - a module invariant
 
 
 class NearDuplicateThresholds(DomainModel):
@@ -272,20 +311,22 @@ def minhash_signature(shingle_set: Iterable[str], seed: str = MINHASH_SEED) -> t
     return tuple(minimums)
 
 
-def jaccard(left: frozenset[str], right: frozenset[str]) -> float:
+def jaccard(left: frozenset[Hashable], right: frozenset[Hashable]) -> float:
     """Shared shingles over all shingles. 0.0 when both are empty."""
     union = len(left | right)
     return len(left & right) / union if union else 0.0
 
 
-def containment(left: frozenset[str], right: frozenset[str]) -> float:
+def containment(left: frozenset[Hashable], right: frozenset[Hashable]) -> float:
     """Shared shingles over the smaller set: how much of the shorter body the longer one contains."""
     smaller = min(len(left), len(right))
     return len(left & right) / smaller if smaller else 0.0
 
 
-def contained_but_for_one_word(short: Sequence[str], long: Sequence[str]) -> bool:
+def contained_but_for_one_word(short: Sequence[Hashable], long: Sequence[Hashable]) -> bool:
     """Whether `short` is in `long` as one run of words, except at one word.
+
+    The words may be strings or their numbers in :class:`BodyWords`; they are only compared.
 
     The one word may be changed (`forty`, `fourty`), split in two (`students`, `stud ents`), run
     together from two, dropped or added. At least :data:`SHINGLE_SIZE` words of `short` before it
@@ -317,10 +358,10 @@ _ONE_WORD_CHANGES: Final = ((1, 1), (1, 2), (2, 1), (0, 1), (1, 0))
 
 
 def confirms_a_cut(
-    cut_set: frozenset[str],
-    holder_set: frozenset[str],
-    cut_words: Sequence[str],
-    holder_words: Sequence[str],
+    cut_set: frozenset[Hashable],
+    holder_set: frozenset[Hashable],
+    cut_words: Sequence[Hashable],
+    holder_words: Sequence[Hashable],
     limits: NearDuplicateThresholds,
 ) -> bool:
     """Whether a body that holds an end of `cut` is confirmed to contain it.
@@ -335,26 +376,150 @@ def confirms_a_cut(
     return len(cut_set) < SHORT_BODY_SHINGLES and contained_but_for_one_word(cut_words, holder_words)
 
 
+def ordered_shingles(numbers: bytes) -> list[bytes]:
+    """A body's shingles in order, as keys: each the bytes of its words' numbers in :class:`BodyWords`.
+
+    :func:`word_shingles`, read through the numbers: every run of :data:`SHINGLE_SIZE` words, or one
+    of all of them when there are fewer. Two keys are equal exactly when their words are, because
+    each number stands for one word and a shorter body's key is shorter.
+    """
+    if len(numbers) <= _SHINGLE_BYTES:
+        return [numbers] if numbers else []
+    return [
+        numbers[start : start + _SHINGLE_BYTES]
+        for start in range(0, len(numbers) - _SHINGLE_BYTES + 1, _WORD_NUMBER_BYTES)
+    ]
+
+
+class SpelledWords(Sequence[str]):
+    """One body's words, read from their numbers as they are asked for: what the linker compares an
+    abbreviated card's words with (:class:`~debate_core.evidence.abbreviated_links.FullCardWords`).
+    A slice is a tuple of the words, so it compares equal to the tuple of the same words."""
+
+    __slots__ = ("_numbers", "_vocabulary")
+
+    def __init__(self, numbers: array[int], vocabulary: Sequence[str]) -> None:
+        self._numbers = numbers
+        self._vocabulary = vocabulary
+
+    def __len__(self) -> int:
+        return len(self._numbers)
+
+    @overload
+    def __getitem__(self, position: int) -> str: ...
+    @overload
+    def __getitem__(self, position: slice) -> tuple[str, ...]: ...
+    def __getitem__(self, position: int | slice) -> str | tuple[str, ...]:
+        if isinstance(position, slice):
+            return tuple(map(self._vocabulary.__getitem__, self._numbers[position]))
+        return self._vocabulary[self._numbers[position]]
+
+
+class BodyWords(Mapping[str, "array[int]"]):
+    """Every body's words as the clusterer reads them (:func:`matching_words`), each held as its
+    number in one vocabulary: four bytes a word, and each distinct word's text once.
+
+    Maps a fingerprint to its body's word numbers. Two words have one number exactly when they are
+    the same string, so comparing numbers is comparing the words.
+    """
+
+    def __init__(self, bodies: Mapping[str, str]) -> None:
+        numbered: dict[str, int] = {}
+        self._numbers = {
+            fingerprint: array(
+                _WORD_NUMBER, [numbered.setdefault(word, len(numbered)) for word in matching_words(text)]
+            )
+            for fingerprint, text in sorted(bodies.items())
+        }
+        self.vocabulary: tuple[str, ...] = tuple(numbered)
+        """Each word once, at its number."""
+
+    def __getitem__(self, fingerprint: str) -> array[int]:
+        return self._numbers[fingerprint]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._numbers)
+
+    def __len__(self) -> int:
+        return len(self._numbers)
+
+    def spelled(self, fingerprint: str) -> SpelledWords:
+        """The body's words as strings, read from the vocabulary as they are asked for."""
+        return SpelledWords(self._numbers[fingerprint], self.vocabulary)
+
+    def shingles_of(self, fingerprint: str) -> list[bytes]:
+        """The body's shingle keys in order (:func:`ordered_shingles`)."""
+        return ordered_shingles(self._numbers[fingerprint].tobytes())
+
+
+class _ShingleSets(Mapping[str, frozenset[bytes]]):
+    """Each body's set of shingle keys, made from its word numbers when it is asked for. The sets of
+    the bodies asked for most recently are kept, up to :data:`SHINGLE_SETS_KEPT` shingles in all."""
+
+    def __init__(self, words: BodyWords) -> None:
+        self._words = words
+        self._kept: OrderedDict[str, frozenset[bytes]] = OrderedDict()
+        self._shingles_kept = 0
+
+    def __getitem__(self, fingerprint: str) -> frozenset[bytes]:
+        found = self._kept.get(fingerprint)
+        if found is not None:
+            self._kept.move_to_end(fingerprint)
+            return found
+        made = frozenset(self._words.shingles_of(fingerprint))
+        if len(made) <= SHINGLE_SETS_KEPT:
+            self._kept[fingerprint] = made
+            self._shingles_kept += len(made)
+            while self._shingles_kept > SHINGLE_SETS_KEPT:
+                _, dropped = self._kept.popitem(last=False)
+                self._shingles_kept -= len(dropped)
+        return made
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._words)
+
+    def __len__(self) -> int:
+        return len(self._words)
+
+
 class CutIndex:
     """Which bodies hold which, worked out from the bodies alone, before any cluster exists.
 
     The clusterer and :mod:`debate_core.evidence.cluster_diagnosis` both read containment from
     here, so a diagnosis cannot drift from the rule it explains. Every answer is cached: a body is
-    asked about many times, in every round of the cut step.
+    asked about many times, in every round of the cut step. The bodies are held as this module's
+    docstring says ("How the bodies are held"): `words` maps each to its word numbers, and `sets`
+    makes its shingle set when it is asked for.
+
+    `words`, when given, are the :class:`BodyWords` of these same bodies, made by the caller to
+    read them again after the index is gone, as the linker does.
     """
 
-    def __init__(self, bodies: Mapping[str, str], thresholds: NearDuplicateThresholds | None = None) -> None:
+    def __init__(
+        self,
+        bodies: Mapping[str, str],
+        thresholds: NearDuplicateThresholds | None = None,
+        *,
+        words: BodyWords | None = None,
+    ) -> None:
         self.limits = thresholds or NearDuplicateThresholds()
         self.fingerprints: list[str] = sorted(bodies)
-        self.words = {fingerprint: matching_words(bodies[fingerprint]) for fingerprint in self.fingerprints}
-        ordered = {fingerprint: word_shingles(self.words[fingerprint]) for fingerprint in self.fingerprints}
-        self.sets = {fingerprint: frozenset(ordered[fingerprint]) for fingerprint in self.fingerprints}
-        self.ends = {fingerprint: (runs[0], runs[-1]) for fingerprint, runs in ordered.items() if runs}
+        if words is not None and list(words) != self.fingerprints:
+            raise ValueError("the words given are not of the bodies given")
+        self.words: BodyWords = words if words is not None else BodyWords(bodies)
+        self.sets: Mapping[str, frozenset[bytes]] = _ShingleSets(self.words)
+        self._sizes: dict[str, int] = {}
+        self.ends: dict[str, tuple[bytes, bytes]] = {}
+        for fingerprint in self.fingerprints:
+            runs = self.words.shingles_of(fingerprint)
+            self._sizes[fingerprint] = len(set(runs))
+            if runs:
+                self.ends[fingerprint] = (runs[0], runs[-1])
 
         end_shingles = {shingle for pair in self.ends.values() for shingle in pair}
-        holders: defaultdict[str, set[str]] = defaultdict(set)
+        holders: defaultdict[bytes, set[str]] = defaultdict(set)
         for fingerprint in self.fingerprints:
-            for shingle in self.sets[fingerprint] & end_shingles:
+            for shingle in end_shingles.intersection(self.words.shingles_of(fingerprint)):
                 holders[shingle].add(fingerprint)
         self._candidates: dict[str, list[str]] = {}
         self._both_ends: dict[str, list[str]] = {}
@@ -388,7 +553,11 @@ class CutIndex:
 
     def size(self, fingerprint: str) -> int:
         """Shingles in the body."""
-        return len(self.sets[fingerprint])
+        return self._sizes[fingerprint]
+
+    def shingle_texts(self, fingerprint: str) -> frozenset[str]:
+        """The body's shingles as text, as :func:`shingles` gives them: what MinHash signs."""
+        return frozenset(word_shingles(self.words.spelled(fingerprint)[:]))
 
     def by_size(self, fingerprints: Iterable[str]) -> list[str]:
         """Smallest first, then by fingerprint: the order a body's containers are tried in."""
@@ -573,21 +742,23 @@ def cluster_near_duplicates(
     thresholds: NearDuplicateThresholds | None = None,
     *,
     seed: str = MINHASH_SEED,
+    words: BodyWords | None = None,
 ) -> dict[str, str]:
     """Group card bodies into near-duplicate clusters.
 
     `bodies` maps each exact fingerprint to one body with that fingerprint (which body does not
     matter: they normalize identically). The result maps every fingerprint to its cluster id, the
-    smallest fingerprint in its cluster; a body that matched nothing is its own cluster.
+    smallest fingerprint in its cluster; a body that matched nothing is its own cluster. `words`,
+    when given, are the bodies' :class:`BodyWords`, for a caller that reads them afterwards.
     """
-    index = CutIndex(bodies, thresholds)
+    index = CutIndex(bodies, thresholds, words=words)
     shingle_sets = index.sets
 
     buckets: defaultdict[tuple[int, tuple[int, ...]], list[str]] = defaultdict(list)
     for fingerprint in index.fingerprints:
-        if not shingle_sets[fingerprint]:
+        if not index.size(fingerprint):
             continue
-        signature = minhash_signature(shingle_sets[fingerprint], seed)
+        signature = minhash_signature(index.shingle_texts(fingerprint), seed)
         for band in range(LSH_BANDS):
             rows = signature[band * LSH_ROWS_PER_BAND : (band + 1) * LSH_ROWS_PER_BAND]
             buckets[(band, rows)].append(fingerprint)

@@ -16,7 +16,10 @@ What each test below holds the rebuild to:
   camp files at two paths of one release, a withdrawn camp path, and generated stores. That rebuild
   is kept below as the oracle, copied from `caselist_parse.py` and `caselist_card_stats.py` at the
   commit this task started from (`61d3191`), with only its names changed. It is the old code, not
-  the code under test, so it can disagree with it (working agreement 6).
+  the code under test, so it can disagree with it (working agreement 6). Since `v1-e40-t39` it
+  clusters with the clusterer from before that task too (`near_duplicates_as_before.py`), whose
+  index held word and shingle strings, so these stores also check the compact index and the
+  linker's words read from it.
 * **The placer places as the one list did**, on generated lists of cards (Hypothesis).
 
 Every source here is synthetic: invented words, invented paths, no real file's text or name.
@@ -93,15 +96,16 @@ from debate_core.evidence.abbreviated_links import (
     short_cite_key,
 )
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION, card_fingerprint, fingerprint_text
-from debate_core.evidence.near_duplicates import (
-    NearDuplicateThresholds,
-    cluster_near_duplicates,
-    matching_words,
-)
 from debate_core.integrations.local import FsEvidenceObjectStore
 from debate_core.integrations.local.parsed_store import LocalParsedStore
 from debate_core.integrations.local.suppression_list import local_suppression_list_file
 from debate_core.testing.fakes.caselist import build_fake_caselist_repository
+
+from ..evidence.near_duplicates_as_before import (
+    NearDuplicateThresholds,
+    cluster_near_duplicates,
+    matching_words,
+)
 
 pytestmark = pytest.mark.anyio
 

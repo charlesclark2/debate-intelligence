@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 
-from tests.smoke.installed_build import InstalledCli
+from tests.smoke.installed_build import REPO_ROOT, InstalledCli
 
 from debate_cli.exit_codes import ExitCode
 
@@ -40,26 +40,31 @@ def test_search_is_installed_with_its_options_and_exit_codes(installed_cli: Inst
 def test_an_installed_build_carries_the_taxonomy_ranking_table_and_feed_lists_it_searches_with(
     installed_cli: InstalledCli,
 ) -> None:
+    """Every feed list this checkout commits, beside the taxonomy, the table and the prompt (v1-e08-t09)."""
+    feed_lists = sorted(
+        f"config/feeds/{path.name}" for path in (REPO_ROOT / "config" / "feeds").glob("*.yaml")
+    )
+    assert "config/feeds/politics.yaml" in feed_lists
+    names = [
+        "config/argument_taxonomy.yaml",
+        "config/federated_ranking.yaml",
+        *feed_lists,
+        "prompts/search/expand.md",
+    ]
     probe = (
-        "import json\n"
+        "import json, sys\n"
         "from debate_cli.build_info import bundled_config_root\n"
         "root = bundled_config_root()\n"
-        "names = ['config/argument_taxonomy.yaml', 'config/federated_ranking.yaml', "
-        "'config/feeds/politics.yaml', 'prompts/search/expand.md']\n"
+        "names = sys.argv[1:]\n"
         "print(json.dumps(None if root is None else {name: (root / name).is_file() for name in names}))\n"
     )
 
-    run = installed_cli.run_program([str(installed_cli.build.interpreter), "-c", probe])
+    run = installed_cli.run_program([str(installed_cli.build.interpreter), "-c", probe, *names])
 
     assert run.exit_code == 0, run.output
     bundled = json.loads(run.stdout)
     if installed_cli.build.installed:
-        assert bundled == {
-            "config/argument_taxonomy.yaml": True,
-            "config/federated_ranking.yaml": True,
-            "config/feeds/politics.yaml": True,
-            "prompts/search/expand.md": True,
-        }
+        assert bundled == dict.fromkeys(names, True)
     else:
         assert bundled is None, "the checkout's console script is not stamped: it reads the checkout's copy"
 

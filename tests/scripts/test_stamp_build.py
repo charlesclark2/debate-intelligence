@@ -27,7 +27,12 @@ import pytest
 from pydantic import BaseModel
 
 from debate_core.application.budget import UnpricedModelError
+from debate_core.application.federated_ranking import (
+    FEDERATED_RANKING_CONFIG_PATH,
+    load_federated_ranking_config,
+)
 from debate_core.application.ports.model_router import ModelRouter
+from debate_core.application.query_expansion import ARGUMENT_TAXONOMY_PATH, load_argument_taxonomy
 from debate_core.application.settings import Settings, load_settings
 from debate_core.domain.model_contracts import (
     EmbeddingResponse,
@@ -38,6 +43,7 @@ from debate_core.domain.model_contracts import (
     RerankResponse,
     TaskClass,
 )
+from debate_core.integrations.discovery.feed_config import load_feed_directory
 from debate_core.integrations.models import RoutingPolicy, build_model_router
 from debate_core.integrations.models.prompt_registry import PromptRegistry
 
@@ -137,7 +143,13 @@ def test_stamp_bundles_the_committed_profiles_and_routing_files(checkout: Path, 
     sb.stamp(checkout, info(), tmp_path / "dist")
 
     bundled = checkout / sb.BUNDLED_CONFIG / "config"
-    assert sorted(path.relative_to(bundled).as_posix() for path in bundled.rglob("*") if path.is_file()) == [
+    assert sorted(
+        path.relative_to(bundled).as_posix()
+        for path in bundled.rglob("*")
+        if path.is_file() and path.parent.name != "feeds"
+    ) == [
+        "argument_taxonomy.yaml",
+        "federated_ranking.yaml",
         "format_profiles/flow.yaml",
         "format_profiles/plain.yaml",
         "format_profiles/team-default.yaml",
@@ -151,6 +163,73 @@ def test_stamp_bundles_the_committed_profiles_and_routing_files(checkout: Path, 
     ]
     # The E34 policy gate travels with the build.
     assert "api_enabled = true" in (bundled / "profiles" / "dev.toml").read_text(encoding="utf-8")
+
+
+def test_stamp_bundles_the_taxonomy_and_ranking_table_search_reads_unchanged(
+    checkout: Path, tmp_path: Path
+) -> None:
+    """An installed `search` expands with this taxonomy and ranks with this table (v1-e08-t09)."""
+    sb.stamp(checkout, info(), tmp_path / "dist")
+
+    for relative in ("config/argument_taxonomy.yaml", "config/federated_ranking.yaml"):
+        bundled = checkout / sb.BUNDLED_CONFIG / relative
+        assert bundled.read_bytes() == (REPO_ROOT / relative).read_bytes(), relative
+
+
+def test_stamp_bundles_every_feed_list_but_no_readme(checkout: Path, tmp_path: Path) -> None:
+    """The `rss` and `google_news` providers read every `config/feeds/*.yaml` (v1-e08-t09).
+
+    The expected list is read from the committed directory, so a new topic's feed list is bundled
+    without editing this test, as the prompts are.
+    """
+    sb.stamp(checkout, info(), tmp_path / "dist")
+
+    committed = REPO_ROOT / "config" / "feeds"
+    assert (committed / "README.md").is_file(), "the README this test expects to be left out has gone"
+    expected = sorted(path.name for path in committed.glob("*.yaml"))
+    assert {"health-insurance.yaml", "politics.yaml"} <= set(expected)
+
+    bundled = checkout / sb.BUNDLED_CONFIG / "config" / "feeds"
+    assert sorted(path.name for path in bundled.iterdir()) == expected
+    for name in expected:
+        assert (bundled / name).read_bytes() == (committed / name).read_bytes(), name
+
+
+def test_the_bundled_search_configuration_loads_as_search_loads_it(checkout: Path, tmp_path: Path) -> None:
+    """The container reads these three from an installed build's bundled root; each loads and checks."""
+    sb.stamp(checkout, info(), tmp_path / "dist")
+    root = checkout / sb.BUNDLED_CONFIG
+
+    taxonomy = load_argument_taxonomy(root / ARGUMENT_TAXONOMY_PATH)
+    assert taxonomy == load_argument_taxonomy(REPO_ROOT / ARGUMENT_TAXONOMY_PATH)
+    assert "politics-da" in {argument.id for argument in taxonomy.arguments}
+    ranking = load_federated_ranking_config(root / FEDERATED_RANKING_CONFIG_PATH)
+    assert ranking == load_federated_ranking_config(REPO_ROOT / FEDERATED_RANKING_CONFIG_PATH)
+    topics = load_feed_directory(root / "config" / "feeds")
+    assert topics == load_feed_directory(REPO_ROOT / "config" / "feeds")
+    assert len(topics) >= 2
+
+
+@pytest.mark.parametrize(
+    ("missing", "message"),
+    [
+        ("config/argument_taxonomy.yaml", "argument_taxonomy.yaml"),
+        ("config/federated_ranking.yaml", "federated_ranking.yaml"),
+        ("config/feeds", "feed lists"),
+    ],
+)
+def test_stamp_refuses_a_checkout_without_what_search_reads(
+    missing: str, message: str, checkout: Path, tmp_path: Path
+) -> None:
+    path = checkout / missing
+    if path.is_dir():
+        for feed_list in path.glob("*.yaml"):
+            feed_list.unlink()
+    else:
+        path.unlink()
+
+    with pytest.raises(sb.StampError, match=message):
+        sb.stamp(checkout, info(), tmp_path / "dist")
 
 
 def test_stamp_bundles_the_committed_prompts_and_their_lock_but_no_readme(
@@ -235,7 +314,7 @@ def write_wheel(
 
 
 def cli_members(version: str = VERSION) -> dict[str, str]:
-    members = {member: "" for member in sb.REQUIRED_CLI_MEMBERS}
+    members = {member: "" for member in sb.required_cli_members(REPO_ROOT)}
     members["debate_cli/_build_info.py"] = sb.render_build_info_module(info(version=version))
     members["debate_cli/app.py"] = ""
     return members
@@ -306,6 +385,94 @@ def test_a_wheel_without_cuts_prompts_or_its_default_format_profile_is_refused(
     write_wheel(dist, "debate_cli", VERSION, members, [f"debate-core=={VERSION}"])
 
     assert sb.check_wheels(dist, VERSION) == [f"debate_cli-{VERSION}-py3-none-any.whl: missing {member}"]
+
+
+@pytest.mark.parametrize(
+    "member",
+    [
+        "debate_cli/_bundled_config/config/argument_taxonomy.yaml",
+        "debate_cli/_bundled_config/config/federated_ranking.yaml",
+        "debate_cli/_bundled_config/config/feeds/health-insurance.yaml",
+        "debate_cli/_bundled_config/config/feeds/politics.yaml",
+        "debate_cli/_bundled_config/prompts/search/expand.md",
+    ],
+)
+def test_a_wheel_without_what_search_reads_is_refused(member: str, tmp_path: Path) -> None:
+    """The taxonomy, the ranking table, each committed feed list and `--expand-llm`'s prompt (v1-e08-t09)."""
+    dist = good_dist(tmp_path / "dist")
+    members = cli_members()
+    del members[member]
+    write_wheel(dist, "debate_cli", VERSION, members, [f"debate-core=={VERSION}"])
+
+    assert sb.check_wheels(dist, VERSION) == [f"debate_cli-{VERSION}-py3-none-any.whl: missing {member}"]
+
+
+def test_check_wheels_requires_a_feed_list_the_checkout_commits_after_the_wheel_was_built(
+    tmp_path: Path,
+) -> None:
+    """The feed lists required are the checkout's own, so a new topic is required without a code edit."""
+    repository = tmp_path / "checkout"
+    shutil.copytree(REPO_ROOT / "config" / "feeds", repository / "config" / "feeds")
+    dist = good_dist(tmp_path / "dist")
+    assert sb.check_wheels(dist, VERSION, repository=repository) == []
+
+    shutil.copyfile(
+        repository / "config" / "feeds" / "politics.yaml", repository / "config" / "feeds" / "new-topic.yaml"
+    )
+
+    assert sb.check_wheels(dist, VERSION, repository=repository) == [
+        f"debate_cli-{VERSION}-py3-none-any.whl: missing "
+        "debate_cli/_bundled_config/config/feeds/new-topic.yaml"
+    ]
+
+
+def test_the_check_wheels_command_reads_the_feed_lists_of_the_checkout_it_names(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repository = tmp_path / "checkout"
+    shutil.copytree(REPO_ROOT / "config" / "feeds", repository / "config" / "feeds")
+    shutil.copyfile(
+        repository / "config" / "feeds" / "politics.yaml", repository / "config" / "feeds" / "new-topic.yaml"
+    )
+    dist = good_dist(tmp_path / "dist")
+
+    exit_code = sb.main(
+        ["check-wheels", "--version", VERSION, "--dist", str(dist), "--repository", str(repository)]
+    )
+
+    assert exit_code == 1
+    assert "missing debate_cli/_bundled_config/config/feeds/new-topic.yaml" in capsys.readouterr().err
+
+
+def test_check_wheels_refuses_when_the_checkout_commits_no_feed_lists_to_compare(tmp_path: Path) -> None:
+    """With nothing to compare with, it cannot say every feed list was bundled, so it refuses."""
+    repository = tmp_path / "checkout"
+    (repository / "config" / "feeds").mkdir(parents=True)
+
+    problems = sb.check_wheels(good_dist(tmp_path / "dist"), VERSION, repository=repository)
+
+    assert len(problems) == 1
+    assert "no committed feed lists" in problems[0]
+
+
+def test_a_wheel_of_what_the_stamp_bundled_passes_check_wheels(checkout: Path, tmp_path: Path) -> None:
+    """The stamp and check-wheels agree: a wheel holding exactly the stamped package files passes.
+
+    A stamp that left out a file check-wheels requires (one feed list, say) fails here, as it would
+    fail the pre-release workflow.
+    """
+    sb.stamp(checkout, info(), tmp_path / "dist")
+    package = checkout / sb.CLI_PACKAGE
+    members = {
+        f"debate_cli/{path.relative_to(package).as_posix()}": path.read_text(encoding="utf-8")
+        for path in package.rglob("*")
+        if path.is_file()
+    }
+    dist = tmp_path / "wheels"
+    write_wheel(dist, "debate_core", VERSION, {"debate_core/__init__.py": ""}, ["pydantic>=2.9"])
+    write_wheel(dist, "debate_cli", VERSION, members, [f"debate-core=={VERSION}"])
+
+    assert sb.check_wheels(dist, VERSION, repository=checkout) == []
 
 
 def test_a_version_mismatch_is_refused(tmp_path: Path) -> None:

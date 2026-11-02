@@ -31,7 +31,7 @@ from debate_core.application.federated_search_types import (
     StagesInOrder,
 )
 from debate_core.domain import AccessStatus, Article, ArticleIdentifiers, SearchFilters, SourceType
-from debate_core.domain.discovery import CandidateResult, ProviderHealth
+from debate_core.domain.discovery import CandidateResult, DatePrecision, ProviderHealth
 from debate_core.testing.fakes.clock_and_ids import FixedClock, SequentialIdGenerator
 from debate_core.testing.fakes.persistence import InMemoryArticleRepository, InMemorySearchRepository
 from debate_core.testing.fakes.providers import FakeSearchProvider
@@ -223,3 +223,32 @@ def test_the_service_stores_the_matched_results_and_returns_the_ranking_and_arti
     assert [result.article_id for result in outcome.results] == [
         article.article_id for article in outcome.articles
     ]
+
+
+@pytest.mark.parametrize(
+    ("published_at", "precision", "stored"),
+    [
+        (datetime(2021, 1, 1, tzinfo=UTC), DatePrecision.YEAR, None),
+        (datetime(2023, 3, 1, tzinfo=UTC), DatePrecision.MONTH, None),
+        (datetime(2022, 5, 17, tzinfo=UTC), DatePrecision.DAY, datetime(2022, 5, 17, tzinfo=UTC)),
+        (datetime(2022, 5, 17, tzinfo=UTC), None, datetime(2022, 5, 17, tzinfo=UTC)),
+    ],
+    ids=["year", "month", "day", "no precision"],
+)
+def test_a_discovery_only_article_never_turns_a_year_or_a_month_into_a_day(
+    published_at: datetime, precision: DatePrecision | None, stored: datetime | None
+) -> None:
+    """Until a Citation can carry a partial date (v1-e06-t12's follow-up), an Article stores none."""
+    crossref = PAPER.model_copy(
+        update={
+            "provider": "crossref",
+            "provider_record_id": "10.5555/ipr.2026.0031",
+            "identifiers": ArticleIdentifiers(doi="10.5555/ipr.2026.0031"),
+            "published_at": published_at,
+            "date_precision": precision,
+        }
+    )
+    done = run(stage(InMemoryArticleRepository()).run(ranked_state(crossref)))
+
+    [article] = done.articles
+    assert article.published_at == stored

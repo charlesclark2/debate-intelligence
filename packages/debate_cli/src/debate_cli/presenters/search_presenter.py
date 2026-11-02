@@ -15,6 +15,12 @@ search's status. Every provider is named whatever happened to it, so a partial r
   `not configured`, each with the provider's own reason, and `on 2 of 7 queries` when only some of
   its calls failed.
 
+## Dates
+
+The table's Date column shows what is known: `2022-05-17`, or `2023-03` and `2021` for a date a
+provider knows only to its month or year (Crossref's, v1-e07-t03). `--json` still gives
+`published_at` as the period's first instant.
+
 ## No evidence text
 
 A search returns sources, not cards. Neither surface prints a snippet, an abstract or a feed's
@@ -32,7 +38,7 @@ from debate_cli.output import CliOutput, CommandFailure, JsonValue, TableSpec
 from debate_core.application.federated_ranking import RankedCandidate
 from debate_core.application.federated_search_types import SearchOutcome
 from debate_core.domain import AccessStatus, Article, SearchStatus
-from debate_core.domain.discovery import CandidateResult, ProviderOutcome, ProviderStatus
+from debate_core.domain.discovery import CandidateResult, DatePrecision, ProviderOutcome, ProviderStatus
 
 __all__ = [
     "NO_PROVIDER_ENABLED_CODE",
@@ -169,6 +175,18 @@ def _articles_by_rank(outcome: SearchOutcome) -> dict[int, Article]:
     return {result.rank: article for result, article in zip(outcome.results, outcome.articles, strict=True)}
 
 
+def _date(ranked: RankedCandidate) -> str:
+    """The date to the precision known: `2022-05-17`, `2023-03` or `2021` (v1-e07-t03), or `undated`."""
+    published, precision = ranked.candidate.published_at, ranked.candidate.date_precision
+    if published is None:
+        return "undated"
+    if precision is DatePrecision.YEAR:
+        return f"{published.year:04d}"
+    if precision is DatePrecision.MONTH:
+        return f"{published.year:04d}-{published.month:02d}"
+    return published.date().isoformat()
+
+
 def _access(ranked: RankedCandidate, article: Article | None) -> str:
     """The access a person can expect: an Article's measured status, else the providers' open-access hint."""
     if article is not None and article.access_status is not AccessStatus.UNKNOWN:
@@ -267,7 +285,7 @@ def results_table(outcome: SearchOutcome) -> TableSpec:
             str(ranked.rank),
             ranked.candidate.title,
             ranked.candidate.publication or "",
-            ranked.candidate.published_at.date().isoformat() if ranked.candidate.published_at else "undated",
+            _date(ranked),
             ranked.candidate.source_type.value.lower(),
             _access(ranked, articles.get(ranked.rank)),
             ranked.explanation,

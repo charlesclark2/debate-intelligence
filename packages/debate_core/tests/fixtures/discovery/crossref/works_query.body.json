@@ -1,0 +1,145 @@
+{
+  "status": "ok",
+  "message-type": "work-list",
+  "message-version": "1.0.0",
+  "message": {
+    "facets": {},
+    "total-results": 6,
+    "items-per-page": 6,
+    "query": {"start-index": 0, "search-terms": "carbon capture subsidies"},
+    "items": [
+      {
+        "DOI": "10.5555/INVENTED.2022.0417",
+        "URL": "https://doi.org/10.5555/invented.2022.0417",
+        "type": "journal-article",
+        "title": ["Pricing <i>carbon capture</i> under   production subsidies"],
+        "container-title": ["Journal of Invented Energy Economics"],
+        "author": [
+          {
+            "given": "Ilse",
+            "family": "Marrowby",
+            "sequence": "first",
+            "ORCID": "https://orcid.org/0000-0000-0000-0002",
+            "authenticated-orcid": false,
+            "affiliation": [{"name": "University of Nowhere"}]
+          },
+          {"given": "Tomas", "family": "Underhill", "sequence": "additional", "affiliation": []}
+        ],
+        "issued": {"date-parts": [[2022, 5, 17]]},
+        "published-online": {"date-parts": [[2022, 5, 17]]},
+        "published-print": {"date-parts": [[2022, 8]]},
+        "is-referenced-by-count": 17,
+        "license": [
+          {
+            "URL": "https://creativecommons.org/licenses/by/4.0/",
+            "start": {"date-parts": [[2022, 5, 17]], "date-time": "2022-05-17T00:00:00Z", "timestamp": 1652745600000},
+            "delay-in-days": 0,
+            "content-version": "vor"
+          }
+        ],
+        "link": [
+          {
+            "URL": "https://publisher.example.org/articles/2022.0417/full.xml",
+            "content-type": "text/xml",
+            "content-version": "vor",
+            "intended-application": "text-mining"
+          },
+          {
+            "URL": "https://publisher.example.org/articles/2022.0417.pdf",
+            "content-type": "application/pdf",
+            "content-version": "vor",
+            "intended-application": "text-mining"
+          },
+          {
+            "URL": "https://publisher.example.org/articles/2022.0417/similarity.pdf",
+            "content-type": "application/pdf",
+            "content-version": "vor",
+            "intended-application": "similarity-checking"
+          }
+        ],
+        "abstract": "<jats:title>Abstract</jats:title><jats:p>Production subsidies change how <jats:italic>carbon capture</jats:italic> is priced &amp; who pays.</jats:p>"
+      },
+      {
+        "DOI": "10.5555/invented.report.2021",
+        "URL": "https://doi.org/10.5555/invented.report.2021",
+        "type": "report",
+        "title": ["Subsidy design for capture plants"],
+        "author": [{"name": "Invented Energy Institute", "sequence": "first", "affiliation": []}],
+        "issued": {"date-parts": [[2021]]},
+        "is-referenced-by-count": 3,
+        "link": [
+          {
+            "URL": "https://institute.example.org/reports/2021-capture.pdf",
+            "content-type": "application/pdf",
+            "content-version": "vor",
+            "intended-application": "text-mining"
+          }
+        ]
+      },
+      {
+        "DOI": "10.5555/invented.book.2023.ch4",
+        "URL": "https://doi.org/10.5555/invented.book.2023.ch4",
+        "type": "book-chapter",
+        "title": ["Who pays for stored carbon?"],
+        "container-title": ["An Invented Handbook of Climate Finance"],
+        "author": [{"given": "Mara", "family": "Quillfeather", "sequence": "first", "affiliation": []}],
+        "issued": {"date-parts": [[2023, 3]]},
+        "published-print": {"date-parts": [[2023, 3]]},
+        "is-referenced-by-count": 0
+      },
+      {
+        "DOI": "10.5555/invented.preprint.0109",
+        "URL": "https://doi.org/10.5555/invented.preprint.0109",
+        "type": "posted-content",
+        "title": ["Capture subsidies and the cost of storage: a working paper"],
+        "issued": {"date-parts": [[2024, 1, 9]]},
+        "is-referenced-by-count": 0,
+        "license": [
+          {
+            "URL": "https://www.elsevier.example.org/tdm/userlicense/1.0/",
+            "start": {"date-parts": [[2024, 1, 9]], "date-time": "2024-01-09T00:00:00Z", "timestamp": 1704758400000},
+            "delay-in-days": 0,
+            "content-version": "tdm"
+          }
+        ]
+      },
+      {
+        "DOI": "10.5555/invented.proc.2020.11",
+        "URL": "https://doi.org/10.5555/invented.proc.2020.11",
+        "type": "proceedings-article",
+        "title": ["Auctioning capture credits"],
+        "container-title": ["Proceedings of the Invented Conference on Energy Markets"],
+        "author": [
+          {"family": "Oddleigh", "sequence": "first", "affiliation": []},
+          {"sequence": "additional", "affiliation": [{"name": "Department of Invented Economics"}]}
+        ],
+        "issued": {"date-parts": [[null]]},
+        "published-online": {"date-parts": [[2020, 11, 2]]},
+        "is-referenced-by-count": 5,
+        "license": [
+          {
+            "URL": "http://creativecommons.org/licenses/by-nc/4.0/",
+            "start": {"date-parts": [[2027, 11, 2]], "date-time": "2027-11-02T00:00:00Z", "timestamp": 1825113600000},
+            "delay-in-days": 2556,
+            "content-version": "am"
+          }
+        ],
+        "link": [
+          {
+            "URL": "https://proceedings.example.org/2020/11.pdf",
+            "content-type": "application/pdf",
+            "content-version": "am",
+            "intended-application": "unspecified"
+          }
+        ]
+      },
+      {
+        "DOI": "10.5555/invented.untitled.1",
+        "URL": "https://doi.org/10.5555/invented.untitled.1",
+        "type": "journal-article",
+        "title": [],
+        "issued": {"date-parts": [[2022, 2, 2]]}
+      }
+    ]
+  }
+}

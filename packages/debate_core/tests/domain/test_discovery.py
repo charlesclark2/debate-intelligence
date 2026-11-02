@@ -21,6 +21,7 @@ from debate_core.domain import discovery
 from debate_core.domain.discovery import (
     BreakerState,
     CandidateResult,
+    DatePrecision,
     ProviderHealth,
     ProviderOutcome,
     ProviderQuery,
@@ -164,6 +165,72 @@ def test_a_candidate_parses_an_iso_publication_time_with_its_offset() -> None:
 def test_a_candidate_refuses_an_iso_publication_time_without_an_offset() -> None:
     with pytest.raises(ValidationError, match="timezone-aware"):
         make_candidate(published_at="2018-06-21T10:00:00")
+
+
+# --------------------------------------------------------------------------------------------
+# Date precision (v1-e07-t03)
+# --------------------------------------------------------------------------------------------
+
+
+def test_the_date_precisions_have_stable_values() -> None:
+    """Stored with every search's raw results, so a renamed value would strand them."""
+    assert [precision.value for precision in DatePrecision] == ["day", "month", "year"]
+
+
+def test_a_candidate_without_a_precision_is_dated_as_before() -> None:
+    stored = {
+        "provider": "rss",
+        "title": "Methane leakage",
+        "url": "https://example.org/methane",
+        "published_at": "2018-06-21T14:05:00Z",
+    }
+
+    candidate = CandidateResult.model_validate_json(json.dumps(stored))
+
+    assert candidate.date_precision is None
+    assert candidate.published_at == datetime(2018, 6, 21, 14, 5, tzinfo=UTC)
+
+
+@pytest.mark.parametrize(
+    ("published_at", "precision"),
+    [
+        (datetime(2021, 1, 1, tzinfo=UTC), DatePrecision.YEAR),
+        (datetime(2023, 3, 1, tzinfo=UTC), DatePrecision.MONTH),
+        (datetime(2022, 5, 17, tzinfo=UTC), DatePrecision.DAY),
+        (datetime(2022, 5, 17, 9, 30, tzinfo=UTC), DatePrecision.DAY),
+    ],
+    ids=["year", "month", "day", "day with a time"],
+)
+def test_a_candidate_keeps_its_date_at_the_precision_it_was_given(
+    published_at: datetime, precision: DatePrecision
+) -> None:
+    candidate = make_candidate(published_at=published_at, date_precision=precision)
+
+    assert (candidate.published_at, candidate.date_precision) == (published_at, precision)
+    assert CandidateResult.model_validate_json(candidate.model_dump_json()) == candidate
+
+
+@pytest.mark.parametrize(
+    ("published_at", "precision"),
+    [
+        (datetime(2021, 6, 1, tzinfo=UTC), DatePrecision.YEAR),
+        (datetime(2021, 1, 2, tzinfo=UTC), DatePrecision.YEAR),
+        (datetime(2021, 1, 1, 0, 0, 1, tzinfo=UTC), DatePrecision.YEAR),
+        (datetime(2023, 3, 17, tzinfo=UTC), DatePrecision.MONTH),
+        (datetime(2023, 3, 1, 12, tzinfo=UTC), DatePrecision.MONTH),
+    ],
+    ids=["year in June", "year on the 2nd", "year a second late", "month on the 17th", "month at noon"],
+)
+def test_a_year_or_month_date_must_be_the_first_instant_of_its_period(
+    published_at: datetime, precision: DatePrecision
+) -> None:
+    with pytest.raises(ValidationError, match="first instant"):
+        make_candidate(published_at=published_at, date_precision=precision)
+
+
+def test_a_precision_needs_a_date() -> None:
+    with pytest.raises(ValidationError, match="date_precision without a published_at"):
+        make_candidate(date_precision=DatePrecision.YEAR)
 
 
 # --------------------------------------------------------------------------------------------

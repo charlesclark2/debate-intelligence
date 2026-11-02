@@ -38,7 +38,7 @@ from debate_core.application.federated_search_types import SearchRequest, Search
 from debate_core.application.ports.providers import SearchProvider
 from debate_core.application.settings import SearchProviderName
 from debate_core.domain.article import ArticleIdentifiers
-from debate_core.domain.discovery import CandidateResult, ProviderHealth
+from debate_core.domain.discovery import CandidateResult, DatePrecision, ProviderHealth
 from debate_core.domain.enums import SourceType
 from debate_core.testing.fakes.clock_and_ids import SequentialIdGenerator
 from debate_core.testing.fakes.persistence import InMemorySearchRepository
@@ -1115,3 +1115,105 @@ def test_the_dedupe_module_imports_no_network_client() -> None:
     for client in ("httpx", "urllib.request", "requests", "socket", "aiohttp"):
         assert f"import {client}" not in source, client
         assert f"from {client}" not in source, client
+
+
+# --------------------------------------------------------------------------------------------
+# Partial dates (v1-e07-t03): a day-precise date wins, and dates agree at the coarser precision
+# --------------------------------------------------------------------------------------------
+
+STORAGE_DOI = ArticleIdentifiers(doi="10.5555/storage.2024.1")
+
+
+def crossref_record(published_at: datetime, precision: DatePrecision | None) -> CandidateResult:
+    return paper(
+        provider="crossref",
+        url="https://doi.org/10.5555/storage.2024.1",
+        identifiers=STORAGE_DOI,
+        published_at=published_at,
+    ).model_copy(update={"date_precision": precision})
+
+
+def openalex_record(published_at: datetime, precision: DatePrecision | None = None) -> CandidateResult:
+    return paper(identifiers=STORAGE_DOI, published_at=published_at).model_copy(
+        update={"date_precision": precision}
+    )
+
+
+@pytest.mark.parametrize("crossref_first", [True, False], ids=["crossref first", "openalex first"])
+@pytest.mark.parametrize("precision", [DatePrecision.YEAR, DatePrecision.MONTH], ids=["year", "month"])
+def test_openalexs_exact_day_is_never_replaced_by_crossrefs_year_or_month(
+    crossref_first: bool, precision: DatePrecision
+) -> None:
+    crossref = crossref_record(at(2024, 6 if precision is DatePrecision.MONTH else 1), precision)
+    openalex = openalex_record(at(2024, 6, 15))
+    records = (crossref, openalex) if crossref_first else (openalex, crossref)
+
+    (merged,) = merge_candidates(records)
+
+    assert (merged.published_at, merged.date_precision) == (at(2024, 6, 15), None)
+    assert merged.field_sources["published_at"] == "openalex"
+
+
+def test_a_month_beats_a_year_and_crossref_keeps_its_place_among_equals() -> None:
+    year = crossref_record(at(2024), DatePrecision.YEAR)
+    month = openalex_record(at(2024, 6), DatePrecision.MONTH)
+    (merged,) = merge_candidates((year, month))
+    assert (merged.published_at, merged.date_precision, merged.field_sources["published_at"]) == (
+        at(2024, 6),
+        DatePrecision.MONTH,
+        "openalex",
+    )
+
+    day = crossref_record(at(2024, 6, 14), DatePrecision.DAY)
+    (merged,) = merge_candidates((openalex_record(at(2024, 6, 15)), day))
+    assert (merged.published_at, merged.date_precision, merged.field_sources["published_at"]) == (
+        at(2024, 6, 14),
+        DatePrecision.DAY,
+        "crossref",
+    )
+
+
+def test_a_year_alone_is_kept_with_its_precision() -> None:
+    (merged,) = merge_candidates((crossref_record(at(2021), DatePrecision.YEAR),))
+    assert (merged.published_at, merged.date_precision) == (at(2021), DatePrecision.YEAR)
+
+
+def report(published_at: datetime, precision: DatePrecision | None, *, provider: str) -> CandidateResult:
+    """A report (source type other) from one site, dated as given."""
+    return CandidateResult(
+        provider=provider,
+        title="Subsidy design for carbon capture plants",
+        url=f"https://institute.example.org/reports/{provider}",
+        authors=("Invented Energy Institute",),
+        published_at=published_at,
+        date_precision=precision,
+        source_type=SourceType.OTHER,
+    )
+
+
+@pytest.mark.parametrize(
+    ("left", "right", "together"),
+    [
+        ((at(2021), DatePrecision.YEAR), (at(2021, 6, 4), None), True),
+        ((at(2021), DatePrecision.YEAR), (at(2022, 6, 4), None), False),
+        ((at(2023, 3), DatePrecision.MONTH), (at(2023, 3, 17), None), True),
+        ((at(2023, 3), DatePrecision.MONTH), (at(2023, 4, 2), None), False),
+        ((at(2023, 3), DatePrecision.MONTH), (at(2023), DatePrecision.YEAR), True),
+        ((at(2023, 3, 17), DatePrecision.DAY), (at(2023, 3, 18), None), False),
+        ((at(2023, 3, 17), None), (at(2023, 3, 17, 9), None), True),
+    ],
+    ids=[
+        "a year and a day in it",
+        "a year and a day in the next",
+        "a month and a day in it",
+        "a month and a day in the next",
+        "a month and its year",
+        "two different days",
+        "the same day",
+    ],
+)
+def test_fuzzy_title_outside_scholarship_compares_dates_at_the_coarser_precision(
+    left: tuple[datetime, DatePrecision | None], right: tuple[datetime, DatePrecision | None], together: bool
+) -> None:
+    records = (report(*left, provider="crossref"), report(*right, provider="rss"))
+    assert groups(records) == ([[0, 1]] if together else [[0], [1]])

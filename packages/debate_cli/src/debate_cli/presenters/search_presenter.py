@@ -346,9 +346,10 @@ class SearchProgress:
         )
 
     def searched(self, outcome: SearchOutcome) -> None:
+        count = len(outcome.ranked_candidates)
         self._output.event_line(
             self._command,
             "searched",
             {"status": outcome.status.value, "results": len(outcome.ranked_candidates)},
-            text=f"Ranked {len(outcome.ranked_candidates)} sources ({outcome.status.value.lower()})",
+            text=f"Ranked {count} {'source' if count == 1 else 'sources'} ({outcome.status.value.lower()})",
         )

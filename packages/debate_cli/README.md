@@ -411,6 +411,7 @@ $ uv run debate-research fetch https://www.example.org/news/2026/10/some-story
 $ uv run debate-research fetch https://www.example.org/news/2026/10/some-story --refresh
 $ uv run debate-research --json fetch https://www.example.org/report.pdf | jq '.data.snapshot // .error.details.reason'
 $ uv run debate-research fetch --paste my-copy.txt --source-url https://www.example.org/paywalled-story
+$ uv run debate-research fetch --paste my-copy.txt --source-url https://www.example.org/paywalled-story --title "The story's title" --author "First Author" --author "Second Author" --date 2026-09-14 --publication "The Example Review"
 ```
 
 A person sees the canonical URL, title, identifiers, access status and reason, provenance, and the
@@ -424,11 +425,23 @@ such as a subscriber's copy, as USER_SUPPLIED, and fetches nothing. It is stored
 attests lawful access, at a prompt in a terminal or with `--i-have-lawful-access` where no prompt can
 be shown (`--json`, text on stdin, no terminal).
 
+With `--paste`, `--title`, `--author` (once per author, in order), `--date` and `--publication` state
+the copy's cite (`v1-e06-t12`), because a pasted copy has no markup to read one from. They are stored
+with the copy, never as verified, and `cut URL --from-paste` cites the card with them. The card stays
+UNVERIFIED for its cite (`CITATION_UNVERIFIED`), as a card cut from text a user supplied always is,
+and the cite marks each field `[… unverified]`. The date is a full date, `YYYY-MM-DD`; a year alone or a
+year and month is refused. A person sees the stored fields as `Stated …` rows, and `--json` as the
+snapshot's `stated_cite`. Storing the same text again with none of these options, or with the same
+ones, reuses the stored copy and its fields. With other options it stores a new copy holding exactly
+the fields that command states, nothing carried over, so restate `--title` when you add `--author`.
+A copy stored with stated cite fields needs this build or later: an older build cannot read its
+record.
+
 | Exit | Means |
 |---|---|
 | `0` | ACCESSIBLE and stored (or answered by a recent stored snapshot), or pasted text stored as USER_SUPPLIED. |
 | `1` | Refused, nothing stored: not a source URL, pasted text not attested, or pasted text rejected (blank, too short, too large). |
-| `2` | A usage error, for example `--paste` without `--source-url`, or a URL and `--paste` together. |
+| `2` | A usage error, for example `--paste` without `--source-url`, a URL and `--paste` together, a cite option without `--paste` or with an empty value, or a `--date` that is not `YYYY-MM-DD`. |
 | `3` | PAYWALLED, BLOCKED, ROBOTS_DISALLOWED, NOT_FOUND, UNSUPPORTED_TYPE or ERROR (`SOURCE_NOT_ACCESSIBLE`), or the fetcher could not run. No snapshot is stored. |
 
 ## `debate-research cut`

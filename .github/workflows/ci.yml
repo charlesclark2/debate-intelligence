@@ -86,7 +86,10 @@ concurrency:
 
 jobs:
   # Which areas of the repository a pull request touches. Pushes to dev and main run every job: they
-  # are the record that the merged result is green, and the 5-minute budget is for pull requests.
+  # are the record that the merged result is green, and the 5-minute budget is for pull requests. So
+  # does a dispatch, but for the one refresh-generated-files.yml makes on its branch when the branch
+  # changes only ROADMAP.md and docs/README.md: that run stands in for the bot's pull request, which
+  # starts no pull_request run, and selects what the pull request would, nothing (v1-e41-t16).
   changes:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -95,16 +98,44 @@ jobs:
       # dorny/paths-filter lists a pull request's files through the REST API.
       pull-requests: read
     outputs:
-      python: ${{ github.event_name != 'pull_request' || steps.filter.outputs.python == 'true' || steps.markdown.outputs.outside_site == 'true' }}
-      infrastructure: ${{ github.event_name != 'pull_request' || steps.filter.outputs.infrastructure == 'true' }}
-      site: ${{ github.event_name != 'pull_request' || steps.filter.outputs.site == 'true' }}
-      web: ${{ github.event_name != 'pull_request' || steps.filter.outputs.web == 'true' }}
-      api: ${{ github.event_name != 'pull_request' || steps.filter.outputs.api == 'true' }}
-      workflows: ${{ github.event_name != 'pull_request' || steps.filter.outputs.workflows == 'true' }}
+      python: ${{ github.event_name != 'pull_request' && steps.bot_branch.outputs.generated_files_only != 'true' || steps.filter.outputs.python == 'true' || steps.markdown.outputs.outside_site == 'true' }}
+      infrastructure: ${{ github.event_name != 'pull_request' && steps.bot_branch.outputs.generated_files_only != 'true' || steps.filter.outputs.infrastructure == 'true' }}
+      site: ${{ github.event_name != 'pull_request' && steps.bot_branch.outputs.generated_files_only != 'true' || steps.filter.outputs.site == 'true' }}
+      web: ${{ github.event_name != 'pull_request' && steps.bot_branch.outputs.generated_files_only != 'true' || steps.filter.outputs.web == 'true' }}
+      api: ${{ github.event_name != 'pull_request' && steps.bot_branch.outputs.generated_files_only != 'true' || steps.filter.outputs.api == 'true' }}
+      workflows: ${{ github.event_name != 'pull_request' && steps.bot_branch.outputs.generated_files_only != 'true' || steps.filter.outputs.workflows == 'true' }}
       # The partition proof's own job (v1-e41-t15): on every push, and on a pull request that changes
       # what it proves. Not on a dispatch, whose commit has its own push run or is the bot's.
       partition_proof: ${{ github.event_name == 'push' || steps.filter.outputs.partition_proof == 'true' }}
     steps:
+      # The bot's dispatched run only: every branch's history, for origin/dev and where the bot's
+      # branch left it. Nothing else here reads the checkout; a pull request's files come from the API.
+      - uses: actions/checkout@v7
+        if: github.event_name == 'workflow_dispatch' && github.ref_name == 'bot/refresh-generated-files'
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      # What the bot's branch changes since it left dev, as scripts/ci_test_selection.py compares it for
+      # `test-selection`: 'true' only when every change is ROADMAP.md or docs/README.md and none is a
+      # deletion. A person's commit under the bot's, nothing changed, or no origin/dev to compare with
+      # writes 'false', and the dispatch runs every job as before.
+      - name: Does the bot's branch change only the generated files (its dispatched run only)
+        id: bot_branch
+        if: github.event_name == 'workflow_dispatch' && github.ref_name == 'bot/refresh-generated-files'
+        run: |
+          only=false
+          if changed=$(git diff --name-status --no-renames origin/dev...HEAD); then
+            [ -z "$changed" ] || only=true
+            while IFS=$'\t' read -r status path; do
+              case "$path" in
+                ROADMAP.md | docs/README.md) [ "$status" != D ] || only=false ;;
+                *) only=false ;;
+              esac
+            done <<< "$changed"
+          else
+            echo "::warning title=Changes::bot/refresh-generated-files could not be compared with origin/dev, so every job runs."
+          fi
+          echo "generated_files_only=$only" >> "$GITHUB_OUTPUT"
       - uses: dorny/paths-filter@v4
         id: filter
         if: github.event_name == 'pull_request'

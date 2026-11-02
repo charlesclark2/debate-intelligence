@@ -1,0 +1,12 @@
+# The words around the announcements on /news/, on each announcement's own page and on the home
+# page's announcements band. Validated by src/lib/announcements.ts at build time. The page's title,
+# description and opening paragraph are content/pages/news.md; the announcements themselves are the
+# files in content/announcements/. House style: no em dashes, and spell out every acronym.
+labels:
+  # Beside an announcement that is pinned to the top of the home page.
+  pinned: Pinned
+  # On /news/ while no announcement is published.
+  empty: >-
+    There are no announcements right now. The tournament schedule has the dates for the season.
+  # The link from an announcement's own page back to /news/.
+  backToNews: All announcements

@@ -66,6 +66,55 @@ export const nonPersonImageSchema = z.object({
   reason: z.string().min(1),
 })
 
+/**
+ * The ordinary single words permittedNamePhrases may hold (v1-e37-t03 acceptance criterion 7).
+ *
+ * A one-word entry covers that word wherever it appears in a run of capitals, so a list that grew
+ * a word at a time would come to cover a student's name a word at a time: the bare-word guard the
+ * v1-e36-t07 review replaced with phrases. These earn their place because they begin a sentence or
+ * a heading, or sit beside a date, immediately before a reviewed phrase, and are nobody's name in
+ * the copy: articles and sentence openers, the one product name the schedule's subscribe
+ * instructions use, and the days and months. Any other one-word entry fails the build. Adding a
+ * word here is a code change, so it is reviewed as one; it is never a student's name or part of one.
+ */
+export const REVIEWED_SINGLE_WORDS: readonly string[] = [
+  'The',
+  'In',
+  'Email',
+  'Joining',
+  'Outlook',
+  'Monday',
+  'Mondays',
+  'Tuesday',
+  'Tuesdays',
+  'Wednesday',
+  'Wednesdays',
+  'Thursday',
+  'Thursdays',
+  'Friday',
+  'Fridays',
+  'Saturday',
+  'Saturdays',
+  'Sunday',
+  'Sundays',
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+]
+
+const REVIEWED_SINGLE_WORD_SET: ReadonlySet<string> = new Set(
+  REVIEWED_SINGLE_WORDS.map((word) => word.toLowerCase()),
+)
+
 export const mediaConsentSchema = z.object({
   season,
   students: z.array(consentedStudentSchema),
@@ -77,7 +126,22 @@ export const mediaConsentSchema = z.object({
    * High School" does not leave Blue, Valley and West permitted on their own for ever
    * (the v1-e36-t07 review). See `unreviewedNames` in src/lib/publishing-policy.ts.
    */
-  permittedNamePhrases: z.array(z.string().min(1)),
+  permittedNamePhrases: z.array(z.string().min(1)).superRefine((phrases, ctx) => {
+    for (const phrase of phrases) {
+      const words = phrase.trim().split(/\s+/)
+      if (words.length === 1 && !REVIEWED_SINGLE_WORD_SET.has(phrase.trim().toLowerCase())) {
+        ctx.addIssue({
+          code: 'custom',
+          message:
+            `"${phrase.trim()}" is a single word. The list holds reviewed phrases, written as the ` +
+            'site prints them, such as "Whitefish Bay High School", so that reviewing a name ' +
+            'never permits its words on their own. Add the whole phrase. A one-word entry is ' +
+            'allowed only from REVIEWED_SINGLE_WORDS in src/lib/media-consent.ts, and a student ' +
+            "is never added here: a student's name goes in `students`",
+        })
+      }
+    }
+  }),
 })
 
 export type ConsentedStudent = z.infer<typeof consentedStudentSchema>

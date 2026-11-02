@@ -35,6 +35,12 @@ export const SCHEDULE_SLUG = 'schedule'
 export const RESULTS_SLUG = 'results'
 
 /**
+ * The announcements list, composed from content/announcements/ by src/app/news/page.tsx; each
+ * announcement has a page of its own under it (v1-e37-t03).
+ */
+export const NEWS_SLUG = 'news'
+
+/**
  * Pages that are composed by a route module of their own rather than rendered as one run of
  * Markdown by src/app/[slug]/page.tsx.
  *
@@ -52,6 +58,7 @@ export const COMPOSED_SLUGS: readonly string[] = [
   EVENTS_SLUG,
   SCHEDULE_SLUG,
   RESULTS_SLUG,
+  NEWS_SLUG,
 ]
 
 /**
@@ -283,6 +290,17 @@ export const homeContentSchema = z.object({
    * around them. The panel is left out of the page while the season has no result yet.
    */
   recentResults: z.object({
+    eyebrow: z.string().min(1),
+    title: z.string().min(1),
+    intro: z.string().min(1),
+    action: homeActionSchema,
+  }),
+  /**
+   * The pinned and newest announcements, linking to /news/ (v1-e37-t03). The announcements are
+   * files in content/announcements/; this is only the words around them. The band is left out of
+   * the page while no announcement is published.
+   */
+  announcements: z.object({
     eyebrow: z.string().min(1),
     title: z.string().min(1),
     intro: z.string().min(1),
@@ -724,7 +742,8 @@ export function loadNotFoundPage(
 
 /** Every string in the home content, in reading order, for the checks that scan copy. */
 function homeContentStrings(content: HomeContent): string[] {
-  const { hero, seasonSchedule, recentResults, entryPoints, prose, whatDebateBuilds } = content
+  const { hero, seasonSchedule, recentResults, announcements, entryPoints, prose, whatDebateBuilds } =
+    content
   return [
     hero.lead,
     hero.action.label,
@@ -736,6 +755,10 @@ function homeContentStrings(content: HomeContent): string[] {
     recentResults.title,
     recentResults.intro,
     recentResults.action.label,
+    announcements.eyebrow,
+    announcements.title,
+    announcements.intro,
+    announcements.action.label,
     entryPoints.eyebrow,
     entryPoints.title,
     entryPoints.intro,
@@ -882,9 +905,13 @@ export interface AnnouncementField {
 /**
  * Every fact the site's announcements promise. None today: the October 1 parent-session panel
  * in content/home.yaml, the one announcement with facts of this kind, was replaced by a pointer
- * to the tournament schedule in v1-e37-t02 once the session had happened. The guard and its
- * wiring in src/app/layout.tsx stay, because v1-e37-t03's announcements join it here rather than
- * growing a second guard of their own.
+ * to the tournament schedule in v1-e37-t02 once the session had happened.
+ *
+ * v1-e37-t03's announcements, the Markdown files in content/announcements/, add none either,
+ * because they have no field that can be left unset: a missing title or date is a schema error
+ * that fails the build, and a fact still owed inside a body is a [[TBD]] marker, which the guard
+ * reports as it does on any page (src/lib/announcements.ts). The guard and its wiring in
+ * src/app/layout.tsx stay for the next panel built from fields.
  */
 export function announcementFields(): AnnouncementField[] {
   return []
@@ -941,8 +968,11 @@ const anchorId = z
   .min(1)
   .regex(/^[a-z][a-z0-9-]*$/, 'must be a lower-case anchor id such as "cost-and-travel"')
 
-/** Markdown rendered to HTML at build time, with any placeholder marker made visible. */
-function renderMarkdown(filePath: string, markdown: string): string {
+/**
+ * Markdown rendered to HTML at build time, with any placeholder marker made visible. The one
+ * Markdown path every content file goes through; src/lib/announcements.ts renders a body with it.
+ */
+export function renderMarkdown(filePath: string, markdown: string): string {
   const rendered = marked.parse(renderPlaceholders(markdown), { async: false })
   if (typeof rendered !== 'string') {
     throw new ContentValidationError(filePath, 'Markdown could not be rendered synchronously')

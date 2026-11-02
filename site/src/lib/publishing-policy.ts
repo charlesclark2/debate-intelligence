@@ -14,17 +14,28 @@ import { readSiteEnvironment } from './site-settings'
  * Errors fail a prod build. Warnings are printed in every environment and are the things a
  * person has to look at, chiefly a consent entry that predates the current season.
  *
- * Deliberately not here: detecting an unknown "First Last" name is only as good as its
- * vocabulary, and the policy assigns the full published-names allowlist to v1-e37-t03. What this
- * guard does is flag a capitalised name made of words nobody has reviewed, which is enough to
- * stop a student name reaching prod unnoticed.
+ * Deliberately not here: recognising a person's name. A detector is only as good as its
+ * vocabulary, so the guard does the reverse: it flags every capitalised name made of words nobody
+ * has reviewed, wherever a visitor reads it (text, alt text, captions), which is enough to stop a
+ * student name reaching prod unnoticed. The published-names allowlist is content/media-consent.yaml:
+ * its students, and permittedNamePhrases, which v1-e37-t03 keeps to reviewed phrases.
  */
 
 export interface PolicyFinding {
   /** Where the problem is: a content file path, or a built page route. */
   location: string
   message: string
+  /**
+   * The rule in docs/policies/website-publishing.md the problem breaks, such as "Students 6", so
+   * the person fixing it can read why. Left out for a house-style finding, which is the site's
+   * own rule rather than the policy's.
+   */
+  rule?: string
 }
+
+/** Where every finding's rule is written. */
+export const POLICY_DOCUMENT = 'docs/policies/website-publishing.md'
+
 
 export interface PolicyReport {
   errors: PolicyFinding[]
@@ -50,12 +61,22 @@ const ANY_IFRAME = /<iframe\b/gi
 const IMAGE_REFERENCE = /!\[[^\]]*\]\(([^)\s]+)\)|<img\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/gi
 
 /**
- * Runs of two or more capitalised words, which is what a person's name looks like in prose. The
- * apostrophe allows O'Brien, and the match is greedy so "Martin Luther King" is one candidate
- * rather than two overlapping ones. A single space or newline separates the words: a blank line
- * ends the phrase, so a heading and the paragraph under it are never read as one name.
+ * One capitalised word: a capital and at least one lower-case letter, with an apostrophe inside
+ * it, so O'Brien, O'Neill and Clark's are each one word. Until v1-e37-t03 the capital after an
+ * apostrophe ended the word, so a name like O'Neill was reported as "O'".
  */
-const CAPITALISED_PHRASE = /\b[A-Z][a-z'’]+(?:\s(?!\s)[A-Z][a-z'’]+)+\b/g
+const CAPITALISED_WORD = String.raw`[A-Z](?:[a-z]+(?:['’][A-Z]?[a-z]+)*|['’][A-Z]?[a-z]+)`
+
+/**
+ * Runs of two or more capitalised words, which is what a person's name looks like in prose. The
+ * match is greedy so "Martin Luther King" is one candidate rather than two overlapping ones. A
+ * single space or newline separates the words: a blank line ends the phrase, so a heading and the
+ * paragraph under it are never read as one name.
+ */
+const CAPITALISED_PHRASE = new RegExp(
+  String.raw`\b${CAPITALISED_WORD}(?:\s(?!\s)${CAPITALISED_WORD})+['’]?\b`,
+  'g',
+)
 
 function collect(text: string, pattern: RegExp): string[] {
   return [...text.matchAll(pattern)].map((match) => match[0])
@@ -83,12 +104,72 @@ export function withoutScripts(html: string): string {
     .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
 }
 
-/** The visible words of a page, with Markdown link targets and code removed. */
+/**
+ * Inline formatting, which sits inside a run of words rather than between blocks. Dropped without
+ * a gap, so `<strong>Jordan</strong> Rivera` is read as the one name a visitor sees; every other
+ * tag ends the run, so a heading never runs into the paragraph under it.
+ */
+const INLINE_TAG = /^<\/?(?:a|abbr|b|cite|code|em|i|mark|q|s|small|span|strong|sub|sup|u)\b[^>]*>$/i
+
+/**
+ * The attributes a visitor reads as text: an image's alt text, which a screen reader speaks and a
+ * browser shows when the image does not load, and a title, which is a Markdown image's caption and
+ * a link's tooltip. Each is published copy, read as a run of its own (v1-e37-t03).
+ */
+const READABLE_ATTRIBUTE = /\b(?:alt|title)\s*=\s*(?:"([^"]*)"|'([^']*)')/gi
+
+/** A Markdown link or image, with the title a Markdown image uses as its caption. */
+const MARKDOWN_LINK = /\[([^\]]*)\]\([^)\s]*(?:\s+(?:"([^"]*)"|'([^']*)'))?\s*\)/g
+
+const NAMED_ENTITIES: Readonly<Record<string, string>> = {
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+  nbsp: ' ',
+}
+
+/**
+ * The characters a renderer escapes, back as a visitor reads them. The Markdown renderer writes
+ * O'Neill as `O&#39;Neill`, which no run of capitalised words matches, so without this a name
+ * with an apostrophe passed the name rules in every rendered page.
+ */
+function decodeEntities(text: string): string {
+  return text.replace(/&(?:#(\d+)|#x([0-9a-f]+)|([a-z]+));/gi, (entity, decimal, hex, name) => {
+    if (decimal !== undefined) {
+      return String.fromCodePoint(Number.parseInt(decimal as string, 10))
+    }
+    if (hex !== undefined) {
+      return String.fromCodePoint(Number.parseInt(hex as string, 16))
+    }
+    return NAMED_ENTITIES[(name as string).toLowerCase()] ?? entity
+  })
+}
+
+/** Each readable attribute in one tag, as a run of its own, or a blank line for a tag with none. */
+function readTag(tag: string): string {
+  const readable = [...tag.matchAll(READABLE_ATTRIBUTE)].map((match) => match[1] ?? match[2] ?? '')
+  if (readable.length > 0) {
+    return `\n\n${readable.join('\n\n')}\n\n`
+  }
+  return INLINE_TAG.test(tag) ? '' : '\n\n'
+}
+
+/**
+ * The words a visitor reads on a page: its text, its images' alt text and captions, and its links'
+ * titles, with Markdown link targets and code removed and escaped characters decoded.
+ */
 export function visibleText(markdownOrHtml: string): string {
-  return markdownOrHtml
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-    .replace(/`[^`]*`/g, ' ')
+  return decodeEntities(
+    markdownOrHtml
+      .replace(/<[^>]+>/g, readTag)
+      .replace(MARKDOWN_LINK, (_link, text: string, doubleQuoted?: string, singleQuoted?: string) => {
+        const caption = doubleQuoted ?? singleQuoted
+        return caption === undefined ? text : `${text}\n\n${caption}\n\n`
+      })
+      .replace(/`[^`]*`/g, ' '),
+  )
 }
 
 /** Lower case, with a typographic apostrophe folded to a plain one, for comparing names. */
@@ -228,6 +309,7 @@ export function checkPublishingPolicy({
           message:
             `publishes the email address "${address}", which is not in the allowlist in ` +
             'content/site.yaml. Only coach and team addresses may appear on this site.',
+          rule: 'Students 6',
         })
       }
     }
@@ -236,6 +318,7 @@ export function checkPublishingPolicy({
       errors.push({
         location,
         message: `publishes what looks like a phone number ("${phone.trim()}"). The site publishes none.`,
+        rule: 'Students 6',
       })
     }
 
@@ -250,6 +333,7 @@ export function checkPublishingPolicy({
           message:
             `references the image ${image}, whose consent reference is still to come. An image ` +
             'of a person publishes only against a form the activities office has confirmed.',
+          rule: 'Photos and media consent 1 and 4',
         })
       } else if (entry && isStale(entry, consent.season)) {
         errors.push({
@@ -258,6 +342,7 @@ export function checkPublishingPolicy({
             `references the image ${image}, whose consent entry is for season ${entry.season}, ` +
             `checked ${entry.dateChecked}. Consent does not carry over between seasons: confirm ` +
             `the form for ${consent.season} and update the entry.`,
+          rule: 'Photos and media consent 1 and 11',
         })
       } else if (!entry && !nonPersonImagePaths.has(image)) {
         errors.push({
@@ -266,6 +351,7 @@ export function checkPublishingPolicy({
             `references the image ${image}, which has no entry in content/media-consent.yaml. ` +
             'Add a consent entry for an image of a person, or a nonPersonImages entry for one ' +
             'with nobody in it.',
+          rule: 'Photos and media consent 4',
         })
       }
     }
@@ -280,6 +366,7 @@ export function checkPublishingPolicy({
             'student, add a consent entry confirmed with the activities office for season ' +
             `${consent.season}. If it is not a person, add the whole phrase to ` +
             'permittedNamePhrases.',
+          rule: 'Students 1 and 2',
         })
       } else if (isStale(entry, consent.season)) {
         errors.push({
@@ -287,6 +374,7 @@ export function checkPublishingPolicy({
           message:
             `names "${name}", whose consent entry is for season ${entry.season}, checked ` +
             `${entry.dateChecked}. Consent does not carry over between seasons.`,
+          rule: 'Students 2; Consent renewal and the start-of-season check 1',
         })
       }
     }
@@ -299,10 +387,15 @@ export function checkPublishingPolicy({
         errors.push({
           location,
           message: `loads something from another origin: ${tag.trim()}`,
+          rule: 'Analytics and third parties 5 and 6',
         })
       }
       for (const tag of collect(raw, ANY_IFRAME)) {
-        errors.push({ location, message: `contains an iframe, which this site does not use: ${tag}` })
+        errors.push({
+          location,
+          message: `contains an iframe, which this site does not use: ${tag}`,
+          rule: 'Analytics and third parties 6',
+        })
       }
     }
   }
@@ -339,8 +432,14 @@ export function checkPublishingPolicy({
   return { errors, warnings }
 }
 
+/** One finding as the build prints it: where, what, and the policy rule when there is one. */
+export function describeFinding(finding: PolicyFinding): string {
+  const rule = finding.rule === undefined ? '' : ` (${POLICY_DOCUMENT}, ${finding.rule})`
+  return `${finding.location}: ${finding.message}${rule}`
+}
+
 function format(findings: PolicyFinding[]): string {
-  return findings.map((finding) => `  ${finding.location}: ${finding.message}`).join('\n')
+  return findings.map((finding) => `  ${describeFinding(finding)}`).join('\n')
 }
 
 /**

@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import ContentPageRoute from '@/app/[slug]/page'
 import EventsPage from '@/app/events/page'
 import FaqPage from '@/app/faq/page'
+import NewsRoute from '@/app/news/[[...slug]]/page'
 import ResultsPage from '@/app/results/page'
 import SchedulePage from '@/app/schedule/page'
 import HomePage from '@/app/page'
@@ -14,6 +15,7 @@ import {
   EVENTS_SLUG,
   FAQ_SLUG,
   HOME_SLUG,
+  NEWS_SLUG,
   RESULTS_SLUG,
   SCHEDULE_SLUG,
   buildNavigation,
@@ -87,6 +89,9 @@ async function routeFor(slug: string): Promise<ReactNode> {
   }
   if (slug === RESULTS_SLUG) {
     return <ResultsPage />
+  }
+  if (slug === NEWS_SLUG) {
+    return NewsRoute({ params: Promise.resolve({}) })
   }
   return ContentPageRoute({ params: Promise.resolve({ slug }) })
 }

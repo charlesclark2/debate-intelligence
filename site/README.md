@@ -45,6 +45,7 @@ Both are read at build time only and never reach the browser.
 | `SITE_URL` | an origin | Canonical URLs, Open Graph URLs and sitemap entries. Defaults to `http://localhost:3000`. |
 | `SITE_DEBATER_LOGIN` | `on`, anything else | `on` puts the Debater login link in the main navigation. Anything else, including unset, leaves it out of the export entirely: not hidden, absent. It stays off until the V2 app in `web/` exists. |
 | `SITE_DEBATER_LOGIN_URL` | a path or URL | Where that link points. Defaults to `/app/`, because the V2 app mounts under this same domain. |
+| `SITE_BUILD_DATE` | a date, `2026-11-03` | The day the build is for, which decides which announcements are published (from their `date` through their `expires`). Unset, it is today in America/Chicago. The tests set it so none reads the clock; a dev preview may set it to see next week's pages. The deploy blocks refuse to run with any `SITE_` variable left over, so a prod build uses today. |
 
 ```bash
 SITE_ENV=prod SITE_URL=https://the-team-domain pnpm --dir site build
@@ -60,6 +61,10 @@ content/
   email-updates.json   the parent email-updates section: the mailing provider's name, its signup
                        page address and the section's copy (v1-e37-t05)
   media-consent.yaml   who may be named, which images may be published, and when each was checked
+  announcements/       one Markdown file per announcement (v1-e37-t03): on the home page, at /news/
+                       and at /news/<file name>/. Its README.md explains the fields
+  news.yaml            the words around the announcements: the pinned label, the empty list, the
+                       link back to /news/
   pages/<slug>.md      one page each; home.md renders at /, every other file at /<slug>/
   not-found.md         the 404 page, kept out of pages/ so it never enters the navigation or sitemap
 ```
@@ -144,7 +149,8 @@ a dev build prints it and carries on**, so the copy can be reviewed with the gap
 | An email address that is not in `contactEmails` in `site.yaml` | Only coach and team addresses publish; a student address never does |
 | Anything shaped like a phone number | The site publishes none, of anyone |
 | An image with no entry in `media-consent.yaml` | Every image of a person needs a current-season consent reference; every other image needs a line saying nobody is in it |
-| A run of capitalised words that `permittedNamePhrases` cannot cover end to end | A student name cannot reach prod unreviewed. Phrases, not words: reviewing "Blue Valley West High School" must not leave Blue, Valley and West permitted on their own. The full published-names allowlist is `v1-e37-t03` |
+| A run of capitalised words that `permittedNamePhrases` cannot cover end to end, in the text, an image's alt text or a caption | A student name cannot reach prod unreviewed, and alt text and captions are published copy (`v1-e37-t03`). Phrases, not words: reviewing "Blue Valley West High School" must not leave Blue, Valley and West permitted on their own |
+| A one-word `permittedNamePhrases` entry that is not on `REVIEWED_SINGLE_WORDS` in `src/lib/media-consent.ts` | A list of single words would come to cover a student's name a word at a time, which is the guard the phrases replaced (`v1-e37-t03`). The reviewed list is days, months and a few ordinary words |
 | A named student, or an image a page shows, whose consent entry is for another season, was not checked this season, or (for an image) has a consent reference still to come | The district's form renews annually; consent does not carry over, and a photograph publishes only against a current-season form. Both use `isStale` in `src/lib/media-consent.ts` (`v1-e37-t12`) |
 | A `[[TBD]]` marker | A half-written page is not published |
 | An announcement field with an `unsetNote` rather than a value | An announcement states every fact it lists. A room of "To be announced" is a decision; an empty one is an oversight, and a panel with nothing where the room goes leaves no trace in the copy for the other rules to catch |
@@ -154,6 +160,24 @@ It **warns**, in every environment, when a consent entry was last checked before
 season began. That is the start-of-season check in the policy: the warning makes a lapsed one
 visible without anyone having to remember to look. The entry itself is only a warning; a name or
 an image that a page publishes against it is the error above.
+
+### Announcements
+
+`src/lib/announcements.ts` reads `content/announcements/`, one Markdown file per announcement
+(`v1-e37-t03`, ADR-0015 point 2), and is stricter than the pages: like the schedule and the results,
+every file fails the build **in every environment** on a problem, naming the file and the policy
+rule, because the dev preview is public too. Besides the guard above, run over its title, body,
+alt text and captions, it refuses raw HTML of any kind (refused, never stripped), a link that is
+not a page here, an `https://` or a `mailto:` address, an image from another site, a file name that
+comes to the same address as another's, and a front-matter field it does not know. Every file is
+checked whether or not it is published.
+
+An announcement is published from its `date` through its `expires`, against `SITE_BUILD_DATE` or
+today in America/Chicago, so an expiry takes effect at the next deploy, not on its date. `/news/`
+and the announcement pages are one optional catch-all route, `src/app/news/[[...slug]]/`, because
+a static export refuses a dynamic route that generates no page, and the site often has no
+announcement. The coach-facing side is
+[`docs/guides/coach-website-editing.md`](../docs/guides/coach-website-editing.md#announcements-one-file-each-in-the-announcements-folder).
 
 ## Design tokens
 

@@ -89,7 +89,7 @@ spec:
         and the check fails on a new bare-word entry outside that list, so the v1-e36-t08 ruling
         cannot quietly erode.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

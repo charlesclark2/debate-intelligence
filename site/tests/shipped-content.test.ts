@@ -1,7 +1,9 @@
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
+import { announcementsGuardedContent, loadAnnouncements } from '@/lib/announcements'
 import { loadSiteSettings } from '@/lib/content'
 import { consentGuardedContent, loadMediaConsent } from '@/lib/media-consent'
 import { checkPublishingPolicy, contactDetails } from '@/lib/publishing-policy'
@@ -76,6 +78,14 @@ const checks: Record<string, (directory: string) => void> = {
     loadResultsView(directory)
   },
 
+  /**
+   * Every file in content/announcements/ passes the build's own checks, published or not
+   * (v1-e37-t03): its front matter, Markdown only, the house style and the publishing policy.
+   */
+  announcements: (directory) => {
+    loadAnnouncements(directory)
+  },
+
   /** The schedule, the results and the consent manifest are for the same season. */
   oneSeason: (directory) => {
     const seasons = (['tournaments.yaml', 'results.yaml', 'media-consent.yaml'] as const).map(
@@ -120,6 +130,7 @@ const checks: Record<string, (directory: string) => void> = {
       pages: [
         ...scheduleGuardedContent(directory),
         ...resultsGuardedContent(directory),
+        ...announcementsGuardedContent(directory),
         ...consentGuardedContent(directory),
       ],
       settings: loadSiteSettings(directory),
@@ -356,5 +367,37 @@ describe('a break planted in a copy of the shipped content is refused', () => {
   ])('the %s check refuses %s', (name, _plant, edits, reason) => {
     const copy = shippedContentWith(edits)
     expect(() => checks[name]!(copy)).toThrow(reason)
+  })
+})
+
+/**
+ * An announcement file a coach might add, planted beside whatever the shipped folder holds, is
+ * refused by the announcements check when it breaks a rule and passes when it does not. The
+ * names in them are invented.
+ */
+describe('an announcement planted in a copy of the shipped content', () => {
+  const planted = (body: string) =>
+    ['---', 'title: Planted announcement', 'date: 2026-10-20', '---', '', body, ''].join('\n')
+
+  function withAnnouncement(body: string): string {
+    const copy = shippedContentWith()
+    mkdirSync(join(copy, 'announcements'), { recursive: true })
+    writeFileSync(join(copy, 'announcements', 'zz-planted-announcement.md'), planted(body))
+    return copy
+  }
+
+  it('passes every check when it breaks no rule', () => {
+    const copy = withAnnouncement('Practice is on as usual this week.')
+    for (const name of Object.keys(checks)) {
+      expect(() => checks[name]!(copy), `the ${name} check`).not.toThrow()
+    }
+  })
+
+  it.each([
+    ['a phone number', 'Call 414-555-0142 with questions.', /zz-planted-announcement\.md: publishes what looks like a phone number/],
+    ['a student with no consent entry', 'Congratulations to Taylor Brooks.', /zz-planted-announcement\.md: names "Taylor Brooks"/],
+    ['raw HTML', '<div>Big news</div>', /zz-planted-announcement\.md: contains raw HTML/],
+  ])('is refused by the announcements check for %s', (_plant, body, reason) => {
+    expect(() => checks.announcements!(withAnnouncement(body))).toThrow(reason)
   })
 })

@@ -18,8 +18,9 @@ dependencies = [
     # `tub`, with `aws`: the coach's `tub users` commands, which reach the pilot's user pool and
     # audit log through debate_core.integrations.cognito and cloudwatch_audit (v1-e39-t05).
     # `extraction`, with `http`: `fetch`, whose article fetcher reads pages with the HTML and PDF
-    # extractors (trafilatura, readability-lxml, pypdf; v1-e04-t06).
-    "debate-core[aws,docx,extraction,http,opencaselist,tub]",
+    # extractors (trafilatura, readability-lxml, pypdf; v1-e04-t06). `feeds`, with `http`: `search`,
+    # whose RSS and Google News providers parse feeds with defusedxml (v1-e07-t05, v1-e08-t05).
+    "debate-core[aws,docx,extraction,feeds,http,opencaselist,tub]",
     "rich>=13.9",
     "typer>=0.15",
 ]

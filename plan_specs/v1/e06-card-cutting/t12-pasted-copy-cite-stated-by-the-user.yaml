@@ -44,7 +44,7 @@ spec:
         copy stored without them cuts as today, by tests shown failing first and an
         installed-build smoke check.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

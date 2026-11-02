@@ -95,6 +95,7 @@ __all__ = [
     "USER_TEXT_EXTRACTOR_VERSION",
     "ArticleService",
     "InvalidSourceUrl",
+    "NoUserSuppliedCopy",
     "RetrievalOutcome",
     "UserTextNotAttested",
     "UserTextRejected",
@@ -134,6 +135,15 @@ class UserTextRejected(DomainError):
     def __init__(self, reason: str) -> None:
         self.reason = reason
         super().__init__(f"user-supplied text was not stored: {reason}")
+
+
+class NoUserSuppliedCopy(DomainError):
+    """No text a user supplied is stored for the URL, so there is no copy of theirs to cut from."""
+
+    def __init__(self, url: str, canonical_url: str) -> None:
+        self.url = url
+        self.canonical_url = canonical_url
+        super().__init__(f"no user-supplied copy of {canonical_url} is stored")
 
 
 def access_thresholds(settings: ArticleSettings) -> AccessThresholds:
@@ -517,6 +527,14 @@ class ArticleService:
             ),
             message="user text ingested",
         )
+
+    # ----------------------------------------------------------------------------------------
+    # user_supplied_copy
+    # ----------------------------------------------------------------------------------------
+
+    async def user_supplied_copy(self, url: str, *, correlation_id: str | None = None) -> RetrievalOutcome:
+        """The newest text a user supplied for `url`, as stored; nothing is fetched."""
+        return await self.retrieve(url, correlation_id=correlation_id)
 
     def _check_user_text(self, text: str) -> None:
         minimum = self._settings.access_minimum_characters

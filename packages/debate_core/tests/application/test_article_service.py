@@ -31,10 +31,12 @@ from debate_core.application.article_service import (
     USER_TEXT_EXTRACTOR_VERSION,
     ArticleService,
     InvalidSourceUrl,
+    NoUserSuppliedCopy,
     UserTextNotAttested,
     UserTextRejected,
     access_thresholds,
 )
+from debate_core.application.errors import error_code_of
 from debate_core.application.settings import ArticleSettings
 from debate_core.application.snapshot_service import SnapshotService
 from debate_core.domain import AccessStatus, ProvenanceMode
@@ -863,6 +865,75 @@ def test_user_text_stays_distinguishable_from_the_publisher_snapshot() -> None:
     assert again.snapshot == readable.snapshot
     assert again.snapshot is not None
     assert again.snapshot.provenance_mode is ProvenanceMode.PUBLISHER_RETRIEVED
+
+
+# --------------------------------------------------------------------------------------------
+# The stored user-supplied copy `cut --from-paste` cuts from (v1-e06-t08)
+# --------------------------------------------------------------------------------------------
+
+
+def test_a_stored_user_copy_is_answered_as_stored_and_nothing_is_fetched() -> None:
+    world = build_world()
+    supplied = run(
+        world.service.ingest_user_text(
+            source_url=PAYWALLED_URL, text=TEXT, attested=True, reported_access_status=AccessStatus.PAYWALLED
+        )
+    )
+
+    outcome = run(world.service.user_supplied_copy(PAYWALLED_URL))
+
+    assert world.fetcher.requested_urls == []
+    assert (outcome.fetched, outcome.snapshot_reused, outcome.decision) == (False, True, None)
+    assert outcome.snapshot == supplied.snapshot
+    assert outcome.snapshot is not None and outcome.snapshot.provenance_mode is ProvenanceMode.USER_SUPPLIED
+    assert outcome.access_status is AccessStatus.PAYWALLED, "the status is the user's report, kept as given"
+    assert (outcome.requested_url, outcome.canonical_url) == (PAYWALLED_URL, PAYWALLED_CANONICAL)
+    assert (outcome.fetch_url, outcome.final_url) == (None, None)
+    assert outcome.article == supplied.article
+
+
+def test_the_newest_user_copy_answers_and_never_the_publishers_snapshot() -> None:
+    world = build_world()
+    world.fetcher.add(ARTICLE_URL, BODY)
+    run(world.service.retrieve(ARTICLE_URL))
+    run(world.service.ingest_user_text(source_url=ARTICLE_URL, text=TEXT, attested=True))
+    world.clock.advance(timedelta(hours=1))
+    changed = run(
+        world.service.ingest_user_text(
+            source_url=ARTICLE_URL, text="\n\n".join(CHANGED_PARAGRAPHS), attested=True
+        )
+    )
+    world.clock.advance(timedelta(hours=1))
+    run(world.service.retrieve(ARTICLE_URL, refresh=True))
+
+    outcome = run(world.service.user_supplied_copy(ARTICLE_URL))
+
+    assert world.fetcher.requested_urls == [ARTICLE_URL, ARTICLE_URL], "only the two retrievals fetched"
+    assert outcome.snapshot == changed.snapshot
+    assert outcome.snapshot is not None and outcome.snapshot.normalized_text_hash == CHANGED_TEXT_HASH
+
+
+@pytest.mark.parametrize("stored", ["nothing", "only the publisher's snapshot"])
+def test_no_stored_user_copy_is_refused_and_nothing_is_fetched(stored: str) -> None:
+    world = build_world()
+    if stored == "only the publisher's snapshot":
+        world.fetcher.add(ARTICLE_URL, BODY)
+        run(world.service.retrieve(ARTICLE_URL))
+    requested = list(world.fetcher.requested_urls)
+
+    with pytest.raises(NoUserSuppliedCopy) as refused:
+        run(world.service.user_supplied_copy(ARTICLE_URL))
+
+    assert (refused.value.url, refused.value.canonical_url) == (ARTICLE_URL, ARTICLE_URL)
+    assert error_code_of(refused.value) == "NO_USER_SUPPLIED_COPY"
+    assert world.fetcher.requested_urls == requested
+
+
+def test_a_user_copy_asked_for_by_a_string_that_is_not_a_source_url_is_refused() -> None:
+    world = build_world()
+    with pytest.raises(InvalidSourceUrl):
+        run(world.service.user_supplied_copy("not a url"))
+    assert world.fetcher.requested_urls == []
 
 
 # --------------------------------------------------------------------------------------------

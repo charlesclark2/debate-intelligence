@@ -23,6 +23,7 @@ passages are the committed `card.markup` answer's offsets read off t04's paragra
 from __future__ import annotations
 
 import gc
+import hashlib
 import io
 import json
 import sqlite3
@@ -35,7 +36,13 @@ from typing import Any, Final
 import docx
 import httpx
 import pytest
-from tests.fixtures.card.card_world import MODEL_OUTPUTS, NEWS_ARGUMENT, NEWS_NEED, CountingRouter
+from tests.fixtures.card.card_world import (
+    MODEL_OUTPUTS,
+    NEWS_ARGUMENT,
+    NEWS_NEED,
+    CountingRouter,
+    paragraphs_of,
+)
 from tests.fixtures.citation.citation_world import CrossrefAnswers
 from tests.fixtures.http.cassettes import ReplayTransport, cassette_names, load_cassette
 from typer.testing import CliRunner, Result
@@ -554,3 +561,201 @@ def test_a_cut_without_a_need_exit_code_is_2(seams: Seams, out: Path) -> None:
 
     assert result.exit_code == ExitCode.USAGE_ERROR, result.output
     assert seams.transport.requested == []
+
+
+# --------------------------------------------------------------------------------------------
+# --from-paste: a card cut from the user's own stored copy (v1-e06-t08)
+# --------------------------------------------------------------------------------------------
+
+PASTED_TEXT: Final = "\n\n".join(paragraphs_of("news-article"))
+"""t04's hand-written paragraphs of the news article, as a coach would paste their library copy.
+
+The model is shown only the numbered text and the need, so the committed answers for the news article
+answer for this copy too: the same tag, evidence and underlines as a publisher-retrieved cut."""
+PASTED_FULL_CITE: Final = (
+    f"[no author] 26 [September 14, 2026; {NEWS_CANONICAL}; accessed October 26, 2026; user-supplied text]"
+)
+"""By the citation rules (v1-e06-t01): a pasted copy holds no markup, so only its URL is read. The date
+is the URL path's, the URL and accessed date the platform's record of what the user said, and nothing
+names an author, title or publication (`fetch --paste` titles the article with its URL, which is never
+taken as a title). The short cite falls back to "[no author]"; the note says whose text it is."""
+PASTED_CITE_FIELDS: Final = ["authors", "title", "publication", "published_at", "canonical_url"]
+"""Every required cite field: none is verified for user-supplied text, missing or not."""
+PASTED_BANNER: Final = "UNVERIFIED — not a finished card: CITATION_UNVERIFIED"
+
+
+def paste(url: str, tmp_path: Path) -> dict[str, Any]:
+    """Store `PASTED_TEXT` for `url` the way the coach does, `fetch --paste`; the stored snapshot's summary."""
+    pasted = tmp_path / "library-copy.txt"
+    pasted.write_text(PASTED_TEXT, encoding="utf-8")
+    result = runner.invoke(
+        create_app(),
+        ["--json", "fetch", "--paste", str(pasted), "--source-url", url, "--i-have-lawful-access"],
+    )
+    assert result.exit_code == ExitCode.OK, result.output
+    snapshot: dict[str, Any] = envelope(result)["data"]["snapshot"]
+    assert snapshot["provenance_mode"] == "USER_SUPPLIED"
+    return snapshot
+
+
+def cut_pasted(url: str, out: Path, *options: str, json_output: bool = False) -> Result:
+    return cut(
+        url,
+        "--need",
+        NEWS_NEED,
+        "--argument",
+        NEWS_ARGUMENT,
+        "--output",
+        str(out),
+        "--from-paste",
+        *options,
+        json_output=json_output,
+    )
+
+
+def test_the_help_documents_from_paste_and_the_exit_code_for_no_pasted_copy() -> None:
+    result = runner.invoke(create_app(), ["cut", "--help"])
+
+    assert result.exit_code == ExitCode.OK
+    flat = " ".join(result.stdout.split())
+    assert "--from-paste" in flat
+    assert "fetch --paste" in flat
+    assert "no copy stored with fetch --paste" in flat
+
+
+def test_a_card_cut_from_a_stored_pasted_copy_is_user_supplied_and_nothing_is_fetched(
+    seams: Seams, data_dir: Path, out: Path, tmp_path: Path
+) -> None:
+    pasted = paste(NEWS_URL, tmp_path)
+
+    result = cut_pasted(NEWS_URL, out, json_output=True)
+
+    assert result.exit_code == ExitCode.CARD_UNVERIFIED, result.output
+    assert seams.transport.requested == [], "cutting from a pasted copy asks no publisher"
+    details = envelope(result)["error"]["details"]
+    assert details["source"] == {
+        "requested_url": NEWS_URL,
+        "canonical_url": NEWS_CANONICAL,
+        "access_status": "UNKNOWN",
+        "provenance_mode": "USER_SUPPLIED",
+        "fetched": False,
+        "snapshot_id": pasted["snapshot_id"],
+        "snapshot_reused": True,
+    }
+    [card] = stored_cards(data_dir)
+    assert (card["provenance_mode"], card["snapshot_id"]) == ("USER_SUPPLIED", pasted["snapshot_id"])
+    assert EVIDENCE_WORD not in result.stdout
+
+
+def test_a_card_cut_from_a_pasted_copy_is_unverified_for_its_cite_alone(
+    seams: Seams, data_dir: Path, out: Path, tmp_path: Path
+) -> None:
+    paste(NEWS_URL, tmp_path)
+
+    result = cut_pasted(NEWS_URL, out, json_output=True)
+
+    assert result.exit_code == ExitCode.CARD_UNVERIFIED, result.output
+    details = envelope(result)["error"]["details"]
+    assert details["status"] == "UNVERIFIED"
+    assert [(r["reason"], r["verifier_code"], r["fields"]) for r in details["reasons"]] == [
+        ("CITATION_UNVERIFIED", "CITATION_UNVERIFIED", PASTED_CITE_FIELDS)
+    ]
+    paragraphs = read_paragraphs(out)
+    assert [(p.style_id, p.text) for p in paragraphs[:2]] == [("Heading4", TAG), ("Normal", PASTED_FULL_CITE)]
+    assert paragraphs[2].underlined == UNDERLINED
+    assert PASTED_BANNER in [p.text for p in paragraphs]
+    [embedded] = embedded_manifest(out)["cards"]
+    assert (embedded["evidence_text"], embedded["verification_status"]) == (EVIDENCE, "UNVERIFIED")
+
+
+def test_the_manifest_of_a_card_cut_from_a_pasted_copy_records_user_supplied_and_references_that_copy(
+    seams: Seams, out: Path, tmp_path: Path
+) -> None:
+    pasted = paste(NEWS_URL, tmp_path)
+
+    assert cut_pasted(NEWS_URL, out).exit_code == ExitCode.CARD_UNVERIFIED
+
+    manifest = embedded_manifest(out)
+    [embedded] = manifest["cards"]
+    assert (embedded["provenance_mode"], embedded["snapshot_id"]) == ("USER_SUPPLIED", pasted["snapshot_id"])
+    assert manifest["snapshots"] == [
+        {
+            "snapshot_id": pasted["snapshot_id"],
+            "sha256": hashlib.sha256(PASTED_TEXT.encode("utf-8")).hexdigest(),
+            "normalized_text_hash": pasted["normalized_text_hash"],
+            "normalizer_version": pasted["normalizer_version"],
+            "extractor_version": "user-supplied-text-1",
+            "retrieved_at": "2026-10-26T15:00:00Z",
+            "canonical_url": NEWS_CANONICAL,
+        }
+    ]
+
+
+def test_verify_finds_a_card_cut_from_a_pasted_copy_true_to_that_copy_and_unverified_for_its_cite_alone(
+    seams: Seams, out: Path, tmp_path: Path
+) -> None:
+    paste(NEWS_URL, tmp_path)
+    assert cut_pasted(NEWS_URL, out).exit_code == ExitCode.CARD_UNVERIFIED
+
+    result = runner.invoke(create_app(), ["--json", "verify", str(out)])
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    [card] = envelope(result)["error"]["details"]["cards"]
+    assert (card["status"], card["reason_codes"]) == ("UNVERIFIED", ["CITATION_UNVERIFIED"])
+
+
+def test_the_paste_progress_says_the_stored_copy_answered_and_nothing_was_fetched(
+    seams: Seams, out: Path, tmp_path: Path
+) -> None:
+    paste(NEWS_URL, tmp_path)
+
+    result = cut_pasted(NEWS_URL, out, json_output=True)
+
+    events = [json.loads(line) for line in result.stderr.splitlines() if line.strip()]
+    assert [event["event"] for event in events] == STAGES
+    [fetched] = [event for event in events if event["event"] == "fetch"]
+    assert (fetched["data"]["fetched"], fetched["data"]["provenance_mode"]) == (False, "USER_SUPPLIED")
+
+
+def test_a_paywalled_source_can_be_pasted_and_cut_from_the_paste_as_the_fetch_hint_says(
+    seams: Seams, data_dir: Path, out: Path, tmp_path: Path
+) -> None:
+    fetched = runner.invoke(create_app(), ["--json", "fetch", PAYWALLED_URL])
+    assert fetched.exit_code == ExitCode.RETRIEVAL_FAILURE, fetched.output
+    hint = envelope(fetched)["error"]["hint"]
+    assert "--paste" in hint
+    assert f"cut {PAYWALLED_URL} --from-paste" in hint
+    requested = list(seams.transport.requested)
+    pasted = paste(PAYWALLED_URL, tmp_path)
+
+    result = cut_pasted(PAYWALLED_URL, out, json_output=True)
+
+    assert result.exit_code == ExitCode.CARD_UNVERIFIED, result.output
+    assert seams.transport.requested == requested, "the cut asked the publisher nothing"
+    details = envelope(result)["error"]["details"]
+    assert [reason["reason"] for reason in details["reasons"]] == ["CITATION_UNVERIFIED"]
+    [card] = stored_cards(data_dir)
+    assert (card["provenance_mode"], card["snapshot_id"]) == ("USER_SUPPLIED", pasted["snapshot_id"])
+
+
+@pytest.mark.parametrize("stored", ["nothing", "only the publisher's snapshot"])
+def test_from_paste_with_no_pasted_copy_stored_exits_1_with_the_fetch_paste_hint_and_fetches_nothing(
+    seams: Seams, data_dir: Path, out: Path, stored: str
+) -> None:
+    counting = CountingRouter(FakeModelRouter(MODEL_OUTPUTS))
+    seams.router = counting
+    if stored == "only the publisher's snapshot":
+        assert runner.invoke(create_app(), ["fetch", NEWS_URL]).exit_code == ExitCode.OK
+    requested = list(seams.transport.requested)
+
+    result = cut_pasted(NEWS_URL, out, json_output=True)
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    error = envelope(result)["error"]
+    assert (error["code"], error["exit_code"]) == ("NO_USER_SUPPLIED_COPY", 1)
+    assert error["details"]["canonical_url"] == NEWS_CANONICAL
+    assert f"fetch --paste FILE --source-url {NEWS_URL}" in error["hint"]
+    assert seams.transport.requested == requested, "no fetch stands in for a missing pasted copy"
+    assert counting.calls == []
+    assert not out.exists()
+    assert stored_cards(data_dir) == []

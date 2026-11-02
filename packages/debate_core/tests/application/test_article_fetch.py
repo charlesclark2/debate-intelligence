@@ -25,7 +25,7 @@ from debate_core.application.article_fetch import (
     FetchReport,
     render_fetch_result_schema,
 )
-from debate_core.application.article_service import ArticleService, UserTextNotAttested
+from debate_core.application.article_service import ArticleService, NoUserSuppliedCopy, UserTextNotAttested
 from debate_core.application.errors import SnapshotIntegrityError
 from debate_core.application.settings import ArticleSettings
 from debate_core.application.snapshot_service import SnapshotService
@@ -152,6 +152,30 @@ def test_pasted_text_is_reported_as_user_supplied_and_nothing_is_fetched() -> No
     assert not report.fetched
     assert report.snapshot is not None and report.snapshot.paragraph_count == 3
     assert world.fetcher.requested_urls == []
+
+
+def test_a_stored_pasted_copy_is_reported_as_user_supplied_and_nothing_is_fetched() -> None:
+    world = build_world()
+    pasted = run(world.fetch.ingest_pasted(source_url=URL, text=BODY.decode(), attested=True))
+
+    report = run(world.fetch.user_supplied_copy(URL))
+
+    assert world.fetcher.requested_urls == []
+    assert (report.provenance_mode, report.fetched) == (ProvenanceMode.USER_SUPPLIED, False)
+    assert report.snapshot is not None and pasted.snapshot is not None
+    assert report.snapshot.snapshot_id == pasted.snapshot.snapshot_id
+    assert (report.snapshot.reused, report.snapshot.paragraph_count) == (True, 3)
+    assert report.canonical_url == CANONICAL
+
+
+def test_no_stored_pasted_copy_is_refused_and_nothing_is_fetched() -> None:
+    world = build_world()
+
+    with pytest.raises(NoUserSuppliedCopy):
+        run(world.fetch.user_supplied_copy(URL))
+
+    assert world.fetcher.requested_urls == []
+    assert world.connection.closed == 0, "the run's own context closes it, as for every other call"
 
 
 def test_unattested_pasted_text_is_refused_and_stores_nothing() -> None:

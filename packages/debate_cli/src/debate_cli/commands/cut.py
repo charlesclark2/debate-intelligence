@@ -90,6 +90,13 @@ def cut(
             "--format", metavar="PROFILE", help="The team format profile: team-default, flow or plain."
         ),
     ] = DEFAULT_FORMAT_PROFILE,
+    from_paste: Annotated[
+        bool,
+        typer.Option(
+            "--from-paste",
+            help="Cut from the copy you stored with fetch --paste for this URL, as USER_SUPPLIED. Fetches nothing.",
+        ),
+    ] = False,
     json_output: Annotated[
         bool, typer.Option("--json", help="Write one machine-readable JSON object to stdout.")
     ] = False,

@@ -63,7 +63,7 @@ v2.3's extension work.
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 55 | 252 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 115 | 95 | 505 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 75 | 68 | 312 |
-| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 18 | 12 | 118 |
+| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 18 | 13 | 118 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 17 | 7 | 100 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 29 | 21 | 166 |
@@ -423,7 +423,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [DOCX renderer](plan_specs/v1/e06-card-cutting/t04-docx-renderer.yaml) `v1-e06-t04-docx-renderer` | Succeeded | 3 | 11.0 |
 | [JSON manifest export](plan_specs/v1/e06-card-cutting/t05-json-manifest-export.yaml) `v1-e06-t05-json-manifest-export` | Succeeded | 2 | 6.0 |
 | [`debate-research cut` command](plan_specs/v1/e06-card-cutting/t06-cut-command.yaml) `v1-e06-t06-cut-command` | Succeeded | 3 | 7.0 |
-| [Verify DOCX files](plan_specs/v1/e06-card-cutting/t07-verify-docx.yaml) `v1-e06-t07-verify-docx` | Pending | 2 | 8.0 |
+| [Verify DOCX files](plan_specs/v1/e06-card-cutting/t07-verify-docx.yaml) `v1-e06-t07-verify-docx` | Succeeded | 2 | 8.0 |
 | [`cut` can cut a card from the user's own stored copy of an article, with that provenance](plan_specs/v1/e06-card-cutting/t08-cut-from-a-stored-pasted-copy.yaml) `v1-e06-t08-cut-from-a-stored-pasted-copy` | Pending | 1 | 3.0 |
 | [`cut` refused for an unrecorded model call says to set DEBATE_MODEL_MODE=live for a real cut](plan_specs/v1/e06-card-cutting/t09-cut-replay-hint-names-live-mode.yaml) `v1-e06-t09-cut-replay-hint-names-live-mode` | Pending | 1 | 0.5 |
 

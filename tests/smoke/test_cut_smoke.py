@@ -250,3 +250,99 @@ def test_verify_reads_the_docx_cut_wrote_and_finds_its_card_verified_offline(
         "unclaimed_body_card_verdicts": [],
     }
     assert out.read_bytes() == written, "verify only reads the document"
+
+
+# --------------------------------------------------------------------------------------------
+# --from-paste: the coach's own stored copy (v1-e06-t08)
+# --------------------------------------------------------------------------------------------
+
+PASTED_CITE_FIELDS: Final = ["authors", "title", "publication", "published_at", "canonical_url"]
+"""Every required cite field: the citation rules verify none of text a user supplied (v1-e06-t01)."""
+
+
+def _paste_news(installed_cli: InstalledCli) -> dict[str, Any]:
+    """t04's paragraphs of the news article stored with the build's own `fetch --paste`; the snapshot."""
+    pasted = installed_cli.workdir / "library-copy.txt"
+    pasted.write_text("\n\n".join(paragraphs_of("news-article")), encoding="utf-8")
+    run = installed_cli.run(
+        "--json", "fetch", "--paste", str(pasted), "--source-url", NEWS_URL, "--i-have-lawful-access"
+    )
+    assert run.exit_code == ExitCode.OK, run.output
+    data = run.envelope()["data"]
+    assert isinstance(data, dict)
+    snapshot: dict[str, Any] = data["snapshot"]
+    return snapshot
+
+
+def test_cut_from_paste_cuts_the_stored_copy_as_user_supplied_and_verify_reads_it_offline(
+    installed_cli: InstalledCli,
+) -> None:
+    """Paste, cut and verify on the build under test, nothing fetched (the guard's log stays empty).
+
+    The pasted copy is the news article's text, so the replayed answers are the ones `cut` asks for.
+    The evidence verifies against the copy; the cite of user-supplied text never does, so the card is
+    UNVERIFIED for that alone (exit 4), and `verify` finds the same (exit 1)."""
+    snapshot = _paste_news(installed_cli)
+    assert len(_plant_cassettes(installed_cli.data_dir)) == 2
+    out = installed_cli.workdir / "evidence.docx"
+
+    cut = installed_cli.run(
+        "--json",
+        "cut",
+        NEWS_URL,
+        "--from-paste",
+        "--need",
+        NEWS_NEED,
+        "--argument",
+        NEWS_ARGUMENT,
+        "--output",
+        str(out),
+    )
+
+    assert cut.exit_code == ExitCode.CARD_UNVERIFIED, cut.output
+    error = cut.envelope()["error"]
+    assert isinstance(error, dict)
+    details = error["details"]
+    assert (details["source"]["provenance_mode"], details["source"]["fetched"]) == ("USER_SUPPLIED", False)
+    assert [(r["reason"], r["fields"]) for r in details["reasons"]] == [
+        ("CITATION_UNVERIFIED", PASTED_CITE_FIELDS)
+    ]
+    manifest = json.loads(read_embedded_manifest_bytes(out))
+    [card] = manifest["cards"]
+    assert (card["provenance_mode"], card["snapshot_id"], card["evidence_text"]) == (
+        "USER_SUPPLIED",
+        snapshot["snapshot_id"],
+        EVIDENCE,
+    )
+    assert [(s["snapshot_id"], s["extractor_version"]) for s in manifest["snapshots"]] == [
+        (snapshot["snapshot_id"], "user-supplied-text-1")
+    ]
+
+    verify = installed_cli.run("--json", "verify", str(out))
+
+    assert verify.exit_code == ExitCode.DOMAIN_FAILURE, verify.output
+    verified = verify.envelope()["error"]
+    assert isinstance(verified, dict)
+    [verdict] = verified["details"]["cards"]
+    assert (verdict["card_id"], verdict["status"], verdict["reason_codes"]) == (
+        card["card_id"],
+        "UNVERIFIED",
+        ["CITATION_UNVERIFIED"],
+    )
+
+
+def test_cut_from_paste_with_no_stored_copy_exits_1_naming_fetch_paste_offline(
+    installed_cli: InstalledCli,
+) -> None:
+    out = installed_cli.workdir / "evidence.docx"
+
+    run = installed_cli.run(
+        "--json", "cut", NEWS_URL, "--from-paste", "--need", NEWS_NEED, "--output", str(out)
+    )
+
+    assert run.exit_code == ExitCode.DOMAIN_FAILURE, run.output
+    error = run.envelope()["error"]
+    assert isinstance(error, dict)
+    assert error["code"] == "NO_USER_SUPPLIED_COPY"
+    assert isinstance(error["hint"], str) and "fetch --paste FILE --source-url" in error["hint"]
+    assert not out.exists()

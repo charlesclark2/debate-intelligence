@@ -186,9 +186,40 @@ whole selection (the PM's brief).
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-02
 
 **Notes:**
+
+Measuring before building was the right call, and the finding changed the plan: ten of the last
+twelve task pull requests still get eight parts, so sizing saves runners and queueing on small
+selections but not an ordinary task pull request's wait. That is now its own p1 task.
+
+1. **ac1 passes.** The rule is stated in one place (`parts_of`, 30 files a part, 1 to 8, eight for the
+   whole selection) and named in ci.yml's header, agreements 1 and 10 and the costs page. Red first
+   (14 and 56 failing), 171 green, 13 of 14 mutants caught and the fourteenth shown equivalent and
+   removed. The partition proof deals the real collection at every size from 1 to 8 and is no
+   slower than before (18.7 s and 17.7 s against 36.5 s and 18.2 s).
+2. **The PM read `changes` in ci.yml.** The full-history checkout and the comparison run only on the
+   bot's dispatch of `bot/refresh-generated-files`; every other run is unchanged. A person's commit,
+   a deletion or a failed comparison writes 'false' and runs everything, each pinned by a test.
+   `xdist_dist` is a `choice` input reaching the shell only through `XDIST_DIST`.
+3. **Deviation 2 is accepted, and thank you for flagging it.** The ruling stands on the corrected
+   figures: by file, the two small sets get 2 and 4 parts at about 1,020 tests a part, still near
+   100 s, and no collection step joins the critical path. Both columns stay in the costs page.
+4. **Deviation 1** is the PM's ruling of 2026-11-02. **Decisions accepted:** `parts` is `[1]` when no
+   part runs; the proof covers every size by dealing; `--dist no` in one-process test runs.
+5. **ac2 is NOT RUN** and needs the merge. The operator dispatches load and worksteal on one `dev`
+   commit and pastes the two run ids; the PM reads the eight parts' pytest step times and decides
+   the default in a one-line change, then reads the next three ordinary task pull requests' `ci`
+   wall times and records ac2.
+6. **Follow-up:** duration-based dealing (the costs page's option 1) is filed as a p1 E41 task in the
+   next batch, with this report's figures.
+7. **Closing checks:** the affected set is the whole selection (ci.yml is shared test ground), so it
+   is left to this pull request's own `ci`. The changed directory with the always-run list (2,718
+   passed), docs and architecture (434), actionlint, ruff, pyright over the whole tree,
+   lint-imports, thin handlers, the links and the specs are clean.
+8. **Merge:** `scripts/task pr --partial` once `ci` is green. The Goal stays `InProgress` until the PM
+   records ac2.

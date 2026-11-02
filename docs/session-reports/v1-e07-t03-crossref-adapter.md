@@ -402,9 +402,42 @@ Both are optional and for after the merge, once an installed build carries this 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-02
 
 **Notes:**
+
+A careful adapter. The two stops before building were the right calls: the first found Crossref's
+2025-12-01 list limits, which the spec predates, and the second found that a plain pacer would bench
+a healthy provider. Both rulings are in the spec, and the report keeps the evidence that led to them.
+
+1. **ac1 to ac4 pass.** respx pins every request parameter and the User-Agent on both pools; partial
+   dates keep their precision through dedupe, the Article and the table; the headers tighten the
+   adapter's own pacer and never loosen it past the documented pace; the kit passes three times, and
+   the one-process run (932) ends with Crossref's 195.
+2. **The public-pool case is solved as ruled.** On virtual time through the real wrapper and
+   `FanOutStage`: 9, 6 and 3 asked at answers of 0.5, 1.5 and 2.5 s, the rest "not asked" with the
+   cure in the message, the breaker closed with 0 errors every time, and the polite pool answering
+   all 11. The queries not asked are the last in the expansion's order, and a sent query that runs
+   slow still times out (a real-time test).
+3. **Red first and mutants:** 144, 11 and 6 failing before the code; 20 of 20 mutants caught, the PM's
+   five among them. The look-alike-host survivor was closed with a test, as it should be.
+4. **Deviations accepted,** including the two pinned integration lists (`test_doctor.py`,
+   `test_installation.py`), which wiring the factory requires. The PM amends the spec's packages in
+   the next batch.
+5. **Decisions accepted:** the even pace (never a burst), the reserve over the last 50 answers,
+   `issued` first, the DOI through `ArticleIdentifiers`, open access only from an in-force Creative
+   Commons licence, and the type table.
+6. **Follow-ups the PM files:** the wrapper not counting a pacer's wait as a failure, with the
+   latency-median point folded in (before t04); a `date_precision` key in `search --json`; a cap on
+   templates per taxonomy pair (p3). A partial date on an Article waits on v1-e06-t12's Citation date
+   follow-up, which the PM files with it.
+7. **Operator follow-ups are optional** and run after an installed build carries this; the PM reads
+   the smoke output if Charlie runs it.
+8. **Closing checks:** the affected set (514 files) is left to `ci` (agreement 10). The changed areas
+   with the always-run list (2,784), the application directory in three parts, ruff, pyright,
+   lint-imports, thin handlers, the schemas, the links and the specs are clean, after the sync onto
+   v1-e06-t12.
+9. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`.

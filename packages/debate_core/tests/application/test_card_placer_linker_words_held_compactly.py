@@ -27,10 +27,11 @@ import pytest
 
 import debate_core.application.caselist_card_stats as caselist_card_stats
 from debate_core.application.caselist_card_stats import CaselistCardStatsService
+from debate_core.domain.card_occurrence import ClusterMembership
 from debate_core.domain.caselist import SourceOrigin
 from debate_core.domain.debate_files import CardCompleteness, FileImportProvenance, ParsedCard
 from debate_core.domain.style_profile import StyleMatchSource
-from debate_core.evidence.abbreviated_links import AbbreviationAnchor, FullCardWords
+from debate_core.evidence.abbreviated_links import AbbreviationAnchor, FullCardWords, matching_full_cards
 from debate_core.evidence.near_duplicates import matching_words
 from debate_core.testing.fakes.caselist import build_fake_caselist_repository
 
@@ -81,14 +82,15 @@ def held_while_linking(monkeypatch: pytest.MonkeyPatch, given: list[ParsedCard])
     placer = CaselistCardStatsService(build_fake_caselist_repository(), ellipsis_markers=MARKERS).placer()
     for one in given:
         placer.add(one)
-    original = caselist_card_stats.matching_full_cards
     at_link: list[int] = []
 
-    def first_question(anchor: AbbreviationAnchor, full_cards: Iterable[FullCardWords]) -> list[FullCardWords]:
+    def first_question(
+        anchor: AbbreviationAnchor, full_cards: Iterable[FullCardWords]
+    ) -> list[FullCardWords]:
         if not at_link:
             gc.collect()
             at_link.append(tracemalloc.get_traced_memory()[0])
-        return original(anchor, full_cards)
+        return matching_full_cards(anchor, full_cards)
 
     monkeypatch.setattr(caselist_card_stats, "matching_full_cards", first_question)
     gc.collect()
@@ -98,7 +100,7 @@ def held_while_linking(monkeypatch: pytest.MonkeyPatch, given: list[ParsedCard])
         placed = placer.placements()
     finally:
         tracemalloc.stop()
-    assert placed[-1].membership.value == "ABBREVIATED_LINK"  # the linker was asked, and linked it
+    assert placed[-1].membership is ClusterMembership.ABBREVIATED_LINK  # the linker was asked, and linked it
     (linking,) = at_link
     return linking - before
 

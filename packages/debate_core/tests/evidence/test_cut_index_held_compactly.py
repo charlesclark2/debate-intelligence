@@ -49,7 +49,12 @@ def corpus(cards: int, seed: int = 39, words: int = 400) -> dict[str, str]:
         changed = list(passage)
         changed[words // 2] = "changed"
         following = passages[(number + 1) % cards]
-        texts += [passage, changed, passage[words // 3 : 2 * words // 3], passage[words // 2 :] + following[: words // 2]]
+        texts += [
+            passage,
+            changed,
+            passage[words // 3 : 2 * words // 3],
+            passage[words // 2 :] + following[: words // 2],
+        ]
     return {f"{number:064x}": " ".join(text) for number, text in enumerate(texts)}
 
 

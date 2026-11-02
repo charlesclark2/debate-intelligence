@@ -96,13 +96,16 @@ from debate_core.evidence.abbreviated_links import (
     short_cite_key,
 )
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION, card_fingerprint, fingerprint_text
-from debate_core.evidence.near_duplicates import NearDuplicateThresholds
 from debate_core.integrations.local import FsEvidenceObjectStore
 from debate_core.integrations.local.parsed_store import LocalParsedStore
 from debate_core.integrations.local.suppression_list import local_suppression_list_file
 from debate_core.testing.fakes.caselist import build_fake_caselist_repository
 
-from ..evidence.near_duplicates_as_before import cluster_near_duplicates, matching_words
+from ..evidence.near_duplicates_as_before import (
+    NearDuplicateThresholds,
+    cluster_near_duplicates,
+    matching_words,
+)
 
 pytestmark = pytest.mark.anyio
 

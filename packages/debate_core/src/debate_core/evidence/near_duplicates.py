@@ -171,7 +171,7 @@ import re
 import struct
 from array import array
 from collections import OrderedDict, defaultdict
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Hashable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final, overload
 
@@ -310,20 +310,22 @@ def minhash_signature(shingle_set: Iterable[str], seed: str = MINHASH_SEED) -> t
     return tuple(minimums)
 
 
-def jaccard(left: frozenset[str], right: frozenset[str]) -> float:
+def jaccard(left: frozenset[Hashable], right: frozenset[Hashable]) -> float:
     """Shared shingles over all shingles. 0.0 when both are empty."""
     union = len(left | right)
     return len(left & right) / union if union else 0.0
 
 
-def containment(left: frozenset[str], right: frozenset[str]) -> float:
+def containment(left: frozenset[Hashable], right: frozenset[Hashable]) -> float:
     """Shared shingles over the smaller set: how much of the shorter body the longer one contains."""
     smaller = min(len(left), len(right))
     return len(left & right) / smaller if smaller else 0.0
 
 
-def contained_but_for_one_word(short: Sequence[str], long: Sequence[str]) -> bool:
+def contained_but_for_one_word(short: Sequence[Hashable], long: Sequence[Hashable]) -> bool:
     """Whether `short` is in `long` as one run of words, except at one word.
+
+    The words may be strings or their numbers in :class:`BodyWords`; they are only compared.
 
     The one word may be changed (`forty`, `fourty`), split in two (`students`, `stud ents`), run
     together from two, dropped or added. At least :data:`SHINGLE_SIZE` words of `short` before it
@@ -355,10 +357,10 @@ _ONE_WORD_CHANGES: Final = ((1, 1), (1, 2), (2, 1), (0, 1), (1, 0))
 
 
 def confirms_a_cut(
-    cut_set: frozenset[str],
-    holder_set: frozenset[str],
-    cut_words: Sequence[str],
-    holder_words: Sequence[str],
+    cut_set: frozenset[Hashable],
+    holder_set: frozenset[Hashable],
+    cut_words: Sequence[Hashable],
+    holder_words: Sequence[Hashable],
     limits: NearDuplicateThresholds,
 ) -> bool:
     """Whether a body that holds an end of `cut` is confirmed to contain it.

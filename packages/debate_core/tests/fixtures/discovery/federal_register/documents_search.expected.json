@@ -1,0 +1,44 @@
+[
+  {
+    "provider": "federal_register",
+    "provider_record_id": "2025-90101",
+    "title": "Marketplace Enrollment Verification Standards for Plan Year 2027",
+    "url": "https://www.federalregister.gov/documents/2025/03/14/2025-90101/marketplace-enrollment-verification-standards-for-plan-year-2027",
+    "source_type": "government",
+    "authors": [],
+    "publication": "Health and Human Services Department; Centers for Medicare & Medicaid Services",
+    "published_at": "2025-03-14T00:00:00Z",
+    "date_precision": "day",
+    "snippet": "This final rule sets enrollment verification standards for the individual health insurance marketplaces beginning with plan year 2027.",
+    "open_access_url": "https://www.govinfo.gov/content/pkg/FR-2025-03-14/pdf/2025-90101.pdf",
+    "open_access": true
+  },
+  {
+    "provider": "federal_register",
+    "provider_record_id": "2025-90102",
+    "title": "Premium Tax Credit Reconciliation for Marketplace Coverage",
+    "url": "https://www.govinfo.gov/content/pkg/FR-2025-08-01/pdf/2025-90102.pdf",
+    "source_type": "government",
+    "authors": [],
+    "publication": "Treasury Department",
+    "published_at": "2025-08-01T00:00:00Z",
+    "date_precision": "day",
+    "snippet": null,
+    "open_access_url": "https://www.govinfo.gov/content/pkg/FR-2025-08-01/pdf/2025-90102.pdf",
+    "open_access": true
+  },
+  {
+    "provider": "federal_register",
+    "provider_record_id": "2026-90104",
+    "title": "Agency Information Collection Activities: Marketplace Navigator Grant Reports",
+    "url": "https://www.federalregister.gov/documents/2026/02/27/2026-90104/agency-information-collection-activities-marketplace-navigator-grant-reports",
+    "source_type": "government",
+    "authors": [],
+    "publication": null,
+    "published_at": null,
+    "date_precision": null,
+    "snippet": null,
+    "open_access_url": null,
+    "open_access": true
+  }
+]

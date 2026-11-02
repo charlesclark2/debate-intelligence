@@ -753,6 +753,20 @@ async def test_a_user_supplied_snapshot_is_cut_whatever_status_its_user_reported
     assert result.verification.checks_run >= REQUIRED_CHECKS, "every check against the snapshot ran"
 
 
+async def test_a_user_supplied_card_with_no_evidence_placed_still_says_user_supplied() -> None:
+    """A refused selection places no evidence, so nothing copies provenance from the snapshot later:
+    the card CardService makes must already say whose text it is (v1-e06-t08)."""
+    world = scripted_world(PAST_THE_LAST_PARAGRAPH, PAST_THE_LAST_PARAGRAPH)
+    source = await pasted_news_copy(world, AccessStatus.UNKNOWN)
+
+    result = await world.card_service.cut_card(news_request(source.snapshot.snapshot_id))
+
+    card = await assert_saved_unverified(world, result)
+    assert card.evidence_text == ""
+    assert card.provenance_mode is ProvenanceMode.USER_SUPPLIED
+    assert ReasonCode.PROVENANCE_MISMATCH not in [reason.code for reason in result.verification.reasons]
+
+
 async def test_a_snapshot_that_is_not_stored_is_rejected_and_nothing_is_saved(world: CardWorld) -> None:
     with pytest.raises(NotFound):
         await world.card_service.cut_card(news_request(SNAPSHOT))

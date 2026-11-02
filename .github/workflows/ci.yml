@@ -125,7 +125,8 @@ jobs:
         run: |
           only=false
           if changed=$(git diff --name-status --no-renames origin/dev...HEAD); then
-            [ -z "$changed" ] || only=true
+            only=true
+            # No change at all reads as one empty line, which is no generated file: 'false'.
             while IFS=$'\t' read -r status path; do
               case "$path" in
                 ROADMAP.md | docs/README.md) [ "$status" != D ] || only=false ;;

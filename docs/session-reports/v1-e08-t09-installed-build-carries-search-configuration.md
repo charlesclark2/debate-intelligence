@@ -157,9 +157,38 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-02
 
 **Notes:**
+
+The fix is exactly the failure validate-dev showed, and the red-to-green on real installed builds
+proves it. Today's stamp gives 4 smoke failures, with `INVALID_ARGUMENT_TAXONOMY` naming the
+site-packages copy. This branch's stamp passes 5. This branch's check-wheels refuses today's wheel,
+naming the four missing files.
+
+1. **ac1 passes:**
+   * the bundled tree is checked byte for byte;
+   * the bundled copies load with the same loaders the container uses;
+   * check-wheels refuses each missing file and the search prompt;
+   * the stamp refuses a checkout without them.
+2. **Red first and mutants:** 14 tests failed against the skeleton. Of 11 mutants, the PM's four
+   among them, the one survivor (`--repository` ignored) was closed by a test.
+3. **The design choice is accepted:** check-wheels takes the feed lists from the checkout it runs in,
+   and fails closed when there are none. A new topic's feed list is then required with no code edit.
+   It runs in the checkout the stamp ran in, as dev-prerelease does.
+4. **Decisions accepted:**
+   * the landscape topics are not bundled, since the taxonomy's loader reads nothing from them;
+   * the feeds README is left out;
+   * `prompts.lock.json` stays unrequired.
+   The forbidden list holds: the installed `search` read the site-packages copy from a scratch working
+   directory.
+5. **After the merge,** the PM reads the next dev pre-release's validate-dev run from the public API.
+   It must pass the installed-build smoke tier, as the spec's description says. That isn't a criterion,
+   so it doesn't hold the merge.
+6. **Closing checks:** the affected set (46 files) reached 99% with no failure and is left to `ci`
+   (agreement 10). The changed files with the always-run list (428 passed), the other installed-build
+   smoke files (21 passed), ruff, pyright, lint-imports, thin handlers and the specs are clean.
+7. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`.

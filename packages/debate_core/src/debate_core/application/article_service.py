@@ -83,7 +83,14 @@ from debate_core.application.ports.persistence import ArticleRepository
 from debate_core.application.ports.providers import ArticleFetcher, Clock, ContentExtractor, IdGenerator
 from debate_core.application.settings import ArticleSettings
 from debate_core.application.snapshot_service import SnapshotService
-from debate_core.domain import AccessStatus, Article, ArticleIdentifiers, ProvenanceMode, SourceSnapshot
+from debate_core.domain import (
+    AccessStatus,
+    Article,
+    ArticleIdentifiers,
+    Citation,
+    ProvenanceMode,
+    SourceSnapshot,
+)
 from debate_core.evidence.hashing import sha256_text
 from debate_core.evidence.normalization import NORMALIZER_VERSION, normalize
 from debate_core.retrieval import (
@@ -460,6 +467,7 @@ class ArticleService:
         attested: bool,
         reported_access_status: AccessStatus = AccessStatus.UNKNOWN,
         title: str | None = None,
+        stated_citation: Citation | None = None,
         owner_id: str | None = None,
         correlation_id: str | None = None,
     ) -> RetrievalOutcome:

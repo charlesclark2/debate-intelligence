@@ -97,6 +97,21 @@ def fetch(
             help="With --paste: attest lawful access without a prompt. Required where none can be shown.",
         ),
     ] = False,
+    title: Annotated[
+        str | None, typer.Option("--title", help="With --paste: the article's title, as you state it.")
+    ] = None,
+    authors: Annotated[
+        list[str] | None,
+        typer.Option("--author", help="With --paste: an author's name; repeat it for each, in order."),
+    ] = None,
+    published_on: Annotated[
+        str | None,
+        typer.Option("--date", help="With --paste: the date the article was published, YYYY-MM-DD."),
+    ] = None,
+    publication: Annotated[
+        str | None,
+        typer.Option("--publication", help="With --paste: the publication, journal or outlet."),
+    ] = None,
     json_output: Annotated[
         bool, typer.Option("--json", help="Write one machine-readable JSON object to stdout.")
     ] = False,

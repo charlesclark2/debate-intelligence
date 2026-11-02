@@ -16,6 +16,7 @@ import hashlib
 import json
 from collections.abc import Iterator
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -32,7 +33,7 @@ from debate_core.application.article_service import ArticleService
 from debate_core.application.errors import ProviderUnavailable
 from debate_core.application.settings import ArticleSettings
 from debate_core.application.snapshot_service import SnapshotService
-from debate_core.domain import AccessStatus, ProvenanceMode
+from debate_core.domain import AccessStatus, CitationFieldSource, ProvenanceMode
 from debate_core.retrieval.fetch_types import (
     FetchResult,
     RobotsDisallowed,
@@ -480,3 +481,230 @@ def test_json_after_the_command_is_the_same_envelope_as_before_it(world: World) 
 
     assert after["data"]["snapshot"]["snapshot_id"] == before["data"]["snapshot"]["snapshot_id"]
     assert (after["command"], after["status"]) == ("fetch", "ok")
+
+
+# --------------------------------------------------------------------------------------------
+# --paste with stated cite fields: stored user-stated, never verified (v1-e06-t12)
+# --------------------------------------------------------------------------------------------
+
+STATED_TITLE = "Basin Councils After the Dry Summer"
+STATED_AUTHORS = ("Mara Okonkwo-Lindqvist", "Teodor Brannigan")
+STATED_DATE = "2026-08-30"
+STATED_PUBLICATION = "The Quarterly Watershed"
+CITE_OPTIONS = (
+    "--title",
+    STATED_TITLE,
+    "--author",
+    STATED_AUTHORS[0],
+    "--author",
+    STATED_AUTHORS[1],
+    "--date",
+    STATED_DATE,
+    "--publication",
+    STATED_PUBLICATION,
+)
+STATED_CITE = {
+    "authors": list(STATED_AUTHORS),
+    "title": STATED_TITLE,
+    "publication": STATED_PUBLICATION,
+    "published_at": STATED_DATE,
+}
+"""The report's `stated_cite` for `CITE_OPTIONS`, written by hand."""
+
+
+def paste_stating(tmp_path: Path, *options: str, json_output: bool = True) -> Result:
+    pasted = write_text(tmp_path, BODY.decode())
+    return invoke(
+        *(["--json"] if json_output else []),
+        "fetch",
+        "--paste",
+        str(pasted),
+        "--source-url",
+        URL,
+        "--i-have-lawful-access",
+        *options,
+    )
+
+
+def stored_snapshots(world: World) -> list[Any]:
+    """Every stored snapshot, oldest first."""
+    snapshots = list(world.articles._snapshots.values())  # pyright: ignore[reportPrivateUsage]
+    return sorted(snapshots, key=lambda snapshot: (snapshot.retrieved_at, snapshot.snapshot_id))
+
+
+def test_paste_with_cite_options_stores_each_field_user_stated_and_unverified(
+    world: World, tmp_path: Path
+) -> None:
+    result = paste_stating(tmp_path, *CITE_OPTIONS)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert envelope(result)["data"]["snapshot"]["stated_cite"] == STATED_CITE
+    [stored] = stored_snapshots(world)
+    stated = stored.stated_citation
+    assert stated is not None
+    assert (stated.authors.value, stated.authors.raw) == (STATED_AUTHORS, "; ".join(STATED_AUTHORS))
+    assert (stated.title.value, stated.publication.value) == (STATED_TITLE, STATED_PUBLICATION)
+    assert (stated.published_at.value, stated.published_at.raw) == (
+        datetime(2026, 8, 30, tzinfo=UTC),
+        STATED_DATE,
+    )
+    for name in ("authors", "title", "publication", "published_at"):
+        assert (getattr(stated, name).source, getattr(stated, name).verified) == (
+            CitationFieldSource.HEURISTIC,
+            False,
+        )
+    for name in ("author_credentials", "canonical_url", "accessed_at"):
+        assert not getattr(stated, name).is_present, f"{name} is not a field a user states"
+
+
+def test_paste_with_cite_options_prints_the_stated_fields_it_stored(world: World, tmp_path: Path) -> None:
+    result = paste_stating(tmp_path, "--author", STATED_AUTHORS[0], "--date", STATED_DATE, json_output=False)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    shown = " ".join(result.stdout.replace("│", " ").split())
+    for row in (
+        f"Stated authors {STATED_AUTHORS[0]}",
+        "Stated title not stated",
+        f"Stated date {STATED_DATE}",
+        "Stated publication not stated",
+    ):
+        assert row in shown, row
+
+
+def test_paste_without_cite_options_stores_and_reports_no_stated_cite(world: World, tmp_path: Path) -> None:
+    result = paste_stating(tmp_path)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert "stated_cite" not in envelope(result)["data"]["snapshot"]
+    [stored] = stored_snapshots(world)
+    assert stored.stated_citation is None
+    assert "stated_citation" not in stored.model_dump_json()
+
+
+@pytest.mark.parametrize(
+    "option",
+    [
+        ("--title", STATED_TITLE),
+        ("--author", STATED_AUTHORS[0]),
+        ("--date", STATED_DATE),
+        ("--publication", STATED_PUBLICATION),
+    ],
+    ids=["title", "author", "date", "publication"],
+)
+def test_a_cite_option_without_paste_is_a_usage_error_and_fetches_nothing(
+    world: World, option: tuple[str, str]
+) -> None:
+    world.fetcher.add(URL, BODY)
+
+    result = invoke("fetch", URL, *option)
+
+    assert result.exit_code == ExitCode.USAGE_ERROR, result.output
+    assert "go with --paste" in " ".join(result.stderr.split())
+    assert world.fetcher.requested_urls == []
+    assert world.snapshot_count() == 0
+
+
+@pytest.mark.parametrize("value", ["", "   ", "\t\n"], ids=["empty", "spaces", "whitespace"])
+@pytest.mark.parametrize("option", ["--title", "--author", "--publication"])
+def test_paste_with_an_empty_cite_option_is_a_usage_error_and_stores_nothing(
+    world: World, tmp_path: Path, option: str, value: str
+) -> None:
+    result = paste_stating(tmp_path, option, value, json_output=False)
+
+    assert result.exit_code == ExitCode.USAGE_ERROR, result.output
+    assert option in result.stderr
+    assert world.snapshot_count() == 0
+
+
+@pytest.mark.parametrize(
+    "stated",
+    [
+        "2026",
+        "2026-08",
+        "August 30, 2026",
+        "2026-8-30",
+        "2026/08/30",
+        "30-08-2026",
+        "2026-02-30",
+        "2026-08-30T10:00",
+    ],
+)
+def test_paste_with_a_date_that_is_not_yyyy_mm_dd_is_a_usage_error_naming_the_form(
+    world: World, tmp_path: Path, stated: str
+) -> None:
+    result = paste_stating(tmp_path, "--date", stated, json_output=False)
+
+    assert result.exit_code == ExitCode.USAGE_ERROR, result.output
+    assert "YYYY-MM-DD" in result.stderr
+    assert world.snapshot_count() == 0
+
+
+def test_paste_cite_options_are_stored_stripped(world: World, tmp_path: Path) -> None:
+    result = paste_stating(
+        tmp_path,
+        "--title",
+        f"  {STATED_TITLE} ",
+        "--author",
+        f"\t{STATED_AUTHORS[0]}  ",
+        "--publication",
+        f" {STATED_PUBLICATION}\n",
+    )
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert envelope(result)["data"]["snapshot"]["stated_cite"] == {
+        "authors": [STATED_AUTHORS[0]],
+        "title": STATED_TITLE,
+        "publication": STATED_PUBLICATION,
+        "published_at": None,
+    }
+
+
+# Storing the same copy again (the PM's ruling, 2026-11-02): no options or the same ones reuse the
+# newest copy; other options make a new copy holding exactly the fields that command stated.
+
+
+def test_a_paste_stored_again_without_cite_options_keeps_the_newest_copys_fields(
+    world: World, tmp_path: Path
+) -> None:
+    first = envelope(paste_stating(tmp_path, *CITE_OPTIONS))["data"]["snapshot"]
+
+    again = envelope(paste_stating(tmp_path))["data"]["snapshot"]
+
+    assert (again["snapshot_id"], again["reused"]) == (first["snapshot_id"], True)
+    assert again["stated_cite"] == STATED_CITE
+    assert world.snapshot_count() == 1
+
+
+def test_a_paste_stored_again_with_the_same_cite_options_reuses_the_copy(
+    world: World, tmp_path: Path
+) -> None:
+    first = envelope(paste_stating(tmp_path, *CITE_OPTIONS))["data"]["snapshot"]
+
+    again = envelope(paste_stating(tmp_path, *CITE_OPTIONS))["data"]["snapshot"]
+
+    assert (again["snapshot_id"], again["reused"]) == (first["snapshot_id"], True)
+    assert world.snapshot_count() == 1
+
+
+def test_a_paste_stored_again_with_other_cite_options_is_a_new_copy_holding_exactly_those(
+    world: World, tmp_path: Path
+) -> None:
+    first = envelope(paste_stating(tmp_path, *CITE_OPTIONS))["data"]["snapshot"]
+
+    again = envelope(paste_stating(tmp_path, "--author", "Ines Halvorsen"))["data"]["snapshot"]
+
+    assert again["snapshot_id"] != first["snapshot_id"]
+    assert again["reused"] is False
+    assert again["stated_cite"] == {
+        "authors": ["Ines Halvorsen"],
+        "title": None,
+        "publication": None,
+        "published_at": None,
+    }
+    assert world.snapshot_count() == 2
+    older, newer = stored_snapshots(world)
+    assert older.snapshot_id == first["snapshot_id"]
+    assert older.stated_citation is not None and older.stated_citation.title.value == STATED_TITLE, (
+        "unchanged"
+    )
+    assert newer.stated_citation is not None and not newer.stated_citation.title.is_present, "nothing merged"

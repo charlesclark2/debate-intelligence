@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
@@ -11,6 +12,9 @@ from debate_core.domain import (
     AccessStatus,
     Article,
     ArticleIdentifiers,
+    Citation,
+    CitationField,
+    CitationFieldSource,
     ProvenanceMode,
     SourceSnapshot,
     SourceType,
@@ -203,3 +207,121 @@ def test_snapshot_provenance_mode_has_no_default() -> None:
 def test_snapshot_rejects_a_naive_retrieved_at() -> None:
     with pytest.raises(ValidationError):
         make_snapshot(retrieved_at=datetime(2026, 9, 17, 14, 30))  # deliberately naive
+
+
+# --------------------------------------------------------------------------------------------
+# SourceSnapshot.stated_citation: cite fields a user stated for their copy (v1-e06-t12)
+# --------------------------------------------------------------------------------------------
+
+STATED_AT = datetime(2026, 8, 30, tzinfo=UTC)
+
+
+def stated(**fields: CitationField[Any]) -> Citation:
+    """A stated cite: the fields given, else a title, each unverified and heuristic."""
+    given: dict[str, Any] = fields or {"title": heuristic("Basin Councils After the Dry Summer")}
+    return Citation.model_validate(given)
+
+
+def heuristic(
+    value: Any, *, verified: bool = False, source: CitationFieldSource = CitationFieldSource.HEURISTIC
+) -> CitationField[Any]:
+    return CitationField[Any](value=value, source=source, verified=verified, raw=str(value))
+
+
+def test_a_user_supplied_snapshot_carries_its_stated_citation_through_json() -> None:
+    citation = stated(
+        authors=heuristic(("Mara Okonkwo-Lindqvist", "Teodor Brannigan")),
+        title=heuristic("Basin Councils After the Dry Summer"),
+        publication=heuristic("The Quarterly Watershed"),
+        published_at=heuristic(STATED_AT),
+    )
+    snapshot = make_snapshot(provenance_mode=ProvenanceMode.USER_SUPPLIED, stated_citation=citation)
+
+    assert SourceSnapshot.model_validate_json(snapshot.model_dump_json()) == snapshot
+    assert snapshot.stated_citation == citation
+
+
+@pytest.mark.parametrize(
+    "mode", [mode for mode in ProvenanceMode if mode is not ProvenanceMode.USER_SUPPLIED]
+)
+def test_only_a_user_supplied_snapshot_may_carry_a_stated_citation(mode: ProvenanceMode) -> None:
+    with pytest.raises(ValidationError, match="USER_SUPPLIED"):
+        make_snapshot(provenance_mode=mode, stated_citation=stated())
+
+
+@pytest.mark.parametrize("name", ["authors", "title", "publication", "published_at"])
+def test_a_stated_citation_with_a_field_marked_verified_is_refused(name: str) -> None:
+    values: dict[str, Any] = {
+        "authors": ("Mara Okonkwo-Lindqvist",),
+        "title": "Basin Councils After the Dry Summer",
+        "publication": "The Quarterly Watershed",
+        "published_at": STATED_AT,
+    }
+    claimed = stated(**{name: heuristic(values[name], verified=True, source=CitationFieldSource.BYLINE)})
+
+    with pytest.raises(ValidationError, match="verified"):
+        make_snapshot(provenance_mode=ProvenanceMode.USER_SUPPLIED, stated_citation=claimed)
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("author_credentials", "Hydrologist"),
+        ("canonical_url", "https://example.org/climate-2026"),
+        ("accessed_at", STATED_AT),
+    ],
+)
+def test_a_stated_citation_holds_only_the_fields_a_user_states(name: str, value: Any) -> None:
+    with pytest.raises(ValidationError, match="states"):
+        make_snapshot(
+            provenance_mode=ProvenanceMode.USER_SUPPLIED,
+            stated_citation=stated(title=heuristic("A title"), **{name: heuristic(value)}),
+        )
+
+
+def test_a_stated_citation_that_states_nothing_is_refused() -> None:
+    with pytest.raises(ValidationError, match="nothing"):
+        make_snapshot(provenance_mode=ProvenanceMode.USER_SUPPLIED, stated_citation=Citation())
+
+
+SNAPSHOT_DOCUMENT_BEFORE_T12 = (
+    '{"created_at":"2026-09-17T14:30:00Z","updated_at":"2026-09-17T14:30:00Z","revision":1,'
+    '"snapshot_id":"01ARZ3NDEKTSV4RRFFQ69G5FB0","owner_id":null,"organization_id":null,'
+    '"article_id":"01ARZ3NDEKTSV4RRFFQ69G5FAA","canonical_url":"https://example.org/a",'
+    '"retrieved_at":"2026-09-17T14:30:00Z","access_status":"UNKNOWN","provenance_mode":"{mode}",'
+    '"raw_blob_key":"raw","normalized_blob_key":"norm","sha256":"' + "0" * 64 + '",'
+    '"normalized_text_hash":"' + "1" * 64 + '","extractor_version":"x","normalizer_version":"1",'
+    '"content_type":"text/plain; charset=utf-8","byte_size":5}'
+)
+"""A snapshot's stored document as every build before `v1-e06-t12` wrote it, written by hand."""
+
+
+@pytest.mark.parametrize("mode", list(ProvenanceMode))
+def test_a_snapshot_with_no_stated_citation_is_stored_byte_for_byte_as_before(mode: ProvenanceMode) -> None:
+    """The SQLite row's document is `model_dump_json()`; with nothing stated it gains no key, so every
+    existing row, and every snapshot of any provenance stored without stated fields, is unchanged."""
+    moment = datetime(2026, 9, 17, 14, 30, tzinfo=UTC)
+    snapshot = SourceSnapshot(
+        snapshot_id="01ARZ3NDEKTSV4RRFFQ69G5FB0",
+        article_id="01ARZ3NDEKTSV4RRFFQ69G5FAA",
+        canonical_url="https://example.org/a",
+        retrieved_at=moment,
+        created_at=moment,
+        updated_at=moment,
+        access_status=AccessStatus.UNKNOWN,
+        provenance_mode=mode,
+        raw_blob_key="raw",
+        normalized_blob_key="norm",
+        sha256="0" * 64,
+        normalized_text_hash="1" * 64,
+        extractor_version="x",
+        normalizer_version="1",
+        content_type="text/plain; charset=utf-8",
+        byte_size=5,
+    )
+
+    assert snapshot.model_dump_json() == SNAPSHOT_DOCUMENT_BEFORE_T12.replace("{mode}", mode.value)
+    assert (
+        SourceSnapshot.model_validate_json(SNAPSHOT_DOCUMENT_BEFORE_T12.replace("{mode}", mode.value))
+        == snapshot
+    )

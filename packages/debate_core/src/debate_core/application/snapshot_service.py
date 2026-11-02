@@ -50,7 +50,7 @@ from debate_core.application.errors import (
 )
 from debate_core.application.ports.persistence import SnapshotStore
 from debate_core.application.ports.providers import Clock, IdGenerator
-from debate_core.domain import AccessStatus, ProvenanceMode, SourceSnapshot
+from debate_core.domain import AccessStatus, Citation, ProvenanceMode, SourceSnapshot
 from debate_core.evidence.hashing import sha256_bytes, sha256_text
 from debate_core.evidence.normalization import (
     NORMALIZER_VERSION,
@@ -110,6 +110,7 @@ class SnapshotService:
         content_type: str | None = None,
         owner_id: str | None = None,
         organization_id: str | None = None,
+        stated_citation: Citation | None = None,
     ) -> SourceSnapshot:
         """Normalize, hash and store one retrieval, and return its snapshot record.
 

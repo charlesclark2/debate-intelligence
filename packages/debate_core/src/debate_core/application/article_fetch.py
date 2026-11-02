@@ -44,7 +44,7 @@ from debate_core.application.article_service import (
 )
 from debate_core.application.errors import ProviderUnavailable, error_code_of_class
 from debate_core.application.snapshot_service import SnapshotService
-from debate_core.domain import AccessStatus, ArticleIdentifiers, ProvenanceMode
+from debate_core.domain import AccessStatus, ArticleIdentifiers, Citation, ProvenanceMode
 from debate_core.domain.schema_export import JSON_SCHEMA_DIALECT
 from debate_core.retrieval.access import AccessEvidence
 
@@ -80,6 +80,17 @@ class Closeable(Protocol):
     async def aclose(self) -> None: ...
 
 
+class StatedCite(BaseModel):
+    """Skeleton."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    authors: tuple[str, ...] = ()
+    title: str | None = None
+    publication: str | None = None
+    published_at: str | None = None
+
+
 class SnapshotSummary(BaseModel):
     """The stored snapshot a report names: ids, hashes, versions and counts, no text."""
 
@@ -99,6 +110,7 @@ class SnapshotSummary(BaseModel):
     byte_size: int | None
     retrieved_at: AwareDatetime
     reused: bool = Field(description="Whether the snapshot was already stored before this run.")
+    stated_cite: StatedCite | None = Field(default=None, description="Skeleton.")
 
 
 class FetchReport(BaseModel):
@@ -162,7 +174,9 @@ class ArticleFetch:
         """
         return await self._report(await self._articles.retrieve(url, refresh=refresh))
 
-    async def ingest_pasted(self, *, source_url: str, text: str, attested: bool) -> FetchReport:
+    async def ingest_pasted(
+        self, *, source_url: str, text: str, attested: bool, stated_citation: Citation | None = None
+    ) -> FetchReport:
         """Store `text` as USER_SUPPLIED under the article for `source_url`; nothing is fetched.
 
         Raises what :meth:`ArticleService.ingest_user_text` raises, and then nothing is stored:

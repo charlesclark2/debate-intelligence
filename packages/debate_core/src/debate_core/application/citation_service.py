@@ -108,9 +108,11 @@ __all__ = [
     "CitationService",
     "CrossrefOutcome",
     "FormattedCite",
+    "InvalidStatedCite",
     "format_cite",
     "keep_student_edits",
     "resolve_citation",
+    "stated_citation",
 ]
 
 logger = logging.getLogger(__name__)
@@ -165,6 +167,7 @@ class CitationResolution:
     crossref: CrossrefOutcome
     student_fields: tuple[str, ...] = ()
     """Fields that keep a student's value, unverified, because it differs from the source's (ac5)."""
+    stated_fields: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -295,6 +298,25 @@ def keep_student_edits(stored: Citation, derived: Citation) -> tuple[Citation, t
             kept[name] = mine
     marked = {"authors_are_organizations": stored.authors_are_organizations} if "authors" in kept else {}
     return derived.evolve(**kept, **marked, cleared_by_student=stored.cleared_by_student), tuple(kept)
+
+
+class InvalidStatedCite(ValueError):
+    """A cite field a user stated that the cite cannot take."""
+
+    def __init__(self, field: str, detail: str) -> None:
+        self.field = field
+        super().__init__(f"{field}: {detail}")
+
+
+def stated_citation(
+    *,
+    title: str | None = None,
+    authors: Sequence[str] = (),
+    publication: str | None = None,
+    published_on: str | None = None,
+) -> Citation | None:
+    """Skeleton: states nothing."""
+    return None
 
 
 # --------------------------------------------------------------------------------------------

@@ -32,6 +32,7 @@ from debate_core.application.article_service import (
     ArticleService,
     InvalidSourceUrl,
     NoUserSuppliedCopy,
+    RetrievalOutcome,
     UserTextNotAttested,
     UserTextRejected,
     access_thresholds,
@@ -39,7 +40,7 @@ from debate_core.application.article_service import (
 from debate_core.application.errors import error_code_of
 from debate_core.application.settings import ArticleSettings
 from debate_core.application.snapshot_service import SnapshotService
-from debate_core.domain import AccessStatus, ProvenanceMode
+from debate_core.domain import AccessStatus, Citation, CitationField, CitationFieldSource, ProvenanceMode
 from debate_core.integrations import html_extractor, pdf_extractor
 from debate_core.retrieval import RelCanonicalRule
 from debate_core.retrieval.access import AccessThresholds
@@ -1079,3 +1080,87 @@ def test_the_service_imports_no_http_extraction_or_filesystem_code() -> None:
     assert imported & FORBIDDEN_MODULES == set()
     assert "debate_core" in imported
     assert "open" not in called
+
+
+# --------------------------------------------------------------------------------------------
+# Stated cite fields stored with a user's copy (v1-e06-t12, the PM's ruling of 2026-11-02)
+# --------------------------------------------------------------------------------------------
+
+STATED = Citation(
+    authors=CitationField[tuple[str, ...]](
+        value=("Ilse Marchetti", "Kwame Osei-Barlow"),
+        source=CitationFieldSource.HEURISTIC,
+        raw="Ilse Marchetti; Kwame Osei-Barlow",
+    ),
+    title=CitationField[str](value="Grid Storage, Two Summers On", source=CitationFieldSource.HEURISTIC),
+)
+OTHER_STATED = Citation(
+    publication=CitationField[str](value="The Storage Ledger", source=CitationFieldSource.HEURISTIC)
+)
+
+
+def store(world: World, *, text: str = TEXT, stated: Citation | None = None) -> RetrievalOutcome:
+    return run(
+        world.service.ingest_user_text(
+            source_url=PAYWALLED_URL, text=text, attested=True, stated_citation=stated
+        )
+    )
+
+
+def test_user_text_with_a_stated_cite_is_snapshotted_with_it() -> None:
+    world = build_world()
+
+    outcome = store(world, stated=STATED)
+
+    assert outcome.snapshot is not None
+    assert outcome.snapshot.stated_citation == STATED
+    assert run(world.articles.list_snapshots(outcome.article.article_id)) == (outcome.snapshot,)
+
+
+def test_user_text_stored_again_with_no_stated_cite_reuses_the_newest_copy_and_its_fields() -> None:
+    world = build_world()
+    first = store(world, stated=STATED)
+
+    again = store(world, stated=None)
+
+    assert (again.snapshot, again.snapshot_reused) == (first.snapshot, True)
+    assert again.snapshot is not None and again.snapshot.stated_citation == STATED
+
+
+def test_user_text_stored_again_with_the_same_stated_cite_reuses_the_copy() -> None:
+    world = build_world()
+    first = store(world, stated=STATED)
+
+    again = store(world, stated=STATED)
+
+    assert (again.snapshot, again.snapshot_reused) == (first.snapshot, True)
+    assert len(run(world.articles.list_snapshots(first.article.article_id))) == 1
+
+
+def test_user_text_stored_again_with_another_stated_cite_is_a_new_copy_holding_exactly_it() -> None:
+    world = build_world()
+    first = store(world, stated=STATED)
+    world.clock.advance(timedelta(minutes=1))
+
+    again = store(world, stated=OTHER_STATED)
+
+    assert again.snapshot is not None and first.snapshot is not None
+    assert not again.snapshot_reused
+    assert again.snapshot.snapshot_id != first.snapshot.snapshot_id
+    assert again.snapshot.stated_citation == OTHER_STATED, "nothing is merged from the older copy"
+    assert again.snapshot.normalized_text_hash == first.snapshot.normalized_text_hash
+    newest = run(world.service.user_supplied_copy(PAYWALLED_URL)).snapshot
+    assert newest == again.snapshot
+    assert run(world.articles.get_snapshot(first.snapshot.snapshot_id)) == first.snapshot, "unchanged"
+
+
+def test_changed_user_text_with_no_stated_cite_is_a_new_copy_with_none() -> None:
+    world = build_world()
+    store(world, stated=STATED)
+    world.clock.advance(timedelta(minutes=1))
+
+    changed = store(world, text="\n\n".join(CHANGED_PARAGRAPHS))
+
+    assert changed.snapshot is not None
+    assert not changed.snapshot_reused
+    assert changed.snapshot.stated_citation is None

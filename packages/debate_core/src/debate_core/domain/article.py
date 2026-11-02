@@ -27,6 +27,7 @@ from debate_core.domain.base import (
     UtcDatetime,
     new_id,
 )
+from debate_core.domain.citation import Citation
 from debate_core.domain.enums import AccessStatus, ProvenanceMode, SourceType
 
 __all__ = ["Article", "ArticleIdentifiers", "SourceSnapshot"]
@@ -174,3 +175,4 @@ class SourceSnapshot(DomainEntity):
         default=None, description="Content type reported by the source, if any."
     )
     byte_size: int | None = Field(default=None, ge=0, description="Size of the raw blob in bytes.")
+    stated_citation: Citation | None = Field(default=None, description="Cite fields the user stated.")

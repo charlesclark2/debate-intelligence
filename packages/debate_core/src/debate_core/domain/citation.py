@@ -16,7 +16,13 @@ from pydantic import Field, model_validator
 from debate_core.domain.base import DomainModel, NonEmptyText, UtcDatetime
 from debate_core.domain.enums import CitationFieldSource
 
-__all__ = ["CITATION_FIELD_NAMES", "REQUIRED_CITATION_FIELDS", "Citation", "CitationField"]
+__all__ = [
+    "CITATION_FIELD_NAMES",
+    "REQUIRED_CITATION_FIELDS",
+    "STATED_CITATION_FIELDS",
+    "Citation",
+    "CitationField",
+]
 
 #: The fields a cite must have verified before a card can be presented as finished evidence.
 #: Author credentials and the accessed date are recorded when available but never required: many
@@ -33,6 +39,9 @@ CITATION_FIELD_NAMES = (
     "canonical_url",
     "accessed_at",
 )
+
+#: The cite fields a user may state for a copy they supplied (`v1-e06-t12`), in cite order.
+STATED_CITATION_FIELDS = ("authors", "title", "publication", "published_at")
 
 
 class CitationField[CitationValueT](DomainModel):

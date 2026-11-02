@@ -63,7 +63,7 @@ spec:
       description: >-
         CHANGELOG.md has entries for v1.0 through v1.5 referencing their release specs.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

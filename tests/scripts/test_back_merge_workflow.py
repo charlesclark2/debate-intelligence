@@ -151,8 +151,8 @@ def test_no_other_workflow_job_holds_actions_write_except_the_ones_that_dispatch
 def test_no_other_workflow_job_holds_pull_requests_write_or_contents_write() -> None:
     """Forbidden (v1-e01-t26): either write on any job but the one that opens the back-merge pull
     request. In back-merge.yml that job holds `pull-requests: write` and only `contents: read`; the
-    other holders are refresh-generated-files' branch and pull request (v1-e01-t16) and the
-    pre-release tag and release (v1-e01-t09)."""
+    other holders are refresh-generated-files' branch and pull request (v1-e01-t16), the
+    pre-release tag and release (v1-e01-t09), and the stable release (v1-e09-t06)."""
     holders = []
     for path in sorted(WORKFLOWS.glob("*.yml")):
         flow = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -170,6 +170,7 @@ def test_no_other_workflow_job_holds_pull_requests_write_or_contents_write() -> 
         ("dev-prerelease.yml", "publish", "contents"),
         ("refresh-generated-files.yml", "regenerate", "pull-requests"),
         ("refresh-generated-files.yml", "regenerate", "contents"),
+        ("release.yml", "publish", "contents"),
     ]
 
 

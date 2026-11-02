@@ -1,0 +1,229 @@
+# The stable release channel (v1-e09-t06-packaging-release).
+#
+# A stable release vX.Y.Z is the build the team installs (scripts/install_channel.sh vX.Y.Z), and it
+# runs as DEBATE_ENV=prod. It is cut from `main` only, on the merge commit of a validated dev → main
+# promotion (docs/process/branching-and-environments.md, "Releases"). Pushing the tag starts this
+# workflow; nothing else does. A vX.Y.Z-dev.N tag never starts it: those are dev-prerelease.yml's
+# (v1-e01-t09), and the tag filter below excludes them twice, once by the shape of a stable tag and
+# once by name.
+#
+# What one run does, for exactly one tag:
+#   check    scripts/check_stable_release.py refuses the tag, naming each check that failed, unless:
+#            it is vX.Y.Z; its commit is on main's first-parent line and is the merge commit of a
+#            pull request from this repository's dev into main; that pull request's head, the dev
+#            parent, has a green `validate-dev` status posted by GitHub Actions; the tag names the
+#            version in packages/debate_cli/pyproject.toml, which every workspace pyproject carries;
+#            every epic of plan_specs/releases/vX.Y.yaml is Succeeded (validate_specs.py
+#            --require-succeeded); CHANGELOG.md's section for the tag is written; and CI's push run
+#            on main for the commit passed.
+#   build    stamps the checkout for channel stable (scripts/stamp_build.py, as dev-prerelease.yml
+#            does for dev), builds the debate_core and debate_cli wheels with `uv build`, refuses them
+#            with check-wheels unless they are exactly the two at the tag's version with nothing that
+#            must not ship, writes SHA256SUMS, rehearses the install with scripts/install_channel.sh
+#            (which checks `debate-research --version` reports this version and channel stable), and
+#            takes the release notes from CHANGELOG.md.
+#   publish  creates the GitHub Release for the tag, a full release and never a pre-release, with
+#            the wheels, SHA256SUMS, build-info.json and the notes: the assets install_channel.sh
+#            downloads. Never PyPI: neither name is registered there (install_channel.sh says why).
+#
+# THE FULL TEST SUITE, REUSED. A push to main runs ci.yml over the whole default selection, on
+# exactly the merge commit this tag names (working agreement 10), and validate-dev ran the offline
+# slow tier and the smoke tier against the dev parent's installed build. The check job requires that
+# push run to have passed, waiting up to 30 minutes while it runs, instead of running the matrix a
+# second time: the same tests on the same commit would cost about 8 more runners and the minutes of
+# a push run for no new answer. This workflow's own cost is three short jobs, a few minutes in all,
+# plus the wait when the tag is pushed before main's push run has finished.
+#
+# SECURITY. The workflow grants `contents: read`. The check job adds the read scopes its GitHub reads
+# need (`pull-requests`, `statuses`, `actions`) and nothing else; the build job, which runs the
+# tagged commit's code, holds `contents: read` alone and no token; only the publish job holds
+# `contents: write`, and it checks out nothing and runs none of the repository's code. No secret is
+# read and no OIDC token is requested, so nothing here can reach AWS or PyPI. Every checkout persists
+# no credentials. The build does not restore uv's cache, which other refs write, so what the release
+# installs to rehearse is resolved afresh. Expressions reach `run:` blocks only through `env:`.
+#
+# A tag is immutable once released: a run for a tag whose release already exists refuses to publish.
+# A run refused at the check publishes nothing and can be re-run once what it named is put right
+# (for example, after main's push run has passed). Fixing the commit itself means a new patch
+# version and a new tag, never moving this one.
+
+name: Stable release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "!v*-dev.*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stable-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: check the tag is a validated release of main
+    runs-on: ubuntu-24.04
+    # The checks take seconds; the rest is the wait for main's push run of ci.yml (30 minutes at most).
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      # The pull request the tagged commit merged, the dev parent's validate-dev status, and ci.yml's
+      # push run on main, all read through GITHUB_TOKEN.
+      pull-requests: read
+      statuses: read
+      actions: read
+    outputs:
+      tag: ${{ steps.checks.outputs.tag }}
+      version: ${{ steps.checks.outputs.version }}
+      sha: ${{ steps.checks.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Every branch and tag: main's first-parent line is read from origin/main.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v10.2.0 # setup-uv publishes no major-version tag
+        with:
+          enable-cache: false
+
+      - name: Install Python from .python-version
+        run: uv python install
+
+      - name: Resolve the tagged commit
+        id: commit
+        env:
+          TAG: ${{ github.ref_name }}
+        run: echo "sha=$(git rev-parse --verify "refs/tags/${TAG}^{commit}")" >> "$GITHUB_OUTPUT"
+
+      # The epics check is `validate_specs.py --require-succeeded` for each epic the release spec lists.
+      - name: Refuse a tag that is not a validated release of main
+        id: checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          SHA: ${{ steps.commit.outputs.sha }}
+        run: uv run scripts/check_stable_release.py check --tag "$TAG" --sha "$SHA" --repository "$GITHUB_REPOSITORY"
+
+  build:
+    name: build and check the stable wheels
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      TAG: ${{ needs.check.outputs.tag }}
+      VERSION: ${{ needs.check.outputs.version }}
+      SHA: ${{ needs.check.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.check.outputs.sha }}
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v10.2.0 # setup-uv publishes no major-version tag
+        with:
+          enable-cache: false
+
+      - name: Install Python from .python-version
+        run: uv python install
+
+      - name: Stamp the version, build info and bundled configuration for channel stable
+        run: >-
+          python3 scripts/stamp_build.py stamp
+          --version "$VERSION" --tag "$TAG" --channel stable
+          --commit "$SHA" --run-id "$GITHUB_RUN_ID" --dist dist
+
+      - name: Build the debate_core and debate_cli wheels
+        run: |
+          uv build --package debate-core --wheel --out-dir dist
+          uv build --package debate-cli --wheel --out-dir dist
+
+      - name: Refuse wheels that are not exactly what should ship
+        run: python3 scripts/stamp_build.py check-wheels --version "$VERSION" --dist dist
+
+      - name: Write SHA256SUMS
+        working-directory: dist
+        run: |
+          sha256sum -- *.whl build-info.json > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Install the build as its users will and check it reports this version and channel stable
+        # The script the team runs, against the assets about to be published, into a throwaway tool
+        # directory. It also imports every integration the CLI wires and runs `doctor`.
+        run: |
+          export UV_TOOL_DIR="$RUNNER_TEMP/verify-tools" UV_TOOL_BIN_DIR="$RUNNER_TEMP/verify-bin"
+          sh scripts/install_channel.sh --no-path-warning --dir dist "$TAG"
+
+      - name: Take the release notes from CHANGELOG.md
+        run: uv run scripts/check_stable_release.py notes --tag "$TAG" > release-notes.md
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: stable-release
+          path: |
+            dist/*.whl
+            dist/SHA256SUMS
+            dist/build-info.json
+            release-notes.md
+          if-no-files-found: error
+
+  publish:
+    name: publish the stable release
+    needs: [check, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.check.outputs.tag }}
+      VERSION: ${{ needs.check.outputs.version }}
+      SHA: ${{ needs.check.outputs.sha }}
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: stable-release
+          path: release
+
+      - name: Refuse a tag that moved since it was checked, or that is already released
+        run: |
+          read -r kind commit <<< "$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" --jq '.object.type + " " + .object.sha')"
+          if [ "$kind" = tag ]; then
+            commit=$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${commit}" --jq .object.sha)
+          fi
+          if [ "$commit" != "$SHA" ]; then
+            echo "::error title=Tag moved::${TAG} now names ${commit}, not the checked ${SHA}; nothing is published."
+            exit 1
+          fi
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName > /dev/null 2>&1; then
+            echo "::error title=Already released::${TAG} already has a GitHub Release; a released tag is never rebuilt."
+            exit 1
+          fi
+
+      - name: Publish the GitHub Release
+        # Never --prerelease: a stable tag is a full release (dev builds are always pre-releases).
+        # --verify-tag: publish only under the tag that was pushed; never create one here. GitHub marks
+        # the highest version Latest by itself.
+        run: |
+          gh release create "$TAG" release/dist/*.whl release/dist/SHA256SUMS release/dist/build-info.json \
+            --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "debate-research ${TAG}" --notes-file release/release-notes.md
+
+      - name: Summary
+        run: |
+          {
+            echo "### ${TAG}"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Commit | \`${SHA}\` |"
+            echo "| Wheel version | \`${VERSION}\` |"
+            echo "| Channel | stable (DEBATE_ENV=prod unless set) |"
+            echo
+            echo "Install with \`scripts/install_channel.sh ${TAG}\`."
+          } >> "$GITHUB_STEP_SUMMARY"

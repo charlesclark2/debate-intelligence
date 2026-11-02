@@ -307,9 +307,41 @@ That closes ac5; the PM then sets the Goal to Succeeded.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-02
 
 **Notes:**
+
+Announcements are built the way the site's other content is, and the guard is stronger for it: the
+two gaps from v1-e36-t08 are closed, and three more holes found on the way are closed too.
+
+1. **ac1 to ac4, ac6, ac7 and ac5's first half pass.** The orders are hand-written from the fixtures at
+   a fixed build date; an expired item is on no page and not in the sitemap, in tests and in a real
+   export; every refusal names the file and the policy rule, and the valid fixture publishes; the
+   guide no longer mentions a Sheet. Both gaps were shown failing first (`b2934c1`, 10 failed), and all
+   ten planted breaks were caught.
+2. **Deviations accepted.** (1) The apostrophe, inline-formatting and O'Neill holes affect every page,
+   so fixing them here was right; the PM amends the spec's description in the next batch. (2) A
+   `rule` field on findings, rather than text matched out of messages. (3) The extra refusals
+   (non-web links, remote images, a student's whole name in a file name, non-Markdown files) all
+   follow the spec's forbidden list.
+3. **Decisions accepted:** the slug rule with collisions refused by name, a future date not yet
+   published, the Chicago build date injected in every test, every file checked whether published or
+   not, and the one optional catch-all route Next 16 requires. `/news/` in the footer stands unless
+   the coach wants it in the header (a one-line content edit).
+4. **The policy sentence** in Follow-up work is a change to the website publishing policy, so it waits
+   for Charlie's approval and goes into the next batch with a version bump if he approves.
+5. **ac5's second half is the operator's,** on two different days, neither a Wednesday, after the code
+   reaches `main` (block 0 checks). On the deploy block: if its first line prints `STOP`, don't run
+   the lines after it. The PM records it and sets the Goal to `Succeeded`.
+6. **Follow-ups the PM files:** graduated students' names after the season rolls over (with
+   v1-e37-t06's, for Charlie's ruling), the published "(year)" form in free text, an image file
+   checked to exist, and the reviewed-words residual noted in the guide.
+7. **Closing checks:** `pre-commit-checks.sh` (28 files, 1,063 tests, export checks 114) and the prod
+   export checks pass offline; the Python affected set reached 91% with no failure and is left to
+   `ci` (agreement 10); the always-run list, ruff, lint-imports, the links, the docs index and the
+   specs are clean.
+8. **Merge:** `scripts/task pr --partial` once `ci` is green. The Goal stays `InProgress` until the PM
+   records ac5.

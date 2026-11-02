@@ -512,7 +512,12 @@ def test_an_unknown_expansion_choice_exits_2_listing_the_valid_ones(
         ("theory", "impact", ["interpretation", "standards", "voters", "answers"], "uniqueness"),
         ("process-cp", "link", ["solvency", "net-benefit", "competition", "answers"], "uniqueness"),
         ("cap-k", "solvency", ["link", "impact", "alternative", "framework", "answers"], "net-benefit"),
-        ("politics-da", "alternative", ["uniqueness", "link", "internal-link", "impact", "answers"], "solvency"),
+        (
+            "politics-da",
+            "alternative",
+            ["uniqueness", "link", "internal-link", "impact", "answers"],
+            "solvency",
+        ),
     ],
 )
 def test_a_need_outside_the_arguments_family_exits_2_listing_that_arguments_needs(

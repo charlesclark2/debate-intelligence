@@ -73,13 +73,15 @@ families:
     label: Test scenarios
     kinds: [da]
     needs:
-      - {id: uniqueness, label: Uniqueness, description: Where things stand now., aliases: [uq], recency_days: 14}
+      - {id: uniqueness, label: Uniqueness, description: Where things stand now., aliases: [uq],
+         recency_days: 14}
       - {id: impact, label: Impact, description: What happens in the end., aliases: [i], recency_days: any}
   - id: test-framing
     label: Test framing
     kinds: [framework]
     needs:
-      - {id: framework-good, label: Framework good, description: Why to use it., aliases: [fw-good], recency_days: any}
+      - {id: framework-good, label: Framework good, description: Why to use it., aliases: [fw-good],
+         recency_days: any}
       - {id: answers, label: Answers, description: Why not., aliases: [at], recency_days: any}
 arguments:
   - id: test-da
@@ -246,7 +248,9 @@ ADDED_KRITIKS = {
 }
 """generic.yaml's named kritiks; generic-k, its catch-all for a card that fits none, is not an argument."""
 
-COACH_REVIEWED_FILE = REPOSITORY / "packages/debate_core/tests/fixtures/argument_taxonomy/coach_reviewed_1_1_0.yaml"
+COACH_REVIEWED_FILE = (
+    REPOSITORY / "packages/debate_core/tests/fixtures/argument_taxonomy/coach_reviewed_1_1_0.yaml"
+)
 
 
 def test_the_committed_taxonomy_validates_and_every_argument_has_a_template_for_each_need_of_its_family(
@@ -277,7 +281,8 @@ def test_the_committed_taxonomy_puts_the_frameworks_in_framing_and_theory_in_its
 
 
 def test_the_committed_taxonomy_gives_framing_evidence_no_window(committed: ArgumentTaxonomy) -> None:
-    """Philosophy evidence doesn't go stale (the coach, 2026-11-02): no framing need or template has a window."""
+    """Philosophy evidence doesn't go stale (the coach, 2026-11-02): no framing need or template has a
+    window."""
     framing = next(family for family in committed.families if family.id == "framing")
     assert [(need.id, need.recency_days) for need in framing.needs] == [
         ("framework-good", "any"),
@@ -321,7 +326,9 @@ def test_the_committed_taxonomy_keeps_every_coach_reviewed_entry_as_he_reviewed_
     """The coach's 1.1.0 entries and the DA and advantage needs' windows are unchanged; every other
     entry, added or reshaped, waits for his review."""
     reviewed_file = yaml.safe_load(COACH_REVIEWED_FILE.read_text(encoding="utf-8"))
-    reviewed = {entry["id"]: entry for entry in reviewed_file["arguments"] if entry["review"] == "coach_reviewed"}
+    reviewed = {
+        entry["id"]: entry for entry in reviewed_file["arguments"] if entry["review"] == "coach_reviewed"
+    }
     assert len(reviewed) == 9
     for argument in committed.arguments:
         entry = reviewed.get(argument.id)
@@ -521,7 +528,12 @@ def test_the_committed_taxonomy_resolves_the_spec_spellings_and_typed_variants(
                     "uniqueness": [{"text": "{query} now"}],
                 }
             ),
-            ["test-framework", "uniqueness", "not a need of the test-framing family", "framework-good, answers"],
+            [
+                "test-framework",
+                "uniqueness",
+                "not a need of the test-framing family",
+                "framework-good, answers",
+            ],
             id="a framework given a uniqueness need",
         ),
         pytest.param(
@@ -535,14 +547,22 @@ def test_the_committed_taxonomy_resolves_the_spec_spellings_and_typed_variants(
             id="a framing pair left out",
         ),
         pytest.param(
-            family_with(1, kinds=["framework", "da"]), ["two families take the kind da"], id="a kind in two families"
+            family_with(1, kinds=["framework", "da"]),
+            ["two families take the kind da"],
+            id="a kind in two families",
         ),
         pytest.param(
-            first_argument_with(kind="cp"), ["argument test-da is a cp, which no family takes"], id="a kind no family takes"
+            first_argument_with(kind="cp"),
+            ["argument test-da is a cp, which no family takes"],
+            id="a kind no family takes",
         ),
         pytest.param(family_with(1, needs=[]), ["families.1.needs"], id="a family with no needs"),
         pytest.param(family_with(1, kinds=[]), ["families.1.kinds"], id="a family with no kinds"),
-        pytest.param(family_with(1, id="test-scenario"), ["two families share the id test-scenario"], id="a family id twice"),
+        pytest.param(
+            family_with(1, id="test-scenario"),
+            ["two families share the id test-scenario"],
+            id="a family id twice",
+        ),
         pytest.param(
             need_with(0, 1, aliases=["uq"]),
             ["two needs of the test-scenario family share the id or alias uq"],
@@ -602,7 +622,9 @@ def test_the_taxonomy_refuses_an_unknown_choice_with_a_typed_error_listing_the_v
     ("argument", "need", "choices"),
     [
         pytest.param("test-da", "solvency", ("uniqueness", "impact"), id="a need no family has"),
-        pytest.param("test-framework", "uniqueness", ("framework-good", "answers"), id="another family's need"),
+        pytest.param(
+            "test-framework", "uniqueness", ("framework-good", "answers"), id="another family's need"
+        ),
         pytest.param("test-da", "at", ("uniqueness", "impact"), id="another family's alias"),
     ],
 )

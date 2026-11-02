@@ -30,7 +30,7 @@ model in architecture proposal §7, so V2 swaps storage rather than schemas.
 | `enums.py` | `AccessStatus`, `VerificationStatus`, `ProvenanceMode`, `SearchStatus`, `SourceType`, `SpanStyle`, `SpanPurpose`, `CitationFieldSource` |
 | `article.py` | `Article`, `ArticleIdentifiers`, `SourceSnapshot` |
 | `search.py` | `Search`, `SearchFilters`, `SearchResult`, and `SearchExpansion`, how a search's query was expanded (v1-e08-t04) |
-| `argument_taxonomy.py` | `ArgumentTaxonomy`: the arguments, needs, query templates, recency windows and topic presets of `config/argument_taxonomy.yaml`, validated whole (v1-e08-t04-argument-need-expansion) |
+| `argument_taxonomy.py` | `ArgumentTaxonomy`: the arguments, their families' needs, query templates, recency windows and topic presets of `config/argument_taxonomy.yaml`, validated whole (v1-e08-t04-argument-need-expansion; needs per family, v1-e08-t08) |
 | `card.py` | `Card`, `CardSpan` |
 | `citation.py` | `Citation`, `CitationField[T]` |
 | `schema_export.py` | Renders the published JSON Schemas (no I/O; the script writes them) |

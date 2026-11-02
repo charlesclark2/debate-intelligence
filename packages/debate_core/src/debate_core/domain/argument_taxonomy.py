@@ -21,10 +21,10 @@ how recent the evidence for each need should be:
   (`config/landscape/topics.yaml`'s resolutions), never from memory.
 
 :class:`ArgumentTaxonomy` validates the whole file when it loads. Every argument has templates for
-exactly its family's needs, and every (argument, need) pair has at least one template that needs only the variables a search always has (:data:`ALWAYS_GIVEN_VARIABLES`),
-so any pair expands into at least one query whatever else the request gives. A template names only
-variables the file declares, and never a hard-coded current event: what changes week to week is a
-variable the request fills.
+exactly its family's needs, and every (argument, need) pair has at least one template that needs
+only the variables a search always has (:data:`ALWAYS_GIVEN_VARIABLES`), so any pair expands into at
+least one query whatever else the request gives. A template names only variables the file declares,
+and never a hard-coded current event: what changes week to week is a variable the request fills.
 
 The ids of arguments that also exist in the Policy landscape taxonomy (`config/landscape/taxonomies/`)
 are the landscape's own ids, and each says so in `landscape_id`. Nothing here reads the landscape
@@ -169,7 +169,8 @@ class NeedFamily(DomainModel):
     needs: tuple[Need, ...] = Field(min_length=1, description="Its needs, in the order they are listed.")
 
     def find_need(self, name: str) -> Need | None:
-        """The need of this family `name` is the id or an alias of, compared as :func:`normalized_choice` says."""
+        """The need of this family that `name` is the id or an alias of, compared as
+        :func:`normalized_choice` says."""
         wanted = normalized_choice(name)
         return next((need for need in self.needs if wanted in (need.id, *need.aliases)), None)
 
@@ -384,4 +385,3 @@ class ArgumentTaxonomy(DomainModel):
         """The topic preset with this id."""
         wanted = normalized_choice(topic_id)
         return next((topic for topic in self.topics if topic.id == wanted), None)
-

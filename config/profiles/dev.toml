@@ -41,7 +41,10 @@ region = "us-east-1"
 aws_profile = "debate-dev-evidence"
 
 [providers]
-enabled = ["openalex", "crossref", "rss"]
+# Only the providers this build has an adapter for: the registry refuses to build any search while
+# a name it cannot build is enabled (v1-e07-t01). Crossref and Semantic Scholar are added back by
+# the tasks that bring their adapters, v1-e07-t03 and v1-e07-t04 (v1-e08-t05).
+enabled = ["openalex", "rss"]
 
 [http]
 # Slower than prod on purpose: dev is where a new adapter's first, wrong version runs.

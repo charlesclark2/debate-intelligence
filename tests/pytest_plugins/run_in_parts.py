@@ -14,7 +14,11 @@ cards, starting from a part chosen by a checksum of the file's path. So
   so the parts stay level without a recorded-durations file that would go stale. Measured on
   5,812 tests, the heaviest of four parts held 1.04 times the mean test time;
 * there is no state. The split cannot drift towards one part; what grows is every part together,
-  and the answer to that is one more part in ci.yml's matrix.
+  and the answer to that is more parts: scripts/ci_test_selection.py's MOST_PARTS.
+
+How many parts CI asks for follows the selection (v1-e41-t16): one per 30 test files, at most
+MOST_PARTS. The dealing is the same at every N, and the partition proof deals the real suite at
+every N the rule can give with `parts_dealt`, the function this hook deals with.
 
 It deals what is left after `-m` and `-k` (the hook runs last), so a part of a narrower selection is
 still a part of that selection. Every xdist worker collects for itself and deals the same way.
@@ -25,6 +29,7 @@ from __future__ import annotations
 import argparse
 import zlib
 from collections import Counter
+from collections.abc import Iterable
 
 import pytest
 
@@ -44,6 +49,17 @@ def part_of_parts(text: str) -> tuple[int, int]:
 def first_part_dealt_to(test_file: str, parts: int) -> int:
     """Where dealing starts for one file, from 0. A checksum, so it is the same on every machine."""
     return zlib.crc32(test_file.encode("utf-8")) % parts
+
+
+def parts_dealt(node_ids: Iterable[str], parts: int) -> list[int]:
+    """The part, from 0, each test is dealt to out of `parts`, for node ids in collection order."""
+    dealt_so_far: Counter[str] = Counter()
+    dealt: list[int] = []
+    for node_id in node_ids:
+        test_file = node_id.partition("::")[0]
+        dealt.append((first_part_dealt_to(test_file, parts) + dealt_so_far[test_file]) % parts)
+        dealt_so_far[test_file] += 1
+    return dealt
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -69,13 +85,9 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     if chosen is None:
         return
     part, parts = chosen
-    dealt_so_far: Counter[str] = Counter()
     in_this_part: list[pytest.Item] = []
     in_another_part: list[pytest.Item] = []
-    for item in items:
-        test_file = item.nodeid.partition("::")[0]
-        dealt_to = (first_part_dealt_to(test_file, parts) + dealt_so_far[test_file]) % parts
-        dealt_so_far[test_file] += 1
+    for item, dealt_to in zip(items, parts_dealt((item.nodeid for item in items), parts), strict=True):
         (in_this_part if dealt_to == part - 1 else in_another_part).append(item)
     items[:] = in_this_part
     config.hook.pytest_deselected(items=in_another_part)

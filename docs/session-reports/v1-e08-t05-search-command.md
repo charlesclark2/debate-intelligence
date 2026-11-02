@@ -293,9 +293,63 @@ PM questions from v1-e08-t05 (debate-research search), session of 2026-11-02. Fo
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-02
 
 **Notes:**
+
+`search` is built as a thin command over the federated service, with the expansion wired in. It
+never fetches and never prints a snippet. The Goal stays `InProgress` for ac6, the coach's labels.
+The profile find, that dev and prod could not have run a single search, is the most useful thing in
+this report.
+
+1. **ac1–ac5:**
+   * The rows and the footer are written by hand from the fixtures.
+   * ac2's seven expanded link queries come from taxonomy 1.1.0.
+   * The timeout gives PARTIAL and exit 6 in the table and in JSON.
+   * 14 usage cases exit 2.
+   * The container registers and closes all three providers.
+   * Article matching makes no snapshot row and no request beyond the two provider hosts.
+2. **Red first and mutants:** 31 of 34 tests failed against the skeleton, and the smoke check was red
+   on the old profiles. All six of the PM's mutants were caught at assertions. The fetch mutant was
+   caught without touching the network.
+3. **Exit codes:** the PM's ruling is in the spec as a dated amendment. The session's rule for a
+   search that asked no provider (`NO_PROVIDER_ENABLED`, exit 1) and its partial-with-no-rows → 6 are
+   both accepted.
+4. **The rulings on your questions:**
+   * **Q1, (a).** Keep `["openalex", "rss"]` in dev and prod. v1-e07-t03 and t04 add their names
+     back with their adapters. A search that always exits 6 would teach people to ignore 6.
+   * **Q2, (a).** `--save PATH` writes the JSON search object.
+   * **Q3, (a).** Keep exit 1.
+   * **Q4, (b).** The labelling sheet uses an item number with rows in title order, so the rank
+     doesn't lean the coach. Before the PR, change operator command 4 to write two files per search:
+     the coach's CSV (`item`, `title`, `url`, `relevant`) and a key file (`item`, `rank`,
+     `provider_order`) that the scoring session uses and the coach never needs to open.
+5. **Deviations accepted:**
+   * the envelope's `data.results` as ac2's array;
+   * the two profiles;
+   * the smoke check and the stamp-build pin, added to the packages;
+   * `--save`;
+   * the `allow_network` guard the test profile always promised.
+6. **Decisions accepted:**
+   * a canonical URL is the platform's, not an owner's, as `ArticleService` already treats it;
+   * stored Articles reused as they stand;
+   * no installed build reads stored searches, so the first command that reads one back owns the
+     cross-build proof;
+   * the UTC day bounds for dates;
+   * the footer's placement;
+   * `--expand-llm`'s own router, in replay by default;
+   * `provider_order` for ac6.
+7. **Follow-ups the PM files:**
+   * one p3 task for the request count: each expanded query asks every provider once, so OpenAlex can
+     take one request with OR'd queries, and each feed can be read once per search;
+   * the LD preset stays with v1-e32-t06;
+   * Google News stays off until the coach turns it on.
+8. **Closing checks:** the affected set is the whole selection (the pyproject edit), so it is left to
+   `ci` (agreement 10). The bounded runs (377, 1,324 and 282 passed), ruff, pyright, lint-imports, thin
+   handlers, the specs and the doc checks are clean. The hand-edited lock passes `uv lock --check
+   --offline`.
+9. **Merge:** after the command-4 edit, `scripts/task pr --partial` once `ci` is green. The PM
+   records ac6 in a batch and sets the Goal `Succeeded` when the coach's labels are scored.

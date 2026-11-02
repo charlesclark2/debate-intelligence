@@ -25,9 +25,16 @@ spec:
     is complete. The card stays UNVERIFIED for its cite (CITATION_UNVERIFIED), as the rules
     treat a user-supplied copy, and the cite says the fields are user-stated wherever the format
     already marks unverified fields. No verified field is filled from a user statement.
+    (PM amendment 2026-11-02, from the session's questions.) The stated fields live on the
+    pasted copy's snapshot, as one optional SourceSnapshot field, stated_citation, omitted from
+    the row when absent; it is allowed only on a USER_SUPPLIED snapshot and never holds a
+    verified field, so debate_core.domain and the regenerated source_snapshot.schema.json join
+    the packages. No migration. The date is a full ISO date (YYYY-MM-DD) only. Identical text
+    stored again with no cite options, or with the newest copy's own, reuses that copy;
+    with other options it is a new copy holding exactly the fields stated, and its fields win.
   priority: 2
   constraints:
-    packages: [debate_core.application, debate_core.retrieval, debate_core.evidence, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke]
+    packages: [debate_core.application, debate_core.retrieval, debate_core.evidence, debate_core.domain, packages/debate_core/schemas/source_snapshot.schema.json, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke]
     forbidden:
       - A user-stated field recorded or reported as verified
       - A card from a pasted copy reported VERIFIED

@@ -234,7 +234,19 @@ def _metadata(archive: zipfile.ZipFile) -> email.message.Message:
     return email.parser.Parser().parsestr(archive.read(names[0]).decode("utf-8"))
 
 
-def check_wheels(dist: Path, version: str) -> list[str]:
+def required_cli_members(repository: Path) -> tuple[str, ...]:
+    """Red-run skeleton (v1-e08-t09): the full list the tests build wheels from; nothing checks it yet."""
+    feeds = sorted(path.name for path in (repository / "config" / "feeds").glob("*.yaml"))
+    return (
+        *REQUIRED_CLI_MEMBERS,
+        "debate_cli/_bundled_config/config/argument_taxonomy.yaml",
+        "debate_cli/_bundled_config/config/federated_ranking.yaml",
+        "debate_cli/_bundled_config/prompts/search/expand.md",
+        *(f"debate_cli/_bundled_config/config/feeds/{name}" for name in feeds),
+    )
+
+
+def check_wheels(dist: Path, version: str, *, repository: Path = REPOSITORY_ROOT) -> list[str]:
     """Every reason the wheels in `dist` are not publishable as `version`; empty when they are."""
     problems: list[str] = []
     wheels = sorted(dist.glob("*.whl"))

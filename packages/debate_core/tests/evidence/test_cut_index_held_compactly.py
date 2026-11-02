@@ -27,11 +27,16 @@ from collections.abc import Callable, Mapping
 from typing import Final
 
 import pytest
-from hypothesis import given, settings
+from hypothesis import event, given, settings
 from hypothesis import strategies as st
 
 import debate_core.evidence.near_duplicates as near_duplicates
-from debate_core.evidence.near_duplicates import CutIndex, cluster_near_duplicates, matching_words
+from debate_core.evidence.near_duplicates import (
+    SHORT_BODY_SHINGLES,
+    CutIndex,
+    cluster_near_duplicates,
+    matching_words,
+)
 
 from . import near_duplicates_as_before as before
 
@@ -137,15 +142,15 @@ def bodies(draw: st.DrawFn) -> dict[str, str]:
     """A few invented passages, and bodies cut from them, copied with a word changed, dropped or
     added, and run from one into another: what makes copies, cuts and passages for the cut step."""
     passages = draw(
-        st.lists(st.lists(st.sampled_from(SHORT_WORDS), min_size=1, max_size=90), min_size=1, max_size=3)
+        st.lists(st.lists(st.sampled_from(SHORT_WORDS), min_size=8, max_size=90), min_size=1, max_size=3)
     )
     texts: list[list[str]] = [list(passage) for passage in passages]
-    for _ in range(draw(st.integers(0, 8))):
+    for _ in range(draw(st.integers(1, 8))):
         source = draw(st.sampled_from(passages))
         start = draw(st.integers(0, len(source) - 1))
         end = draw(st.integers(start + 1, len(source)))
         piece = list(source[start:end])
-        change = draw(st.sampled_from(("none", "changed", "dropped", "added", "joined")))
+        change = draw(st.sampled_from(("none", "none", "none", "changed", "dropped", "added", "joined")))
         at = draw(st.integers(0, len(piece) - 1))
         if change == "changed":
             piece[at] = draw(st.sampled_from(SHORT_WORDS))
@@ -165,6 +170,12 @@ def bodies(draw: st.DrawFn) -> dict[str, str]:
 @settings(max_examples=300, deadline=None)
 @given(bodies())
 def test_the_index_answers_as_before_on_generated_bodies(generated: dict[str, str]) -> None:
+    oracle = before.CutIndex(generated)
+    clusters = before.cluster_near_duplicates(generated)
+    event(f"bodies joined: {len(generated) > len(set(clusters.values()))}")
+    event(f"a body holds another: {any(oracle.containers(one) for one in oracle.fingerprints)}")
+    event(f"copies of one size: {bool(oracle.copies())}")
+    event(f"a short body: {any(0 < oracle.size(one) < SHORT_BODY_SHINGLES for one in oracle.fingerprints)}")
     assert_answers_as_before(generated)
 
 

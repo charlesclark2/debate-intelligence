@@ -51,6 +51,7 @@ regenerates it on `dev` ([`v1-e01-t16`](../plan_specs/v1/e01-repo-foundation/t16
 | [policies/caselist-data-use.md](policies/caselist-data-use.md) | Data-use policy for OpenCaselist disclosures and OpenEv camp files |
 | [policies/website-publishing.md](policies/website-publishing.md) | What may be published on the public team website: student names and photos, results, branding, accessibility, third parties, donations, removal on request |
 | [process/branching-and-environments.md](process/branching-and-environments.md) | `main` = prod, `dev` = development; promotion rules |
+| [process/ci-test-part-costs.md](process/ci-test-part-costs.md) | What one ci.yml test part costs besides its tests, measured 2026-11-01, and the options for making parts cheaper |
 | [process/session-report-template.md](process/session-report-template.md) | Template for session reports |
 | [process/task-workflow.md](process/task-workflow.md) | `scripts/task`: start → session → PM review → PR → finish |
 | [process/working-agreements.md](process/working-agreements.md) | Project rules: light CI, operator hand-off for long commands, doc locations, naming |
@@ -67,6 +68,7 @@ regenerates it on `dev` ([`v1-e01-t16`](../plan_specs/v1/e01-repo-foundation/t16
 | [runbooks/caselist-scheduled-sync.md](runbooks/caselist-scheduled-sync.md) | Installing, enabling, watching and disabling the weekly `caselist pull` launchd agent |
 | [runbooks/evidence-search.md](runbooks/evidence-search.md) | Standing up the student evidence search pilot in dev and prod: applies, deploys, cookie keys, CLI-only settings, SES access and the school IT request |
 | [runbooks/evidence-store.md](runbooks/evidence-store.md) | Applying the dev and prod evidence buckets and checking the operator and takedown credentials |
+| [runbooks/landscape-model-evaluation-record.md](runbooks/landscape-model-evaluation-record.md) | Re-recording the landscape model evaluation under a new prompt version, then breaking it down as JSON |
 | [runbooks/landscape-model-evaluation-replay.md](runbooks/landscape-model-evaluation-replay.md) | Replaying a recorded landscape model evaluation, broken down card by card, with no model call |
 | [runbooks/landscape-report-from-the-cloud-run.md](runbooks/landscape-report-from-the-cloud-run.md) | Publishing a caselist's landscape report from the weeks the cloud run pulled: restore a copy, parse it, dry run, publish, delete the copy |
 | [runbooks/parsed-store-retention.md](runbooks/parsed-store-retention.md) | Retiring superseded parsed-store version directories in both buckets and on this machine, and undoing it |

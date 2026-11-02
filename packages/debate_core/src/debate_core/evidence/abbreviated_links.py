@@ -156,7 +156,11 @@ class FullCardWords:
 
     cluster_id: str
     short_cite_key: str | None
-    words: tuple[str, ...]
+    words: Sequence[str]
+    """The body's words as :func:`~debate_core.evidence.near_duplicates.matching_words` reads them. A
+    slice is a tuple of words. The parse pipeline reads them from the clusterer's word numbers
+    (:meth:`~debate_core.evidence.near_duplicates.BodyWords.spelled`), so a caselist's linker holds
+    no string per word (`v1-e40-t39`)."""
     copies: int = 1
     """How many disclosed cards have this body under this short cite."""
 
@@ -300,7 +304,7 @@ def _consistent_throughout(group: Sequence[AbbreviationAnchor]) -> bool:
     )
 
 
-def _matches(anchor: AbbreviationAnchor, body: tuple[str, ...]) -> bool:
+def _matches(anchor: AbbreviationAnchor, body: Sequence[str]) -> bool:
     if anchor.from_cite_line:
         return (
             _overlap(anchor.opening_words, body, at_start=True) >= MIN_ANCHOR_WORDS
@@ -312,7 +316,7 @@ def _matches(anchor: AbbreviationAnchor, body: tuple[str, ...]) -> bool:
     return body[: len(opening)] == opening and body[len(body) - len(closing) :] == closing
 
 
-def _overlap(fragment: tuple[str, ...], body: tuple[str, ...], *, at_start: bool) -> int:
+def _overlap(fragment: tuple[str, ...], body: Sequence[str], *, at_start: bool) -> int:
     """How many words of `fragment` line up with the start (or end) of `body`.
 
     At the start, the longest suffix of the opening fragment that is a prefix of the body: the cite

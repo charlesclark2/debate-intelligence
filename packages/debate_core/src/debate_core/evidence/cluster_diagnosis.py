@@ -341,7 +341,7 @@ def diagnose_cuts(
     # nine-tenths inside another that holds neither of its ends, which is never among its candidates.
     probes = {fingerprint: _probes(index, fingerprint) for fingerprint in index.ends}
     probe_shingles = {shingle for held in probes.values() for shingle in held}
-    holders: defaultdict[str, set[str]] = defaultdict(set)
+    holders: defaultdict[bytes, set[str]] = defaultdict(set)
     for fingerprint in index.fingerprints:
         for shingle in index.sets[fingerprint] & probe_shingles:
             holders[shingle].add(fingerprint)
@@ -351,7 +351,7 @@ def diagnose_cuts(
     def banded(left: str, right: str) -> bool:
         for fingerprint in (left, right):
             if fingerprint not in signatures:
-                signatures[fingerprint] = minhash_signature(index.sets[fingerprint], seed)
+                signatures[fingerprint] = minhash_signature(index.shingle_texts(fingerprint), seed)
         return _share_a_band(signatures[left], signatures[right])
 
     findings: list[CutFinding] = []
@@ -425,9 +425,9 @@ def diagnose_cuts(
     )
 
 
-def _probes(index: CutIndex, fingerprint: str) -> set[str]:
+def _probes(index: CutIndex, fingerprint: str) -> set[bytes]:
     """Three of a body's interior shingles: a quarter, a half and three-quarters of the way in."""
-    ordered = word_shingles(index.words[fingerprint])
+    ordered = index.words.shingles_of(fingerprint)
     return {ordered[len(ordered) * quarter // 4] for quarter in (1, 2, 3)}
 
 

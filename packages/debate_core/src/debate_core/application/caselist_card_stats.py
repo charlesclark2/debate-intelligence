@@ -73,9 +73,9 @@ from debate_core.evidence.abbreviated_links import (
 )
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION, card_fingerprint, extract_cutter_mark
 from debate_core.evidence.near_duplicates import (
+    BodyWords,
     NearDuplicateThresholds,
     cluster_near_duplicates,
-    matching_words,
 )
 
 __all__ = [
@@ -334,7 +334,10 @@ class CardPlacer:
     The linker compares an abbreviated card with a full card's body words. Those are taken from the
     first body with the full card's fingerprint, which is the SHA-256 of the body under the
     normalization :func:`~debate_core.evidence.near_duplicates.matching_words` reads words through,
-    so every full card with one fingerprint has the same words.
+    so every full card with one fingerprint has the same words. They are read from the clusterer's
+    :class:`~debate_core.evidence.near_duplicates.BodyWords`, a number per word, rather than held
+    as a tuple of strings per body: about 2 GB over the whole `hspolicy26` store before
+    `v1-e40-t39`.
     """
 
     def __init__(self, thresholds: NearDuplicateThresholds, markers: tuple[str, ...] | None) -> None:
@@ -361,14 +364,13 @@ class CardPlacer:
 
     def placements(self) -> list[ClusterPlacement]:
         """One placement per card given, in the order given: steps 1 to 3 of this module's docstring."""
-        clusters = cluster_near_duplicates(self._bodies, self._thresholds)
-        words: dict[str, tuple[str, ...]] = {}
+        # One word list for the clusterer and the linker, held as numbers (`v1-e40-t39`).
+        words = BodyWords(self._bodies)
+        clusters = cluster_near_duplicates(self._bodies, self._thresholds, words=words)
         full_by_cite: defaultdict[str | None, dict[str, FullCardWords]] = defaultdict(dict)
         for (fingerprint, key), copies in self._copies.items():
-            if fingerprint not in words:
-                words[fingerprint] = tuple(matching_words(self._bodies[fingerprint]))
             full_by_cite[key][fingerprint] = FullCardWords(
-                clusters[fingerprint], key, words[fingerprint], copies
+                clusters[fingerprint], key, words.spelled(fingerprint), copies
             )
 
         # An abbreviated card links to a full card's cluster, or failing that is grouped with the

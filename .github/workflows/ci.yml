@@ -24,9 +24,16 @@
 #     part is not a list of directories: tests/pytest_plugins/run_in_parts.py deals every test file's
 #     tests round the parts, so the parts are level without anyone balancing them and no part can
 #     be forgotten. tests/scripts/test_ci_workflow_test_job.py collects every part and proves that
-#     together they are exactly the unsplit selection. That proof collects the whole suite nine times,
-#     so it runs in the `partition-proof` job, on every push and on a pull request that changes what
-#     it proves, and the parts leave its `partition_proof` marker out (v1-e41-t15).
+#     together they are exactly the unsplit selection, and deals the real collection at every size
+#     the matrix can take. That proof collects the whole suite nine times, so it runs in the
+#     `partition-proof` job, on every push and on a pull request that changes what it proves, and
+#     the parts leave its `partition_proof` marker out (v1-e41-t15).
+#   * N follows the selection (v1-e41-t16): one part per 30 test files chosen, at least one and at
+#     most eight, and eight for the whole selection; `test-selection` hands the matrix its list.
+#     Every part pays its setup and a collection, so an affected set of a few dozen files no longer
+#     takes eight runners. Most task pull requests reach a third of the suite or more and still get
+#     seven or eight (docs/process/ci-test-part-costs.md). A dispatch can ask for xdist's
+#     `--dist worksteal` instead of `load`, for the PM's comparison of the two on one commit.
 #   * A pull request into dev runs the tests its changes reach (v1-e01-t38): scripts/ci_test_selection.py
 #     reads scripts/affected_tests.py's selection against the pull request's base commit, always-run
 #     list included, and the parts deal that list. Every other run is the whole default selection: a
@@ -48,11 +55,11 @@
 #     Coverage makes a part about half as long again (1.52 times, measured on the operator's Mac),
 #     so a push part takes longer than the same part on a pull request: the 2-minute figure below
 #     is for pull requests, and a push part is held by the job's 10-minute limit.
-#   * When it drifts: every part ends with its 25 slowest tests (`--durations=25`). If `ci` on
-#     ordinary pull requests passes 3 minutes, or one part's pytest step passes 2, append the next
-#     number to the `test` job's `matrix.part`. That is the whole change. If one part is steadily
-#     slower than the rest, its durations name the few slow tests that landed together; make them
-#     cheaper, as working agreement 1 describes.
+#   * When it drifts: every part ends with its 25 slowest tests (`--durations=25`). If one part's
+#     pytest step passes 2 minutes on a whole-selection run, raise MOST_PARTS in
+#     scripts/ci_test_selection.py; if it does on an affected set, lower TEST_FILES_PER_PART there.
+#     That is the whole change. If one part is steadily slower than the rest, its durations name the
+#     few slow tests that landed together; make them cheaper, as working agreement 1 describes.
 #
 # Every job in every workflow names its runner image, ubuntu-24.04, never ubuntu-latest: GitHub moves
 # ubuntu-latest to Ubuntu 26 from 2026-10-19, and a new image (its python3, shellcheck, gh) must not

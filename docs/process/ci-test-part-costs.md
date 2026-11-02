@@ -1,10 +1,11 @@
-<!-- docs-index: What one ci.yml test part costs besides its tests, measured 2026-11-01, and the options for making parts cheaper -->
+<!-- docs-index: What one ci.yml test part costs besides its tests (measured 2026-11-01), how many parts a selection gets (2026-11-02), and the options for making parts cheaper -->
 # What a CI test part costs besides its tests
 
-`ci.yml`'s `test` job runs the selection in eight parts (working agreement 1). This page records
-what each part spends on things other than its tests, against its test time, and the options for
-cutting that cost. It was written by `v1-e41-t15`. That task built none of the options below; the
-PM chooses which to file.
+`ci.yml`'s `test` job runs the selection in parts (working agreement 1): eight until `v1-e41-t16`,
+and since then one per 30 test files chosen, at most eight. This page records what each part spends
+on things other than its tests, against its test time, and the options for cutting that cost. It
+was written by `v1-e41-t15`, which built none of the options; what `v1-e41-t16` built from them is
+at the end.
 
 ## What was measured
 
@@ -91,3 +92,76 @@ The heaviest files, by the same rough estimate, are `tests/smoke/test_caselist_r
 **Recommendation:** option 2's matrix sized to the selection first, which is small and answers the
 queue; option 4 alongside it, measured on a whole-selection run; option 1 when a whole-selection
 part passes the 2-minute line again.
+
+## What v1-e41-t16 changed
+
+The PM chose option 2, sized by file count, and option 4 as a switch (rulings of 2026-11-02).
+
+### As many parts as the selection needs
+
+`test-selection` gives the `test` matrix one part per 30 test files it chose, at least one and at
+most eight; the whole selection is always eight (`TEST_FILES_PER_PART` and `MOST_PARTS` in
+`scripts/ci_test_selection.py`). It counts its own list, so nothing is added to the parts' path; an
+exact count of tests would need a collection there, about 5–15 s on every pull request.
+
+Why 30: on the operator's Mac, 2026-11-02, `fd48282`'s affected set ran 2,047 tests in 55.5 s at
+`-n 4`, 203 s of worker time, 0.099 s a test, against about 0.13 s a test estimated above for the
+whole selection. On a runner, a part's pytest step is about 15 s plus 0.09 s for each test in it
+(whole-selection parts of about 2,510 tests take 190–290 s; the bot's parts, about 50 tests each,
+15–33 s). About 1,000 tests to a part keeps the step near 100 s, under agreement 1's 2-minute line,
+and 30 test files are about 1,000 tests on today's suite (30.7 tests a file on average; 24–44 in the
+sets below).
+
+The rule over the last twelve task merges into `dev` before this task, read with
+`scripts/affected_tests.py --diff <commit>` against the 2026-11-02 tree and counted from one
+collection of the whole selection (20,077 tests in 654 files). "By 1,000 tests" is the rule the
+session first proposed, for comparison:
+
+| Merge | Task | Test files | Tests | Of the suite | Parts | Tests a part | By 1,000 tests |
+|---|---|---|---|---|---|---|---|
+| `fd48282` | v1-e08-t09 | 46 | 2,047 | 10% | 2 | 1,023 | 3 |
+| `51706db` | v1-e06-t08 | 110 | 4,084 | 20% | 4 | 1,021 | 5 |
+| `28d4c88` | v1-e32-t39 | 233 | 5,854 | 29% | 8 | 731 | 6 |
+| `b707b6a` | v1-e06-t07 | 238 | 6,745 | 34% | 8 | 843 | 7 |
+| `ffce3fb` | v1-e08-t08 | 254 | 6,604 | 33% | 8 | 825 | 7 |
+| `dedb908` | v1-e32-t40 | 308 | 8,501 | 42% | 8 | 1,062 | 8 |
+| `4f91c9e` | v1-e40-t39 | 328 | 7,758 | 39% | 8 | 969 | 8 |
+| `c8e02a3` | v1-e40-t35 | 362 | 9,094 | 45% | 8 | 1,136 | 8 |
+| `792dd4a` | v1-e40-t36 | 412 | 11,397 | 57% | 8 | 1,424 | 8 |
+| `c6e35fd` | v1-e08-t04 | 622 | 19,236 | 96% | 8 | 2,404 | 8 |
+| `f66a450` | v1-e08-t05 | whole selection (shared test ground) | 20,077 | 100% | 8 | 2,510 | 8 |
+| `1663d04` | v1-e06-t06 | whole selection (shared test ground) | 20,077 | 100% | 8 | 2,510 | 8 |
+
+The always-run list alone, 11 files and 377 tests, is one part. So sizing saves runners and
+the queue for them on small selections, and changes nothing for most task pull requests: ten of
+these twelve still get eight parts. Their wait is the parts' fixed cost and the selection's size,
+which option 1 above answers; the PM files it as its own task.
+
+The parts still partition the selection at every size: the partition proof collects the parts the
+rule gives for its selections and deals the real collection at every size from one to eight with
+the plugin's own function (`parts_dealt`). On the operator's Mac it took 18.7 s and 17.7 s, against
+36.5 s and 18.2 s for the proof before the change, run alternately at load averages of 4.5 to 16.
+
+### worksteal, switchable for a dispatch
+
+`ci.yml`'s `workflow_dispatch` has an input, `xdist_dist`, `load` (the default) or `worksteal`,
+which every test part passes to pytest as `--dist`. A push, a pull request and the bot's dispatch
+run `load`. To compare the two on one commit, dispatch `ci` on `dev` twice, once with each value,
+without a merge into `dev` in between (a dispatch runs the whole selection in eight parts, without
+coverage):
+
+```bash
+gh workflow run ci.yml --repo charlesclark2/debate-intelligence --ref dev -f xdist_dist=load
+gh workflow run ci.yml --repo charlesclark2/debate-intelligence --ref dev -f xdist_dist=worksteal
+```
+
+Then check that both runs are of the same commit; a different `headSha` means `dev` moved between
+them, and both are dispatched again:
+
+```bash
+gh run list --repo charlesclark2/debate-intelligence --workflow ci.yml --event workflow_dispatch --branch dev --limit 2 --json databaseId,headSha,createdAt,status
+```
+
+The PM reads the eight parts' pytest step times of each run from the public API, and decides the
+default in a later one-line change: the input's `default` and the `'load'` in the `test` job's
+`XDIST_DIST`.

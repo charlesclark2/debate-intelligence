@@ -53,6 +53,33 @@ as one relay prompt on 2026-11-02. No code has been written.
 No cite reads it: CitationService takes its date from the Crossref deposit (`DoiWork`, with its
 own precision) and the page harvest, and nothing reads `Article.published_at` into a cite.
 
+### The largest search on the public pool (PM ruling 1, 2026-11-02)
+
+* **The wrapper's timeout** is `providers.timeout_seconds`, 10 s by default; no profile overrides
+  it. Each query is its own wrapped call, and the fan-out starts them all at once, so every query's
+  10 s starts at the same moment. The whole search's deadline is `providers.search_deadline_seconds`, 15 s.
+* **The most queries one search sends** is 11 with today's taxonomy: `heg`/`answers` has 8
+  templates (the largest pair of 127) and `--expand-llm` adds at most `DEFAULT_MAX_MODEL_QUERIES`,
+  3. `ArgumentTaxonomy` sets no limit on templates per pair, so a taxonomy edit can raise it.
+* **What happens with a plain pacer**, from a scratch simulation through the real
+  `ResilientProvider` (time scaled down 10 times; 11 queries at once; one-line pacer of the
+  pool's rate and concurrency):
+
+| Pool | Crossref's answer time | Answered | Timed out by the wrapper | Breaker afterwards |
+|---|---|---|---|---|
+| public | 0 s | 10 | 1 | closed |
+| public | 0.5 s | 10 | 1 | closed |
+| public | 1.5 s | 6 | 5 | open for the 60 s cool-down |
+| public | 2.5 s | 3 | 8 | open for the 60 s cool-down |
+| polite | 1.5 s | 11 | 0 | closed |
+| polite | 2.5 s | 9 | 2 | closed |
+
+  On the public pool the 11th query cannot start before 10 s, so it always times out. With
+  answers taking a second or more, the late queries time out together and open the breaker:
+  that search is PARTIAL and Crossref is benched for the next search too. That is the case
+  ruling 1 said to ask about, so building stopped again here.
+
+
 ## Plan nodes
 
 <!-- One row per Plan graph node, in the order they were completed. -->

@@ -63,8 +63,8 @@ v2.3's extension work.
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 55 | 252 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 115 | 95 | 505 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 77 | 68 | 316 |
-| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 21 | 14 | 121 |
-| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 20 | 9 | 104 |
+| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 21 | 15 | 121 |
+| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 20 | 10 | 104 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 29 | 21 | 166 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 29 | 25 | 94 |
@@ -430,7 +430,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [`cut` refused for an unrecorded model call says to set DEBATE_MODEL_MODE=live for a real cut](plan_specs/v1/e06-card-cutting/t09-cut-replay-hint-names-live-mode.yaml) `v1-e06-t09-cut-replay-hint-names-live-mode` | Pending | 1 | 0.5 |
 | [`verify` warns when a deletion in a .docx body removes a negation](plan_specs/v1/e06-card-cutting/t10-verify-docx-flags-a-removed-negation.yaml) `v1-e06-t10-verify-docx-flags-a-removed-negation` | Pending | 1 | 1.0 |
 | [Exporting a .docx refuses a card whose format profile is not the one it renders in](plan_specs/v1/e06-card-cutting/t11-export-docx-refuses-a-mismatched-profile.yaml) `v1-e06-t11-export-docx-refuses-a-mismatched-profile` | Pending | 1 | 0.5 |
-| [A pasted copy's cite fields can be stated when it is stored, so a card cut from it has a usable cite](plan_specs/v1/e06-card-cutting/t12-pasted-copy-cite-stated-by-the-user.yaml) `v1-e06-t12-pasted-copy-cite-stated-by-the-user` | Pending | 1 | 2.0 |
+| [A pasted copy's cite fields can be stated when it is stored, so a card cut from it has a usable cite](plan_specs/v1/e06-card-cutting/t12-pasted-copy-cite-stated-by-the-user.yaml) `v1-e06-t12-pasted-copy-cite-stated-by-the-user` | Succeeded | 1 | 2.0 |
 
 
 ### v1.4 — Federated research from the CLI
@@ -443,7 +443,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 |---|---|---|---|
 | [SearchProvider contract, health and circuit breaking](plan_specs/v1/e07-discovery-adapters/t01-search-provider-contract.yaml) `v1-e07-t01-search-provider-contract` | Succeeded | 1 | 9.0 |
 | [OpenAlex adapter](plan_specs/v1/e07-discovery-adapters/t02-openalex-adapter.yaml) `v1-e07-t02-openalex-adapter` | Succeeded | 2 | 5.0 |
-| [Crossref adapter](plan_specs/v1/e07-discovery-adapters/t03-crossref-adapter.yaml) `v1-e07-t03-crossref-adapter` | Pending | 3 | 5.0 |
+| [Crossref adapter](plan_specs/v1/e07-discovery-adapters/t03-crossref-adapter.yaml) `v1-e07-t03-crossref-adapter` | Succeeded | 3 | 5.0 |
 | [Semantic Scholar adapter](plan_specs/v1/e07-discovery-adapters/t04-semantic-scholar-adapter.yaml) `v1-e07-t04-semantic-scholar-adapter` | Pending | 2 | 4.0 |
 | [Publisher RSS/Atom and Google News RSS adapter](plan_specs/v1/e07-discovery-adapters/t05-rss-news-adapter.yaml) `v1-e07-t05-rss-news-adapter` | Succeeded | 2 | 8.0 |
 | [GDELT news adapter](plan_specs/v1/e07-discovery-adapters/t06-gdelt-adapter.yaml) `v1-e07-t06-gdelt-adapter` | Pending | 2 | 4.0 |
@@ -512,7 +512,7 @@ Whitefish Bay Debate has a public, mobile-friendly team website: team informatio
 |---|---|---|---|
 | [How coaches edit content (ADR-0015)](plan_specs/v1/e37-calendar-and-announcements/t01-content-editing-decision.yaml) `v1-e37-t01-content-editing-decision` | Succeeded | 1 | 13.0 |
 | [Events and tournaments calendar](plan_specs/v1/e37-calendar-and-announcements/t02-events-calendar.yaml) `v1-e37-t02-events-calendar` | Succeeded | 2 | 11.0 |
-| [Announcements and news](plan_specs/v1/e37-calendar-and-announcements/t03-announcements.yaml) `v1-e37-t03-announcements` | Pending | 2 | 10.0 |
+| [Announcements and news](plan_specs/v1/e37-calendar-and-announcements/t03-announcements.yaml) `v1-e37-t03-announcements` | InProgress | 2 | 10.0 |
 | [Automatic republish on content changes](plan_specs/v1/e37-calendar-and-announcements/t04-auto-republish.yaml) `v1-e37-t04-auto-republish` | Cancelled | 3 | 11.0 |
 | [Parent email updates](plan_specs/v1/e37-calendar-and-announcements/t05-parent-email-signup.yaml) `v1-e37-t05-parent-email-signup` | Succeeded | 2 | 6.0 |
 | [Season results: how the team's students placed at each tournament](plan_specs/v1/e37-calendar-and-announcements/t06-season-results.yaml) `v1-e37-t06-season-results` | Succeeded | 2 | 6.0 |

@@ -641,7 +641,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [The image plan check refuses a schedule repointed at a revision registered before the apply](plan_specs/v1/e41-delivery-tooling-upkeep/t13-image-plan-check-known-revision-rule.yaml) `v1-e41-t13-image-plan-check-known-revision-rule` | Pending | 1 | 0.5 |
 | [A bounded run that starts a Docker container stops that container too](plan_specs/v1/e41-delivery-tooling-upkeep/t14-hard-stop-stops-a-named-container.yaml) `v1-e41-t14-hard-stop-stops-a-named-container` | Pending | 1 | 0.8 |
 | [CI chooses the tests once, skips the test parts when none are chosen, cancels superseded pull-request runs, and runs the partition proof only when it can change](plan_specs/v1/e41-delivery-tooling-upkeep/t15-ci-selection-once-and-no-queue.yaml) `v1-e41-t15-ci-selection-once-and-no-queue` | Succeeded | 1 | 4.0 |
-| [CI runs as many test parts as the selection needs, measures work stealing, and the bot's dispatched run runs no Python job](plan_specs/v1/e41-delivery-tooling-upkeep/t16-ci-matrix-sized-to-the-selection.yaml) `v1-e41-t16-ci-matrix-sized-to-the-selection` | Pending | 1 | 3.0 |
+| [CI runs as many test parts as the selection needs, measures work stealing, and the bot's dispatched run runs no Python job](plan_specs/v1/e41-delivery-tooling-upkeep/t16-ci-matrix-sized-to-the-selection.yaml) `v1-e41-t16-ci-matrix-sized-to-the-selection` | InProgress | 1 | 3.0 |
 
 
 ## V2

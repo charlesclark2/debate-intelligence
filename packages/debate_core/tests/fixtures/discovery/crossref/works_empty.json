@@ -1,0 +1,13 @@
+{
+  "query": {"query": "orbital debris liability", "filters": {"max_results": 5}},
+  "exchanges": [
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://api.crossref.org/works?query.bibliographic=orbital+debris+liability&rows=5&select=DOI%2Ctitle%2Ccontainer-title%2Cauthor%2Cissued%2Cpublished-online%2Cpublished-print%2Ctype%2Cis-referenced-by-count%2Clicense%2Clink%2Cabstract&mailto=crossref-coach%40example.org"
+      },
+      "response": {"status": 200, "headers": {"content-type": "application/json", "x-rate-limit-limit": "3", "x-rate-limit-interval": "1s", "x-concurrency-limit": "3"}, "body_file": "works_empty.body.json"}
+    }
+  ],
+  "expected_results_file": "works_empty.expected.json"
+}

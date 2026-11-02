@@ -366,6 +366,21 @@ def test_presenter_json_items_carry_rank_score_features_explanation_identifiers_
     ]
 
 
+def test_presenter_json_gives_each_result_its_place_in_raw_provider_order(seams: Seams) -> None:
+    result = search("midterm elections", "--since", "2026-09-14", "--format", "json")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    places = {item["title"]: item["provider_order"] for item in envelope(result)["data"]["results"]}
+    # Fan-out order is OpenAlex's three works, then the Courier's two matching items, of which the
+    # turnout item is the second work: it keeps the work's place.
+    assert places == {
+        "Midterm elections and the partisan fight over health insurance": 1,
+        "Turnout in the 2026 midterm elections": 2,
+        "Political capital and health insurance reform": 3,
+        "Midterm elections tighten as health insurance costs rise": 4,
+    }
+
+
 def test_presenter_json_puts_only_the_envelope_on_stdout_and_progress_on_stderr(seams: Seams) -> None:
     result = search("midterm elections", "--since", "2026-09-14", "--json")
 

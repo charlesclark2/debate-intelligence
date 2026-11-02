@@ -32,7 +32,7 @@ from debate_cli.output import CliOutput, CommandFailure, JsonValue, TableSpec
 from debate_core.application.federated_ranking import RankedCandidate
 from debate_core.application.federated_search_types import SearchOutcome
 from debate_core.domain import AccessStatus, Article, SearchStatus
-from debate_core.domain.discovery import ProviderOutcome, ProviderStatus
+from debate_core.domain.discovery import CandidateResult, ProviderOutcome, ProviderStatus
 
 __all__ = [
     "NO_PROVIDER_ENABLED_CODE",
@@ -178,10 +178,23 @@ def _access(ranked: RankedCandidate, article: Article | None) -> str:
     return "UNKNOWN"
 
 
-def _result_json(ranked: RankedCandidate, article: Article | None) -> dict[str, JsonValue]:
+def _provider_order(ranked: RankedCandidate, candidates: Sequence[CandidateResult]) -> int | None:
+    """Where the source first appears in what the providers returned, in fan-out order, from 1.
+
+    The baseline v1-e08-t03 measures the ranking against ("raw provider order"): the merged
+    candidates' first appearance, query by query and provider by provider.
+    """
+    positions = [candidates.index(member) + 1 for member in ranked.candidate.members if member in candidates]
+    return min(positions) if positions else None
+
+
+def _result_json(
+    ranked: RankedCandidate, article: Article | None, candidates: Sequence[CandidateResult]
+) -> dict[str, JsonValue]:
     candidate = ranked.candidate
     return {
         "rank": ranked.rank,
+        "provider_order": _provider_order(ranked, candidates),
         "score": ranked.total_score,
         "lexical_score": ranked.lexical_score,
         "features": dict(ranked.features),
@@ -221,7 +234,10 @@ def search_payload(outcome: SearchOutcome) -> dict[str, JsonValue]:
         "status": search.status.value,
         "filters": search.filters.model_dump(mode="json"),
         "expansion": search.expansion.model_dump(mode="json") if search.expansion is not None else None,
-        "results": [_result_json(ranked, articles.get(ranked.rank)) for ranked in outcome.ranked_candidates],
+        "results": [
+            _result_json(ranked, articles.get(ranked.rank), outcome.candidates)
+            for ranked in outcome.ranked_candidates
+        ],
         "providers": [summary.as_json() for summary in provider_summaries(outcome.provider_statuses)],
         "provider_calls": [
             {

@@ -62,13 +62,13 @@ v2.3's extension work.
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 55 | 252 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 115 | 95 | 505 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 75 | 68 | 312 |
-| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 20 | 13 | 119 |
-| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 17 | 8 | 100 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 77 | 68 | 316 |
+| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 21 | 14 | 121 |
+| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 20 | 8 | 104 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 29 | 21 | 166 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 29 | 25 | 94 |
-| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 55 | 33 | 100 |
+| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 56 | 35 | 103 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -372,6 +372,8 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [The landscape smoke check reads the review queue's order line and a dry run's scan refusal](plan_specs/v1/e32-argument-landscape/t38-landscape-smoke-checks-order-line-and-dry-run-refusal.yaml) `v1-e32-t38-landscape-smoke-checks-order-line-and-dry-run-refusal` | Pending | 2 | 1.0 |
 | [Why the model stage scored 36.8%: the evaluation broken down, and the scan's hits listed in the operator's terminal](plan_specs/v1/e32-argument-landscape/t39-model-evaluation-diagnosis.yaml) `v1-e32-t39-model-evaluation-diagnosis` | Succeeded | 4 | 3.0 |
 | [The model stage names the argument a card is read as, with each position's side and description, and the scrub and scan fixed](plan_specs/v1/e32-argument-landscape/t40-model-stage-reads-the-argument-not-the-subject.yaml) `v1-e32-t40-model-stage-reads-the-argument-not-the-subject` | InProgress | 1 | 5.0 |
+| [The coach's review applied: three new NHI positions, corrected descriptions, and a second accepted label in the coach sample](plan_specs/v1/e32-argument-landscape/t41-coach-sample-second-label-and-three-new-positions.yaml) `v1-e32-t41-coach-sample-second-label-and-three-new-positions` | Pending | 2 | 3.0 |
+| [`landscape cassettes --delete` can delete only one prompt version's cassettes](plan_specs/v1/e32-argument-landscape/t42-landscape-cassettes-delete-by-prompt-version.yaml) `v1-e32-t42-landscape-cassettes-delete-by-prompt-version` | Pending | 1 | 1.0 |
 
 #### [E33 — Evidence File Builder](plan_specs/v1/e33-file-builder/epic.yaml)
 
@@ -424,10 +426,11 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [JSON manifest export](plan_specs/v1/e06-card-cutting/t05-json-manifest-export.yaml) `v1-e06-t05-json-manifest-export` | Succeeded | 2 | 6.0 |
 | [`debate-research cut` command](plan_specs/v1/e06-card-cutting/t06-cut-command.yaml) `v1-e06-t06-cut-command` | Succeeded | 3 | 7.0 |
 | [Verify DOCX files](plan_specs/v1/e06-card-cutting/t07-verify-docx.yaml) `v1-e06-t07-verify-docx` | Succeeded | 2 | 8.0 |
-| [`cut` can cut a card from the user's own stored copy of an article, with that provenance](plan_specs/v1/e06-card-cutting/t08-cut-from-a-stored-pasted-copy.yaml) `v1-e06-t08-cut-from-a-stored-pasted-copy` | Pending | 1 | 3.0 |
+| [`cut` can cut a card from the user's own stored copy of an article, with that provenance](plan_specs/v1/e06-card-cutting/t08-cut-from-a-stored-pasted-copy.yaml) `v1-e06-t08-cut-from-a-stored-pasted-copy` | Succeeded | 1 | 3.0 |
 | [`cut` refused for an unrecorded model call says to set DEBATE_MODEL_MODE=live for a real cut](plan_specs/v1/e06-card-cutting/t09-cut-replay-hint-names-live-mode.yaml) `v1-e06-t09-cut-replay-hint-names-live-mode` | Pending | 1 | 0.5 |
 | [`verify` warns when a deletion in a .docx body removes a negation](plan_specs/v1/e06-card-cutting/t10-verify-docx-flags-a-removed-negation.yaml) `v1-e06-t10-verify-docx-flags-a-removed-negation` | Pending | 1 | 1.0 |
 | [Exporting a .docx refuses a card whose format profile is not the one it renders in](plan_specs/v1/e06-card-cutting/t11-export-docx-refuses-a-mismatched-profile.yaml) `v1-e06-t11-export-docx-refuses-a-mismatched-profile` | Pending | 1 | 0.5 |
+| [A pasted copy's cite fields can be stated when it is stored, so a card cut from it has a usable cite](plan_specs/v1/e06-card-cutting/t12-pasted-copy-cite-stated-by-the-user.yaml) `v1-e06-t12-pasted-copy-cite-stated-by-the-user` | Pending | 1 | 2.0 |
 
 
 ### v1.4 — Federated research from the CLI
@@ -459,7 +462,10 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [`debate-research search` command](plan_specs/v1/e08-research-workflows/t05-search-command.yaml) `v1-e08-t05-search-command` | InProgress | 4 | 6.0 |
 | [`--auto-cut N` batch cutting](plan_specs/v1/e08-research-workflows/t06-auto-cut.yaml) `v1-e08-t06-auto-cut` | Pending | 3 | 9.0 |
 | [`debate-research daily` digests](plan_specs/v1/e08-research-workflows/t07-daily-command.yaml) `v1-e08-t07-daily-command` | Pending | 2 | 7.0 |
-| [Counterplans and kritiks get the research needs their arguments have](plan_specs/v1/e08-research-workflows/t08-counterplan-and-kritik-needs.yaml) `v1-e08-t08-counterplan-and-kritik-needs` | Pending | 1 | 2.0 |
+| [Counterplans and kritiks get the research needs their arguments have](plan_specs/v1/e08-research-workflows/t08-counterplan-and-kritik-needs.yaml) `v1-e08-t08-counterplan-and-kritik-needs` | InProgress | 1 | 2.0 |
+| [An installed build carries the configuration `search` reads: the argument taxonomy, the ranking table and the feed lists](plan_specs/v1/e08-research-workflows/t09-installed-build-carries-search-configuration.yaml) `v1-e08-t09-installed-build-carries-search-configuration` | Pending | 2 | 1.0 |
+| [One search asks each provider once, however many queries the expansion gives](plan_specs/v1/e08-research-workflows/t10-search-asks-each-provider-once.yaml) `v1-e08-t10-search-asks-each-provider-once` | Pending | 1 | 2.0 |
+| [The search.expand prompt names the argument family's needs, not the DA family's](plan_specs/v1/e08-research-workflows/t11-expand-prompt-sends-the-familys-needs.yaml) `v1-e08-t11-expand-prompt-sends-the-familys-needs` | Pending | 1 | 1.0 |
 
 
 ### v1.5 — V1 quality gate & team pilot
@@ -613,7 +619,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [The aggregate rebuild reads cards source by source, so it no longer holds a whole caselist's cards in memory](plan_specs/v1/e40-cloud-caselist-run/t36-parse-rebuild-streams-occurrence-rows.yaml) `v1-e40-t36-parse-rebuild-streams-occurrence-rows` | Succeeded | 2 | 3.0 |
 | [Redaction no longer takes two apostrophes for a quoted path and removes the words between them](plan_specs/v1/e40-cloud-caselist-run/t37-redact-keeps-text-between-apostrophes.yaml) `v1-e40-t37-redact-keeps-text-between-apostrophes` | Pending | 1 | 1.0 |
 | [A lock refusal is not reported as a run that stopped before its stages](plan_specs/v1/e40-cloud-caselist-run/t38-landscape-staleness-ignores-lock-refusals.yaml) `v1-e40-t38-landscape-staleness-ignores-lock-refusals` | Pending | 1 | 0.8 |
-| [The near-duplicate index and the linker's word lists are held compactly, so a season's rebuild fits with room](plan_specs/v1/e40-cloud-caselist-run/t39-cut-index-and-linker-words-held-compactly.yaml) `v1-e40-t39-cut-index-and-linker-words-held-compactly` | InProgress | 1 | 4.0 |
+| [The near-duplicate index and the linker's word lists are held compactly, so a season's rebuild fits with room](plan_specs/v1/e40-cloud-caselist-run/t39-cut-index-and-linker-words-held-compactly.yaml) `v1-e40-t39-cut-index-and-linker-words-held-compactly` | Succeeded | 1 | 4.0 |
 | [In bucket mode a missing or unreadable token, and a download refused for an expired login, give the cloud's cure, not a login by hand](plan_specs/v1/e40-cloud-caselist-run/t40-token-errors-name-the-cloud-cure.yaml) `v1-e40-t40-token-errors-name-the-cloud-cure` | Pending | 1 | 1.0 |
 
 #### [E41 — Delivery Tooling Upkeep](plan_specs/v1/e41-delivery-tooling-upkeep/epic.yaml)
@@ -634,7 +640,8 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [CI's pyright covers the scripts already clean, so they stay clean](plan_specs/v1/e41-delivery-tooling-upkeep/t12-pyright-covers-the-clean-scripts.yaml) `v1-e41-t12-pyright-covers-the-clean-scripts` | Pending | 1 | 0.5 |
 | [The image plan check refuses a schedule repointed at a revision registered before the apply](plan_specs/v1/e41-delivery-tooling-upkeep/t13-image-plan-check-known-revision-rule.yaml) `v1-e41-t13-image-plan-check-known-revision-rule` | Pending | 1 | 0.5 |
 | [A bounded run that starts a Docker container stops that container too](plan_specs/v1/e41-delivery-tooling-upkeep/t14-hard-stop-stops-a-named-container.yaml) `v1-e41-t14-hard-stop-stops-a-named-container` | Pending | 1 | 0.8 |
-| [CI chooses the tests once, skips the test parts when none are chosen, cancels superseded pull-request runs, and runs the partition proof only when it can change](plan_specs/v1/e41-delivery-tooling-upkeep/t15-ci-selection-once-and-no-queue.yaml) `v1-e41-t15-ci-selection-once-and-no-queue` | InProgress | 1 | 4.0 |
+| [CI chooses the tests once, skips the test parts when none are chosen, cancels superseded pull-request runs, and runs the partition proof only when it can change](plan_specs/v1/e41-delivery-tooling-upkeep/t15-ci-selection-once-and-no-queue.yaml) `v1-e41-t15-ci-selection-once-and-no-queue` | Succeeded | 1 | 4.0 |
+| [CI runs as many test parts as the selection needs, measures work stealing, and the bot's dispatched run runs no Python job](plan_specs/v1/e41-delivery-tooling-upkeep/t16-ci-matrix-sized-to-the-selection.yaml) `v1-e41-t16-ci-matrix-sized-to-the-selection` | Pending | 1 | 3.0 |
 
 
 ## V2

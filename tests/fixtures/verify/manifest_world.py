@@ -91,7 +91,7 @@ class ManifestWorld:
             blobs=blobs, clock=self.clock, id_generator=SequentialIdGenerator(f"{id_prefix}SNAP")
         )
         self.verifier = EvidenceVerifier(articles=articles, snapshots=self.snapshots, clock=self.clock)
-        self.use_case = VerifyManifest(verifier=self.verifier)
+        self.use_case = VerifyManifest(verifier=self.verifier, articles=articles)
         self._card_ids = SequentialIdGenerator(f"{id_prefix}CARD")
         self._span_ids = SequentialIdGenerator(f"{id_prefix}SPAN")
 

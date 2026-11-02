@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "debate-research verify --json output",
-  "description": "One JSON object on stdout per run. Exit 0: every card VERIFIED, report under data. Exit 1: some card UNVERIFIED, report under error.details. Exit 2: usage error or a manifest that fails its schema, with the failing JSON path. Exit 3: verification could not run.",
+  "description": "One JSON object on stdout per run. Exit 0: every card VERIFIED, report under data. Exit 1: some card UNVERIFIED, report under error.details. Exit 2: usage error, a manifest that fails its schema, with the failing JSON path, or a .docx with no embedded manifest (NO_MANIFEST). Exit 3: verification could not run.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -137,6 +137,56 @@
                   "minimum": 1
                 },
                 "manifest": {
+                  "type": "string"
+                }
+              }
+            },
+            "hint": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "title": "No manifest in the .docx (exit 2)",
+      "properties": {
+        "status": {
+          "const": "error"
+        },
+        "data": {
+          "type": "null"
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "code",
+            "message",
+            "exit_code",
+            "details",
+            "hint"
+          ],
+          "properties": {
+            "code": {
+              "const": "NO_MANIFEST"
+            },
+            "message": {
+              "type": "string"
+            },
+            "exit_code": {
+              "const": 2
+            },
+            "details": {
+              "type": "object",
+              "required": [
+                "document"
+              ],
+              "properties": {
+                "document": {
                   "type": "string"
                 }
               }
@@ -315,6 +365,15 @@
           "description": "The verifier's rules version; null when the card never reached the verifier.",
           "title": "Verifier Version"
         },
+        "warnings": {
+          "default": [],
+          "description": "What a reader should know that changes no status, in body order. Absent when none.",
+          "items": {
+            "$ref": "#/$defs/ReportedWarning"
+          },
+          "title": "Warnings",
+          "type": "array"
+        },
         "reason_codes": {
           "description": "The codes of :attr:`reasons`, in order, without repeats.",
           "items": {
@@ -339,6 +398,47 @@
       "title": "CardVerdict",
       "type": "object"
     },
+    "DocumentCheck": {
+      "additionalProperties": false,
+      "description": "What was read of a .docx's body beside its manifest (`v1-e06-t07`).",
+      "properties": {
+        "format_profile": {
+          "description": "The format profile the body was read in: the one its cards name.",
+          "title": "Format Profile",
+          "type": "string"
+        },
+        "body_cards": {
+          "description": "How many cards (tag paragraphs) the body holds.",
+          "minimum": 0,
+          "title": "Body Cards",
+          "type": "integer"
+        },
+        "unclaimed_body_cards": {
+          "description": "The positions, among the body's cards from 0, of those no manifest card claims, such as a card pasted in by hand. Each has an entry in unclaimed_body_card_verdicts.",
+          "items": {
+            "type": "integer"
+          },
+          "title": "Unclaimed Body Cards",
+          "type": "array"
+        },
+        "unclaimed_body_card_verdicts": {
+          "default": [],
+          "description": "One UNVERIFIED entry per unclaimed body card, in body order, counted in the report's total and unverified. A manifest card's status does not change for them.",
+          "items": {
+            "$ref": "#/$defs/UnclaimedBodyCardVerdict"
+          },
+          "title": "Unclaimed Body Card Verdicts",
+          "type": "array"
+        }
+      },
+      "required": [
+        "format_profile",
+        "body_cards",
+        "unclaimed_body_cards"
+      ],
+      "title": "DocumentCheck",
+      "type": "object"
+    },
     "ReasonCode": {
       "description": "Why a card is UNVERIFIED. Values are stable: they are written into reports and JSON output.",
       "enum": [
@@ -351,10 +451,36 @@
         "CITATION_UNVERIFIED",
         "ARTICLE_MISMATCH",
         "PROVENANCE_MISMATCH",
-        "CARD_INVALID"
+        "CARD_INVALID",
+        "SNAPSHOT_REFERENCE_MISMATCH",
+        "MANUAL_EDIT",
+        "BODY_CARD_MISSING",
+        "BODY_CARD_NOT_IN_MANIFEST"
       ],
       "title": "ReasonCode",
       "type": "string"
+    },
+    "ReportedRange": {
+      "additionalProperties": false,
+      "description": "``[start, end)`` in characters; empty where something was only added.",
+      "properties": {
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "integer"
+        },
+        "end": {
+          "minimum": 0,
+          "title": "End",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "title": "ReportedRange",
+      "type": "object"
     },
     "ReportedReason": {
       "additionalProperties": false,
@@ -380,6 +506,30 @@
           "default": null,
           "description": "For TEXT_MISMATCH only: the first index where the texts differ, in evidence_text.",
           "title": "First Differing Offset"
+        },
+        "evidence_range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReportedRange"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "For MANUAL_EDIT only: the evidence_text range the body changed. Absent otherwise."
+        },
+        "body_range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReportedRange"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "For MANUAL_EDIT only: the range of the body's evidence (its paragraphs joined with a line feed) that replaced it. Absent otherwise."
         }
       },
       "required": [
@@ -387,6 +537,87 @@
         "detail"
       ],
       "title": "ReportedReason",
+      "type": "object"
+    },
+    "ReportedWarning": {
+      "additionalProperties": false,
+      "description": "Something about a card a reader should know that leaves it VERIFIED (`v1-e06-t07`).",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/WarningCode"
+        },
+        "detail": {
+          "description": "For people. Gives offsets and lengths; never evidence or inserted text.",
+          "title": "Detail",
+          "type": "string"
+        },
+        "evidence_offset": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "For INTERPOLATION_PRESENT: the evidence_text offset it is read before.",
+          "title": "Evidence Offset"
+        }
+      },
+      "required": [
+        "code",
+        "detail"
+      ],
+      "title": "ReportedWarning",
+      "type": "object"
+    },
+    "UnclaimedBodyCardVerdict": {
+      "additionalProperties": false,
+      "description": "The verdict on a card in a .docx's body that its manifest does not list (`v1-e06-t07`).\n\nAlways UNVERIFIED with ``BODY_CARD_NOT_IN_MANIFEST``: no snapshot is named for it, so nothing it\nshows can be verified. It has no card id; it is known by its position in the body.",
+      "properties": {
+        "body_position": {
+          "description": "Its index among the body's cards, from 0.",
+          "minimum": 0,
+          "title": "Body Position",
+          "type": "integer"
+        },
+        "tag": {
+          "description": "Its tag as the body shows it.",
+          "title": "Tag",
+          "type": "string"
+        },
+        "status": {
+          "const": "UNVERIFIED",
+          "title": "Status",
+          "type": "string"
+        },
+        "reasons": {
+          "items": {
+            "$ref": "#/$defs/ReportedReason"
+          },
+          "minItems": 1,
+          "title": "Reasons",
+          "type": "array"
+        },
+        "reason_codes": {
+          "description": "The codes of :attr:`reasons`, in order, without repeats.",
+          "items": {
+            "$ref": "#/$defs/ReasonCode"
+          },
+          "readOnly": true,
+          "title": "Reason Codes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "body_position",
+        "tag",
+        "status",
+        "reasons",
+        "reason_codes"
+      ],
+      "title": "UnclaimedBodyCardVerdict",
       "type": "object"
     },
     "VerificationCheck": {
@@ -416,6 +647,14 @@
       "title": "VerificationStatus",
       "type": "string"
     },
+    "WarningCode": {
+      "description": "Something about a VERIFIED card a reader should know. Never a reason: the status stays VERIFIED.",
+      "enum": [
+        "INTERPOLATION_PRESENT"
+      ],
+      "title": "WarningCode",
+      "type": "string"
+    },
     "ManifestVerificationReport": {
       "additionalProperties": false,
       "description": "Every card of one manifest, with its verdict, in manifest order.",
@@ -442,14 +681,26 @@
           "title": "Cards",
           "type": "array"
         },
+        "document": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DocumentCheck"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "For a .docx: what was read of its body. Absent for a JSON manifest."
+        },
         "total": {
-          "description": "How many cards the manifest lists.",
+          "description": "How many cards were judged: the manifest's, and for a .docx each body card it does not list.",
           "readOnly": true,
           "title": "Total",
           "type": "integer"
         },
         "verified": {
-          "description": "How many of them are VERIFIED.",
+          "description": "How many of them are VERIFIED. A body card the manifest does not list never is.",
           "readOnly": true,
           "title": "Verified",
           "type": "integer"

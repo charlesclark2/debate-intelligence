@@ -194,7 +194,7 @@ def test_an_invalid_card_does_not_stop_the_cards_after_it_being_verified(world: 
     invalid_first = manifest_with(MIXED, cards=lambda cards: [cards[3], cards[0]])
     verifier = CountingVerifier(world)
 
-    report = run(VerifyManifest(verifier=verifier).verify(invalid_first))
+    report = run(VerifyManifest(verifier=verifier, articles=world.articles).verify(invalid_first))
 
     assert rows(report) == [
         {**OVERLONG, "position": 0, "reasons": [reason_at(OVERLONG, 0)]},
@@ -282,7 +282,7 @@ def test_a_manifest_that_fails_the_schema_names_the_failing_path_and_verifies_no
     verifier = CountingVerifier(world)
 
     with pytest.raises(InvalidManifest) as refused:
-        run(VerifyManifest(verifier=verifier).verify(json.dumps(document).encode()))
+        run(VerifyManifest(verifier=verifier, articles=world.articles).verify(json.dumps(document).encode()))
 
     assert (refused.value.json_path, refused.value.problem, refused.value.violations) == (
         json_path,
@@ -425,7 +425,7 @@ def test_a_manifest_from_a_newer_build_says_to_install_a_newer_build_and_verifie
     verifier = CountingVerifier(world)
 
     with pytest.raises(NewerManifestVersion) as refused:
-        run(VerifyManifest(verifier=verifier).verify(json.dumps(document).encode()))
+        run(VerifyManifest(verifier=verifier, articles=world.articles).verify(json.dumps(document).encode()))
 
     assert isinstance(refused.value, InvalidManifest), "the CLI reports it as a manifest it cannot read"
     assert (refused.value.json_path, refused.value.problem, refused.value.violations) == (

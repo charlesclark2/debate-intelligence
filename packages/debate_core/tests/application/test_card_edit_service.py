@@ -479,7 +479,11 @@ def test_the_verify_manifest_carries_interpolations_untouched(world: EditWorld) 
     ).encode()
 
     assert CardManifest.model_validate_json(document).cards[0].interpolations == saved.interpolations
-    report = run(VerifyManifest(verifier=world.verification.verifier).verify(document))
+    report = run(
+        VerifyManifest(verifier=world.verification.verifier, articles=world.verification.articles).verify(
+            document
+        )
+    )
     assert report.all_verified
 
 

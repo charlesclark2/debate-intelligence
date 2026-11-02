@@ -203,7 +203,7 @@ def test_this_checkout_is_a_complete_installation() -> None:
     report = check_installation()
 
     assert report.complete, report.as_dict()
-    assert report.declared_extras == ("aws", "docx", "extraction", "http", "opencaselist", "tub")
+    assert report.declared_extras == ("aws", "docx", "extraction", "feeds", "http", "opencaselist", "tub")
 
 
 def test_an_integration_that_does_not_import_makes_the_installation_incomplete() -> None:

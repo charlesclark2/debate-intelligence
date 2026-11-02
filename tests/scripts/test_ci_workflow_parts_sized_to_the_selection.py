@@ -64,7 +64,7 @@ def jobs() -> dict[str, Any]:
 def triggers() -> dict[str, Any]:
     """The `on:` block; YAML 1.1 reads the bare key `on` as true."""
     flow = workflow()
-    return flow.get("on", flow.get(True))
+    return flow["on"] if "on" in flow else flow[True]
 
 
 def the_script() -> Any:

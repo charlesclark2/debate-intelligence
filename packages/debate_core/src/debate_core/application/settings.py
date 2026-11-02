@@ -517,6 +517,15 @@ class ProviderSettings(SettingsGroup):
     timeout_seconds: float = Field(
         default=10.0, gt=0, le=120, description="How long one discovery call may take before it is cancelled."
     )
+    search_deadline_seconds: float = Field(
+        default=15.0,
+        gt=0,
+        le=300,
+        description=(
+            "How long a whole federated search may take, every provider and query together; a call "
+            "still running then is cancelled and reported as a timeout (v1-e08-t05)."
+        ),
+    )
     breaker_failure_threshold: int = Field(
         default=3, ge=1, le=100, description="Consecutive failures after which a provider is skipped."
     )

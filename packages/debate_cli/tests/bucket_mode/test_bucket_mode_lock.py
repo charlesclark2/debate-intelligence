@@ -217,6 +217,7 @@ NEVER_WRITE_A_BUCKET: Final = {
     "verify",
     "fetch",
     "cut",
+    "search",
     "config show",
     "caselist backfile-survey",
     "caselist cards",

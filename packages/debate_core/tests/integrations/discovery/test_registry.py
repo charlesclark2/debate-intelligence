@@ -301,3 +301,57 @@ def test_no_key_or_contact_email_reaches_a_log_an_error_a_health_snapshot_or_a_r
     assert (
         registry.health()[0].last_error == "semantic_scholar: HTTP 403 for x-api-key *** (caselist_token=***)"
     )
+
+
+# --------------------------------------------------------------------------------------------
+# Closing (v1-e08-t05)
+# --------------------------------------------------------------------------------------------
+
+
+class ClosingAdapter(StubAdapter):
+    """A stub that holds connections: it records being closed, or fails to close with `close_failure`."""
+
+    def __init__(self, name: str, clock: FixedClock, close_failure: Exception | None = None) -> None:
+        super().__init__(name, clock)
+        self.closed = 0
+        self.close_failure = close_failure
+
+    async def aclose(self) -> None:
+        self.closed += 1
+        if self.close_failure is not None:
+            raise self.close_failure
+
+
+def test_closing_the_registry_closes_every_adapter_that_holds_connections() -> None:
+    clock = FixedClock()
+    openalex = ClosingAdapter("openalex", clock)
+    rss = ClosingAdapter("rss", clock)
+    registry = ProviderRegistry(
+        ResilientProvider(adapter, ResiliencePolicy(), clock=clock)
+        for adapter in (openalex, StubAdapter("crossref", clock), rss)
+    )
+
+    run(registry.aclose())
+
+    assert (openalex.closed, rss.closed) == (1, 1)
+
+
+def test_one_adapter_failing_to_close_does_not_leave_the_others_open() -> None:
+    clock = FixedClock()
+    failing = ClosingAdapter("openalex", clock, close_failure=OSError("socket already gone"))
+    rss = ClosingAdapter("rss", clock)
+    registry = ProviderRegistry(
+        ResilientProvider(adapter, ResiliencePolicy(), clock=clock) for adapter in (failing, rss)
+    )
+
+    with pytest.raises(OSError, match="socket already gone"):
+        run(registry.aclose())
+
+    assert (failing.closed, rss.closed) == (1, 1)
+
+
+def test_the_search_deadline_setting_defaults_to_15_seconds_and_refuses_none_or_over_300() -> None:
+    assert ProviderSettings().search_deadline_seconds == 15.0
+    for value in (0, 301):
+        with pytest.raises(ValidationError, match="search_deadline_seconds"):
+            ProviderSettings.model_validate({"search_deadline_seconds": value})

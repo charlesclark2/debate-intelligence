@@ -71,6 +71,7 @@ from debate_cli.commands import (
     files,
     landscape,
     landscape_cassettes,
+    search,
     store,
     tub_index,
     tub_index_prune,
@@ -88,6 +89,7 @@ def register_commands(app: typer.Typer) -> None:
     app.command("verify")(verify.verify)
     app.command("fetch")(fetch.fetch)
     app.command("cut")(cut.cut)
+    app.command("search")(search.search)
     app.command("usage")(usage.usage)
 
     configuration = command_group("config", "Inspect the settings this installation runs with.")

@@ -17,6 +17,8 @@ and :meth:`ServiceContainer.verify_manifest`, which `debate-research verify` run
 (`v1-e03-t06-verify-command`); and :meth:`ServiceContainer.article_fetch`, which
 `debate-research fetch` runs (`v1-e04-t06-fetch-command`), and :meth:`ServiceContainer.card_cutting`,
 which `debate-research cut` runs after it (`v1-e06-t06-cut-command`); and
+:meth:`ServiceContainer.federated_search`, which `debate-research search` runs over
+:meth:`ServiceContainer.discovery_providers` (`v1-e08-t05-search-command`); and
 :meth:`ServiceContainer.caselist_sync`, which
 `debate-research caselist pull` and the weekly launchd agent run (`v1-e34-t02-scheduled-sync`), recorded by
 :meth:`ServiceContainer.caselist_sync_monitor` and read back by
@@ -224,6 +226,15 @@ from debate_core.application.evidence_sync import (
 )
 from debate_core.application.evidence_verifier import EvidenceVerifier
 from debate_core.application.export_service import ExportService
+from debate_core.application.federated_dedupe import DedupeStage
+from debate_core.application.federated_ranking import (
+    FEDERATED_RANKING_CONFIG_PATH,
+    FederatedRankStage,
+    load_federated_ranking_config,
+)
+from debate_core.application.federated_search import FederatedSearchService
+from debate_core.application.federated_search_articles import ArticleMatchingStage
+from debate_core.application.federated_search_types import StagesInOrder
 from debate_core.application.file_build_service import FileBuildService
 from debate_core.application.file_publish_service import FilePublishService
 from debate_core.application.file_quality_service import FileQualityService
@@ -244,6 +255,11 @@ from debate_core.application.ports.evidence_store import EvidenceObjectStore, Ob
 from debate_core.application.ports.model_router import ModelRouter, RoutingConfigError
 from debate_core.application.ports.notifier import Notifier, NullNotifier
 from debate_core.application.ports.suppression import SuppressionList
+from debate_core.application.query_expansion import (
+    ARGUMENT_TAXONOMY_PATH,
+    QueryExpansionStage,
+    load_argument_taxonomy,
+)
 from debate_core.application.review_queue_order import ReviewQueueOrdering
 from debate_core.application.search_index_build import SearchIndexBuildService
 from debate_core.application.search_index_prune import SearchIndexPrune
@@ -255,6 +271,7 @@ from debate_core.application.settings import (
     ConfigurationError,
     Environment,
     RunStateMode,
+    SearchProviderName,
     Settings,
     SyncNotifierKind,
     find_repository_root,
@@ -290,6 +307,8 @@ if TYPE_CHECKING:  # pragma: no cover - imported for the type checker only; see 
         OpenEvMetadataReimportInBucket,
     )
     from debate_core.application.caselist_login import ScheduledLogin, SecretText, TabroomPasswordSecret
+    from debate_core.integrations.discovery.feed_config import FeedConfig
+    from debate_core.integrations.discovery.registry import ProviderRegistry
     from debate_core.integrations.docx_parser import DebateDocxParser
     from debate_core.integrations.local import SqliteDatabase
     from debate_core.integrations.models.model_mode import ModelMode
@@ -325,8 +344,10 @@ SERVICE_NAMES: Final[tuple[str, ...]] = (
     "caselist_sync_history",
     "caselist_sync_monitor",
     "caselist_token_store",
+    "discovery_providers",
     "evidence_profile_check",
     "evidence_sync",
+    "federated_search",
     "file_build",
     "file_publish",
     "file_quality",
@@ -396,6 +417,40 @@ class CardCutting:
         traceback: TracebackType | None,
     ) -> None:
         await self._connection.aclose()
+
+
+SEARCH_CASSETTES_DIRECTORY: Final = Path("search") / "model-cassettes"
+"""Where `search --expand-llm`'s model calls are recorded and replayed, in the data directory (`v1-e08-t05`).
+
+A cassette holds what the debater typed and the template queries, which are this machine's research,
+so it is kept beside `cut`'s and never committed."""
+
+FEEDS_DIRECTORY: Final = Path("config") / "feeds"
+"""The topic feed lists the `rss` and `google_news` providers read (`v1-e07-t05`), committed beside the
+taxonomy and carried whole by an installed build."""
+
+
+class FederatedSearching:
+    """What `search` runs: the federated search over the enabled discovery providers (`v1-e08-t05`).
+
+    An async context manager, like :class:`CardCutting`: every provider holds an HTTP client, which
+    belongs to the event loop that used it, and leaving the block closes them all.
+    """
+
+    def __init__(self, *, service: FederatedSearchService, providers: Closeable) -> None:
+        self.service = service
+        self._providers = providers
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        await self._providers.aclose()
 
 
 class _NoCardEditsYet:
@@ -1390,6 +1445,153 @@ class ServiceContainer:
             clock=_PortClock(self.clock()),
             usage_log=self.usage_log(),
             cassette_dir=settings.storage.data_dir / CARD_CASSETTES_DIRECTORY,
+        )
+
+    def discovery_providers(self) -> ProviderRegistry:
+        """The discovery providers `providers.enabled` names, each wrapped in its breaker (`v1-e08-t05`).
+
+        :meth:`~debate_core.integrations.discovery.registry.ProviderRegistry.from_settings` over this
+        build's three adapters: OpenAlex (`openalex_factory`, `v1-e07-t02`), the publisher feeds
+        (`feed_factory`) and Google News's RSS search (`google_news_factory`, `v1-e07-t05`). The feed
+        providers read the committed `config/feeds/` topics and keep a
+        :class:`~debate_core.integrations.discovery.feed_cache.FileFeedCache` in `<data dir>/feeds/`.
+        A name enabled with no adapter in this build is the registry's configuration error.
+
+        The adapters' transport is the network in every real run. A test that replays recorded answers
+        registers its transport under `"discovery_transport"`, or a whole registry under
+        `"discovery_providers"`, before the command runs. An environment that forbids the network
+        (`allow_network` false, the `test` profile) and enables a provider is refused here unless a
+        test gave a transport, so no search can leave the process by accident.
+        """
+        return self.singleton("discovery_providers", self._build_discovery_providers)
+
+    def _build_discovery_providers(self) -> ProviderRegistry:
+        from debate_cli import package_version
+        from debate_core.integrations.discovery.feed_cache import FEED_CACHE_DIRECTORY, FileFeedCache
+        from debate_core.integrations.discovery.feed_config import FeedConfigError, load_feed_directory
+        from debate_core.integrations.discovery.feeds import feed_factory
+        from debate_core.integrations.discovery.google_news_rss import google_news_factory
+        from debate_core.integrations.discovery.openalex import openalex_factory
+        from debate_core.integrations.discovery.registry import ProviderRegistry
+
+        settings = self.settings
+        enabled = set(settings.providers.enabled)
+        # A test's replay transport, or None: the network. `Any`, because this module may not name httpx.
+        transport = cast(Any, self._instances.get("discovery_transport"))
+        if enabled and transport is None and not settings.allow_network:
+            raise ConfigurationError(
+                "this environment forbids outbound calls (allow_network is false), so no discovery "
+                "provider may be enabled; set providers.enabled to [] or use an environment that allows it",
+                field="allow_network",
+            )
+        topics: tuple[FeedConfig, ...] = ()
+        if enabled & {SearchProviderName.RSS, SearchProviderName.GOOGLE_NEWS}:
+            directory = _committed_root(str(FEEDS_DIRECTORY)) / FEEDS_DIRECTORY
+            try:
+                topics = load_feed_directory(directory)
+            except (FeedConfigError, OSError) as error:
+                raise ConfigurationError(
+                    f"the topic feed lists did not load: {error}", field=str(FEEDS_DIRECTORY)
+                ) from None
+        clock = _PortClock(self.clock())
+        version = package_version()
+        cache = FileFeedCache(settings.storage.data_dir / FEED_CACHE_DIRECTORY)
+        factories = {
+            SearchProviderName.OPENALEX: openalex_factory(
+                settings.http, version=version, clock=clock, transport=transport
+            ),
+            SearchProviderName.RSS: feed_factory(
+                settings.http, version=version, clock=clock, topics=topics, cache=cache, transport=transport
+            ),
+            SearchProviderName.GOOGLE_NEWS: google_news_factory(
+                settings.http, version=version, clock=clock, topics=topics, cache=cache, transport=transport
+            ),
+        }
+        return ProviderRegistry.from_settings(settings.providers, factories, clock=clock)
+
+    def federated_search(self, *, model_expansion: bool) -> FederatedSearching:
+        """What `debate-research search` runs: expand, fan out, dedupe, rank and store (`v1-e08-t05`).
+
+        :class:`~debate_core.application.federated_search.FederatedSearchService` over
+        :meth:`discovery_providers`, under `providers.search_deadline_seconds`, with its four stages:
+        :class:`~debate_core.application.query_expansion.QueryExpansionStage` over the committed
+        `config/argument_taxonomy.yaml`; :class:`~debate_core.application.federated_dedupe.DedupeStage`;
+        and :class:`~debate_core.application.federated_ranking.FederatedRankStage` over the committed
+        `config/federated_ranking.yaml`, followed by
+        :class:`~debate_core.application.federated_search_articles.ArticleMatchingStage`, which turns
+        the ranking into stored results through Articles in the SQLite file, fetching nothing. Searches
+        are stored in the same file. Both configuration files are read from an installed build's bundled
+        copy or the source checkout this code runs from, as `cut`'s prompts are.
+
+        `model_expansion` (`--expand-llm`) gives the expansion a structured-output guard over
+        :meth:`_search_model_router`; without it the stage has none, so no model can be asked.
+        """
+        return self.singleton("federated_search", lambda: self._build_federated_search(model_expansion))
+
+    def _build_federated_search(self, model_expansion: bool) -> FederatedSearching:
+        from debate_core.integrations.local import SqliteArticleRepository, SqliteSearchRepository
+        from debate_core.integrations.models.prompt_registry import PromptRegistry
+
+        settings = self.settings
+        clock = _PortClock(self.clock())
+        ids = _PortIdGenerator()
+        taxonomy = load_argument_taxonomy(
+            _committed_root(str(ARGUMENT_TAXONOMY_PATH)) / ARGUMENT_TAXONOMY_PATH
+        )
+        ranking = load_federated_ranking_config(
+            _committed_root(str(FEDERATED_RANKING_CONFIG_PATH)) / FEDERATED_RANKING_CONFIG_PATH
+        )
+        guard = None
+        if model_expansion:
+            registry = PromptRegistry.load(_committed_prompts())
+            guard = StructuredOutputGuard(self._search_model_router(registry), registry)
+        providers = self.discovery_providers()
+        service = FederatedSearchService(
+            providers,
+            SqliteSearchRepository(self.database),
+            clock=clock,
+            ids=ids,
+            deadline_seconds=settings.providers.search_deadline_seconds,
+            expand=QueryExpansionStage(taxonomy, clock=clock, guard=guard),
+            normalize=DedupeStage(),
+            rank=StagesInOrder(
+                FederatedRankStage(ranking, clock=clock),
+                ArticleMatchingStage(SqliteArticleRepository(self.database), clock=clock, ids=ids),
+            ),
+        )
+        return FederatedSearching(service=service, providers=providers)
+
+    def _search_model_router(self, registry: PromptRegistry) -> ModelRouter:
+        """The router `search --expand-llm`'s `search.expand` call goes to, chosen as `cut`'s is.
+
+        The fixture fake when `models.provider` is `fake`, and otherwise the record-and-replay router in
+        the mode `DEBATE_MODEL_MODE` names, replay when it names none, so a run nobody configured reaches
+        no model; record and live wrap the Bedrock router behind the usage log and the budget. The call
+        is routed by its task class, `high_volume`. Cassettes are kept in
+        `<data dir>/search/model-cassettes/`. A test registers its own router under
+        `"search_model_router"`.
+        """
+        return self.singleton("search_model_router", lambda: self._build_search_model_router(registry))
+
+    def _build_search_model_router(self, registry: PromptRegistry) -> ModelRouter:
+        from debate_core.integrations.models.factory import build_model_router
+        from debate_core.integrations.models.model_mode import ModelMode, resolve_model_mode
+
+        settings = self.settings
+        mode = resolve_model_mode(None)
+        real_router = None
+        if mode is not ModelMode.REPLAY and settings.models.provider is not ModelProvider.FAKE:
+            # Imported here, not at module scope: only a record or live run needs the AWS SDK.
+            from debate_core.integrations.bedrock import bedrock_router_factory
+
+            real_router = bedrock_router_factory(registry)
+        return build_model_router(
+            settings,
+            mode=mode,
+            real_router=real_router,
+            clock=_PortClock(self.clock()),
+            usage_log=self.usage_log(),
+            cassette_dir=settings.storage.data_dir / SEARCH_CASSETTES_DIRECTORY,
         )
 
     def format_profiles(self) -> dict[str, ResolvedFormatProfile]:

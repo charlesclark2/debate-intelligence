@@ -197,6 +197,7 @@ def arguments(tmp_path: Path) -> dict[str, tuple[object, ...]]:
         "environment: str": ("test",),
         "user_pool_id: str": ("us-east-1_planted",),
         "profile: str | None": (None,),
+        "model_expansion: bool": (False, True),
     }
 
 

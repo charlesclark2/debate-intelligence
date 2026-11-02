@@ -33,7 +33,10 @@ region = "us-east-1"
 aws_profile = "debate-prod-evidence"
 
 [providers]
-enabled = ["openalex", "crossref", "semantic_scholar", "rss"]
+# Only the providers this build has an adapter for: the registry refuses to build any search while
+# a name it cannot build is enabled (v1-e07-t01). Crossref and Semantic Scholar are added back by
+# the tasks that bring their adapters, v1-e07-t03 and v1-e07-t04 (v1-e08-t05).
+enabled = ["openalex", "rss"]
 
 [http]
 per_host_interval_seconds = 1.0

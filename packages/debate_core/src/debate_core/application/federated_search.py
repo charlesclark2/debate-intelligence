@@ -293,4 +293,6 @@ class FederatedSearchService:
             candidates=state.candidates,
             results=state.results,
             provider_health=self._providers.health(),
+            ranked_candidates=state.ranked_candidates,
+            articles=state.articles,
         )

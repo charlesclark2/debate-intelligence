@@ -1,0 +1,61 @@
+{
+  "meta": {"count": 3, "page": 1, "per_page": 20},
+  "results": [
+    {
+      "id": "https://openalex.org/W4410000001",
+      "doi": "https://doi.org/10.5555/IPR.2026.0031",
+      "display_name": "Midterm elections and the partisan fight over health insurance",
+      "publication_date": "2026-10-02",
+      "type": "article",
+      "cited_by_count": 3,
+      "open_access": {"is_oa": true, "oa_status": "gold", "oa_url": "https://journal.example.org/ipr/2026/0031.pdf"},
+      "best_oa_location": {
+        "is_oa": true,
+        "landing_page_url": "https://doi.org/10.5555/ipr.2026.0031",
+        "pdf_url": "https://journal.example.org/ipr/2026/0031.pdf",
+        "source": {"id": "https://openalex.org/S4210000001", "display_name": "Invented Politics Review", "type": "journal"}
+      },
+      "primary_location": {
+        "is_oa": true,
+        "landing_page_url": "https://doi.org/10.5555/ipr.2026.0031",
+        "source": {"id": "https://openalex.org/S4210000001", "display_name": "Invented Politics Review", "type": "journal"}
+      },
+      "authorships": [{"author_position": "first", "author": {"id": "https://openalex.org/A5100000001", "display_name": "Ada Placeholder"}}],
+      "abstract_inverted_index": {"ABSTRACTSENTINEL": [0], "voters": [1], "weigh": [2], "coverage": [3]}
+    },
+    {
+      "id": "https://openalex.org/W4410000002",
+      "doi": null,
+      "display_name": "Turnout in the 2026 midterm elections",
+      "publication_date": "2026-09-30",
+      "type": "report",
+      "cited_by_count": 0,
+      "open_access": {"is_oa": false, "oa_status": "closed", "oa_url": null},
+      "best_oa_location": null,
+      "primary_location": {
+        "is_oa": false,
+        "landing_page_url": "https://www.policycenter.example/research/midterm-turnout-2026",
+        "source": {"id": "https://openalex.org/S4210000002", "display_name": "Invented Policy Center", "type": "repository"}
+      },
+      "authorships": [{"author_position": "first", "author": {"id": "https://openalex.org/A5100000002", "display_name": "Grace Example"}}],
+      "abstract_inverted_index": null
+    },
+    {
+      "id": "https://openalex.org/W4410000003",
+      "doi": "https://doi.org/10.5555/jhe.2026.0107",
+      "display_name": "Political capital and health insurance reform",
+      "publication_date": "2026-09-20",
+      "type": "article",
+      "cited_by_count": 12,
+      "open_access": {"is_oa": false, "oa_status": "closed", "oa_url": null},
+      "best_oa_location": null,
+      "primary_location": {
+        "is_oa": false,
+        "landing_page_url": "https://doi.org/10.5555/jhe.2026.0107",
+        "source": {"id": "https://openalex.org/S4210000003", "display_name": "Journal of Invented Health Economics", "type": "journal"}
+      },
+      "authorships": [{"author_position": "first", "author": {"id": "https://openalex.org/A5100000003", "display_name": "Rosalind Invented"}}],
+      "abstract_inverted_index": null
+    }
+  ]
+}

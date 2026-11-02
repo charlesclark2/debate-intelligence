@@ -230,9 +230,36 @@ cd "$HOME" && env DEBATE_ENV=dev DEBATE_MODEL_MODE=live debate-research cut 'URL
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-02
 
 **Notes:**
+
+A pasted copy's card now has a usable cite, and nothing about it can read as verified.
+
+1. **ac1 passes on every clause.** Fields are stored `heuristic` and unverified; the cut cite shows them
+   with the existing `[… unverified]` marks; `cut` exits 4 and `verify` finds `CITATION_UNVERIFIED`
+   alone; t08's tests pass unchanged. Red first (68 failed against a skeleton, and the smoke check
+   failing on an installed build of the start commit), and all 21 mutants caught, the PM's seven among
+   them.
+2. **Byte identity is proved, not asserted:** the stored documents of all four provenances compared
+   before and after with `cmp`, and a committed test pins them.
+3. **Deviations accepted.** (1) is the PM's ruling, with the older-build limit checked against the
+   start commit's model and written in the CLI README. (2) adds one optional key to
+   `fetch_result.v1.json`, absent when nothing is stated; the PM amends the spec's packages in the next
+   batch. (3) the CLI README is the right home, since no guide covers `fetch`.
+4. **Decisions accepted.** The re-store rule is Q3 (b) exactly, nothing merged. A stated field replaces
+   a derived one, which is right: both are unverified and the user's statement is the better one. No
+   user-facing word says "student" for these fields.
+5. **For the coach (not this task):** the short cite writes "et al." for any second author, as
+   `format_cite` already did, so a two-author card reads "Okonkwo-Lindqvist et al. 26". The PM asks
+   the coach whether the team writes "A and B 26" for two authors, and files a task if so.
+6. **Follow-ups the PM files:** year and year-and-month dates (with e07-t03's precision field), and
+   the snapshot's `ValidationError` mapped to a refusal (p3).
+7. **Closing checks:** the affected set is 634 of 661 files, so it is left to `ci` (agreement 10).
+   Domain and evidence (2,840), application (5,108), the CLI's files (885), the always-run list (399),
+   the cut and fetch smoke files on an installed build (11), ruff, pyright, lint-imports, thin
+   handlers, the schemas and the specs are clean.
+8. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`.

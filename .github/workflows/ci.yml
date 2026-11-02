@@ -24,7 +24,9 @@
 #     part is not a list of directories: tests/pytest_plugins/run_in_parts.py deals every test file's
 #     tests round the parts, so the parts are level without anyone balancing them and no part can
 #     be forgotten. tests/scripts/test_ci_workflow_test_job.py collects every part and proves that
-#     together they are exactly the unsplit selection.
+#     together they are exactly the unsplit selection. That proof collects the whole suite nine times,
+#     so it runs in the `partition-proof` job, on every push and on a pull request that changes what
+#     it proves, and the parts leave its `partition_proof` marker out (v1-e41-t15).
 #   * A pull request into dev runs the tests its changes reach (v1-e01-t38): scripts/ci_test_selection.py
 #     reads scripts/affected_tests.py's selection against the pull request's base commit, always-run
 #     list included, and the parts deal that list. Every other run is the whole default selection: a
@@ -32,6 +34,9 @@
 #     into dev that changes shared test ground (this file among it), whose base is not in the
 #     checkout, or whose selection fails or comes back empty. It fails toward more tests, never
 #     fewer, and the job summary says how many test files ran and, for the whole selection, why.
+#     The `test-selection` job chooses once and hands the choice to every part (v1-e41-t15). When it
+#     chooses no test, which only ROADMAP.md and docs/README.md alone do (the bot's refresh pull
+#     request, and the run it dispatches on its branch), the parts are skipped and `ci` accepts it.
 #     The push run on dev is the whole selection, and the dev pre-release waits for it, so a test the
 #     selection missed fails before any release; a red push run on dev is fixed by the next pull
 #     request before anything else merges (working agreement 10).
@@ -70,9 +75,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
-  # A new push to a pull request supersedes the run for the old head. Pushes to dev and main are
-  # never cancelled, so every merge commit gets its own verdict.
+  # A pull request's runs share one group, so a new push to it cancels the run for its old head. Every
+  # other run has a group of its own, its run id: a push to dev or main and a dispatch are never
+  # cancelled and never wait for one another, and every merge commit gets its own verdict, which dev's
+  # pre-release waits for. Until v1-e41-t15 every push to dev shared `ci-refs/heads/dev`. Without
+  # cancel-in-progress a push run then waited for the one before it, and GitHub keeps one pending run
+  # per group, so a third merge landing while the first still ran cancelled the second's run.
+  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -92,6 +101,9 @@ jobs:
       web: ${{ github.event_name != 'pull_request' || steps.filter.outputs.web == 'true' }}
       api: ${{ github.event_name != 'pull_request' || steps.filter.outputs.api == 'true' }}
       workflows: ${{ github.event_name != 'pull_request' || steps.filter.outputs.workflows == 'true' }}
+      # The partition proof's own job (v1-e41-t15): on every push, and on a pull request that changes
+      # what it proves. Not on a dispatch, whose commit has its own push run or is the bot's.
+      partition_proof: ${{ github.event_name == 'push' || steps.filter.outputs.partition_proof == 'true' }}
     steps:
       - uses: dorny/paths-filter@v4
         id: filter
@@ -145,12 +157,30 @@ jobs:
             workflows:
               - '.github/workflows/**'
               - 'scripts/actionlint.sh'
+            # What can move a test into a second part or into none (v1-e41-t15): this file's test
+            # parts and how they are asked for, the dealing plugin and any plugin beside it, the
+            # scripts that choose the selection, pytest's configuration and version, and the proof
+            # itself. A file that starts deciding what a part collects is added here.
+            partition_proof:
+              - *workflow
+              - 'tests/pytest_plugins/**'
+              - 'scripts/ci_test_selection.py'
+              - 'scripts/affected_tests.py'
+              - 'tests/scripts/test_ci_workflow_test_job.py'
+              - 'pyproject.toml'
+              - 'conftest.py'
+              - 'uv.lock'
       # Every Markdown file outside site/, for the python output (v1-e36-t12). Until then the python
       # filter held '**/*.md', so a page edit under site/ ran the whole Python selection on a pull
       # request into main. A filter excludes a path only when every pattern must match, so this is a
       # step of its own. Under site/ no Python test reads anything but the Markdown links, which
       # spec-validate checks on every pull request, and the single-interpreter scan in
       # tests/architecture, which already ran for no other site/ file; the site job checks the rest.
+      # ROADMAP.md and docs/README.md are left out too (v1-e41-t15): refresh-generated-files.yml
+      # regenerates them, the tests that read such files read fixtures, the single-interpreter scan
+      # exempts ROADMAP.md, and spec-validate checks their links and descriptions. So the bot's
+      # refresh pull request runs only the doc checks; scripts/ci_test_selection.py names the same
+      # two files for the run the bot dispatches.
       - uses: dorny/paths-filter@v4
         id: markdown
         if: github.event_name == 'pull_request'
@@ -160,6 +190,8 @@ jobs:
             outside_site:
               - '**/*.md'
               - '!site/**'
+              - '!ROADMAP.md'
+              - '!docs/README.md'
 
   # Runs on every trigger, whatever changed. It checks the whole tree rather than the changed files:
   # `ruff format --check` failed on dev from #53 until #70 because pre-commit only formats staged
@@ -210,12 +242,57 @@ jobs:
       - name: pyright
         run: uv run --frozen pyright
 
-  # The selection, in parts that run side by side (see the top of this file): on a pull request into
-  # dev, the tests its changes reach; on every other event, the whole default selection. Every part
-  # runs on every event this job runs on.
+  # Chooses the tests once, for every part of `test` (v1-e41-t15): on a pull request into dev, the
+  # tests its changes reach; for ROADMAP.md and docs/README.md alone, none; on every other event, the
+  # whole default selection. Its outputs are `run_parts`, whether the parts run at all, and
+  # `test_files`, one test file per line, empty for the whole selection. Until v1-e41-t15 each of the
+  # eight parts chose for itself, 17 to 33 seconds each. It runs beside `changes` rather than in it,
+  # so the jobs that need only the path filters do not wait for the choice.
+  test-selection:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      run_parts: ${{ steps.choose.outputs.run_parts }}
+      test_files: ${{ steps.choose.outputs.test_files }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          # Every branch's history: a pull request's base commit, which the selection compares with,
+          # and origin/dev, which the bot's dispatched run on its branch is compared with. The
+          # repository's packs are under 10 MB; spec-validate fetches the same.
+          fetch-depth: 0
+      - *setup-uv
+      - *install-python
+      # affected_tests.py reads the packages' imports with grimp, from the installed workspace.
+      - *uv-sync
+      - name: Choose the tests once, for every part (the affected set on a pull request into dev, none for the generated files alone, otherwise all of them)
+        id: choose
+        # The script writes its outputs to a file, and the file reaches $GITHUB_OUTPUT only when the
+        # script succeeded. If it cannot run, every part runs the whole default selection: a broken
+        # choice runs more tests, never fewer and never none. The job summary says how many and why.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_BRANCH: ${{ github.base_ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if uv run --frozen python scripts/ci_test_selection.py --event "$EVENT_NAME" \
+              --base-branch "$BASE_BRANCH" --base-sha "$BASE_SHA" --ref-name "$REF_NAME" \
+              --outputs "$RUNNER_TEMP/test-selection-outputs.txt" --summary "$GITHUB_STEP_SUMMARY"; then
+            cat "$RUNNER_TEMP/test-selection-outputs.txt" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_parts=true" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Test selection::scripts/ci_test_selection.py failed, so every part runs the whole default selection."
+            printf '### Tests: the whole default selection\n\nscripts/ci_test_selection.py failed, so every part runs its share of every test file.\n' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  # The selection, in parts that run side by side (see the top of this file), as `test-selection`
+  # chose it. When it chose no test the job is skipped, and `ci` accepts the skip because
+  # `test-selection.run_parts` says 'false'. Otherwise every part runs on every event this job runs on.
   test:
-    needs: changes
-    if: needs.changes.outputs.python == 'true'
+    needs: [changes, test-selection]
+    if: needs.changes.outputs.python == 'true' && needs.test-selection.outputs.run_parts == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     strategy:
@@ -227,41 +304,24 @@ jobs:
         # in `needs`, and its result is a failure if any part failed.
         part: [1, 2, 3, 4, 5, 6, 7, 8]
     steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-          # On a pull request, the merge commit GitHub tests and its two parents. The first parent
-          # is the pull request's base commit, which the selection compares with. Nothing else is
-          # fetched: a base that is not among them runs the whole selection.
-          fetch-depth: 2
+      - *checkout
       - *setup-uv
       - *install-python
       - *uv-sync
-      - name: Choose the tests (the affected set on a pull request into dev, otherwise all of them)
-        # Writes the test files to run, one per line, and says how many and why in the job summary.
-        # An empty file is the whole default selection. If the script cannot run at all, the file is
-        # emptied, so a broken selection runs more tests, never fewer.
+      - name: Write down the test files test-selection chose (none written is the whole default selection)
+        # One test file per line, with no blank line: pytest would read one as an empty path.
         env:
-          EVENT_NAME: ${{ github.event_name }}
-          BASE_BRANCH: ${{ github.base_ref }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          REF_NAME: ${{ github.ref_name }}
-        run: |
-          if ! uv run --frozen python scripts/ci_test_selection.py --event "$EVENT_NAME" \
-              --base-branch "$BASE_BRANCH" --base-sha "$BASE_SHA" --ref-name "$REF_NAME" \
-              --output "$RUNNER_TEMP/test-selection.txt" --summary "$GITHUB_STEP_SUMMARY"; then
-            : > "$RUNNER_TEMP/test-selection.txt"
-            echo "::warning title=Test selection::scripts/ci_test_selection.py failed, so this part runs the whole default selection."
-            printf '### Tests: the whole default selection\n\nscripts/ci_test_selection.py failed, so every part runs its share of every test file.\n' >> "$GITHUB_STEP_SUMMARY"
-          fi
+          TEST_FILES: ${{ needs.test-selection.outputs.test_files }}
+        run: printf '%s' "$TEST_FILES" > "$RUNNER_TEMP/test-selection.txt"
       - name: pytest (one part of the selection, no slow or live tests, no coverage)
         # pyproject.toml's addopts already say `-n auto` and the markers, and block sockets; they are
         # spelled out here so the PR path cannot quietly start running slow or live tests if addopts
-        # change. The durations are how anyone sees which tests are slow on a runner, where the
-        # order is not the one a laptop gives. pytest reads `@FILE` as more arguments, one per line;
-        # an empty file adds none, and pytest runs every path in `testpaths`.
+        # change. The partition proof is left to its own job below. The durations are how anyone
+        # sees which tests are slow on a runner, where the order is not the one a laptop gives.
+        # pytest reads `@FILE` as more arguments, one per line; an empty file adds none, and pytest
+        # runs every path in `testpaths`.
         if: github.event_name != 'push'
-        run: uv run --frozen pytest -n auto -m "not slow and not live" --part "${{ matrix.part }}/${{ strategy.job-total }}" --durations=25 "@$RUNNER_TEMP/test-selection.txt"
+        run: uv run --frozen pytest -n auto -m "not slow and not live and not partition_proof" --part "${{ matrix.part }}/${{ strategy.job-total }}" --durations=25 "@$RUNNER_TEMP/test-selection.txt"
       - name: pytest --cov (one part of the selection, measuring coverage, on a push)
         # The step above with coverage added (v1-e01-t42): [tool.coverage] in pyproject.toml says what
         # is measured, and the part writes no report of its own (`--cov-report=` is none). Its data
@@ -270,7 +330,7 @@ jobs:
         if: github.event_name == 'push'
         env:
           COVERAGE_FILE: ${{ runner.temp }}/coverage-part-${{ matrix.part }}-of-${{ strategy.job-total }}
-        run: uv run --frozen pytest -n auto -m "not slow and not live" --part "${{ matrix.part }}/${{ strategy.job-total }}" --durations=25 --cov --cov-report= "@$RUNNER_TEMP/test-selection.txt"
+        run: uv run --frozen pytest -n auto -m "not slow and not live and not partition_proof" --part "${{ matrix.part }}/${{ strategy.job-total }}" --durations=25 --cov --cov-report= "@$RUNNER_TEMP/test-selection.txt"
       - name: Keep this part's coverage data for the coverage job
         if: github.event_name == 'push'
         uses: actions/upload-artifact@v6
@@ -280,6 +340,27 @@ jobs:
           if-no-files-found: error
           # Read once, by the `coverage` job of the same run.
           retention-days: 1
+
+  # The proof that the parts together are exactly the selection and no test is in two of them
+  # (v1-e01-t27 ac3, v1-e01-t38), for the whole selection and for an affected set. It collects the
+  # whole suite nine times, about 70 seconds, so it runs in a job of its own rather than in a part,
+  # where it held part 1 for that long on every whole-selection pull request. It runs on every push
+  # to dev and main and on a pull request that changes what it proves (the `partition_proof` filter
+  # above). Its tests carry the `partition_proof` marker, which the parts leave out and this job runs;
+  # it is one of `ci`'s needs, and `ci` accepts its skip only when that filter says 'false'
+  # (v1-e41-t15). tests/scripts/test_ci_workflow_selection_once_and_no_queue.py checks all of that.
+  partition-proof:
+    needs: changes
+    if: needs.changes.outputs.partition_proof == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - *checkout
+      - *setup-uv
+      - *install-python
+      - *uv-sync
+      - name: pytest (the partition proof)
+        run: uv run --frozen pytest -n auto -m "partition_proof and not slow and not live" --durations=10 tests/scripts/test_ci_workflow_test_job.py
 
   # Branch coverage of the whole default selection, with the report every run printed until
   # v1-e01-t27, on pushes to dev and main only: nothing is gated on coverage (pyproject.toml sets no
@@ -495,15 +576,19 @@ jobs:
         run: scripts/actionlint.sh
 
   # The single required status check on the protect-dev and protect-main rulesets. It passes only if
-  # every job it needs succeeded, or was skipped because its path filter found nothing to check. A job
-  # skipped for any other reason (the `changes` job failed, a condition was wrong) fails it. It needs
-  # every job above except `coverage`, which runs on pushes only.
+  # every job it needs succeeded, or was skipped because an output it is gated on said 'false': a path
+  # filter that found nothing to check, or test-selection choosing no test. A job skipped for any
+  # other reason (the `changes` or `test-selection` job failed, a condition was wrong) fails it, and
+  # so does a failed or cancelled one: a matrix job's result is `failure` when any part failed. It
+  # needs every job above except `coverage`, which runs on pushes only.
   ci:
     needs:
       - changes
+      - test-selection
       - lint
       - typecheck
       - test
+      - partition-proof
       - import-boundaries
       - spec-validate
       - terraform-checks
@@ -513,22 +598,27 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - name: Every check passed or was skipped by its path filter
+      - name: Every check passed, or was skipped because an output it is gated on said there was nothing to check
         env:
           NEEDS: ${{ toJSON(needs) }}
-          # Each path-filtered job and the `changes` output that gates it. A job missing from this map
-          # has no filter, so it has to succeed.
-          PATH_FILTER_OF_JOB: >-
-            {"typecheck": "python", "test": "python", "import-boundaries": "python",
-             "terraform-checks": "infrastructure", "site": "site", "workflow-lint": "workflows"}
+          # Each gated job and the outputs its `if:` requires to be 'true', as `job.output`. Its skip is
+          # accepted when one of them is 'false'. A job missing from this map is not gated, so it has
+          # to succeed.
+          GATES_OF_JOB: >-
+            {"typecheck": ["changes.python"], "test": ["changes.python", "test-selection.run_parts"],
+             "partition-proof": ["changes.partition_proof"], "import-boundaries": ["changes.python"],
+             "terraform-checks": ["changes.infrastructure"], "site": ["changes.site"],
+             "workflow-lint": ["changes.workflows"]}
         run: |
-          jq -r --argjson filter_of "$PATH_FILTER_OF_JOB" '
-            (.changes.outputs // {}) as $changed
+          jq -r --argjson gates_of "$GATES_OF_JOB" '
+            . as $needs
             | to_entries[]
-            | .key as $job | .value.result as $result | $filter_of[$job] as $filter
+            | .key as $job | .value.result as $result
+            | [($gates_of[$job] // [])[] | select(split(".") as [$from, $output]
+                | ($needs[$from].outputs // {})[$output] == "false")] as $closed
             | if $result == "success" then "ok    \($job)"
-              elif $result == "skipped" and $filter != null and $changed[$filter] == "false"
-                then "skip  \($job) (nothing changed under the \($filter) filter)"
+              elif $result == "skipped" and ($closed | length) > 0
+                then "skip  \($job) (\($closed | join(" and ")) said there was nothing to check)"
               else "FAIL  \($job): \($result)"
               end
           ' <<< "$NEEDS" | tee verdicts.txt

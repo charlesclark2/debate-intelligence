@@ -70,7 +70,7 @@ spec:
         Each part's fixed cost against its test time is recorded in docs/process with the
         options, sent to the PM.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

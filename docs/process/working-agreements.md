@@ -20,8 +20,16 @@ The goal is a short wait between opening a PR and being able to merge it into `d
   selected test is in exactly one part and the parts stay level with nothing to maintain. The
   parts together are the selection: on a pull request into `dev` the tests its changes reach, and
   otherwise the whole default selection ([agreement 10](#10-a-session-tests-what-it-changed-a-pull-request-what-it-reaches-and-dev-and-main-everything)).
-  `tests/scripts/test_ci_workflow_test_job.py` collects all of them and proves it, for both, on
-  every run. No test is moved off the PR path to make room.
+  `ci.yml`'s `test-selection` job chooses it once and every part reads it; when it chooses no test,
+  the parts are skipped and `ci` still passes (`v1-e41-t15`).
+  `tests/scripts/test_ci_workflow_test_job.py` collects all of them and proves it, for both, in a
+  job of its own, `partition-proof`: on every push to `dev` and `main`, and on a pull request that
+  changes what the proof covers (`ci.yml`, `tests/pytest_plugins/`, the selection scripts, pytest's
+  configuration, the proof itself). The proof collects the whole suite nine times, and in a part it
+  held that part for about 70 seconds. No other test is moved off the PR path to make room.
+* **A pull request's newer push cancels its older run; nothing else is cancelled.** A push to `dev`
+  or `main` and a dispatched run each have a concurrency group of their own, so every merge commit
+  gets its own verdict and never waits for the run before it (`v1-e41-t15`).
 * **When it drifts**, read the `test` parts of a few recent pull requests. Each ends with its 25
   slowest tests.
   * `ci` over 3 minutes on ordinary pull requests, or one part's pytest step over 2: append the
@@ -215,12 +223,15 @@ rather than once per idea. (Added by the PM, 2026-10-19.) By 2026-10-26 that run
 5-minute budget of [agreement 1](#1-ci-stays-light), so a pull request into `dev` now runs only the
 tests its changes reach, and the whole selection runs once per merge instead (`v1-e01-t38`).
 
-* **A pull request into `dev` runs the affected set.** ci.yml's `test` job reads
+* **A pull request into `dev` runs the affected set.** ci.yml's `test-selection` job reads
   `scripts/affected_tests.py`'s selection against the pull request's base commit, always-run list
-  included, and deals it round the parts. When the pull request changes shared test ground (ci.yml
-  among it), or its selection fails, comes back empty or has no base commit to compare with, the job
-  runs the whole selection instead: it fails toward more tests, never fewer. The job summary says
-  how many test files it ran and, for the whole selection, why.
+  included, once, and the `test` parts deal it round themselves. When the pull request changes
+  shared test ground (ci.yml among it), or its selection fails, comes back empty or has no base
+  commit to compare with, the parts run the whole selection instead: it fails toward more tests,
+  never fewer. The job summary says how many test files it chose and, for the whole selection, why.
+  The one change that runs no test is the two generated files alone, `ROADMAP.md` and
+  `docs/README.md`: the bot's refresh pull request, and the run it dispatches on its branch, run
+  only the doc checks (`v1-e41-t15`).
 * **Dev's push run and every promotion run everything.** A push to `dev` or `main`, a pull request
   into `main` and a dispatched run each run the whole default selection, and the `coverage` job
   measures it on every push. The dev pre-release waits for dev's push run, so a test the affected set

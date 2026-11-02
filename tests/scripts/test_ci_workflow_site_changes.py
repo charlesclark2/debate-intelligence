@@ -216,8 +216,8 @@ def test_the_site_job_gates_the_required_ci_check_so_no_ruleset_changes() -> Non
     jobs = ci_jobs()
     assert "site" in jobs["ci"]["needs"]
     assert jobs["site"]["if"] == "needs.changes.outputs.site == 'true'"
-    filter_of_job = yaml.safe_load(jobs["ci"]["steps"][0]["env"]["PATH_FILTER_OF_JOB"])
-    assert filter_of_job["site"] == "site"
+    gates_of_job = yaml.safe_load(jobs["ci"]["steps"][0]["env"]["GATES_OF_JOB"])
+    assert gates_of_job["site"] == ["changes.site"]
 
 
 def test_no_workflow_step_here_holds_a_secret_or_an_aws_credential() -> None:
@@ -305,7 +305,11 @@ def changes_outputs(changed: Iterable[str], context: Mapping[str, str]) -> dict[
 
 SITE_FILES = tracked("site/")
 SITE_SCRIPTS = ["scripts/site_deploy.sh", "scripts/site_smoke.py", "scripts/check_promotion_source.py"]
-MARKDOWN_OUTSIDE_SITE = [path for path in tracked("*.md") if not path.startswith("site/")]
+# refresh-generated-files.yml's two files, which no Python test reads (v1-e41-t15).
+GENERATED_FILES = ["ROADMAP.md", "docs/README.md"]
+MARKDOWN_OUTSIDE_SITE = [
+    path for path in tracked("*.md") if not path.startswith("site/") and path not in GENERATED_FILES
+]
 
 
 def test_every_pattern_in_the_filters_is_one_this_test_reads_as_dorny_does() -> None:
@@ -365,13 +369,48 @@ def test_a_change_under_scripts_still_selects_the_python_tests(path: str) -> Non
 def test_every_markdown_file_outside_site_still_selects_the_python_tests() -> None:
     """tests/docs and tests/architecture read them; leaving site/ out must not leave these out."""
     assert len(MARKDOWN_OUTSIDE_SITE) > 100
-    for path in [*MARKDOWN_OUTSIDE_SITE, "a-new-top-level-folder/notes.md", "NEW.md"]:
+    for path in [*MARKDOWN_OUTSIDE_SITE, "a-new-top-level-folder/notes.md", "NEW.md", "docs/NEW.md"]:
         assert changes_outputs([path], PULL_REQUEST_INTO_DEV)["python"] == "true", path
 
 
-@pytest.mark.parametrize("context", [PUSH, DISPATCH], ids=["push", "dispatch"])
-def test_a_push_or_a_dispatch_still_runs_everything(context: dict[str, str]) -> None:
-    outputs = changes_outputs(["site/content/pages/results.md"], context)
+def test_the_generated_files_alone_select_no_python_job() -> None:
+    """The bot's refresh pull request (v1-e41-t15): ROADMAP.md and docs/README.md are regenerated
+    from the tree. The tests that read such files read fixtures, and spec-validate, which has no
+    filter, checks the real files' links and descriptions. With anything else they select as before."""
+    for path in GENERATED_FILES:
+        assert (REPO_ROOT / path).is_file()
+    for changed in ([*GENERATED_FILES], [GENERATED_FILES[0]], [GENERATED_FILES[1]]):
+        outputs = changes_outputs(changed, PULL_REQUEST_INTO_DEV)
+        assert outputs["python"] == "false", changed
+        assert set(outputs.values()) == {"false"}, outputs
+    assert (
+        changes_outputs([*GENERATED_FILES, "docs/process/working-agreements.md"], PULL_REQUEST_INTO_DEV)[
+            "python"
+        ]
+        == "true"
+    )
+    # The same two files the selection script and the bot's workflow name.
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    import ci_test_selection
+
+    assert sorted(ci_test_selection.GENERATED_FILES) == sorted(GENERATED_FILES)
+    refresh = (REPO_ROOT / ".github" / "workflows" / "refresh-generated-files.yml").read_text(
+        encoding="utf-8"
+    )
+    assert "git diff --quiet -- ROADMAP.md docs/README.md" in refresh
+    assert yaml.safe_load(refresh)["env"]["BRANCH"] == ci_test_selection.GENERATED_FILES_BRANCH
+
+
+def test_a_push_still_runs_everything() -> None:
+    outputs = changes_outputs(["site/content/pages/results.md"], PUSH)
+    assert set(outputs.values()) == {"true"}
+
+
+def test_a_dispatch_runs_everything_but_the_partition_proof() -> None:
+    """The partition proof runs on every push and on its triggers (the PM's ruling, v1-e41-t15);
+    a dispatch's commit has its push run, or is the bot's, which runs no test part."""
+    outputs = changes_outputs(["site/content/pages/results.md"], DISPATCH)
+    assert outputs.pop("partition_proof") == "false"
     assert set(outputs.values()) == {"true"}
 
 

@@ -86,13 +86,15 @@ $ debate-research --version
 ```
 
 `--version` names the tag's version, channel `stable` and environment `prod`. The script is the
-one-line install. It verifies the release's `SHA256SUMS` before installing anything, and installs
-both wheels by their file URLs, so no package index can supply either name. Plain
-`uv tool install` of the two downloaded wheels also works, but checks none of that:
+one-line install. It verifies the release's `SHA256SUMS` before installing anything, installs both
+wheels by their file URLs, so no package index can supply either name, and holds uv to the Python
+`debate_core` declares. Plain `uv tool install` of the two downloaded wheels also works, from a
+checkout of the tag, but checks none of that; it reads the Python from `debate_core`'s pyproject,
+because uv ignores the upper bound of a wheel's `Requires-Python`:
 
 ```console
 $ gh release download v1.1.0 --repo charlesclark2/debate-intelligence --pattern '*.whl' --dir debate-research-v1.1.0
-$ uv tool install --python '>=3.12,<3.13' "debate-cli @ file://$PWD/debate-research-v1.1.0/debate_cli-1.1.0-py3-none-any.whl" --with "debate-core @ file://$PWD/debate-research-v1.1.0/debate_core-1.1.0-py3-none-any.whl"
+$ uv tool install --managed-python --python "$(sed -n 's/^requires-python = "\(.*\)"$/\1/p' packages/debate_core/pyproject.toml)" "debate-cli @ file://$PWD/debate-research-v1.1.0/debate_cli-1.1.0-py3-none-any.whl" --with "debate-core @ file://$PWD/debate-research-v1.1.0/debate_core-1.1.0-py3-none-any.whl"
 ```
 
 No extra is optional at install time. The CLI's own requirement names every `debate-core` extra

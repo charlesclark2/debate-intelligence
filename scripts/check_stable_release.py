@@ -1,5 +1,4 @@
 # /// script
-# requires-python = ">=3.11"
 # dependencies = ["pyyaml>=6"]
 # ///
 """Refuse a stable tag that is not a validated release of `main` (v1-e09-t06-packaging-release).

@@ -57,10 +57,29 @@ spec:
     refused by a build from before v1-e08-t04. Say whether any installed build reads stored searches
     across builds. If one does, make that read tolerate the field and prove it with an earlier build's
     offline wheel, as the caselist tasks do; if none does, say so in the report.
+    (PM amendment 2026-11-02, the PM's rulings for this task, written in by the session.) Exit codes:
+    `debate_cli/exit_codes.py` stays the only place a failure becomes a code, and the numbers above
+    predate it, so the mapping is 0 for complete results; 6, a new `ExitCode.SEARCH_PARTIAL`, for
+    results returned while some provider failed, timed out, was rate-limited, had its breaker open,
+    was not configured or answered only partly, with or without rows; 7, a new `ExitCode.NO_RESULTS`,
+    for every provider answering in full with nothing; 3, `RETRIEVAL_FAILURE`, for every provider
+    failing, as `fetch` has it, not 7; 2 for usage, `UnknownExpansionChoice` and since > until
+    included; and (the session's addition) 1 when no provider was asked because none selected is
+    enabled, which no retry cures. Expansion flags are `--argument`, `--need`, `--topic`, a repeatable
+    `--var NAME=VALUE` and `--expand-llm`, off by default and the only thing that builds a guard; the
+    model call goes through the `high_volume` route under DEBATE_MODEL_MODE, replay by default, as
+    `cut`'s do. The JSON output is the CLI's envelope: the array of results is `data.results` (or
+    `error.details.results` on 6, 7 and 3), and no item carries a snippet or abstract. `--save PATH`
+    writes the same search object to a file. The session also changed, outside the packages first
+    listed, `config/profiles/dev.toml` and `prod.toml` to enable only the providers this build has
+    adapters for (`openalex`, `rss`), because the registry refuses every search while `crossref` or
+    `semantic_scholar` is enabled with no adapter, and added `tests/smoke/test_search_smoke.py`
+    (working agreement 5); both are in the report's Deviations for the PM to keep or undo.
   priority: 1
   constraints:
     # PM amendment 2026-10-22: registration, Article matching and the outcome live in debate_core.
-    packages: [debate_cli, debate_core.application, debate_core.integrations.discovery, packages/debate_cli/tests, packages/debate_core/tests, packages/debate_cli/pyproject.toml, uv.lock, config/argument_taxonomy.yaml]
+    # Session addition 2026-11-02 (Deviations, for the PM to keep or undo): the two profiles and the smoke check.
+    packages: [debate_cli, debate_core.application, debate_core.integrations.discovery, packages/debate_cli/tests, packages/debate_core/tests, packages/debate_cli/pyproject.toml, uv.lock, config/argument_taxonomy.yaml, config/profiles/dev.toml, config/profiles/prod.toml, tests/smoke/test_search_smoke.py]
     forbidden:
       - Business logic (ranking, dedupe, expansion) in debate_cli
       - Hiding provider failures when results are partial

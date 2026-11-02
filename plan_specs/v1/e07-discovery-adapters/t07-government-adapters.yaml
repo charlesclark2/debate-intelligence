@@ -41,9 +41,58 @@ spec:
     adapter's tests run once in one process after the OpenCaselist client and discovery suites
     (`-n 0 -p no:randomly`), since logger filters are shared by the whole process (working
     agreement 10).
+    (PM amendment 2026-11-02, from the session's documentation stop.) Congress.gov API v3 has no
+    keyword search: its committed openapi.yaml gives /bill only offset, limit and
+    fromDateTime/toDateTime on update date, and no path takes a query. So there is no
+    CongressGovProvider and no CONGRESS_GOV in SearchProviderName: bills come from GovInfo's
+    `collection:bills` search, with congress, type and number read from the BILLS package id.
+    Congress.gov lookups by bill (latest action, committees) are a follow-up the PM files.
+    GovInfoProvider searches BILLS, CRPT, CHRG and CPRT by default; GAO reports (GovInfo's GAOREPORTS is
+    an archive frozen on 2008-09-19) and CRS reports (on Congress.gov, not GovInfo, with no keyword
+    search) are a follow-up the PM files. The Federal Register's API spec,
+    https://www.federalregister.gov/api/v1/documentation.json, was read by the PM on 2026-11-02: no API
+    key, no stated rate limit, documents.json with conditions[term], conditions[publication_date][gte|lte],
+    conditions[type][] (RULE, PRORULE, NOTICE, PRESDOCU; the adapter asks for the first three),
+    per_page up to 1000, order=relevance and fields[]. No pacer: the wrapper's handling applies, and a
+    3xx (the site's block page answers 302) is unavailable, naming the redirect host. One
+    providers.api_data_gov_key (SecretStr, env DEBATE_PROVIDERS__API_DATA_GOV_KEY), never DEMO_KEY:
+    without it GovInfo is not built, the registry records it as enabled but not configured, and the
+    fan-out reports each call to it `not_configured`, "govinfo: no api.data.gov key
+    (DEBATE_PROVIDERS__API_DATA_GOV_KEY)"; health() is unchanged. The official identifier is
+    provider_record_id in a documented, stable form per source; ArticleIdentifiers is unchanged; the
+    issuing agency or committee is `publication`; dates keep their precision (date_precision), never an
+    invented day. Topic enablement: a search names its topic with `search --topic`, which now works
+    without --argument/--need, as SearchRequest.topic_id (left out of the stored JSON when None). A
+    feed file in config/feeds lists the debate topics it applies to (`search_topics`) and the
+    government providers they enable (`government_providers`). A government provider runs only when it
+    is in providers.enabled, on the search's topic, and (GovInfo) keyed; with no topic it is neither
+    asked nor reported. --topic accepts the taxonomy presets and every id in a search_topics list, and
+    an unknown one is a usage error listing the valid ones. Only the NHI Policy topic is enabled
+    (health-insurance.yaml); the data-center PF topic's file waits for the coach's November-December
+    resolution, since the September-October PF topic ended on 2026-10-31.
   priority: 2
   constraints:
-    packages: [debate_core.integrations, config/feeds]
+    packages:
+      - debate_core.integrations
+      - config/feeds
+      # PM ruling 2026-11-02 (brief item 3): SearchProviderName gains FEDERAL_REGISTER and GOVINFO, and
+      # ProviderSettings one api_data_gov_key. Settings only.
+      - packages/debate_core/src/debate_core/application/settings.py
+      # PM ruling 2026-11-02 (stop question 4): the registry's enabled-but-not-configured names reach the
+      # fan-out through DiscoveryProviders, which reports each call to one as not_configured.
+      - packages/debate_core/src/debate_core/application/ports/providers.py
+      - packages/debate_core/src/debate_core/application/federated_search.py
+      # PM ruling 2026-11-02 (stop question 5: A): SearchRequest.topic_id, left out of the stored JSON
+      # when None, and `search --topic` on its own.
+      - packages/debate_core/src/debate_core/application/federated_search_types.py
+      - packages/debate_cli/src/debate_cli/commands/search.py
+      # The factories in the CLI's factory map, and the two lists that pin the container's integrations.
+      - packages/debate_cli/src/debate_cli/container.py
+      - packages/debate_cli/tests/commands/test_doctor.py
+      - packages/debate_cli/tests/test_installation.py
+      - packages/debate_cli/tests/test_search_command.py
+      - packages/debate_cli/README.md
+      - tests/smoke/test_search_smoke.py
     forbidden:
       - Logging or committing api.data.gov keys
       - Live government API calls in CI (respx fixtures only)
@@ -58,16 +107,20 @@ spec:
   acceptanceCriteria:
     - id: ac1
       description: >-
-        CongressGovProvider, FederalRegisterProvider and GovInfoProvider each pass the contract kit on
-        recorded fixtures.
+        (PM amendment 2026-11-02: two providers, because Congress.gov has no keyword search and bills
+        come from GovInfo's BILLS collection.) FederalRegisterProvider and GovInfoProvider each pass the
+        contract kit on hand-written fixtures.
     - id: ac2
       description: >-
-        Results carry source_type government, the issuing agency or committee as publisher, and the
-        official identifier (bill number, FR document number, GovInfo package id).
+        (PM amendment 2026-11-02, as ac1.) Results carry source_type government, the issuing agency or
+        committee as publisher, and the official identifier as provider_record_id (FR document number;
+        GovInfo package id, with a bill's congress, type and number read from it).
     - id: ac3
       description: >-
         Missing api.data.gov keys disable Congress.gov and GovInfo with a health status of
         NOT_CONFIGURED rather than an error, while Federal Register works keyless.
+        (PM amendment 2026-11-02: GovInfo only, as ac1; the call outcome is not_configured, and health()
+        is unchanged.)
     - id: ac4
       description: >-
         Topic config controls which government providers run for a search, verified by a registry test.
@@ -92,8 +145,8 @@ metadata:
     debate/epic: v1-e07-discovery-adapters
 spec:
   description: >-
-    Federal Register first (keyless), then Congress.gov and GovInfo sharing the api.data.gov key handling,
-    then topic enablement.
+    Federal Register first (keyless), then the api.data.gov key handling and topic enablement, then
+    GovInfo (PM ruling 2026-11-02; no Congress.gov adapter, see the Goal's amendment).
   goalRef:
     name: v1-e07-t07-government-adapters
   graph:
@@ -104,9 +157,11 @@ spec:
         description: >-
           Record fixtures and implement documents search with conditions[term], publication_date range and
           type filters.
+        # PM ruling 2026-11-02 (brief item 5): hand-written from the documented response schema, under
+        # OpenAlex's layout; was tests/fixtures/providers/federal_register/.
         outputs:
           - packages/debate_core/src/debate_core/integrations/discovery/federal_register.py
-          - tests/fixtures/providers/federal_register/
+          - packages/debate_core/tests/fixtures/discovery/federal_register/
         estimatedEffort: 2h
         acceptanceCriteria:
           - type: test_passes
@@ -130,32 +185,16 @@ spec:
             name: Key handling tests pass
             command: uv
             args: [run, pytest, packages/debate_core/tests/integrations/discovery/test_government.py, -k, key]
-      - id: congress-gov
-        kind: Task
-        name: Congress.gov adapter
-        description: >-
-          Record fixtures and implement bill search with congress and update-date filters.
-        dependsOn: [data-gov-key]
-        outputs: [packages/debate_core/src/debate_core/integrations/discovery/congress_gov.py]
-        estimatedEffort: 2h
-        acceptanceCriteria:
-          - type: test_passes
-            name: Congress.gov tests pass
-            command: uv
-            args:
-              - run
-              - pytest
-              - packages/debate_core/tests/integrations/discovery/test_government.py
-              - -k
-              - congress
       - id: govinfo
         kind: Task
         name: GovInfo adapter
         description: >-
           Record fixtures and implement search over CRPT, CHRG and GAOREPORTS-style collections with date
-          filters.
-        dependsOn: [data-gov-key]
-        outputs: [packages/debate_core/src/debate_core/integrations/discovery/govinfo.py]
+          filters. (PM ruling 2026-11-02: BILLS, CRPT, CHRG and CPRT; GAOREPORTS ends in 2008.)
+        dependsOn: [data-gov-key, topic-enablement]
+        outputs:
+          - packages/debate_core/src/debate_core/integrations/discovery/govinfo.py
+          - packages/debate_core/tests/fixtures/discovery/govinfo/
         estimatedEffort: 2h
         acceptanceCriteria:
           - type: test_passes
@@ -172,8 +211,10 @@ spec:
         name: Per-topic enablement and full suite
         description: >-
           Extend topic config with a government provider list and verify registry selection; run the full
-          government module.
-        dependsOn: [federal-register, congress-gov, govinfo]
+          government module. (PM ruling 2026-11-02: before GovInfo, after the key handling; its
+          acceptance command runs the government module as it stands then, and the govinfo node's runs
+          it whole.)
+        dependsOn: [federal-register, data-gov-key]
         estimatedEffort: 1h
         acceptanceCriteria:
           - type: test_passes

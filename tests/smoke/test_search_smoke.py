@@ -102,3 +102,14 @@ def test_an_unknown_argument_exits_2_listing_the_arguments(installed_cli: Instal
 
     assert run.exit_code == ExitCode.USAGE_ERROR, run.output
     assert "politics-da" in run.stderr
+
+
+def test_a_need_outside_the_arguments_family_exits_2_listing_its_needs(installed_cli: InstalledCli) -> None:
+    """v1-e08-t08: a framework's needs are framework-good and answers; it has no uniqueness."""
+    run = installed_cli.run(
+        "search", "health insurance", "--argument", "util", "--need", "uniqueness", env={"COLUMNS": "200"}
+    )
+
+    assert run.exit_code == ExitCode.USAGE_ERROR, run.output
+    assert "framework-good" in run.stderr
+    assert "internal-link" not in run.stderr

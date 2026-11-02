@@ -43,7 +43,7 @@ from debate_core.application.query_expansion import (
 )
 from debate_core.application.structured_output import StructuredOutputGuard
 from debate_core.domain import SearchFilters
-from debate_core.domain.argument_taxonomy import ArgumentTaxonomy
+from debate_core.domain.argument_taxonomy import ArgumentTaxonomy, ReviewStatus
 from debate_core.domain.caselist.values import Event
 from debate_core.domain.model_contracts import ModelProvider, TaskClass
 from debate_core.domain.search import ExpandedQuery, QueryOrigin, SearchExpansion, WindowSource
@@ -62,15 +62,25 @@ NOW = datetime(2026, 11, 1, 12, 0, tzinfo=UTC)
 """The clock every test reads: the day the task ran."""
 
 SMALL_TAXONOMY = """
-schema_version: 1
+schema_version: 2
 taxonomy_version: 0.1.0
 variables:
   query: The query.
   topic: The topic.
   bill: The agenda item.
-needs:
-  - {id: uniqueness, label: Uniqueness, description: Where things stand now., aliases: [uq], recency_days: 14}
-  - {id: impact, label: Impact, description: What happens in the end., aliases: [i], recency_days: any}
+families:
+  - id: test-scenario
+    label: Test scenarios
+    kinds: [da]
+    needs:
+      - {id: uniqueness, label: Uniqueness, description: Where things stand now., aliases: [uq], recency_days: 14}
+      - {id: impact, label: Impact, description: What happens in the end., aliases: [i], recency_days: any}
+  - id: test-framing
+    label: Test framing
+    kinds: [framework]
+    needs:
+      - {id: framework-good, label: Framework good, description: Why to use it., aliases: [fw-good], recency_days: any}
+      - {id: answers, label: Answers, description: Why not., aliases: [at], recency_days: any}
 arguments:
   - id: test-da
     label: Test DA
@@ -92,10 +102,10 @@ arguments:
     formats: [LD]
     review: awaiting_coach_review
     templates:
-      uniqueness:
-        - {text: "{topic} trends"}
-      impact:
-        - {text: "framework justification"}
+      framework-good:
+        - {text: "{topic} framework good"}
+      answers:
+        - {text: "framework critique"}
 topics:
   - {id: test-topic, format: POLICY, variables: {topic: preset subject}}
 """
@@ -116,6 +126,27 @@ def first_argument_with(**changes: Any) -> dict[str, Any]:
     """SMALL_TAXONOMY with its first argument changed."""
     document = small_taxonomy()
     document["arguments"][0].update(changes)
+    return document
+
+
+def framework_with(**templates: list[dict[str, Any]]) -> dict[str, Any]:
+    """SMALL_TAXONOMY with the framing argument's templates replaced."""
+    document = small_taxonomy()
+    document["arguments"][1]["templates"] = templates
+    return document
+
+
+def family_with(index: int, **changes: Any) -> dict[str, Any]:
+    """SMALL_TAXONOMY with one family changed."""
+    document = small_taxonomy()
+    document["families"][index].update(changes)
+    return document
+
+
+def need_with(family: int, need: int, **changes: Any) -> dict[str, Any]:
+    """SMALL_TAXONOMY with one need of one family changed."""
+    document = small_taxonomy()
+    document["families"][family]["needs"][need].update(changes)
     return document
 
 
@@ -180,15 +211,130 @@ def template_query(
 # =============================================================================================
 
 
-def test_the_committed_taxonomy_validates_and_every_argument_need_pair_has_a_template(
+FAMILY_NEEDS = {
+    "da-and-advantage": ["uniqueness", "link", "internal-link", "impact", "answers"],
+    "framing": ["framework-good", "answers"],
+    "theory": ["interpretation", "standards", "voters", "answers"],
+    "counterplan": ["solvency", "net-benefit", "competition", "answers"],
+    "kritik": ["link", "impact", "alternative", "framework", "answers"],
+}
+"""Each family's needs in order: the PM's list of 2026-11-02, from the coach's review of v1-e08-t04."""
+
+KIND_FAMILY = {
+    "da": "da-and-advantage",
+    "advantage": "da-and-advantage",
+    "framework": "framing",
+    "theory": "theory",
+    "cp": "counterplan",
+    "k": "kritik",
+}
+
+ADDED_COUNTERPLANS = {"process-cp", "states-cp", "courts-cp", "delay-cp", "advantage-cp"}
+"""The Policy landscape's counterplans that are not about the NHI topic's mechanism (v1-e08-t08)."""
+
+ADDED_KRITIKS = {
+    "cap-k",
+    "racial-capitalism-k",
+    "security-k",
+    "biopolitics-k",
+    "settler-colonialism-k",
+    "colonialism-k",
+    "antiblackness-k",
+    "psychoanalysis-k",
+    "queer-k",
+    "buddhism-k",
+}
+"""generic.yaml's named kritiks; generic-k, its catch-all for a card that fits none, is not an argument."""
+
+COACH_REVIEWED_FILE = REPOSITORY / "packages/debate_core/tests/fixtures/argument_taxonomy/coach_reviewed_1_1_0.yaml"
+
+
+def test_the_committed_taxonomy_validates_and_every_argument_has_a_template_for_each_need_of_its_family(
     committed: ArgumentTaxonomy,
 ) -> None:
-    needs = [need.id for need in committed.needs]
-    assert needs == ["uniqueness", "link", "internal-link", "impact", "answers"]
+    assert committed.taxonomy_version == "1.2.0"
+    assert {family.id: [need.id for need in family.needs] for family in committed.families} == FAMILY_NEEDS
     for argument in committed.arguments:
-        assert sorted(argument.templates) == sorted(needs), argument.id
-        for need in needs:
+        family = committed.family_of(argument)
+        assert family.id == KIND_FAMILY[argument.kind.value], argument.id
+        assert list(argument.templates) == FAMILY_NEEDS[family.id], argument.id
+        for need in FAMILY_NEEDS[family.id]:
             assert argument.templates[need], f"{argument.id}/{need}"
+
+
+def test_the_committed_taxonomy_puts_the_frameworks_in_framing_and_theory_in_its_own_family(
+    committed: ArgumentTaxonomy,
+) -> None:
+    def family(argument_id: str) -> str:
+        found = committed.find_argument(argument_id)
+        assert found is not None, argument_id
+        return committed.family_of(found).id
+
+    assert [family(name) for name in ("util", "deontology", "structural-violence", "cost-benefit")] == [
+        "framing"
+    ] * 4
+    assert family("theory") == "theory"
+
+
+def test_the_committed_taxonomy_gives_framing_evidence_no_window(committed: ArgumentTaxonomy) -> None:
+    """Philosophy evidence doesn't go stale (the coach, 2026-11-02): no framing need or template has a window."""
+    framing = next(family for family in committed.families if family.id == "framing")
+    assert [(need.id, need.recency_days) for need in framing.needs] == [
+        ("framework-good", "any"),
+        ("answers", "any"),
+    ]
+    for argument in committed.arguments:
+        if committed.family_of(argument).id == "framing":
+            for need, templates in argument.templates.items():
+                assert [t.recency_days for t in templates] == [None] * len(templates), f"{argument.id}/{need}"
+
+
+def landscape_kinds() -> dict[str, str]:
+    kinds: dict[str, str] = {}
+    for path in sorted((REPOSITORY / "config" / "landscape" / "taxonomies").glob("*.yaml")):
+        document = yaml.safe_load(path.read_text(encoding="utf-8"))
+        kinds.update({position["id"]: position["kind"] for position in document["positions"]})
+    return kinds
+
+
+def test_the_committed_taxonomy_adds_the_landscapes_generic_counterplans_and_kritiks_under_its_ids(
+    committed: ArgumentTaxonomy,
+) -> None:
+    by_kind = {
+        kind: {argument.id for argument in committed.arguments if argument.kind.value == kind}
+        for kind in ("cp", "k")
+    }
+    assert by_kind == {"cp": ADDED_COUNTERPLANS, "k": ADDED_KRITIKS}
+    kinds = landscape_kinds()
+    for argument in committed.arguments:
+        if argument.id in ADDED_COUNTERPLANS | ADDED_KRITIKS:
+            assert kinds.get(argument.id) == argument.kind.value, argument.id
+            assert argument.landscape_id == argument.id, argument.id
+            assert argument.formats == (Event.POLICY,), argument.id
+    assert committed.find_argument("federalism-cp") is None
+    assert committed.find_argument("free-market-cp") is None
+
+
+def test_the_committed_taxonomy_keeps_every_coach_reviewed_entry_as_he_reviewed_it(
+    committed: ArgumentTaxonomy,
+) -> None:
+    """The coach's 1.1.0 entries and the DA and advantage needs' windows are unchanged; every other
+    entry, added or reshaped, waits for his review."""
+    reviewed_file = yaml.safe_load(COACH_REVIEWED_FILE.read_text(encoding="utf-8"))
+    reviewed = {entry["id"]: entry for entry in reviewed_file["arguments"] if entry["review"] == "coach_reviewed"}
+    assert len(reviewed) == 9
+    for argument in committed.arguments:
+        entry = reviewed.get(argument.id)
+        if entry is None:
+            assert argument.review is ReviewStatus.AWAITING_COACH_REVIEW, argument.id
+            continue
+        assert argument.review is ReviewStatus.COACH_REVIEWED, argument.id
+        assert argument.model_dump(mode="json", exclude_none=True) == entry, argument.id
+    assert {argument.id for argument in committed.arguments} >= set(reviewed)
+    scenario = next(family for family in committed.families if family.id == "da-and-advantage")
+    assert [need.model_dump(mode="json", exclude_defaults=True) for need in scenario.needs] == [
+        {key: value for key, value in need.items() if value != []} for need in reviewed_file["needs"]
+    ]
 
 
 def test_the_committed_taxonomy_covers_policy_ld_and_pf(committed: ArgumentTaxonomy) -> None:
@@ -209,7 +355,8 @@ def test_the_committed_taxonomy_names_no_year_and_no_harms(committed: ArgumentTa
             for template in templates:
                 assert not re.search(r"\d{4}", template.text), f"{argument.id}/{need}: {template.text}"
                 assert "harm" not in template.text.casefold(), f"{argument.id}/{need}: {template.text}"
-    labels = [need.label for need in committed.needs] + [argument.label for argument in committed.arguments]
+    needs = [need for family in committed.families for need in family.needs]
+    labels = [need.label for need in needs] + [argument.label for argument in committed.arguments]
     assert not [label for label in labels if "harm" in label.casefold()]
 
 
@@ -253,8 +400,10 @@ def test_the_committed_taxonomy_resolves_the_spec_spellings_and_typed_variants(
         found = committed.find_argument(name)
         return None if found is None else found.id
 
-    def need(name: str) -> str | None:
-        found = committed.find_need(name)
+    def need(name: str, argument_id: str = "politics-da") -> str | None:
+        found_argument = committed.find_argument(argument_id)
+        assert found_argument is not None
+        found = committed.find_need(found_argument, name)
         return None if found is None else found.id
 
     assert argument("ptx") == "politics-da"
@@ -264,6 +413,15 @@ def test_the_committed_taxonomy_resolves_the_spec_spellings_and_typed_variants(
     assert need("AT") == "answers"
     assert need("internal link") == "internal-link"
     assert need("uq") == "uniqueness"
+    assert need("Framework good", "util") == "framework-good"
+    assert need("AT", "util") == "answers"
+    assert need("interp", "theory") == "interpretation"
+    assert need("net benefit", "process-cp") == "net-benefit"
+    assert need("NB", "states-cp") == "net-benefit"
+    assert need("alt", "cap-k") == "alternative"
+    assert need("FW", "cap-k") == "framework"
+    assert need("link", "cap-k") == "link"
+    assert need("uq", "util") is None
 
 
 @pytest.mark.parametrize(
@@ -354,6 +512,47 @@ def test_the_committed_taxonomy_resolves_the_spec_spellings_and_typed_variants(
             id="a topic setting query",
         ),
         pytest.param(small_taxonomy(unexpected=1), ["unexpected"], id="an unknown key"),
+        pytest.param(small_taxonomy(schema_version=1), ["schema_version"], id="the old schema version"),
+        pytest.param(
+            framework_with(
+                **{
+                    "framework-good": [{"text": "{query} good"}],
+                    "answers": [{"text": "{query} bad"}],
+                    "uniqueness": [{"text": "{query} now"}],
+                }
+            ),
+            ["test-framework", "uniqueness", "not a need of the test-framing family", "framework-good, answers"],
+            id="a framework given a uniqueness need",
+        ),
+        pytest.param(
+            framework_with(**{"framework-good": [{"text": "{query} good"}], "answers": []}),
+            ["argument test-framework has no template for the need answers"],
+            id="a framing pair left empty",
+        ),
+        pytest.param(
+            framework_with(**{"framework-good": [{"text": "{query} good"}]}),
+            ["argument test-framework has no template for the need answers"],
+            id="a framing pair left out",
+        ),
+        pytest.param(
+            family_with(1, kinds=["framework", "da"]), ["two families take the kind da"], id="a kind in two families"
+        ),
+        pytest.param(
+            first_argument_with(kind="cp"), ["argument test-da is a cp, which no family takes"], id="a kind no family takes"
+        ),
+        pytest.param(family_with(1, needs=[]), ["families.1.needs"], id="a family with no needs"),
+        pytest.param(family_with(1, kinds=[]), ["families.1.kinds"], id="a family with no kinds"),
+        pytest.param(family_with(1, id="test-scenario"), ["two families share the id test-scenario"], id="a family id twice"),
+        pytest.param(
+            need_with(0, 1, aliases=["uq"]),
+            ["two needs of the test-scenario family share the id or alias uq"],
+            id="two needs of a family sharing a name",
+        ),
+        pytest.param(
+            need_with(1, 0, aliases=["i"]),
+            ["i means impact in test-scenario and framework-good in test-framing"],
+            id="one name meaning two needs",
+        ),
     ],
 )
 def test_a_taxonomy_that_breaks_a_rule_is_refused_when_it_loads(
@@ -384,7 +583,6 @@ def choices_of(expansion: dict[str, Any]) -> dict[str, Any]:
     ("expansion", "kind", "value", "choices"),
     [
         pytest.param({"argument": "heg"}, "argument", "heg", ("test-da", "test-framework"), id="argument"),
-        pytest.param({"need": "solvency"}, "need", "solvency", ("uniqueness", "impact"), id="need"),
         pytest.param({"topic_id": "ld-topic"}, "topic", "ld-topic", ("test-topic",), id="topic"),
         pytest.param({"variables": {"agenda": "x"}}, "variable", "agenda", ("topic", "bill"), id="variable"),
     ],
@@ -398,6 +596,59 @@ def test_the_taxonomy_refuses_an_unknown_choice_with_a_typed_error_listing_the_v
         )
     assert (refused.value.kind, refused.value.value, refused.value.choices) == (kind, value, choices)
     assert str(refused.value) == f"unknown {kind} {value!r}; the {kind}s are: {', '.join(choices)}"
+
+
+@pytest.mark.parametrize(
+    ("argument", "need", "choices"),
+    [
+        pytest.param("test-da", "solvency", ("uniqueness", "impact"), id="a need no family has"),
+        pytest.param("test-framework", "uniqueness", ("framework-good", "answers"), id="another family's need"),
+        pytest.param("test-da", "at", ("uniqueness", "impact"), id="another family's alias"),
+    ],
+)
+def test_the_taxonomy_refuses_a_need_outside_the_arguments_family_listing_its_needs(
+    argument: str, need: str, choices: tuple[str, ...]
+) -> None:
+    with pytest.raises(UnknownExpansionChoice) as refused:
+        expand(request_for(argument=argument, need=need))
+    assert (refused.value.kind, refused.value.value, refused.value.choices) == ("need", need, choices)
+    assert refused.value.argument == argument
+    assert str(refused.value) == f"{argument} has no need {need!r}; its needs are: {', '.join(choices)}"
+
+
+@pytest.mark.parametrize(
+    ("argument", "need", "choices"),
+    [
+        ("util", "uniqueness", ("framework-good", "answers")),
+        ("deontology", "internal-link", ("framework-good", "answers")),
+        ("theory", "link", ("interpretation", "standards", "voters", "answers")),
+        ("process-cp", "uniqueness", ("solvency", "net-benefit", "competition", "answers")),
+        ("cap-k", "solvency", ("link", "impact", "alternative", "framework", "answers")),
+        ("politics-da", "alternative", ("uniqueness", "link", "internal-link", "impact", "answers")),
+    ],
+)
+def test_the_taxonomy_committed_refuses_each_familys_outside_needs(
+    committed: ArgumentTaxonomy, argument: str, need: str, choices: tuple[str, ...]
+) -> None:
+    with pytest.raises(UnknownExpansionChoice) as refused:
+        expand(request_for(argument=argument, need=need), committed)
+    assert refused.value.choices == choices
+
+
+def test_the_taxonomy_framing_expansion_sets_no_window(committed: ArgumentTaxonomy) -> None:
+    for need in ("framework-good", "answers"):
+        expansion = expand(request_for("de-extinction", argument="util", need=need), committed)
+        assert expansion.queries, need
+        assert {(q.since, q.recency_days, q.window) for q in expansion.queries} == {
+            (None, None, WindowSource.NEED)
+        }, need
+
+
+def test_the_taxonomy_expands_counterplan_and_kritik_needs(committed: ArgumentTaxonomy) -> None:
+    for argument, need in (("states-cp", "net benefit"), ("cap-k", "alt"), ("theory", "voters")):
+        expansion = expand(request_for("health insurance", argument=argument, need=need), committed)
+        assert expansion.argument == argument
+        assert expansion.queries, f"{argument}/{need}"
 
 
 def test_the_taxonomy_refuses_an_unknown_argument_before_any_provider_is_asked() -> None:
@@ -429,7 +680,7 @@ def test_template_expansion_of_politics_da_link_on_health_insurance(committed: A
     expansion = expand(request_for("health insurance", argument="politics-da", need="link"), committed)
     since = NOW - timedelta(days=1826)
     assert expansion == SearchExpansion(
-        taxonomy_version="1.1.0",
+        taxonomy_version="1.2.0",
         argument="politics-da",
         need="link",
         variables={"query": "health insurance", "topic": "health insurance"},

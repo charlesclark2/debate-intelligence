@@ -22,7 +22,7 @@
 # Ids: an argument the Policy landscape taxonomy also counts (config/landscape/taxonomies/) uses the
 # landscape's id, and says so in landscape_id. The spelling in the task spec is an alias
 # (econ-da -> economy-da, ptx -> politics-da, elections -> midterms-da).
-schema_version: 1
+schema_version: 2
 taxonomy_version: 1.1.0
 
 variables:
@@ -35,32 +35,36 @@ variables:
   impact: >-
     The impact a debater names for a scenario (for example war), as the request gives it.
 
-needs:
-  - id: uniqueness
-    label: Uniqueness
-    description: Where things stand now, before the plan or action.
-    aliases: [uq, u]
-    recency_days: 365
-  - id: link
-    label: Link
-    description: How the plan or action sets the argument off.
-    aliases: [l]
-    recency_days: 1826
-  - id: internal-link
-    label: Internal link
-    description: The step that connects the link to the impact.
-    aliases: [il]
-    recency_days: 1826
-  - id: impact
-    label: Impact
-    description: What happens in the end, and why it matters. Older scholarship is fine.
-    aliases: [i, impacts]
-    recency_days: any
-  - id: answers
-    label: Answers (AT)
-    description: Evidence answering the other side's version of the argument.
-    aliases: [at, a2, answers-to]
-    recency_days: 1826
+families:
+  - id: da-and-advantage
+    label: DAs and advantages
+    kinds: [da, advantage, framework, theory]
+    needs:
+      - id: uniqueness
+        label: Uniqueness
+        description: Where things stand now, before the plan or action.
+        aliases: [uq, u]
+        recency_days: 365
+      - id: link
+        label: Link
+        description: How the plan or action sets the argument off.
+        aliases: [l]
+        recency_days: 1826
+      - id: internal-link
+        label: Internal link
+        description: The step that connects the link to the impact.
+        aliases: [il]
+        recency_days: 1826
+      - id: impact
+        label: Impact
+        description: What happens in the end, and why it matters. Older scholarship is fine.
+        aliases: [i, impacts]
+        recency_days: any
+      - id: answers
+        label: Answers (AT)
+        description: Evidence answering the other side's version of the argument.
+        aliases: [at, a2, answers-to]
+        recency_days: 1826
 
 arguments:
 

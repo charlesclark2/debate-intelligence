@@ -10,8 +10,10 @@ asks its providers the taxonomy's queries for that pair instead of the bare quer
 :func:`expand_with_templates` is deterministic: the same request, taxonomy and clock give the same
 queries in the same order. It
 
-1. resolves the argument and need by id or alias, refusing an unknown one with
-   :class:`UnknownExpansionChoice`, which lists the valid choices;
+1. resolves the argument by id or alias, and the need among the needs of the argument's family
+   (v1-e08-t08), refusing an unknown one with :class:`UnknownExpansionChoice`, which lists the valid
+   choices: for a need, that argument's needs, so a framework asked for uniqueness lists "framework
+   good" and answers;
 2. fills the variables: `query` is the search's own, the topic preset's values and the request's
    own come next, and `topic` falls back to the query;
 3. renders every template of the pair whose variables are all filled, in the taxonomy's order, and
@@ -127,19 +129,26 @@ class InvalidArgumentTaxonomy(ConfigurationError):
 
 
 class UnknownExpansionChoice(DomainError):
-    """A search named an argument, need, topic or variable the taxonomy does not have.
+    """A search named an argument, need, topic or variable the taxonomy does not have, or a need the
+    argument's family does not have.
 
     Carries the valid choices, so the CLI can print them rather than a bare refusal.
     """
 
-    def __init__(self, kind: str, value: str, choices: Sequence[str]) -> None:
+    def __init__(self, kind: str, value: str, choices: Sequence[str], *, argument: str | None = None) -> None:
         self.kind = kind
         """`argument`, `need`, `topic` or `variable`."""
         self.value = value
         """What the search named, as given."""
         self.choices = tuple(choices)
-        """Every valid id, in the taxonomy's order."""
-        super().__init__(f"unknown {kind} {value!r}; the {kind}s are: {', '.join(self.choices)}")
+        """Every valid id, in the taxonomy's order: for a need, the needs of the argument's family."""
+        self.argument = argument
+        """For a need, the argument whose needs `choices` are; otherwise None."""
+        if argument is None:
+            message = f"unknown {kind} {value!r}; the {kind}s are: {', '.join(self.choices)}"
+        else:
+            message = f"{argument} has no {kind} {value!r}; its {kind}s are: {', '.join(self.choices)}"
+        super().__init__(message)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -189,9 +198,12 @@ def _resolve(
     argument = taxonomy.find_argument(wanted.argument)
     if argument is None:
         raise UnknownExpansionChoice("argument", wanted.argument, [entry.id for entry in taxonomy.arguments])
-    need = taxonomy.find_need(wanted.need)
+    family = taxonomy.family_of(argument)
+    need = family.find_need(wanted.need)
     if need is None:
-        raise UnknownExpansionChoice("need", wanted.need, [entry.id for entry in taxonomy.needs])
+        raise UnknownExpansionChoice(
+            "need", wanted.need, [entry.id for entry in family.needs], argument=argument.id
+        )
     values: dict[str, str] = {"query": query}
     if wanted.topic_id is not None:
         topic = taxonomy.find_topic(wanted.topic_id)
@@ -396,8 +408,8 @@ class QueryExpansionStage:
         if self._guard is None:
             return self._fell_back(expansion, "model expansion is not configured", code=None)
         argument = self._taxonomy.find_argument(expansion.argument)
-        need = self._taxonomy.need(expansion.need)
         assert argument is not None  # the expansion was resolved against this taxonomy
+        need = self._taxonomy.family_of(argument).need(expansion.need)
         prompt = ModelPrompt(
             prompt_id=EXPAND_PROMPT_ID,
             prompt_version=self._prompt_version,

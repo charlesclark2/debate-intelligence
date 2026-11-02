@@ -1,22 +1,27 @@
 """The argument/need taxonomy a federated search expands its query with (v1-e08-t04).
 
 A debater looking for new evidence usually knows two things besides the words they type: which
-argument the card is for (a politics DA, the economy advantage, a util framework) and which part of
-that argument it has to prove (uniqueness, a link, an internal link, an impact, or an answer to the
-other side's version). `config/argument_taxonomy.yaml` writes both down, with the search queries
-each pair expands into and how recent the evidence for each need should be:
+argument the card is for (a politics DA, the economy advantage, a util framework, the states CP) and
+which part of that argument it has to prove (a DA's uniqueness or link, a framework's reasons it is
+good, a counterplan's solvency, a kritik's alternative, or an answer to the other side's version).
+`config/argument_taxonomy.yaml` writes both down, with the search queries each pair expands into and
+how recent the evidence for each need should be:
 
+* :class:`NeedFamily` — the needs one family of arguments has (v1-e08-t08): DAs and advantages have
+  uniqueness, link, internal link, impact and answers; a framework has only "framework good" and
+  answers; theory, counterplans and kritiks each have their own. The family is chosen by the
+  argument's kind, so an argument names it by being a `da`, a `framework` or a `cp`.
 * :class:`Need` — one part of an argument, with its default **recency window**: uniqueness is about
-  the status quo and wants the last week or two, while an impact card can be older scholarship.
+  the status quo and wants recent evidence, while an impact card or a philosophy card can be any age.
 * :class:`Argument` — one argument a debater researches, the events it is read in, and, for every
-  need, at least one :class:`QueryTemplate`.
+  need of its family, at least one :class:`QueryTemplate`.
 * :class:`QueryTemplate` — query text with variables such as `{query}`, `{topic}` and `{bill}`,
   and, when the need's default does not fit, a window of its own.
 * :class:`TopicPreset` — the values a topic gives its variables, taken from what is committed
   (`config/landscape/topics.yaml`'s resolutions), never from memory.
 
-:class:`ArgumentTaxonomy` validates the whole file when it loads. Every (argument, need) pair has at
-least one template that needs only the variables a search always has (:data:`ALWAYS_GIVEN_VARIABLES`),
+:class:`ArgumentTaxonomy` validates the whole file when it loads. Every argument has templates for
+exactly its family's needs, and every (argument, need) pair has at least one template that needs only the variables a search always has (:data:`ALWAYS_GIVEN_VARIABLES`),
 so any pair expands into at least one query whatever else the request gives. A template names only
 variables the file declares, and never a hard-coded current event: what changes week to week is a
 variable the request fills.
@@ -50,6 +55,7 @@ __all__ = [
     "ArgumentKind",
     "ArgumentTaxonomy",
     "Need",
+    "NeedFamily",
     "QueryTemplate",
     "RecencyDays",
     "ReviewStatus",
@@ -58,8 +64,9 @@ __all__ = [
     "template_variables",
 ]
 
-ARGUMENT_TAXONOMY_SCHEMA_VERSION: Final = 1
-"""The shape of `config/argument_taxonomy.yaml` this module reads."""
+ARGUMENT_TAXONOMY_SCHEMA_VERSION: Final = 2
+"""The shape of `config/argument_taxonomy.yaml` this module reads: 2 since v1-e08-t08 gave each argument
+family its own needs."""
 
 ALWAYS_GIVEN_VARIABLES: Final = frozenset({"query", "topic"})
 """The variables every expansion has a value for: the search's own query, and its topic, which is
@@ -134,6 +141,12 @@ class ArgumentKind(StrEnum):
     THEORY = "theory"
     """An argument about the rules of debate."""
 
+    COUNTERPLAN = "cp"
+    """A policy the negative reads instead of the plan: the states CP, a process CP."""
+
+    KRITIK = "k"
+    """A K: a criticism of the affirmative's assumptions, with an alternative."""
+
 
 class Need(DomainModel):
     """One part of an argument a card has to prove, and how recent its evidence should be."""
@@ -145,6 +158,27 @@ class Need(DomainModel):
     recency_days: RecencyDays = Field(
         description="The default window: evidence from the last N days, or `any` age."
     )
+
+
+class NeedFamily(DomainModel):
+    """The needs one family of arguments has, and the kinds of argument in it."""
+
+    id: Slug = Field(description="The family's id: `da-and-advantage`, `framing`, `counterplan`.")
+    label: NonEmptyText = Field(description="The family as a debater says it.")
+    kinds: tuple[ArgumentKind, ...] = Field(min_length=1, description="The kinds of argument it holds.")
+    needs: tuple[Need, ...] = Field(min_length=1, description="Its needs, in the order they are listed.")
+
+    def find_need(self, name: str) -> Need | None:
+        """The need of this family `name` is the id or an alias of, compared as :func:`normalized_choice` says."""
+        wanted = normalized_choice(name)
+        return next((need for need in self.needs if wanted in (need.id, *need.aliases)), None)
+
+    def need(self, need_id: str) -> Need:
+        """The need of this family with exactly this id; `KeyError` when there is none."""
+        for need in self.needs:
+            if need.id == need_id:
+                return need
+        raise KeyError(need_id)
 
 
 class QueryTemplate(DomainModel):
@@ -183,7 +217,9 @@ class Argument(DomainModel):
 
     id: Slug = Field(description="The argument's id, as `--argument` takes it: `politics-da`.")
     label: NonEmptyText = Field(description="The argument as a debater names it.")
-    kind: ArgumentKind = Field(description="DA, advantage, framework or theory.")
+    kind: ArgumentKind = Field(
+        description="DA, advantage, framework, theory, counterplan or kritik; it chooses the family."
+    )
     formats: tuple[Event, ...] = Field(min_length=1, description="The events it is read in.")
     aliases: tuple[Slug, ...] = Field(default=(), description="Other spellings `--argument` accepts.")
     landscape_id: Slug | None = Field(
@@ -198,7 +234,7 @@ class Argument(DomainModel):
         default=None, description="Anything the coach should know when reviewing."
     )
     templates: dict[Slug, tuple[QueryTemplate, ...]] = Field(
-        description="Each need's id, and the templates it expands into, in order."
+        description="Each need of the argument's family, and the templates it expands into, in order."
     )
 
 
@@ -219,12 +255,14 @@ def _repeated(values: Iterable[str]) -> list[str]:
 class ArgumentTaxonomy(DomainModel):
     """`config/argument_taxonomy.yaml`, validated whole when it loads."""
 
-    schema_version: Literal[1] = Field(description="The file's shape: 1.")
+    schema_version: Literal[2] = Field(description="The file's shape: 2.")
     taxonomy_version: NonEmptyText = Field(description="MAJOR.MINOR.PATCH, raised on every reviewed change.")
     variables: dict[str, NonEmptyText] = Field(
         description="Every variable a template may name, with what fills it. Must declare query and topic."
     )
-    needs: tuple[Need, ...] = Field(min_length=1, description="Every need, in the order they are listed.")
+    families: tuple[NeedFamily, ...] = Field(
+        min_length=1, description="Every argument family and its needs, in the order they are listed."
+    )
     arguments: tuple[Argument, ...] = Field(min_length=1, description="Every argument, in the order listed.")
     topics: tuple[TopicPreset, ...] = Field(default=(), description="Topic presets, by landscape topic id.")
 
@@ -233,10 +271,10 @@ class ArgumentTaxonomy(DomainModel):
         if not _SEMVER_PATTERN.fullmatch(self.taxonomy_version):
             raise ValueError(f"taxonomy_version {self.taxonomy_version!r} is not MAJOR.MINOR.PATCH")
         self._check_variables()
+        self._check_families()
         self._check_names()
-        need_ids = [need.id for need in self.needs]
         for argument in self.arguments:
-            self._check_templates(argument, need_ids)
+            self._check_templates(argument, self._family_of_kind(argument))
         for topic in self.topics:
             unknown = sorted(set(topic.variables) - set(self.variables))
             if unknown or "query" in topic.variables:
@@ -254,12 +292,43 @@ class ArgumentTaxonomy(DomainModel):
         if missing:
             raise ValueError(f"variables must declare {', '.join(missing)}")
 
-    def _check_names(self) -> None:
-        for what, entries in (("need", self.needs), ("argument", self.arguments)):
-            names = [entry.id for entry in entries] + [alias for entry in entries for alias in entry.aliases]
+    def _check_families(self) -> None:
+        repeated = _repeated(family.id for family in self.families)
+        if repeated:
+            raise ValueError(f"two families share the id {', '.join(repeated)}")
+        repeated = _repeated(kind.value for family in self.families for kind in family.kinds)
+        if repeated:
+            raise ValueError(f"two families take the kind {', '.join(repeated)}")
+        meanings: dict[str, tuple[str, str]] = {}
+        for family in self.families:
+            names = [name for need in family.needs for name in (need.id, *need.aliases)]
             repeated = _repeated(names)
             if repeated:
-                raise ValueError(f"two {what}s share the id or alias {', '.join(repeated)}")
+                raise ValueError(
+                    f"two needs of the {family.id} family share the id or alias {', '.join(repeated)}"
+                )
+            for need in family.needs:
+                for name in (need.id, *need.aliases):
+                    first = meanings.setdefault(name, (need.id, family.id))
+                    if first[0] != need.id:
+                        raise ValueError(
+                            f"{name} means {first[0]} in {first[1]} and {need.id} in {family.id}; a need's "
+                            "name means the same need in every family"
+                        )
+
+    def _family_of_kind(self, argument: Argument) -> NeedFamily:
+        family = next((family for family in self.families if argument.kind in family.kinds), None)
+        if family is None:
+            raise ValueError(f"argument {argument.id} is a {argument.kind.value}, which no family takes")
+        return family
+
+    def _check_names(self) -> None:
+        names = [entry.id for entry in self.arguments] + [
+            alias for entry in self.arguments for alias in entry.aliases
+        ]
+        repeated = _repeated(names)
+        if repeated:
+            raise ValueError(f"two arguments share the id or alias {', '.join(repeated)}")
         repeated = _repeated(topic.id for topic in self.topics)
         if repeated:
             raise ValueError(f"two topics share the id {', '.join(repeated)}")
@@ -270,12 +339,13 @@ class ArgumentTaxonomy(DomainModel):
                     "the landscape also counts takes the landscape's id"
                 )
 
-    def _check_templates(self, argument: Argument, need_ids: list[str]) -> None:
+    def _check_templates(self, argument: Argument, family: NeedFamily) -> None:
+        need_ids = [need.id for need in family.needs]
         unknown = sorted(set(argument.templates) - set(need_ids))
         if unknown:
             raise ValueError(
-                f"argument {argument.id} has templates for {', '.join(unknown)}, which is not a need; "
-                f"the needs are {', '.join(need_ids)}"
+                f"argument {argument.id} has templates for {', '.join(unknown)}, which is not a need of "
+                f"the {family.id} family; its needs are {', '.join(need_ids)}"
             )
         for need_id in need_ids:
             templates = argument.templates.get(need_id, ())
@@ -301,19 +371,17 @@ class ArgumentTaxonomy(DomainModel):
             (argument for argument in self.arguments if wanted in (argument.id, *argument.aliases)), None
         )
 
-    def find_need(self, name: str) -> Need | None:
-        """The need `name` is the id or an alias of, compared as :func:`normalized_choice` says."""
-        wanted = normalized_choice(name)
-        return next((need for need in self.needs if wanted in (need.id, *need.aliases)), None)
+    def family_of(self, argument: Argument) -> NeedFamily:
+        """The family whose needs `argument` has: the one that takes its kind."""
+        return self._family_of_kind(argument)
+
+    def find_need(self, argument: Argument, name: str) -> Need | None:
+        """The need of `argument`'s family that `name` is the id or an alias of; None for any other,
+        including another family's need."""
+        return self.family_of(argument).find_need(name)
 
     def find_topic(self, topic_id: str) -> TopicPreset | None:
         """The topic preset with this id."""
         wanted = normalized_choice(topic_id)
         return next((topic for topic in self.topics if topic.id == wanted), None)
 
-    def need(self, need_id: str) -> Need:
-        """The need with exactly this id; `KeyError` when there is none."""
-        for need in self.needs:
-            if need.id == need_id:
-                return need
-        raise KeyError(need_id)

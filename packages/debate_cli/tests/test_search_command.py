@@ -506,6 +506,61 @@ def test_an_unknown_expansion_choice_exits_2_listing_the_valid_ones(
 
 
 @pytest.mark.parametrize(
+    ("argument", "need", "listed", "not_listed"),
+    [
+        ("util", "uniqueness", ["framework-good", "answers"], "internal-link"),
+        ("theory", "impact", ["interpretation", "standards", "voters", "answers"], "uniqueness"),
+        ("process-cp", "link", ["solvency", "net-benefit", "competition", "answers"], "uniqueness"),
+        ("cap-k", "solvency", ["link", "impact", "alternative", "framework", "answers"], "net-benefit"),
+        ("politics-da", "alternative", ["uniqueness", "link", "internal-link", "impact", "answers"], "solvency"),
+    ],
+)
+def test_a_need_outside_the_arguments_family_exits_2_listing_that_arguments_needs(
+    seams: Seams, argument: str, need: str, listed: list[str], not_listed: str
+) -> None:
+    """v1-e08-t08: each argument family has its own needs, and `--need` is read within its argument's."""
+    result = search("health insurance", "--argument", argument, "--need", need)
+
+    assert result.exit_code == ExitCode.USAGE_ERROR == 2, result.output
+    said = " ".join(result.stderr.replace("│", " ").split())
+    assert f"{argument} has no need '{need}'; its needs are: {', '.join(listed)}" in said
+    assert not_listed not in said
+    assert seams.providers.requests == []
+
+
+@pytest.mark.parametrize(
+    ("argument", "need", "expanded_need", "windowed"),
+    [
+        ("util", "framework good", "framework-good", False),
+        ("states-cp", "NB", "net-benefit", True),
+        ("cap-k", "alt", "alternative", False),
+    ],
+)
+def test_each_familys_own_need_expands_before_any_provider_is_asked(
+    seams: Seams, argument: str, need: str, expanded_need: str, windowed: bool
+) -> None:
+    """Asked only of a provider that is not enabled, the search stops after expanding: exit 1 with the
+    expansion under `error.details`, and no request sent."""
+    result = search(
+        "health insurance",
+        "--argument",
+        argument,
+        "--need",
+        need,
+        "--providers",
+        "semantic_scholar",
+        json_output=True,
+    )
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    expansion = envelope(result)["error"]["details"]["expansion"]
+    assert (expansion["argument"], expansion["need"]) == (argument, expanded_need)
+    assert expansion["queries"]
+    assert all((query["since"] is not None) is windowed for query in expansion["queries"])
+    assert seams.providers.requests == []
+
+
+@pytest.mark.parametrize(
     ("arguments", "said"),
     [
         (["--since", "2026-10-01", "--until", "2026-09-01"], "after --until"),

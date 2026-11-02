@@ -426,6 +426,24 @@ def test_check_wheels_requires_a_feed_list_the_checkout_commits_after_the_wheel_
     ]
 
 
+def test_the_check_wheels_command_reads_the_feed_lists_of_the_checkout_it_names(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repository = tmp_path / "checkout"
+    shutil.copytree(REPO_ROOT / "config" / "feeds", repository / "config" / "feeds")
+    shutil.copyfile(
+        repository / "config" / "feeds" / "politics.yaml", repository / "config" / "feeds" / "new-topic.yaml"
+    )
+    dist = good_dist(tmp_path / "dist")
+
+    exit_code = sb.main(
+        ["check-wheels", "--version", VERSION, "--dist", str(dist), "--repository", str(repository)]
+    )
+
+    assert exit_code == 1
+    assert "missing debate_cli/_bundled_config/config/feeds/new-topic.yaml" in capsys.readouterr().err
+
+
 def test_check_wheels_refuses_when_the_checkout_commits_no_feed_lists_to_compare(tmp_path: Path) -> None:
     """With nothing to compare with, it cannot say every feed list was bundled, so it refuses."""
     repository = tmp_path / "checkout"

@@ -28,7 +28,8 @@ From :mod:`debate_cli.exit_codes`:
 The lawful path for an article the coach can read and the platform cannot, such as one behind a
 subscription (§19). The text comes from a file, or `-` for stdin, and is stored under the article for
 `--source-url` with `provenance_mode` USER_SUPPLIED, which every card cut from it carries. Nothing is
-fetched. It is stored only after the user attests lawful access: by answering the prompt in a terminal,
+fetched. `cut URL --from-paste` cuts from it (`v1-e06-t08`), and a page that is not ACCESSIBLE says so
+in its hint. It is stored only after the user attests lawful access: by answering the prompt in a terminal,
 or with `--i-have-lawful-access` anywhere else (with `--json`, when the text comes from stdin, or when
 stdin is not a terminal). A run that can neither prompt nor was given the flag stores nothing and
 exits 1.
@@ -47,6 +48,7 @@ from __future__ import annotations
 import asyncio
 import sys
 from collections.abc import Coroutine
+from shlex import quote
 from typing import Annotated, Any, NoReturn
 
 import typer
@@ -226,7 +228,9 @@ def _not_accessible(report: FetchReport, payload: dict[str, JsonValue]) -> Comma
         exit_code=ExitCode.RETRIEVAL_FAILURE,
         details=payload,
         hint="No snapshot was stored, so nothing can be cut from this source. Paywalls are never bypassed; "
-        "if you can read it lawfully, store your copy with --paste.",
+        "if you can read it lawfully, store your copy with "
+        f"--paste FILE --source-url {quote(report.requested_url)} "
+        f"and cut it with: debate-research cut {quote(report.requested_url)} --from-paste",
         panel_details={
             "access_status": report.access_status.value,
             "canonical_url": report.canonical_url,

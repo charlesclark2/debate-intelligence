@@ -750,7 +750,7 @@ async def test_a_user_supplied_snapshot_is_cut_whatever_status_its_user_reported
             ("authors", "title", "publication", "published_at", "canonical_url"),
         )
     ]
-    assert REQUIRED_CHECKS <= result.verification.checks_run, "every check against the snapshot ran"
+    assert result.verification.checks_run >= REQUIRED_CHECKS, "every check against the snapshot ran"
 
 
 async def test_a_snapshot_that_is_not_stored_is_rejected_and_nothing_is_saved(world: CardWorld) -> None:

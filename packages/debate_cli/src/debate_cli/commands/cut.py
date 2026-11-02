@@ -17,14 +17,28 @@ From :mod:`debate_cli.exit_codes`:
 * `1`: the cut could not run and nothing was saved, nor any card id printed: the model provider
   refused the call (`MODEL_ACCESS_DENIED`, `MODEL_REQUEST_REJECTED`), the snapshot is missing or
   damaged, a prompt is not registered, no answer was recorded for a replayed call, or the URL names
-  no source. These are exceptions; the root group maps them.
+  no source. These are exceptions; the root group maps them. With `--from-paste`, also no copy stored
+  for the URL (`NO_USER_SUPPLIED_COPY`), with a hint naming `fetch --paste`.
 * `2`: the command line was wrong: no `--need`, a `--format` no profile has, an `--output` in a
   directory that does not exist. Nothing is fetched.
 * `3`: the source is PAYWALLED, BLOCKED, ROBOTS_DISALLOWED, NOT_FOUND, UNSUPPORTED_TYPE or ERROR
   (`SOURCE_NOT_ACCESSIBLE`, with the status and the canonical URL), or the model provider did not
   answer or throttled the call. No card is saved and nothing is written.
 * `4`: the card is UNVERIFIED (`CARD_UNVERIFIED`): saved, written to `--output` with its banner, and
-  each reason printed.
+  each reason printed. A card cut `--from-paste` always is, for its cite (see below).
+
+## `--from-paste`
+
+The way to cut an article the coach can read and the platform cannot, such as one behind a library
+subscription (`v1-e06-t08`). `fetch --paste FILE --source-url URL` stores the coach's copy as
+USER_SUPPLIED, after they attest lawful access; `cut URL --from-paste` cuts from the newest copy stored
+for that URL's canonical form, through
+:meth:`~debate_core.application.article_fetch.ArticleFetch.user_supplied_copy`. Nothing is fetched,
+and the publisher's snapshot never stands in for the copy. The card carries USER_SUPPLIED provenance
+(the manifest's card says so, and its snapshot reference names that copy), its cite ends "user-supplied
+text", and its evidence is verified against the copy exactly as against a retrieved page. Its cite is
+not: the citation rules verify no cite field of text a user supplied (`v1-e06-t01`), so the card is
+UNVERIFIED for its cite alone (`CITATION_UNVERIFIED`, exit 4), and `verify` says the same.
 
 ## `--json`
 
@@ -42,10 +56,12 @@ import tempfile
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from pathlib import Path
+from shlex import quote
 from typing import Annotated, Any, NoReturn
 
 import typer
 
+from debate_cli.commands.fetch import ATTESTATION_FLAG
 from debate_cli.container import LOCAL_OWNER_ID, CardCutting
 from debate_cli.context import CliContext, cli_context, command_name
 from debate_cli.output import CliOutput, CommandFailure, OutputMode
@@ -57,6 +73,7 @@ from debate_cli.presenters.cut_presenter import (
     verdict_table,
 )
 from debate_core.application.article_fetch import ArticleFetch, FetchReport
+from debate_core.application.article_service import NoUserSuppliedCopy
 from debate_core.application.card_types import CutRequest, CutResult
 from debate_core.domain import AccessStatus
 from debate_core.domain.card import DEFAULT_FORMAT_PROFILE
@@ -94,7 +111,7 @@ def cut(
         bool,
         typer.Option(
             "--from-paste",
-            help="Cut from the copy you stored with fetch --paste for this URL, as USER_SUPPLIED. Fetches nothing.",
+            help="Cut from your copy of this URL stored with fetch --paste, as USER_SUPPLIED. No fetch.",
         ),
     ] = False,
     json_output: Annotated[
@@ -108,9 +125,13 @@ def cut(
     The card is written in the --format profile with its manifest embedded; progress goes to stderr.
     The model is called only when DEBATE_MODEL_MODE is live or record; otherwise its answers are replayed.
 
+    With --from-paste, cuts from the copy you stored with fetch --paste instead, and fetches nothing.
+    The card says it is USER_SUPPLIED; its cite is never verified, so it is UNVERIFIED (exit 4).
+
     Exit codes:
     0  the card is VERIFIED and was written to --output
-    1  could not run, nothing saved: a refused model call, a missing or damaged snapshot, an unknown prompt
+    1  could not run, nothing saved: a refused model call, a missing or damaged snapshot, an unknown
+       prompt, or for --from-paste no copy stored with fetch --paste
     2  usage error, for example an unknown --format
     3  PAYWALLED, BLOCKED, ROBOTS_DISALLOWED, NOT_FOUND, or the model did not answer; nothing written
     4  the card is UNVERIFIED: written with its banner, and each reason printed
@@ -132,7 +153,20 @@ def cut(
         )
 
     progress = CutProgress(cli.output, command_name(ctx))
-    done = _run(_cut(cli.services.article_fetch(), cutting, url, request_for, profile, progress))
+    try:
+        done = _run(
+            _cut(
+                cli.services.article_fetch(),
+                cutting,
+                url,
+                request_for,
+                profile,
+                progress,
+                from_paste=from_paste,
+            )
+        )
+    except NoUserSuppliedCopy as missing:
+        _end(cli, ctx, CommandFailure.from_exception(missing, hint=_paste_hint(url, output)))
     if done.result is None or done.document is None:
         _end(cli, ctx, not_accessible(done.report, output))
     _write(output, done.document)
@@ -185,12 +219,20 @@ async def _cut(
     request_for: Callable[[str], CutRequest],
     profile: ResolvedFormatProfile,
     progress: CutProgress,
+    *,
+    from_paste: bool,
 ) -> _Done:
-    """Fetch, then cut and export the card when the source is ACCESSIBLE: the three services, in order."""
+    """Fetch, or read the stored pasted copy, then cut and export the card: the three services, in order.
+
+    A retrieval is cut only when the source is ACCESSIBLE; a pasted copy whatever status its user
+    reported, as CardService decides.
+    """
     async with fetching, cutting:
-        report = await fetching.retrieve(url)
+        report = await (fetching.user_supplied_copy(url) if from_paste else fetching.retrieve(url))
         progress.fetched(report)
-        if report.access_status is not AccessStatus.ACCESSIBLE or report.snapshot is None:
+        if report.snapshot is None or (
+            not from_paste and report.access_status is not AccessStatus.ACCESSIBLE
+        ):
             return _Done(report)
         progress.extracted(report.snapshot)
         progress.selecting((CARD_SELECT_PROMPT_ID, CARD_MARKUP_PROMPT_ID))
@@ -200,6 +242,13 @@ async def _cut(
             [result.card], profile=profile, failures={result.card.card_id: result.reasons}
         )
         return _Done(report, result, document)
+
+
+def _paste_hint(url: str, output: Path) -> str:
+    return (
+        f"No card was cut and nothing was written to {output}. Store your copy first, if you can read it "
+        f"lawfully: debate-research fetch --paste FILE --source-url {quote(url)} {ATTESTATION_FLAG}"
+    )
 
 
 def _write(output: Path, document: bytes) -> None:

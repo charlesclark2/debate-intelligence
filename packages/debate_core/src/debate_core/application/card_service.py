@@ -6,7 +6,10 @@ what lies between, through the ports and services it is given (architecture prop
 
 1. **Read the snapshot record**, and refuse one whose access status is not ACCESSIBLE with
    :class:`~debate_core.application.card_types.SourceNotAccessibleError`, before any model call and
-   without making a card.
+   without making a card. A USER_SUPPLIED snapshot is the exception (`v1-e06-t08`): its access status
+   is what its user reported about the publisher (UNKNOWN unless they said), not the platform's
+   reading, and it was stored only on their attestation of lawful access. Its card carries
+   USER_SUPPLIED, and the citation rules verify no cite field of it, so it is never VERIFIED.
 2. **Load it** with every integrity check (:meth:`SnapshotService.load
    <debate_core.application.snapshot_service.SnapshotService.load>`). The model is shown that text,
    numbered by paragraph, and nothing else.
@@ -66,7 +69,7 @@ from debate_core.application.model_errors import ModelOutputError
 from debate_core.application.ports.persistence import ArticleRepository, CardRepository
 from debate_core.application.ports.providers import Clock, IdGenerator
 from debate_core.application.snapshot_service import LoadedSnapshot, SnapshotService
-from debate_core.domain import AccessStatus, Card
+from debate_core.domain import AccessStatus, Card, ProvenanceMode
 from debate_core.domain.provenance import SourcedArtifactMetadata
 from debate_core.evidence.card_mapping import place_evidence_on_card
 from debate_core.evidence.extractor import EvidenceExtractor
@@ -111,11 +114,13 @@ class CardService:
         """Cut, cite, verify and save one card for `request`; see the module docstring.
 
         Raises :class:`~debate_core.application.card_types.SourceNotAccessibleError` for a snapshot that
-        is not ACCESSIBLE, before any model call. Every failure after that which is about the card is a
-        reason on the saved UNVERIFIED card; the rest propagate with nothing saved.
+        is not ACCESSIBLE, unless a user supplied it, before any model call. Every failure after that
+        which is about the card is a reason on the saved UNVERIFIED card; the rest propagate with
+        nothing saved.
         """
         record = await self._articles.get_snapshot(request.snapshot_id)
-        if record.access_status is not AccessStatus.ACCESSIBLE:
+        attested = record.provenance_mode is ProvenanceMode.USER_SUPPLIED
+        if record.access_status is not AccessStatus.ACCESSIBLE and not attested:
             raise SourceNotAccessibleError(record.snapshot_id, record.access_status)
         loaded = await self._snapshots.load(record)
         article = await self._articles.get(record.article_id)

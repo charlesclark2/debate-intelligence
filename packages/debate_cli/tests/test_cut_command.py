@@ -579,13 +579,19 @@ PASTED_FULL_CITE: Final = (
 is the URL path's, the URL and accessed date the platform's record of what the user said, and nothing
 names an author, title or publication (`fetch --paste` titles the article with its URL, which is never
 taken as a title). The short cite falls back to "[no author]"; the note says whose text it is."""
+PASTED_CITE_MARKS: Final = (
+    "[author unverified] [title unverified] [publication unverified] [date unverified] [URL unverified] "
+    "[accessed date unverified]"
+)
+"""The renderer's mark for each cite field shown unverified, or required and missing, in cite order
+(v1-e06-t04): the credentials are neither shown nor required, so they have none."""
 PASTED_CITE_FIELDS: Final = ["authors", "title", "publication", "published_at", "canonical_url"]
 """Every required cite field: none is verified for user-supplied text, missing or not."""
 PASTED_BANNER: Final = "UNVERIFIED — not a finished card: CITATION_UNVERIFIED"
 
 
 def paste(url: str, tmp_path: Path) -> dict[str, Any]:
-    """Store `PASTED_TEXT` for `url` the way the coach does, `fetch --paste`; the stored snapshot's summary."""
+    """Store `PASTED_TEXT` for `url` as the coach does, `fetch --paste`; the stored snapshot's summary."""
     pasted = tmp_path / "library-copy.txt"
     pasted.write_text(PASTED_TEXT, encoding="utf-8")
     result = runner.invoke(
@@ -661,9 +667,13 @@ def test_a_card_cut_from_a_pasted_copy_is_unverified_for_its_cite_alone(
         ("CITATION_UNVERIFIED", "CITATION_UNVERIFIED", PASTED_CITE_FIELDS)
     ]
     paragraphs = read_paragraphs(out)
-    assert [(p.style_id, p.text) for p in paragraphs[:2]] == [("Heading4", TAG), ("Normal", PASTED_FULL_CITE)]
-    assert paragraphs[2].underlined == UNDERLINED
-    assert PASTED_BANNER in [p.text for p in paragraphs]
+    assert [(p.style_id, p.text) for p in paragraphs[:3]] == [
+        ("Heading4", TAG),
+        ("Normal", PASTED_BANNER),
+        ("Normal", f"{PASTED_FULL_CITE} {PASTED_CITE_MARKS}"),
+    ]
+    assert paragraphs[3].underlined == UNDERLINED
+    assert len(paragraphs) == 4
     [embedded] = embedded_manifest(out)["cards"]
     assert (embedded["evidence_text"], embedded["verification_status"]) == (EVIDENCE, "UNVERIFIED")
 
@@ -754,7 +764,7 @@ def test_from_paste_with_no_pasted_copy_stored_exits_1_with_the_fetch_paste_hint
     error = envelope(result)["error"]
     assert (error["code"], error["exit_code"]) == ("NO_USER_SUPPLIED_COPY", 1)
     assert error["details"]["canonical_url"] == NEWS_CANONICAL
-    assert f"fetch --paste FILE --source-url {NEWS_URL}" in error["hint"]
+    assert f"fetch --paste FILE --source-url '{NEWS_URL}' --i-have-lawful-access" in error["hint"]
     assert seams.transport.requested == requested, "no fetch stands in for a missing pasted copy"
     assert counting.calls == []
     assert not out.exists()

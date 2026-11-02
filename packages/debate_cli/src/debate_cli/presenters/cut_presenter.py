@@ -5,13 +5,14 @@ Every decision was made in `debate_core` before anything here runs: whether the 
 document holds (ExportService). This module only puts those answers into words and shapes:
 
 * **Progress**, one line per stage on stderr, in order: `fetch`, `extract`, `select`, `verify`,
-  `export`. Under `--json` each is an event object (:meth:`~debate_cli.output.CliOutput.event_line`),
-  so stdout still carries one object. `select` is announced before the model is asked, because that
-  is the stage a person waits on.
+  `export`. For `--from-paste` the `fetch` line says the stored USER_SUPPLIED copy answered. Under
+  `--json` each is an event object (:meth:`~debate_cli.output.CliOutput.event_line`), so stdout still
+  carries one object. `select` is announced before the model is asked, because that is the stage a
+  person waits on.
 * **The payload**: the card's id and status (`status`, as `verify` names a card's), the file, the
-  source and snapshot, each failure reason, each model call's provenance, and the manifest's
-  identity: its version, time, cards, snapshot references and the SHA-256 of the manifest bytes
-  embedded in the document. Never evidence text or
+  source with its provenance (USER_SUPPLIED for `--from-paste`) and snapshot, each failure reason,
+  each model call's provenance, and the manifest's identity: its version, time, cards, snapshot
+  references and the SHA-256 of the manifest bytes embedded in the document. Never evidence text or
   a model's words, as no `--json` payload carries them (:mod:`debate_cli.output`). The manifest itself,
   evidence included, is the one in the .docx.
 * **The failures**: a source that is not ACCESSIBLE (exit 3, the status with the canonical URL) and a
@@ -31,7 +32,7 @@ from debate_cli.exit_codes import ExitCode
 from debate_cli.output import CliOutput, CommandFailure, JsonValue, TableSpec
 from debate_core.application.article_fetch import SOURCE_NOT_ACCESSIBLE_CODE, FetchReport, SnapshotSummary
 from debate_core.application.card_types import CardFailure, CardFailureReason, CutResult
-from debate_core.domain import AccessStatus
+from debate_core.domain import AccessStatus, ProvenanceMode
 
 __all__ = [
     "ACCESS_STATUS_WORDS",
@@ -82,12 +83,20 @@ class CutProgress:
         self._command = command
 
     def fetched(self, report: FetchReport) -> None:
-        how = "fetched from the publisher" if report.fetched else "a recent stored snapshot answered"
+        provenance = report.provenance_mode
+        if provenance is ProvenanceMode.USER_SUPPLIED:
+            text = (
+                f"{provenance.value} {report.canonical_url} (your stored copy answered; nothing was fetched)"
+            )
+        else:
+            how = "fetched from the publisher" if report.fetched else "a recent stored snapshot answered"
+            text = f"{report.access_status.value} {report.canonical_url} ({how})"
         self._line(
             "fetch",
-            f"{report.access_status.value} {report.canonical_url} ({how})",
+            text,
             canonical_url=report.canonical_url,
             access_status=report.access_status.value,
+            provenance_mode=provenance.value if provenance is not None else None,
             fetched=report.fetched,
         )
 
@@ -142,6 +151,7 @@ def cut_payload(
             "requested_url": report.requested_url,
             "canonical_url": report.canonical_url,
             "access_status": report.access_status.value,
+            "provenance_mode": report.provenance_mode.value if report.provenance_mode is not None else None,
             "fetched": report.fetched,
             "snapshot_id": snapshot.snapshot_id if snapshot is not None else None,
             "snapshot_reused": snapshot.reused if snapshot is not None else None,
@@ -171,6 +181,7 @@ def verdict_table(result: CutResult, payload: dict[str, JsonValue], report: Fetc
         ("Written to", str(payload["output"])),
         ("Format profile", str(payload["format_profile"])),
         ("Source", report.canonical_url),
+        ("Provenance", report.provenance_mode.value if report.provenance_mode is not None else "none"),
         ("Snapshot", snapshot.snapshot_id if snapshot is not None else "none"),
         ("Model calls", calls or "none"),
         ("Manifest", f"version {manifest['manifest_version']}, SHA-256 {manifest['sha256']}"),

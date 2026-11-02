@@ -3,12 +3,12 @@
 
 | | |
 |---|---|
-| Policy version | 1.21 |
-| Status | **Approved**, version 1.21, on the merge of its pull request (2026-11-01; it tightens a rule, so it takes effect on merge). See [Approval](#approval). |
+| Policy version | 1.22 |
+| Status | **Approved**, version 1.22, on the merge of its pull request (approved by Charlie 2026-11-02). See [Approval](#approval). |
 | Owner | Charlie Clark (product owner and head coach) |
 | Written by | v1-e30-t01-caselist-data-use-policy implementation session, 2026-09-19 |
 | Applies to | Everything the platform collects from OpenCaselist and OpenEv, and everything derived from it, in every environment |
-| Approved by | Charlie Clark, product owner and head coach, 2026-09-19 (versions 1.0 and 1.1), 2026-10-01 (versions 1.3 and 1.4), 2026-10-10 (versions 1.5 and 1.6), 2026-10-11 (version 1.7), 2026-10-13 (version 1.8), 2026-10-15 (version 1.9), 2026-10-19 (version 1.10), 2026-10-22 (versions 1.11 and 1.12) and 2026-10-24 (versions 1.13, 1.14 and 1.15) and 2026-10-25 (versions 1.16, 1.17 and 1.18) and 2026-10-30 (version 1.19) and 2026-11-01 (versions 1.20 and 1.21) |
+| Approved by | Charlie Clark, product owner and head coach, 2026-09-19 (versions 1.0 and 1.1), 2026-10-01 (versions 1.3 and 1.4), 2026-10-10 (versions 1.5 and 1.6), 2026-10-11 (version 1.7), 2026-10-13 (version 1.8), 2026-10-15 (version 1.9), 2026-10-19 (version 1.10), 2026-10-22 (versions 1.11 and 1.12) and 2026-10-24 (versions 1.13, 1.14 and 1.15) and 2026-10-25 (versions 1.16, 1.17 and 1.18) and 2026-10-30 (version 1.19) and 2026-11-01 (versions 1.20 and 1.21) and 2026-11-02 (version 1.22) |
 | Next review | Start of the 2027-28 season, or sooner if a source's terms change |
 
 This is the policy that governs how the Debate Intelligence Platform collects, stores, uses and
@@ -204,7 +204,10 @@ Conditions, all required:
    session, a PM chat) is not the ModelRouter either. Card text, excerpts, and any listing that
    prints names from the caselist (the model evaluation's terminal hit listing prints schools, team
    codes and tournaments with words of card text around them) are read in the operator's terminal
-   and never pasted into such a session. What goes to a session is counts (version 1.21).
+   and never pasted into such a session. What goes to a session is counts (version 1.21). The
+   exception (version 1.22): a tag, a plan text or a counterplan text, each a summary of an argument,
+   may go to such a session. Evidence bodies, cites, and school names, team codes and debater names
+   never do.
 2. **No retention of our inputs, and no invocation logging, recorded for the account before the
    first full-corpus run** ([open question 4](#open-questions), resolved by the coach on 2026-11-01,
    version 1.20). What is recorded: AWS's
@@ -689,7 +692,7 @@ before the thing it gates.
 
 ## Approval
 
-**Version 1.21 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
+**Version 1.22 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
 real corpus into dev, model classification over real disclosed text, and automated download (E34)
 are unblocked, each still subject to its own conditions in [Gates](#gates). Version 1.1 recorded
 the maintainer's confirmation of scheduled API downloads and the 10-per-minute rate limit.
@@ -912,16 +915,25 @@ scrub misses; and condition 1 now says that a development or PM session is not t
 It tightens a rule, so it takes effect on merge, and merging its pull request records Charlie's
 approval below. Nothing else changes.
 
+Version 1.22 loosens [Model provider use](#model-provider-use) condition 1, by the coach's decision
+of 2026-11-02: a tag, a plan text or a counterplan text may go to a development or PM session,
+because each is a summary of an argument. Evidence bodies, cites, and school names, team codes and
+debater names still never do. It also records the close of version 1.21's incident's follow-up: on
+2026-11-02 hspolicy26's four model cassettes recorded under prompt 1.0.0, which held the 9 names the
+scrub had missed (condition 4), were deleted with `landscape cassettes --delete` after their last
+use. It loosens a rule, so it needs the coach's approval: Charlie approved version 1.22 on
+2026-11-02, and merging its pull request records the approval below.
+
 The standing rule for every future version: until this table records an approval of that version,
 nothing this policy governs may happen under it.
 
 | Field | Value |
 |---|---|
-| Policy version | 1.21 and 1.20 (2026-11-01); 1.19 (2026-10-30); 1.18, 1.17 and 1.16 (2026-10-25); 1.15, 1.14 and 1.13 (2026-10-24); 1.12 and 1.11 (2026-10-22); 1.10 (2026-10-19); 1.9 (2026-10-15); 1.8 (2026-10-13); 1.7 (2026-10-11); 1.6 and 1.5 (2026-10-10); 1.4 and 1.3 approved 2026-10-01, 1.3 including version 1.2's correction to rule 3; 1.0 and 1.1 approved 2026-09-19 |
+| Policy version | 1.22 (2026-11-02); 1.21 and 1.20 (2026-11-01); 1.19 (2026-10-30); 1.18, 1.17 and 1.16 (2026-10-25); 1.15, 1.14 and 1.13 (2026-10-24); 1.12 and 1.11 (2026-10-22); 1.10 (2026-10-19); 1.9 (2026-10-15); 1.8 (2026-10-13); 1.7 (2026-10-11); 1.6 and 1.5 (2026-10-10); 1.4 and 1.3 approved 2026-10-01, 1.3 including version 1.2's correction to rule 3; 1.0 and 1.1 approved 2026-09-19 |
 | Approved by | Charlie Clark |
 | Role | Product owner and head coach |
-| Approval date | 2026-11-01 (versions 1.20 and 1.21); 2026-10-30 (version 1.19); 2026-10-25 (versions 1.18, 1.17 and 1.16; 1.15, 1.14 and 1.13: 2026-10-24; 1.12 and 1.11: 2026-10-22; 1.10: 2026-10-19; 1.9: 2026-10-15; 1.8: 2026-10-13; 1.7: 2026-10-11; 1.5 and 1.6: 2026-10-10; 1.3 and 1.4: 2026-10-01; 1.0 and 1.1: 2026-09-19) |
-| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.21, including the [clause register](#clause-register) read 2026-09-19 and the [community disclosure norms](#community-disclosure-norms), both confirmed by Charlie |
+| Approval date | 2026-11-02 (version 1.22); 2026-11-01 (versions 1.20 and 1.21); 2026-10-30 (version 1.19); 2026-10-25 (versions 1.18, 1.17 and 1.16; 1.15, 1.14 and 1.13: 2026-10-24; 1.12 and 1.11: 2026-10-22; 1.10: 2026-10-19; 1.9: 2026-10-15; 1.8: 2026-10-13; 1.7: 2026-10-11; 1.5 and 1.6: 2026-10-10; 1.3 and 1.4: 2026-10-01; 1.0 and 1.1: 2026-09-19) |
+| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.22, including the [clause register](#clause-register) read 2026-09-19 and the [community disclosure norms](#community-disclosure-norms), both confirmed by Charlie |
 | Open questions resolved at approval | **5** — removal contact address is `ctcb57@gmail.com`. **7** — two-season retention stands. **8** — resolved by a PM spec change to v1-e29-t03 / v1-e30-t07. **2** (version 1.1) — maintainer confirmed scheduled API downloads at 10 file downloads per minute. **6** (version 1.10) — the school's activities director and IT approved the tool for students; no district review for the E39 pilot. **4** (version 1.20) — zero retention and no invocation logging recorded, by the coach's decision without a written no-training term |
 | Open questions accepted as known gaps | **1** — OpenCaselist privacy page unread. **3** — OpenEv distribution and per-camp terms unread |
 | Open questions left open | **6** — for the V2 tub only, if its scope goes beyond the pilot's |

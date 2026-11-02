@@ -433,5 +433,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e41-t15-ci-selection-once-and-no-queue
+    - id: t16
+      kind: Task
+      name: 'CI runs as many test parts as the selection needs, measures work stealing, and the bot''s dispatched run runs no Python job'
+      description: >-
+        CI runs as many test parts as the selection needs, measures work stealing, and the
+        bot's dispatched run runs no Python job.
+      inputs:
+        specRef: plan_specs/v1/e41-delivery-tooling-upkeep/t16-ci-matrix-sized-to-the-selection.yaml
+        goalRef: v1-e41-t16-ci-matrix-sized-to-the-selection
+      dependsOn:
+      - t15
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e41-t16-ci-matrix-sized-to-the-selection reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e41-t16-ci-matrix-sized-to-the-selection
 status:
   phase: Pending

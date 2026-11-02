@@ -490,3 +490,20 @@ evaluation and a landscape run.
    docs and the specs are clean.
 8. **Merge:** `scripts/task pr --partial` once `ci` is green. The PM records ac2 and ac3 in a batch
    and sets the Goal `Succeeded` when they pass.
+
+## PM note: the coach's review and the 1.0.0 cassettes (2026-11-02)
+
+Added by the PM. Nothing above is changed, and this is not a review.
+
+* **ac2.** The coach approved the review sheet's descriptions with nine corrections (pharma-da,
+  taxes-da, ai-da, democracy-da, advantage-cp, trump-k, antiblackness-k, psychoanalysis-k, aspec). He
+  answered the 13 rows: rows 9, 17, 43 and 45 keep their labels; 32, 38 and 47 take the model's answer;
+  34 and 58 fit either position; 11 is a Free Market CP answer; 30 and 59 are a health profiteering
+  advantage; 31 is a Federalism CP answer. `v1-e32-t41` (p1, filed in this batch) applies the
+  corrections and adds the three positions and a second label. ac2 is recorded PASS when it merges.
+* **The 1.0.0 cassettes.** Follow-up 1 was run from a scratch checkout of `28d4c88` on 2026-11-02 and
+  printed only row numbers. hspolicy26's four cassettes (three classification recordings and one
+  repair), which held the 9 names the scrub had missed, were then deleted with `landscape cassettes
+  --delete` (dry run first: 4 this caselist's alone, 0 shared, 0 unattributed), and a second listing
+  showed none. No 1.1.0 cassette existed, so nothing else was lost. The scratch checkout was removed.
+* **ac3** follows `v1-e32-t41` and the coach's relabelling.

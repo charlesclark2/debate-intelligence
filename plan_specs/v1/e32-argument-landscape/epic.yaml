@@ -926,5 +926,45 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e32-t40-model-stage-reads-the-argument-not-the-subject
+    - id: t41
+      kind: Task
+      name: 'The coach''s review applied: three new NHI positions, corrected descriptions, and a second accepted label in the coach sample'
+      description: >-
+        The coach's review applied: three new NHI positions, corrected descriptions, and a
+        second accepted label in the coach sample.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t41-coach-sample-second-label-and-three-new-positions.yaml
+        goalRef: v1-e32-t41-coach-sample-second-label-and-three-new-positions
+      dependsOn:
+      - t39
+      - t21
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t41-coach-sample-second-label-and-three-new-positions reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t41-coach-sample-second-label-and-three-new-positions
+    - id: t42
+      kind: Task
+      name: '`landscape cassettes --delete` can delete only one prompt version''s cassettes'
+      description: >-
+        `landscape cassettes --delete` can delete only one prompt version's cassettes.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t42-landscape-cassettes-delete-by-prompt-version.yaml
+        goalRef: v1-e32-t42-landscape-cassettes-delete-by-prompt-version
+      dependsOn:
+      - t36
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t42-landscape-cassettes-delete-by-prompt-version reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t42-landscape-cassettes-delete-by-prompt-version
 status:
   phase: Pending

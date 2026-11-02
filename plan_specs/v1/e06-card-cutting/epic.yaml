@@ -343,5 +343,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e06-t11-export-docx-refuses-a-mismatched-profile
+    - id: t12
+      kind: Task
+      name: 'A pasted copy''s cite fields can be stated when it is stored, so a card cut from it has a usable cite'
+      description: >-
+        A pasted copy's cite fields can be stated when it is stored, so a card cut from it
+        has a usable cite.
+      inputs:
+        specRef: plan_specs/v1/e06-card-cutting/t12-pasted-copy-cite-stated-by-the-user.yaml
+        goalRef: v1-e06-t12-pasted-copy-cite-stated-by-the-user
+      dependsOn:
+      - t08
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e06-t12-pasted-copy-cite-stated-by-the-user reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e06-t12-pasted-copy-cite-stated-by-the-user
 status:
   phase: Pending

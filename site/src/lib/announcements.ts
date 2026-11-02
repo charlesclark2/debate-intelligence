@@ -534,7 +534,15 @@ export function checkAnnouncements(contentDirectory: string = defaultContentDire
       consent,
     })
     if (errors.length > 0) {
-      problems.push(...errors)
+      // Once each: the summary repeats the body's opening, and a linked address is in the link
+      // text and its target, so the guard meets the same problem more than once in one file.
+      const seen = new Set<string>()
+      for (const error of errors) {
+        if (!seen.has(describeFinding(error))) {
+          seen.add(describeFinding(error))
+          problems.push(error)
+        }
+      }
       return
     }
     read.push(outcome)

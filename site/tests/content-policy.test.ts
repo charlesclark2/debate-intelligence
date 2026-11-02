@@ -28,6 +28,7 @@ import {
   resetPolicyReporting,
   unreviewedNames,
 } from '@/lib/publishing-policy'
+import { announcementsGuardedContent } from '@/lib/announcements'
 import { resultsGuardedContent } from '@/lib/results'
 import { loadSchedule, scheduleGuardedContent } from '@/lib/tournaments'
 
@@ -139,6 +140,7 @@ function guardErrors(directory: string): string[] {
       ...loadGuardedContent(directory),
       ...scheduleGuardedContent(directory),
       ...resultsGuardedContent(directory),
+      ...announcementsGuardedContent(directory),
       ...consentGuardedContent(directory),
     ],
     settings: loadSiteSettings(directory),
@@ -763,6 +765,7 @@ describe('the content this site actually ships', () => {
     ...loadGuardedContent(),
     ...scheduleGuardedContent(),
     ...resultsGuardedContent(),
+    ...announcementsGuardedContent(),
     ...consentGuardedContent(),
   ]
 
@@ -811,6 +814,7 @@ describe('the content this site actually ships', () => {
       'content/events.yaml',
       'content/schedule.yaml',
       'content/results.yaml, labels',
+      'content/news.yaml',
     ]) {
       expect(guarded, `${filePath} is not checked by the publishing-policy guard`).toContain(
         filePath,

@@ -1,6 +1,8 @@
 import { cleanup } from '@testing-library/react'
 import { afterEach, beforeEach, vi } from 'vitest'
 
+import { TEST_BUILD_DATE } from './build-date'
+
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean
 }
@@ -39,15 +41,9 @@ globalThis.IntersectionObserver = InertIntersectionObserver
  * site/content/. This stub turns any stray fetch into a loud failure rather than a hung test or
  * a real request, which is what docs/process/working-agreements.md §1 asks of PR-path tests.
  */
-/**
- * The day every test builds the site as of (v1-e37-t03). An announcement is published from its
- * date to its expiry, judged against the build date, so a test that read the clock would pass or
- * fail by the day it ran. The loader reads SITE_BUILD_DATE before the clock, and every test starts
- * with it set to this; a test about another day stubs its own. Restored by vi.unstubAllEnvs().
- */
-export const TEST_BUILD_DATE = '2026-11-02'
-
 beforeEach(() => {
+  // Every test builds the site as of one fixed day, so none reads the clock (tests/build-date.ts).
+  // vi.unstubAllEnvs() below restores it after each test, and the next test sets it again.
   vi.stubEnv('SITE_BUILD_DATE', TEST_BUILD_DATE)
   vi.stubGlobal('fetch', () => {
     throw new Error('Network access is not allowed in the site test suite')

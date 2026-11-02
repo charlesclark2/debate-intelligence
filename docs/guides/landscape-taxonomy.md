@@ -727,6 +727,36 @@ codes and school names, since a decision copies a heading teams wrote into the r
 that names a school or a team, by any form, gets no decision: leave it blank. A decision changes
 counts from the next run without a `taxonomy_version` bump.
 
+## Your labelled sample of cards
+
+The model stage is measured against cards you labelled by hand: a sample of 60 unplaced cards, in a CSV
+kept outside the repository (`~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv`
+for the Policy topic). `debate-research landscape evaluate` reads two of its columns, and a third when
+it is there:
+
+| Column | What you write |
+|---|---|
+| `sample_row` | Already filled: the card's row number. Leave it as it is |
+| `position` | The position id the card argues, `none` for a card that argues no position, or `unsure` or nothing for a card you will not label. Only a position id or `none` is scored |
+| `also` | Optional. A second position id you accept for the card, when it fits two positions equally well. An answer naming either is scored right |
+
+A second label is a position id of the taxonomy, never `none`, and never the same as the row's
+`position`. A card labelled `none` takes none, since an answer naming any position is wrong for it. A
+row you mark `unsure` or leave blank is not scored, so its `also` is not read. A sample without the
+`also` column scores exactly as before. The breakdown counts how many cards were scored right on their
+second label, and its table of label against answer stays on the first.
+
+To check the file after an edit, without asking the model anything or reading any card, the operator
+runs this in a checkout on the Mac that holds the store. It takes a few seconds:
+
+```bash
+uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample ~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv --sample-rows ~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl --check-sample
+```
+
+It prints the labelled rows by the kind of their position, and the second labels by theirs: counts
+only. A label the taxonomy does not have, or a second label that breaks the rules above, is refused
+with `EVALUATION_REFUSED` and the row number.
+
 ## Seeding a new taxonomy
 
 A taxonomy is seeded, not invented. For a new topic, the operator runs the seeding script over the

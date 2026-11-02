@@ -6,7 +6,8 @@ One evaluation, for one caselist (one format) at its newest weekly snapshot unle
 1. **reads the coach's labels**: `v1-e32-t21`'s coach sample, the CSV the coach filled (`sample_row`,
    `position`) and the rows file written beside it (`sample_row` to item id), so a card the coach labelled
    for t21 is labelled once for both (:func:`read_coach_sample`). A label is a position id of the topic's
-   taxonomy, `none` for a card that argues no position, or `unsure` or blank, which is not scored;
+   taxonomy, `none` for a card that argues no position, or `unsure` or blank, which is not scored. An
+   optional `also` column names a second position the coach accepts (`v1-e32-t41`);
 2. **reads each labelled card** from the parsed store exactly as a landscape run reads it
    (:func:`~debate_core.application.position_classification.model_candidate`), and asks the model stage
    about all of them, whatever stage one made of them, under the run's model mode: `replay` serves the
@@ -214,7 +215,9 @@ def read_coach_sample(sample: TextIO, rows: Iterable[str], taxonomy: Taxonomy) -
 
     `rows` is JSON lines: a header line, then one object per card with its `sample_row` and `item_id`, as
     `v1-e32-t21` writes them. A label naming no active position of `taxonomy`, or a row the rows file does
-    not have, is refused by its row number.
+    not have, is refused by its row number. So is a second label (:data:`SECOND_LABEL_COLUMN`) that is
+    `none`, the row's own label or no active position, or that a row labelled `none` gives; a row that is
+    not scored is not read for one.
     """
     by_row: dict[int, str] = {}
     strata: dict[int, str] = {}

@@ -18,6 +18,10 @@ Beside each card is what stage one, the deterministic matcher, makes of it (:cla
 and whether a real run would send it to the model at all: only a card stage one leaves unplaced or places
 below the threshold is sent, so the bar applies to those (:func:`model_set_score`).
 
+A card the coach gave a second label (`v1-e32-t41`) is correct when the answer names either label
+(:func:`second_label_counts` counts those right on the second); a wrong answer, its kind and the confusion
+table are judged against the first label.
+
 Pure: values in, values out. A card is named by its row in the coach's file and its labels and answers
 by taxonomy ids, which are committed; nothing here holds a heading, tag or card text.
 """

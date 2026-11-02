@@ -148,6 +148,13 @@ to the model, and the score by the sample's strata. `data.breakdown` holds those
 counts by kind and field. The hits themselves, each with its text, field, kind, matched words and the
 words either side, are printed in a terminal only: never in `--json`, a log or a file, and not when
 stdout is not a terminal.
+
+The sample may give a card a second label the coach accepts, in an `also` column (`v1-e32-t41`): an answer
+naming either label is correct, and `data.breakdown.second_label` counts the cards with one and those
+right on it; the confusion table and the label kinds stay on the first label. `--check-sample` reads the
+sample against the caselist's taxonomy as the evaluation would, refusing it as the evaluation would, and
+prints its rows by label kind and its second labels by kind. It reads no card, asks no model and records
+nothing, so it takes no `--breakdown` and no `--model-mode record` (`CHECK_SAMPLE_ASKS_NO_MODEL`).
 """
 
 from __future__ import annotations

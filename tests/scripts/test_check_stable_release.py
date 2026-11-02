@@ -249,7 +249,7 @@ def test_a_tag_that_is_not_vxyz_is_refused_and_nothing_else_is_checked(checkout:
 def test_a_tag_that_does_not_name_the_package_version_is_refused(tmp_path: Path) -> None:
     checkout = write_checkout(tmp_path, version="1.4.2")
 
-    assert refused(outcomes(checkout))["version"] == (
+    assert refused(outcomes(checkout)).get("version") == (
         "v1.5.0 does not name packages/debate_cli/pyproject.toml's version 1.4.2"
     )
 
@@ -259,7 +259,7 @@ def test_a_workspace_pyproject_off_the_version_source_is_refused(checkout: Path)
         '[project]\nname = "debate-core"\nversion = "1.4.0"\n', encoding="utf-8"
     )
 
-    assert refused(outcomes(checkout))["version"] == (
+    assert refused(outcomes(checkout)).get("version") == (
         "packages/debate_core/pyproject.toml has version 1.4.0, but packages/debate_cli/pyproject.toml "
         "(the version source) has 1.5.0"
     )
@@ -289,7 +289,7 @@ def test_a_release_whose_epic_is_not_succeeded_is_refused_naming_it(tmp_path: Pa
 def test_every_unfinished_epic_is_named(tmp_path: Path) -> None:
     checkout = write_checkout(tmp_path, e09_phase="Pending", e42_phase="Blocked")
 
-    assert refused(outcomes(checkout))["epics"] == (
+    assert refused(outcomes(checkout)).get("epics") == (
         "plan_specs/releases/v1.5.yaml: v1-e09-quality-pilot is Pending; v1-e42-pilot-upkeep is Blocked"
     )
 
@@ -409,7 +409,7 @@ def test_the_committed_changelog_has_a_section_for_each_v1_release() -> None:
 def test_a_commit_main_never_pointed_at_is_refused(checkout: Path) -> None:
     history = FakeHistory(main_line={OLDER_MAIN})
 
-    assert refused(outcomes(checkout, history=history))["on-main"] == (
+    assert refused(outcomes(checkout, history=history)).get("on-main") == (
         f"{MERGE} is not a commit main has pointed at (origin/main, first parents): a stable tag goes on "
         "the merge commit of a promotion into main, never on a dev or task commit"
     )
@@ -430,7 +430,7 @@ def test_a_commit_with_one_parent_is_not_a_promotion(checkout: Path) -> None:
 def test_a_merge_no_pull_request_made_is_refused(checkout: Path) -> None:
     github = FakeGitHub(pulls=[promotion(merged=False), promotion(number=700, merge_commit_sha=OLDER_MAIN)])
 
-    assert refused(outcomes(checkout, github=github))["promotion-merge"] == (
+    assert refused(outcomes(checkout, github=github)).get("promotion-merge") == (
         f"no merged pull request has {MERGE} as its merge commit"
     )
 
@@ -455,7 +455,7 @@ def test_a_merge_that_is_not_a_promotion_of_dev_into_main_is_refused(
 ) -> None:
     github = FakeGitHub(pulls=[promotion(**changes)])
 
-    assert refused(outcomes(checkout, github=github))["promotion-merge"] == (
+    assert refused(outcomes(checkout, github=github)).get("promotion-merge") == (
         f"{where}; only a promotion of {REPOSITORY}:dev into main is released (a hotfix or site change "
         "reaches a release through the next promotion)"
     )
@@ -464,7 +464,7 @@ def test_a_merge_that_is_not_a_promotion_of_dev_into_main_is_refused(
 def test_a_promotion_whose_head_is_not_the_dev_parent_is_refused(checkout: Path) -> None:
     github = FakeGitHub(pulls=[promotion(head_sha=OLDER_MAIN)])
 
-    assert refused(outcomes(checkout, github=github))["promotion-merge"] == (
+    assert refused(outcomes(checkout, github=github)).get("promotion-merge") == (
         f"#812 merged {REPOSITORY}:dev into main, but its head {OLDER_MAIN} is not {MERGE}'s second parent "
         f"{DEV_PARENT}"
     )

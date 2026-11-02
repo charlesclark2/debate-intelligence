@@ -1451,7 +1451,8 @@ class ServiceContainer:
         """The discovery providers `providers.enabled` names, each wrapped in its breaker (`v1-e08-t05`).
 
         :meth:`~debate_core.integrations.discovery.registry.ProviderRegistry.from_settings` over this
-        build's three adapters: OpenAlex (`openalex_factory`, `v1-e07-t02`), the publisher feeds
+        build's four adapters: OpenAlex (`openalex_factory`, `v1-e07-t02`), Crossref
+        (`crossref_factory`, `v1-e07-t03`, not enabled by default), the publisher feeds
         (`feed_factory`) and Google News's RSS search (`google_news_factory`, `v1-e07-t05`). The feed
         providers read the committed `config/feeds/` topics and keep a
         :class:`~debate_core.integrations.discovery.feed_cache.FileFeedCache` in `<data dir>/feeds/`.
@@ -1467,6 +1468,7 @@ class ServiceContainer:
 
     def _build_discovery_providers(self) -> ProviderRegistry:
         from debate_cli import package_version
+        from debate_core.integrations.discovery.crossref import crossref_factory
         from debate_core.integrations.discovery.feed_cache import FEED_CACHE_DIRECTORY, FileFeedCache
         from debate_core.integrations.discovery.feed_config import FeedConfigError, load_feed_directory
         from debate_core.integrations.discovery.feeds import feed_factory
@@ -1498,6 +1500,9 @@ class ServiceContainer:
         cache = FileFeedCache(settings.storage.data_dir / FEED_CACHE_DIRECTORY)
         factories = {
             SearchProviderName.OPENALEX: openalex_factory(
+                settings.http, version=version, clock=clock, transport=transport
+            ),
+            SearchProviderName.CROSSREF: crossref_factory(
                 settings.http, version=version, clock=clock, transport=transport
             ),
             SearchProviderName.RSS: feed_factory(

@@ -61,6 +61,11 @@ spec:
       # default, with a test that providers.enabled=["crossref"] builds it.
       - packages/debate_cli/src/debate_cli/container.py
       - packages/debate_cli/tests/test_search_command.py
+      # v1-e07-t03 session, 2026-11-02 (Deviation, for the PM to confirm): wiring the factory adds
+      # debate_core.integrations.discovery.crossref to the integrations these two tests pin by hand
+      # (41 becomes 42, and it takes httpx from the http extra).
+      - packages/debate_cli/tests/commands/test_doctor.py
+      - packages/debate_cli/tests/test_installation.py
       # PM ruling 2026-11-02 (v1-e07-t03 Q3: A): the search table shows a year or month date as "2021"
       # or "2021-03". The JSON is unchanged here.
       - packages/debate_cli/src/debate_cli/presenters/search_presenter.py

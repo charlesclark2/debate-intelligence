@@ -57,6 +57,23 @@ NOW: Final = datetime(2026, 10, 21, 12, 0, tzinfo=UTC)
 """The container's clock, and the providers': after every fixture item, so recency is counted from it."""
 
 OPENALEX_HOST: Final = "api.openalex.org"
+CROSSREF_HOST: Final = "api.crossref.org"
+CROSSREF_WORKS: Final = {
+    "status": "ok",
+    "message-type": "work-list",
+    "message": {
+        "items": [
+            {
+                "DOI": "10.5555/invented.report.2021",
+                "type": "report",
+                "title": ["Subsidy design for capture plants"],
+                "author": [{"name": "Invented Energy Institute", "sequence": "first"}],
+                "issued": {"date-parts": [[2021]]},
+            }
+        ]
+    },
+}
+"""One Crossref item, written by hand: a report dated by its year alone (v1-e07-t03)."""
 FEED_URL: Final = "https://news.example.org/rss/politics.xml"
 TOPICS: Final = (
     FeedConfig(
@@ -167,6 +184,8 @@ class RecordedProviders:
                 return httpx.Response(self.openalex_status)
             body = (FIXTURES / self.works_body).read_bytes()
             return httpx.Response(200, headers={"content-type": "application/json"}, content=body)
+        if request.url.host == CROSSREF_HOST and request.url.path == "/works":
+            return httpx.Response(200, json=CROSSREF_WORKS)
         if str(request.url) == FEED_URL or (self.any_feed_url and request.url.host != OPENALEX_HOST):
             if self.feed_status != 200:
                 return httpx.Response(self.feed_status)
@@ -661,6 +680,30 @@ def test_the_container_registers_openalex_feeds_and_google_news_and_closes_them(
     providers = [entry["provider"] for entry in envelope(result)["data"]["providers"]]
     assert providers == ["openalex", "rss", "google_news"]
     assert seams.providers.transport.closed == 3
+
+
+def test_the_container_builds_crossref_when_providers_enabled_names_it(
+    seams: Seams, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seams.registry_override = False
+    monkeypatch.setenv("DEBATE_PROVIDERS__ENABLED", '["crossref"]')
+
+    result = search("carbon capture subsidies", "--format", "json")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    data = envelope(result)["data"]
+    assert [(entry["provider"], entry["outcome"]) for entry in data["providers"]] == [("crossref", "ok")]
+    [item] = data["results"]
+    assert (item["title"], item["identifiers"]["doi"], item["source_type"]) == (
+        "Subsidy design for capture plants",
+        "10.5555/invented.report.2021",
+        "other",
+    )
+    assert item["published_at"] == "2021-01-01T00:00:00+00:00"
+    [request] = [request for request in seams.providers.requests if request.url.host == CROSSREF_HOST]
+    assert request.url.params["query.bibliographic"] == "carbon capture subsidies"
+    assert "mailto" not in request.url.params
+    assert seams.providers.transport.closed == 1
 
 
 def test_the_test_profile_refuses_an_enabled_provider_without_a_transport(

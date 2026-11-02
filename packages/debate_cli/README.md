@@ -76,6 +76,28 @@ $ debate-research --version --json | jq .data
  "environment": "dev", "environment_source": "build-channel:dev"}
 ```
 
+A stable release `vX.Y.Z` is the build the team uses. It is published by
+`.github/workflows/release.yml` when its tag is pushed on `main`, and only for the merge commit of
+a validated dev → main promotion (v1-e09-t06). Install it the same way, by its tag:
+
+```console
+$ scripts/install_channel.sh v1.1.0
+$ debate-research --version
+```
+
+`--version` names the tag's version, channel `stable` and environment `prod`. The script is the
+one-line install. It verifies the release's `SHA256SUMS` before installing anything, and installs
+both wheels by their file URLs, so no package index can supply either name. Plain
+`uv tool install` of the two downloaded wheels also works, but checks none of that:
+
+```console
+$ gh release download v1.1.0 --repo charlesclark2/debate-intelligence --pattern '*.whl' --dir debate-research-v1.1.0
+$ uv tool install --python '>=3.12,<3.13' "debate-cli @ file://$PWD/debate-research-v1.1.0/debate_cli-1.1.0-py3-none-any.whl" --with "debate-core @ file://$PWD/debate-research-v1.1.0/debate_core-1.1.0-py3-none-any.whl"
+```
+
+No extra is optional at install time. The CLI's own requirement names every `debate-core` extra
+its commands wire, Bedrock's boto3 (`aws`) among them, so either command installs all of them.
+
 | Where it came from | `channel` | `DEBATE_ENV` unset means | Configuration read from |
 |---|---|---|---|
 | A source checkout (`uv run`) | `local` | `dev` | the checkout's `config/` |

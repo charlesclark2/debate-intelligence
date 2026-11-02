@@ -208,3 +208,28 @@ text, words of the committed taxonomy, or words of the cards that text sent.
 * **The repair cassette holds the repaired batch again.** All 182 of its hits repeat its repaired prompt,
   6 of them the heading names. The evaluation's scan does not read it.
 
+
+## Before the re-record: what `v1-e32-t40` changed (2026-11-01)
+
+From the PM's rulings on `v1-e32-t39`'s six options. No count here yet: the re-record waits on the
+coach's approval of the descriptions ([the record runbook](../runbooks/landscape-model-evaluation-record.md)).
+
+* **Descriptions.** Every active position the Policy prompt sends now has a one-line description:
+  102 drafted (81 of `policy-2026-27-nhi`'s, 21 of `generic.yaml`'s Policy positions), beside
+  `kritikal-aff`'s, written in `v1-e32-t17`. Taxonomy `policy-2026-27-nhi` 1.4.1 and `generic` 1.1.1; no
+  alias, id, kind or side changed, so no count moves. They are drafts until the coach approves or
+  corrects them.
+* **Prompt `landscape.classify_position` 1.1.0.** It asks for the argument a card is read as in a round,
+  not the subject it is about, explains each position's side and description, sends a card of a kind no
+  named position fits to that kind's generic position where the list has one, and states the
+  280-character rationale limit. Batches stay at 20 cards.
+* **The scrub.** The scan's whole third list, every disclosing team's school, team code and tournament
+  in the reading, comes out of each card's heading path, tag, short cite and excerpt before it is sent.
+  It is what put the 9 heading-path names above into the prompt inputs.
+* **The scan.** It reads field values, never a JSON key (the 178 key hits above), leaves out the
+  committed positions text (the taxonomy-word hits above), holds only the disclosing teams'
+  tournaments on its third list, reads the repair cassettes of the prompt version filed under the
+  caselist, and reads only the cassettes of the prompt version the evaluation ran. The scan counts in
+  the sections above were taken by the earlier rules.
+* **Unchanged:** the coach's labels, the 85% bar, the set it applies to, the review threshold of 0.6,
+  and the 47 cards.

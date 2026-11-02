@@ -5,9 +5,11 @@
 #
 # 1.1.0 (2026-10-24, the coach's first review-queue pass, v1-e32-t05): added generic-k and
 # generic-theory for Policy, each with the queue headings the coach placed under it as aliases.
+# 1.1.1 (2026-11-01, v1-e32-t40, for the coach's review): a one-line description drafted for every
+# position, which the model stage sends; policy-2026-27-nhi moves to 1.4.1 with it.
 schema_version: 1
 topic_id: generic
-taxonomy_version: 1.1.0
+taxonomy_version: 1.1.1
 event: null
 positions:
 
@@ -16,66 +18,77 @@ positions:
     label: Cap K
     kind: k
     side: neg
+    description: The affirmative's reform props up capitalism; the alternative rejects capitalism.
     events: [POLICY]
     aliases: [cap k, k cap, capitalism k, k capitalism]
   - id: racial-capitalism-k
     label: Racial capitalism K
     kind: k
     side: neg
+    description: The affirmative ignores how capitalism depends on racial hierarchy; the alternative rejects racial capitalism.
     events: [POLICY]
     aliases: [racial cap k]
   - id: security-k
     label: Security K
     kind: k
     side: neg
+    description: The affirmative's threat scenarios, such as war, pandemics or bioterror, are securitization that justifies violence.
     events: [POLICY]
     aliases: [security k, k security]
   - id: biopolitics-k
     label: Biopolitics K
     kind: k
     side: neg
+    description: The plan's management of health is biopolitical control over life and populations.
     events: [POLICY]
     aliases: [biopolitics k, k biopolitics]
   - id: settler-colonialism-k
     label: Settler colonialism K
     kind: k
     side: neg
+    description: The affirmative takes for granted the settler state on Indigenous land; the alternative is decolonization.
     events: [POLICY]
     aliases: [settler colonialism k, settler colonialism kritik, set col k, k set col]
   - id: colonialism-k
     label: Colonialism K
     kind: k
     side: neg
+    description: The affirmative reproduces colonial relations between nations or peoples, beyond the settler state.
     events: [POLICY]
     aliases: [colonialism k]
   - id: antiblackness-k
     label: Antiblackness K
     kind: k
     side: neg
+    description: The affirmative's reform cannot reach antiblackness, which structures the state and health care.
     events: [POLICY]
     aliases: [antiblackness k, k antiblackness]
   - id: psychoanalysis-k
     label: Psychoanalysis K
     kind: k
     side: neg
+    description: The affirmative's desire to fix health care or to avert its impacts is read through psychoanalysis.
     events: [POLICY]
     aliases: [psychoanalysis k, k psychoanalysis]
   - id: queer-k
     label: Queer K
     kind: k
     side: neg
+    description: The affirmative's vision of health or of the future excludes queer life; queer theory is the alternative.
     events: [POLICY]
     aliases: [queer k, queer intelligibility k]
   - id: buddhism-k
     label: Buddhism K
     kind: k
     side: neg
+    description: The affirmative's attachment to outcomes produces suffering; the alternative is Buddhist non-attachment.
     events: [POLICY]
     aliases: [buddhism k, k buddhism]
   - id: generic-k
     label: Generic K
     kind: k
     side: neg
+    description: A kritik card, a link, alternative, framework or impact, that fits no named kritik in this list.
     events: [POLICY]
     aliases: [ontology]
 
@@ -84,6 +97,7 @@ positions:
     label: T-USFG / framework
     kind: t
     side: neg
+    description: The affirmative must defend a plan by the federal government; read against affirmatives with no plan.
     events: [POLICY]
     aliases: [t usfg, t framework]
 
@@ -92,6 +106,7 @@ positions:
     label: Politics DA
     kind: da
     side: neg
+    description: Passing the plan spends political capital or changes Congress's agenda, so another item on it fails.
     events: [POLICY]
     aliases: [politics da, da politics]
 
@@ -100,6 +115,7 @@ positions:
     label: Process CP
     kind: cp
     side: neg
+    description: The plan, enacted through a different process, such as a consultation, a commission or a referendum.
     events: [POLICY]
     aliases: [process cp]
 
@@ -108,41 +124,48 @@ positions:
     label: Conditionality bad
     kind: theory
     side: aff
+    description: The negative's conditional counterplans or kritiks are unfair, a reason to reject them or the negative.
     events: [POLICY]
     aliases: [condo, theory conditionality]
   - id: fifty-state-fiat-bad
     label: 50-state fiat bad
     kind: theory
     side: aff
+    description: The negative may not fiat that all fifty states act together.
     events: [POLICY]
     aliases: [50 state fiat, fifty state fiat, theory 50 state fiat, theory 50 state fiat bad]
   - id: process-cps-bad
     label: Process CPs bad
     kind: theory
     side: aff
+    description: Counterplans that change only how the plan is passed are illegitimate.
     events: [POLICY]
     aliases: [theory process cps]
   - id: aspec
     label: ASPEC
     kind: theory
     side: neg
+    description: The affirmative must name the agency that carries out the plan.
     events: [POLICY]
     aliases: [aspec, t aspec]
   - id: fspec
     label: FSPEC
     kind: theory
     side: neg
+    description: The affirmative must say how the plan is funded.
     events: [POLICY]
     aliases: [fspec, f spec]
   - id: vagueness
     label: Vagueness
     kind: theory
     side: neg
+    description: The plan text is too vague for the negative to know what it does.
     events: [POLICY]
     aliases: [vagueness]
   - id: generic-theory
     label: Theory
     kind: theory
     side: both
+    description: A theory argument about the rules of debate that fits no listed theory position, read by either side.
     events: [POLICY]
     aliases: [fiat good, state good]

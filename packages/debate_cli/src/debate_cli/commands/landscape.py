@@ -125,16 +125,18 @@ publishing nothing), a live run the data-use policy does not yet allow, a publis
 Measures the model stage against cards a coach labelled (`v1-e32-t07` ac4): `v1-e32-t21`'s coach
 sample, the filled CSV and the rows file written beside it. Every labelled card the store holds is asked
 about, and the command prints, for the caselist's format, how many of the cards a report would count
-name the coach's position (the bar is 85%), and what the scan of the prompt inputs and of the prompt's
-cassettes on this machine found: counts, never a name. `--model-mode replay` (the default) answers from
-those cassettes; `record`, once, after the data-use policy records its open question 4 as answered,
-makes the calls and writes them. It caches, writes and publishes no report. Exit `0` when the stage ran
-to the end, the format meets the bar and both scans are clean. A stage the model stopped partway is judged
+name the coach's position (the bar is 85%), and what the scan of the prompt inputs, of the prompt
+version's cassettes on this machine and of its repair cassettes filed under the caselist found: counts,
+never a name. The scan reads values, not JSON keys, and leaves out the positions text the prompt sends
+(`v1-e32-t40`). `--model-mode replay` (the default) answers from those cassettes; `record`, once, after
+the data-use policy records its open question 4 as answered, makes the calls and writes them. It caches,
+writes and publishes no report. Exit `0` when the stage ran to the end, the format meets the bar and the
+three scans are clean. A stage the model stopped partway is judged
 as `landscape report`'s is (`v1-e32-t33`): `3` when it was throttled or did not answer, `1` when the call
 was refused, with `error.code` `MODEL_STAGE_INTERRUPTED` and the same `cause_code`, `sent`, `unanswered`
 and, for a rate limit that said how long to wait, `retry_after_seconds` in `error.details`, beside the
 summary. Only `record` calls a model, and a rerun of it asks about every labelled card again. `1`
-otherwise (`EVALUATION_BELOW_BAR`), and for a name either scan found even when the stage also stopped.
+otherwise (`EVALUATION_BELOW_BAR`), and for a name any scan found even when the stage also stopped.
 
 `--breakdown` (`v1-e32-t39`) replays only, and is refused with `--model-mode record`: the router it builds
 holds no model, so a request no cassette recorded fails (`MISSING_FIXTURE`) and is never sent. It gives
@@ -442,7 +444,7 @@ def evaluate(
     if broken_down is not None:
         payload["breakdown"] = breakdown_summary(broken_down)
         display = "\n".join([display, *_breakdown_lines(broken_down), *_hit_lines(broken_down)])
-    passed = result.stopped is None and result.meets_target and result.sent.clean and result.cassettes.clean
+    passed = result.stopped is None and result.meets_target and result.scans_clean
     if passed or not cli.output.is_json:
         cli.output.success(command_name(ctx), payload, display=display)
     if not passed:
@@ -683,7 +685,11 @@ def evaluation_summary(result: FormatEvaluation) -> dict[str, JsonValue]:
                 "other_names": scan.other_names,
                 "clean": scan.clean,
             }
-            for name, scan in (("prompt_inputs", result.sent), ("cassettes", result.cassettes))
+            for name, scan in (
+                ("prompt_inputs", result.sent),
+                ("cassettes", result.cassettes),
+                ("repair_cassettes", result.repair_cassettes),
+            )
         },
     }
 
@@ -700,7 +706,8 @@ def _evaluation_display(result: FormatEvaluation) -> str:
             f"{result.placed_below_threshold} placed below the threshold, {result.placed_labelled_none} "
             "labelled none.",
             f"Scan of the prompt inputs: {_scan_line(result.sent)}. Of the cassettes: "
-            f"{_scan_line(result.cassettes)}.",
+            f"{_scan_line(result.cassettes)}. Of the repair cassettes: "
+            f"{_scan_line(result.repair_cassettes)}.",
         ]
     )
 
@@ -715,15 +722,19 @@ def _scan_line(scan: NameScan) -> str:
 def _evaluation_failure(result: FormatEvaluation, payload: dict[str, JsonValue]) -> CommandFailure:
     """Why the evaluation failed: a name the scan found, then a stopped stage, then the bar.
 
-    A name in the prompt inputs or the cassettes decides first, because no retry removes it. A stage the
+    A name in the prompt inputs, the cassettes or the repair cassettes decides first, because no retry
+    removes it. A stage the
     model stopped partway is judged as `landscape report`'s is (`v1-e32-t33`): the same
     :class:`~debate_core.application.landscape_model_stage.ModelStageInterrupted`, so the same exit code
     (`3` for a cause a retry may cure, `1` for a refused or unclassified one), error code and stop details,
     beside every key of the summary.
     """
     stopped = result.stopped
-    if not (result.sent.clean and result.cassettes.clean):
-        message = "the scan found a school, team code or tournament in the prompt inputs or the cassettes"
+    if not result.scans_clean:
+        message = (
+            "the scan found a school, team code or tournament in the prompt inputs, the cassettes or the "
+            "repair cassettes"
+        )
     elif stopped is not None:
         failure = CommandFailure.from_exception(stopped)
         return dataclasses.replace(

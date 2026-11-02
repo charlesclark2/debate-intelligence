@@ -11,7 +11,10 @@ caselist's schools taken out, and each heading's answer flag), less any word of 
 caselist (:func:`sent_headings`; a heading keeps another team's code standing alone, a prompt does not),
 and three pieces of free text, each read
 as lowercase words by :func:`~debate_core.arguments.landscape.tag_scrub.card_tag`: the same names, every
-school of the caselist and every word of every team code taken out.
+school of the caselist and every word of every team code taken out. All four lose, besides, every
+disclosing team's school, code and tournament in the reading
+(:class:`~debate_core.arguments.landscape.tag_scrub.DisclosedNames`, the name scan's third list,
+`v1-e32-t40`), which `v1-e32-t39` found other teams' headings carried.
 
 * the tag;
 * the short cite, at most :data:`CITE_WORDS` words;
@@ -54,12 +57,13 @@ import json
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Final
+from typing import Final, cast
 
 from pydantic import JsonValue, ValidationError
 
 from debate_core.arguments.landscape.headings import NormalizedHeading
 from debate_core.arguments.landscape.matcher import tag_words
+from debate_core.arguments.landscape.tag_scrub import NO_NAMES, DisclosedNames
 from debate_core.domain.landscape import Taxonomy
 from debate_core.domain.landscape_classification import (
     RATIONALE_LIMIT,
@@ -86,6 +90,7 @@ __all__ = [
     "bounded_words",
     "echoes",
     "item_label",
+    "json_values",
     "judge",
     "model_order",
     "name_scan",
@@ -93,6 +98,7 @@ __all__ = [
     "prompt_variables",
     "refusal",
     "refusal_reason",
+    "scanned_values",
     "sent_headings",
 ]
 
@@ -154,6 +160,8 @@ class ModelCandidate:
     """The disclosing teams' school, code and tournament, to take out of the excerpt; never sent."""
     cards: int = 1
     """How many of the reading's cards share this fingerprint."""
+    disclosed: DisclosedNames = field(default=NO_NAMES, repr=False, compare=False)
+    """Every disclosing team's names in the reading, to take out of the excerpt too (`v1-e32-t40`)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -168,12 +176,21 @@ class ModelItem:
 
 
 def sent_headings(
-    headings: Sequence[NormalizedHeading], codes: Collection[str]
+    headings: Sequence[NormalizedHeading], codes: Collection[str], disclosed: DisclosedNames = NO_NAMES
 ) -> tuple[NormalizedHeading, ...]:
-    """`headings` as a model is shown them: without any word of `codes`, and a heading left empty dropped."""
+    """`headings` as a model is shown them: without any word of `codes` or any of the `disclosed` names,
+    and a heading left empty dropped.
+
+    A heading holding a disclosed name is sent as :func:`~debate_core.arguments.landscape.matcher.tag_words`
+    reads it, the words the name scan matches, less the name.
+    """
     sent: list[NormalizedHeading] = []
     for heading in headings:
         text = " ".join(word for word in heading.text.split() if word not in codes)
+        words = tag_words(text)
+        scrubbed = disclosed.without(words)
+        if scrubbed != words:
+            text = " ".join(word for word in scrubbed.split() if word not in codes)
         if text:
             sent.append(
                 heading if text == heading.text else NormalizedHeading(text=text, answer=heading.answer)
@@ -386,12 +403,21 @@ class NameScan:
 
 
 def name_scan(
-    texts: Iterable[str], caselist_names: Mapping[str, Sequence[str]], other_names: Iterable[str] = ()
+    texts: Iterable[str],
+    caselist_names: Mapping[str, Sequence[str]],
+    other_names: Iterable[str] = (),
+    *,
+    leave_out: Collection[str] = (),
 ) -> NameScan:
     """Count the `texts` holding, as whole lowercase words, a school of the caselist, a word of a team
-    code, or one of `other_names` (the disclosing teams' tournaments). A text is read as
-    :func:`~debate_core.arguments.landscape.matcher.tag_words` reads a tag, so JSON and punctuation do
-    not hide a name.
+    code, or one of `other_names` (the disclosing teams' tournaments). Each value of a text
+    (:func:`scanned_values`) is read as :func:`~debate_core.arguments.landscape.matcher.tag_words` reads a
+    tag, so punctuation does not hide a name, and no match spans two values.
+
+    Since `v1-e32-t40` the scan reads field values, never JSON keys: `v1-e32-t39` found one school named
+    like a key of the prompt input counted in every text. `leave_out` is committed text cut from every
+    value first, the taxonomy's positions as the prompt sends them, whose ordinary words (a team code's
+    among them) every cassette holds.
 
     A debater's name cannot be scanned for: no list of them exists (the caselist's paths name schools
     and codes). The scan says so by having no count for it.
@@ -402,8 +428,63 @@ def name_scan(
     counted = school_hits = code_hits = other_hits = 0
     for text in texts:
         counted += 1
-        padded = f" {tag_words(text)} "
+        padded = f" {' | '.join(tag_words(value) for value in scanned_values(text, leave_out))} "
         school_hits += any(f" {school} " in padded for school in schools)
         code_hits += any(f" {code} " in padded for code in codes)
         other_hits += any(f" {name} " in padded for name in others)
     return NameScan(texts=counted, schools=school_hits, team_codes=code_hits, other_names=other_hits)
+
+
+def scanned_values(text: str, leave_out: Collection[str] = ()) -> tuple[str, ...]:
+    """What the name scan reads of `text`: the values of a JSON text (:func:`json_values`), or a text that
+    is not JSON as one value, with every `leave_out` text cut out of each."""
+    try:
+        loaded: object = json.loads(text)
+    except json.JSONDecodeError:
+        return (_cut(text, leave_out),)
+    return json_values(loaded, leave_out)
+
+
+def json_values(value: object, leave_out: Collection[str] = ()) -> tuple[str, ...]:
+    """Every string and number of a JSON value, in order, as the name scan reads them (`v1-e32-t40`).
+
+    Never a key, `true`, `false` or `null`. A list of strings alone, such as a card's heading path, is
+    one value, its strings one space apart. A string holding JSON (a prompt's `items` variable, as a
+    cassette keeps it) is read the same way. Every `leave_out` text is cut out of a string first.
+    """
+    found: list[str] = []
+    _collect(value, tuple(one for one in leave_out if one), found)
+    return tuple(found)
+
+
+def _collect(value: object, leave_out: tuple[str, ...], found: list[str]) -> None:
+    if isinstance(value, dict):
+        for inner in cast(dict[str, object], value).values():
+            _collect(inner, leave_out, found)
+    elif isinstance(value, list):
+        listed = cast(list[object], value)
+        if listed and all(isinstance(one, str) for one in listed):
+            found.append(_cut(" ".join(cast(list[str], listed)), leave_out))
+        else:
+            for inner in listed:
+                _collect(inner, leave_out, found)
+    elif isinstance(value, str):
+        text = _cut(value, leave_out)
+        if text.lstrip().startswith(("[", "{")):
+            try:
+                inner: object = json.loads(text)
+            except json.JSONDecodeError:
+                pass
+            else:
+                _collect(inner, leave_out, found)
+                return
+        found.append(text)
+    elif isinstance(value, int | float) and not isinstance(value, bool):
+        found.append(str(value))
+
+
+def _cut(text: str, leave_out: Collection[str]) -> str:
+    for one in leave_out:
+        if one:
+            text = text.replace(one, " ")
+    return text

@@ -443,7 +443,7 @@ def test_replay_runs_the_model_stage_on_the_unplaced_cards_and_counts_it(
     assert data["classification"]["cards_by_method"] == {"ALIAS": 7, "MODEL": 2}
     model = data["classification"]["model"]
     assert (model["prompt_version"], model["asked"], model["held_back"], model["refused"]) == (
-        "1.0.0",
+        "1.1.0",
         2,
         0,
         {},
@@ -699,7 +699,7 @@ def test_the_container_builds_the_model_stage_from_the_committed_prompt(world: S
 
     assert (built.prompt_id, built.prompt_version, built.max_items) == (
         "landscape.classify_position",
-        "1.0.0",
+        "1.1.0",
         7,
     )
 
@@ -1883,6 +1883,7 @@ def _evaluated(**changes: Any) -> FormatEvaluation:
         placed_labelled_none=1,
         sent=NameScan(texts=2),
         cassettes=NameScan(texts=2),
+        repair_cassettes=NameScan(texts=1),
     )
     return dataclasses.replace(base, **changes)
 
@@ -1911,6 +1912,13 @@ def _stub_evaluation(monkeypatch: pytest.MonkeyPatch, result: FormatEvaluation) 
 
     monkeypatch.setattr(container_module.ServiceContainer, "landscape_evaluation", build)
     return asked
+
+
+def _plain_display(world: SyntheticRun, sample_files: tuple[Path, Path]) -> str:
+    """The evaluation's display, without --json."""
+    sample, rows = sample_files
+    command = ["landscape", "evaluate", "--config-dir", str(world.config_dir), "--caselist", CASELIST]
+    return runner.invoke(create_app(), [*command, "--sample", str(sample), "--sample-rows", str(rows)]).output
 
 
 def evaluate(world: SyntheticRun, sample_files: tuple[Path, Path], *arguments: str) -> Result:
@@ -1946,11 +1954,34 @@ def test_evaluate_meeting_the_bar_with_clean_scans_exits_0_and_counts_it(
         "other_names": 0,
         "clean": True,
     }
+    assert data["scan"]["repair_cassettes"] == {
+        "texts": 1,
+        "schools": 0,
+        "team_codes": 0,
+        "other_names": 0,
+        "clean": True,
+    }
     assert asked == [False]
 
 
+def test_evaluate_displays_the_repair_cassettes_scan(
+    world: SyntheticRun, sample_files: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _stub_evaluation(monkeypatch, _evaluated())
+
+    shown = " ".join(_plain_display(world, sample_files).split())
+
+    assert "Of the repair cassettes: 1 text(s), 0 naming a school, 0 a team code, 0 a tournament." in shown
+
+
 @pytest.mark.parametrize(
-    "changes", [{"correct": 16}, {"counted": 0, "correct": 0}, {"cassettes": NameScan(texts=2, team_codes=1)}]
+    "changes",
+    [
+        {"correct": 16},
+        {"counted": 0, "correct": 0},
+        {"cassettes": NameScan(texts=2, team_codes=1)},
+        {"repair_cassettes": NameScan(texts=1, other_names=1)},
+    ],
 )
 def test_evaluate_under_the_bar_or_with_a_name_in_a_cassette_exits_1(
     world: SyntheticRun,

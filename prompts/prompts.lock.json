@@ -20,6 +20,11 @@
         "body_sha256": "abab5e2d3dd883bfc279c95f85c72920a729e4057607ccc5fe87a1ba578d126d",
         "output_schema": "debate_core.domain.landscape_classification.ModelPositionAnswers",
         "task_class": "high_volume"
+      },
+      "1.1.0": {
+        "body_sha256": "c82e5aa735b4118a03b30dee7f29e0c504146d5058638189789a7721dcb105a4",
+        "output_schema": "debate_core.domain.landscape_classification.ModelPositionAnswers",
+        "task_class": "high_volume"
       }
     },
     "model.repair": {

@@ -8,7 +8,8 @@ not already cached under this prompt version. :meth:`ModelClassificationStage.ru
 1. **orders** them, most cards first (:func:`~debate_core.arguments.landscape.model_stage.model_order`),
    and keeps the first `max_items`; the rest are **held back** for a later run, and counted;
 2. **reads** each kept card's evidence text from the parsed store (:class:`ParsedStoreCardTexts`), and
-   cuts its excerpt: its first words, without the names of the caselist's schools and teams;
+   cuts its excerpt: its first words, without the names of the caselist's schools and teams, or any
+   disclosing team's school, code or tournament (`v1-e32-t40`);
 3. **asks** in batches of `batch_size`, each one call to `landscape.classify_position` through the
    :class:`~debate_core.application.structured_output.StructuredOutputGuard` on the `high_volume` route.
    A batch whose answer leaves a card unanswered, answers one twice or names one it was not asked about
@@ -77,7 +78,7 @@ from debate_core.arguments.landscape.model_stage import (
     refusal_reason,
 )
 from debate_core.arguments.landscape.source_headings import CaselistNames
-from debate_core.arguments.landscape.tag_scrub import card_tag
+from debate_core.arguments.landscape.tag_scrub import DisclosedNames, card_tag
 from debate_core.domain.landscape import Taxonomy
 from debate_core.domain.landscape_classification import ClassificationResult, ModelPositionAnswers
 from debate_core.domain.model_contracts import ModelPrompt, TaskClass
@@ -104,7 +105,7 @@ logger = logging.getLogger(__name__)
 CLASSIFY_POSITION_PROMPT_ID: Final = "landscape.classify_position"
 """The registered prompt the stage runs (`prompts/landscape/classify_position.md`)."""
 
-CLASSIFY_POSITION_VERSION: Final = "1.0.0"
+CLASSIFY_POSITION_VERSION: Final = "1.1.0"
 """The version of :data:`CLASSIFY_POSITION_PROMPT_ID` a stage runs unless it is built with another."""
 
 CLASSIFICATION_TASK_CLASS: Final = TaskClass.HIGH_VOLUME
@@ -399,15 +400,22 @@ def _fingerprints(batch: Sequence[ModelItem]) -> tuple[str, ...]:
 def _item(
     candidate: ModelCandidate, evidence: str | None, names: CaselistNames, codes: Collection[str]
 ) -> ModelItem:
-    excerpt = bounded_words(card_tag(evidence, candidate.own_names, names, codes), EXCERPT_WORDS)
+    excerpt = bounded_words(
+        card_tag(evidence, candidate.own_names, names, codes, candidate.disclosed), EXCERPT_WORDS
+    )
     return ModelItem(candidate=candidate, excerpt=excerpt, evidence=evidence or "")
 
 
 def scrubbed_cite(
-    short_cite: str | None, own_names: Collection[str], names: CaselistNames, codes: Collection[str]
+    short_cite: str | None,
+    own_names: Collection[str],
+    names: CaselistNames,
+    codes: Collection[str],
+    disclosed: DisclosedNames,
 ) -> str | None:
-    """A short cite as a model is shown it: words, no names of the caselist's teams, at most a dozen."""
-    return bounded_words(card_tag(short_cite, tuple(own_names), names, codes), CITE_WORDS)
+    """A short cite as a model is shown it: words, no names of the caselist's teams or of any disclosing
+    team (`v1-e32-t40`), at most a dozen."""
+    return bounded_words(card_tag(short_cite, tuple(own_names), names, codes, disclosed), CITE_WORDS)
 
 
 def _as_output_problems(answers: ModelPositionAnswers, size: int) -> tuple[OutputProblem, ...]:

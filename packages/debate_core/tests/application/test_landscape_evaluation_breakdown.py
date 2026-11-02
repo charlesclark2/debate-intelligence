@@ -97,7 +97,8 @@ OVERRIDES = OverrideRules.model_validate(
 # (tag, headings, the coach's label, sample row, stratum). Stage one, by hand: the `States CP` heading is
 # an alias (ALIAS 1.0, not sent); `midterms` is election-da's tag keyword (TAG_KEYWORD 0.5, below the
 # 0.6 threshold, sent); `Theory` is overridden to no position (decided, not sent); the rest are unplaced
-# and sent. `harbor classic` is another team's tournament, which the scrub leaves in a tag.
+# and sent. `harbor classic` is another team's tournament, which the scrub takes out of a tag since
+# `v1-e32-t40` (it left it in before).
 CARDS: tuple[tuple[str, tuple[str, ...], str, int, str], ...] = (
     ("Fed key", ("States CP",), "states-cp", 1, "top"),
     ("Cliff nears", ("Impacts",), "spending-da", 2, "rest"),
@@ -112,7 +113,12 @@ CARDS: tuple[tuple[str, tuple[str, ...], str, int, str], ...] = (
 SOURCE = SeedSource(
     sha256=SHA,
     teams=(
-        SeedTeam(identity="maple/ab", side=Side.NEG, names=("Maple Grove", "AB", "Lakeside Invitational")),
+        SeedTeam(
+            identity="maple/ab",
+            side=Side.NEG,
+            names=("Maple Grove", "AB", "Lakeside Invitational"),
+            tournament="Lakeside Invitational",
+        ),
     ),
     cards=tuple(
         SeedCard(tag=tag, section_path=headings, first_element_index=3 * index)
@@ -121,7 +127,14 @@ SOURCE = SeedSource(
 )
 OTHER_SOURCE = SeedSource(
     sha256="e" * 64,
-    teams=(SeedTeam(identity="cedar/kl", side=Side.AFF, names=("Cedar Ridge", "KL", "Harbor Classic")),),
+    teams=(
+        SeedTeam(
+            identity="cedar/kl",
+            side=Side.AFF,
+            names=("Cedar Ridge", "KL", "Harbor Classic"),
+            tournament="Harbor Classic",
+        ),
+    ),
     cards=(),
 )
 READING = SeedReading(
@@ -145,7 +158,7 @@ LABELLED = (
 POPULATIONS = {"top": 100, "rest": 300}
 
 # The model's answers, by the tag as sent (words, the disclosing team's names out). `cliff nears` and
-# `lost card harbor classic` are first answered for an item the batch does not have; the repair answers
+# `lost card` are first answered for an item the batch does not have; the repair answers
 # the first rightly and the second wrongly again, so that batch is refused.
 ANSWERS: dict[str, tuple[str | None, float]] = {
     "fed key": ("states-cp", 0.9),
@@ -155,11 +168,13 @@ ANSWERS: dict[str, tuple[str | None, float]] = {
     "util good": ("spending-da", 0.65),
     "recession": (None, 0.9),
     "bad framing": (None, 0.8),
-    "court clog harbor classic": ("states-cp", 0.4),
+    "court clog": ("states-cp", 0.4),
 }
-FAIL_FIRST = {"cliff nears", "lost card harbor classic"}
-FAIL_REPAIR = {"lost card harbor classic"}
+FAIL_FIRST = {"cliff nears", "lost card"}
+FAIL_REPAIR = {"lost card"}
 RATIONALES = {"util good": "as cedar ridge reads it"}
+REPAIR_RATIONALES = {"cliff nears": "as maple grove reads it"}
+"""The repair's rationale for a card, where it differs: a school in the repair cassette alone."""
 
 # By sample row, by hand: (outcome, refusal, the model's answer, its batch's verdict, stage one's
 # (position, method, sent to the model)).
@@ -209,7 +224,9 @@ class ScriptedByTag(ScriptedModelRouter):
                     "item": "item-9" if fails else item["item"],
                     "position_id": position,
                     "confidence": confidence,
-                    "rationale": RATIONALES.get(tag, "a reason in the model's words"),
+                    "rationale": (REPAIR_RATIONALES if repair else RATIONALES).get(
+                        tag, "a reason in the model's words"
+                    ),
                 }
             )
         self.enqueue({"answers": answers})
@@ -362,30 +379,24 @@ def shown(hits: tuple[ScanHit, ...]) -> Counter[tuple[HitField, HitKind, str, bo
 async def test_evaluation_breakdown_lists_the_scans_hits_by_text_field_and_kind(
     recorded_and_replayed: tuple[EvaluationBreakdown, EvaluationBreakdown],
 ) -> None:
-    """The tournament in two tags is in their input batches and their cassettes, and in the refused
-    batch's repair cassette; the school in a rationale is in its cassette, on the school list and on the
-    scan's third list, where every disclosing team's names are."""
+    """Since `v1-e32-t40` the scrub takes the tournament out of both tags, so no input batch has a hit. The
+    school in a rationale is in its cassette, on the school list only (the third list holds tournaments),
+    and the school in the repaired answer's rationale is in the repair cassette, which the evaluation's
+    own scan now reads too."""
     _, result = recorded_and_replayed
-    assert shown(result.sent_hits) == {(HitField.TAG, HitKind.TOURNAMENT, "harbor classic", False): 2}
-    assert shown(result.cassette_hits) == {
-        (HitField.TAG, HitKind.TOURNAMENT, "harbor classic", False): 2,
-        (HitField.RATIONALE, HitKind.SCHOOL, "cedar ridge", False): 1,
-        (HitField.RATIONALE, HitKind.TOURNAMENT, "cedar ridge", True): 1,
-    }
+    assert shown(result.sent_hits) == {}
+    assert shown(result.cassette_hits) == {(HitField.RATIONALE, HitKind.SCHOOL, "cedar ridge", False): 1}
     assert result.repair_cassettes == 2
-    assert shown(result.repair_hits) == {
-        (HitField.REPAIRED_PROMPT, HitKind.TOURNAMENT, "harbor classic", False): 1,
-    }
-    court = next(hit for hit in result.sent_hits if hit.before == "court clog")
-    assert (court.after, court.text.startswith("input batch ")) == ("", True)
+    assert shown(result.repair_hits) == {(HitField.RATIONALE, HitKind.SCHOOL, "maple grove", False): 1}
     # The evaluation's own scan counts the same texts the listing shows hits in.
-    assert (
-        result.evaluation.sent.texts,
-        result.evaluation.sent.other_names,
-        result.evaluation.sent.schools,
-    ) == (9, 2, 0)
-    assert (result.evaluation.cassettes.texts, result.evaluation.cassettes.schools) == (9, 1)
-    assert result.evaluation.cassettes.other_names == 3
+    sent, cassettes, repairs = (
+        result.evaluation.sent,
+        result.evaluation.cassettes,
+        result.evaluation.repair_cassettes,
+    )
+    assert (sent.texts, sent.schools, sent.team_codes, sent.other_names) == (9, 0, 0, 0)
+    assert (cassettes.texts, cassettes.schools, cassettes.team_codes, cassettes.other_names) == (9, 1, 0, 0)
+    assert (repairs.texts, repairs.schools, repairs.team_codes, repairs.other_names) == (2, 1, 0, 0)
 
 
 @pytest.mark.anyio
@@ -437,6 +448,7 @@ async def test_evaluation_breakdown_withholds_every_hits_words_from_its_repr(
         )
         assert "harbor" not in shown.casefold()
         assert "cedar" not in shown.casefold()
+        assert "maple" not in shown.casefold()
 
 
 @pytest.mark.anyio
@@ -491,6 +503,7 @@ async def test_evaluation_breakdown_scores_as_the_evaluation_does(
         LABELLED,
         stage_over(recording, prompts),
         cassette_texts=lambda: texts_under(tmp_path / CLASSIFY_POSITION_PROMPT_ID),
+        repair_cassette_texts=lambda: texts_under(tmp_path / REPAIR_PROMPT_ID),
     )
     replaying = RecordReplayModelRouter(None, mode=ModelMode.REPLAY, cassette_dir=tmp_path)
     result = await broken_down(replaying, prompts, tmp_path)

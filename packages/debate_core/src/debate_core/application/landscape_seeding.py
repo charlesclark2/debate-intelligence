@@ -160,7 +160,7 @@ def _team(path: str, topic: Topic) -> SeedTeam:
     names += (read.tournament,) if read.tournament else ()
     known = read.school != UNKNOWN_SCHOOL and read.team_code != UNKNOWN_TEAM_CODE
     identity = f"{read.school.casefold()}/{read.team_code.casefold()}" if known else ""
-    return SeedTeam(identity=identity, side=read.side, names=names)
+    return SeedTeam(identity=identity, side=read.side, names=names, tournament=read.tournament or None)
 
 
 def _disclosure(caselist: str, sha256: str, disclosed: Disclosed, topic: Topic) -> Disclosure:

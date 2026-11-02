@@ -6,6 +6,7 @@ Every expected value is written by hand. Every heading, tag and evidence text is
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -35,7 +36,9 @@ from debate_core.domain.landscape_classification import (
     ModelPositionAnswers,
     PositionRole,
 )
+from debate_core.integrations.landscape.yaml_taxonomy_repository import YamlTaxonomyRepository
 
+REPOSITORY = Path(__file__).resolve().parents[5]
 TAXONOMY = Taxonomy.model_validate(
     {
         "topic_id": "policy-sample-topic",
@@ -298,3 +301,19 @@ def test_the_prompt_lists_active_positions_and_numbers_the_cards() -> None:
     }
     assert "never sent" not in json.dumps(variables)
     assert "0" * 64 not in json.dumps(variables)
+
+
+def test_every_position_the_policy_prompt_sends_has_its_side_and_a_one_line_description() -> None:
+    """`v1-e32-t40`: the committed Policy taxonomy, generic.yaml's Policy positions with it, as the prompt
+    sends it. A position with no description gave the model its id and label alone to tell neighbours
+    apart (`v1-e32-t39`)."""
+    taxonomy = YamlTaxonomyRepository.load(REPOSITORY / "config" / "landscape").taxonomy("policy-2026-27-nhi")
+    assert taxonomy is not None
+    positions = json.loads(str(prompt_variables(taxonomy, ())["positions"]))
+
+    assert len(positions) == len(taxonomy.active_positions) > 100
+    assert [one["id"] for one in positions if not one.get("description", "").strip()] == []
+    assert {one["side"] for one in positions} == {"aff", "neg", "both"}
+    assert [
+        one["id"] for one in positions if "\n" in one["description"] or len(one["description"]) > 140
+    ] == []

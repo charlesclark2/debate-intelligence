@@ -2491,3 +2491,167 @@ def test_evaluate_breakdown_refuses_record_mode_before_building_anything(
     assert refused.exit_code == ExitCode.USAGE_ERROR, refused.output
     assert _error(refused)["code"] == "BREAKDOWN_REPLAYS_ONLY"
     assert asked == []
+
+
+def test_evaluate_breakdown_counts_the_cards_scored_correct_on_their_second_label(
+    world: SyntheticRun, sample_files: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """v1-e32-t41: card 1 is right on its second label, card 2 has one it missed; card 3 has none."""
+    original = _broken_down()
+    first, second, third = original.cards
+    cards = (
+        dataclasses.replace(first, label="states-cp", label_kind="cp", also="spending-da"),
+        dataclasses.replace(second, also="costs-advantage"),
+        third,
+    )
+    _stub_breakdown(monkeypatch, dataclasses.replace(original, cards=cards))
+
+    result = _breakdown(world, sample_files, "--json")
+
+    breakdown = _error(result)["details"]["breakdown"]
+    assert breakdown["second_label"] == {"cards": 2, "correct": 1}
+    assert [card["also"] for card in breakdown["cards"]] == ["spending-da", "costs-advantage", None]
+    assert {"label": "states-cp", "answer": "spending-da", "cards": 1} in breakdown["confusion"]
+    shown = _flat(_breakdown(world, sample_files).stdout)
+    assert "Second labels: 2 card(s), 1 scored correct on the second label." in shown
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e32-t41: `landscape evaluate --check-sample` reads the coach's sample as the evaluation does and
+# counts it, over the real container and synthetic26's taxonomy, reading no card and asking no model.
+# ------------------------------------------------------------------------------------------------
+
+
+def _sample(tmp_path: Path, csv_text: str) -> tuple[Path, Path]:
+    sample = tmp_path / "coach-sample-labelled.csv"
+    sample.write_text(csv_text, encoding="utf-8")
+    rows = tmp_path / "coach-sample.jsonl"
+    lines = ['{"schema": "local-classifier-sample-1"}']
+    lines += [json.dumps({"sample_row": row, "item_id": f"{'a' * 64}:{row}"}) for row in range(1, 6)]
+    rows.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return sample, rows
+
+
+def _asks_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Reading a card or asking the model fails the test."""
+
+    def refuse(*_: Any, **__: Any) -> Any:
+        raise AssertionError("--check-sample read a card or asked the model")
+
+    monkeypatch.setattr("debate_core.application.landscape_model_evaluation.read_seed_sources", refuse)
+    monkeypatch.setattr(ModelClassificationStage, "run", refuse)
+
+
+def _check_sample(world: SyntheticRun, files: tuple[Path, Path], *arguments: str) -> Result:
+    sample, rows = files
+    command = [
+        "--json",
+        "landscape",
+        "evaluate",
+        "--config-dir",
+        str(world.config_dir),
+        "--caselist",
+        CASELIST,
+    ]
+    return runner.invoke(
+        create_app(),
+        [
+            *command,
+            "--snapshot",
+            "2026-09-15",
+            "--sample",
+            str(sample),
+            "--sample-rows",
+            str(rows),
+            *arguments,
+        ],
+    )
+
+
+def test_evaluate_check_sample_counts_the_rows_by_label_kind_and_asks_no_model(
+    world: SyntheticRun, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _asks_nothing(monkeypatch)
+    files = _sample(
+        tmp_path,
+        "sample_row,position,also\n1,states-cp,spending-da\n2,spending-da,\n3,none,\n4,unsure,\n"
+        "5,costs-advantage,single-payer-aff\n",
+    )
+
+    result = _check_sample(world, files, "--check-sample")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert json.loads(result.stdout)["data"] == {
+        "caselist": CASELIST,
+        "topic_id": SYNTHETIC_RUN_TOPIC,
+        "taxonomy_version": "1.0.0",
+        "snapshot": "2026-09-15",
+        "labelled": 4,
+        "by_label_kind": {"advantage": 1, "cp": 1, "da": 1, "none": 1},
+        "second_labels": {"rows": 2, "by_kind": {"aff": 1, "da": 1}},
+    }
+
+
+def test_evaluate_check_sample_displays_its_counts(
+    world: SyntheticRun, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _asks_nothing(monkeypatch)
+    sample, rows = _sample(tmp_path, "sample_row,position\n1,states-cp\n2,none\n")
+    command = ["landscape", "evaluate", "--config-dir", str(world.config_dir), "--caselist", CASELIST]
+
+    result = runner.invoke(
+        create_app(),
+        [
+            *command,
+            "--snapshot",
+            "2026-09-15",
+            "--sample",
+            str(sample),
+            "--sample-rows",
+            str(rows),
+            "--check-sample",
+        ],
+    )
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert (
+        f"The coach's sample reads against {SYNTHETIC_RUN_TOPIC} 1.0.0 ({CASELIST}, snapshot 2026-09-15): "
+        "2 labelled row(s); by the label's kind: cp 1, none 1. Second labels: 0. No model was asked."
+    ) in _flat(result.stdout)
+
+
+@pytest.mark.parametrize(
+    ("csv_text", "refused"),
+    [
+        ("sample_row,position,also\n1,states-cp,states-cp\n", "row 1's second label is its first"),
+        ("sample_row,position,also\n1,states-cp,none\n", "row 1's second label is none"),
+        ("sample_row,position,also\n1,states-cp,made-up-cp\n", "row 1's second label is not an active id"),
+        ("sample_row,position,also\n1,none,states-cp\n", "row 1 is labelled none and names a second label"),
+    ],
+)
+def test_evaluate_check_sample_refuses_a_bad_second_label_by_its_row(
+    world: SyntheticRun, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, csv_text: str, refused: str
+) -> None:
+    _asks_nothing(monkeypatch)
+
+    result = _check_sample(world, _sample(tmp_path, csv_text), "--check-sample")
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    error = _error(result)
+    assert error["code"] == "EVALUATION_REFUSED"
+    assert refused in error["message"]
+
+
+@pytest.mark.parametrize("other", [("--breakdown",), ("--model-mode", "record")])
+def test_evaluate_check_sample_runs_alone(
+    world: SyntheticRun, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, other: tuple[str, ...]
+) -> None:
+    asked = _stub_breakdown(monkeypatch, _broken_down())
+
+    result = _check_sample(
+        world, _sample(tmp_path, "sample_row,position\n1,states-cp\n"), "--check-sample", *other
+    )
+
+    assert result.exit_code == ExitCode.USAGE_ERROR, result.output
+    assert _error(result)["code"] == "CHECK_SAMPLE_ASKS_NO_MODEL"
+    assert asked == []

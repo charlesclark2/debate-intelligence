@@ -569,6 +569,7 @@ PDF_LINK: Final = {
             None,
             None,
         ),
+        ({"license": [{**CC_BY, "URL": "https://notcreativecommons.org/licenses/by/4.0/"}]}, None, None),
         ({"license": [{**CC_BY, "URL": "https://creativecommons.org/about/"}]}, None, None),
         (
             {
@@ -624,6 +625,7 @@ PDF_LINK: Final = {
         "CC over http",
         "public domain",
         "a look-alike host",
+        "a host that ends like it",
         "not a licence path",
         "embargoed until 2027",
         "no start",

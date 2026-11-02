@@ -98,7 +98,9 @@ def search(
     need: Annotated[
         str | None,
         typer.Option(
-            "--need", help="What the argument needs: uniqueness, link, internal-link, impact or answers."
+            "--need",
+            help="The part of the argument to find, from its family's needs: e.g. link for a DA, "
+            "framework-good for a framework, solvency for a counterplan, alternative for a kritik.",
         ),
     ] = None,
     topic: Annotated[

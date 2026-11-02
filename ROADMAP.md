@@ -456,7 +456,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [Normalization and deduplication](plan_specs/v1/e08-research-workflows/t02-normalize-dedupe.yaml) `v1-e08-t02-normalize-dedupe` | Succeeded | 2 | 8.0 |
 | [Explainable feature ranking](plan_specs/v1/e08-research-workflows/t03-feature-ranking.yaml) `v1-e08-t03-feature-ranking` | Succeeded | 1 | 8.0 |
 | [Argument/need query expansion](plan_specs/v1/e08-research-workflows/t04-argument-need-expansion.yaml) `v1-e08-t04-argument-need-expansion` | Succeeded | 3 | 7.5 |
-| [`debate-research search` command](plan_specs/v1/e08-research-workflows/t05-search-command.yaml) `v1-e08-t05-search-command` | Pending | 4 | 6.0 |
+| [`debate-research search` command](plan_specs/v1/e08-research-workflows/t05-search-command.yaml) `v1-e08-t05-search-command` | InProgress | 4 | 6.0 |
 | [`--auto-cut N` batch cutting](plan_specs/v1/e08-research-workflows/t06-auto-cut.yaml) `v1-e08-t06-auto-cut` | Pending | 3 | 9.0 |
 | [`debate-research daily` digests](plan_specs/v1/e08-research-workflows/t07-daily-command.yaml) `v1-e08-t07-daily-command` | Pending | 2 | 7.0 |
 | [Counterplans and kritiks get the research needs their arguments have](plan_specs/v1/e08-research-workflows/t08-counterplan-and-kritik-needs.yaml) `v1-e08-t08-counterplan-and-kritik-needs` | Pending | 1 | 2.0 |
@@ -613,7 +613,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [The aggregate rebuild reads cards source by source, so it no longer holds a whole caselist's cards in memory](plan_specs/v1/e40-cloud-caselist-run/t36-parse-rebuild-streams-occurrence-rows.yaml) `v1-e40-t36-parse-rebuild-streams-occurrence-rows` | Succeeded | 2 | 3.0 |
 | [Redaction no longer takes two apostrophes for a quoted path and removes the words between them](plan_specs/v1/e40-cloud-caselist-run/t37-redact-keeps-text-between-apostrophes.yaml) `v1-e40-t37-redact-keeps-text-between-apostrophes` | Pending | 1 | 1.0 |
 | [A lock refusal is not reported as a run that stopped before its stages](plan_specs/v1/e40-cloud-caselist-run/t38-landscape-staleness-ignores-lock-refusals.yaml) `v1-e40-t38-landscape-staleness-ignores-lock-refusals` | Pending | 1 | 0.8 |
-| [The near-duplicate index and the linker's word lists are held compactly, so a season's rebuild fits with room](plan_specs/v1/e40-cloud-caselist-run/t39-cut-index-and-linker-words-held-compactly.yaml) `v1-e40-t39-cut-index-and-linker-words-held-compactly` | Pending | 1 | 4.0 |
+| [The near-duplicate index and the linker's word lists are held compactly, so a season's rebuild fits with room](plan_specs/v1/e40-cloud-caselist-run/t39-cut-index-and-linker-words-held-compactly.yaml) `v1-e40-t39-cut-index-and-linker-words-held-compactly` | InProgress | 1 | 4.0 |
 | [In bucket mode a missing or unreadable token, and a download refused for an expired login, give the cloud's cure, not a login by hand](plan_specs/v1/e40-cloud-caselist-run/t40-token-errors-name-the-cloud-cure.yaml) `v1-e40-t40-token-errors-name-the-cloud-cure` | Pending | 1 | 1.0 |
 
 #### [E41 — Delivery Tooling Upkeep](plan_specs/v1/e41-delivery-tooling-upkeep/epic.yaml)

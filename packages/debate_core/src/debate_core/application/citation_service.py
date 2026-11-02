@@ -63,6 +63,18 @@ again by re-resolution (`v1-e06-t02`): a required one leaves the card UNVERIFIED
 verifier's ``CITATION_UNVERIFIED`` naming it. A card no student has cite-edited takes the derived
 cite whole. Saving the card, and re-verifying it, is the caller's step.
 
+## Cite fields a user stated (`v1-e06-t12`)
+
+A user who stores their own copy with `fetch --paste` may state its title, authors, publication and
+date. :func:`stated_citation` records them as the snapshot's
+:attr:`~debate_core.domain.SourceSnapshot.stated_citation`, each `heuristic` and unverified, and
+:meth:`CitationService.resolve` applies them to the derived cite exactly as a student's cite edit is
+kept (:func:`keep_student_edits`): a stated field that differs from the derived one replaces it,
+unverified, and is named in :attr:`CitationResolution.stated_fields`; a field the user did not state
+is derived as before. Nothing about user-supplied text verifies, so a card cut from it stays
+UNVERIFIED for its cite (``CITATION_UNVERIFIED``), and the cite marks each field as it marks any
+unverified field.
+
 ## Formatting (ac4)
 
 :func:`format_cite` writes the short cite, "Lastname YY" (first author's last name, "et al." for
@@ -78,6 +90,7 @@ missing, so an export can mark them.
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
@@ -108,9 +121,11 @@ __all__ = [
     "CitationService",
     "CrossrefOutcome",
     "FormattedCite",
+    "InvalidStatedCite",
     "format_cite",
     "keep_student_edits",
     "resolve_citation",
+    "stated_citation",
 ]
 
 logger = logging.getLogger(__name__)
@@ -165,6 +180,9 @@ class CitationResolution:
     crossref: CrossrefOutcome
     student_fields: tuple[str, ...] = ()
     """Fields that keep a student's value, unverified, because it differs from the source's (ac5)."""
+    stated_fields: tuple[str, ...] = ()
+    """Fields that take the value the user stated for their copy, unverified, because it differs from
+    what the rules derived (`v1-e06-t12`)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -297,6 +315,72 @@ def keep_student_edits(stored: Citation, derived: Citation) -> tuple[Citation, t
     return derived.evolve(**kept, **marked, cleared_by_student=stored.cleared_by_student), tuple(kept)
 
 
+class InvalidStatedCite(ValueError):
+    """A cite field a user stated that the cite cannot take; nothing is stored."""
+
+    def __init__(self, field: str, detail: str) -> None:
+        self.field = field
+        """The cite field refused: `title`, `authors`, `publication` or `published_at`."""
+        self.detail = detail
+        """What is wrong with it, for a person."""
+        super().__init__(f"{field}: {detail}")
+
+
+_ISO_DAY: Final = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def stated_citation(
+    *,
+    title: str | None = None,
+    authors: Sequence[str] = (),
+    publication: str | None = None,
+    published_on: str | None = None,
+) -> Citation | None:
+    """The cite fields a user states for a copy they supplied, or `None` when they state none (`v1-e06-t12`).
+
+    Each value is stripped and recorded with its source `heuristic` and `verified` false, as the title a
+    user gives an article already is: a statement nothing checked, which the domain refuses ever to mark
+    verified. The authors stay in the order given. The date is a full ISO date, `YYYY-MM-DD`, the one
+    form the cite can print without inventing a day; anything else is refused, never guessed at.
+    Raises :class:`InvalidStatedCite` for an empty value or another form of date.
+    """
+    stated: dict[str, CitationField[Any]] = {}
+    if title is not None:
+        stated["title"] = _stated_text("title", title)
+    names = tuple(_stated_text("authors", name).value or "" for name in authors)
+    if names:
+        stated["authors"] = CitationField[tuple[str, ...]](
+            value=names, source=_HEURISTIC, raw="; ".join(names)
+        )
+    if publication is not None:
+        stated["publication"] = _stated_text("publication", publication)
+    if published_on is not None:
+        stated["published_at"] = _stated_date(published_on)
+    return Citation.model_validate(stated) if stated else None
+
+
+def _stated_text(name: str, text: str) -> CitationField[str]:
+    value = text.strip()
+    if not value:
+        raise InvalidStatedCite(name, "is empty; give the value, or leave the option out")
+    return CitationField[str](value=value, source=_HEURISTIC, raw=value)
+
+
+def _stated_date(text: str) -> CitationField[datetime]:
+    value = text.strip()
+    try:
+        if not _ISO_DAY.fullmatch(value):
+            raise ValueError(value)
+        day = date.fromisoformat(value)
+    except ValueError:
+        raise InvalidStatedCite(
+            "published_at", f"{text!r} is not a date in the form YYYY-MM-DD, such as 2026-09-14"
+        ) from None
+    return CitationField[datetime](
+        value=datetime(day.year, day.month, day.day, tzinfo=UTC), source=_HEURISTIC, raw=value
+    )
+
+
 # --------------------------------------------------------------------------------------------
 # The service
 # --------------------------------------------------------------------------------------------
@@ -344,7 +428,12 @@ class CitationService:
         doi = dois[0] if dois else None
         work, outcome = await self._look_up(doi)
         citation = resolve_citation(candidates, work, provenance_mode=mode, accessed_at=snapshot.retrieved_at)
-        return CitationResolution(citation=citation, provenance_mode=mode, doi=doi, crossref=outcome)
+        stated_fields: tuple[str, ...] = ()
+        if snapshot.stated_citation is not None:
+            citation, stated_fields = keep_student_edits(snapshot.stated_citation, citation)
+        return CitationResolution(
+            citation=citation, provenance_mode=mode, doi=doi, crossref=outcome, stated_fields=stated_fields
+        )
 
     async def re_resolve(self, card: Card) -> CitationResolution:
         """`card`'s cite resolved again from its snapshot, keeping a student's changed fields (ac5).

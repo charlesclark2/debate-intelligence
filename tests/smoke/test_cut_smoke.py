@@ -346,3 +346,94 @@ def test_cut_from_paste_with_no_stored_copy_exits_1_naming_fetch_paste_offline(
     assert error["code"] == "NO_USER_SUPPLIED_COPY"
     assert isinstance(error["hint"], str) and "fetch --paste FILE --source-url" in error["hint"]
     assert not out.exists()
+
+
+# --------------------------------------------------------------------------------------------
+# --from-paste with cite fields stated at `fetch --paste` (v1-e06-t12)
+# --------------------------------------------------------------------------------------------
+
+
+def test_cut_from_paste_cites_the_fields_stated_at_fetch_paste_unverified_offline(
+    installed_cli: InstalledCli,
+) -> None:
+    """The build's own `fetch --paste` stores invented cite fields; its `cut --from-paste` cites them,
+    none verified, and the card is UNVERIFIED for its cite alone; `verify` finds the same."""
+    pasted = installed_cli.workdir / "library-copy.txt"
+    pasted.write_text("\n\n".join(paragraphs_of("news-article")), encoding="utf-8")
+    stored = installed_cli.run(
+        "--json",
+        "fetch",
+        "--paste",
+        str(pasted),
+        "--source-url",
+        NEWS_URL,
+        "--i-have-lawful-access",
+        "--title",
+        "Mammoth Money and the Elephants Left Waiting",
+        "--author",
+        "Mara Okonkwo-Lindqvist",
+        "--author",
+        "Teodor Brannigan",
+        "--date",
+        "2026-09-15",
+        "--publication",
+        "The Synthetic Science Weekly",
+    )
+    assert stored.exit_code == ExitCode.OK, stored.output
+    data = stored.envelope()["data"]
+    assert isinstance(data, dict)
+    assert data["snapshot"]["stated_cite"] == {
+        "authors": ["Mara Okonkwo-Lindqvist", "Teodor Brannigan"],
+        "title": "Mammoth Money and the Elephants Left Waiting",
+        "publication": "The Synthetic Science Weekly",
+        "published_at": "2026-09-15",
+    }
+    assert len(_plant_cassettes(installed_cli.data_dir)) == 2
+    out = installed_cli.workdir / "evidence.docx"
+
+    cut = installed_cli.run(
+        "--json",
+        "cut",
+        NEWS_URL,
+        "--from-paste",
+        "--need",
+        NEWS_NEED,
+        "--argument",
+        NEWS_ARGUMENT,
+        "--output",
+        str(out),
+    )
+
+    assert cut.exit_code == ExitCode.CARD_UNVERIFIED, cut.output
+    error = cut.envelope()["error"]
+    assert isinstance(error, dict)
+    assert [(r["reason"], r["fields"]) for r in error["details"]["reasons"]] == [
+        ("CITATION_UNVERIFIED", PASTED_CITE_FIELDS)
+    ]
+    [card] = json.loads(read_embedded_manifest_bytes(out))["cards"]
+    citation = card["citation"]
+    assert (card["provenance_mode"], card["snapshot_id"]) == (
+        "USER_SUPPLIED",
+        data["snapshot"]["snapshot_id"],
+    )
+    assert citation["authors"]["value"] == ["Mara Okonkwo-Lindqvist", "Teodor Brannigan"]
+    assert (
+        citation["title"]["value"],
+        citation["publication"]["value"],
+        citation["published_at"]["value"],
+    ) == (
+        "Mammoth Money and the Elephants Left Waiting",
+        "The Synthetic Science Weekly",
+        "2026-09-15T00:00:00Z",
+    )
+    assert [
+        name for name, value in citation.items() if isinstance(value, dict) and value.get("verified")
+    ] == []
+
+    verify = installed_cli.run("--json", "verify", str(out))
+
+    assert verify.exit_code == ExitCode.DOMAIN_FAILURE, verify.output
+    verified = verify.envelope()["error"]
+    assert isinstance(verified, dict)
+    [verdict] = verified["details"]["cards"]
+    assert (verdict["status"], verdict["reason_codes"]) == ("UNVERIFIED", ["CITATION_UNVERIFIED"])

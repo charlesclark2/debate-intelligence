@@ -769,3 +769,131 @@ def test_from_paste_with_no_pasted_copy_stored_exits_1_with_the_fetch_paste_hint
     assert counting.calls == []
     assert not out.exists()
     assert stored_cards(data_dir) == []
+
+
+# --------------------------------------------------------------------------------------------
+# --from-paste with cite fields stated at `fetch --paste` (v1-e06-t12)
+# --------------------------------------------------------------------------------------------
+
+STATED_OPTIONS: Final = (
+    "--title",
+    "Mammoth Money and the Elephants Left Waiting",
+    "--author",
+    "Mara Okonkwo-Lindqvist",
+    "--author",
+    "Teodor Brannigan",
+    "--date",
+    "2026-09-15",
+    "--publication",
+    "The Synthetic Science Weekly",
+)
+"""Invented cite fields, as a coach states them from their library copy."""
+STATED_FULL_CITE: Final = (
+    "Okonkwo-Lindqvist et al. 26 [Mara Okonkwo-Lindqvist and Teodor Brannigan; "
+    '"Mammoth Money and the Elephants Left Waiting"; The Synthetic Science Weekly; September 15, 2026; '
+    f"{NEWS_CANONICAL}; accessed October 26, 2026; user-supplied text]"
+)
+"""By the citation rules (v1-e06-t01) with the stated fields in place of the derived ones: the first
+author's last name and "et al." for two, the authors joined with "and", the title quoted, the stated
+date (not the URL path's 14th), then the URL, the accessed date and whose text it is."""
+STATED_FIELDS: Final = ("authors", "title", "publication", "published_at")
+
+
+def paste_stating(url: str, tmp_path: Path, *options: str) -> dict[str, Any]:
+    """`PASTED_TEXT` stored for `url` with `fetch --paste` and `options`; the stored snapshot's summary."""
+    pasted = tmp_path / "library-copy.txt"
+    pasted.write_text(PASTED_TEXT, encoding="utf-8")
+    result = runner.invoke(
+        create_app(),
+        ["--json", "fetch", "--paste", str(pasted), "--source-url", url, "--i-have-lawful-access", *options],
+    )
+    assert result.exit_code == ExitCode.OK, result.output
+    snapshot: dict[str, Any] = envelope(result)["data"]["snapshot"]
+    return snapshot
+
+
+def cite_paragraph(out: Path) -> str:
+    """The card's cite line, as written: the third paragraph, after the tag and the banner."""
+    paragraphs = read_paragraphs(out)
+    assert [(p.style_id, p.text) for p in paragraphs[:2]] == [("Heading4", TAG), ("Normal", PASTED_BANNER)]
+    return paragraphs[2].text
+
+
+def test_a_card_cut_from_a_paste_with_stated_fields_shows_them_in_its_cite_and_unverified_for_it_alone(
+    seams: Seams, data_dir: Path, out: Path, tmp_path: Path
+) -> None:
+    paste_stating(NEWS_URL, tmp_path, *STATED_OPTIONS)
+
+    result = cut_pasted(NEWS_URL, out, json_output=True)
+
+    assert result.exit_code == ExitCode.CARD_UNVERIFIED, result.output
+    details = envelope(result)["error"]["details"]
+    assert details["status"] == "UNVERIFIED"
+    assert [(r["reason"], r["verifier_code"], r["fields"]) for r in details["reasons"]] == [
+        ("CITATION_UNVERIFIED", "CITATION_UNVERIFIED", PASTED_CITE_FIELDS)
+    ]
+    assert cite_paragraph(out) == f"{STATED_FULL_CITE} {PASTED_CITE_MARKS}"
+    assert read_paragraphs(out)[3].underlined == UNDERLINED
+
+
+def test_the_card_and_manifest_cut_from_a_paste_record_each_stated_field_unverified(
+    seams: Seams, data_dir: Path, out: Path, tmp_path: Path
+) -> None:
+    paste_stating(NEWS_URL, tmp_path, *STATED_OPTIONS)
+
+    assert cut_pasted(NEWS_URL, out).exit_code == ExitCode.CARD_UNVERIFIED
+
+    [card] = stored_cards(data_dir)
+    [embedded] = embedded_manifest(out)["cards"]
+    for recorded in (card, embedded):
+        assert recorded["verification_status"] == "UNVERIFIED"
+        citation = recorded["citation"]
+        assert [
+            name for name, value in citation.items() if isinstance(value, dict) and value.get("verified")
+        ] == []
+        assert citation["authors"]["value"] == ["Mara Okonkwo-Lindqvist", "Teodor Brannigan"]
+        assert {name: citation[name]["source"] for name in STATED_FIELDS} == dict.fromkeys(
+            STATED_FIELDS, "heuristic"
+        )
+        assert citation["published_at"]["value"] == "2026-09-15T00:00:00Z"
+
+
+def test_verify_finds_a_card_cut_from_a_paste_with_stated_fields_unverified_for_its_cite_alone(
+    seams: Seams, out: Path, tmp_path: Path
+) -> None:
+    paste_stating(NEWS_URL, tmp_path, *STATED_OPTIONS)
+    assert cut_pasted(NEWS_URL, out).exit_code == ExitCode.CARD_UNVERIFIED
+
+    result = runner.invoke(create_app(), ["--json", "verify", str(out)])
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    [card] = envelope(result)["error"]["details"]["cards"]
+    assert (card["status"], card["reason_codes"]) == ("UNVERIFIED", ["CITATION_UNVERIFIED"])
+
+
+def test_a_paste_stored_again_with_no_cite_options_is_cut_with_the_fields_stated_before(
+    seams: Seams, out: Path, tmp_path: Path
+) -> None:
+    first = paste_stating(NEWS_URL, tmp_path, *STATED_OPTIONS)
+    again = paste_stating(NEWS_URL, tmp_path)
+    assert again["snapshot_id"] == first["snapshot_id"]
+
+    assert cut_pasted(NEWS_URL, out).exit_code == ExitCode.CARD_UNVERIFIED
+
+    assert cite_paragraph(out) == f"{STATED_FULL_CITE} {PASTED_CITE_MARKS}"
+
+
+def test_a_paste_stored_again_with_other_cite_options_is_cut_with_exactly_those(
+    seams: Seams, data_dir: Path, out: Path, tmp_path: Path
+) -> None:
+    paste_stating(NEWS_URL, tmp_path, *STATED_OPTIONS)
+    newer = paste_stating(NEWS_URL, tmp_path, "--author", "Teodor Brannigan")
+
+    assert cut_pasted(NEWS_URL, out).exit_code == ExitCode.CARD_UNVERIFIED
+
+    [card] = stored_cards(data_dir)
+    assert card["snapshot_id"] == newer["snapshot_id"]
+    assert cite_paragraph(out) == (
+        f"Brannigan 26 [Teodor Brannigan; September 14, 2026; {NEWS_CANONICAL}; accessed October 26, 2026; "
+        f"user-supplied text] {PASTED_CITE_MARKS}"
+    ), "the newest copy's fields alone: no title or publication carried over, the URL path's date"

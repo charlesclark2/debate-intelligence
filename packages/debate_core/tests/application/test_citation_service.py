@@ -33,12 +33,21 @@ from debate_core.application.citation_service import (
     SOURCE_PRECEDENCE,
     CitationResolution,
     CrossrefOutcome,
+    InvalidStatedCite,
     format_cite,
     keep_student_edits,
     resolve_citation,
+    stated_citation,
 )
 from debate_core.application.ports.doi_metadata import DoiAuthor, DoiDate, DoiWork
-from debate_core.domain import Card, Citation, CitationField, ProvenanceMode, VerificationStatus
+from debate_core.domain import (
+    AccessStatus,
+    Card,
+    Citation,
+    CitationField,
+    ProvenanceMode,
+    VerificationStatus,
+)
 from debate_core.domain.enums import CitationFieldSource
 from debate_core.evidence.edits import EditCite, EditKind
 from debate_core.evidence.verification_types import ReasonCode
@@ -980,3 +989,146 @@ def test_a_cite_cannot_record_a_cleared_field_that_is_no_field_or_out_of_order()
         Citation(cleared_by_student=("weather",))
     with pytest.raises(ValueError, match="cite order"):
         Citation(cleared_by_student=("title", "authors"))
+
+
+# --------------------------------------------------------------------------------------------
+# v1-e06-t12: cite fields the user stated for a copy they supplied
+# --------------------------------------------------------------------------------------------
+
+STATED_AUTHORS: Final = ("Ilse Marchetti", "Kwame Osei-Barlow")
+STATED_TITLE: Final = "Tariff Talks Enter a Third Day"
+STATED_PUBLICATION: Final = "Harbor Review Weekly"
+STATED_DATE: Final = "2026-10-03"
+USER_URL: Final = "https://www.harborreview.example/politics/2026/10/02/inside-the-tariff-talks"
+
+
+def stated_cite() -> Citation:
+    citation = stated_citation(
+        title=STATED_TITLE, authors=STATED_AUTHORS, publication=STATED_PUBLICATION, published_on=STATED_DATE
+    )
+    assert citation is not None
+    return citation
+
+
+async def stated_copy(world: CitationWorld, citation: Citation) -> CitationResolution:
+    """The user-supplied case's article, with a pasted copy stored with `citation`, resolved."""
+    article, _ = await world.add_case("user-supplied")
+    snapshot = await world.snapshots.create(
+        article_id=article.article_id,
+        raw_bytes=b"Pasted text.",
+        extracted_text="Pasted text.",
+        canonical_url=USER_URL,
+        retrieved_at=utc(2026, 10, 26, 15),
+        extractor_version="user-supplied-text-1",
+        provenance_mode=USER_SUPPLIED,
+        access_status=AccessStatus.UNKNOWN,
+        content_type="text/plain; charset=utf-8",
+        stated_citation=citation,
+    )
+    await world.articles.save_snapshot(snapshot)
+    return await world.service.resolve(article, await world.snapshots.load(snapshot))
+
+
+def test_stated_fields_become_a_cite_of_unverified_heuristic_fields_stripped_and_in_order() -> None:
+    citation = stated_citation(
+        title=f"  {STATED_TITLE}\t",
+        authors=[f" {STATED_AUTHORS[0]}", f"{STATED_AUTHORS[1]}  "],
+        publication=f"\n{STATED_PUBLICATION} ",
+        published_on=STATED_DATE,
+    )
+
+    assert citation == Citation(
+        authors=CitationField[tuple[str, ...]](
+            value=STATED_AUTHORS, source=HEURISTIC, raw="Ilse Marchetti; Kwame Osei-Barlow"
+        ),
+        title=CitationField[str](value=STATED_TITLE, source=HEURISTIC, raw=STATED_TITLE),
+        publication=CitationField[str](value=STATED_PUBLICATION, source=HEURISTIC, raw=STATED_PUBLICATION),
+        published_at=CitationField[datetime](value=utc(2026, 10, 3), source=HEURISTIC, raw=STATED_DATE),
+    )
+
+
+def test_nothing_stated_is_no_stated_cite() -> None:
+    assert stated_citation() is None
+    assert stated_citation(authors=[]) is None
+
+
+@pytest.mark.parametrize(
+    ("given", "field_name"),
+    [
+        ({"title": ""}, "title"),
+        ({"title": "  \t"}, "title"),
+        ({"authors": [STATED_AUTHORS[0], " "]}, "authors"),
+        ({"authors": [""]}, "authors"),
+        ({"publication": "\n"}, "publication"),
+    ],
+)
+def test_an_empty_stated_field_is_refused(given: dict[str, Any], field_name: str) -> None:
+    with pytest.raises(InvalidStatedCite) as refused:
+        stated_citation(**given)
+
+    assert refused.value.field == field_name
+
+
+@pytest.mark.parametrize(
+    "date_text",
+    [
+        "2026",
+        "2026-10",
+        "October 3, 2026",
+        "2026-10-3",
+        "2026/10/03",
+        "03-10-2026",
+        "2026-02-30",
+        "2026-10-03T09:00",
+        " ",
+    ],
+)
+def test_a_stated_date_is_a_full_iso_date_or_refused_naming_that_form(date_text: str) -> None:
+    with pytest.raises(InvalidStatedCite) as refused:
+        stated_citation(published_on=date_text)
+
+    assert refused.value.field == "published_at"
+    assert "YYYY-MM-DD" in str(refused.value)
+
+
+async def test_a_user_supplied_copy_is_cited_with_its_stated_fields_none_of_them_verified(
+    world: CitationWorld,
+) -> None:
+    resolution = await stated_copy(world, stated_cite())
+
+    assert triples(resolution.citation) == {
+        "authors": (list(STATED_AUTHORS), "heuristic", False),
+        "author_credentials": (None, "missing", False),
+        "title": (STATED_TITLE, "heuristic", False),
+        "publication": (STATED_PUBLICATION, "heuristic", False),
+        "published_at": ("2026-10-03T00:00:00Z", "heuristic", False),
+        "canonical_url": (USER_URL, "retrieval", False),
+        "accessed_at": ("2026-10-26T15:00:00Z", "retrieval", False),
+    }
+    assert resolution.stated_fields == ("authors", "title", "publication", "published_at")
+    assert resolution.citation.unverified_fields == (
+        "authors",
+        "title",
+        "publication",
+        "published_at",
+        "canonical_url",
+    )
+    formatted = format_cite(resolution.citation, provenance_mode=USER_SUPPLIED)
+    assert formatted.short_cite == "Marchetti et al. 26"
+    assert formatted.full_cite == (
+        'Marchetti et al. 26 [Ilse Marchetti and Kwame Osei-Barlow; "Tariff Talks Enter a Third Day"; '
+        f"Harbor Review Weekly; October 3, 2026; {USER_URL}; accessed October 26, 2026; user-supplied text]"
+    )
+
+
+async def test_a_copy_stated_in_part_takes_the_rest_from_the_rules_as_before(world: CitationWorld) -> None:
+    only_authors = stated_citation(authors=[STATED_AUTHORS[1]])
+    assert only_authors is not None
+
+    resolution = await stated_copy(world, only_authors)
+
+    assert resolution.stated_fields == ("authors",)
+    assert format_cite(resolution.citation, provenance_mode=USER_SUPPLIED).full_cite == (
+        'Osei-Barlow 26 [Kwame Osei-Barlow; "Inside the tariff talks"; October 2, 2026; '
+        f"{USER_URL}; accessed October 26, 2026; user-supplied text]"
+    )

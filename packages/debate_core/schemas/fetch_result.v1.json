@@ -630,6 +630,18 @@
           "description": "Whether the snapshot was already stored before this run.",
           "title": "Reused",
           "type": "boolean"
+        },
+        "stated_cite": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StatedCite"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The cite fields its user stated for a USER_SUPPLIED copy, unverified; absent when none were. A copy stored again keeps the fields of the copy that answered, stated or not."
         }
       },
       "required": [
@@ -647,6 +659,62 @@
         "reused"
       ],
       "title": "SnapshotSummary",
+      "type": "object"
+    },
+    "StatedCite": {
+      "additionalProperties": false,
+      "description": "The cite fields a user stated for a pasted copy, as stored (`v1-e06-t12`); none is verified.",
+      "properties": {
+        "authors": {
+          "description": "The authors stated, in order; empty when none were.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Authors",
+          "type": "array"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Title"
+        },
+        "publication": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Publication"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The date stated, YYYY-MM-DD; null when none was.",
+          "title": "Published At"
+        }
+      },
+      "required": [
+        "authors",
+        "title",
+        "publication",
+        "published_at"
+      ],
+      "title": "StatedCite",
       "type": "object"
     },
     "FetchReport": {

@@ -16,6 +16,209 @@
       "title": "AccessStatus",
       "type": "string"
     },
+    "Citation": {
+      "additionalProperties": false,
+      "description": "The cite for one card, with per-field provenance.\n\n`authors` is a single field holding the ordered author list rather than one field per author,\nbecause a page's byline is harvested (and verified) as a unit.\n\nResolution — harvesting these values from a snapshot's HTML and from Crossref — is the\ncitation service's job (E06); this model only records the outcome and its provenance.",
+      "properties": {
+        "authors": {
+          "$ref": "#/$defs/CitationField_tuple_Annotated_str__StringConstraints___________",
+          "description": "Author names, in order."
+        },
+        "author_credentials": {
+          "$ref": "#/$defs/CitationField_str_",
+          "description": "Author qualification as stated on the source or in Crossref/ORCID; never inferred."
+        },
+        "title": {
+          "$ref": "#/$defs/CitationField_str_",
+          "description": "Article title."
+        },
+        "publication": {
+          "$ref": "#/$defs/CitationField_str_",
+          "description": "Publication, journal or issuing body."
+        },
+        "published_at": {
+          "$ref": "#/$defs/CitationField_Annotated_datetime__AfterValidator__",
+          "description": "Publication date, in UTC."
+        },
+        "canonical_url": {
+          "$ref": "#/$defs/CitationField_str_",
+          "description": "Canonical URL of the source."
+        },
+        "accessed_at": {
+          "$ref": "#/$defs/CitationField_Annotated_datetime__AfterValidator__",
+          "description": "When the platform retrieved the source."
+        },
+        "authors_are_organizations": {
+          "default": false,
+          "description": "True when `authors` names the issuing organizations rather than people: the source named no person, and a typed source named the organization.",
+          "title": "Authors Are Organizations",
+          "type": "boolean"
+        },
+        "cleared_by_student": {
+          "default": [],
+          "description": "Cite fields a student's last cite edit left empty, in cite order. Re-resolving the cite keeps each as the student left it; the edit policy rewrites the list on every cite edit.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Cleared By Student",
+          "type": "array"
+        }
+      },
+      "title": "Citation",
+      "type": "object"
+    },
+    "CitationFieldSource": {
+      "description": "Where one citation field's value was harvested from.\n\nRecorded per field so an export can mark exactly which parts of a cite are unverified. A model\nis never a source: authors, credentials, publications and dates are harvested deterministically\nor left missing (architecture proposal §8).",
+      "enum": [
+        "meta_tag",
+        "json_ld",
+        "opengraph",
+        "crossref",
+        "byline",
+        "retrieval",
+        "heuristic",
+        "missing"
+      ],
+      "title": "CitationFieldSource",
+      "type": "string"
+    },
+    "CitationField_Annotated_datetime__AfterValidator__": {
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The harvested value, if any.",
+          "title": "Value"
+        },
+        "source": {
+          "$ref": "#/$defs/CitationFieldSource",
+          "default": "missing",
+          "description": "Where the value was harvested from."
+        },
+        "verified": {
+          "default": false,
+          "description": "True only when the source independently confirms the value.",
+          "title": "Verified",
+          "type": "boolean"
+        },
+        "raw": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The unparsed text the value was read from, kept for auditing.",
+          "title": "Raw"
+        }
+      },
+      "title": "CitationField[Annotated[datetime, AfterValidator]]",
+      "type": "object"
+    },
+    "CitationField_str_": {
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The harvested value, if any.",
+          "title": "Value"
+        },
+        "source": {
+          "$ref": "#/$defs/CitationFieldSource",
+          "default": "missing",
+          "description": "Where the value was harvested from."
+        },
+        "verified": {
+          "default": false,
+          "description": "True only when the source independently confirms the value.",
+          "title": "Verified",
+          "type": "boolean"
+        },
+        "raw": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The unparsed text the value was read from, kept for auditing.",
+          "title": "Raw"
+        }
+      },
+      "title": "CitationField[str]",
+      "type": "object"
+    },
+    "CitationField_tuple_Annotated_str__StringConstraints___________": {
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "anyOf": [
+            {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The harvested value, if any.",
+          "title": "Value"
+        },
+        "source": {
+          "$ref": "#/$defs/CitationFieldSource",
+          "default": "missing",
+          "description": "Where the value was harvested from."
+        },
+        "verified": {
+          "default": false,
+          "description": "True only when the source independently confirms the value.",
+          "title": "Verified",
+          "type": "boolean"
+        },
+        "raw": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The unparsed text the value was read from, kept for auditing.",
+          "title": "Raw"
+        }
+      },
+      "title": "CitationField[tuple[Annotated[str, StringConstraints], ...]]",
+      "type": "object"
+    },
     "ProvenanceMode": {
       "description": "Where a snapshot's or card's text came from.\n\nThis travels from the snapshot onto every card cut from it, so a reader can always tell\npublisher-retrieved evidence from text a person supplied.",
       "enum": [
@@ -184,6 +387,18 @@
       "default": null,
       "description": "Size of the raw blob in bytes.",
       "title": "Byte Size"
+    },
+    "stated_citation": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Citation"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Cite fields the user stated when they supplied this text (`v1-e06-t12`): the title, authors, publication and date, never verified. Only a USER_SUPPLIED snapshot has them. Left out of the stored record when there are none, so a snapshot stated nothing for is stored as before."
     }
   },
   "required": [

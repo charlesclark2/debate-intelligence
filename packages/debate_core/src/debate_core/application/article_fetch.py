@@ -18,7 +18,8 @@ person and for a program. It adds two things the outcome does not carry:
 URLs, the title the article is stored under, its identifiers, the access status with the
 classifier's reason, rules version and evidence (status codes, counts, marker ids: never page text,
 v1-e04-t03), and the snapshot's id, hashes, versions and paragraph count. Never a word of the page or
-of the pasted text: evidence text is not output (architecture proposal §8).
+of the pasted text: evidence text is not output (architecture proposal §8). For a pasted copy, the
+cite fields its user stated (`v1-e06-t12`), which are the user's words about the article, not its text.
 
 ## The published result
 
@@ -30,6 +31,7 @@ of the pasted text: evidence text is not output (architecture proposal §8).
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import UTC
 from types import TracebackType
 from typing import Any, Final, Protocol, Self
 
@@ -44,7 +46,7 @@ from debate_core.application.article_service import (
 )
 from debate_core.application.errors import ProviderUnavailable, error_code_of_class
 from debate_core.application.snapshot_service import SnapshotService
-from debate_core.domain import AccessStatus, ArticleIdentifiers, ProvenanceMode
+from debate_core.domain import AccessStatus, ArticleIdentifiers, Citation, ProvenanceMode
 from debate_core.domain.schema_export import JSON_SCHEMA_DIALECT
 from debate_core.retrieval.access import AccessEvidence
 
@@ -55,6 +57,7 @@ __all__ = [
     "Closeable",
     "FetchReport",
     "SnapshotSummary",
+    "StatedCite",
     "render_fetch_result_schema",
 ]
 
@@ -80,6 +83,27 @@ class Closeable(Protocol):
     async def aclose(self) -> None: ...
 
 
+class StatedCite(BaseModel):
+    """The cite fields a user stated for a pasted copy, as stored (`v1-e06-t12`); none is verified."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    authors: tuple[str, ...] = Field(description="The authors stated, in order; empty when none were.")
+    title: str | None
+    publication: str | None
+    published_at: str | None = Field(description="The date stated, YYYY-MM-DD; null when none was.")
+
+    @classmethod
+    def of(cls, stated: Citation) -> StatedCite:
+        published = stated.published_at.value
+        return cls(
+            authors=stated.authors.value or (),
+            title=stated.title.value,
+            publication=stated.publication.value,
+            published_at=published.astimezone(UTC).date().isoformat() if published is not None else None,
+        )
+
+
 class SnapshotSummary(BaseModel):
     """The stored snapshot a report names: ids, hashes, versions and counts, no text."""
 
@@ -99,6 +123,14 @@ class SnapshotSummary(BaseModel):
     byte_size: int | None
     retrieved_at: AwareDatetime
     reused: bool = Field(description="Whether the snapshot was already stored before this run.")
+    stated_cite: StatedCite | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        description=(
+            "The cite fields its user stated for a USER_SUPPLIED copy, unverified; absent when none were. "
+            "A copy stored again keeps the fields of the copy that answered, stated or not."
+        ),
+    )
 
 
 class FetchReport(BaseModel):
@@ -162,13 +194,18 @@ class ArticleFetch:
         """
         return await self._report(await self._articles.retrieve(url, refresh=refresh))
 
-    async def ingest_pasted(self, *, source_url: str, text: str, attested: bool) -> FetchReport:
+    async def ingest_pasted(
+        self, *, source_url: str, text: str, attested: bool, stated_citation: Citation | None = None
+    ) -> FetchReport:
         """Store `text` as USER_SUPPLIED under the article for `source_url`; nothing is fetched.
 
+        `stated_citation` is the cite fields the user states for it (`v1-e06-t12`), stored unverified.
         Raises what :meth:`ArticleService.ingest_user_text` raises, and then nothing is stored:
         `UserTextNotAttested` unless `attested` is True, `InvalidSourceUrl`, `UserTextRejected`.
         """
-        outcome = await self._articles.ingest_user_text(source_url=source_url, text=text, attested=attested)
+        outcome = await self._articles.ingest_user_text(
+            source_url=source_url, text=text, attested=attested, stated_citation=stated_citation
+        )
         return await self._report(outcome)
 
     async def user_supplied_copy(self, url: str) -> FetchReport:
@@ -197,6 +234,7 @@ class ArticleFetch:
                 byte_size=snapshot.byte_size,
                 retrieved_at=snapshot.retrieved_at,
                 reused=outcome.snapshot_reused,
+                stated_cite=StatedCite.of(snapshot.stated_citation) if snapshot.stated_citation else None,
             )
         return FetchReport(
             correlation_id=outcome.correlation_id,

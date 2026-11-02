@@ -70,7 +70,8 @@ def write_checkout(
         (root / relative).write_text(f'[project]\nname = "x"\nversion = "{version}"\n', encoding="utf-8")
     (root / "CHANGELOG.md").write_text(changelog, encoding="utf-8")
     SpecTree(
-        releases={"v1.4": "Succeeded", "v1.5": "Pending"},
+        # v1.6 has a spec and no epic yet.
+        releases={"v1.4": "Succeeded", "v1.5": "Pending", "v1.6": "Pending"},
         epics=[
             Epic("e08", "research", "v1.4", [Task("t01", "search", phase="Succeeded")], phase="Succeeded"),
             Epic(
@@ -295,11 +296,22 @@ def test_every_unfinished_epic_is_named(tmp_path: Path) -> None:
 
 def test_a_tag_with_no_release_spec_is_refused(tmp_path: Path) -> None:
     checkout = write_checkout(
+        tmp_path, version="1.7.0", changelog=FILLED_CHANGELOG.replace("v1.5.0", "v1.7.0")
+    )
+
+    assert refused(outcomes(checkout, tag="v1.7.0")) == {
+        "epics": "no release spec plan_specs/releases/v1.7.yaml for v1.7.0"
+    }
+
+
+def test_a_release_spec_that_lists_no_epics_is_refused(tmp_path: Path) -> None:
+    """Nothing to be Succeeded is not every epic Succeeded."""
+    checkout = write_checkout(
         tmp_path, version="1.6.0", changelog=FILLED_CHANGELOG.replace("v1.5.0", "v1.6.0")
     )
 
     assert refused(outcomes(checkout, tag="v1.6.0")) == {
-        "epics": "no release spec plan_specs/releases/v1.6.yaml for v1.6.0"
+        "epics": "plan_specs/releases/v1.6.yaml lists no epics"
     }
 
 

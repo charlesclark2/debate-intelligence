@@ -64,7 +64,7 @@ v2.3's extension work.
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 115 | 95 | 505 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 77 | 68 | 316 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 21 | 14 | 121 |
-| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 20 | 8 | 104 |
+| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 20 | 9 | 104 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 29 | 21 | 166 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 29 | 25 | 94 |
@@ -463,7 +463,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [`--auto-cut N` batch cutting](plan_specs/v1/e08-research-workflows/t06-auto-cut.yaml) `v1-e08-t06-auto-cut` | Pending | 3 | 9.0 |
 | [`debate-research daily` digests](plan_specs/v1/e08-research-workflows/t07-daily-command.yaml) `v1-e08-t07-daily-command` | Pending | 2 | 7.0 |
 | [Counterplans and kritiks get the research needs their arguments have](plan_specs/v1/e08-research-workflows/t08-counterplan-and-kritik-needs.yaml) `v1-e08-t08-counterplan-and-kritik-needs` | InProgress | 1 | 2.0 |
-| [An installed build carries the configuration `search` reads: the argument taxonomy, the ranking table and the feed lists](plan_specs/v1/e08-research-workflows/t09-installed-build-carries-search-configuration.yaml) `v1-e08-t09-installed-build-carries-search-configuration` | Pending | 2 | 1.0 |
+| [An installed build carries the configuration `search` reads: the argument taxonomy, the ranking table and the feed lists](plan_specs/v1/e08-research-workflows/t09-installed-build-carries-search-configuration.yaml) `v1-e08-t09-installed-build-carries-search-configuration` | Succeeded | 2 | 1.0 |
 | [One search asks each provider once, however many queries the expansion gives](plan_specs/v1/e08-research-workflows/t10-search-asks-each-provider-once.yaml) `v1-e08-t10-search-asks-each-provider-once` | Pending | 1 | 2.0 |
 | [The search.expand prompt names the argument family's needs, not the DA family's](plan_specs/v1/e08-research-workflows/t11-expand-prompt-sends-the-familys-needs.yaml) `v1-e08-t11-expand-prompt-sends-the-familys-needs` | Pending | 1 | 1.0 |
 

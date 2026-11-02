@@ -47,7 +47,7 @@ spec:
         the command refuses with the --paste hint; fetch's exit-3 hint names the option; by
         tests shown failing first, and an installed-build smoke check.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

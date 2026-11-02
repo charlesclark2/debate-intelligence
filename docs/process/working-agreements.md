@@ -22,19 +22,34 @@ The goal is a short wait between opening a PR and being able to merge it into `d
   otherwise the whole default selection ([agreement 10](#10-a-session-tests-what-it-changed-a-pull-request-what-it-reaches-and-dev-and-main-everything)).
   `ci.yml`'s `test-selection` job chooses it once and every part reads it; when it chooses no test,
   the parts are skipped and `ci` still passes (`v1-e41-t15`).
-  `tests/scripts/test_ci_workflow_test_job.py` collects all of them and proves it, for both, in a
-  job of its own, `partition-proof`: on every push to `dev` and `main`, and on a pull request that
+* **The selection decides how many parts run** (`v1-e41-t16`): one part per 30 test files chosen,
+  at least one and at most eight, and eight for the whole selection. `test-selection` counts its
+  own list, so the count costs nothing, and hands the `test` matrix a list of part numbers; each
+  part asks for `--part K/N` with N the matrix's size. Thirty test files are about 1,000 tests on
+  today's suite, which a runner's part runs in about 100 seconds. A small affected set saves
+  runners and the queue for them; most task pull requests reach a third of the suite or more and
+  still get seven or eight parts, so sizing does not shorten their wait
+  ([`docs/process/ci-test-part-costs.md`](ci-test-part-costs.md) has the figures). A dispatch of
+  `ci.yml` can ask for pytest-xdist's `--dist worksteal` instead of `load` (the `xdist_dist`
+  input); every other run uses `load` until the PM decides from a comparison on one commit.
+* **The parts are proved to be the selection.**
+  `tests/scripts/test_ci_workflow_test_job.py` collects every part and proves it, for an affected
+  set and for the whole selection, in a job of its own, `partition-proof`: on every push to `dev` and `main`, and on a pull request that
   changes what the proof covers (`ci.yml`, `tests/pytest_plugins/`, the selection scripts, pytest's
   configuration, the proof itself). The proof collects the whole suite nine times, and in a part it
-  held that part for about 70 seconds. No other test is moved off the PR path to make room.
+  held that part for about 70 seconds. It also deals the real collection at every size the matrix
+  can take, one part to eight, with the plugin's own dealing function. No other test is moved off
+  the PR path to make room.
 * **A pull request's newer push cancels its older run; nothing else is cancelled.** A push to `dev`
   or `main` and a dispatched run each have a concurrency group of their own, so every merge commit
   gets its own verdict and never waits for the run before it (`v1-e41-t15`).
 * **When it drifts**, read the `test` parts of a few recent pull requests. Each ends with its 25
   slowest tests.
-  * `ci` over 3 minutes on ordinary pull requests, or one part's pytest step over 2: append the
-    next number to `matrix.part` in `ci.yml` (`[1, 2, 3, 4]` becomes `[1, 2, 3, 4, 5]`). Nothing
-    else changes. Each extra part repeats the job's setup, about 15 seconds, and its own collection.
+  * One part's pytest step over 2 minutes on a whole-selection run: raise `MOST_PARTS` in
+    `scripts/ci_test_selection.py` (8 becomes 9). Over 2 minutes on an affected set: lower its
+    `TEST_FILES_PER_PART` (30). Nothing else changes. Each extra part repeats the job's setup,
+    about 15 seconds, and its own collection. `ci` over 3 minutes on ordinary pull requests while
+    every part is under 2 is not a part count to change: read the costs page first.
   * One part steadily slower than the others: a few slow tests have landed together. Its durations
     name them. Make them cheaper; never mark them `slow` to get them out of the way.
 * **The same option splits a long local run** for the operator: `uv run pytest --part 1/2` and
@@ -43,7 +58,7 @@ The goal is a short wait between opening a PR and being able to merge it into `d
 * **Coverage is not measured on a PR, or by a plain `uv run pytest`.** It took a third of the
   suite's time and nothing is gated on it. On every push to `dev` and `main`, each test part measures
   its share and `ci.yml`'s `coverage` job combines them (`v1-e01-t42`), so the push run waits only for
-  its parts. A push part that takes over 8 minutes means one part more. Locally, ask for it:
+  its parts. A push part that takes over 8 minutes means one part more: a larger `MOST_PARTS`. Locally, ask for it:
   `uv run pytest --cov --cov-report=term-missing`.
 * **What runs on every PR:** formatting and lint, type checks, fast unit and contract tests,
   import-boundary checks, spec validation. All offline: recorded fixtures and the fake/replay
@@ -231,7 +246,9 @@ tests its changes reach, and the whole selection runs once per merge instead (`v
   never fewer. The job summary says how many test files it chose and, for the whole selection, why.
   The one change that runs no test is the two generated files alone, `ROADMAP.md` and
   `docs/README.md`: the bot's refresh pull request, and the run it dispatches on its branch, run
-  only the doc checks (`v1-e41-t15`).
+  only the doc checks (`v1-e41-t15`); since `v1-e41-t16` that dispatch also runs no type check,
+  import check, Terraform, site or workflow job, as its pull request runs none. An affected set
+  runs in one part per 30 test files, at most eight, and the whole selection in eight.
 * **Dev's push run and every promotion run everything.** A push to `dev` or `main`, a pull request
   into `main` and a dispatched run each run the whole default selection, and the `coverage` job
   measures it on every push. The dev pre-release waits for dev's push run, so a test the affected set

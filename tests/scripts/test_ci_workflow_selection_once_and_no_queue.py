@@ -119,6 +119,8 @@ def test_the_selection_job_hands_on_its_steps_answer_and_every_part_reads_it() -
     assert selection["outputs"] == {
         "run_parts": f"${{{{ steps.{step['id']}.outputs.run_parts }}}}",
         "test_files": f"${{{{ steps.{step['id']}.outputs.test_files }}}}",
+        # How many parts run (v1-e41-t16): tests/scripts/test_ci_workflow_parts_sized_to_the_selection.py.
+        "parts": f"${{{{ steps.{step['id']}.outputs.parts }}}}",
     }
     test = jobs()["test"]
     assert sorted(test["needs"]) == sorted(["changes", SELECTION_JOB])
@@ -168,6 +170,7 @@ exit "$STAND_IN_STATUS"
 
 TWO_FILES_CHOSEN = (
     "run_parts=true\n"
+    "parts=[1]\n"
     "test_files<<test_files_0123abcd\n"
     "packages/debate_core/tests/test_domain.py\n"
     "tests/architecture/test_layers.py\n"
@@ -247,6 +250,7 @@ def test_what_the_script_chose_reaches_every_part_as_one_test_file_per_line(tmp_
 
     assert outputs == {
         "run_parts": "true",
+        "parts": "[1]",
         "test_files": "packages/debate_core/tests/test_domain.py\ntests/architecture/test_layers.py",
     }
     assert "::warning" not in completed.stdout
@@ -259,20 +263,24 @@ def test_what_the_script_chose_reaches_every_part_as_one_test_file_per_line(tmp_
 
 def test_the_whole_selection_reaches_every_part_as_an_empty_file(tmp_path: Path) -> None:
     _, outputs = run_the_selection_step(
-        tmp_path, status=0, outputs="run_parts=true\ntest_files<<end_x\nend_x\n"
+        tmp_path,
+        status=0,
+        outputs="run_parts=true\nparts=[1, 2, 3, 4, 5, 6, 7, 8]\ntest_files<<end_x\nend_x\n",
     )
 
-    assert outputs == {"run_parts": "true", "test_files": ""}
+    assert outputs == {"run_parts": "true", "parts": "[1, 2, 3, 4, 5, 6, 7, 8]", "test_files": ""}
     assert run_the_part_step(tmp_path, outputs["test_files"]) == ""
 
 
 def test_a_script_that_fails_runs_every_part_over_the_whole_selection(tmp_path: Path) -> None:
     """Even after writing an answer of its own: a failed choice runs every test, never some or none."""
     completed, outputs = run_the_selection_step(
-        tmp_path, status=1, outputs="run_parts=false\ntest_files<<end_x\nend_x\n"
+        tmp_path, status=1, outputs="run_parts=false\nparts=[1]\ntest_files<<end_x\nend_x\n"
     )
 
     assert outputs.get("run_parts") == "true"
+    # Every part of the most there are, as for any whole selection (v1-e41-t16).
+    assert json.loads(outputs["parts"]) == [1, 2, 3, 4, 5, 6, 7, 8]
     assert outputs.get("test_files", "") == ""
     assert "::warning title=Test selection::" in completed.stdout
     summary = (tmp_path / "summary.md").read_text(encoding="utf-8")
@@ -326,7 +334,11 @@ def every_need_passed() -> dict[str, dict[str, Any]]:
         name: {"result": "success", "outputs": {}} for name in jobs()["ci"]["needs"]
     }
     needs["changes"]["outputs"] = dict.fromkeys(jobs()["changes"]["outputs"], "true")
-    needs[SELECTION_JOB]["outputs"] = {"run_parts": "true", "test_files": ""}
+    needs[SELECTION_JOB]["outputs"] = {
+        "run_parts": "true",
+        "test_files": "",
+        "parts": "[1, 2, 3, 4, 5, 6, 7, 8]",
+    }
     return needs
 
 
@@ -362,7 +374,7 @@ def test_ci_passes_when_every_job_passed(tmp_path: Path) -> None:
 def no_tests_chosen() -> dict[str, dict[str, Any]]:
     """The bot's run: Python's filter matched, the selection chose nothing, and the parts were skipped."""
     needs = every_need_passed()
-    needs[SELECTION_JOB]["outputs"] = {"run_parts": "false", "test_files": ""}
+    needs[SELECTION_JOB]["outputs"] = {"run_parts": "false", "test_files": "", "parts": "[1]"}
     needs["test"] = {"result": "skipped", "outputs": {}}
     return needs
 

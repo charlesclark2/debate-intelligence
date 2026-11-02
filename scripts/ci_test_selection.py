@@ -18,11 +18,19 @@ The bot's pull request is opened with the workflow token, which starts no pull_r
 bot dispatches ci on its branch; that run is compared with origin/dev, and it too runs no test when
 the branch changes only those files. Until then each refresh pull request ran all eight parts.
 
+It also says how many parts run (v1-e41-t16): one per 30 test files chosen, at least one and at
+most MOST_PARTS, and MOST_PARTS for the whole selection. Every part pays its setup and its own
+collection, and until then every selection ran in all eight, including an affected set of a few
+dozen files. Thirty test files are about 1,000 tests on today's suite, which a runner's part runs in
+about 100 s, under working agreement 1's 2-minute line (docs/process/ci-test-part-costs.md has the
+figures). The count is the selection's own, so it costs nothing on the parts' path.
+
 It fails toward more tests, never fewer. The choice is written in `$GITHUB_OUTPUT`'s format:
-`run_parts`, whether the parts run at all, and `test_files`, one test file per line, for pytest to
-read as `@FILE`. For the whole selection the list is empty: pytest given no paths runs every path
-in `testpaths`. If this script itself cannot run, the workflow step hands the parts the whole
-selection, so a crash here is also the whole selection.
+`run_parts`, whether the parts run at all, `parts`, the matrix's list of part numbers as JSON, and
+`test_files`, one test file per line, for pytest to read as `@FILE`. For the whole selection the
+list is empty: pytest given no paths runs every path in `testpaths`. If this script itself cannot
+run, the workflow step hands the parts the whole selection in the most parts, so a crash here is
+also the whole selection.
 
 ci.yml's `test-selection` job runs this once and hands the choice to every part, which deals the
 same list round the parts (run_in_parts.py), so the parts together are exactly the selection;
@@ -38,6 +46,7 @@ Usage, as ci.yml's `test-selection` job runs it:
 from __future__ import annotations
 
 import argparse
+import json
 import subprocess
 import sys
 import uuid
@@ -51,6 +60,12 @@ AFFECTED_SET_BRANCH = "dev"
 # What refresh-generated-files.yml regenerates, and the branch it pushes them to (v1-e01-t16).
 GENERATED_FILES = frozenset({"ROADMAP.md", "docs/README.md"})
 GENERATED_FILES_BRANCH = "bot/refresh-generated-files"
+# How many parts run (v1-e41-t16, the PM's ruling of 2026-11-02): one per TEST_FILES_PER_PART test
+# files chosen, never more than MOST_PARTS, which the whole selection always gets. A part's pytest step
+# passing 2 minutes on a whole-selection run means a larger MOST_PARTS (working agreement 1).
+TEST_FILES_PER_PART = 30
+MOST_PARTS = 8
+SIZES_THE_RULE_GIVES = list(range(1, MOST_PARTS + 1))
 # The parts read `test_files` from an environment variable, and Linux refuses one over 128 KiB.
 # 650 test files name about 42 KB.
 LONGEST_LIST_FOR_THE_PARTS = 100_000
@@ -147,6 +162,21 @@ def handed_to_the_parts(choice: Choice) -> Choice:
     return choice
 
 
+def parts_of(choice: Choice) -> list[int]:
+    """The `test` job's matrix for this choice: part numbers 1 to N. When no part runs it is one part
+    that never runs, since GitHub refuses an empty matrix whether or not the job's `if:` holds."""
+    if choice.tests is None:
+        parts = MOST_PARTS
+    else:
+        parts = min(MOST_PARTS, max(1, -(-len(choice.tests) // TEST_FILES_PER_PART)))
+    return list(range(1, parts + 1))
+
+
+def in_parts(choice: Choice) -> str:
+    parts = len(parts_of(choice))
+    return f"in {parts} part{'s' if parts > 1 else ''}"
+
+
 def commit_exists(root: Path, revision: str) -> bool:
     completed = subprocess.run(
         ["git", "cat-file", "-e", f"{revision}^{{commit}}"], cwd=root, capture_output=True, check=False
@@ -164,24 +194,27 @@ def summary(choice: Choice) -> str:
     if choice.tests is None:
         return (
             "### Tests: the whole default selection\n\n"
-            f"Every part runs its share of every test file, because {choice.reason}.\n"
+            f"It runs {in_parts(choice)}, each its share of every test file, because {choice.reason}.\n"
         )
     listing = "\n".join(f"- `{test}`" for test in choice.tests)
     return (
         "### Tests: the affected set\n\n"
-        f"{len(choice.tests)} of {choice.total} test files: {choice.reason}. "
-        "Every part runs its share of them.\n\n"
+        f"{len(choice.tests)} of {choice.total} test files, {in_parts(choice)}: {choice.reason}. "
+        f"Every part runs its share of them (one part per {TEST_FILES_PER_PART} test files, "
+        f"at most {MOST_PARTS}).\n\n"
         f"<details><summary>The {len(choice.tests)} test files</summary>\n\n{listing}\n\n</details>\n"
     )
 
 
 def github_outputs(choice: Choice) -> str:
-    """The choice in `$GITHUB_OUTPUT`'s format: `run_parts`, whether the test parts run at all, and
-    `test_files`, one test file per line, which is empty for the whole default selection."""
+    """The choice in `$GITHUB_OUTPUT`'s format: `run_parts`, whether the test parts run at all,
+    `parts`, the matrix's part numbers as JSON, and `test_files`, one test file per line, which is
+    empty for the whole default selection."""
     delimiter = f"test_files_{uuid.uuid4().hex}"
     listing = "".join(f"{test}\n" for test in choice.tests or ())
     run_parts = "true" if choice.runs_parts else "false"
-    return f"run_parts={run_parts}\ntest_files<<{delimiter}\n{listing}{delimiter}\n"
+    parts = json.dumps(parts_of(choice))
+    return f"run_parts={run_parts}\nparts={parts}\ntest_files<<{delimiter}\n{listing}{delimiter}\n"
 
 
 def main(argv: list[str] | None = None) -> int:

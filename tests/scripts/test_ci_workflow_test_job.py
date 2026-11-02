@@ -19,7 +19,10 @@ still looks green:
   it, and the node ids are compared with the unsplit collection of the same command. Those two
   proofs collect the whole suite nine times between them, so they carry the `partition_proof`
   marker: the parts leave them out, and ci.yml's `partition-proof` job runs them on every push and
-  on a pull request that changes what they prove (v1-e41-t15).
+  on a pull request that changes what they prove (v1-e41-t15). Since v1-e41-t16 the matrix is as
+  many parts as `test-selection` gives for the selection, one to eight, so the proofs collect the
+  parts it gives and also deal the real collection with the plugin's own function at every size the
+  rule can give: milliseconds, where collecting every size would collect the suite 45 times.
 * **Each part runs the selection it is given** (v1-e01-t38): on a pull request into dev, the test
   files `scripts/ci_test_selection.py` chose; otherwise an empty file, which is the whole default
   selection. The parts are compared with the unsplit collection of both. Since v1-e41-t15 the
@@ -59,6 +62,10 @@ CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 PARTS_SELECTION = "not slow and not live and not partition_proof"
 PART_OF_THE_MATRIX = "${{ matrix.part }}/${{ strategy.job-total }}"
 UV_RUN_PYTEST = ["uv", "run", "--frozen", "pytest"]
+# xdist's distribution, set by the job: `load` but on a dispatch that asks for worksteal (v1-e41-t16).
+# It moves no test between parts, so the commands here run with the default.
+XDIST_DIST = "$XDIST_DIST"
+THE_DEFAULT_DIST = "load"
 # Where the selection step writes the test files and the pytest step reads them, as `@FILE`.
 SELECTION_FILE = "$RUNNER_TEMP/test-selection.txt"
 # One small file, so that running the commands for real costs a second each. It imports a workspace
@@ -108,7 +115,7 @@ def pytest_arguments(condition: str = ON_ANY_OTHER_EVENT) -> list[str]:
     # A part names no path: it runs what its selection file holds, or everything `testpaths` lists.
     # (It also keeps the commands run below to the files they are given.)
     assert [word for word in arguments if (REPO_ROOT / word).exists()] == [], run
-    return arguments
+    return [THE_DEFAULT_DIST if word == XDIST_DIST else word for word in arguments]
 
 
 def unsplit_arguments() -> list[str]:
@@ -169,8 +176,32 @@ def always_run_test_files() -> list[str]:
     return sorted(files)
 
 
-def parts_in_the_matrix() -> list[int]:
-    return jobs()["test"]["strategy"]["matrix"]["part"]
+def the_selection_script() -> Any:
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    import ci_test_selection
+
+    return ci_test_selection
+
+
+def parts_given_for(test_files: list[str] | None) -> list[int]:
+    """The matrix `test-selection` hands the `test` job for these test files (None: the whole
+    selection), read from the `parts` output the script writes."""
+    script = the_selection_script()
+    choice = script.whole("the proof") if test_files is None else script.Choice(tuple(test_files), "", 0)
+    [parts] = [
+        line.removeprefix("parts=")
+        for line in script.github_outputs(choice).splitlines()
+        if line.startswith("parts=")
+    ]
+    return json.loads(parts)
+
+
+def dealt_into(node_ids: list[str], parts: int) -> list[list[str]]:
+    """`node_ids` dealt into `parts` parts by run_in_parts.py's own function, as its hook deals them."""
+    dealt = importlib.import_module("run_in_parts").parts_dealt(node_ids, parts)
+    return [
+        [node_id for node_id, to in zip(node_ids, dealt, strict=True) if to == part] for part in range(parts)
+    ]
 
 
 def environment_without_this_run(**more: str) -> dict[str, str]:
@@ -186,9 +217,23 @@ def environment_without_this_run(**more: str) -> dict[str, str]:
 
 
 def run_pytest(*arguments: str, **environment: str) -> subprocess.CompletedProcess[str]:
-    """A fresh pytest in this checkout, in one process, without what this run put in the environment."""
+    """A fresh pytest in this checkout, in one process, without what this run put in the environment.
+    `--dist no` as well as `-n 0`: given a part's `--dist load` and no workers, pytest-cov measures as
+    xdist's controller and keeps no data. On a runner `-n auto` starts the workers."""
     return subprocess.run(
-        [sys.executable, "-m", "pytest", *arguments, "-n", "0", "-p", "no:cacheprovider", "--color=no"],
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            *arguments,
+            "-n",
+            "0",
+            "--dist",
+            "no",
+            "-p",
+            "no:cacheprovider",
+            "--color=no",
+        ],
         cwd=REPO_ROOT,
         env=environment_without_this_run(**environment),
         capture_output=True,
@@ -510,9 +555,14 @@ def test_the_combining_step_fails_unless_it_has_exactly_every_part_of_the_matrix
 
 def test_the_parts_are_numbered_from_one_and_each_asks_for_its_number_out_of_the_matrix_total() -> None:
     strategy = jobs()["test"]["strategy"]
-    parts = parts_in_the_matrix()
-    assert len(parts) >= 2
-    assert parts == list(range(1, len(parts) + 1))
+    # The list test-selection gives (v1-e41-t16), at every size its rule gives.
+    assert strategy["matrix"] == {"part": "${{ fromJSON(needs.test-selection.outputs.parts) }}"}
+    script = the_selection_script()
+    assert len(script.SIZES_THE_RULE_GIVES) >= 2
+    for size in script.SIZES_THE_RULE_GIVES:
+        files = [f"tests/test_{number}.py" for number in range(size * script.TEST_FILES_PER_PART)]
+        assert parts_given_for(files) == list(range(1, size + 1))
+    assert parts_given_for(None) == list(range(1, max(script.SIZES_THE_RULE_GIVES) + 1))
     # Each part reports for itself: one failing part does not cancel the others' results.
     assert strategy["fail-fast"] is False
     arguments = pytest_arguments()
@@ -553,20 +603,32 @@ def assert_the_parts_are_exactly(unsplit: list[str], each_part: list[list[str]],
         assert max(held) - min(held) <= 1, f"{test_file} is dealt unevenly: {held}"
 
 
-def collect_unsplit_and_each_part(selection: Path) -> tuple[list[str], list[list[str]]]:
+def collect_unsplit_and_each_part(
+    selection: Path, *matrices: list[int]
+) -> tuple[list[str], list[list[list[str]]]]:
     """One unsplit collection of what `selection` names (a part's command without `--part`), and each
-    part's, run side by side. Until v1-e01-t42 the unsplit command was the `coverage` job's; a push
-    part's command is this one with coverage added, which collects nothing more or less."""
-    parts = parts_in_the_matrix()
-    with ThreadPoolExecutor(max_workers=len(parts) + 1) as pool:
-        unsplit, *each_part = pool.map(
-            lambda arguments: collected(*arguments),
-            [
-                [*unsplit_arguments(), f"@{selection}"],
-                *(part_arguments(part, len(parts), selection) for part in parts),
-            ],
-        )
-    return unsplit, each_part
+    part's of each matrix, run side by side. Until v1-e01-t42 the unsplit command was the `coverage`
+    job's; a push part's command is this one with coverage added, which collects nothing more or less."""
+    commands = [[*unsplit_arguments(), f"@{selection}"]]
+    for parts in matrices:
+        commands += [part_arguments(part, len(parts), selection) for part in parts]
+    with ThreadPoolExecutor(max_workers=len(commands)) as pool:
+        unsplit, *every_part = pool.map(lambda arguments: collected(*arguments), commands)
+    each_matrix: list[list[list[str]]] = []
+    for parts in matrices:
+        each_matrix.append(every_part[: len(parts)])
+        every_part = every_part[len(parts) :]
+    return unsplit, each_matrix
+
+
+def assert_dealt_at_every_size(unsplit: list[str], collected_parts: list[list[str]], what: str) -> None:
+    """The collected parts are the plugin's function's dealing, so that function, dealt at every size
+    the rule can give, is what those parts would collect; and each of those is a partition."""
+    assert [set(part) for part in dealt_into(unsplit, len(collected_parts))] == [
+        set(part) for part in collected_parts
+    ]
+    for size in the_selection_script().SIZES_THE_RULE_GIVES:
+        assert_the_parts_are_exactly(unsplit, dealt_into(unsplit, size), f"{what}, in {size} parts")
 
 
 @pytest.mark.partition_proof
@@ -576,10 +638,12 @@ def test_the_parts_together_are_exactly_the_default_selection_and_no_test_is_in_
     """The proof that splitting the job dropped nothing (v1-e01-t27 ac3), for the whole selection:
     what every push, promotion and dispatch runs. The default selection here is the parts' own,
     which leaves out this proof and the next: the partition-proof job runs them."""
-    unsplit, each_part = collect_unsplit_and_each_part(the_whole_selection(tmp_path))
+    parts = parts_given_for(None)
+    unsplit, [each_part] = collect_unsplit_and_each_part(the_whole_selection(tmp_path), parts)
 
     assert len(unsplit) > 5000, "the unsplit collection is not the whole suite"
     assert_the_parts_are_exactly(unsplit, each_part, "the default selection")
+    assert_dealt_at_every_size(unsplit, each_part, "the default selection")
 
 
 @pytest.mark.partition_proof
@@ -589,19 +653,24 @@ def test_the_parts_together_are_exactly_an_affected_set_and_each_holds_some_of_t
     """The same proof for a selection given in the file, as a pull request into dev gives one (v1-e01-t38).
 
     Every selection holds the always-run list, and each part gets some of it, so no part of a small
-    selection collects nothing (pytest's exit status 5, which would fail the part).
+    selection collects nothing (pytest's exit status 5, which would fail the part), even in the most
+    parts there are. The selection's own matrix (v1-e41-t16) is collected too.
     """
     always_run = always_run_test_files()
     given = sorted({*always_run, A_SMALL_TEST_FILE, "tests/scripts/test_ci_workflow_test_job.py"})
     selection = tmp_path / "selection.txt"
     selection.write_text("".join(f"{test_file}\n" for test_file in given), encoding="utf-8")
 
-    unsplit, each_part = collect_unsplit_and_each_part(selection)
+    its_own, the_most = parts_given_for(given), parts_given_for(None)
+    assert len(its_own) < len(the_most), (its_own, the_most)
+    unsplit, [in_its_own_parts, each_part] = collect_unsplit_and_each_part(selection, its_own, the_most)
 
     collected_files = {node_id.partition("::")[0] for node_id in unsplit}
     assert collected_files <= set(given)
     assert {A_SMALL_TEST_FILE, "tests/scripts/test_ci_workflow_test_job.py"} <= collected_files
     assert len(unsplit) < 5000, "the selection file was not read: this is the whole suite"
+    assert_the_parts_are_exactly(unsplit, in_its_own_parts, "the selection given")
     assert_the_parts_are_exactly(unsplit, each_part, "the selection given")
+    assert_dealt_at_every_size(unsplit, each_part, "the selection given")
     for number, part in enumerate(each_part, start=1):
         assert any(node_id.partition("::")[0] in always_run for node_id in part), f"part {number}"

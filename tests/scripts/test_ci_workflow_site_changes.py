@@ -44,10 +44,24 @@ VALIDATE_DEV_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "validate-dev.yml"
 
 STUB_LOG_LINE = 'printf \'%s %s\\n\' "$(basename "$0")" "$*" >> "$STUB_LOG"\n'
 
-PULL_REQUEST_INTO_MAIN = {"github.event_name": "pull_request", "github.base_ref": "main"}
-PULL_REQUEST_INTO_DEV = {"github.event_name": "pull_request", "github.base_ref": "dev"}
-PUSH = {"github.event_name": "push", "github.base_ref": ""}
-DISPATCH = {"github.event_name": "workflow_dispatch", "github.base_ref": ""}
+PULL_REQUEST_INTO_MAIN = {
+    "github.event_name": "pull_request",
+    "github.base_ref": "main",
+    "github.ref_name": "7/merge",
+}
+PULL_REQUEST_INTO_DEV = {
+    "github.event_name": "pull_request",
+    "github.base_ref": "dev",
+    "github.ref_name": "7/merge",
+}
+PUSH = {"github.event_name": "push", "github.base_ref": "", "github.ref_name": "dev"}
+DISPATCH = {"github.event_name": "workflow_dispatch", "github.base_ref": "", "github.ref_name": "dev"}
+# The run refresh-generated-files.yml dispatches on its branch (v1-e41-t16).
+DISPATCH_OF_THE_BOTS_BRANCH = {
+    "github.event_name": "workflow_dispatch",
+    "github.base_ref": "",
+    "github.ref_name": "bot/refresh-generated-files",
+}
 
 # What a page looks like with a fact still to be supplied.
 PLANTED_PAGE = "---\ntitle: Results\n---\n\nThe [[TBD]] results summary.\n"
@@ -285,10 +299,28 @@ def filter_steps() -> list[dict[str, Any]]:
     ]
 
 
-def changes_outputs(changed: Iterable[str], context: Mapping[str, str]) -> dict[str, str]:
-    """The `changes` job's outputs for a run whose changed files are `changed`."""
+STEP_OUTPUT = re.compile(r"steps\.([\w-]+)\.outputs\.(\w+)")
+
+
+def changes_outputs(
+    changed: Iterable[str],
+    context: Mapping[str, str],
+    written: Mapping[str, Mapping[str, str]] | None = None,
+) -> dict[str, str]:
+    """The `changes` job's outputs for a run whose changed files are `changed`. `written` is what the
+    job's other steps wrote to `$GITHUB_OUTPUT`, by step id; a step that wrote nothing, or did not
+    run because its `if:` did not hold, gives the empty string for every output."""
     files = list(changed)
     values = dict(context)
+    for step in ci_jobs()["changes"]["steps"]:
+        if "id" not in step or step.get("uses", "").startswith("dorny/paths-filter@"):
+            continue
+        ran = holds(step["if"], context) if "if" in step else True
+        for expression in ci_jobs()["changes"]["outputs"].values():
+            for step_id, name in STEP_OUTPUT.findall(expression):
+                if step_id == step["id"]:
+                    given = (written or {}).get(step_id, {}).get(name, "")
+                    values[f"steps.{step_id}.outputs.{name}"] = given if ran else ""
     for step in filter_steps():
         ran = holds(step["if"], context) if "if" in step else True
         quantifier = step["with"].get("predicate-quantifier", "some")

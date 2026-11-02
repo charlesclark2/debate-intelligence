@@ -24,9 +24,16 @@
 #     part is not a list of directories: tests/pytest_plugins/run_in_parts.py deals every test file's
 #     tests round the parts, so the parts are level without anyone balancing them and no part can
 #     be forgotten. tests/scripts/test_ci_workflow_test_job.py collects every part and proves that
-#     together they are exactly the unsplit selection. That proof collects the whole suite nine times,
-#     so it runs in the `partition-proof` job, on every push and on a pull request that changes what
-#     it proves, and the parts leave its `partition_proof` marker out (v1-e41-t15).
+#     together they are exactly the unsplit selection, and deals the real collection at every size
+#     the matrix can take. That proof collects the whole suite nine times, so it runs in the
+#     `partition-proof` job, on every push and on a pull request that changes what it proves, and
+#     the parts leave its `partition_proof` marker out (v1-e41-t15).
+#   * N follows the selection (v1-e41-t16): one part per 30 test files chosen, at least one and at
+#     most eight, and eight for the whole selection; `test-selection` hands the matrix its list.
+#     Every part pays its setup and a collection, so an affected set of a few dozen files no longer
+#     takes eight runners. Most task pull requests reach a third of the suite or more and still get
+#     seven or eight (docs/process/ci-test-part-costs.md). A dispatch can ask for xdist's
+#     `--dist worksteal` instead of `load`, for the PM's comparison of the two on one commit.
 #   * A pull request into dev runs the tests its changes reach (v1-e01-t38): scripts/ci_test_selection.py
 #     reads scripts/affected_tests.py's selection against the pull request's base commit, always-run
 #     list included, and the parts deal that list. Every other run is the whole default selection: a
@@ -48,11 +55,11 @@
 #     Coverage makes a part about half as long again (1.52 times, measured on the operator's Mac),
 #     so a push part takes longer than the same part on a pull request: the 2-minute figure below
 #     is for pull requests, and a push part is held by the job's 10-minute limit.
-#   * When it drifts: every part ends with its 25 slowest tests (`--durations=25`). If `ci` on
-#     ordinary pull requests passes 3 minutes, or one part's pytest step passes 2, append the next
-#     number to the `test` job's `matrix.part`. That is the whole change. If one part is steadily
-#     slower than the rest, its durations name the few slow tests that landed together; make them
-#     cheaper, as working agreement 1 describes.
+#   * When it drifts: every part ends with its 25 slowest tests (`--durations=25`). If one part's
+#     pytest step passes 2 minutes on a whole-selection run, raise MOST_PARTS in
+#     scripts/ci_test_selection.py; if it does on an affected set, lower TEST_FILES_PER_PART there.
+#     That is the whole change. If one part is steadily slower than the rest, its durations name the
+#     few slow tests that landed together; make them cheaper, as working agreement 1 describes.
 #
 # Every job in every workflow names its runner image, ubuntu-24.04, never ubuntu-latest: GitHub moves
 # ubuntu-latest to Ubuntu 26 from 2026-10-19, and a new image (its python3, shellcheck, gh) must not
@@ -68,8 +75,20 @@ on:
     branches: [dev, main]
   # refresh-generated-files.yml dispatches this on bot/refresh-generated-files (v1-e01-t16): a pull
   # request opened with the workflow token starts no pull_request run, and protect-dev requires
-  # `ci` on its head commit. A dispatch runs every job, like a push.
+  # `ci` on its head commit. A dispatch runs every job, like a push, but for that one when its branch
+  # changes only the generated files (the `changes` job).
   workflow_dispatch:
+    inputs:
+      # How pytest-xdist hands a part's tests to its workers (v1-e41-t16). `load` sends fixed batches;
+      # `worksteal` moves queued tests from a busy worker to an idle one, which may shorten a part's
+      # tail of heavy tests. Every push, pull request and the bot's dispatch run `load`. The PM
+      # compares the two on dispatches of one dev commit and decides the default from the eight
+      # parts' pytest step times (docs/process/ci-test-part-costs.md).
+      xdist_dist:
+        description: "pytest-xdist's --dist for every test part: load (the default) or worksteal"
+        type: choice
+        options: [load, worksteal]
+        default: load
 
 permissions:
   contents: read
@@ -86,7 +105,10 @@ concurrency:
 
 jobs:
   # Which areas of the repository a pull request touches. Pushes to dev and main run every job: they
-  # are the record that the merged result is green, and the 5-minute budget is for pull requests.
+  # are the record that the merged result is green, and the 5-minute budget is for pull requests. So
+  # does a dispatch, but for the one refresh-generated-files.yml makes on its branch when the branch
+  # changes only ROADMAP.md and docs/README.md: that run stands in for the bot's pull request, which
+  # starts no pull_request run, and selects what the pull request would, nothing (v1-e41-t16).
   changes:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -95,16 +117,45 @@ jobs:
       # dorny/paths-filter lists a pull request's files through the REST API.
       pull-requests: read
     outputs:
-      python: ${{ github.event_name != 'pull_request' || steps.filter.outputs.python == 'true' || steps.markdown.outputs.outside_site == 'true' }}
-      infrastructure: ${{ github.event_name != 'pull_request' || steps.filter.outputs.infrastructure == 'true' }}
-      site: ${{ github.event_name != 'pull_request' || steps.filter.outputs.site == 'true' }}
-      web: ${{ github.event_name != 'pull_request' || steps.filter.outputs.web == 'true' }}
-      api: ${{ github.event_name != 'pull_request' || steps.filter.outputs.api == 'true' }}
-      workflows: ${{ github.event_name != 'pull_request' || steps.filter.outputs.workflows == 'true' }}
+      python: ${{ github.event_name != 'pull_request' && steps.bot_branch.outputs.generated_files_only != 'true' || steps.filter.outputs.python == 'true' || steps.markdown.outputs.outside_site == 'true' }}
+      infrastructure: ${{ github.event_name != 'pull_request' && steps.bot_branch.outputs.generated_files_only != 'true' || steps.filter.outputs.infrastructure == 'true' }}
+      site: ${{ github.event_name != 'pull_request' && steps.bot_branch.outputs.generated_files_only != 'true' || steps.filter.outputs.site == 'true' }}
+      web: ${{ github.event_name != 'pull_request' && steps.bot_branch.outputs.generated_files_only != 'true' || steps.filter.outputs.web == 'true' }}
+      api: ${{ github.event_name != 'pull_request' && steps.bot_branch.outputs.generated_files_only != 'true' || steps.filter.outputs.api == 'true' }}
+      workflows: ${{ github.event_name != 'pull_request' && steps.bot_branch.outputs.generated_files_only != 'true' || steps.filter.outputs.workflows == 'true' }}
       # The partition proof's own job (v1-e41-t15): on every push, and on a pull request that changes
       # what it proves. Not on a dispatch, whose commit has its own push run or is the bot's.
       partition_proof: ${{ github.event_name == 'push' || steps.filter.outputs.partition_proof == 'true' }}
     steps:
+      # The bot's dispatched run only: every branch's history, for origin/dev and where the bot's
+      # branch left it. Nothing else here reads the checkout; a pull request's files come from the API.
+      - uses: actions/checkout@v7
+        if: github.event_name == 'workflow_dispatch' && github.ref_name == 'bot/refresh-generated-files'
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      # What the bot's branch changes since it left dev, as scripts/ci_test_selection.py compares it for
+      # `test-selection`: 'true' only when every change is ROADMAP.md or docs/README.md and none is a
+      # deletion. A person's commit under the bot's, nothing changed, or no origin/dev to compare with
+      # writes 'false', and the dispatch runs every job as before.
+      - name: Does the bot's branch change only the generated files (its dispatched run only)
+        id: bot_branch
+        if: github.event_name == 'workflow_dispatch' && github.ref_name == 'bot/refresh-generated-files'
+        run: |
+          only=false
+          if changed=$(git diff --name-status --no-renames origin/dev...HEAD); then
+            only=true
+            # No change at all reads as one empty line, which is no generated file: 'false'.
+            while IFS=$'\t' read -r status path; do
+              case "$path" in
+                ROADMAP.md | docs/README.md) [ "$status" != D ] || only=false ;;
+                *) only=false ;;
+              esac
+            done <<< "$changed"
+          else
+            echo "::warning title=Changes::bot/refresh-generated-files could not be compared with origin/dev, so every job runs."
+          fi
+          echo "generated_files_only=$only" >> "$GITHUB_OUTPUT"
       - uses: dorny/paths-filter@v4
         id: filter
         if: github.event_name == 'pull_request'
@@ -244,8 +295,10 @@ jobs:
 
   # Chooses the tests once, for every part of `test` (v1-e41-t15): on a pull request into dev, the
   # tests its changes reach; for ROADMAP.md and docs/README.md alone, none; on every other event, the
-  # whole default selection. Its outputs are `run_parts`, whether the parts run at all, and
-  # `test_files`, one test file per line, empty for the whole selection. Until v1-e41-t15 each of the
+  # whole default selection. Its outputs are `run_parts`, whether the parts run at all, `parts`, the
+  # `test` matrix's part numbers as JSON (one part per 30 test files chosen, at most eight, and eight
+  # for the whole selection; v1-e41-t16), and `test_files`, one test file per line, empty for the
+  # whole selection. Until v1-e41-t15 each of the
   # eight parts chose for itself, 17 to 33 seconds each. It runs beside `changes` rather than in it,
   # so the jobs that need only the path filters do not wait for the choice.
   test-selection:
@@ -254,6 +307,7 @@ jobs:
     outputs:
       run_parts: ${{ steps.choose.outputs.run_parts }}
       test_files: ${{ steps.choose.outputs.test_files }}
+      parts: ${{ steps.choose.outputs.parts }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -283,26 +337,32 @@ jobs:
             cat "$RUNNER_TEMP/test-selection-outputs.txt" >> "$GITHUB_OUTPUT"
           else
             echo "run_parts=true" >> "$GITHUB_OUTPUT"
+            echo "parts=[1, 2, 3, 4, 5, 6, 7, 8]" >> "$GITHUB_OUTPUT"
             echo "::warning title=Test selection::scripts/ci_test_selection.py failed, so every part runs the whole default selection."
             printf '### Tests: the whole default selection\n\nscripts/ci_test_selection.py failed, so every part runs its share of every test file.\n' >> "$GITHUB_STEP_SUMMARY"
           fi
 
   # The selection, in parts that run side by side (see the top of this file), as `test-selection`
-  # chose it. When it chose no test the job is skipped, and `ci` accepts the skip because
-  # `test-selection.run_parts` says 'false'. Otherwise every part runs on every event this job runs on.
+  # chose it, in as many parts as it chose. When it chose no test the job is skipped, and `ci` accepts
+  # the skip because `test-selection.run_parts` says 'false'.
   test:
     needs: [changes, test-selection]
     if: needs.changes.outputs.python == 'true' && needs.test-selection.outputs.run_parts == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    env:
+      # `load` on every run but a dispatch that asks for `worksteal` (the input at the top).
+      XDIST_DIST: ${{ inputs.xdist_dist || 'load' }}
     strategy:
       # Every part reports its own failures: one failing part does not cancel the others.
       fail-fast: false
       matrix:
-        # To add a part, append the next number and change nothing else. Each part asks for itself
-        # out of strategy.job-total, and `ci` needs this job as a whole: a matrix job is one entry
-        # in `needs`, and its result is a failure if any part failed.
-        part: [1, 2, 3, 4, 5, 6, 7, 8]
+        # 1 to N, N from the selection (v1-e41-t16): scripts/ci_test_selection.py's TEST_FILES_PER_PART
+        # and MOST_PARTS set it, and more parts for every run is a larger MOST_PARTS there. Each part
+        # asks for itself out of strategy.job-total, which is N, so the parts deal the selection by
+        # the number that runs. `ci` needs this job as a whole: a matrix job is one entry in `needs`,
+        # and its result is a failure if any part failed.
+        part: ${{ fromJSON(needs.test-selection.outputs.parts) }}
     steps:
       - *checkout
       - *setup-uv
@@ -321,7 +381,7 @@ jobs:
         # pytest reads `@FILE` as more arguments, one per line; an empty file adds none, and pytest
         # runs every path in `testpaths`.
         if: github.event_name != 'push'
-        run: uv run --frozen pytest -n auto -m "not slow and not live and not partition_proof" --part "${{ matrix.part }}/${{ strategy.job-total }}" --durations=25 "@$RUNNER_TEMP/test-selection.txt"
+        run: uv run --frozen pytest -n auto -m "not slow and not live and not partition_proof" --part "${{ matrix.part }}/${{ strategy.job-total }}" --dist "$XDIST_DIST" --durations=25 "@$RUNNER_TEMP/test-selection.txt"
       - name: pytest --cov (one part of the selection, measuring coverage, on a push)
         # The step above with coverage added (v1-e01-t42): [tool.coverage] in pyproject.toml says what
         # is measured, and the part writes no report of its own (`--cov-report=` is none). Its data
@@ -330,7 +390,7 @@ jobs:
         if: github.event_name == 'push'
         env:
           COVERAGE_FILE: ${{ runner.temp }}/coverage-part-${{ matrix.part }}-of-${{ strategy.job-total }}
-        run: uv run --frozen pytest -n auto -m "not slow and not live and not partition_proof" --part "${{ matrix.part }}/${{ strategy.job-total }}" --durations=25 --cov --cov-report= "@$RUNNER_TEMP/test-selection.txt"
+        run: uv run --frozen pytest -n auto -m "not slow and not live and not partition_proof" --part "${{ matrix.part }}/${{ strategy.job-total }}" --dist "$XDIST_DIST" --durations=25 --cov --cov-report= "@$RUNNER_TEMP/test-selection.txt"
       - name: Keep this part's coverage data for the coverage job
         if: github.event_name == 'push'
         uses: actions/upload-artifact@v6

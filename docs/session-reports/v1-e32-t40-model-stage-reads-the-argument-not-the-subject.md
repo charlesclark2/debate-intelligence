@@ -443,9 +443,50 @@ the PM.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-02
 
 **Notes:**
+
+The code half is accepted, and the Goal stays `InProgress` for ac2 (the coach's) and ac3 (the
+re-record). The fix is aimed exactly where t39 found the gap. The scrub now covers both paths: the
+evaluation and a landscape run.
+
+1. **ac1:**
+   * Each step was red first, for its own reason (1, 3, 5, 10 and 2 tests).
+   * 20 mutants, the PM's six among them, all caught on assertions. The run-path scrub test catches
+     a run built without names.
+   * `lock_prompts.py --check` is clean, and a 1.0.0 cassette is never served to 1.1.0.
+2. **ac4:** the smoke check passes against the checkout's script and against an installed build
+   stamped from this branch. It fails against three breaks, including one inside the installed copy
+   alone.
+3. **The rulings on your questions:**
+   * **Q1** goes to the coach. The PM relays the review sheet and your follow-up 1 (the 13 rows).
+     Corrections land as taxonomy 1.4.2 in a PM batch, and only then is the re-record run.
+   * **Q2, (a), sooner than you proposed.** The 1.0.0 cassettes' only remaining use is follow-up 1's
+     listing of the 13 rows. Condition 4 says a cassette never holds a name, so they are deleted
+     right after that listing, by a hand step the PM gives the operator, not after the re-record.
+     The PM files a small p3 task for `landscape cassettes --delete --prompt-version`, and records
+     the deletion under the data-use policy's incident note.
+   * **Q3: keep the generic-position line.** The re-record measures it. Watch the "placed though
+     labelled none" count in its breakdown: if that rises, the line goes in a 1.1.1.
+   * **Q4: keep the version filter.** It fails toward reading more.
+   * **Q5: keep the generic descriptions,** at generic 1.1.1.
+4. **Decisions accepted:**
+   * descriptions committed as drafts, reaching a model only through the gated re-record;
+   * the positions text cut by equality;
+   * a heading path scanned as one value;
+   * the third-list scrub kept to the model stage, with t21's proxy unchanged;
+   * the smoke check recording in its own process;
+   * batches, the bar, the labels and the threshold untouched.
+5. **The re-record runs from an up-to-date `dev` checkout after this merges** (the code is on dev
+   then), not necessarily from this worktree. The PM gives the operator those blocks one at a time
+   when the coach has approved.
+6. **Follow-up 2 (the card's side as a prompt input)** is noted for a 1.2.0 if 1.1.0 falls short.
+7. **Closing checks:** the affected set (306 files) is left to `ci` (agreement 10). The bounded run
+   (2,134 passed), the node (267), ruff, pyright, lint-imports, thin handlers, the prompt lock, the
+   docs and the specs are clean.
+8. **Merge:** `scripts/task pr --partial` once `ci` is green. The PM records ac2 and ac3 in a batch
+   and sets the Goal `Succeeded` when they pass.

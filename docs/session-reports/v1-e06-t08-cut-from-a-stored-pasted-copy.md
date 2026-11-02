@@ -257,9 +257,48 @@ Reply with: Q1 (a|b), Q2 (accept|other), and any change to the FYI items.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-02
 
 **Notes:**
+
+`cut URL --from-paste` works as the coach needs. It cuts from his stored copy, makes no fetch, and
+carries USER_SUPPLIED provenance on the card, in the manifest and in `--json`. The evidence is
+verified against the copy byte for byte.
+
+1. **Q1, (a). Amend ac1.** The spec asked for VERIFIED, but the citation rules verify no cite field
+   of user-supplied text. A VERIFIED card would therefore need invented authors and a publication,
+   which evidence integrity forbids. So the card is UNVERIFIED for its cite alone (one reason,
+   CITATION_UNVERIFIED): `cut` exits 4 and `verify` exits 1. Write the amendment into the spec as a
+   dated "(PM amendment 2026-11-02, from the PM review)" paragraph, in your proposed words, then set
+   the Goal `Succeeded`.
+2. **Q2: accepted.** The access gate passes a USER_SUPPLIED snapshot whatever status its user
+   reported. That status is the user's report about the publisher, and the copy was stored on his
+   lawful-access attestation. Every other provenance is gated as before, and t02's seven-status test
+   still passes.
+3. **The FYI items are accepted:**
+   * the `--from-paste` flag, cutting the newest copy for the canonical URL, with the publisher's
+     snapshot never standing in;
+   * `NO_USER_SUPPLIED_COPY`, exit 1, with the hint quoting the URL with `shlex`;
+   * no provenance field on `SnapshotReference` (provenance is on the card, which the verifier
+     checks);
+   * `provenance_mode` in `--json`;
+   * the attestation flag in `options/lawful_access.py`, which the affected set's architecture test
+     caught.
+4. **Red first and mutants:** 17 tests failed against the skeleton, and both smoke checks failed on a
+   stamped build of the start commit. 13 mutants, the PM's among them. The survivor showed a real
+   hole: with no evidence placed, a pasted card would have claimed PUBLISHER_RETRIEVED. The new test
+   closes it. The NameError form was redone so it counts.
+5. **Follow-up 1 is filed by the PM as an E06 p2 task:** `fetch --paste` takes the cite fields
+   (title, authors, date, publication), stored as user-stated. A cite without an author is not
+   usable in a round. The card stays UNVERIFIED for its cite by the rules, but the cite becomes
+   complete. Follow-up 2 is already v1-e06-t09.
+6. **Closing checks:** the affected set (110 files) is left to `ci` (agreement 10). The bounded runs
+   (496, 664 and 759 passed), the installed-build smoke (10 passed), ruff, pyright, lint-imports,
+   thin handlers and the specs are clean. Comparing against the local `origin/dev` was right.
+7. **Before the PR:** the ac1 amendment, then the Goal `Succeeded`, validate_specs, and a commit.
+   Don't edit this report further.
+8. **Merge:** a plain `scripts/task pr` once `ci` is green. The live cut from a pasted copy is
+   optional and doesn't hold the merge.

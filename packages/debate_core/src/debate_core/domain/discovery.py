@@ -23,6 +23,7 @@ needs the application layer.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Self
 
@@ -36,6 +37,7 @@ from debate_core.domain.search import SearchFilters
 __all__ = [
     "BreakerState",
     "CandidateResult",
+    "DatePrecision",
     "ProviderHealth",
     "ProviderOutcome",
     "ProviderQuery",
@@ -57,6 +59,19 @@ class ProviderQuery(DomainModel):
     filters: SearchFilters = Field(
         default_factory=SearchFilters, description="Date window, source types, language and result cap."
     )
+
+
+class DatePrecision(StrEnum):
+    """How much of a publication date a provider knows (v1-e07-t03).
+
+    Crossref deposits dates as `[year]`, `[year, month]` or `[year, month, day]`. A date known only
+    to its year or month is stored at the first instant of that period, and its precision says so,
+    so nothing downstream reads an invented day.
+    """
+
+    DAY = "day"
+    MONTH = "month"
+    YEAR = "year"
 
 
 class CandidateResult(DomainModel):
@@ -93,6 +108,14 @@ class CandidateResult(DomainModel):
     authors: tuple[NonEmptyText, ...] = Field(default=(), description="Author names, in published order.")
     publication: NonEmptyText | None = Field(default=None, description="Journal, outlet or issuing body.")
     published_at: UtcDatetime | None = Field(default=None, description="Publication timestamp, in UTC.")
+    date_precision: DatePrecision | None = Field(
+        default=None,
+        description=(
+            "How much of `published_at` the provider knows. `year` and `month` mean `published_at` is "
+            "the first instant of that year or month and no day is known; `day`, or None as for every "
+            "provider before Crossref, means the date is known to the day."
+        ),
+    )
     snippet: str | None = Field(
         default=None,
         description=(
@@ -122,6 +145,25 @@ class CandidateResult(DomainModel):
             "(a blob key, a recorded fixture's name), never the payload itself."
         ),
     )
+
+    @model_validator(mode="after")
+    def _check_a_partial_date_starts_its_period(self) -> Self:
+        precision, published = self.date_precision, self.published_at
+        if precision is None:
+            return self
+        if published is None:
+            raise ValueError("a candidate has a date_precision without a published_at")
+        start = {
+            DatePrecision.DAY: published,
+            DatePrecision.MONTH: datetime(published.year, published.month, 1, tzinfo=UTC),
+            DatePrecision.YEAR: datetime(published.year, 1, 1, tzinfo=UTC),
+        }[precision]
+        if published != start:
+            raise ValueError(
+                f"a {precision.value}-precision published_at must be the first instant of its "
+                f"{precision.value}, {start.isoformat()}, not {published.isoformat()}"
+            )
+        return self
 
 
 class ProviderResponse(DomainModel):

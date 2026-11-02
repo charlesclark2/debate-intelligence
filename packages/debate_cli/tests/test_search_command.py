@@ -7,7 +7,9 @@ each test's own. The providers are the real OpenAlex and feed adapters, each wra
 ResilientProvider, in a ProviderRegistry the test registers under `discovery_providers` (the
 registry override): their HTTP goes to :class:`RecordedProviders`, which answers from the recorded
 bodies in `fixtures/search/` and sends nothing. One test instead registers only the transport, under
-`discovery_transport`, so that the container builds the registry itself from settings.
+`discovery_transport`, so that the container builds the registry itself from settings. The same
+transport is the article fetcher's (`article_fetch_transport`), so a fetch that should never happen
+would be recorded and refused rather than reach the network.
 
 Expected rows, footers and queries are written by hand from the fixtures (working agreement 6;
 `fixtures/search/README.md` says what each body holds).
@@ -220,6 +222,7 @@ def seams(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Seams]:
     monkeypatch.setenv("DEBATE_ENV", "test")
     monkeypatch.setenv("DEBATE_STORAGE__DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("COLUMNS", "250")
+    monkeypatch.setenv("DEBATE_HTTP__PER_HOST_INTERVAL_SECONDS", "0")
     seams = Seams()
     build = ServiceContainer.__init__
 
@@ -227,6 +230,9 @@ def seams(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Seams]:
         build(self, **arguments)
         self.override("clock", lambda: NOW)
         self.override("search_model_router", seams.router)
+        # Nothing a search does fetches an article; if anything tried, its request would land here,
+        # be refused and be named by the fixture's last check.
+        self.override("article_fetch_transport", seams.providers.transport)
         if seams.registry_override:
             self.override("discovery_providers", seams.providers.registry())
         else:

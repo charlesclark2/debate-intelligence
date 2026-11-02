@@ -32,10 +32,12 @@ from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
 from debate_cli.container import ServiceContainer
-from debate_cli.exit_codes import ExitCode
+from debate_cli.exit_codes import ExitCode, exit_code_for, exit_code_for_search
 from debate_core.application.errors import ProviderUnavailable
+from debate_core.application.federated_search_types import SearchOutcome
+from debate_core.application.query_expansion import UnknownExpansionChoice
 from debate_core.application.settings import HttpSettings, ProviderSettings, SearchProviderName
-from debate_core.domain import AccessStatus, Article
+from debate_core.domain import AccessStatus, Article, Search, SearchStatus
 from debate_core.integrations.discovery.feed_cache import InMemoryFeedCache
 from debate_core.integrations.discovery.feed_config import FeedConfig, FeedReview, FeedSource
 from debate_core.integrations.discovery.feeds import feed_factory
@@ -646,3 +648,26 @@ def test_save_writes_the_search_object_to_a_file(seams: Seams, tmp_path: Path) -
 
     assert result.exit_code == ExitCode.OK, result.output
     assert json.loads(saved.read_text(encoding="utf-8")) == envelope(result)["data"]
+
+
+# ------------------------------------------------------------------------------------------------
+# The exit code rule, where the fixtures cannot reach it
+# ------------------------------------------------------------------------------------------------
+
+
+def test_a_partial_search_with_no_rows_is_still_partial_not_no_results() -> None:
+    search_record = Search(
+        query="midterm elections", status=SearchStatus.PARTIAL, created_at=NOW, updated_at=NOW
+    )
+    outcome = SearchOutcome(
+        search=search_record, provider_statuses=(), candidates=(), results=(), provider_health=()
+    )
+
+    assert exit_code_for_search(outcome) is ExitCode.SEARCH_PARTIAL
+
+
+def test_an_unknown_expansion_choice_is_a_usage_error_wherever_it_is_raised() -> None:
+    assert (
+        exit_code_for(UnknownExpansionChoice("argument", "nonsense-da", ["politics-da"]))
+        is ExitCode.USAGE_ERROR
+    )

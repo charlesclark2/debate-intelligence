@@ -46,8 +46,11 @@ spec:
         USER_SUPPLIED provenance in its manifest, and makes no fetch; without a stored copy
         the command refuses with the --paste hint; fetch's exit-3 hint names the option; by
         tests shown failing first, and an installed-build smoke check.
+        (PM amendment 2026-11-02, from the PM review.) For "is VERIFIED against that snapshot"
+        read: its evidence is verified against that snapshot, and the card is UNVERIFIED for its
+        cite alone, as the citation rules treat a user-supplied copy.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

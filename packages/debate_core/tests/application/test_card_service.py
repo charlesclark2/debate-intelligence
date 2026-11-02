@@ -24,6 +24,7 @@ from tests.fixtures.card.card_world import (
     CardWorld,
     news_request,
     page_bytes,
+    paragraphs_of,
     without_lines,
 )
 
@@ -48,6 +49,8 @@ from debate_core.application.snapshot_service import LoadedSnapshot
 from debate_core.application.structured_output import StructuredOutputGuard
 from debate_core.domain import (
     AccessStatus,
+    Article,
+    ArticleIdentifiers,
     Card,
     CardSpan,
     ProvenanceMode,
@@ -78,6 +81,7 @@ STUDENT: Final = "0ST0DENT000000000000000001"
 ARTICLE: Final = "0ART0000000000000000000001"
 SNAPSHOT: Final = "0SNAP000000000000000000001"
 WHEN: Final = datetime(2026, 10, 26, 15, 0, tzinfo=UTC)
+NEWS_CANONICAL: Final = "https://www.dailymeridian.example/science/2026/09/14/mammoth-revival-years-away"
 
 
 @pytest.fixture
@@ -693,6 +697,74 @@ async def test_a_snapshot_that_is_not_accessible_is_rejected_before_any_model_ca
     assert error_code_of(refused.value) == "SOURCE_NOT_ACCESSIBLE"
     assert world.router.calls == []
     assert (await world.cards.list_by_owner(STUDENT)).items == ()
+
+
+async def pasted_news_copy(world: CardWorld, reported: AccessStatus) -> LoadedSnapshot:
+    """The news article's paragraphs stored as `fetch --paste` stores them: USER_SUPPLIED, as reported."""
+    article = await world.articles.save(
+        Article(
+            canonical_url=NEWS_CANONICAL,
+            title=NEWS_CANONICAL,
+            access_status=reported,
+            identifiers=ArticleIdentifiers(doi=None),
+        )
+    )
+    text = "\n\n".join(paragraphs_of("news-article"))
+    snapshot = await world.snapshots.create(
+        article_id=article.article_id,
+        raw_bytes=text.encode("utf-8"),
+        extracted_text=text,
+        canonical_url=NEWS_CANONICAL,
+        retrieved_at=WHEN,
+        extractor_version="user-supplied-text-1",
+        provenance_mode=ProvenanceMode.USER_SUPPLIED,
+        access_status=reported,
+        content_type="text/plain; charset=utf-8",
+    )
+    await world.articles.save_snapshot(snapshot)
+    return await world.snapshots.load(snapshot)
+
+
+@pytest.mark.parametrize("reported", [AccessStatus.UNKNOWN, AccessStatus.PAYWALLED, AccessStatus.ACCESSIBLE])
+async def test_a_user_supplied_snapshot_is_cut_whatever_status_its_user_reported_and_unverified_for_its_cite(
+    world: CardWorld, reported: AccessStatus
+) -> None:
+    """The access gate is about text the platform retrieved; a user's copy was attested when it was stored."""
+    source = await pasted_news_copy(world, reported)
+
+    result = await world.card_service.cut_card(news_request(source.snapshot.snapshot_id))
+
+    card = result.card
+    assert (card.provenance_mode, card.snapshot_id) == (
+        ProvenanceMode.USER_SUPPLIED,
+        source.snapshot.snapshot_id,
+    )
+    assert card.evidence_text == SEGMENT_ONE + SEGMENT_TWO
+    assert card.tag == NEWS_TAG
+    assert len(world.router.calls) == 2
+    assert card.verification_status is VerificationStatus.UNVERIFIED
+    assert [(failure.reason, failure.verifier_code, failure.fields) for failure in result.reasons] == [
+        (
+            CardFailureReason.CITATION_UNVERIFIED,
+            ReasonCode.CITATION_UNVERIFIED,
+            ("authors", "title", "publication", "published_at", "canonical_url"),
+        )
+    ]
+    assert result.verification.checks_run >= REQUIRED_CHECKS, "every check against the snapshot ran"
+
+
+async def test_a_user_supplied_card_with_no_evidence_placed_still_says_user_supplied() -> None:
+    """A refused selection places no evidence, so nothing copies provenance from the snapshot later:
+    the card CardService makes must already say whose text it is (v1-e06-t08)."""
+    world = scripted_world(PAST_THE_LAST_PARAGRAPH, PAST_THE_LAST_PARAGRAPH)
+    source = await pasted_news_copy(world, AccessStatus.UNKNOWN)
+
+    result = await world.card_service.cut_card(news_request(source.snapshot.snapshot_id))
+
+    card = await assert_saved_unverified(world, result)
+    assert card.evidence_text == ""
+    assert card.provenance_mode is ProvenanceMode.USER_SUPPLIED
+    assert ReasonCode.PROVENANCE_MISMATCH not in [reason.code for reason in result.verification.reasons]
 
 
 async def test_a_snapshot_that_is_not_stored_is_rejected_and_nothing_is_saved(world: CardWorld) -> None:

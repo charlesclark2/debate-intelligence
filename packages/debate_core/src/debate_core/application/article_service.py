@@ -53,14 +53,22 @@ shows where it came from. Nothing is fetched. The text passes the same bar as a 
 least `articles.access_minimum_characters` characters and at most `http.max_response_bytes` bytes of
 UTF-8. Identical text supplied again for the same article reuses its snapshot.
 
+## user_supplied_copy(url)
+
+What `debate-research cut --from-paste` cuts from (`v1-e06-t08`): the newest USER_SUPPLIED snapshot
+stored under the URL's canonical form, answered as stored, with its reported access status. Nothing is
+fetched, and a publisher snapshot never stands in: with no user-supplied text stored, the answer is
+:class:`NoUserSuppliedCopy`.
+
 ## Logging
 
-Every outcome, of either method, emits one `INFO` event from this module's logger, `article
-retrieval` or `user text ingested`, whose `extra` fields are the correlation id, the canonical URL,
-the access status, the elapsed time by the injected clock, whether a fetch was made, the snapshot id
-and whether it was reused, the provenance mode, and the classifier's reason and rules version. A
-reason holds status codes, counts, marker ids and the platform's own messages (v1-e04-t03), never a
-word of the page. No event carries page text, extracted text or user-supplied text.
+Every outcome, of each method, emits one `INFO` event from this module's logger, `article
+retrieval`, `user text ingested` or `user-supplied copy read`, whose `extra` fields are the
+correlation id, the canonical URL, the access status, the elapsed time by the injected clock, whether
+a fetch was made, the snapshot id and whether it was reused, the provenance mode, and the
+classifier's reason and rules version. A reason holds status codes, counts, marker ids and the
+platform's own messages (v1-e04-t03), never a word of the page. No event carries page text,
+extracted text or user-supplied text.
 """
 
 from __future__ import annotations
@@ -95,6 +103,7 @@ __all__ = [
     "USER_TEXT_EXTRACTOR_VERSION",
     "ArticleService",
     "InvalidSourceUrl",
+    "NoUserSuppliedCopy",
     "RetrievalOutcome",
     "UserTextNotAttested",
     "UserTextRejected",
@@ -134,6 +143,15 @@ class UserTextRejected(DomainError):
     def __init__(self, reason: str) -> None:
         self.reason = reason
         super().__init__(f"user-supplied text was not stored: {reason}")
+
+
+class NoUserSuppliedCopy(DomainError):
+    """No text a user supplied is stored for the URL, so there is no copy of theirs to cut from."""
+
+    def __init__(self, url: str, canonical_url: str) -> None:
+        self.url = url
+        self.canonical_url = canonical_url
+        super().__init__(f"no user-supplied copy of {canonical_url} is stored")
 
 
 def access_thresholds(settings: ArticleSettings) -> AccessThresholds:
@@ -516,6 +534,46 @@ class ArticleService:
                 elapsed_ms=0.0,
             ),
             message="user text ingested",
+        )
+
+    # ----------------------------------------------------------------------------------------
+    # user_supplied_copy
+    # ----------------------------------------------------------------------------------------
+
+    async def user_supplied_copy(self, url: str, *, correlation_id: str | None = None) -> RetrievalOutcome:
+        """The newest text a user supplied for `url`, as stored; nothing is fetched.
+
+        Raises :class:`InvalidSourceUrl` for a URL with no canonical form, and
+        :class:`NoUserSuppliedCopy` when no USER_SUPPLIED snapshot is stored under its key: a publisher
+        snapshot never stands in for one, and the publisher is never asked.
+        """
+        started = self._clock.now()
+        correlation = correlation_id if correlation_id is not None else self._id_generator.new_id()
+        key = _canonical(url)
+        known = await self._articles.find_by_canonical_url(key)
+        newest = None if known is None else await self._newest(known.article_id, ProvenanceMode.USER_SUPPLIED)
+        if known is None or newest is None:
+            raise NoUserSuppliedCopy(url, key)
+        return self._finish(
+            started,
+            RetrievalOutcome(
+                correlation_id=correlation,
+                article=known,
+                snapshot=newest,
+                access_status=newest.access_status,
+                reason="Text a user supplied and attested the right to, as stored; nothing was fetched",
+                rules_version=None,
+                decision=None,
+                fetched=False,
+                snapshot_reused=True,
+                requested_url=url,
+                canonical_url=key,
+                fetch_url=None,
+                final_url=None,
+                rel_canonical=None,
+                elapsed_ms=0.0,
+            ),
+            message="user-supplied copy read",
         )
 
     def _check_user_text(self, text: str) -> None:

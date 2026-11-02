@@ -171,6 +171,14 @@ class ArticleFetch:
         outcome = await self._articles.ingest_user_text(source_url=source_url, text=text, attested=attested)
         return await self._report(outcome)
 
+    async def user_supplied_copy(self, url: str) -> FetchReport:
+        """The newest text a user supplied for `url`, as stored; nothing is fetched.
+
+        Raises what :meth:`ArticleService.user_supplied_copy` raises: `NoUserSuppliedCopy` when none
+        is stored, `InvalidSourceUrl` for a URL with no canonical form.
+        """
+        return await self._report(await self._articles.user_supplied_copy(url))
+
     async def _report(self, outcome: RetrievalOutcome) -> FetchReport:
         snapshot = outcome.snapshot
         summary = None

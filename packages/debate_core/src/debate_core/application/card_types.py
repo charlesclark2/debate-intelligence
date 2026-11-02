@@ -167,6 +167,7 @@ class CutResult:
 class SourceNotAccessibleError(DomainError):
     """A card was asked for from a snapshot whose access status is not ACCESSIBLE.
 
+    Never for a USER_SUPPLIED snapshot, whose status is only its user's report (`v1-e06-t08`).
     Raised before any model call; no card is made. Reported under `debate-research fetch`'s
     ``SOURCE_NOT_ACCESSIBLE``, the one code for a source the platform may not cut from.
     """

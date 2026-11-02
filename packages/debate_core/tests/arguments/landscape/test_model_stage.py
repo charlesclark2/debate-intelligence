@@ -306,7 +306,8 @@ def test_the_prompt_lists_active_positions_and_numbers_the_cards() -> None:
 def test_every_position_the_policy_prompt_sends_has_its_side_and_a_one_line_description() -> None:
     """`v1-e32-t40`: the committed Policy taxonomy, generic.yaml's Policy positions with it, as the prompt
     sends it. A position with no description gave the model its id and label alone to tell neighbours
-    apart (`v1-e32-t39`)."""
+    apart (`v1-e32-t39`). One line is no line break and at most 240 characters: the coach's corrected
+    `trump-k`, applied word for word, runs to 202 (`v1-e32-t41`; t40's drafts kept to 140)."""
     taxonomy = YamlTaxonomyRepository.load(REPOSITORY / "config" / "landscape").taxonomy("policy-2026-27-nhi")
     assert taxonomy is not None
     positions = json.loads(str(prompt_variables(taxonomy, ())["positions"]))
@@ -315,5 +316,5 @@ def test_every_position_the_policy_prompt_sends_has_its_side_and_a_one_line_desc
     assert [one["id"] for one in positions if not one.get("description", "").strip()] == []
     assert {one["side"] for one in positions} == {"aff", "neg", "both"}
     assert [
-        one["id"] for one in positions if "\n" in one["description"] or len(one["description"]) > 140
+        one["id"] for one in positions if "\n" in one["description"] or len(one["description"]) > 240
     ] == []

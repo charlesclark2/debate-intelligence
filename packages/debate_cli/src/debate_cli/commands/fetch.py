@@ -55,14 +55,13 @@ import typer
 
 from debate_cli.context import CliContext, cli_context, command_name
 from debate_cli.exit_codes import ExitCode
+from debate_cli.options.lawful_access import ATTESTATION_FLAG
 from debate_cli.output import CliOutput, CommandFailure, JsonValue, OutputMode, TableSpec
 from debate_core.application.article_fetch import SOURCE_NOT_ACCESSIBLE_CODE, ArticleFetch, FetchReport
 from debate_core.application.article_service import UserTextNotAttested
 from debate_core.domain import AccessStatus, ProvenanceMode
 
 __all__ = ["ATTESTATION_FLAG", "fetch", "stdin_is_a_terminal"]
-
-ATTESTATION_FLAG = "--i-have-lawful-access"
 
 ATTESTATION_PROMPT = (
     "Store this text as USER_SUPPLIED for {url}? Answer yes only if you have lawful access to it "

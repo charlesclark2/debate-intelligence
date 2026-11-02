@@ -61,9 +61,9 @@ from typing import Annotated, Any, NoReturn
 
 import typer
 
-from debate_cli.commands.fetch import ATTESTATION_FLAG
 from debate_cli.container import LOCAL_OWNER_ID, CardCutting
 from debate_cli.context import CliContext, cli_context, command_name
+from debate_cli.options.lawful_access import ATTESTATION_FLAG
 from debate_cli.output import CliOutput, CommandFailure, OutputMode
 from debate_cli.presenters.cut_presenter import (
     CutProgress,

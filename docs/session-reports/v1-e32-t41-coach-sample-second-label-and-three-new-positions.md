@@ -268,9 +268,43 @@ task). Paste back the whole JSON: it holds counts and taxonomy ids only.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-02
 
 **Notes:**
+
+The coach's review is applied as he gave it, and the alias choice is the strongest part: counted on
+the dev store before any edit, with what moves shown position by position and every left-out heading
+named with its count.
+
+1. **ac1 passes.** 1.5.0 and generic 1.1.2 validate, the nine descriptions match the spec word for
+   word (9 of 9), and the placement test failed 8 against 1.4.1 before passing 17. The PM read
+   `federalism-cp` in the committed file: the description is the coach's mechanism, and the ruling
+   that it differs from `states-cp` is a comment above it, as Decision 5 says.
+2. **What moves is accepted.** 1,106 cards to the profiteering advantage (934 from none), 114 to
+   `free-market-cp`, 62 to `federalism-cp`. The 172 cards leaving affirmatives sit under the
+   advantage's own heading inside the aff's file, which is how every advantage is placed. Nothing
+   moves from `cap-k`, `costs-advantage` or a DA, and the "left where they are" rows pin each
+   exclusion.
+3. **ac2 passes.** Red first in core, CLI and smoke; 20 of 20 mutants caught. A sample without the
+   column scores exactly as t39's fixtures did. Decisions 2 to 4 are accepted: no second label on a
+   `none` row, everything but correctness stays on the first label, and the non-breakdown JSON keys
+   are unchanged.
+4. **Deviations 1 to 3 are the PM's rulings of 2026-11-02:** the smoke check outside the packages, the
+   240-character one-line cap (checked in `test_model_stage.py`), and `--check-sample` replacing the
+   breakdown replay.
+5. **ac3 is the operator's.** The coach relabels rows 11, 30, 31, 59, 32, 38 and 47 and adds the `also`
+   column for rows 34 and 58, then runs `--check-sample` from this worktree. The PM records it, and
+   the expected counts (advantage 16, cp 6, none 3; two second labels, both advantages) come from
+   t39's recorded answers. A different kind on rows 32, 38, 47, 34 or 58 moves one count and is fine.
+6. **Follow-ups the PM takes:** t40's re-record runbook starts with `--check-sample` (next batch); the
+   review-order model's retraining at 1.5.0 is filed after the re-record; the bare profiteering
+   heading and overview go on the coach's review-queue list.
+7. **Closing checks:** the full affected set (193 files) hit its time limit under shared load and is
+   left to `ci` (agreement 10). The 39 taxonomy, sample and evaluate files, the always-run list (377)
+   and the changed areas (1,459) passed, with ruff, pyright, lint-imports, thin handlers and the specs
+   clean.
+8. **Merge:** `scripts/task pr --partial` once `ci` is green. The Goal stays `InProgress` until the PM
+   records ac3.

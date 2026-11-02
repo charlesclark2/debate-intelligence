@@ -53,6 +53,13 @@ shows where it came from. Nothing is fetched. The text passes the same bar as a 
 least `articles.access_minimum_characters` characters and at most `http.max_response_bytes` bytes of
 UTF-8. Identical text supplied again for the same article reuses its snapshot.
 
+**Stated cite fields** (`v1-e06-t12`, the PM's ruling of 2026-11-02). The caller may state the text's
+title, authors, publication and date, a :class:`~debate_core.domain.Citation` of unverified fields
+stored on the snapshot (`stated_citation`). A snapshot is immutable, so the fields are part of the
+copy: identical text with no stated fields, or with the newest copy's own, reuses that copy and keeps
+its fields; identical text with other stated fields is a new copy holding exactly those, nothing
+merged from the older one, and as the newest it is the one `user_supplied_copy` answers with.
+
 ## user_supplied_copy(url)
 
 What `debate-research cut --from-paste` cuts from (`v1-e06-t08`): the newest USER_SUPPLIED snapshot
@@ -476,7 +483,9 @@ class ArticleService:
         `attested` must be True: the caller states they have the right to this text (a subscription,
         a library copy). `reported_access_status` is recorded on the snapshot as the caller reports
         it, and on the article only when this call creates it; a status the platform measured is not
-        overwritten by a report. `title` names the article only when this call creates it. Raises
+        overwritten by a report. `title` names the article only when this call creates it.
+        `stated_citation` is the cite fields the caller states for the text (`v1-e06-t12`); see the
+        module docstring for when a copy is reused. Raises
         :class:`UserTextNotAttested`, :class:`InvalidSourceUrl` or :class:`UserTextRejected`, and then
         stores nothing.
         """
@@ -489,7 +498,11 @@ class ArticleService:
 
         known = await self._articles.find_by_canonical_url(key)
         newest = None if known is None else await self._newest(known.article_id, ProvenanceMode.USER_SUPPLIED)
-        reused = newest is not None and _same_text(newest, text)
+        reused = (
+            newest is not None
+            and _same_text(newest, text)
+            and (stated_citation is None or stated_citation == newest.stated_citation)
+        )
         if newest is not None and reused:
             snapshot = newest
         else:
@@ -505,6 +518,7 @@ class ArticleService:
                 access_status=reported_access_status,
                 content_type=USER_TEXT_CONTENT_TYPE,
                 owner_id=owner_id,
+                stated_citation=stated_citation,
             )
         if known is None:
             now = self._clock.now()

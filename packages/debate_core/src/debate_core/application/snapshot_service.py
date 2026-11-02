@@ -117,6 +117,7 @@ class SnapshotService:
         `raw_bytes` are the response body exactly as received and are hashed and stored as they are.
         `extracted_text` is the extractor's output for them, which is normalized under the current
         normalizer version. `retrieved_at` must be timezone-aware and is recorded in UTC.
+        `stated_citation` is the cite fields a user stated for text they supplied (`v1-e06-t12`).
 
         Everything that can be refused is refused before a blob is written: text the normalizer
         rejects (a lone surrogate, the wrong Unicode database) and provenance the
@@ -158,6 +159,7 @@ class SnapshotService:
             normalizer_version=normalized.normalizer_version,
             content_type=content_type,
             byte_size=len(raw_bytes),
+            stated_citation=stated_citation,
             created_at=now,
             updated_at=now,
         )

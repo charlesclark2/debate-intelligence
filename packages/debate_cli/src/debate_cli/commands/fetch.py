@@ -34,6 +34,14 @@ or with `--i-have-lawful-access` anywhere else (with `--json`, when the text com
 stdin is not a terminal). A run that can neither prompt nor was given the flag stores nothing and
 exits 1.
 
+With `--paste`, `--title`, `--author` (once per author, in order), `--date` (`YYYY-MM-DD`) and
+`--publication` state the copy's cite fields (`v1-e06-t12`). They are stored with the copy,
+unverified, and a card cut from it is cited with them; it stays UNVERIFIED for its cite, as text a
+user supplied always is. Any of them without `--paste`, an empty value, or a date in another form is
+a usage error. The table prints the fields stored with the copy. Stored again, identical text with
+none of these options, or with the newest copy's own, reuses that copy and its fields; with others
+it is a new copy holding exactly those, so a field must be stated again to be kept.
+
 ## `--json`
 
 Accepted after the command (`fetch <URL> --json`, as the spec writes it) as well as before it
@@ -57,11 +65,27 @@ from debate_cli.context import CliContext, cli_context, command_name
 from debate_cli.exit_codes import ExitCode
 from debate_cli.options.lawful_access import ATTESTATION_FLAG
 from debate_cli.output import CliOutput, CommandFailure, JsonValue, OutputMode, TableSpec
-from debate_core.application.article_fetch import SOURCE_NOT_ACCESSIBLE_CODE, ArticleFetch, FetchReport
+from debate_core.application.article_fetch import (
+    SOURCE_NOT_ACCESSIBLE_CODE,
+    ArticleFetch,
+    FetchReport,
+    StatedCite,
+)
 from debate_core.application.article_service import UserTextNotAttested
-from debate_core.domain import AccessStatus, ProvenanceMode
+from debate_core.application.citation_service import InvalidStatedCite, stated_citation
+from debate_core.domain import AccessStatus, Citation, ProvenanceMode
 
-__all__ = ["ATTESTATION_FLAG", "fetch", "stdin_is_a_terminal"]
+__all__ = ["ATTESTATION_FLAG", "CITE_OPTIONS", "fetch", "stdin_is_a_terminal"]
+
+CITE_OPTIONS = {
+    "title": "--title",
+    "authors": "--author",
+    "published_at": "--date",
+    "publication": "--publication",
+}
+"""The option that states each cite field with --paste (`v1-e06-t12`)."""
+
+NOT_STATED = "not stated"
 
 ATTESTATION_PROMPT = (
     "Store this text as USER_SUPPLIED for {url}? Answer yes only if you have lawful access to it "
@@ -120,24 +144,32 @@ def fetch(
 
     Prints the canonical URL, title, identifiers, access status with its reason, and the snapshot's
     id, hashes, paragraph count and extractor version. With --paste, stores text you lawfully have
-    as USER_SUPPLIED after you attest lawful access; nothing is fetched.
+    as USER_SUPPLIED after you attest lawful access; nothing is fetched. --title, --author, --date and
+    --publication state the copy's cite, stored unverified; a new copy holds only the fields stated.
 
     Exit codes:
     0  ACCESSIBLE and stored, or pasted text stored as USER_SUPPLIED
     1  refused, nothing stored: not a source URL, or pasted text not attested or rejected
-    2  usage error, for example --paste without --source-url
+    2  usage error, for example --paste without --source-url, or a --date not YYYY-MM-DD
     3  PAYWALLED, BLOCKED, ROBOTS_DISALLOWED, NOT_FOUND, UNSUPPORTED_TYPE or ERROR; no snapshot stored
     """
     cli = cli_context(ctx)
     if json_output and not cli.output.is_json:
         cli.output = CliOutput(OutputMode.JSON, verbose=cli.output.verbose)
     _check_arguments(url, refresh=refresh, paste=paste, source_url=source_url, lawful_access=lawful_access)
+    stated = _stated_cite(
+        paste, title=title, authors=authors, published_on=published_on, publication=publication
+    )
     if paste is None or source_url is None:
         report = _run(_retrieve(cli.services.article_fetch(), str(url), refresh=refresh))
     else:
         attested = lawful_access or _attest_by_prompt(cli, paste, source_url)
         try:
-            report = _run(_ingest(cli.services.article_fetch(), source_url, paste.read(), attested=attested))
+            report = _run(
+                _ingest(
+                    cli.services.article_fetch(), source_url, paste.read(), attested=attested, stated=stated
+                )
+            )
         except UserTextNotAttested as refused:
             _end(cli, ctx, CommandFailure.from_exception(refused, hint=_attestation_hint(cli, paste)))
 
@@ -192,6 +224,34 @@ def _check_arguments(
         )
 
 
+def _stated_cite(
+    paste: typer.FileText | None,
+    *,
+    title: str | None,
+    authors: list[str] | None,
+    published_on: str | None,
+    publication: str | None,
+) -> Citation | None:
+    """The cite fields stated with --paste, unverified; a usage error without --paste or for a bad value."""
+    if paste is None:
+        stated = (
+            ("--title", title),
+            ("--author", authors),
+            ("--date", published_on),
+            ("--publication", publication),
+        )
+        given = [option for option, value in stated if value is not None and value != []]
+        if given:
+            raise typer.BadParameter(f"{', '.join(given)} go with --paste", param_hint=given[0])
+        return None
+    try:
+        return stated_citation(
+            title=title, authors=authors or (), publication=publication, published_on=published_on
+        )
+    except InvalidStatedCite as refused:
+        raise typer.BadParameter(refused.detail, param_hint=CITE_OPTIONS[refused.field]) from refused
+
+
 def _can_prompt(cli: CliContext, paste: typer.FileText) -> bool:
     """A person can answer: not `--json`, a terminal on stdin, and the text not read from stdin."""
     return not cli.output.is_json and paste.name != "<stdin>" and stdin_is_a_terminal()
@@ -217,9 +277,13 @@ async def _retrieve(fetcher: ArticleFetch, url: str, *, refresh: bool) -> FetchR
         return await fetcher.retrieve(url, refresh=refresh)
 
 
-async def _ingest(fetcher: ArticleFetch, source_url: str, text: str, *, attested: bool) -> FetchReport:
+async def _ingest(
+    fetcher: ArticleFetch, source_url: str, text: str, *, attested: bool, stated: Citation | None
+) -> FetchReport:
     async with fetcher:
-        return await fetcher.ingest_pasted(source_url=source_url, text=text, attested=attested)
+        return await fetcher.ingest_pasted(
+            source_url=source_url, text=text, attested=attested, stated_citation=stated
+        )
 
 
 # ------------------------------------------------------------------------------------------------
@@ -275,12 +339,26 @@ def _table(report: FetchReport) -> TableSpec:
             ("Extractor", snapshot.extractor_version),
             ("Normalizer", snapshot.normalizer_version),
         ]
+    if snapshot is not None and snapshot.provenance_mode is ProvenanceMode.USER_SUPPLIED:
+        rows += _stated_rows(snapshot.stated_cite)
     shown = (
         report.provenance_mode
         if report.provenance_mode is ProvenanceMode.USER_SUPPLIED
         else report.access_status
     )
     return TableSpec(title=f"{shown.value} {report.canonical_url}", columns=("Field", "Value"), rows=rows)
+
+
+def _stated_rows(stated: StatedCite | None) -> list[tuple[str, str]]:
+    """The cite fields stored with a pasted copy, each one, so a field not stated shows as such."""
+    if stated is None:
+        return [("Stated cite", "none")]
+    return [
+        ("Stated authors", "; ".join(stated.authors) or NOT_STATED),
+        ("Stated title", stated.title or NOT_STATED),
+        ("Stated date", stated.published_at or NOT_STATED),
+        ("Stated publication", stated.publication or NOT_STATED),
+    ]
 
 
 def _run[T](awaitable: Coroutine[Any, Any, T]) -> T:

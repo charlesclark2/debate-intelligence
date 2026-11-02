@@ -226,9 +226,54 @@ None. ac3 is the PM's read of the public API after the merge, so there is no blo
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-02
 
 **Notes:**
+
+Accepted, with the Goal `InProgress` for ac3, the PM's read after the merge. The best find is the one
+the PM didn't ask for: the old concurrency group put every push to dev in one group. A third merge
+landing while the first run was still going cancelled the second merge's run. Your red test shows
+it, and every non-PR run now has a group of its own.
+
+1. **ac1 and ac2:**
+   * 70 tests failed at the start commit, then 8 failed for the rules' own reasons after the
+     interface change, and 119 pass now.
+   * The partition proof runs in its own job: 2 passed, 55 s.
+   * 16 mutants, the PM's four among them, each caught by the test aimed at it.
+   * `GATES_OF_JOB` is pinned to the jobs' own `if:` conditions, so the two can't drift. A failed or
+     cancelled part fails `ci`; a skip passes only behind a closed gate.
+2. **ac4:** `docs/process/ci-test-part-costs.md` and the relay block hold the options.
+3. **Deviations accepted:**
+   * **`test-selection` as a job beside `changes`.** Inside `changes`, its checkout and `uv sync`
+     would delay every path-filtered job. Item (1) is amended to match in the PM's next batch.
+   * **The concurrency group corrected** rather than added.
+   * **The partition proof's wider triggers** (every plugin, `affected_tests.py`, `pyproject.toml`,
+     the root `conftest.py`, `uv.lock`), each failing toward running it.
+   * **The generated files leaving the `python` filter.**
+   * **Running `actionlint.sh`.** It was in the PM's brief, so that download is covered. The standing
+     rule is otherwise unchanged.
+4. **Decisions accepted:**
+   * outputs and an environment variable, not an artifact, with the size fallback;
+   * the script's outputs appended only on success, so a failure means the whole selection;
+   * the bot's dispatch compared with `origin/dev` from full history;
+   * a deleted generated file not treated as "generated files alone";
+   * dispatches never cancelled.
+5. **The rulings on item (5)'s options:**
+   * **1 (size the matrix to the selection) and 2 (`--dist worksteal`, measured on one
+     whole-selection run):** the PM files them as one E41 p2 task. It also turns off the other
+     Python jobs on the bot's dispatched run, by comparing a dispatch of
+     `bot/refresh-generated-files` with `origin/dev` in `changes`, as `test-selection` does.
+   * **3 (deal whole files by recorded durations):** deferred until a whole-selection part passes 2
+     minutes again.
+   * **4 and 5:** not taken.
+6. **ac3:** after the merge, the PM reads one bot run (no test parts) and one ordinary task PR's `ci`
+   wall time from the public API, records them in a batch, and sets the Goal `Succeeded`.
+7. **Closing checks:** the affected set is the whole selection (ci.yml is shared ground), so it is
+   left to this PR's `ci` (agreement 10). The bounded run (1,129 passed), architecture and docs (433),
+   actionlint (with a planted misspelling caught), ruff, pyright, lint-imports, thin handlers, the
+   specs and the doc checks are clean.
+8. **Merge:** `scripts/task pr --partial` once `ci` is green. This PR's own `ci` runs the whole
+   selection under the new workflow, which is a useful first read.

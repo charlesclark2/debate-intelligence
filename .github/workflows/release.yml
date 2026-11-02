@@ -29,10 +29,12 @@
 # THE FULL TEST SUITE, REUSED. A push to main runs ci.yml over the whole default selection, on
 # exactly the merge commit this tag names (working agreement 10), and validate-dev ran the offline
 # slow tier and the smoke tier against the dev parent's installed build. The check job requires that
-# push run to have passed, waiting up to 30 minutes while it runs, instead of running the matrix a
-# second time: the same tests on the same commit would cost about 8 more runners and the minutes of
-# a push run for no new answer. This workflow's own cost is three short jobs, a few minutes in all,
-# plus the wait when the tag is pushed before main's push run has finished.
+# push run to have passed, waiting while it runs, instead of running the matrix a second time: the
+# same tests on the same commit would take eight more test runners, the whole selection's part count,
+# for no new answer. The wait is at most 50 minutes, the five-job chain of ci.yml's push run (changes,
+# test-selection, test, coverage, ci) at its 10-minute job limits, and it is spent only when the tag
+# is pushed before main's push run has finished. This workflow's own work is one build and its
+# checks, the steps dev-prerelease.yml runs for every dev build.
 #
 # SECURITY. The workflow grants `contents: read`. The check job adds the read scopes its GitHub reads
 # need (`pull-requests`, `statuses`, `actions`) and nothing else; the build job, which runs the
@@ -66,8 +68,8 @@ jobs:
   check:
     name: check the tag is a validated release of main
     runs-on: ubuntu-24.04
-    # The checks take seconds; the rest is the wait for main's push run of ci.yml (30 minutes at most).
-    timeout-minutes: 40
+    # The checks take seconds; the rest is the wait for main's push run of ci.yml (50 minutes at most).
+    timeout-minutes: 60
     permissions:
       contents: read
       # The pull request the tagged commit merged, the dev parent's validate-dev status, and ci.yml's

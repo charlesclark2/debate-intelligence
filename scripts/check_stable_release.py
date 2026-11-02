@@ -79,7 +79,9 @@ NOT_YET_RELEASED = "Not yet released"
 RELEASE_SPECS = Path("plan_specs/releases")
 COMMIT_SHA = re.compile(r"^[0-9a-f]{40}$")
 
-DEFAULT_WAIT_MINUTES = 30
+DEFAULT_WAIT_MINUTES = 50
+"""How long `full-suite` waits for CI's push run: its longest chain on a push is five jobs (changes,
+test-selection, test, coverage, ci), each limited to 10 minutes, so a run that passes has ended."""
 POLL_SECONDS = 30
 
 PASSED, REFUSED, COULD_NOT_RUN = 0, 1, 2

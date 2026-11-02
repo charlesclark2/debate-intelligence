@@ -1,11 +1,47 @@
 # Changelog
 
-Each release of the Debate Research & Argument Intelligence Platform gets a section here when its
-tag is cut from `main`. The release specs in [`plan_specs/releases/`](plan_specs/releases/) say
-what each release is for, and the session reports in
-[`docs/session-reports/`](docs/session-reports/) say how each task was done and checked. Dev
-pre-releases (`vX.Y.Z-dev.N`) are not listed; each is a build of `dev` on the way to the next
+Each release of the Debate Research & Argument Intelligence Platform has a section here, newest
+first, in the manner of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). The release specs
+in [`plan_specs/releases/`](plan_specs/releases/) say what each release is for, and the session
+reports in [`docs/session-reports/`](docs/session-reports/) say how each task was done and checked.
+Dev pre-releases (`vX.Y.Z-dev.N`) are not listed; each is a build of `dev` on the way to the next
 version here.
+
+A release that is not tagged yet has a section that says only "Not yet released" and links its
+spec. The PM writes it when the release is closed out, before its tag is cut from `main`. The
+release workflow (`.github/workflows/release.yml`) publishes a tag's section, from its heading to the
+next, as the GitHub Release's notes, and refuses a tag whose section is missing or still says
+"Not yet released".
+
+## v1.5.0: V1 quality gate & team pilot
+
+Not yet released.
+
+The release spec, [`plan_specs/releases/v1.5.yaml`](plan_specs/releases/v1.5.yaml), says what it is for.
+
+## v1.4.0: Federated research from the CLI
+
+Not yet released.
+
+The release spec, [`plan_specs/releases/v1.4.yaml`](plan_specs/releases/v1.4.yaml), says what it is for.
+
+## v1.3.0: URL → verified card
+
+Not yet released.
+
+The release spec, [`plan_specs/releases/v1.3.yaml`](plan_specs/releases/v1.3.yaml), says what it is for.
+
+## v1.2.0: Argument landscape & file building
+
+Not yet released.
+
+The release spec, [`plan_specs/releases/v1.2.yaml`](plan_specs/releases/v1.2.yaml), says what it is for.
+
+## v1.1.0: Caselist evidence store
+
+Not yet released.
+
+The release spec, [`plan_specs/releases/v1.1.yaml`](plan_specs/releases/v1.1.yaml), says what it is for.
 
 ## v1.0.0: Foundation and verified evidence core
 

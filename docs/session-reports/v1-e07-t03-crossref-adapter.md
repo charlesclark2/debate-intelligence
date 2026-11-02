@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e07-discovery-adapters/t03-crossref-adapter.yaml`](../../plan_specs/v1/e07-discovery-adapters/t03-crossref-adapter.yaml) |
 | Epic / release | `v1-e07-discovery-adapters` / `v1.4` |
 | Branch | `task/v1-e07-t03-crossref-adapter` |
-| Session status | IN PROGRESS <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | BLOCKED <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 

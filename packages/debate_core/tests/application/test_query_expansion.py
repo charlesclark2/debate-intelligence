@@ -569,6 +569,26 @@ def test_the_committed_taxonomy_resolves_the_spec_spellings_and_typed_variants(
             id="two needs of a family sharing a name",
         ),
         pytest.param(
+            family_with(
+                1,
+                needs=[
+                    {"id": "framework-good", "label": "Good", "description": "Why.", "recency_days": "any"},
+                    {"id": "framework-good", "label": "Again", "description": "Why.", "recency_days": "any"},
+                ],
+            )
+            | {
+                "arguments": [
+                    small_taxonomy()["arguments"][0],
+                    {
+                        **small_taxonomy()["arguments"][1],
+                        "templates": {"framework-good": [{"text": "{query}"}]},
+                    },
+                ]
+            },
+            ["two needs of the test-framing family share the id or alias framework-good"],
+            id="two needs of a family with one id",
+        ),
+        pytest.param(
             need_with(1, 0, aliases=["i"]),
             ["i means impact in test-scenario and framework-good in test-framing"],
             id="one name meaning two needs",

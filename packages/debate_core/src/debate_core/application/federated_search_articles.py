@@ -11,7 +11,9 @@ The last step of the search command's rank slot (:class:`ArticleMatchingStage`, 
    and metadata may come from a retrieval, which knows more than a search result does;
 3. otherwise a **discovery-only** Article is saved from the candidate's metadata, with access
    `UNKNOWN`. Nothing is fetched here: this stage has no fetcher, and an Article's access is only
-   ever measured by `fetch` or `cut` (v1-e04-t05).
+   ever measured by `fetch` or `cut` (v1-e04-t05). A date known only to its year or month (a
+   Crossref deposit's, v1-e07-t03) is not stored: an Article's date is a day, and it stays unknown
+   until a Citation can carry a partial date (the follow-up from v1-e06-t12).
 
 The result is :func:`~debate_core.application.federated_ranking.search_result_for` for that Article.
 A candidate with no canonical form keeps its place in the ranking and stores no result; nor does a
@@ -37,6 +39,7 @@ from debate_core.application.federated_search_types import SearchState
 from debate_core.application.ports.persistence import ArticleRepository
 from debate_core.application.ports.providers import Clock, IdGenerator
 from debate_core.domain import AccessStatus, Article, SearchResult
+from debate_core.domain.discovery import DatePrecision
 
 __all__ = ["ArticleMatchingStage", "discovery_article"]
 
@@ -61,7 +64,9 @@ def discovery_article(
         title=candidate.title,
         authors=candidate.authors,
         publication=candidate.publication,
-        published_at=candidate.published_at,
+        published_at=candidate.published_at
+        if candidate.date_precision in (None, DatePrecision.DAY)
+        else None,
         source_type=candidate.source_type,
         access_status=AccessStatus.UNKNOWN,
         identifiers=candidate.identifiers,

@@ -106,7 +106,7 @@ from debate_core.application.settings import SearchProviderName
 from debate_core.domain import DomainModel, NonEmptyText
 from debate_core.domain.article import ArticleIdentifiers
 from debate_core.domain.base import HttpUrlStr, UtcDatetime
-from debate_core.domain.discovery import CandidateResult
+from debate_core.domain.discovery import CandidateResult, DatePrecision
 from debate_core.domain.enums import SourceType
 from debate_core.retrieval import InvalidUrlError, canonicalize_url, detect_identifiers, registrable_domain
 
@@ -204,6 +204,10 @@ class MergedCandidate(DomainModel):
     authors: tuple[NonEmptyText, ...] = Field(default=(), description="Authors, from one provider.")
     publication: NonEmptyText | None = Field(default=None, description="Journal, outlet or issuing body.")
     published_at: UtcDatetime | None = Field(default=None, description="Publication timestamp, in UTC.")
+    date_precision: DatePrecision | None = Field(
+        default=None,
+        description="How much of `published_at` is known, from the member that supplied it (v1-e07-t03).",
+    )
     snippet: str | None = Field(
         default=None, description="Abstract or snippet: discovery context only, never quoted on a card."
     )
@@ -331,15 +335,22 @@ def _precedence_value(candidate: CandidateResult, field: str) -> object | None:
 
 
 def _in_precedence(members: Sequence[CandidateResult], field: str) -> list[CandidateResult]:
+    """`members` in `field`'s provider order; for the date, a more precise one first (v1-e07-t03)."""
     order = FIELD_PRECEDENCE[field]
     ranked = sorted(
         range(len(members)),
         key=lambda index: (
+            _coarseness(members[index].date_precision) if field == "published_at" else 0,
             order.index(members[index].provider) if members[index].provider in order else len(order),
             index,
         ),
     )
     return [members[index] for index in ranked]
+
+
+def _coarseness(precision: DatePrecision | None) -> int:
+    """0 for a date known to the day (or with no precision stated), 1 for a month, 2 for a year."""
+    return {DatePrecision.MONTH: 1, DatePrecision.YEAR: 2}.get(precision, 0) if precision is not None else 0
 
 
 def merge_group(members: Sequence[CandidateResult], matched_on: Sequence[MatchRule] = ()) -> MergedCandidate:
@@ -394,6 +405,7 @@ def merge_group(members: Sequence[CandidateResult], matched_on: Sequence[MatchRu
         authors=authors_from.authors if authors_from else (),
         publication=publication_from.publication if publication_from else None,
         published_at=published_at_from.published_at if published_at_from else None,
+        date_precision=published_at_from.date_precision if published_at_from else None,
         snippet=snippet_from.snippet if snippet_from else None,
         open_access_url=open_access_from.open_access_url if open_access_from else None,
         open_access=open_access_status_from.open_access if open_access_status_from else None,
@@ -674,7 +686,16 @@ def _dates_and_sites_agree(left: CandidateResult, right: CandidateResult) -> boo
     if left.source_type is SourceType.SCHOLARLY and right.source_type is SourceType.SCHOLARLY:
         return left.published_at.year == right.published_at.year
     site = _site(left)
-    return left.published_at.date() == right.published_at.date() and site is not None and site == _site(right)
+    return _same_period(left, right) and site is not None and site == _site(right)
+
+
+def _same_period(left: CandidateResult, right: CandidateResult) -> bool:
+    """The two dates agree at the coarser one's precision: a year with any day in it (v1-e07-t03)."""
+    assert left.published_at is not None and right.published_at is not None
+    coarser = max(_coarseness(left.date_precision), _coarseness(right.date_precision))
+    parts = (left.published_at.year, left.published_at.month, left.published_at.day)
+    other = (right.published_at.year, right.published_at.month, right.published_at.day)
+    return parts[: 3 - coarser] == other[: 3 - coarser]
 
 
 def _join_on_titles(groups: _Groups, candidates: Sequence[CandidateResult]) -> None:

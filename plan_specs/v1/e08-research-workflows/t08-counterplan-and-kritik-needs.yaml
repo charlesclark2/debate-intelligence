@@ -24,7 +24,24 @@ spec:
     the generic counterplans and kritiks the Policy landscape names, under the landscape's ids,
     with templates in the coach's terms, and mark them for the coach's review (operator). The
     existing arguments and their templates are unchanged.
-  priority: 3
+    (PM amendment 2026-11-02, the coach's review of v1-e08-t04.) Widened to framing arguments, and
+    raised to p2. A framework has no uniqueness or internal link: the question is whether it is good or
+    not. Give a framing family its own needs, for example "framework good" and "answers", with no
+    window, since philosophy evidence doesn't go stale. Reshape util, deontology, structural violence and
+    cost-benefit into it, and give theory a family of its own (interpretation, standards, voters,
+    answers). The coach's content, to be written as templates for his review:
+    - **Util:** whether utilitarianism is good or not as a framework; predictions good or not good;
+      predictions accurate or inaccurate; util inevitable.
+    - **Deontology:** whether deontology is good or bad as a framework; for example, deontology allows
+      better policy making.
+    - **Structural violence:** whether structural violence should be evaluated above other consequences
+      or not. Answers: war turns structural violence; economic decline turns structural violence;
+      structural violence is inevitable; structural violence can't be solved.
+    - **Cost-benefit:** in the framing family, the same shape as util. The coach's own wording is asked
+      for at review.
+    
+    The arguments the coach reviewed (every DA and advantage, taxonomy 1.1.0) are unchanged.
+  priority: 2
   constraints:
     packages: [config/argument_taxonomy.yaml, debate_core.domain, debate_core.application, packages/debate_core/tests]
     forbidden:

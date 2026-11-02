@@ -233,3 +233,35 @@ coach's approval of the descriptions ([the record runbook](../runbooks/landscape
   the sections above were taken by the earlier rules.
 * **Unchanged:** the coach's labels, the 85% bar, the set it applies to, the review threshold of 0.6,
   and the 47 cards.
+
+## The coach's review applied (`v1-e32-t41`, 2026-11-02)
+
+The coach approved `v1-e32-t40`'s descriptions with nine corrections and answered its 13 disputed rows.
+Taxonomy `policy-2026-27-nhi` 1.5.0 and `generic` 1.1.2 carry both; the re-record measures against them.
+
+* **Nine descriptions corrected**, in the coach's words: `pharma-da`, `taxes-da`, `ai-da` (now a
+  politics-style DA on AI regulation), `democracy-da`, `advantage-cp` and `trump-k` in the topic's file,
+  `antiblackness-k`, `psychoanalysis-k` and `aspec` in `generic.yaml`.
+* **Three positions added** for the rows no position fitted: `health-profiteering-advantage` (aff
+  advantage), `free-market-cp` and `federalism-cp` (neg CPs; the coach ruled `federalism-cp` a different
+  mechanism from `states-cp`). Their aliases are headings two or more teams use, counted first on the
+  dev store (hspolicy26 2026.10.27-docx-7 through 2026-10-20: 3,825 sources, 126,681 cards), by placing
+  every item under 1.4.1 and under 1.5.0:
+
+| Position | Aliases | Cards it places | Of those, unplaced today | Under another position today |
+|---|---|---|---|---|
+| `health-profiteering-advantage` | 8 | 1,106 | 934 | 172: `single-payer-aff` 129, `medicare-for-all-aff` 34, `global-budgets-aff` 8, `reproductive-health-aff` 1 |
+| `free-market-cp` | 4 | 114 | 112 | 2: `voucher-aff` 1, `value-based-reimbursement-aff` 1 |
+| `federalism-cp` | 2 | 62 | 58 | 4: `ucf-cp` 3, `states-cp` 1 |
+
+  The cards moving from an affirmative sit under an advantage heading inside that aff's file, nearer
+  the card than the aff's own heading, which is how every other advantage is placed. No card moves
+  from `cap-k`, `costs-advantage` or any DA. The one `states-cp` card sits directly under a heading
+  that is this alias, in one team's file. Headings counted beside these and left out are named by kind
+  in the task's session report.
+* **A second label.** The sample takes an optional `also` column: a second position the coach accepts.
+  An answer naming either label is scored correct; the breakdown counts those right on the second label,
+  and its confusion table and kinds stay on the first. A sample without the column scores as before.
+* **The relabel** is the coach's, in the coach's own CSV (the session report's operator follow-ups): rows 11,
+  30, 31 and 59 to the new positions, rows 32, 38 and 47 to the model's answers, rows 34 and 58 with
+  the model's answer as a second label. Its counts by label kind are recorded here when the PM has them.

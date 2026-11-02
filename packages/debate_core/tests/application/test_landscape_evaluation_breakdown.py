@@ -8,6 +8,8 @@ tournament, heading, tag and rationale is invented.
 
 from __future__ import annotations
 
+import dataclasses
+import io
 import json
 from collections import Counter
 from pathlib import Path
@@ -22,8 +24,10 @@ from debate_core.application.landscape_model_evaluation import (
     BATCH_REFUSED,
     BATCH_REPAIRED,
     EvaluationBreakdown,
+    EvaluationRefused,
     LabelledCard,
     break_down_labelled_cards,
+    coach_sample_counts,
     evaluate_labelled_cards,
     read_coach_sample,
     read_sample_populations,
@@ -37,8 +41,11 @@ from debate_core.application.landscape_seeding import SeedReading
 from debate_core.application.structured_output import REPAIR_PROMPT_ID, StructuredOutputGuard
 from debate_core.arguments.landscape.evaluation_breakdown import (
     CardOutcome,
+    confusion,
     outcome_counts,
+    outcomes_by_label_kind,
     refusals_by_label,
+    second_label_counts,
     weighted_accuracy,
 )
 from debate_core.arguments.landscape.scan_hits import HitField, HitKind, ScanHit
@@ -523,8 +530,6 @@ ROWS = [
 
 
 def test_evaluation_coach_sample_keeps_each_cards_row_and_stratum() -> None:
-    import io
-
     sample = io.StringIO("sample_row,position\n1,states-cp\n2,none\n3,unsure\n")
 
     assert read_coach_sample(sample, ROWS, TAXONOMY) == (
@@ -533,3 +538,151 @@ def test_evaluation_coach_sample_keeps_each_cards_row_and_stratum() -> None:
     )
     assert read_sample_populations(ROWS) == {"top": 100, "rest": 300}
     assert read_sample_populations(['{"schema": "local-classifier-sample-1"}\n']) == {}
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e32-t41: a second label the coach accepts. An answer naming either label is correct; the confusion
+# table and the label's kind stay on the first label, and a sample without the column scores as before.
+# ------------------------------------------------------------------------------------------------
+
+SECOND_LABELS = {2: "election-da", 3: "spending-da", 4: "medicare-aff"}
+"""By sample row: row 2's repaired answer and row 4's answer name these, row 3's (states-cp) does not."""
+WITH_SECOND_LABELS = tuple(
+    dataclasses.replace(card, also=SECOND_LABELS.get(card.sample_row or 0)) for card in LABELLED
+)
+
+
+@pytest.mark.anyio
+async def test_evaluation_breakdown_scores_an_answer_naming_the_second_label_correct(
+    prompts: PromptRegistry,
+) -> None:
+    """By hand from t39's answers: rows 2 and 4 become correct on their second label, row 3 stays a wrong
+    kind. Counted 5 (rows 1-5), correct 3; a run sends rows 2-6, 8 and 9: counted 4, correct 2."""
+    result = await break_down_labelled_cards(
+        READING, TAXONOMY, OVERRIDES, WITH_SECOND_LABELS, stage_over(ScriptedByTag(), prompts)
+    )
+
+    assert result.outcomes == {
+        "correct": 3,
+        "wrong_position_same_kind": 0,
+        "wrong_kind": 1,
+        "placed_labelled_none": 1,
+        "refused": 2,
+        "below_threshold": 1,
+        "lost_to_failed_batch": 1,
+        "not_asked": 0,
+        "not_found": 1,
+    }
+    by_row = {card.sample_row: card for card in result.cards}
+    assert {row: by_row[row].outcome for row in SECOND_LABELS} == {
+        2: CardOutcome.CORRECT,
+        3: CardOutcome.WRONG_KIND,
+        4: CardOutcome.CORRECT,
+    }
+    assert {row for row, card in by_row.items() if card.correct_on_second_label} == {2, 4}
+    assert {card.sample_row for card in result.cards if card.related} == set()
+    assert second_label_counts(result.cards) == {"cards": 3, "correct": 2}
+    assert (result.evaluation.counted, result.evaluation.correct, result.evaluation.accuracy) == (5, 3, 0.6)
+    model_set = result.model_set
+    assert (model_set.cards, model_set.counted, model_set.correct) == (7, 4, 2)
+
+
+@pytest.mark.anyio
+async def test_evaluation_breakdown_keeps_the_confusion_table_and_label_kinds_on_the_first_label(
+    prompts: PromptRegistry,
+) -> None:
+    result = await break_down_labelled_cards(
+        READING, TAXONOMY, OVERRIDES, WITH_SECOND_LABELS, stage_over(ScriptedByTag(), prompts)
+    )
+
+    assert ("spending-da", "election-da", 1) in confusion(result.cards)
+    assert ("rural-adv", "medicare-aff", 1) in confusion(result.cards)
+    assert outcomes_by_label_kind(result.cards) == {
+        "advantage": {"correct": 1},
+        "cp": {"correct": 1, "below_threshold": 1, "not_found": 1},
+        "da": {"correct": 1, "wrong_kind": 1, "refused": 1, "lost_to_failed_batch": 1},
+        "none": {"placed_labelled_none": 1, "refused": 1},
+    }
+
+
+ROWS_OF_EVERY_CARD = [
+    '{"schema": "local-classifier-sample-1", "populations": {"top": 100, "rest": 300}}\n',
+    *(
+        json.dumps({"sample_row": card.sample_row, "item_id": card.item_id, "stratum": card.stratum}) + "\n"
+        for card in LABELLED
+    ),
+]
+
+
+def t39_sample(*, second_label_column: bool) -> io.StringIO:
+    """t39's ten labels as the coach's CSV, with an empty second-label column or none."""
+    header = "sample_row,tag,position" + (",also" if second_label_column else "")
+    lines = [
+        f"{card.sample_row},a tag,{card.label}" + ("," if second_label_column else "") for card in LABELLED
+    ]
+    return io.StringIO("\n".join([header, *lines]) + "\n")
+
+
+@pytest.mark.anyio
+async def test_a_sample_without_the_second_label_column_scores_exactly_as_t39s(
+    prompts: PromptRegistry,
+) -> None:
+    without = read_coach_sample(t39_sample(second_label_column=False), ROWS_OF_EVERY_CARD, TAXONOMY)
+    blank = read_coach_sample(t39_sample(second_label_column=True), ROWS_OF_EVERY_CARD, TAXONOMY)
+
+    assert without == blank == LABELLED
+    result = await break_down_labelled_cards(
+        READING, TAXONOMY, OVERRIDES, without, stage_over(ScriptedByTag(), prompts)
+    )
+    assert {card.sample_row: (card.outcome, card.answer) for card in result.cards} == {
+        row: (expected[0], expected[2]) for row, expected in EXPECTED.items()
+    }
+    assert (result.evaluation.counted, result.evaluation.correct) == (5, 1)
+    assert second_label_counts(result.cards) == {"cards": 0, "correct": 0}
+    assert not any(card.correct_on_second_label for card in result.cards)
+
+
+def test_the_coach_sample_reads_a_second_label_beside_the_first() -> None:
+    sample = io.StringIO("sample_row,position,also\n1,states-cp,\n2,spending-da,election-da\n3,none,\n")
+
+    assert read_coach_sample(sample, ROWS, TAXONOMY) == (
+        LabelledCard(card_item_id(SHA, 0), "states-cp", sample_row=1, stratum="top"),
+        LabelledCard(card_item_id(SHA, 3), "spending-da", sample_row=2, stratum="rest", also="election-da"),
+        LabelledCard(card_item_id(SHA, 6), "none", sample_row=3),
+    )
+
+
+@pytest.mark.parametrize(
+    ("also", "refused"),
+    [
+        ("spending-da", "row 2's second label is its first"),
+        ("none", "row 2's second label is none"),
+        ("None", "row 2's second label is none"),
+        ("made-up-cp", f"row 2's second label is not an active id of {TOPIC} 1.0.0"),
+        ("unsure", f"row 2's second label is not an active id of {TOPIC} 1.0.0"),
+    ],
+)
+def test_a_second_label_that_is_none_the_first_or_no_position_is_refused_by_row(
+    also: str, refused: str
+) -> None:
+    sample = io.StringIO(f"sample_row,position,also\n1,states-cp,\n2,spending-da,{also}\n")
+
+    with pytest.raises(EvaluationRefused, match=refused):
+        read_coach_sample(sample, ROWS, TAXONOMY)
+
+
+def test_a_card_labelled_none_takes_no_second_label() -> None:
+    sample = io.StringIO("sample_row,position,also\n2,none,spending-da\n")
+
+    with pytest.raises(EvaluationRefused, match="row 2 is labelled none and names a second label"):
+        read_coach_sample(sample, ROWS, TAXONOMY)
+
+
+def test_the_coach_sample_is_counted_by_label_kind_and_second_label_kind() -> None:
+    sample = io.StringIO(
+        "sample_row,position,also\n1,states-cp,spending-da\n2,spending-da,election-da\n3,none,\n"
+    )
+
+    labelled = read_coach_sample(sample, ROWS, TAXONOMY)
+
+    assert coach_sample_counts(labelled, TAXONOMY) == ({"cp": 1, "da": 1, "none": 1}, {"da": 2})

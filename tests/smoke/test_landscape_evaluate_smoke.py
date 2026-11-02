@@ -257,3 +257,27 @@ def test_landscape_evaluate_breakdown_counts_each_card_and_the_repaired_batch(
     assert (hits["repair_cassettes"]["texts"], hits["repair_cassettes"]["hits"]) == (1, 0)
     for identity in IDENTITIES:
         assert identity not in result.output
+
+
+def test_landscape_evaluate_check_sample_counts_a_second_label_and_asks_no_model(
+    installed_cli: InstalledCli, evaluation: tuple[SyntheticRun, Path, Path], tmp_path: Path
+) -> None:
+    """`v1-e32-t41`: the same rows with a second label on the first, read and counted with nothing asked or
+    recorded. By hand: four labelled, one per kind, and one second label, an advantage."""
+    world, _, rows = evaluation
+    sample = tmp_path / "coach-sample-with-a-second-label.csv"
+    labels = [label for _, _, label, _ in LABELLED]
+    lines = ["sample_row,position,also", f"1,{labels[0]},costs-advantage"]
+    lines += [f"{row},{label}," for row, label in enumerate(labels[1:], start=2)]
+    sample.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    cassettes = world.data_dir / "landscape" / "model-cassettes"
+    before = sorted(cassettes.rglob("*"))
+
+    result = evaluate(installed_cli, world, sample, rows, "--check-sample")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    data = json.loads(result.stdout)["data"]
+    assert (data["taxonomy_version"], data["snapshot"], data["labelled"]) == ("1.0.0", SNAPSHOT, 4)
+    assert data["by_label_kind"] == {"advantage": 1, "aff": 1, "cp": 1, "da": 1}
+    assert data["second_labels"] == {"rows": 1, "by_kind": {"advantage": 1}}
+    assert sorted(cassettes.rglob("*")) == before

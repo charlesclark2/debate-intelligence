@@ -194,6 +194,7 @@ __all__ = [
     "BodyWords",
     "CutIndex",
     "NearDuplicateThresholds",
+    "SpelledWords",
     "Witnesses",
     "cluster_near_duplicates",
     "confirms_a_cut",

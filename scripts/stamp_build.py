@@ -26,13 +26,17 @@ What `stamp` does, and why:
   format profiles, `config/format_profiles/*.yaml`, go beside them, and the reviewed prompts, every
   `prompts/**/*.md` but a README with `prompts/prompts.lock.json`, into
   `debate_cli/_bundled_config/prompts/`: `cut` loads its prompt registry and its `--format` profile
-  from those copies (v1-e06-t06).
+  from those copies (v1-e06-t06). `search` reads `config/argument_taxonomy.yaml`,
+  `config/federated_ranking.yaml` and every `config/feeds/*.yaml` from the same place, so they are
+  bundled too, unchanged, and a checkout without them is refused (v1-e08-t09).
 
 `check-wheels` refuses a build that is not exactly the two expected wheels at the stamped version,
 whose debate_cli does not pin debate_core, that lacks the build info, the bundled profiles, routing
-files, pricing file, `cut`'s two prompts or its default format profile, or that contains anything
-that looks like a secret or local data: `.env` files, a `secrets/` directory, a `caselist_token`,
-SQLite files, a `.debate-research` data directory.
+files, pricing file, `cut`'s two prompts or its default format profile, `search`'s taxonomy, ranking
+table, `--expand-llm` prompt or any feed list the checkout commits, or that contains anything that
+looks like a secret or local data: `.env` files, a `secrets/` directory, a `caselist_token`, SQLite
+files, a `.debate-research` data directory. It runs in the checkout the wheels were built from
+(`--repository`), and refuses when that checkout commits no feed list to compare with.
 
 Standard library only.
 """
@@ -81,7 +85,16 @@ REQUIRED_CLI_MEMBERS = (
     "debate_cli/_bundled_config/config/format_profiles/team-default.yaml",
     "debate_cli/_bundled_config/prompts/card/select.md",
     "debate_cli/_bundled_config/prompts/card/markup.md",
+    "debate_cli/_bundled_config/config/argument_taxonomy.yaml",
+    "debate_cli/_bundled_config/config/federated_ranking.yaml",
+    "debate_cli/_bundled_config/prompts/search/expand.md",
 )
+"""Every wheel's fixed members; :func:`required_cli_members` adds the feed lists the checkout commits."""
+
+SEARCH_CONFIGURATION = ("argument_taxonomy.yaml", "federated_ranking.yaml")
+"""What `search` reads from `config/` beside the feed lists: its taxonomy and its ranking table."""
+FEEDS = "feeds"
+"""`config/feeds/`, every topic's feed list, read whole by the `rss` and `google_news` providers."""
 
 FORBIDDEN_DIRECTORY_NAMES = frozenset({"secrets", ".debate-research", ".data", ".venv"})
 FORBIDDEN_SUFFIXES = (".sqlite", ".sqlite3", ".db")
@@ -145,13 +158,13 @@ def render_build_info_module(info: Mapping[str, str]) -> str:
 
 
 def bundle_configuration(repository: Path) -> list[Path]:
-    """Copy the committed profiles, routing, pricing and format profile files and the prompts into the
-    CLI package; return them."""
+    """Copy the committed profiles, routing, pricing and format profile files, what `search` reads and
+    the prompts into the CLI package; return them."""
     source = repository / "config"
     destination = repository / BUNDLED_CONFIG / "config"
     if destination.parent.exists():
         shutil.rmtree(destination.parent)
-    for subdirectory in ("profiles", "format_profiles"):
+    for subdirectory in ("profiles", "format_profiles", FEEDS):
         (destination / subdirectory).mkdir(parents=True)
     copied: list[Path] = []
     for pattern, subdirectory in (
@@ -159,6 +172,8 @@ def bundle_configuration(repository: Path) -> list[Path]:
         ("model_routing.*.yaml", ""),
         ("model_pricing.yaml", ""),
         ("format_profiles/*.yaml", "format_profiles"),
+        *((name, "") for name in SEARCH_CONFIGURATION),
+        (f"{FEEDS}/*.yaml", FEEDS),
     ):
         for file in sorted(source.glob(pattern)):
             target = destination / subdirectory / file.name
@@ -166,6 +181,14 @@ def bundle_configuration(repository: Path) -> list[Path]:
             copied.append(target.relative_to(repository))
     if not any(path.name == "dev.toml" for path in copied):
         raise StampError(f"no config/profiles/dev.toml under {repository}; nothing to bundle")
+    names = {path.name for path in copied}
+    for name in SEARCH_CONFIGURATION:
+        if name not in names:
+            raise StampError(f"no config/{name} under {repository}; an installed build could not search")
+    if not any(path.parent.name == FEEDS for path in copied):
+        raise StampError(
+            f"no feed lists (config/{FEEDS}/*.yaml) under {repository}; an installed build could not search"
+        )
     copied.extend(_bundle_prompts(repository))
     return copied
 
@@ -234,21 +257,30 @@ def _metadata(archive: zipfile.ZipFile) -> email.message.Message:
     return email.parser.Parser().parsestr(archive.read(names[0]).decode("utf-8"))
 
 
+def committed_feed_lists(repository: Path) -> list[str]:
+    """The names of the feed lists `repository` commits, `config/feeds/*.yaml`, sorted."""
+    return sorted(path.name for path in (repository / "config" / FEEDS).glob("*.yaml"))
+
+
 def required_cli_members(repository: Path) -> tuple[str, ...]:
-    """Red-run skeleton (v1-e08-t09): the full list the tests build wheels from; nothing checks it yet."""
-    feeds = sorted(path.name for path in (repository / "config" / "feeds").glob("*.yaml"))
+    """What the debate_cli wheel must carry: the fixed members and every feed list `repository` commits."""
     return (
         *REQUIRED_CLI_MEMBERS,
-        "debate_cli/_bundled_config/config/argument_taxonomy.yaml",
-        "debate_cli/_bundled_config/config/federated_ranking.yaml",
-        "debate_cli/_bundled_config/prompts/search/expand.md",
-        *(f"debate_cli/_bundled_config/config/feeds/{name}" for name in feeds),
+        *(f"debate_cli/_bundled_config/config/{FEEDS}/{name}" for name in committed_feed_lists(repository)),
     )
 
 
 def check_wheels(dist: Path, version: str, *, repository: Path = REPOSITORY_ROOT) -> list[str]:
-    """Every reason the wheels in `dist` are not publishable as `version`; empty when they are."""
+    """Every reason the wheels in `dist` are not publishable as `version`; empty when they are.
+
+    The feed lists required are those `repository` commits: the checkout the wheels were built from.
+    """
     problems: list[str] = []
+    if not committed_feed_lists(repository):
+        problems.append(
+            f"no committed feed lists under {repository / 'config' / FEEDS}; cannot tell whether the "
+            "wheel carries every one `search` reads"
+        )
     wheels = sorted(dist.glob("*.whl"))
     by_distribution = {wheel.name.split("-", 1)[0]: wheel for wheel in wheels}
     if sorted(by_distribution) != sorted(WHEEL_DISTRIBUTIONS) or len(wheels) != len(WHEEL_DISTRIBUTIONS):
@@ -278,7 +310,9 @@ def check_wheels(dist: Path, version: str, *, repository: Path = REPOSITORY_ROOT
                 )
             members = set(archive.namelist())
             problems.extend(
-                f"{wheel.name}: missing {member}" for member in REQUIRED_CLI_MEMBERS if member not in members
+                f"{wheel.name}: missing {member}"
+                for member in required_cli_members(repository)
+                if member not in members
             )
             if "debate_cli/_build_info.py" in members:
                 stamped = _stamped_build_info(archive.read("debate_cli/_build_info.py").decode("utf-8"))
@@ -319,6 +353,9 @@ def _parser() -> argparse.ArgumentParser:
     check = commands.add_parser("check-wheels", help="refuse wheels that are not publishable")
     check.add_argument("--version", required=True)
     check.add_argument("--dist", type=Path, required=True)
+    check.add_argument(
+        "--repository", type=Path, default=REPOSITORY_ROOT, help="the checkout the wheels were built from"
+    )
     return parser
 
 
@@ -338,7 +375,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             for path in stamp(arguments.repository, info, arguments.dist):
                 print(f"stamped {path}")
             return 0
-        problems = check_wheels(arguments.dist, arguments.version)
+        problems = check_wheels(arguments.dist, arguments.version, repository=arguments.repository)
         for problem in problems:
             print(f"stamp_build: {problem}", file=sys.stderr)
         if problems:

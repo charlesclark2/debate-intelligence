@@ -31,8 +31,8 @@ from debate_core.application.federated_ranking import (
     FEDERATED_RANKING_CONFIG_PATH,
     load_federated_ranking_config,
 )
-from debate_core.application.query_expansion import ARGUMENT_TAXONOMY_PATH, load_argument_taxonomy
 from debate_core.application.ports.model_router import ModelRouter
+from debate_core.application.query_expansion import ARGUMENT_TAXONOMY_PATH, load_argument_taxonomy
 from debate_core.application.settings import Settings, load_settings
 from debate_core.domain.model_contracts import (
     EmbeddingResponse,
@@ -421,7 +421,8 @@ def test_check_wheels_requires_a_feed_list_the_checkout_commits_after_the_wheel_
     )
 
     assert sb.check_wheels(dist, VERSION, repository=repository) == [
-        f"debate_cli-{VERSION}-py3-none-any.whl: missing debate_cli/_bundled_config/config/feeds/new-topic.yaml"
+        f"debate_cli-{VERSION}-py3-none-any.whl: missing "
+        "debate_cli/_bundled_config/config/feeds/new-topic.yaml"
     ]
 
 

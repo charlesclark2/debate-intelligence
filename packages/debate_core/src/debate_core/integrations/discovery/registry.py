@@ -11,7 +11,8 @@ function per :class:`~debate_core.application.settings.SearchProviderName`, taki
 settings (its keys and contact email, still as `SecretStr`) and returning an adapter. The adapters
 are v1-e07-t02 to t07; until one exists, enabling its name is a configuration error that says so.
 
-:meth:`ProviderRegistry.health` is what the CLI's provider status footer reads (a later task).
+:meth:`ProviderRegistry.health` is what the CLI's provider status footer reads, and
+:meth:`ProviderRegistry.aclose` closes every adapter's connections when a search ends (v1-e08-t05).
 """
 
 from __future__ import annotations
@@ -123,6 +124,20 @@ class ProviderRegistry:
     def health(self) -> tuple[ProviderHealth, ...]:
         """One snapshot per enabled provider, in settings order: state, last error, p50, counts."""
         return tuple(provider.health() for provider in self._providers.values())
+
+    async def aclose(self) -> None:
+        """Close every provider's connections, each one even when closing another fails.
+
+        The first failure is raised once all have been asked to close.
+        """
+        failures: list[BaseException] = []
+        for provider in self._providers.values():
+            try:
+                await provider.aclose()
+            except Exception as error:
+                failures.append(error)
+        if failures:
+            raise failures[0]
 
     def __repr__(self) -> str:
         return f"ProviderRegistry(providers={list(self._providers)!r})"

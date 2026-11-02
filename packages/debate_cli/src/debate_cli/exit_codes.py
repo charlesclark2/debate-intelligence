@@ -33,6 +33,22 @@ are fixed here rather than at each `raise`:
     refused model call, a missing or damaged snapshot or an unregistered prompt saves no card and is a
     `1`, and a source that could not be retrieved, or a model provider that did not answer, is a `3`.
 
+`6` — `SEARCH_PARTIAL`
+    `search` returned what it found while at least one provider it asked did not answer in full:
+    it failed, timed out, was rate-limited, had its circuit breaker open, was not configured, or
+    answered only partly (some of its feeds failed) (`v1-e08-t05`). The provider status footer and
+    the JSON's `providers` name each one. Never `0`, so a script cannot take a partial result for a
+    complete one; a partial search that found nothing is a `6` too, because the providers that did
+    not answer may have had results.
+
+`7` — `NO_RESULTS`
+    `search` asked every provider, every one answered in full, and nothing matched: a definite
+    answer, unlike a `6` or a `3`.
+
+A search that no provider answered is a `3`, `RETRIEVAL_FAILURE`, as a failed `fetch` is: the same
+search may succeed later. One that asked no provider at all, because none it named is enabled, is a
+`1`: no retry enables one (:func:`exit_code_for_search`).
+
 `70` — `INTERNAL_ERROR`
     A bug: an exception the CLI does not model. 70 is `EX_SOFTWARE` from `sysexits.h`.
 
@@ -45,7 +61,8 @@ raises and applies :func:`exit_code_for` for it. A command only chooses a code i
 failure is an *outcome* rather than an exception — `verify` reporting an `UNVERIFIED` card is the
 V1 example, and it reports that outcome through
 :meth:`~debate_cli.output.CliOutput.failure` and then exits with `DOMAIN_FAILURE`; `cut` reporting
-an `UNVERIFIED` card it exported exits with `CARD_UNVERIFIED` the same way.
+an `UNVERIFIED` card it exported exits with `CARD_UNVERIFIED` the same way, and `search` takes its
+code from :func:`exit_code_for_search`.
 
 `debate_core` never imports this module: an exit code is a property of a command-line surface, not
 of the domain. The dependency runs the other way for **error codes**: the word a failure is
@@ -76,7 +93,11 @@ from debate_core.application.errors import (
     error_code_of,
     error_code_of_class,
 )
+from debate_core.application.federated_search_types import SearchOutcome
 from debate_core.application.landscape_model_stage import ModelStageInterrupted
+from debate_core.application.query_expansion import UnknownExpansionChoice
+from debate_core.domain import SearchStatus
+from debate_core.domain.discovery import ProviderOutcome
 
 __all__ = [
     "REFUSED_MODEL_CALLS",
@@ -88,6 +109,7 @@ __all__ = [
     "error_code_for",
     "exit_code_for",
     "exit_code_for_failure_codes",
+    "exit_code_for_search",
     "is_retryable_store_failure",
 ]
 
@@ -154,6 +176,8 @@ class ExitCode(IntEnum):
     USAGE_ERROR = 2
     RETRIEVAL_FAILURE = 3
     CARD_UNVERIFIED = 4
+    SEARCH_PARTIAL = 6
+    NO_RESULTS = 7
     INTERNAL_ERROR = 70
 
 
@@ -173,11 +197,18 @@ def exit_code_for(exception: BaseException) -> ExitCode:
     Click-family errors (`typer.TyperException` and its `UsageError` subclasses) already carry the
     code Typer's standalone runner exits with, so this reports that number rather than inventing a
     second one — which is what keeps the JSON envelope's `exit_code` equal to the real exit status.
+
+    :class:`~debate_core.application.query_expansion.UnknownExpansionChoice` is a `USAGE_ERROR`
+    (`v1-e08-t05`): `search --argument` or `--need` named something the taxonomy does not have, a
+    choice the person typed, and its message lists the valid ones. It is checked before any provider
+    is asked, so nothing was executed, as with any other usage error.
     """
     if isinstance(exception, typer.Exit):
         return _known_exit_code(exception.exit_code)
     if isinstance(exception, typer.TyperException):
         return _known_exit_code(exception.exit_code)
+    if isinstance(exception, UnknownExpansionChoice):
+        return ExitCode.USAGE_ERROR
     if isinstance(exception, REFUSED_MODEL_CALLS):
         return ExitCode.DOMAIN_FAILURE
     if isinstance(exception, (ProviderError, *RETRYABLE_STORE_FAILURES)):
@@ -191,6 +222,23 @@ def exit_code_for(exception: BaseException) -> ExitCode:
     if isinstance(exception, DomainError):
         return ExitCode.DOMAIN_FAILURE
     return ExitCode.INTERNAL_ERROR
+
+
+def exit_code_for_search(outcome: SearchOutcome) -> ExitCode:
+    """The exit code a finished `search` ends with, from its status and what it ranked (`v1-e08-t05`).
+
+    * COMPLETE with a result: `OK`. COMPLETE with none: `NO_RESULTS`.
+    * PARTIAL, with results or without: `SEARCH_PARTIAL`.
+    * FAILED: `RETRIEVAL_FAILURE` when a provider was asked and did not answer, and `DOMAIN_FAILURE`
+      when none was asked because none of those selected is enabled (`not_configured`, or no
+      provider at all).
+    """
+    if outcome.status is SearchStatus.COMPLETE:
+        return ExitCode.OK if outcome.ranked_candidates else ExitCode.NO_RESULTS
+    if outcome.status is SearchStatus.PARTIAL:
+        return ExitCode.SEARCH_PARTIAL
+    asked = any(status.outcome is not ProviderOutcome.NOT_CONFIGURED for status in outcome.provider_statuses)
+    return ExitCode.RETRIEVAL_FAILURE if asked else ExitCode.DOMAIN_FAILURE
 
 
 def is_retryable_store_failure(exception: BaseException | None) -> bool:

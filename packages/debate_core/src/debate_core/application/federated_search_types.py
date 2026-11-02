@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING, Protocol, Self, runtime_checkable
 from pydantic import Field, model_validator
 
 from debate_core.domain import (
+    Article,
     DomainModel,
     NonEmptyText,
     Search,
@@ -57,6 +58,7 @@ __all__ = [
     "SearchStage",
     "SearchState",
     "StageName",
+    "StagesInOrder",
 ]
 
 
@@ -155,6 +157,10 @@ class SearchState:
     """The ranking as stored with the search: one SearchResult per ranked candidate that has an
     Article. Empty until a stage registers ranked candidates as Articles (v1-e08-t05)."""
 
+    articles: tuple[Article, ...] = ()
+    """The Article each of `results` names, in the same order: a stored one, or the discovery-only one
+    the search registered (v1-e08-t05)."""
+
     @classmethod
     def start(cls, search_id: Ulid, request: SearchRequest) -> SearchState:
         """The state before any stage: one query, the request's own, under its own filters."""
@@ -174,6 +180,7 @@ class SearchState:
         merged_candidates: tuple[MergedCandidate, ...] | None = None,
         ranked_candidates: tuple[RankedCandidate, ...] | None = None,
         results: tuple[SearchResult, ...] | None = None,
+        articles: tuple[Article, ...] | None = None,
     ) -> SearchState:
         """A copy with the given fields replaced; `search_id` and `request` never change."""
         return dataclasses.replace(
@@ -185,6 +192,7 @@ class SearchState:
             merged_candidates=self.merged_candidates if merged_candidates is None else merged_candidates,
             ranked_candidates=self.ranked_candidates if ranked_candidates is None else ranked_candidates,
             results=self.results if results is None else results,
+            articles=self.articles if articles is None else articles,
         )
 
 
@@ -205,6 +213,33 @@ class PassThroughStage:
 
     def __repr__(self) -> str:
         return "PassThroughStage()"
+
+
+class StagesInOrder:
+    """Several stages run one after another in one slot of the pipeline.
+
+    The search command's rank slot is the ranking and then the Article matching that turns the
+    ranking into stored results (v1-e08-t05): two steps that belong to one stage, because matching
+    reads nothing but what ranking just wrote.
+    """
+
+    def __init__(self, *stages: SearchStage) -> None:
+        if not stages:
+            raise ValueError("StagesInOrder runs at least one stage")
+        self._stages = stages
+
+    @property
+    def stages(self) -> tuple[SearchStage, ...]:
+        """The stages, in the order they run."""
+        return self._stages
+
+    def __repr__(self) -> str:
+        return f"StagesInOrder({', '.join(repr(stage) for stage in self._stages)})"
+
+    async def run(self, state: SearchState) -> SearchState:
+        for stage in self._stages:
+            state = await stage.run(state)
+        return state
 
 
 class StageName(StrEnum):
@@ -242,7 +277,10 @@ class SearchOutcome:
 
     `provider_statuses` names every call and how it ended, so the CLI can say "partial: OpenAlex
     timed out" rather than quietly showing fewer results. `provider_health` is each enabled
-    provider's record just after the search, for the status footer.
+    provider's record just after the search, for the status footer. `ranked_candidates` is the
+    ranking with its features and explanations, for the table and the JSON output; `results` is the
+    part of it stored with the search, one per ranked candidate that has an Article, and `articles`
+    the Article each of those names, in the same order.
     """
 
     search: Search
@@ -250,6 +288,8 @@ class SearchOutcome:
     candidates: tuple[CandidateResult, ...]
     results: tuple[SearchResult, ...]
     provider_health: tuple[ProviderHealth, ...]
+    ranked_candidates: tuple[RankedCandidate, ...] = ()
+    articles: tuple[Article, ...] = ()
 
     @property
     def status(self) -> SearchStatus:

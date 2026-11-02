@@ -282,6 +282,16 @@ class ResilientProvider:
         self._succeed(permit, started)
         return response
 
+    async def aclose(self) -> None:
+        """Close the wrapped adapter's connections, when it holds any (an `aclose` of its own).
+
+        The search command closes every provider when its search ends (v1-e08-t05); an adapter with
+        nothing to close, such as a test's fake, has no `aclose` and is left as it is.
+        """
+        close = getattr(self._inner, "aclose", None)
+        if close is not None:
+            await close()
+
     def health(self) -> ProviderHealth:
         """This provider's record so far, redacted, for the CLI's status footer."""
         now = self._clock.now()

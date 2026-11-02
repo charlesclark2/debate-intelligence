@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>The Example Courier - Politics</title>
+    <link>https://news.example.org/politics</link>
+    <description>Invented politics coverage for the search command's tests.</description>
+    <item>
+      <title>Midterm elections tighten as health insurance costs rise</title>
+      <link>https://news.example.org/2026/10/20/midterms-tighten</link>
+      <guid isPermaLink="false">courier-2001</guid>
+      <pubDate>Tue, 20 Oct 2026 14:05:00 +0000</pubDate>
+      <dc:creator>Dana Whitfield</dc:creator>
+      <description>SNIPPETSENTINEL Polls narrow in five states.</description>
+    </item>
+    <item>
+      <title>Policy Center: turnout in the 2026 midterm elections</title>
+      <link>https://www.policycenter.example/research/midterm-turnout-2026</link>
+      <guid isPermaLink="false">courier-2002</guid>
+      <pubDate>Thu, 01 Oct 2026 09:30:00 +0000</pubDate>
+      <description>A new report on who votes.</description>
+    </item>
+    <item>
+      <title>Health insurance fight costs the president political capital</title>
+      <link>https://news.example.org/2026/10/15/political-capital</link>
+      <guid isPermaLink="false">courier-2003</guid>
+      <pubDate>Thu, 15 Oct 2026 10:15:00 +0000</pubDate>
+      <description>Allies in Congress grow wary.</description>
+    </item>
+    <item>
+      <title>Midterm elections: the summer primaries in review</title>
+      <link>https://news.example.org/2026/08/01/summer-primaries</link>
+      <guid isPermaLink="false">courier-2004</guid>
+      <pubDate>Sat, 01 Aug 2026 19:50:00 +0000</pubDate>
+      <description>Before the window.</description>
+    </item>
+    <item>
+      <title>Weekend weather</title>
+      <link>https://news.example.org/2026/10/17/weather</link>
+      <guid isPermaLink="false">courier-2005</guid>
+      <pubDate>Sat, 17 Oct 2026 07:00:00 +0000</pubDate>
+      <description>Rain on Saturday.</description>
+    </item>
+  </channel>
+</rss>

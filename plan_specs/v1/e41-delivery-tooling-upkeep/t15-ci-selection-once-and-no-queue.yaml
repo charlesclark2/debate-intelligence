@@ -39,6 +39,9 @@ spec:
     numbers: file-level dealing by recorded durations, fewer parts, the xdist worker count.
     Don't build (5)'s option here. The target: an ordinary pull request's `ci` under 3 minutes
     of wall time, and no test parts on the bot's pull requests.
+    (PM amendment 2026-11-02, from the PM review.) Item (1)'s selection runs in a `test-selection` job beside
+    `changes`, not inside it, so the path-filtered jobs `changes` gates don't wait for a checkout and an
+    install (the session's deviation, accepted).
   priority: 1
   constraints:
     packages: [.github/workflows, scripts, tests/scripts, tests/pytest_plugins, docs/process]
@@ -70,7 +73,7 @@ spec:
         Each part's fixed cost against its test time is recorded in docs/process with the
         options, sent to the PM.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

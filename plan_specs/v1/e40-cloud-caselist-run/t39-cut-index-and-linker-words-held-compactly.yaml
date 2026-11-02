@@ -55,7 +55,7 @@ spec:
         The operator's whole-store check matches the store's own aggregates byte for byte
         (operator, recorded by the PM).
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

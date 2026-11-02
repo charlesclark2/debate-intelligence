@@ -1,0 +1,91 @@
+# TASK v1-e41-t16-ci-matrix-sized-to-the-selection - CI runs as many test parts as the selection needs, measures work stealing, and the bot's dispatched run runs no Python job
+# Epic: E41 — Delivery Tooling Upkeep | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e41-t16-ci-matrix-sized-to-the-selection
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+  annotations:
+    debate/title: "CI runs as many test parts as the selection needs, measures work stealing, and the bot's dispatched run runs no Python job"
+spec:
+  # Filed by the PM, 2026-11-02, from v1-e41-t15's item 5 options 1 and 2 (the PM's ruling, 2026-11-02) and its ac3 read.
+  description: >-
+    v1-e41-t15 chose the tests once, skipped the matrix for generated docs and fixed the
+    concurrency group. The PM's ac3 read on 2026-11-02 found the bot's pull requests run no test
+    part. But ordinary task pull requests still take 297–318 s of `ci` wall time against the
+    3-minute target, each running all eight parts, and every part pays the whole selection's
+    collection and fixture setup (docs/process/ci-test-part-costs.md). Do: (1) size the matrix
+    to the selection. `test-selection` decides the number of parts from the selection (for
+    example by test count, or by the files' recorded collection and run time; propose the rule
+    and its numbers): one or two parts for a small affected set, up to eight for the whole
+    selection. The parts still partition the selection, and the partition proof still holds. (2)
+    Measure `--dist worksteal` against today's distribution on one whole-selection run (the job
+    step timings, read by the PM from the public API after the merge, or by the operator with
+    `gh run view --log`), and keep it only if it helps. (3) The bot's dispatched run of
+    `bot/refresh-generated-files` runs no Python job: `changes` compares the dispatch with
+    `origin/dev`, as `test-selection` already does. Record the wall time of the next three
+    ordinary task pull requests after the merge (the PM reads them).
+  priority: 1
+  constraints:
+    packages: [.github/workflows, scripts, tests/scripts, tests/pytest_plugins, docs/process]
+    forbidden:
+      - Paid or larger runners
+      - A part that can be forgotten, or a selected test in no part
+      - Cancelling a push run on dev or main
+      - Network access in a test
+  context:
+    - kind: TaskRef
+      name: v1-e41-t15-ci-selection-once-and-no-queue
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The matrix's size follows the selection by a stated rule, every selected test is in
+        exactly one part at every size, and the bot's dispatch selects no Python job, by
+        workflow tests shown failing first.
+    - id: ac2
+      description: >-
+        worksteal is measured on a whole-selection run and kept or dropped on the figures,
+        and three task pull requests' `ci` wall times after the merge are recorded by the
+        PM.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e41-t16-ci-matrix-sized-to-the-selection-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+spec:
+  description: >-
+    CI runs as many test parts as the selection needs, measures work stealing, and the bot's
+    dispatched run runs no Python job.
+  goalRef:
+    name: v1-e41-t16-ci-matrix-sized-to-the-selection
+  graph:
+    nodes:
+      - id: ci-matrix-sized-to-the-selection
+        kind: Task
+        name: Matrix sized
+        description: >-
+          CI runs as many test parts as the selection needs, measures work stealing, and
+          the bot's dispatched run runs no Python job.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Matrix sized tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, -k, ci_workflow or test_selection]
+status:
+  phase: Pending

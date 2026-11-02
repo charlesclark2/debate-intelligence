@@ -1,0 +1,80 @@
+# TASK v1-e06-t12-pasted-copy-cite-stated-by-the-user - A pasted copy's cite fields can be stated when it is stored, so a card cut from it has a usable cite
+# Epic: E06 Card Cutting, Citation & Export | Release: v1.3 (URL → verified card) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e06-t12-pasted-copy-cite-stated-by-the-user
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e06-card-cutting
+  annotations:
+    debate/title: "A pasted copy's cite fields can be stated when it is stored, so a card cut from it has a usable cite"
+spec:
+  # Filed by the PM, 2026-11-02, from v1-e06-t08's follow-up 1 (the PM's review, 2026-11-02).
+  description: >-
+    `cut --from-paste` (v1-e06-t08) cuts a card from the coach's stored copy, but `fetch
+    --paste` takes no title, author, date or publication. So the card's cite has none, and a
+    cite without an author isn't usable in a round. Give `fetch --paste` options for the cite
+    fields the citation rules use (title, authors, date, publication, and the URL it already
+    takes). Store them as user-stated, the way a student's cite edit is stored, never as
+    verified. Let the citation rules use them for a USER_SUPPLIED copy, so the cut card's cite
+    is complete. The card stays UNVERIFIED for its cite (CITATION_UNVERIFIED), as the rules
+    treat a user-supplied copy, and the cite says the fields are user-stated wherever the format
+    already marks unverified fields. No verified field is filled from a user statement.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.retrieval, debate_core.evidence, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke]
+    forbidden:
+      - A user-stated field recorded or reported as verified
+      - A card from a pasted copy reported VERIFIED
+      - Network or live model calls in tests
+  context:
+    - kind: TaskRef
+      name: v1-e06-t08-cut-from-a-stored-pasted-copy
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `fetch --paste` stores stated cite fields as user-stated, a card cut from that copy
+        shows them in its cite and stays UNVERIFIED with CITATION_UNVERIFIED alone, and a
+        copy stored without them cuts as today, by tests shown failing first and an
+        installed-build smoke check.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e06-t12-pasted-copy-cite-stated-by-the-user-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e06-card-cutting
+spec:
+  description: >-
+    A pasted copy's cite fields can be stated when it is stored, so a card cut from it has a
+    usable cite.
+  goalRef:
+    name: v1-e06-t12-pasted-copy-cite-stated-by-the-user
+  graph:
+    nodes:
+      - id: pasted-copy-cite-stated-by-the-user
+        kind: Task
+        name: Stated cite
+        description: >-
+          A pasted copy's cite fields can be stated when it is stored, so a card cut from
+          it has a usable cite.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Stated cite tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/test_cut_command.py, packages/debate_cli/tests/test_fetch_command.py, -k, paste]
+status:
+  phase: Pending

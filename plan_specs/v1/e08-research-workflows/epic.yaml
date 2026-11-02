@@ -290,5 +290,64 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e08-t08-counterplan-and-kritik-needs
+    - id: t09
+      kind: Task
+      name: 'An installed build carries the configuration `search` reads: the argument taxonomy, the ranking table and the feed lists'
+      description: >-
+        An installed build carries the configuration `search` reads: the argument taxonomy,
+        the ranking table and the feed lists.
+      inputs:
+        specRef: plan_specs/v1/e08-research-workflows/t09-installed-build-carries-search-configuration.yaml
+        goalRef: v1-e08-t09-installed-build-carries-search-configuration
+      dependsOn:
+      - ext-v1-e06-t06-cut-command
+      - t04
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e08-t09-installed-build-carries-search-configuration reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e08-t09-installed-build-carries-search-configuration
+    - id: t10
+      kind: Task
+      name: 'One search asks each provider once, however many queries the expansion gives'
+      description: >-
+        One search asks each provider once, however many queries the expansion gives.
+      inputs:
+        specRef: plan_specs/v1/e08-research-workflows/t10-search-asks-each-provider-once.yaml
+        goalRef: v1-e08-t10-search-asks-each-provider-once
+      dependsOn:
+      - t05
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e08-t10-search-asks-each-provider-once reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e08-t10-search-asks-each-provider-once
+    - id: t11
+      kind: Task
+      name: 'The search.expand prompt names the argument family''s needs, not the DA family''s'
+      description: >-
+        The search.expand prompt names the argument family's needs, not the DA family's.
+      inputs:
+        specRef: plan_specs/v1/e08-research-workflows/t11-expand-prompt-sends-the-familys-needs.yaml
+        goalRef: v1-e08-t11-expand-prompt-sends-the-familys-needs
+      dependsOn:
+      - t08
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e08-t11-expand-prompt-sends-the-familys-needs reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e08-t11-expand-prompt-sends-the-familys-needs
 status:
   phase: Pending

@@ -277,3 +277,13 @@ it, and every non-PR run now has a group of its own.
    specs and the doc checks are clean.
 8. **Merge:** `scripts/task pr --partial` once `ci` is green. This PR's own `ci` runs the whole
    selection under the new workflow, which is a useful first read.
+
+## Operator records (recorded by the PM, 2026-11-02)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac3: one bot pull request and one task pull request's `ci` | NOT RUN (the PM's read) | PASS (recorded) | 2026-11-02, from GitHub's public API: the bot's refresh-generated-files runs (pull_request 06:23 and two dispatches) ran test-selection and skipped the test matrix, with `ci` success; ordinary task pull requests (v1-e08-t05, v1-e40-t39, v1-e08-t08) took 318, 297 and 315 s of `ci` wall time, each running all eight parts, and dev's push runs 456–523 s |
+
+ac3 is a recorded read, so the Goal is `Succeeded` in this batch. The task pull requests are still over the 3-minute target; `v1-e41-t16` (p1, filed in this batch) sizes the matrix to the selection.

@@ -307,3 +307,13 @@ nothing measurable. The three aggregates kept the same SHA-256.
    (248, 2,056, 2,262 and 179 passed), ruff, pyright, lint-imports, thin handlers, the specs and the
    doc checks are clean.
 8. **Merge:** `scripts/task pr --partial` once `ci` is green.
+
+## Operator records (recorded by the PM, 2026-11-02)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac2 and ac1's whole store | NOT RUN (operator) | PASS | 2026-11-02, block 2 of the report over a copy-on-write clone of the whole hspolicy26 store, this branch's code (4f91c9e5) in the run image under -m 7g: sources 3869, parsed 3825, cards 126681, occurrences 144841, clusters 21595, rebuild 741 s; index.jsonl ba319604…, failures.jsonl 5ce41084…, occurrences.jsonl 24574846…, each equal to the store's own aggregates; VmHWM 1,025,892,352 (t36's whole-store figure 6,252,990,464); index over 29,866 bodies and 26,968,420 words; cgroup peak 5,281,984,512, which counts the page cache of the 4 GB of parsed files read |
+
+Both criteria pass, so the Goal is `Succeeded` in this batch. The main process's peak is about a sixth of t36's at the whole store, so a full season fits the run task's 32 GB with room. Images carrying this commit may now go to the schedule.

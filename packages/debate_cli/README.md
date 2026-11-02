@@ -83,9 +83,9 @@ $ debate-research --version --json | jq .data
 | A stable release (v1-e09-t06) | `stable` | `prod` | the `config/` bundled in the wheel |
 
 **What an installed build contains.** This package requires
-`debate-core[aws,docx,extraction,http,opencaselist,tub]`: the extras behind the adapters
+`debate-core[aws,docx,extraction,feeds,http,opencaselist,tub]`: the extras behind the adapters
 `debate_cli.container` wires, so a channel install has boto3, lxml, trafilatura, readability-lxml,
-pypdf, httpx, keyring and cryptography without anything added by hand. `scripts/install_channel.sh` proves it after every
+pypdf, httpx, defusedxml, keyring and cryptography without anything added by hand. `scripts/install_channel.sh` proves it after every
 install with `python -m debate_cli.installation`. That check reads the list of
 `debate_core.integrations` modules from the installed container's own import statements, imports
 each one, and fails unless it tried and imported them all. It also confirms that every distribution
@@ -123,13 +123,17 @@ rather than writing an integer.
 | 2 | `USAGE_ERROR` | The command line was wrong: unknown command or option, missing argument, no command given. Nothing was executed. |
 | 3 | `RETRIEVAL_FAILURE` | Something the command depends on did not answer, so there is no answer yet. An external provider — search, fetch, a model — failed or rate-limited the call, or a store could not be read or written: it was unavailable, the SSO session for it expired, or it refused access (the operating system refusing a data directory included). The same command may well succeed later. |
 | 4 | `CARD_UNVERIFIED` | `cut` made a card and the evidence verifier did not pass it: the card was saved and written `UNVERIFIED`, with its banner, and each reason was printed. Never `0`, and not `1`, so a script can tell a card that needs a person's look from a cut that could not run (`v1-e06-t06`). |
+| 6 | `SEARCH_PARTIAL` | `search` returned what it found while at least one provider it asked did not answer in full: it failed, timed out, was rate-limited, had its breaker open, was not configured or answered only partly. The footer names each one. A partial search with no rows is a `6` too (`v1-e08-t05`). |
+| 7 | `NO_RESULTS` | `search` asked every provider, every one answered in full, and nothing matched. |
 | 70 | `INTERNAL_ERROR` | A bug: an exception the CLI does not model. It is reported by its class, never its message (below). 70 is `EX_SOFTWARE` from `sysexits.h`. |
 
 Exceptions are mapped by `exit_code_for`: `ProviderError` → 3; `StoreUnavailable`,
 `StoreCredentialsExpired` and `StoreAccessDenied` (`RETRYABLE_STORE_FAILURES`) → 3 in every
 command, and so are `caselist remove`'s `TakedownPreflightFailed` and `RemovalIncomplete` when one
 of those three is what stopped them (`v1-e01-t20`); any other `DomainError` → 1, including
-`NotFound`; a usage error → 2; anything else → 70. A failure that is an *outcome* rather than an
+`NotFound`; a usage error → 2, and so is `search`'s `UnknownExpansionChoice` (`v1-e08-t05`);
+anything else → 70. `search` takes its code from `exit_code_for_search`: 6 and 7 above, 3 when no
+provider answered, 1 when none it selected is enabled. A failure that is an *outcome* rather than an
 exception — `verify` finding an unverifiable card — is reported with `output.failure(...)` and then
 `raise typer.Exit(code=ExitCode.DOMAIN_FAILURE)`; `cut` exporting an `UNVERIFIED` card does the same
 with `ExitCode.CARD_UNVERIFIED`.
@@ -461,3 +465,43 @@ evidence included, is the one in the .docx. Cards belong to one fixed local owne
 | `2` | A usage error: no `--need`, a `--format` no profile has, an `--output` in a directory that does not exist. Nothing is fetched. |
 | `3` | The source is PAYWALLED, BLOCKED, ROBOTS_DISALLOWED, NOT_FOUND, UNSUPPORTED_TYPE or ERROR (`SOURCE_NOT_ACCESSIBLE`, with the status and the canonical URL), or the model provider did not answer or throttled the call. No card is saved and nothing is written. |
 | `4` | The card is UNVERIFIED (`CARD_UNVERIFIED`): saved, written with its banner, and each reason printed. |
+
+## `debate-research search`
+
+`debate-research search "<query>"` (`v1-e08-t05-search-command`) asks every enabled discovery provider
+at once and ranks what they find. `FederatedSearchService` in `debate_core` does the work: with
+`--argument` and `--need` it expands the query into the taxonomy's queries for that pair
+(`config/argument_taxonomy.yaml`, `v1-e08-t04`), asks each provider each query under
+`providers.search_deadline_seconds`, merges what comes back into distinct sources (`v1-e08-t02`), ranks
+them by seven explainable features (`config/federated_ranking.yaml`, `v1-e08-t03`), matches each to an
+Article without fetching it, and stores the search. The providers are the ones `providers.enabled`
+names that this build has adapters for: `openalex`, `rss` (the publisher feeds in `config/feeds/`) and
+`google_news`. The words are `debate_cli.presenters.search_presenter`'s.
+
+```console
+$ uv run debate-research search "midterm elections" --since 2026-09-14 --max-results 20
+$ uv run debate-research search "national health insurance" --argument politics-da --need link --topic policy-2026-27-nhi
+$ uv run debate-research search "de-extinction" --format json | jq '.data // .error.details | .results[] | [.rank, .title, .explanation]'
+$ uv run debate-research search "health insurance" --argument ptx --need uq --var bill=reconciliation --expand-llm
+```
+
+A person sees a table of rank, title, publisher or venue, date, source type, access and the ranking's
+explanation, then the expansion's line and a footer with one line per provider: `openalex: ok, 12
+results`, `rss: partial, 4 results: 1 of 6 feeds failed: …`, `openalex: timeout: no answer within 10s`.
+`--format json` (or `--json`) prints one envelope whose search object carries, for each result, its
+rank, score, seven features and their contributions, explanation, identifiers, the providers that found
+it and its Article id and access status. Neither surface prints a snippet or an abstract: search
+returns sources, not cards, and access stays `UNKNOWN` until `fetch` or `cut` reads the page.
+`--save PATH` writes the same search object to a file. `--expand-llm` also asks a model for up to three
+extra queries, replayed from `<data dir>/search/model-cassettes/` unless `DEBATE_MODEL_MODE` is `live`
+or `record`; it is off unless given, and a model that cannot be asked leaves a warning on stderr and the
+template queries alone.
+
+| Exit | Means |
+|---|---|
+| `0` | Every provider answered in full, with results. |
+| `1` | No provider was asked: none of those selected is enabled (`NO_PROVIDER_ENABLED`). |
+| `2` | A usage error: an unknown `--argument`, `--need`, `--topic` or `--var` (the valid ones are listed), `--since` after `--until`, a provider this build does not have. Nothing is searched. |
+| `3` | No provider answered (`SEARCH_FAILED`). |
+| `6` | Partial (`SEARCH_PARTIAL`): results from the providers that answered, and the footer names each one that did not. |
+| `7` | Every provider answered, and nothing matched (`NO_RESULTS`). |

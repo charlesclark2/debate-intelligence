@@ -279,9 +279,12 @@ _SEMANTIC_SCHOLAR = SearchProviderName.SEMANTIC_SCHOLAR.value
 _RSS = SearchProviderName.RSS.value
 _GOOGLE_NEWS = SearchProviderName.GOOGLE_NEWS.value
 _GDELT = SearchProviderName.GDELT.value
+# Federal Register and GovInfo documents share no work with the providers above, so they come last in
+# every row: a government value fills a field only when no other member has one (v1-e07-t07).
+_GOVERNMENT = (SearchProviderName.FEDERAL_REGISTER.value, SearchProviderName.GOVINFO.value)
 
-_PUBLISHER_DEPOSIT_FIRST = (_CROSSREF, _OPENALEX, _SEMANTIC_SCHOLAR, _RSS, _GOOGLE_NEWS, _GDELT)
-_INDEXES_FIRST = (_OPENALEX, _SEMANTIC_SCHOLAR, _CROSSREF, _RSS, _GOOGLE_NEWS, _GDELT)
+_PUBLISHER_DEPOSIT_FIRST = (_CROSSREF, _OPENALEX, _SEMANTIC_SCHOLAR, _RSS, _GOOGLE_NEWS, _GDELT, *_GOVERNMENT)
+_INDEXES_FIRST = (_OPENALEX, _SEMANTIC_SCHOLAR, _CROSSREF, _RSS, _GOOGLE_NEWS, _GDELT, *_GOVERNMENT)
 
 FIELD_PRECEDENCE: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
     {
@@ -295,11 +298,11 @@ FIELD_PRECEDENCE: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
         "identifiers.doi": _PUBLISHER_DEPOSIT_FIRST,
         # Crossref's date is the earliest the publisher deposited (online before print); a publisher
         # feed dates its own story; GDELT's date is when GDELT saw the story, so it comes last.
-        "published_at": (_CROSSREF, _RSS, _GOOGLE_NEWS, _OPENALEX, _SEMANTIC_SCHOLAR, _GDELT),
+        "published_at": (_CROSSREF, _RSS, _GOOGLE_NEWS, _OPENALEX, _SEMANTIC_SCHOLAR, _GDELT, *_GOVERNMENT),
         # The publisher's own link: a feed item's link is the publisher's page, Crossref's is the DOI
         # resolver, which leads to it. OpenAlex's landing page next; Semantic Scholar's is its own
         # index page; GDELT's is whatever URL it crawled, AMP and tracking included.
-        "url": (_RSS, _GOOGLE_NEWS, _CROSSREF, _OPENALEX, _SEMANTIC_SCHOLAR, _GDELT),
+        "url": (_RSS, _GOOGLE_NEWS, _CROSSREF, _OPENALEX, _SEMANTIC_SCHOLAR, _GDELT, *_GOVERNMENT),
         # Abstracts and open-access copies are what the indexes add: OpenAlex rebuilds the abstract
         # and finds the best open location, Semantic Scholar has abstracts and open-access PDFs, and
         # Crossref has an abstract only when the publisher deposited one.
@@ -319,8 +322,17 @@ FIELD_PRECEDENCE: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
             _RSS,
             _GOOGLE_NEWS,
             _GDELT,
+            *_GOVERNMENT,
         ),
-        "identifiers.arxiv_id": (_SEMANTIC_SCHOLAR, _OPENALEX, _CROSSREF, _RSS, _GOOGLE_NEWS, _GDELT),
+        "identifiers.arxiv_id": (
+            _SEMANTIC_SCHOLAR,
+            _OPENALEX,
+            _CROSSREF,
+            _RSS,
+            _GOOGLE_NEWS,
+            _GDELT,
+            *_GOVERNMENT,
+        ),
     }
 )
 """For each merged field, the configured providers in the order their value is taken."""

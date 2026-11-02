@@ -274,6 +274,8 @@ class SearchProviderName(StrEnum):
     RSS = "rss"
     GOOGLE_NEWS = "google_news"
     GDELT = "gdelt"
+    FEDERAL_REGISTER = "federal_register"
+    GOVINFO = "govinfo"
 
 
 class SettingsGroup(BaseModel):
@@ -552,6 +554,13 @@ class ProviderSettings(SettingsGroup):
     )
     semantic_scholar_api_key: SecretStr | None = Field(
         default=None, description="Semantic Scholar API key, if the account has one."
+    )
+    api_data_gov_key: SecretStr | None = Field(
+        default=None,
+        description=(
+            "api.data.gov key, free from api.data.gov/signup, for GovInfo (v1-e07-t07). Without one "
+            "GovInfo is not configured; api.data.gov's shared DEMO_KEY is never used in its place."
+        ),
     )
     caselist_token: SecretStr | None = Field(
         default=None,

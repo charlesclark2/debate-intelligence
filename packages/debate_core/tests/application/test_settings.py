@@ -26,6 +26,7 @@ from debate_core.application.settings import (
     Environment,
     HttpSettings,
     ModelSettings,
+    ProviderSettings,
     SearchProviderName,
     Settings,
     StorageSettings,
@@ -553,7 +554,13 @@ def test_the_committed_test_profile_is_offline() -> None:
 def test_no_committed_profile_contains_anything_that_looks_like_a_secret() -> None:
     """A profile file is committed, so a secret in one is a secret published."""
     assert REPOSITORY_ROOT is not None
-    secret_fields = ("contact_email", "openalex_api_key", "semantic_scholar_api_key", "caselist_token")
+    secret_fields = (
+        "contact_email",
+        "openalex_api_key",
+        "semantic_scholar_api_key",
+        "api_data_gov_key",
+        "caselist_token",
+    )
     for path in sorted((REPOSITORY_ROOT / "config" / "profiles").glob("*.toml")):
         body = "\n".join(
             line for line in path.read_text(encoding="utf-8").splitlines() if not line.startswith("#")
@@ -571,6 +578,7 @@ def test_the_example_env_file_documents_every_secret_without_setting_one() -> No
         "DEBATE_PROVIDERS__CASELIST_TOKEN",
         "DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY",
         "DEBATE_PROVIDERS__OPENALEX_API_KEY",
+        "DEBATE_PROVIDERS__API_DATA_GOV_KEY",
         "DEBATE_PROVIDERS__CONTACT_EMAIL",
     ):
         assert variable in body
@@ -586,7 +594,25 @@ def test_the_provider_names_configuration_accepts_are_the_ones_e07_builds() -> N
         "rss",
         "google_news",
         "gdelt",
+        "federal_register",
+        "govinfo",
     }
+
+
+def test_the_api_data_gov_key_is_unset_by_default_and_never_the_demo_key(
+    profiles: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """GovInfo goes unconfigured without a key; it never falls back to api.data.gov's DEMO_KEY."""
+    assert ProviderSettings().api_data_gov_key is None
+    assert load_settings(environment="dev", profile_dir=profiles).providers.api_data_gov_key is None
+
+    monkeypatch.setenv("DEBATE_PROVIDERS__API_DATA_GOV_KEY", "datagov-not-a-real-key")
+    settings = load_settings(environment="dev", profile_dir=profiles)
+
+    key = settings.providers.api_data_gov_key
+    assert key is not None and key.get_secret_value() == "datagov-not-a-real-key"
+    assert "datagov-not-a-real-key" not in repr(settings)
+    assert settings.redacted_dict()["providers.api_data_gov_key"] == SECRET_PLACEHOLDER
 
 
 # ---------------------------------------------------------------------------------------------

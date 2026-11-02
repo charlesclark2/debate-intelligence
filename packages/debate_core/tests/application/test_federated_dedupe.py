@@ -855,6 +855,22 @@ def test_precedence_table_has_one_row_per_merged_field_naming_every_configured_p
         assert sorted(order) == configured, field
 
 
+def test_the_government_providers_come_last_in_every_row_so_no_earlier_merge_changes() -> None:
+    """Federal Register and GovInfo documents share no work with the scholarly and news providers
+    (v1-e07-t07); last in every row, they fill a field only when no other member has a value."""
+    for field, order in FIELD_PRECEDENCE.items():
+        assert order[-2:] == ("federal_register", "govinfo"), field
+
+
+def test_a_government_record_gives_way_to_every_other_provider_in_a_merge() -> None:
+    rule = record_from("gdelt").evolve(provider="federal_register", title="Title from federal_register")
+    gdelt = record_from("gdelt")
+
+    merged = merge_group((rule, gdelt))
+
+    assert merged.field_sources["title"] == "gdelt"
+
+
 def test_precedence_expectations_cover_every_row_of_the_table() -> None:
     assert set(EXPECTED_PRECEDENCE) == set(FIELD_PRECEDENCE)
 

@@ -78,6 +78,13 @@ spec:
       # PM ruling 2026-11-02 (brief item 3): SearchProviderName gains FEDERAL_REGISTER and GOVINFO, and
       # ProviderSettings one api_data_gov_key. Settings only.
       - packages/debate_core/src/debate_core/application/settings.py
+      - packages/debate_core/tests/application/test_settings.py
+      - .env.example
+      # Found while building (session report, Deviations): every row of the dedupe precedence table names
+      # every SearchProviderName (a test pins it), so the two new names go last in each row, where no
+      # existing merge changes.
+      - packages/debate_core/src/debate_core/application/federated_dedupe.py
+      - packages/debate_core/tests/application/test_federated_dedupe.py
       # PM ruling 2026-11-02 (stop question 4): the registry's enabled-but-not-configured names reach the
       # fan-out through DiscoveryProviders, which reports each call to one as not_configured.
       - packages/debate_core/src/debate_core/application/ports/providers.py

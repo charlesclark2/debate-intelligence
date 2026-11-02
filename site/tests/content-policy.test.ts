@@ -13,6 +13,7 @@ import type { MediaConsent } from '@/lib/media-consent'
 import {
   consentGuardedContent,
   consentPlaceholders,
+  REVIEWED_SINGLE_WORDS,
   consentedStudentSchema,
   isStale,
   loadMediaConsent,
@@ -30,7 +31,7 @@ import {
 import { resultsGuardedContent } from '@/lib/results'
 import { loadSchedule, scheduleGuardedContent } from '@/lib/tournaments'
 
-import { STUDENTS, contentWith, shippedContentWith, withConsent } from './content-fixture'
+import { STUDENTS, contentWith, replaceOnce, shippedContentWith, withConsent } from './content-fixture'
 
 /**
  * The content guard (v1-e36-t04 acceptance criterion 3).
@@ -965,6 +966,99 @@ describe('the content this site actually ships', () => {
         expect(entry, `${page.filePath} prints a name with no consent entry`).toBeDefined()
         expect(isStale(entry!, consent.season), `${page.filePath} prints a lapsed name`).toBe(false)
       }
+    }
+  })
+})
+
+/**
+ * The name rules read what a page publishes outside its body text too (v1-e37-t03 acceptance
+ * criterion 6, from the v1-e36-t08 review). An image's alt text is read aloud by a screen reader
+ * and shown when the image does not load, and a Markdown image's title is the caption a browser
+ * shows on it: both are published copy, so a name in either fails the build with the message it
+ * would get in a paragraph. Until v1-e37-t03 the rules read the text between tags only, so a name
+ * in an attribute passed. Rowan Ellery is invented.
+ */
+describe('names in alt text and captions', () => {
+  const IMAGE = '/brand/wfb-mark-navy-transparent.png'
+  const bodyMessage = () => messages('Rowan Ellery spoke second.')
+
+  it('names a student in body copy, which is the message the others must match', () => {
+    expect(bodyMessage()).toMatch(/names "Rowan Ellery", which has no entry in content\/media-consent\.yaml/)
+  })
+
+  it.each([
+    ['the alt text of a Markdown image', `![Rowan Ellery at the podium](${IMAGE})`],
+    ['the alt text of an HTML image', `<img src="${IMAGE}" alt="Rowan Ellery">`],
+    ['the alt text of an HTML image in single quotes', `<img src='${IMAGE}' alt='Rowan Ellery'>`],
+    ['the caption of a Markdown image', `![A debater at the podium](${IMAGE} "Rowan Ellery")`],
+    ['a figure caption', `<figure><img src="${IMAGE}" alt="A debater"><figcaption>Rowan Ellery</figcaption></figure>`],
+  ])('fails on a name in %s, with the message it gets in body copy', (_where, markdown) => {
+    expect(messages(markdown)).toBe(bodyMessage())
+  })
+
+  it('reads an alt attribute in a built page, as the export checks see it', () => {
+    const report = checkPublishingPolicy({
+      pages: [],
+      settings,
+      consent,
+      builtPages: [{ location: '/news/example/', html: `<main><img src="${IMAGE}" alt="Rowan Ellery"></main>` }],
+    })
+    expect(report.errors.map((error) => error.message).join('\n')).toBe(bodyMessage())
+  })
+
+  it("reads a name with an apostrophe, which the Markdown renderer writes as an entity", () => {
+    expect(messages(`![Rowan O'Neill at the podium](${IMAGE})`)).toMatch(/names "Rowan O'Neill"/)
+    expect(messages("Rowan O'Neill spoke second.")).toMatch(/names "Rowan O'Neill"/)
+  })
+
+  it('reads a name whose first word is in bold as one name', () => {
+    expect(messages('**Rowan** Ellery spoke second.')).toBe(bodyMessage())
+  })
+
+  it('stays quiet about alt text and captions that name nobody', () => {
+    expect(check(`![The team mark](${IMAGE} "Whitefish Bay Debate")`).errors).toEqual([])
+    expect(check(`<img src="${IMAGE}" alt="">`).errors).toEqual([])
+  })
+})
+
+/**
+ * permittedNamePhrases holds reviewed phrases, not bare words (the v1-e36-t07 ruling, and v1-e37-t03
+ * acceptance criterion 7). A one-word entry covers that word inside any run of capitals, so a list
+ * that grew a word at a time would cover a student's name a word at a time, which is the guard the
+ * ruling replaced. A one-word entry is allowed only from the short list of ordinary words reviewed
+ * in src/lib/media-consent.ts; any other fails the build naming the entry. Ellery is invented.
+ */
+describe('the reviewed-phrase allowlist', () => {
+  const withPhrase = (phrase: string) => ({
+    'media-consent.yaml': replaceOnce('permittedNamePhrases:\n', `permittedNamePhrases:\n  - ${phrase}\n`),
+  })
+
+  it('refuses a new bare word, naming the entry and the rule', () => {
+    expect(() => loadMediaConsent(contentWith(withPhrase('Ellery')))).toThrow(
+      /permittedNamePhrases: "Ellery" is a single word/,
+    )
+  })
+
+  it('accepts a new multi-word phrase', () => {
+    expect(loadMediaConsent(contentWith(withPhrase('Ellery Middle School'))).permittedNamePhrases).toContain(
+      'Ellery Middle School',
+    )
+  })
+
+  it('accepts a single word from the reviewed list, as the days of the week are', () => {
+    expect(REVIEWED_SINGLE_WORDS).toContain('Tuesday')
+    expect(() => loadMediaConsent(contentWith(withPhrase('Tuesday')))).not.toThrow()
+  })
+
+  it('keeps the reviewed list short, and free of any word of a consented name', () => {
+    expect(REVIEWED_SINGLE_WORDS.length).toBeLessThanOrEqual(40)
+    const nameWords = new Set(
+      consent.students.flatMap((student) => student.publishedName.toLowerCase().split(/\s+/)),
+    )
+    // Asserted as one boolean, so a failure prints no student's name.
+    expect(REVIEWED_SINGLE_WORDS.some((word) => nameWords.has(word.toLowerCase()))).toBe(false)
+    for (const word of REVIEWED_SINGLE_WORDS) {
+      expect(word.trim().split(/\s+/)).toHaveLength(1)
     }
   })
 })

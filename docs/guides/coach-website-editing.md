@@ -1,13 +1,6 @@
 <!-- docs-index: For coaches: adding, changing and removing events and announcements on the team website, with no code -->
 # Keeping the team website current: a guide for coaches
 
-> **Partly out of date.** The parts about **announcements** still describe the Google Sheet
-> proposal, which [ADR-0015](../adr/0015-website-content-editing.md#decision-as-accepted) did not
-> adopt; each one is marked. Announcements are becoming Markdown files in
-> `site/content/announcements/`, and `v1-e37-t03` rewrites those parts. Everything about **events
-> and the tournament schedule** (`v1-e37-t02`) and **the season's results** (`v1-e37-t06`) is
-> current.
-
 How the Whitefish Bay debate team website's tournament schedule, results and announcements are
 kept up to date, and how a change reaches parents.
 
@@ -23,7 +16,7 @@ guide and the policy ever disagree. How a deploy runs:
 |---|---|---|
 | Add, change or remove a tournament | `site/content/tournaments.yaml`, in the repository ([Events](#events-the-tournament-schedule-file)) | Charlie, in git. A coach who does not use git sends Charlie the change |
 | Add, correct or take down a result | `site/content/results.yaml`, in the repository ([Results](#results-the-seasons-results-file)) | Charlie, in git. A coach sends Charlie the tournament's published result |
-| Post, change or take down an announcement | *Out of date:* see [Announcements](#announcements-the-website-announcements-sheet) | |
+| Post, change, pin, expire or take down an announcement | One file each in `site/content/announcements/`, in the repository ([Announcements](#announcements-one-file-each-in-the-announcements-folder)) | Charlie, in git. A coach who does not use git sends Charlie the words |
 | Change anything else on the site (the pages about the team, the events explained, the coaches, the parent questions) | `site/content/` | Charlie. Anyone else asks Charlie |
 | Put a photograph on the site | Send it to Charlie. **Never** put a photo in a content file yourself | Charlie, after checking consent |
 
@@ -48,9 +41,10 @@ no exceptions.
 When in doubt, leave it out, or write at team level ("A Whitefish Bay team reached the
 quarterfinals") and ask Charlie.
 
-The build enforces part of this: a schedule entry containing an email address, a phone number or
-a capitalised name nobody has reviewed **fails the build**, in the dev preview as well as in prod,
-and the message names the tournament and the field. That is a backstop, not permission. It cannot
+The build enforces part of this: a schedule entry or an announcement containing an email address,
+a phone number or a capitalised name nobody has reviewed **fails the build**, in the dev preview as
+well as in prod, and the message names the tournament and the field, or the announcement's file.
+That is a backstop, not permission. It cannot
 tell a ride list from a bus time.
 
 ## Events: the tournament schedule file
@@ -660,62 +654,179 @@ about a tournament says how the team did in team-level words and links to the re
 `https://wfbdebate.com/results/`, where the names live under the consent rules and can come down on
 request. How to send one: [parent-email-updates.md](parent-email-updates.md).
 
-## Announcements: the Website announcements sheet
+## Announcements: one file each in the announcements folder
 
-> **Out of date.** This section describes the Google Sheet proposal, which ADR-0015 did not adopt.
-> `v1-e37-t03` replaces it with Markdown files in `site/content/announcements/`.
+Each announcement is one Markdown file in **`site/content/announcements/`**
+([ADR-0015](../adr/0015-website-content-editing.md#decision-as-accepted) point 2). Three things are
+built from the files:
 
-Each row of the **Announcements** tab is one announcement. The website shows pinned
-announcements first, then the newest, on the home page, and every current one on the news page.
+- the **Announcements** band on the home page: every pinned announcement, newest first, then the
+  three newest that are not pinned. It is left off the home page while none is published;
+- the **news page**, `/news/`, linked from the footer of every page: every published announcement,
+  newest first;
+- a **page of its own** for each one, `/news/<file name>/`, with its title, date, picture if it has
+  one, and the whole text. The home page and the news page show the title, the date and the opening
+  words, and link to it.
 
-| Column | What to put | Example |
-|---|---|---|
-| **Title** | A short headline | `Novice orientation Tuesday` |
-| **Publish date** | The day it should first appear. Pick from the calendar that pops up when you double-click the cell | `9/29/2026` |
-| **Body** | The announcement, in plain words. Leave a blank line between paragraphs (on a laptop, **Ctrl+Enter** or **Cmd+Enter** makes a new line inside a cell). A web address is turned into a link | `Come to Room 264 after school...` |
-| **Expires on** | Optional. The last day it should appear. Leave empty to keep it up | `10/6/2026` |
-| **Pin to top** | Tick to keep it above newer ones. Use sparingly | ☐ |
-| **Status** | `Draft` while you are writing. `Publish` when it is ready. `Waiting for Charlie` if it names or pictures a student | `Publish` |
+The folder's `README.md` is the short version of this section and is never published.
 
-Do not edit the **Published** tab. It fills itself from the rows set to `Publish`, and it is
-the only thing the website reads, so drafts never leave the sheet.
+### What an announcement file looks like
 
-`[Screenshot to add: the Announcements tab with one row filled in, and the Status dropdown open]`
+```markdown
+---
+title: Novice orientation on Tuesday
+date: 2026-11-03
+expires: 2026-11-10
+pinned: true
+---
 
-### Getting access to the sheet
+New debaters and their families: come to the library after school on Tuesday. We'll walk through
+the season and answer your questions.
+```
 
-Charlie shares the sheet with the Google account you already use. You get an email from Google
-saying a spreadsheet was shared with you; the sheet is then in Google Sheets and Google Drive under
-**Shared with me**. On a phone, install the **Google Sheets** app if you don't have it.
+The part between the two `---` lines is the **front matter**; everything under it is the
+announcement, in Markdown.
 
-### Post an announcement
+| Field | Needed | What to put | Example |
+|---|---|---|---|
+| `title` | yes | A short headline, in sentence case | `Novice orientation on Tuesday` |
+| `date` | yes | The day it first appears, as year-month-day | `2026-11-03` |
+| `expires` | no | The last day it appears. Leave it out to keep it up until you remove the file | `2026-11-10` |
+| `pinned` | no | `true` keeps it at the top of the home page, above newer ones. Use it sparingly | `true` |
+| `image` | no | A picture from the site's own `site/public/` folder, starting with `/`. **Only Charlie adds one**: see [Pictures](#pictures) | `/photos/novice-orientation-2026.jpg` |
+| `alt` | with `image` | What the picture shows, for someone who cannot see it | `Two debaters at the podium` |
 
-1. Open the **Website announcements** sheet and go to the **Announcements** tab.
-2. Type in the first empty row: Title, Publish date, Body, and Expires on if it has an end.
-3. Read it once more against [Never post these about students](#never-post-these-about-students).
-4. Set **Status** to `Publish`, or to `Waiting for Charlie` if it names or pictures any student.
-   Charlie checks those against the consent records and changes them to `Publish` once they pass.
+**The file name is the announcement's web address.** Name it for the day and what it announces, in
+lower case with hyphens: `2026-11-03-novice-orientation.md` publishes at
+`/news/2026-11-03-novice-orientation/`. Starting with the date keeps the folder in date order and
+means a name never repeats from one year to the next. **Never put a student's name in a file
+name.** The build makes the address from the file name by lower-casing it and turning every space
+or other character into a hyphen, so `Novice Orientation.md` and `novice-orientation.md` would both
+be `/news/novice-orientation/`: two files that come to the same address are both refused, and the
+message names both.
 
-The sheet saves as you type. There is no Save button.
+**The body is Markdown, and only Markdown.** Paragraphs separated by a blank line, `**bold**`,
+`*italic*`, lists starting `- `, and links written `[the schedule](/schedule/)` or
+`[the tournament's site](https://example.org/)`. **No HTML**: a `<div>`, a `<script>`, an
+`<iframe>` or any other tag fails the build rather than being quietly removed, and so do a link
+that is not a page on this site, an `https://` address or a `mailto:` address, and a picture from
+another website. To point at a video, a form or a calendar elsewhere, link to it; nothing is ever
+embedded.
 
-On a phone, in the Google Sheets app: open the sheet, tap a cell, and type in the box that
-appears. Tap the **Status** cell to pick from the list. A long body is easier to type on a laptop,
-and it is fine to start on a phone and finish later with `Draft`.
+### Add an announcement
+
+1. Make a new file in `site/content/announcements/`, named as above, with the front matter and the
+   text. Copy an existing one, or the example above, and change it.
+2. Read it once more against [Never post these about students](#never-post-these-about-students).
+3. Check it, as under [Check a change](#check-a-change), then open <http://localhost:3000/news/>
+   and the home page.
+4. Publish it through the site lane: [Publish a change](#publish-a-change). **An announcement that
+   names a student needs Charlie to have seen it before it publishes** (the policy's
+   [pre-publication checklist](../policies/website-publishing.md#pre-publication-checklist), item
+   16); one that names nobody does not.
+
+**Which publish path.** An announcement is a content edit, so under
+[ADR-0015](../adr/0015-website-content-editing.md#decision-as-accepted) point 4 it reaches the
+public site only from `main`. Use the site lane for every announcement, change and takedown: it
+takes a `site/` change to `main` and to the public site the same day. Nothing reaches the site
+without that deploy, and no announcement path bypasses `main`.
+
+### Schedule one for later
+
+Give it a `date` in the future. It stays off every page until the first deploy **on or after** that
+date. Deploys are run by hand, so for it to appear on its day, deploy that day. The build checks it
+the day you write it, so a problem is found then, not on the morning it was meant to go out.
 
 ### Change an announcement
 
-Edit the row. The change appears at the next update, exactly as a new one does.
+Edit the file and publish it the same way. Keep the file name: renaming it changes its address, and
+anyone with the old link gets the "page not found" page.
+
+### Pin and unpin
+
+Add `pinned: true` to keep it at the top of the home page, above newer announcements; delete the
+line, or write `pinned: false`, to let it fall back into date order. Every pinned announcement is
+shown, and they do not count toward the three newest, so pin one or two at most. The news page
+lists everything in date order, pinned or not. An expired announcement is hidden even if it is
+pinned.
+
+### Expire an announcement
+
+Add `expires:` with the **last day** it should appear. **Expiry takes effect at the next deploy, not
+on its date.** The site is static pages built at each deploy, so an announcement expiring on
+Tuesday is shown through Tuesday and disappears from the first site built on Wednesday or later. If
+nothing is deployed that week, it stays up. When it has to be gone on a particular day, deploy that
+day. The build decides "today" in Wisconsin time (America/Chicago), whatever computer runs it.
+
+An expired file can stay in the folder. Delete expired files at the end of the season: the build
+checks every file, expired or not, so a file naming a student whose consent has lapsed fails the
+build even when nobody can see it.
 
 ### Take an announcement down
 
-- **Later, on a set day:** put the last day in **Expires on**.
-- **Now:** change **Status** to `Draft`. It comes off at the next update, and the row stays in the
-  sheet in case you want it back. Deleting the row does the same.
+- **Later, on a set day:** set `expires`, as above, and deploy on or after it.
+- **Now:** delete the file and publish through the site lane straight away.
 
-If an announcement must come down **urgently**, because it names a student or a family has asked,
-change the Status **and then call or text Charlie**. Changing the sheet alone does not take it off
-the live website until Charlie next publishes the site, and the publishing policy promises
-families a 24-hour clock.
+**If it names or pictures a student, or a family has asked**, it comes down within 24 hours of the
+request: the policy's student clock
+([Removal on request](../policies/website-publishing.md#removal-on-request)). Delete the file,
+publish through the site lane, then follow the runbook's
+[Taking something down on request](../runbooks/team-website.md#taking-something-down-on-request) to
+confirm it is gone. If it has to be gone in minutes, the runbook's
+[emergency lever](../runbooks/team-website.md#the-emergency-lever) applies. An announcement is in
+up to three places in the bucket: its own folder, `news/<file name>/`; the news page, `news/`
+(`index.html`, `index.txt` and its `__next.*.txt` files); and, while it is pinned or one of the three
+newest, **the home page** (`index.html`, `index.txt` and the `__next.*.txt` files at the top of the
+bucket). A missing page until the rebuild is deployed is better than a name left up.
+
+### Pictures
+
+Only Charlie adds a picture, because every person in it needs a media-consent entry for this season
+first (the policy's [Photos and media consent](../policies/website-publishing.md#photos-and-media-consent)).
+Send the picture to Charlie, who strips its location and camera data, puts it in
+`site/public/photos/` under a name with no student's name in it, and adds its entry to `site/content/media-consent.yaml`
+(under `images` for a picture of people, `nonPersonImages` for one with nobody in it). The build
+refuses an image with no entry, or one whose consent is for another season or not yet confirmed.
+
+The `alt` text is published too: a screen reader reads it aloud, and a browser shows it when the
+picture does not load. So is a caption written `![alt text](/photos/name.jpg "caption")`. Both are
+held to the same rules as the text of the announcement. "Two debaters at the podium" is the default;
+a student is named in either only as their consent allows.
+
+### What may never be written
+
+Everything in [Never post these about students](#never-post-these-about-students) applies to every
+announcement, its title, its picture's alt text and its file name. In short: no student contact
+details, no student named without a current consent entry (and never an opponent), no named student
+placed at a time and place, nothing sensitive, no photo without consent, and no HTML or embed.
+
+### What the build refuses
+
+The build checks every announcement file, published or not, and stops, in the dev preview as well
+as in prod, with a message naming the file and, where there is one, the rule in the publishing
+policy it breaks. It refuses:
+
+- a missing `title` or `date`, a date that does not exist, an `expires` before the `date`, a field
+  it does not know (`expiry:` for `expires:`), `pinned` that is not `true` or `false`, an `image`
+  without `alt` (or `alt` without `image`), and an empty body;
+- HTML of any kind, a script or an embed, a link that is not to a page on this site, an `https://`
+  address or a `mailto:` address, and a picture from another website;
+- an em dash, and an acronym such as PF that the announcement does not spell out;
+- an email address that is not the coach's, any phone number, and a capitalised name nobody has
+  reviewed, in the title, the text, the alt text or a caption;
+- a picture with no media-consent entry, or one for another season;
+- a student named whose consent entry is for another season or was not checked this season;
+- a file name that comes to the same address as another's, a file name with a consented student's
+  name in it, and any file in the folder that is not a `.md` file.
+
+A `[[TBD: what is needed]]` marker shows as a "TBD" badge in the dev preview and fails the prod
+build, as on every other page.
+
+If the build says an announcement "names" something that is a school, a tournament or a place, add
+the **whole phrase** to `permittedNamePhrases` in `site/content/media-consent.yaml`: "Marquette
+University High School", never "Marquette" on its own. A single word is refused there unless it is
+on the short reviewed list in `site/src/lib/media-consent.ts` (days, months and a few words such as
+"The"), because a list of single words would come to permit a student's name a word at a time.
 
 ## When something goes wrong
 
@@ -732,8 +843,10 @@ families a 24-hour clock.
 | `promotion-source` fails on a `site/` pull request | It names the files: something outside `site/`, a dependency file such as `site/package.json`, or nothing at all. Take them off the branch; a dependency change goes into `dev` on a task branch |
 | `back-merge` fails on a `site/` pull request | The previous site change or a hotfix has not been merged back into `dev`. Merge that back-merge pull request ([Publish a change](#publish-a-change), step 9), then check again |
 | `validate-dev` never appears on a `site/` commit | The run refused it before posting: `gh run list --workflow validate-dev.yml --limit 3` and `gh run view <id> --log-failed`. Usually the commit is not the branch's head, or the branch changes something outside the lane |
-| *Out of date:* your announcement is not on the website after an update | Check its **Status** is `Publish`, its **Publish date** is today or earlier, and **Expires on** has not passed |
-| Something about a student is on the site and should not be | **Phone or text Charlie straight away.** Then take it out of the file (or the sheet) and follow [Taking something down on request](../runbooks/team-website.md#taking-something-down-on-request) |
+| An announcement is not on the website after a deploy | Check its file is in `site/content/announcements/` on `main`, its `date` is on or before the deploy's day, and its `expires` has not passed. A future `date` waits for a deploy on or after it |
+| An announcement is still up after its `expires` date | Expiry takes effect at the next deploy, not on its date: deploy ([Expire an announcement](#expire-an-announcement)) |
+| The build fails naming an announcement file | Fix what it names. [What the build refuses](#what-the-build-refuses-1) says what each message means |
+| Something about a student is on the site and should not be | **Phone or text Charlie straight away.** Then take it out of the file and follow [Taking something down on request](../runbooks/team-website.md#taking-something-down-on-request) |
 
 **Who to contact:** Charlie Clark, head coach, at charles.clark@wfbschools.com, or by phone or
 text for anything urgent. If Charlie is unreachable and something about a student has to come down,

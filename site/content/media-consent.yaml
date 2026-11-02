@@ -102,7 +102,10 @@ nonPersonImages:
 # without the name itself having to be listed twice.
 #
 # A student's name never goes here. It goes in `students` above, with a consent reference.
-# The full published-names allowlist, covering opponent schools and tournaments, is v1-e37-t03.
+#
+# A ONE-WORD ENTRY FAILS THE BUILD (v1-e37-t03) unless the word is on REVIEWED_SINGLE_WORDS in
+# src/lib/media-consent.ts: the days, the months and the few ordinary words below. Add a school, a
+# tournament or a place as its whole phrase, "Marquette University High School", never "Marquette".
 permittedNamePhrases:
   # Adults acting publicly, named under the Students rules: coaches may be named as coaches.
   - Charlie Clark

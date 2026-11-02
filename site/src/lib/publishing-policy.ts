@@ -14,10 +14,11 @@ import { readSiteEnvironment } from './site-settings'
  * Errors fail a prod build. Warnings are printed in every environment and are the things a
  * person has to look at, chiefly a consent entry that predates the current season.
  *
- * Deliberately not here: detecting an unknown "First Last" name is only as good as its
- * vocabulary, and the policy assigns the full published-names allowlist to v1-e37-t03. What this
- * guard does is flag a capitalised name made of words nobody has reviewed, which is enough to
- * stop a student name reaching prod unnoticed.
+ * Deliberately not here: recognising a person's name. A detector is only as good as its
+ * vocabulary, so the guard does the reverse: it flags every capitalised name made of words nobody
+ * has reviewed, wherever a visitor reads it (text, alt text, captions), which is enough to stop a
+ * student name reaching prod unnoticed. The published-names allowlist is content/media-consent.yaml:
+ * its students, and permittedNamePhrases, which v1-e37-t03 keeps to reviewed phrases.
  */
 
 export interface PolicyFinding {

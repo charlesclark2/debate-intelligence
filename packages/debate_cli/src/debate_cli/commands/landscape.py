@@ -175,6 +175,7 @@ from debate_core.application.analytic_texts import AnalyticTextCounts
 from debate_core.application.errors import error_code_of
 from debate_core.application.landscape_model_evaluation import (
     TARGET_ACCURACY,
+    CoachSampleCheck,
     EvaluationBreakdown,
     FormatEvaluation,
 )
@@ -207,6 +208,7 @@ from debate_core.arguments.landscape.evaluation_breakdown import (
     deterministic_counts,
     outcomes_by_label_kind,
     refusals_by_label,
+    second_label_counts,
     weighted_accuracy,
 )
 from debate_core.arguments.landscape.model_stage import NameScan
@@ -225,6 +227,7 @@ __all__ = [
     "evaluation_summary",
     "report",
     "run_summary",
+    "sample_check_summary",
 ]
 
 POLICY_FILE: Final = Path("docs") / "policies" / "caselist-data-use.md"
@@ -413,6 +416,14 @@ def evaluate(
             "scan's hits, listed in this terminal only.",
         ),
     ] = False,
+    check_sample: Annotated[
+        bool,
+        typer.Option(
+            "--check-sample",
+            help="Read the sample against the caselist's taxonomy and count its rows by label kind; "
+            "asks no model and reads no card.",
+        ),
+    ] = False,
     json_output: Annotated[
         bool, typer.Option("--json", help="Write one machine-readable JSON object to stdout.")
     ] = False,
@@ -421,6 +432,16 @@ def evaluate(
     cli = cli_context(ctx)
     if json_output and not cli.output.is_json:
         cli.output = CliOutput(OutputMode.JSON, verbose=cli.output.verbose)
+    if check_sample:
+        return _check_sample(
+            cli,
+            ctx,
+            caselist,
+            (sample, sample_rows),
+            snapshot,
+            config_dir,
+            alone=not breakdown and model_mode is EvaluationMode.REPLAY,
+        )
     if breakdown and model_mode is EvaluationMode.RECORD:
         _end(cli, ctx, _BREAKDOWN_RECORDS_NOTHING)
     refusal = _policy_refusal() if model_mode is EvaluationMode.RECORD else None
@@ -460,6 +481,65 @@ _BREAKDOWN_RECORDS_NOTHING: Final = CommandFailure(
 )
 
 
+_CHECK_SAMPLE_ALONE: Final = CommandFailure(
+    code="CHECK_SAMPLE_ASKS_NO_MODEL",
+    message="--check-sample reads the coach's sample and asks no model; it takes no --breakdown and no "
+    "--model-mode record",
+    exit_code=ExitCode.USAGE_ERROR,
+    hint="Run --check-sample alone, then the evaluation without it.",
+)
+
+
+def _check_sample(
+    cli: CliContext,
+    ctx: typer.Context,
+    caselist: str,
+    files: tuple[Path, Path],
+    snapshot: str | None,
+    config_dir: Path | None,
+    *,
+    alone: bool,
+) -> None:
+    """`--check-sample`: the sample read as the evaluation reads it and counted, with no model asked."""
+    if not alone:
+        _end(cli, ctx, _CHECK_SAMPLE_ALONE)
+    service = cli.services.landscape_evaluation(config_dir=landscape_config_dir(config_dir), record=False)
+    sample, sample_rows = files
+    through = parse_snapshot_date(snapshot) if snapshot else None
+    with sample.open(encoding="utf-8", newline="") as labels, sample_rows.open(encoding="utf-8") as rows:
+        checked = asyncio.run(service.check_sample(caselist, labels, rows, snapshot=through))
+    cli.output.success(
+        command_name(ctx), sample_check_summary(checked), display=_sample_check_display(checked)
+    )
+
+
+def sample_check_summary(checked: CoachSampleCheck) -> dict[str, JsonValue]:
+    """`data` of `--check-sample`: the sample's rows by label kind, and its second labels, counts only."""
+    return {
+        "caselist": checked.caselist,
+        "topic_id": checked.topic_id,
+        "taxonomy_version": checked.taxonomy_version,
+        "snapshot": checked.snapshot.isoformat(),
+        "labelled": checked.labelled,
+        "by_label_kind": dict(checked.by_label_kind),
+        "second_labels": {
+            "rows": sum(checked.second_labels.values()),
+            "by_kind": dict(checked.second_labels),
+        },
+    }
+
+
+def _sample_check_display(checked: CoachSampleCheck) -> str:
+    kinds = ", ".join(f"{kind} {count}" for kind, count in checked.by_label_kind.items())
+    second = ", ".join(f"{kind} {count}" for kind, count in checked.second_labels.items())
+    return (
+        f"The coach's sample reads against {checked.topic_id} {checked.taxonomy_version} "
+        f"({checked.caselist}, snapshot {checked.snapshot.isoformat()}): {checked.labelled} labelled row(s); "
+        f"by the label's kind: {kinds}. Second labels: {sum(checked.second_labels.values())}"
+        f"{f' ({second})' if second else ''}. No model was asked."
+    )
+
+
 def _stdout_is_a_terminal() -> bool:
     """Whether the hits may be printed: stdout is a terminal, not a pipe or a file."""
     return sys.stdout.isatty()
@@ -480,6 +560,7 @@ def breakdown_summary(result: EvaluationBreakdown) -> dict[str, JsonValue]:
             for label, answer, count in confusion(result.cards)
         ],
         "wrong_answers_naming_a_related_position": sum(card.related for card in result.cards),
+        "second_label": dict(second_label_counts(result.cards)),
         "model_set": _score_json(result.model_set),
         "deterministic": dict(deterministic_counts(result.cards)),
         "batches": [
@@ -523,6 +604,7 @@ def _card_json(card: CardBreakdown) -> dict[str, JsonValue]:
         "stratum": card.stratum,
         "label": card.label,
         "label_kind": card.label_kind,
+        "also": card.also,
         "outcome": card.outcome.value,
         "refusal": card.refusal,
         "answer": card.answer,
@@ -593,6 +675,10 @@ def _breakdown_lines(result: EvaluationBreakdown) -> list[str]:
         f"  {kind}: " + ", ".join(f"{name} {count}" for name, count in counts.items())
         for kind, counts in outcomes_by_label_kind(result.cards).items()
     ]
+    second = second_label_counts(result.cards)
+    lines.append(
+        f"Second labels: {second['cards']} card(s), {second['correct']} scored correct on the second label."
+    )
     lines.append("Label -> answer (cards):")
     lines += [f"  {label} -> {answer}: {count}" for label, answer, count in confusion(result.cards)]
     lines.append("Cards (sample row, stratum: label -> outcome, answer; headings):")

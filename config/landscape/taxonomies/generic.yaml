@@ -7,9 +7,11 @@
 # generic-theory for Policy, each with the queue headings the coach placed under it as aliases.
 # 1.1.1 (2026-11-01, v1-e32-t40, for the coach's review): a one-line description drafted for every
 # position, which the model stage sends; policy-2026-27-nhi moves to 1.4.1 with it.
+# 1.1.2 (2026-11-02, v1-e32-t41): the coach's corrections to the antiblackness-k, psychoanalysis-k and aspec
+# descriptions; policy-2026-27-nhi moves to 1.5.0 with it, for its own new positions.
 schema_version: 1
 topic_id: generic
-taxonomy_version: 1.1.1
+taxonomy_version: 1.1.2
 event: null
 positions:
 
@@ -60,14 +62,14 @@ positions:
     label: Antiblackness K
     kind: k
     side: neg
-    description: The affirmative's reform cannot reach antiblackness, which structures the state and health care.
+    description: The affirmative's reform perpetuates white supremacy and antiblackness; the alternative is an epistemological reframing of how we approach health care.
     events: [POLICY]
     aliases: [antiblackness k, k antiblackness]
   - id: psychoanalysis-k
     label: Psychoanalysis K
     kind: k
     side: neg
-    description: The affirmative's desire to fix health care or to avert its impacts is read through psychoanalysis.
+    description: The affirmative is driven by desire, read through Lacan or Zizek; the alternative is psychoanalysis.
     events: [POLICY]
     aliases: [psychoanalysis k, k psychoanalysis]
   - id: queer-k
@@ -145,7 +147,7 @@ positions:
     label: ASPEC
     kind: theory
     side: neg
-    description: The affirmative must name the agency that carries out the plan.
+    description: The affirmative must specify its agent, a particular branch or agency, rather than the whole federal government.
     events: [POLICY]
     aliases: [aspec, t aspec]
   - id: fspec

@@ -82,7 +82,7 @@ from debate_core.arguments.landscape.scan_hits import (
 )
 from debate_core.arguments.landscape.source_headings import CaselistNames
 from debate_core.arguments.landscape.tag_scrub import DisclosedNames, code_words
-from debate_core.domain.landscape import Taxonomy
+from debate_core.domain.landscape import Taxonomy, Topic
 from debate_core.domain.landscape_classification import ItemKind, OverrideRules
 
 __all__ = [
@@ -90,9 +90,11 @@ __all__ = [
     "BATCH_REFUSED",
     "BATCH_REPAIRED",
     "NO_POSITION_LABEL",
+    "SECOND_LABEL_COLUMN",
     "TARGET_ACCURACY",
     "UNSURE_LABEL",
     "BatchBreakdown",
+    "CoachSampleCheck",
     "EvaluationBreakdown",
     "EvaluationRefused",
     "FormatEvaluation",
@@ -101,6 +103,7 @@ __all__ = [
     "LandscapeModelEvaluationService",
     "ask_labelled_cards",
     "break_down_labelled_cards",
+    "coach_sample_counts",
     "committed_positions",
     "evaluate_labelled_cards",
     "read_coach_sample",
@@ -119,6 +122,9 @@ NO_POSITION_LABEL: Final = "none"
 UNSURE_LABEL: Final = "unsure"
 """The coach's label for a card they could not place: not scored, as a blank is not."""
 
+SECOND_LABEL_COLUMN: Final = "also"
+"""The coach sample's optional column naming a second position the coach accepts for a card (`v1-e32-t41`)."""
+
 
 class EvaluationRefused(DomainError):
     """The labels, the caselist or the snapshot cannot be evaluated: named by row or value, never by text."""
@@ -134,6 +140,8 @@ class LabelledCard:
     """Its row in the coach's file, which names it to the coach and the PM without its text."""
     stratum: str | None = None
     """The stratum `v1-e32-t21` drew it from, when the rows file says."""
+    also: str | None = None
+    """A second position id the coach accepts, from the sample's :data:`SECOND_LABEL_COLUMN`; never `none`."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -240,10 +248,54 @@ def read_coach_sample(sample: TextIO, rows: Iterable[str], taxonomy: Taxonomy) -
                 f"row {row} names a position that is not an active id of {taxonomy.topic_id} "
                 f"{taxonomy.taxonomy_version}"
             )
+        also = _second_label(row, label, (line.get(SECOND_LABEL_COLUMN) or "").strip(), active, taxonomy)
         labelled.append(
-            LabelledCard(item_id=by_row[row], label=label, sample_row=row, stratum=strata.get(row))
+            LabelledCard(item_id=by_row[row], label=label, sample_row=row, stratum=strata.get(row), also=also)
         )
     return tuple(labelled)
+
+
+def _second_label(row: int, label: str, also: str, active: set[str], taxonomy: Taxonomy) -> str | None:
+    """Row `row`'s second label, None when blank: an active position id other than its first, never `none`."""
+    if not also:
+        return None
+    if label == NO_POSITION_LABEL:
+        raise EvaluationRefused(f"row {row} is labelled none and names a second label")
+    if also.casefold() == NO_POSITION_LABEL:
+        raise EvaluationRefused(f"row {row}'s second label is none: a second label names a position")
+    if also == label:
+        raise EvaluationRefused(f"row {row}'s second label is its first")
+    if also not in active:
+        raise EvaluationRefused(
+            f"row {row}'s second label is not an active id of {taxonomy.topic_id} {taxonomy.taxonomy_version}"
+        )
+    return also
+
+
+@dataclass(frozen=True, slots=True)
+class CoachSampleCheck:
+    """The coach's sample read against a caselist's taxonomy, without asking the model: counts only."""
+
+    caselist: str
+    topic_id: str
+    taxonomy_version: str
+    snapshot: date
+    labelled: int
+    """Rows scored: a position id or `none`."""
+    by_label_kind: dict[str, int]
+    """Those rows by their label's kind (`da`, `cp`...), `none` for a card labelled none."""
+    second_labels: dict[str, int]
+    """The rows with a second label, by that label's kind."""
+
+
+def coach_sample_counts(
+    labelled: Iterable[LabelledCard], taxonomy: Taxonomy
+) -> tuple[dict[str, int], dict[str, int]]:
+    """The labelled rows by their label's kind, and the rows with a second label by its kind."""
+    chosen = list(labelled)
+    kinds = Counter(label_kind(taxonomy, one.label) for one in chosen)
+    second = Counter(label_kind(taxonomy, one.also) for one in chosen if one.also is not None)
+    return dict(sorted(kinds.items())), dict(sorted(second.items()))
 
 
 def read_sample_populations(rows: Iterable[str]) -> dict[str, int]:
@@ -278,6 +330,8 @@ class LabelledAnswers:
     tournaments: frozenset[str] = field(repr=False)
     """Every disclosing team's tournament, every source's: the scan's third list (`v1-e32-t40`; until then
     each team's school and code were on it too, and the first two lists hold those)."""
+    second_labels: Mapping[str, str] = field(default_factory=dict[str, str])
+    """The second label of each labelled card that has one, by item id (`v1-e32-t41`)."""
 
 
 async def ask_labelled_cards(
@@ -287,7 +341,9 @@ async def ask_labelled_cards(
     taxonomy: Taxonomy,
 ) -> LabelledAnswers:
     """Ask `stage` about every labelled card `reading` holds, once per fingerprint, as a run would ask."""
-    labels = {one.item_id: one.label for one in labelled}
+    chosen = list(labelled)
+    labels = {one.item_id: one.label for one in chosen}
+    second_labels = {one.item_id: one.also for one in chosen if one.also is not None}
     names = CaselistNames(reading.caselist_names)
     codes = code_words(reading.caselist_names)
     disclosed = DisclosedNames.of_sources(reading.sources)
@@ -323,6 +379,7 @@ async def ask_labelled_cards(
         outcome=outcome,
         names=names,
         tournaments=frozenset(tournaments),
+        second_labels=second_labels,
     )
 
 
@@ -338,7 +395,9 @@ def score_labelled_answers(
     snapshot: date | None = None,
 ) -> FormatEvaluation:
     """The evaluation's score of `asked`, and the scans of what was sent, of `cassettes` and of
-    `repair_cassettes`, each read as :func:`scanned_cassettes` and :func:`scanned_repairs` choose."""
+    `repair_cassettes`, each read as :func:`scanned_cassettes` and :func:`scanned_repairs` choose.
+
+    A counted answer is right when it names the card's label or its second label (`v1-e32-t41`)."""
     labels, outcome = asked.labels, asked.outcome
     committed = committed_positions(taxonomy)
     counted = correct = below = labelled_none = 0
@@ -350,7 +409,7 @@ def score_labelled_answers(
             below += 1
             continue
         counted += 1
-        correct += result.position_id == labels[item_id]
+        correct += result.position_id in (labels[item_id], asked.second_labels.get(item_id))
         labelled_none += labels[item_id] == NO_POSITION_LABEL
     refused = Counter(outcome.refused)
     return FormatEvaluation(
@@ -570,9 +629,10 @@ def _card_breakdown(
             outcome=CardOutcome.NOT_FOUND,
             sample_row=labelled.sample_row,
             stratum=labelled.stratum,
+            also=labelled.also,
         )
     result = outcome.results.get(item.fingerprint)
-    found = card_outcome(taxonomy, labelled.label, result, threshold=threshold)
+    found = card_outcome(taxonomy, labelled.label, result, threshold=threshold, also=labelled.also)
     answered = result is not None and not places_nothing(result)
     answer = result.position_id if result is not None and answered else None
     reason = refusal_reason(result) if result is not None and found is CardOutcome.REFUSED else None
@@ -590,6 +650,7 @@ def _card_breakdown(
         related=found in (CardOutcome.WRONG_POSITION_SAME_KIND, CardOutcome.WRONG_KIND)
         and answer is not None
         and related(taxonomy, answer, labelled.label),
+        also=labelled.also,
     )
 
 
@@ -730,9 +791,27 @@ class LandscapeModelEvaluationService:
             snapshot=prepared.through,
         )
 
-    async def _prepared(
-        self, caselist: str, sample: TextIO, rows: Iterable[str], snapshot: date | None
-    ) -> _Prepared:
+    async def check_sample(
+        self, caselist: str, sample: TextIO, rows: Iterable[str], *, snapshot: date | None = None
+    ) -> CoachSampleCheck:
+        """Read the coach's sample against the caselist's taxonomy as :meth:`evaluate` reads it, and count it,
+        reading no source and asking no model (`v1-e32-t41`). Refused exactly as the evaluation refuses it."""
+        _, taxonomy, through = await self._resolved(caselist, snapshot)
+        labelled = _labelled(sample, rows, taxonomy)
+        by_label_kind, second_labels = coach_sample_counts(labelled, taxonomy)
+        return CoachSampleCheck(
+            caselist=caselist,
+            topic_id=taxonomy.topic_id,
+            taxonomy_version=taxonomy.taxonomy_version,
+            snapshot=through,
+            labelled=len(labelled),
+            by_label_kind=by_label_kind,
+            second_labels=second_labels,
+        )
+
+    async def _resolved(self, caselist: str, snapshot: date | None) -> tuple[Topic, Taxonomy, date]:
+        """The topic the caselist's snapshot is on and its taxonomy, and the snapshot: the given one or the
+        newest."""
         through = snapshot or await LandscapeStalenessCheck(
             objects=self._objects, run_log=None
         ).newest_snapshot(caselist)
@@ -743,19 +822,29 @@ class LandscapeModelEvaluationService:
             raise EvaluationRefused(
                 f"topics.yaml puts {caselist} on {through.isoformat()} on no topic with a taxonomy"
             )
-        taxonomy = resolved.taxonomy
-        labelled = read_coach_sample(sample, rows, taxonomy)
-        if not labelled:
-            raise EvaluationRefused("the coach's sample has no labelled row to score")
+        return resolved.topic, resolved.taxonomy, through
+
+    async def _prepared(
+        self, caselist: str, sample: TextIO, rows: Iterable[str], snapshot: date | None
+    ) -> _Prepared:
+        topic, taxonomy, through = await self._resolved(caselist, snapshot)
+        labelled = _labelled(sample, rows, taxonomy)
         reading = await read_seed_sources(
             store=self._parsed,
             local=self._local,
             suppression=self._suppression,
-            topic=resolved.topic,
+            topic=topic,
             caselist=caselist,
             through=through,
         )
         return _Prepared(reading=reading, taxonomy=taxonomy, labelled=labelled, through=through)
+
+
+def _labelled(sample: TextIO, rows: Iterable[str], taxonomy: Taxonomy) -> tuple[LabelledCard, ...]:
+    labelled = read_coach_sample(sample, rows, taxonomy)
+    if not labelled:
+        raise EvaluationRefused("the coach's sample has no labelled row to score")
+    return labelled
 
 
 @dataclass(frozen=True, slots=True)

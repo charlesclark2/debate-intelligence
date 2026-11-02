@@ -55,6 +55,7 @@ __all__ = [
     "refusals_by_label",
     "related",
     "score",
+    "second_label_counts",
     "stratum_scores",
     "weighted_accuracy",
 ]
@@ -137,10 +138,17 @@ class CardBreakdown:
     """The batch it was asked in, from 1; None when it was not asked."""
     related: bool = False
     """A wrong answer naming the label's parent or a child of it (an advantage and its aff)."""
+    also: str | None = None
+    """The second position id the coach accepts (`v1-e32-t41`); None when the sample gives none."""
 
     @property
     def counted(self) -> bool:
         return self.outcome in COUNTED_OUTCOMES
+
+    @property
+    def correct_on_second_label(self) -> bool:
+        """Scored correct because the answer names the second label, not the first."""
+        return self.outcome is CardOutcome.CORRECT and self.also is not None and self.answer == self.also
 
 
 def label_kind(taxonomy: Taxonomy, label: str) -> str:
@@ -164,11 +172,17 @@ def _ancestor(taxonomy: Taxonomy, ancestor: str, of: str) -> bool:
 
 
 def card_outcome(
-    taxonomy: Taxonomy, label: str, result: ClassificationResult | None, *, threshold: float
+    taxonomy: Taxonomy,
+    label: str,
+    result: ClassificationResult | None,
+    *,
+    threshold: float,
+    also: str | None = None,
 ) -> CardOutcome:
     """The one outcome of a found card labelled `label` whose MODEL result is `result` (None: unasked).
 
-    Checked in the evaluation's own order: placing nothing first, then the threshold, then the label.
+    Checked in the evaluation's own order: placing nothing first, then the threshold, then the label. An
+    answer naming `also`, the coach's second label, is correct too; a wrong one is judged against `label`.
     """
     if result is None:
         return CardOutcome.NOT_ASKED
@@ -180,7 +194,7 @@ def card_outcome(
         return CardOutcome.BELOW_THRESHOLD
     if label == NO_POSITION_LABEL:
         return CardOutcome.PLACED_LABELLED_NONE
-    if result.position_id == label:
+    if result.position_id == label or (also is not None and result.position_id == also):
         return CardOutcome.CORRECT
     if result.position_id is not None and label_kind(taxonomy, result.position_id) == label_kind(
         taxonomy, label
@@ -236,6 +250,12 @@ def outcome_counts(cards: Iterable[CardBreakdown]) -> dict[str, int]:
     """Cards by outcome, every outcome named, in :class:`CardOutcome`'s order: they sum to the cards."""
     found = Counter(card.outcome for card in cards)
     return {outcome.value: found[outcome] for outcome in CardOutcome}
+
+
+def second_label_counts(cards: Iterable[CardBreakdown]) -> dict[str, int]:
+    """The cards the coach gave a second label, and those scored correct on it."""
+    chosen = [card for card in cards if card.also is not None]
+    return {"cards": len(chosen), "correct": sum(card.correct_on_second_label for card in chosen)}
 
 
 def refusals_by_label(cards: Iterable[CardBreakdown]) -> dict[str, dict[str, int]]:

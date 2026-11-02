@@ -341,9 +341,44 @@ The questions for him:
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-02
 
 **Notes:**
+
+Accepted, with the Goal `InProgress` for the coach's review (ac1, operator). Needs are now per family:
+a framework has no uniqueness, and `search` refuses a need from another family with exit 2, naming
+that argument's needs. The guard that freezes the coach's reviewed 1.1.0 file is the right way to keep
+his DA and advantage review intact.
+
+1. **ac1 (code):** 28 core and 7 CLI tests failed against the skeleton, and 139 pass now, the smoke
+   check included. The 17 mutants, the PM's four among them, were all caught at assertions. The two
+   that failed by refusing to load were redone, which is right.
+2. **The rulings on your questions:**
+   * **Q1, A.** The topic-independent counterplans and generic.yaml's ten named kritiks.
+     `federalism-cp` and `free-market-cp` arrive with the landscape task the PM files next.
+     `health-profiteering-advantage` is an advantage, so it is that task's too.
+   * **Q2, A.** The kind chooses the family.
+   * **Q3, A.** The windows are drafts for the coach's review.
+   * **Q4, A.** The PM files prompt `search.expand` 1.1.0 (the family's needs sent as a variable) as a
+     p3 follow-up.
+3. **For the coach's review, two templates the PM flags:**
+   * On 2026-11-02 the coach described `antiblackness-k`'s alternative as an epistemological
+     reframing of how we approach health care, and `psychoanalysis-k` as desire read through Lacan or
+     Žižek. The templates here (afropessimism, fugitivity, traverse the fantasy) should be checked
+     against those descriptions.
+   * Cost-benefit's own wording is still his to give.
+4. **Deviations accepted:**
+   * the CLI test, the smoke check and the `--need` help line, outside the packages;
+   * schema 2;
+   * ac2's version pin at 1.2.0, with its queries unchanged.
+5. **Deviation 4 (the `git fetch`):** noted. It is the second session this week. The rule stands: use
+   the local `origin/dev`. Network calls, read-only ones included, go to the operator, except
+   `scripts/task sync` when the PM asks for it.
+6. **Closing checks:** the affected set (254 files) is left to `ci` (agreement 10). The bounded run (557
+   passed), ruff, pyright, lint-imports, thin handlers and the specs are clean.
+7. **After the coach's review:** the PM applies his corrections in a batch, flips the entries to
+   `coach_reviewed`, refreshes the frozen fixture, records ac1 and sets the Goal `Succeeded`.
+8. **Merge:** `scripts/task pr --partial` once `ci` is green.

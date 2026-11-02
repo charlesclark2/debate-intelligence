@@ -108,7 +108,7 @@ spec:
         The coach's labels on one real query per format are recorded with nDCG@10 ranked
         against provider order (operator); a lower ranked figure is ticketed, not a failure.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

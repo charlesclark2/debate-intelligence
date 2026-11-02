@@ -9,17 +9,21 @@
 # {topic}. No template names a current event: what changes week to week is a variable.
 #
 # Windows: each need has a default recency window, and a template may set its own. A search with
-# its own --since keeps it. `any` means any age.
+# its own --since keeps it. `any` means any age. The coach's windows (2026-11-02): uniqueness one
+# year, 30 days for the politics DA; link, internal link and answers five years; impact any age.
 #
 # Loaded and validated by debate_core.application.query_expansion.load_argument_taxonomy; a mistake
 # fails the load naming the field. Raise taxonomy_version on every change. Every entry says
 # `review: awaiting_coach_review` until the coach has read it and changed it to `coach_reviewed`.
+# Version 1.1.0 is the coach's review of 2026-11-02 (v1-e08-t04's ac4): his windows, templates and
+# decisions. The framing entries (util, deontology, structural violence, cost-benefit) and theory
+# are being reshaped by v1-e08-t08, because a framework has no uniqueness or internal link.
 #
 # Ids: an argument the Policy landscape taxonomy also counts (config/landscape/taxonomies/) uses the
 # landscape's id, and says so in landscape_id. The spelling in the task spec is an alias
 # (econ-da -> economy-da, ptx -> politics-da, elections -> midterms-da).
 schema_version: 1
-taxonomy_version: 1.0.0
+taxonomy_version: 1.1.0
 
 variables:
   query: What the debater typed as the search query.
@@ -28,23 +32,25 @@ variables:
   bill: >-
     The agenda item a politics DA says the plan trades off with, as the request names it. Never
     written into a template, because it changes from week to week.
+  impact: >-
+    The impact a debater names for a scenario (for example war), as the request gives it.
 
 needs:
   - id: uniqueness
     label: Uniqueness
     description: Where things stand now, before the plan or action.
     aliases: [uq, u]
-    recency_days: 14
+    recency_days: 365
   - id: link
     label: Link
     description: How the plan or action sets the argument off.
     aliases: [l]
-    recency_days: 180
+    recency_days: 1826
   - id: internal-link
     label: Internal link
     description: The step that connects the link to the impact.
     aliases: [il]
-    recency_days: 365
+    recency_days: 1826
   - id: impact
     label: Impact
     description: What happens in the end, and why it matters. Older scholarship is fine.
@@ -54,7 +60,7 @@ needs:
     label: Answers (AT)
     description: Evidence answering the other side's version of the argument.
     aliases: [at, a2, answers-to]
-    recency_days: 365
+    recency_days: 1826
 
 arguments:
 
@@ -68,22 +74,30 @@ arguments:
     formats: [POLICY]
     aliases: [ptx, politics, ptx-da]
     landscape_id: politics-da
-    review: awaiting_coach_review
+    review: coach_reviewed
     templates:
       uniqueness:
-        - {text: "{query} vote count Senate", recency_days: 7}
-        - {text: "{query} likely to pass Congress", recency_days: 7}
-        - {text: "{bill} whip count", recency_days: 7}
+        - {text: "{query} vote count Senate", recency_days: 30}
+        - {text: "{query} likely to pass Congress", recency_days: 30}
+        - {text: "{query} will not pass", recency_days: 30}
+        - {text: "{bill} whip count", recency_days: 30}
       link:
-        - {text: "{query} political capital", recency_days: 60}
-        - {text: "{query} partisan fight Congress", recency_days: 60}
-        - {text: "{query} unpopular with voters", recency_days: 60}
+        - {text: "{query} political capital"}
+        - {text: "{query} partisan fight Congress"}
+        - {text: "{query} unpopular with voters"}
+        - {text: "{query} popular with Republicans"}
+        - {text: "{query} unpopular with Republicans"}
+        - {text: "{query} popular with Democrats"}
+        - {text: "{query} unpopular with Democrats"}
       internal-link:
         - {text: "political capital key to the president's agenda {query}"}
         - {text: "{bill} needs presidential political capital"}
+        - {text: "popularity key to passage"}
       impact:
-        - {text: "{query} fails consequences"}
-        - {text: "{bill} fails impact"}
+        - {text: "{bill} benefits"}
+        - {text: "{bill} key to {impact}"}
+        - {text: "{bill} fails consequences"}
+        - {text: "president's agenda impact"}
       answers:
         - {text: "winners win political capital {query}"}
         - {text: "political capital theory wrong {query}"}
@@ -94,17 +108,16 @@ arguments:
     formats: [POLICY]
     aliases: [elections, elections-da]
     landscape_id: midterms-da
-    review: awaiting_coach_review
+    review: coach_reviewed
     note: >-
-      The landscape's id. The 2026 midterms are on 3 November; after them this DA is about the next
-      election. Coach: keep the name, or rename it to elections-da with midterms as an alias?
+      The landscape's id, kept by the coach (2026-11-02), with elections as an alias.
     templates:
       uniqueness:
-        - {text: "{topic} midterms polling", recency_days: 7}
-        - {text: "{query} election forecast", recency_days: 7}
+        - {text: "{topic} midterms polling"}
+        - {text: "{query} election forecast"}
       link:
-        - {text: "{query} voters election impact", recency_days: 60}
-        - {text: "{topic} issue swing voters", recency_days: 60}
+        - {text: "{query} voters election impact"}
+        - {text: "{topic} issue swing voters"}
       internal-link:
         - {text: "{query} turnout swing voters"}
         - {text: "{query} control of Congress"}
@@ -121,7 +134,7 @@ arguments:
     formats: [POLICY]
     aliases: [econ-da, econ, economy]
     landscape_id: economy-da
-    review: awaiting_coach_review
+    review: coach_reviewed
     templates:
       uniqueness:
         - {text: "{query} economic growth forecast"}
@@ -138,16 +151,18 @@ arguments:
       answers:
         - {text: "{query} economy resilient"}
         - {text: "economic decline does not cause war"}
+        - {text: "{query} helps the economy"}
+        - {text: "{query} economy currently declining"}
 
   - id: spending-da
     label: Spending DA
     kind: da
     formats: [POLICY]
     aliases: [spending, fiscal-da]
-    review: awaiting_coach_review
+    review: coach_reviewed
     note: >-
       The NHI landscape has no Spending DA; its closest positions are debt-da and budgets-advantage.
-      Coach: keep it separate, or fold it into debt-da?
+      Kept separate by the coach (2026-11-02): a different mechanism.
     templates:
       uniqueness:
         - {text: "{query} federal spending debate Congress"}
@@ -161,9 +176,14 @@ arguments:
       impact:
         - {text: "national debt crisis consequences"}
         - {text: "{query} deficit impact"}
+        - {text: "{query} fiscal cliff"}
       answers:
         - {text: "{query} pays for itself savings"}
         - {text: "deficit spending sustainable"}
+        - {text: "{query} no impact to deficit spending"}
+        - {text: "{query} no spending trade off"}
+        - {text: "{query} federal spending high now"}
+        - {text: "{query} debt crisis now"}
 
   - id: federalism-da
     label: Federalism DA
@@ -171,11 +191,13 @@ arguments:
     formats: [POLICY]
     aliases: [federalism]
     landscape_id: federalism-da
-    review: awaiting_coach_review
+    review: coach_reviewed
     templates:
       uniqueness:
         - {text: "states lead {query} policy"}
         - {text: "{query} state innovation federalism"}
+        - {text: "{query} clean federal and state separation now"}
+        - {text: "{query} federalism healthy now"}
       link:
         - {text: "{query} federal preemption states"}
         - {text: "{query} federal government overrides state authority"}
@@ -185,9 +207,12 @@ arguments:
       impact:
         - {text: "federalism laboratories of democracy"}
         - {text: "federalism key to democracy {query}"}
+        - {text: "{query} federalism modeled globally"}
       answers:
         - {text: "{query} federal action consistent with federalism"}
         - {text: "federalism resilient to preemption"}
+        - {text: "{query} federalism low now"}
+        - {text: "{query} federal overreach now"}
 
   # ---------------------------------------------------------------------------------------------
   # Policy: advantage areas
@@ -198,25 +223,35 @@ arguments:
     kind: advantage
     formats: [POLICY]
     aliases: [hegemony, heg-advantage]
-    review: awaiting_coach_review
+    review: coach_reviewed
     note: >-
-      Heg is read as an advantage and as a DA impact; the NHI landscape counts no heg position.
+      Heg is read as an advantage and as a DA impact; the NHI landscape counts no heg position. Kept
+      by the coach (2026-11-02): a prevalent impact scenario. The answer naming the president is the
+      coach's wording, kept because it answers the argument for years.
     templates:
       uniqueness:
-        - {text: "US global leadership decline {query}"}
-        - {text: "US military readiness {query}"}
+        - {text: "US leadership high now"}
+        - {text: "US leadership low now"}
       link:
-        - {text: "{query} US military readiness"}
-        - {text: "{query} US global leadership"}
+        - {text: "{topic} boosts US soft power"}
+        - {text: "{topic} US model other countries follow"}
+        - {text: "{query} global health leadership soft power"}
       internal-link:
         - {text: "US economic strength key to hegemony"}
         - {text: "{query} US soft power"}
+        - {text: "{query} soft power key to hard power"}
       impact:
         - {text: "US hegemony prevents great power war"}
         - {text: "US primacy deters conflict"}
       answers:
         - {text: "US hegemony unsustainable"}
         - {text: "{query} heg resilient"}
+        - {text: "{query} Trump has destroyed US leadership"}
+        - {text: "{query} US leadership low now"}
+        - {text: "{query} unipolarity unsustainable"}
+        - {text: "{query} multipolarity inevitable"}
+        - {text: "{query} US leadership causes war"}
+        - {text: "{query} US leadership causes {impact}"}
 
   - id: economy-advantage
     label: Economy advantage
@@ -224,7 +259,7 @@ arguments:
     formats: [POLICY]
     aliases: [econ-advantage, econ-adv]
     landscape_id: economy-advantage
-    review: awaiting_coach_review
+    review: coach_reviewed
     templates:
       uniqueness:
         - {text: "{query} costs hurting the economy"}
@@ -241,6 +276,9 @@ arguments:
       answers:
         - {text: "{topic} hurts the economy"}
         - {text: "{query} economic costs"}
+        - {text: "{query} doesn't boost economic growth"}
+        - {text: "{query} productivity not key to the economy"}
+        - {text: "{query} labor market mobility not key to the economy"}
 
   - id: pandemics-advantage
     label: Pandemics advantage
@@ -248,7 +286,7 @@ arguments:
     formats: [POLICY]
     aliases: [pandemics, pandemic-advantage]
     landscape_id: pandemics-advantage
-    review: awaiting_coach_review
+    review: coach_reviewed
     templates:
       uniqueness:
         - {text: "{query} pandemic preparedness gaps"}
@@ -265,6 +303,9 @@ arguments:
       answers:
         - {text: "{topic} does not solve pandemics"}
         - {text: "pandemic extinction unlikely"}
+        - {text: "{query} pandemics burn out"}
+        - {text: "{query} pandemic response adequate in the status quo"}
+        - {text: "{query} pandemics good"}
 
   - id: inequality-advantage
     label: Inequality advantage
@@ -272,7 +313,7 @@ arguments:
     formats: [POLICY]
     aliases: [inequality]
     landscape_id: inequality-advantage
-    review: awaiting_coach_review
+    review: coach_reviewed
     templates:
       uniqueness:
         - {text: "{query} health disparities"}
@@ -286,9 +327,14 @@ arguments:
       impact:
         - {text: "inequality undermines democracy"}
         - {text: "{query} inequality structural violence"}
+        - {text: "{query} inequality populism"}
+        - {text: "{query} inequality economic unrest"}
       answers:
         - {text: "{topic} fails to reduce disparities"}
         - {text: "{query} inequality persists"}
+        - {text: "{query} inequality inevitable"}
+        - {text: "{query} inequality declining"}
+        - {text: "{query} no impact to inequality"}
 
   # ---------------------------------------------------------------------------------------------
   # LD framing. The November-December de-extinction resolution is not committed yet (v1-e32-t06),
@@ -344,12 +390,13 @@ arguments:
   - id: structural-violence
     label: Structural violence
     kind: framework
-    formats: [LD, PF]
+    formats: [POLICY, LD, PF]
     aliases: [sv]
     review: awaiting_coach_review
     note: >-
-      Also listed for PF, which has no active teams this season: generic framing for the coach's
-      review, not built out.
+      A framing argument for Policy and LD (the coach, 2026-11-02), kept for PF too. Its templates are
+      reshaped by v1-e08-t08: whether structural violence comes before other consequences, and
+      answers (war and economic decline turn it, it is inevitable, it can't be solved).
     templates:
       uniqueness:
         - {text: "{query} structural inequality"}
@@ -400,11 +447,12 @@ arguments:
   - id: cost-benefit
     label: Cost-benefit
     kind: framework
-    formats: [PF]
+    formats: [POLICY, LD, PF]
     aliases: [cba, cost-benefit-analysis]
     review: awaiting_coach_review
     note: >-
-      PF has no active teams this season: generic framing for the coach's review, not built out.
+      A framing argument for Policy and LD (the coach, 2026-11-02), kept for PF too. Its templates are
+      reshaped by v1-e08-t08 with the other frameworks.
     templates:
       uniqueness:
         - {text: "{topic} current costs benefits"}

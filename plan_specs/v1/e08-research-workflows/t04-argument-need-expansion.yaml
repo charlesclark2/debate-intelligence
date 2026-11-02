@@ -65,7 +65,7 @@ spec:
       description: >-
         Charlie reviews the taxonomy for Policy, LD and PF coverage and debate-term accuracy.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

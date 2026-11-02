@@ -421,11 +421,15 @@ def test_the_taxonomy_resolves_aliases_and_typed_spellings_of_its_ids() -> None:
 
 
 def test_template_expansion_of_politics_da_link_on_health_insurance(committed: ArgumentTaxonomy) -> None:
-    """ac2's example, from config/argument_taxonomy.yaml's politics-da link templates (60-day windows)."""
+    """ac2's example, from config/argument_taxonomy.yaml's politics-da link templates.
+
+    The coach's review of 2026-11-02 (taxonomy 1.1.0) gave links a five-year window, the need's own
+    default, and added the four party-popularity templates.
+    """
     expansion = expand(request_for("health insurance", argument="politics-da", need="link"), committed)
-    since = NOW - timedelta(days=60)
+    since = NOW - timedelta(days=1826)
     assert expansion == SearchExpansion(
-        taxonomy_version="1.0.0",
+        taxonomy_version="1.1.0",
         argument="politics-da",
         need="link",
         variables={"query": "health insurance", "topic": "health insurance"},
@@ -434,24 +438,56 @@ def test_template_expansion_of_politics_da_link_on_health_insurance(committed: A
                 "health insurance political capital",
                 "politics-da/link/1",
                 "{query} political capital",
-                days=60,
-                window=WindowSource.TEMPLATE,
+                days=1826,
+                window=WindowSource.NEED,
                 since=since,
             ),
             template_query(
                 "health insurance partisan fight Congress",
                 "politics-da/link/2",
                 "{query} partisan fight Congress",
-                days=60,
-                window=WindowSource.TEMPLATE,
+                days=1826,
+                window=WindowSource.NEED,
                 since=since,
             ),
             template_query(
                 "health insurance unpopular with voters",
                 "politics-da/link/3",
                 "{query} unpopular with voters",
-                days=60,
-                window=WindowSource.TEMPLATE,
+                days=1826,
+                window=WindowSource.NEED,
+                since=since,
+            ),
+            template_query(
+                "health insurance popular with Republicans",
+                "politics-da/link/4",
+                "{query} popular with Republicans",
+                days=1826,
+                window=WindowSource.NEED,
+                since=since,
+            ),
+            template_query(
+                "health insurance unpopular with Republicans",
+                "politics-da/link/5",
+                "{query} unpopular with Republicans",
+                days=1826,
+                window=WindowSource.NEED,
+                since=since,
+            ),
+            template_query(
+                "health insurance popular with Democrats",
+                "politics-da/link/6",
+                "{query} popular with Democrats",
+                days=1826,
+                window=WindowSource.NEED,
+                since=since,
+            ),
+            template_query(
+                "health insurance unpopular with Democrats",
+                "politics-da/link/7",
+                "{query} unpopular with Democrats",
+                days=1826,
+                window=WindowSource.NEED,
                 since=since,
             ),
         ),
@@ -567,12 +603,19 @@ def test_template_expansion_is_asked_of_every_provider_and_recorded_on_the_store
 
     expected = expand(request, committed)
     assert outcome.search.expansion == expected
-    since = NOW - timedelta(days=60)
+    since = NOW - timedelta(days=1826)
     asked = [(query.query, query.filters) for query in provider.queries]
     assert asked == [
-        ("health insurance political capital", SearchFilters(since=since, max_results=10)),
-        ("health insurance partisan fight Congress", SearchFilters(since=since, max_results=10)),
-        ("health insurance unpopular with voters", SearchFilters(since=since, max_results=10)),
+        (f"health insurance {link}", SearchFilters(since=since, max_results=10))
+        for link in (
+            "political capital",
+            "partisan fight Congress",
+            "unpopular with voters",
+            "popular with Republicans",
+            "unpopular with Republicans",
+            "popular with Democrats",
+            "unpopular with Democrats",
+        )
     ]
     stored = asyncio.run(searches.get(outcome.search.search_id))
     assert stored.expansion == expected

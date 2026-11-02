@@ -528,3 +528,27 @@ two PRs only break together.
   - bundling a README: `1 failed`;
   - leaving the `search/` prompts out: `1 failed`.
 - ruff and pyright on the test are clean.
+
+## Operator records (recorded by the PM, 2026-11-02)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac4: the coach reviews the taxonomy | NOT RUN (the coach's) | PASS | 2026-11-02: Charlie reviewed the sheet and gave his decisions, windows and templates; the PM applied them in this batch as taxonomy 1.1.0 (config/argument_taxonomy.yaml, each reviewed entry `coach_reviewed`) |
+
+ac4 passes, so the Goal is `Succeeded` in this batch. What the coach decided:
+
+* **Kept:** midterms-da (with elections as an alias), spending-da (a different mechanism), heg (a
+  prevalent impact scenario), structural violence and cost-benefit (framing arguments for Policy
+  and LD as well as PF).
+* **Windows:** uniqueness one year, 30 days for the politics DA; link, internal link and answers
+  five years; impact any age.
+* **Templates:** additions to every DA and advantage. Heg's uniqueness and link are rewritten,
+  politics impact is rewritten around `{bill}`, and a new optional variable `{impact}` is added.
+* **Framing arguments** (util, deontology, structural violence, cost-benefit) have no uniqueness or
+  internal link: the question is whether the framework is good or not. `v1-e08-t08` reshapes them
+  with needs per family, and theory gets a family of its own. Until then their entries stay
+  `awaiting_coach_review`.
+
+The ac2 test and the stored-search test follow the new politics link templates and window.

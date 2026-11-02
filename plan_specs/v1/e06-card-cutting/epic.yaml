@@ -305,5 +305,43 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e06-t09-cut-replay-hint-names-live-mode
+    - id: t10
+      kind: Task
+      name: '`verify` warns when a deletion in a .docx body removes a negation'
+      description: >-
+        `verify` warns when a deletion in a .docx body removes a negation.
+      inputs:
+        specRef: plan_specs/v1/e06-card-cutting/t10-verify-docx-flags-a-removed-negation.yaml
+        goalRef: v1-e06-t10-verify-docx-flags-a-removed-negation
+      dependsOn:
+      - t07
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e06-t10-verify-docx-flags-a-removed-negation reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e06-t10-verify-docx-flags-a-removed-negation
+    - id: t11
+      kind: Task
+      name: 'Exporting a .docx refuses a card whose format profile is not the one it renders in'
+      description: >-
+        Exporting a .docx refuses a card whose format profile is not the one it renders in.
+      inputs:
+        specRef: plan_specs/v1/e06-card-cutting/t11-export-docx-refuses-a-mismatched-profile.yaml
+        goalRef: v1-e06-t11-export-docx-refuses-a-mismatched-profile
+      dependsOn:
+      - t07
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e06-t11-export-docx-refuses-a-mismatched-profile reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e06-t11-export-docx-refuses-a-mismatched-profile
 status:
   phase: Pending

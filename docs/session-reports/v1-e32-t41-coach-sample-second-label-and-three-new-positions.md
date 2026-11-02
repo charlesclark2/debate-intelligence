@@ -20,7 +20,8 @@ the first. A sample without the column scores exactly as before, proved on t39's
 the operator's check, `landscape evaluate --check-sample` reads the sample and counts it by label kind,
 with no card read and no model asked. A `--breakdown` replay would stop at `MISSING_FIXTURE_ERROR`, because
 1.5.0 changes the prompt's positions text. **The Goal stays InProgress:** ac3, the coach's relabelled sample
-read without refusal, is the operator's and is recorded by the PM. **Look first** at Deviation 2: t40's
+read without refusal, is the operator's and is recorded by the PM. The PM's three rulings of 2026-11-02
+are recorded under Deviations 1 to 3 and the alias counts. **Look first** at Deviation 2: t40's
 140-character cap on descriptions is now 240, because the coach's `trump-k` runs to 202.
 
 ## Plan nodes
@@ -76,7 +77,9 @@ are. The 172 cards moving from an affirmative sit under the advantage's heading 
 nearer the card than the aff's own heading: that is how every other advantage is placed ("standalone
 until the headings show which aff each belongs to"). The one `states-cp` card, and its section, sit
 directly under a heading that is exactly `federalism cp`, in one team's file. By the coach's ruling that
-the two are different mechanisms, I kept the alias and record the move here.
+the two are different mechanisms, I kept the alias. **The PM ruled on 2026-11-02 to keep the move**
+(ruling 3). The count: 1 card and 1 section, in 1 document of 1 team, move from `states-cp` to
+`federalism-cp`; no other `states-cp` card or section moves.
 
 **Left out**, by kind (counts from the same pass; the placement test's "left where they are" rows hold one
 of each, so an alias that took one fails it):
@@ -170,17 +173,18 @@ refused" failed on the refusal it adds, which is the behaviour under test (the s
 1. **A smoke check outside the task's packages.** `tests/smoke/test_landscape_evaluate_smoke.py` gains one
    test for `--check-sample`, which is a new user-facing flag (working agreement 5); `tests/smoke` is not
    in `constraints.packages`. It ran against the checkout's script (red at the start commit, green
-   after), not against an installed build.
+   after), not against an installed build. Accepted by the PM on 2026-11-02 (ruling 2).
 2. **t40's description cap is 240 characters, not 140.** `test_every_position_the_policy_prompt_sends_has_its_side_and_a_one_line_description`
    refused the coach's `trump-k` (202 characters) and `antiblackness-k` (151), which the spec says to
    apply word for word. The spec and prompt ask for "one line", and 140 was t40's session's own bound, so
-   the test keeps "no line break" and allows 240, saying why. If the PM would rather keep 140, the coach
-   shortens those two and the bound goes back.
+   the test keeps "no line break" and allows 240, saying why. **The PM ruled (a) on 2026-11-02**
+   (ruling 1): one line is the rule, 240 characters stands, and the coach's wording stays word for word.
 3. **The PM's suggested operator read is replaced.** The PM asked for a JSON-only `--breakdown` replay, or
    better a validation-only path if one existed or was small. None existed, so I added `--check-sample`
    (two statements in the handler, about 70 lines with its helpers). The replay would stop at
    `MISSING_FIXTURE_ERROR`: 1.5.0 changes the positions text and the taxonomy version, both of which are
-   in every cassette's key.
+   in every cassette's key. **Accepted by the PM on 2026-11-02** (ruling 2): the relabel's operator blocks
+   end with `--check-sample`, and t40's re-record starts with it.
 
 ## Decisions and assumptions
 
@@ -222,8 +226,9 @@ and saves it as CSV at the same path (no command):
 * in `also`: rows 34 and 58 → the model's answer for that row, from the replay. Every other `also` cell
   stays empty.
 
-Then the check, on the Mac that holds the store, from this task's worktree until it merges (a worktree of
-`dev` after). Go to the worktree:
+The relabel ends with the check, which is also the first step of t40's re-record. Run it on the Mac that
+holds the store, from this task's worktree until it merges (a worktree of `dev` after). Go to the
+worktree:
 
 ```bash
 cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t41-coach-sample-second-label-and-three-new-positions
@@ -245,9 +250,11 @@ task). Paste back the whole JSON: it holds counts and taxonomy ids only.
 
 ## Follow-up work
 
-1. **`v1-e32-t40`'s re-record follows this task**, at 1.5.0. Its runbook's step 2 replay will stop at
-   `MISSING_FIXTURE_ERROR` as it says. `--check-sample` could go before it as a first check (t40's
-   runbook, not edited here).
+1. **`v1-e32-t40`'s re-record follows this task, at 1.5.0, and starts with `--check-sample`** (the PM's
+   ruling 2): the block in [Operator follow-ups](#operator-follow-ups) is its first step, and must exit 0
+   with 47 labelled before anything is recorded. Its runbook's step 2 replay then stops at
+   `MISSING_FIXTURE_ERROR` as it says. The PM amends t40's runbook steps in the next batch; this task does
+   not edit them.
 2. **The review-order model was trained under taxonomy 1.4.0.** It has not ordered the review queue
    since t40's 1.4.1, and still won't at 1.5.0 until `scripts/compare_local_classifier.py` trains it
    again (E32, the PM's call).

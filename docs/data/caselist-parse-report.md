@@ -2358,7 +2358,9 @@ character style, which M3 leaves to the file's author.
 terminal by item number: 66 items from 13,518 parsed sources (`docx-8`), 480 seconds answering. The
 question was "the source's own text, a note by whoever cut the card, or something else?" The coach
 was told before answering that a citation line, page furniture or anything he could not tell is
-"something else", and an in-round marker or an omission note is a note by whoever cut the card.
+"something else", and an in-round marker or an omission note is a note by whoever cut the card. He
+kept no count of how many of his "something else" answers were citation lines, so the 7
+"something else" answers below are not split further.
 
 | Stratum | In the store | Asked | The source's own text | A note by whoever cut the card | Something else |
 |---|---|---|---|---|---|

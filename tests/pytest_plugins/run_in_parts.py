@@ -29,7 +29,8 @@ from __future__ import annotations
 import argparse
 import zlib
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
+from pathlib import Path
 
 import pytest
 
@@ -51,7 +52,13 @@ def first_part_dealt_to(test_file: str, parts: int) -> int:
     return zlib.crc32(test_file.encode("utf-8")) % parts
 
 
-def parts_dealt(node_ids: Iterable[str], parts: int) -> list[int]:
+def files_to_parts(text: str, parts: int) -> dict[str, int]:
+    return {}
+
+
+def parts_dealt(
+    node_ids: Iterable[str], parts: int, part_of_file: Mapping[str, int] | None = None
+) -> list[int]:
     """The part, from 0, each test is dealt to out of `parts`, for node ids in collection order."""
     dealt_so_far: Counter[str] = Counter()
     dealt: list[int] = []
@@ -70,6 +77,8 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         default=None,
         help="Run part K of N of the selected tests. The N parts together are the whole selection.",
     )
+    parser.addoption("--files-to-parts", type=Path, default=None)
+    parser.addoption("--record-durations", type=Path, default=None)
 
 
 def pytest_report_header(config: pytest.Config) -> str | None:

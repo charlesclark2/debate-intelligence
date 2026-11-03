@@ -79,6 +79,9 @@ class Ran:
     parts: list[int]
     summary: str
     stdout: str
+    # The deal of whole test files to parts by recorded durations (v1-e41-t17), JSON; empty when the
+    # parts are dealt test by test: tests/scripts/test_parts_dealt_by_durations.py.
+    files_to_parts: str = ""
 
 
 def git(root: Path, *args: str) -> str:
@@ -122,6 +125,7 @@ def run(
     base_branch: str = "dev",
     base_sha: str = "",
     ref_name: str = "7/merge",
+    durations: Path | None = None,
 ) -> Ran:
     output = tmp_path / "outputs.txt"
     output.write_text("run_parts=left over from an earlier step\n", encoding="utf-8")
@@ -143,6 +147,7 @@ def run(
             str(output),
             "--summary",
             str(summary),
+            *(["--durations", str(durations)] if durations is not None else []),
         ],
         cwd=root,
         capture_output=True,
@@ -152,13 +157,14 @@ def run(
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr
     outputs = read_github_output(output.read_text(encoding="utf-8"))
-    assert set(outputs) == {"run_parts", "test_files", "parts"}, outputs
+    assert set(outputs) == {"run_parts", "test_files", "parts", "files_to_parts"}, outputs
     return Ran(
         outputs["run_parts"],
         outputs["test_files"].splitlines(),
         json.loads(outputs["parts"]),
         summary.read_text(encoding="utf-8"),
         completed.stdout,
+        outputs["files_to_parts"],
     )
 
 

@@ -172,6 +172,10 @@ def parts_of(choice: Choice) -> list[int]:
     return list(range(1, parts + 1))
 
 
+def test_files_to_deal(root: Path, choice: Choice) -> list[str]:
+    return list(choice.tests or ())
+
+
 def in_parts(choice: Choice) -> str:
     parts = len(parts_of(choice))
     return f"in {parts} part{'s' if parts > 1 else ''}"
@@ -206,7 +210,7 @@ def summary(choice: Choice) -> str:
     )
 
 
-def github_outputs(choice: Choice) -> str:
+def github_outputs(choice: Choice, deal: object = None) -> str:
     """The choice in `$GITHUB_OUTPUT`'s format: `run_parts`, whether the test parts run at all,
     `parts`, the matrix's part numbers as JSON, and `test_files`, one test file per line, which is
     empty for the whole default selection."""
@@ -214,7 +218,10 @@ def github_outputs(choice: Choice) -> str:
     listing = "".join(f"{test}\n" for test in choice.tests or ())
     run_parts = "true" if choice.runs_parts else "false"
     parts = json.dumps(parts_of(choice))
-    return f"run_parts={run_parts}\nparts={parts}\ntest_files<<{delimiter}\n{listing}{delimiter}\n"
+    return (
+        f"run_parts={run_parts}\nparts={parts}\nfiles_to_parts=\n"
+        f"test_files<<{delimiter}\n{listing}{delimiter}\n"
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -227,6 +234,7 @@ def main(argv: list[str] | None = None) -> int:
         "--outputs", type=Path, required=True, help="where to write the choice, in $GITHUB_OUTPUT's format"
     )
     parser.add_argument("--summary", type=Path, help="a Markdown file to append the summary to")
+    parser.add_argument("--durations", type=Path)
     arguments = parser.parse_args(argv)
 
     root = affected_tests.repository_root()

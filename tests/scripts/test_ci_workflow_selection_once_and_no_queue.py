@@ -121,6 +121,9 @@ def test_the_selection_job_hands_on_its_steps_answer_and_every_part_reads_it() -
         "test_files": f"${{{{ steps.{step['id']}.outputs.test_files }}}}",
         # How many parts run (v1-e41-t16): tests/scripts/test_ci_workflow_parts_sized_to_the_selection.py.
         "parts": f"${{{{ steps.{step['id']}.outputs.parts }}}}",
+        # Which part each whole test file goes to (v1-e41-t17):
+        # tests/scripts/test_ci_workflow_durations_recorded_and_restored.py.
+        "files_to_parts": f"${{{{ steps.{step['id']}.outputs.files_to_parts }}}}",
     }
     test = jobs()["test"]
     assert sorted(test["needs"]) == sorted(["changes", SELECTION_JOB])
@@ -338,6 +341,7 @@ def every_need_passed() -> dict[str, dict[str, Any]]:
         "run_parts": "true",
         "test_files": "",
         "parts": "[1, 2, 3, 4, 5, 6, 7, 8]",
+        "files_to_parts": "",
     }
     return needs
 
@@ -559,6 +563,8 @@ PROOF_TRIGGERS = [
     "tests/pytest_plugins/run_in_parts.py",
     "tests/pytest_plugins/a_new_plugin.py",
     "scripts/ci_test_selection.py",
+    # It makes the deal of whole files to parts (v1-e41-t17).
+    "scripts/ci_test_durations.py",
     "scripts/affected_tests.py",
     PROOF_FILE,
     "pyproject.toml",

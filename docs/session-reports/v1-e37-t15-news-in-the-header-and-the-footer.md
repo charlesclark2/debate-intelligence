@@ -21,11 +21,19 @@ With nine links, "Parent FAQ" broke over two lines at 768px and at every width f
 1280px included. I narrowed the gap between the links. That is a navigation change outside the
 ruling's letter, made so that adding News does not break the header.
 
+**Added after the first review, at the PM's ruling of 2026-11-03** (Deviations 2): the PR's CI
+failed on `test_container_factories.py`, a debate_cli test that this task's site work does not
+touch. The test passed or failed with the order the tests ran in. Its import recorder credited a
+build with import statements run inside integrations loading for the first time. It now credits
+only the container's own import statements, which is what "wired" means. This is test tooling,
+not site work, in its own commit (`6c4c437`). See "The container factory test fix" below.
+
 ## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
 | `news-in-the-header-and-the-footer` (News in both) | Done | site.yaml, `buildNavigation`, the header spacing, tests and three fixtures |
+| (no node) The container factory test fix, at the PM's ruling | Done | `packages/debate_cli/tests/test_container_factories.py` only; the spec's `constraints.packages` amended in `cd905eb` |
 
 ## Acceptance criteria
 
@@ -52,15 +60,85 @@ should: it guards an invariant the old code already met. The export check, again
 
 Each mutant was restored from HEAD with `git checkout HEAD --` after its run.
 
-**Before the report:**
+## The container factory test fix
 
-* `uv run scripts/affected_tests.py --run`, bounded at 115 s: stopped at the limit at 84% with
-  `2444` passed and none failed or skipped, with the machine at load average 15-17. site/ changes
-  reach no pytest test (`site/ changed: the site's own pnpm checks test it; pytest does not.`),
-  and the 61 files chosen were the always-run and workflow tests. Under the PM's 2026-10-19
-  ruling, a run over about two minutes is left to the pull request's CI, with no operator hand-off.
-* `uv run lint-imports` → `Contracts: 20 kept, 0 broken.`
-* ruff and pyright: not run. No Python file changed.
+**What failed.** CI `test (2)` on this PR (log pasted by the operator):
+`FAILED packages/debate_cli/tests/test_container_factories.py::test_every_factory_builds_and_between_them_they_import_every_wired_integration`
+with `'debate_core.integrations.discovery.feed_config: discovery_providers() under the test profile built without it'`.
+The branch's Python was dev's own (`c862f2c`). The test fails whenever its file runs first in a
+fresh process. It passed with the discovery adapters imported before pytest started.
+
+**Why.** The planted break blocks each wired integration in turn and requires a build that
+imports it to fail. The recorder credited a build with every import statement run during it,
+including those inside a module loading for the first time. In a fresh process, `feeds` and
+`google_news_rss` first load during the test profile's `discovery_providers()` build, so their own
+imports of `feed_config` credited that build with `feed_config`. With `feed_config` blocked, the
+rebuild found both modules already loaded, built without it, and the test reported the break as
+uncaught. Whether the test passed depended on whether an earlier test in the same worker had
+loaded the adapters. Since `v1-e41-t17`, whole files are dealt to the CI parts, which can put this
+always-run file first in a worker.
+
+**The fix** (ruling 2). `recording_integration_imports` credits an import statement only when the
+importing frame's module (`globals["__name__"]`) is `debate_cli.container`. Why I chose this:
+
+* **The container, not every debate_cli module.** The ruling said "under debate_cli". Today the
+  two are the same, because no other module in `packages/debate_cli/src` imports an integration
+  (`git grep`). I matched the container exactly because `wired_integrations` reads only the
+  container's source. Its factories also run their imports on every call. A debate_cli helper
+  that imported an integration at module level would load once per process, and crediting it
+  would bring back the same first-load order dependence.
+* **Not preloading the adapters.** Preloading would also stop integrations' own import statements
+  being credited, but it needs a list of modules to preload that every new integration must join.
+  It would also leave the recorder crediting more than the wiring check reads. The fix keeps the
+  test's two checks unchanged: every wired integration is imported by some build, and blocking it
+  fails one.
+
+**Red first** (ruling 4), at `9a1723c` before the fix, the file alone in a fresh process:
+`.venv/bin/python -m pytest -n 0 -p no:cacheprovider packages/debate_cli/tests/test_container_factories.py`
+→ `1 failed, 5 passed`, the same assertion and message as CI.
+
+**Mutants** (ruling 3), each with the file alone at `-n 0`, restored with `git checkout HEAD --`:
+
+| Mutant | Result |
+|---|---|
+| The recorder credits every import again (`from_the_container = True`) | `1 failed, 5 passed`: `feed_config: discovery_providers() under the test profile built without it`. The fresh-process failure returns |
+| `_build_discovery_providers` drops its own `feeds` import and takes `feed_factory` through the `discovery` package attribute that `google_news_rss`'s import sets (a `TYPE_CHECKING` import keeps `feeds` wired) | `1 failed, 5 passed`: "no factory build imports these", `Left contains one more item: 'debate_core.integrations.discovery.feeds'` |
+| Crossref wired under `TYPE_CHECKING` only and dropped from the factories map | `1 failed, 5 passed`: "no factory build imports these", `'debate_core.integrations.discovery.crossref'` |
+
+A first try at the second mutant, `_load_topic_feed_lists` taking `load_feed_directory` from
+`feed_check`, passed. That is right: `_build_federated_search` imports `feed_config` itself (line
+1563), so a container build still imports it.
+
+**Green** (ruling 4), three runs each, after the fix:
+
+* The file alone, `-n 0`: `6 passed` three times (6.28, 5.97, 4.72 s).
+* After the discovery adapters are imported (`feeds`, `google_news_rss`, `feed_config` and the rest
+  imported in `python -c` before `pytest.main`): `6 passed` three times.
+* `-n 4` with random order: no random-order plugin is installed and adding one is a dependency
+  change, so a ten-line scratch plugin (not committed) shuffled the collection with a fixed seed,
+  the same in every worker. Seeds 11, 2026 and 90210 put the factory test at positions 411, 143
+  and 533 of 826, against 4 unshuffled.
+  * The file with `packages/debate_core/tests/integrations/discovery`: `826 passed` three times.
+    These runs could not have caught the bug: with the old recorder they also pass, because a
+    discovery test loads the adapters in each worker first.
+  * The file alone: `6 passed` three times. With the old recorder: `1 failed, 5 passed` three
+    times. These are the runs that tell the two apart.
+
+**Before the report** (after the fix):
+
+* `site/scripts/pre-commit-checks.sh` at `6c4c437` (25.8 s, exit 0): `Tests 1070 passed (1070)`,
+  `recorded 85 exported files`, export checks `Tests 130 passed (130)`.
+* `uv run scripts/affected_tests.py` → `68 of 671 test files (10.1%) chosen in 16.7 s from 18
+  changed files`. That is the 61 always-run and workflow files from before, plus 7 the test change
+  reaches. Those 7 and the fixed file: `225 passed` in 11.3 s. The whole set with `--run`, bounded
+  at 115 s: stopped at the limit at 85% with `2592` passed and none failed or skipped, at load
+  average 18. As before, the PM's 2026-10-19 ruling leaves the rest to the pull request's CI. The
+  earlier run, before the fix: 84%, `2444` passed, none failed. That run never reached the
+  factory test in a fresh worker.
+* `uv run --frozen ruff format --check packages/debate_cli` → `142 files already formatted`;
+  `ruff check` → `All checks passed!`; `uv run --frozen pyright packages/debate_cli` →
+  `0 errors, 0 warnings, 0 informations`.
+* `uv run --frozen lint-imports` → `Contracts: 20 kept, 0 broken.`
 * `uv run scripts/validate_specs.py` → `OK: 599 files, 41 epics, 536 tasks, 22 releases`.
 
 ## Files changed
@@ -81,6 +159,11 @@ Each mutant was restored from HEAD with `git checkout HEAD --` after its run.
   exported page.
 * `site/tests/fixtures/footer-keeps-a-header-page/`, `footer-unknown-page/`, `footer-duplicate/`:
   fixture sites for the three new `buildNavigation` cases. Their expectations are written by hand.
+* `packages/debate_cli/tests/test_container_factories.py` (own commit `6c4c437`, at the PM's
+  ruling): the import recorder credits only `debate_cli.container`'s import statements, with its
+  docstring saying why.
+* `plan_specs/v1/e37-calendar-and-announcements/t15-news-in-the-header-and-the-footer.yaml`
+  (`cd905eb`): `constraints.packages` gains that test file, with a comment naming the ruling.
 
 ## Deviations from the spec
 
@@ -92,8 +175,9 @@ Each mutant was restored from HEAD with `git checkout HEAD --` after its run.
    * Eight links (the pre-task `site.yaml`): one row with no label broken at all seven widths from
      768 to 1280px.
    * Nine links at the old spacing: "Parent FAQ" broke over two lines at 768, 1024 and 1280px (it
-     held at 800 to 1023px). A 0.75rem gap from 64rem still broke it at 1024 to 1440px. The header is capped at 56rem, so from about 900px the bar has the same width at
-     every viewport, and from 64rem the links get 8px more padding and a 16px gap.
+       held at 800 to 1023px). A 0.75rem gap from 64rem still broke it at 1024 to 1440px. The
+     header is capped at 56rem, so from about 900px the bar has the same width at every
+     viewport, and from 64rem the links get 8px more padding and a 16px gap.
    * Nine links after the change (gap 0 between 48rem and 64rem, 0.5rem from 64rem): one row, no
      label broken and no sideways scroll at 768, 780, 800, 850, 900, 1000, 1023, 1024, 1100, 1280,
      1440 and 1920px, on `/` and `/news/`. About 22px are spare at 768px and 14px from 1024px. Every
@@ -103,6 +187,12 @@ Each mutant was restored from HEAD with `git checkout HEAD --` after its run.
    If the PM prefers not to tighten the bar, the alternatives are a shorter label (for example
    "FAQ" for "Parent FAQ", which is the coach's copy) or dropping a link from the header. A tenth
    link will not fit at either breakpoint without one of those.
+
+2. **The container factory test is fixed in this PR** (PM ruling, 2026-11-03, option 2). This is
+   test tooling, not site work. It is done here because the promotion to main runs the whole
+   selection and would meet the same order-dependent failure at random. The spec's
+   `constraints.packages` gains `packages/debate_cli/tests/test_container_factories.py`
+   (`cd905eb`), and the fix is its own commit (`6c4c437`). Nothing else outside `site/` changed.
 
 ## Decisions and assumptions
 

@@ -165,6 +165,7 @@ def test_evaluate_record_on_a_route_writes_only_that_routes_directory(
     data = payload(result)
     assert (data["route"], data["asked"], data["calls"]) == ("deep_audit", 2, 1)
     assert (data["pipeline"]["counted"], data["pipeline"]["correct"]) == (2, 2)
+    assert (data["scan"]["cassettes"]["texts"], data["scan"]["cassettes"]["clean"]) == (1, True)
     assert not (landscape / "model-cassettes").exists()
     recorded = files_under(landscape / "model-cassettes-deep_audit")
     assert len(recorded) == 1 and recorded[0].startswith(f"{CLASSIFY}/")

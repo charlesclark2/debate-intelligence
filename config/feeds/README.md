@@ -23,6 +23,8 @@ google_news:
   language: en-US
   country: US
   edition: US:en
+search_topics: [policy-2026-27-nhi]
+government_providers: [federal_register, govinfo]
 ```
 
 * `feeds` lists each feed's absolute `http` or `https` URL, the publisher's name, and `review`:
@@ -34,9 +36,19 @@ google_news:
   URL without asking Google, which the platform does not do, so they are dropped and few results
   come back.
 
+* `search_topics` and `government_providers` are optional, and go together. `search_topics` names
+  the debate topics the file applies to, as `search --topic` takes them (`policy-2026-27-nhi`, the
+  ids in `config/argument_taxonomy.yaml` and `config/landscape/topics.yaml`).
+  `government_providers` names the government sources a search on one of those topics also asks:
+  `federal_register` (the Federal Register's rules, proposed rules and notices) and `govinfo`
+  (GovInfo's bills, committee reports, hearings and committee prints). They run only for such a
+  search, and only when `providers.enabled` lists them too; a search with no `--topic` never asks
+  them. Today only `health-insurance.yaml` lists them, for the NHI Policy topic. The data-center PF
+  topic's file waits for the coach's November-December resolution.
+
 Every file is checked when it is read. A misspelled key, a URL that is not absolute http(s), a feed
-listed twice or a `topic:` that does not match the file name stops the load with the file and the
-problem named. `packages/debate_core/tests/integrations/discovery/test_feed_config.py` loads every
+listed twice, a provider in `government_providers` that is not a government one or a `topic:` that
+does not match the file name stops the load with the file and the problem named. `packages/debate_core/tests/integrations/discovery/test_feed_config.py` loads every
 file here on every pull request.
 
 ## Checking that the feeds answer

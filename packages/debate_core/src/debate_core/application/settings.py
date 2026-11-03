@@ -138,6 +138,7 @@ __all__ = [
     "ProviderSettings",
     "S3StorageSettings",
     "SearchProviderName",
+    "TOPIC_ENABLED_PROVIDERS",
     "Settings",
     "StorageSettings",
     "RunStateMode",
@@ -274,6 +275,19 @@ class SearchProviderName(StrEnum):
     RSS = "rss"
     GOOGLE_NEWS = "google_news"
     GDELT = "gdelt"
+    FEDERAL_REGISTER = "federal_register"
+    GOVINFO = "govinfo"
+
+
+TOPIC_ENABLED_PROVIDERS: Final[frozenset[SearchProviderName]] = frozenset(
+    {SearchProviderName.FEDERAL_REGISTER, SearchProviderName.GOVINFO}
+)
+"""The providers a search asks only when its topic lists them, as well as `providers.enabled` (v1-e07-t07).
+
+The government sources are worth asking on a policy topic and noise on most others, so enabling one in
+settings is not enough: a topic's feed file names it in `government_providers` (`config/feeds/`), and a
+search with no topic, or on a topic that does not list it, never asks it.
+"""
 
 
 class SettingsGroup(BaseModel):
@@ -552,6 +566,13 @@ class ProviderSettings(SettingsGroup):
     )
     semantic_scholar_api_key: SecretStr | None = Field(
         default=None, description="Semantic Scholar API key, if the account has one."
+    )
+    api_data_gov_key: SecretStr | None = Field(
+        default=None,
+        description=(
+            "api.data.gov key, free from api.data.gov/signup, for GovInfo (v1-e07-t07). Without one "
+            "GovInfo is not configured; api.data.gov's shared DEMO_KEY is never used in its place."
+        ),
     )
     caselist_token: SecretStr | None = Field(
         default=None,

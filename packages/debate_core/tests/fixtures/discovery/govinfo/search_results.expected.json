@@ -1,0 +1,58 @@
+[
+  {
+    "provider": "govinfo",
+    "provider_record_id": "BILLS-119hr4821ih",
+    "title": "H.R. 4821 (IH) - Invented National Health Coverage Act of 2025",
+    "url": "https://www.govinfo.gov/app/details/BILLS-119hr4821ih",
+    "source_type": "government",
+    "authors": [],
+    "publication": "Congress. House",
+    "published_at": "2025-07-22T00:00:00Z",
+    "date_precision": "day",
+    "snippet": null,
+    "open_access_url": null,
+    "open_access": true
+  },
+  {
+    "provider": "govinfo",
+    "provider_record_id": "CRPT-119hrpt212",
+    "title": "Invented Single-Payer Transition Cost Estimates",
+    "url": "https://www.govinfo.gov/app/details/CRPT-119hrpt212",
+    "source_type": "government",
+    "authors": [],
+    "publication": "Congress. House. Committee on Energy and Commerce; Congress. House",
+    "published_at": "2025-09-01T00:00:00Z",
+    "date_precision": "month",
+    "snippet": null,
+    "open_access_url": null,
+    "open_access": true
+  },
+  {
+    "provider": "govinfo",
+    "provider_record_id": "CHRG-119shrg58210",
+    "title": "Invented Hearing on Health Insurance Coverage for Rural Families",
+    "url": "https://www.govinfo.gov/app/details/CHRG-119shrg58210",
+    "source_type": "government",
+    "authors": [],
+    "publication": "Congress. Senate. Committee on Finance",
+    "published_at": "2026-01-01T00:00:00Z",
+    "date_precision": "year",
+    "snippet": null,
+    "open_access_url": null,
+    "open_access": true
+  },
+  {
+    "provider": "govinfo",
+    "provider_record_id": "CPRT-119SPRT60044",
+    "title": "Invented Committee Print on Coverage Mandates",
+    "url": "https://www.govinfo.gov/app/details/CPRT-119SPRT60044",
+    "source_type": "government",
+    "authors": [],
+    "publication": null,
+    "published_at": null,
+    "date_precision": null,
+    "snippet": null,
+    "open_access_url": null,
+    "open_access": true
+  }
+]

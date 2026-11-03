@@ -68,10 +68,12 @@ WIRED_INTEGRATIONS = [
     "debate_core.integrations.cognito",
     "debate_core.integrations.crossref_doi",
     "debate_core.integrations.discovery.crossref",
+    "debate_core.integrations.discovery.federal_register",
     "debate_core.integrations.discovery.feed_cache",
     "debate_core.integrations.discovery.feed_config",
     "debate_core.integrations.discovery.feeds",
     "debate_core.integrations.discovery.google_news_rss",
+    "debate_core.integrations.discovery.govinfo",
     "debate_core.integrations.discovery.openalex",
     "debate_core.integrations.discovery.registry",
     "debate_core.integrations.docx_file_writer.writer",
@@ -225,7 +227,7 @@ def test_an_integration_that_does_not_import_fails_doctor_naming_each_one(
     assert error["exit_code"] == ExitCode.DOMAIN_FAILURE
     for module in s3_and_opencaselist_do_not_import:
         assert module in error["message"]
-    assert "5 of the 42 integrations" in error["message"]
+    assert "5 of the 44 integrations" in error["message"]
     assert error["details"]["integrations_import"] is False
     assert error["details"]["integrations_failed"] == {
         OPENCASELIST: f"ModuleNotFoundError: no module named {OPENCASELIST!r}",

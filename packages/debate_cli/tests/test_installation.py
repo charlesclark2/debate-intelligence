@@ -88,17 +88,20 @@ def test_the_container_wires_these_integrations() -> None:
     # and for `search` (v1-e08-t05) `discovery.feed_cache`, `discovery.feed_config`, `discovery.feeds`,
     # `discovery.google_news_rss` and `discovery.openalex` inside the discovery providers factory, with
     # `discovery.registry` there and under TYPE_CHECKING, and `discovery.feed_config` under TYPE_CHECKING too;
-    # and `discovery.crossref` in the same factory (v1-e07-t03).
+    # and `discovery.crossref` in the same factory (v1-e07-t03), with `discovery.federal_register` and
+    # `discovery.govinfo` there (v1-e07-t07).
     assert wired_integrations() == (
         "debate_core.integrations.bedrock",
         "debate_core.integrations.cloudwatch_audit",
         "debate_core.integrations.cognito",
         "debate_core.integrations.crossref_doi",
         "debate_core.integrations.discovery.crossref",
+        "debate_core.integrations.discovery.federal_register",
         "debate_core.integrations.discovery.feed_cache",
         "debate_core.integrations.discovery.feed_config",
         "debate_core.integrations.discovery.feeds",
         "debate_core.integrations.discovery.google_news_rss",
+        "debate_core.integrations.discovery.govinfo",
         "debate_core.integrations.discovery.openalex",
         "debate_core.integrations.discovery.registry",
         "debate_core.integrations.docx_file_writer.writer",
@@ -262,7 +265,7 @@ def test_the_check_exits_zero_and_reports_json_for_this_checkout(capsys: pytest.
     report = json.loads(capsys.readouterr().out)
     assert report["complete"] is True
     assert report["covered"] is True
-    assert len(report["imported"]) == len(report["wired"]) == 42
+    assert len(report["imported"]) == len(report["wired"]) == 44
 
 
 # ---------------------------------------------------------------------------------------------
@@ -396,8 +399,10 @@ def test_dropping_the_http_extra_leaves_the_client_without_httpx() -> None:
     assert gaps == {
         "debate_core.integrations.crossref_doi": {"httpx"},
         "debate_core.integrations.discovery.crossref": {"httpx"},
+        "debate_core.integrations.discovery.federal_register": {"httpx"},
         "debate_core.integrations.discovery.feeds": {"httpx"},
         "debate_core.integrations.discovery.google_news_rss": {"httpx"},
+        "debate_core.integrations.discovery.govinfo": {"httpx"},
         "debate_core.integrations.discovery.openalex": {"httpx"},
         "debate_core.integrations.http_fetcher": {"httpx"},
         "debate_core.integrations.opencaselist": {"httpx"},

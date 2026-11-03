@@ -10,6 +10,9 @@ Which adapter answers to which name is the composition root's to say, through `f
 function per :class:`~debate_core.application.settings.SearchProviderName`, taking the provider
 settings (its keys and contact email, still as `SecretStr`) and returning an adapter. The adapters
 are v1-e07-t02 to t07; until one exists, enabling its name is a configuration error that says so.
+A factory that cannot build its adapter because a credential is not set raises
+:class:`ProviderNotConfigured`: the registry builds nothing for it and lists it in
+:attr:`ProviderRegistry.not_configured` with the reason, which a search reports for each call (v1-e07-t07).
 
 :meth:`ProviderRegistry.health` is what the CLI's provider status footer reads, and
 :meth:`ProviderRegistry.aclose` closes every adapter's connections when a search ends (v1-e08-t05).
@@ -18,6 +21,7 @@ are v1-e07-t02 to t07; until one exists, enabling its name is a configuration er
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
+from types import MappingProxyType
 
 from pydantic import SecretStr
 
@@ -28,11 +32,29 @@ from debate_core.domain.discovery import ProviderHealth
 from debate_core.integrations.discovery.resilience import ResiliencePolicy, ResilientProvider
 
 __all__ = [
+    "ProviderNotConfigured",
     "ProviderRegistry",
     "SearchProviderFactory",
     "configured_secrets",
     "policy_from_settings",
 ]
+
+
+class ProviderNotConfigured(Exception):  # noqa: N818 - a reported outcome, as ProviderOutcome.NOT_CONFIGURED is
+    """A factory cannot build its adapter from these settings: a credential it needs is not set.
+
+    Not an error of the search: :meth:`ProviderRegistry.from_settings` records the provider as enabled
+    but not configured, with `reason`, and the fan-out reports each call to it so (v1-e07-t07).
+    `reason` names the setting to set and never its value.
+    """
+
+    def __init__(self, provider: str, reason: str) -> None:
+        self.provider = provider
+        """The provider's settings name."""
+        self.reason = reason
+        """What is missing, as a person reads it: `govinfo: no api.data.gov key (DEBATE_PROVIDERS__...)`."""
+        super().__init__(reason)
+
 
 type SearchProviderFactory = Callable[[ProviderSettings], SearchProvider]
 """Builds one adapter from the provider settings; its other dependencies come from the closure."""
@@ -64,12 +86,15 @@ def configured_secrets(settings: ProviderSettings) -> tuple[str, ...]:
 class ProviderRegistry:
     """The enabled discovery providers, each a :class:`ResilientProvider`, in settings order."""
 
-    def __init__(self, providers: Iterable[ResilientProvider]) -> None:
+    def __init__(
+        self, providers: Iterable[ResilientProvider], *, not_configured: Mapping[str, str] | None = None
+    ) -> None:
         self._providers: dict[str, ResilientProvider] = {}
         for provider in providers:
             if provider.name in self._providers:
                 raise ValueError(f"two discovery providers are named {provider.name!r}")
             self._providers[provider.name] = provider
+        self._not_configured = MappingProxyType(dict(not_configured or {}))
 
     @classmethod
     def from_settings(
@@ -81,6 +106,9 @@ class ProviderRegistry:
     ) -> ProviderRegistry:
         """Build, and wrap, exactly the providers `settings.enabled` names.
 
+        A factory that raises :class:`ProviderNotConfigured` builds nothing; its provider is in
+        :attr:`not_configured` instead, with the reason, and in no other list here.
+
         Raises :class:`~debate_core.application.settings.ConfigurationError` on
         `providers.enabled` when a name has no adapter in this build, or when the adapter built for
         a name calls itself something else (health and results are reported by that name).
@@ -88,6 +116,7 @@ class ProviderRegistry:
         policy = policy_from_settings(settings)
         secrets = configured_secrets(settings)
         wrapped: list[ResilientProvider] = []
+        not_configured: dict[str, str] = {}
         for name in dict.fromkeys(settings.enabled):
             factory = factories.get(name)
             if factory is None:
@@ -95,14 +124,23 @@ class ProviderRegistry:
                     f"discovery provider {name.value!r} is enabled, but this build has no adapter for it",
                     field="providers.enabled",
                 )
-            adapter = factory(settings)
+            try:
+                adapter = factory(settings)
+            except ProviderNotConfigured as missing:
+                not_configured[name.value] = missing.reason
+                continue
             if adapter.name != name.value:
                 raise ConfigurationError(
                     f"the adapter built for {name.value!r} calls itself {adapter.name!r}",
                     field="providers.enabled",
                 )
             wrapped.append(ResilientProvider(adapter, policy, clock=clock, secrets=secrets))
-        return cls(wrapped)
+        return cls(wrapped, not_configured=not_configured)
+
+    @property
+    def not_configured(self) -> Mapping[str, str]:
+        """Enabled providers whose factory could not build them, by name, with why; in settings order."""
+        return self._not_configured
 
     @property
     def names(self) -> tuple[str, ...]:
@@ -140,4 +178,5 @@ class ProviderRegistry:
             raise failures[0]
 
     def __repr__(self) -> str:
-        return f"ProviderRegistry(providers={list(self._providers)!r})"
+        not_configured = f", not_configured={list(self._not_configured)!r}" if self._not_configured else ""
+        return f"ProviderRegistry(providers={list(self._providers)!r}{not_configured})"

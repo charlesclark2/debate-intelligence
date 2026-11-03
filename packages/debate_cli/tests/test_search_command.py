@@ -74,6 +74,36 @@ CROSSREF_WORKS: Final = {
     },
 }
 """One Crossref item, written by hand: a report dated by its year alone (v1-e07-t03)."""
+FEDERAL_REGISTER_HOST: Final = "www.federalregister.gov"
+FEDERAL_REGISTER_DOCUMENTS: Final = {
+    "count": 1,
+    "results": [
+        {
+            "document_number": "2026-90401",
+            "title": "Invented Coverage Standards for Marketplace Plans",
+            "publication_date": "2026-05-04",
+            "agency_names": ["Centers for Medicare & Medicaid Services"],
+            "html_url": "https://www.federalregister.gov/documents/2026/05/04/2026-90401/invented-coverage-standards",
+        }
+    ],
+}
+"""One Federal Register document, written by hand with an invented number (v1-e07-t07)."""
+GOVINFO_HOST: Final = "api.govinfo.gov"
+GOVINFO_RESULTS: Final = {
+    "count": 1,
+    "offsetMark": None,
+    "results": [
+        {
+            "title": "Invented Hearing on Coverage for Rural Families",
+            "packageId": "CHRG-119shrg58999",
+            "governmentAuthor": ["Congress. Senate. Committee on Finance"],
+            "dateIssued": "2026-03",
+            "collectionCode": "CHRG",
+        }
+    ],
+}
+"""One GovInfo hearing, written by hand with an invented package id (v1-e07-t07)."""
+DATA_GOV_KEY: Final = "datagov-cli-K1"
 FEED_URL: Final = "https://news.example.org/rss/politics.xml"
 TOPICS: Final = (
     FeedConfig(
@@ -186,6 +216,10 @@ class RecordedProviders:
             return httpx.Response(200, headers={"content-type": "application/json"}, content=body)
         if request.url.host == CROSSREF_HOST and request.url.path == "/works":
             return httpx.Response(200, json=CROSSREF_WORKS)
+        if request.url.host == FEDERAL_REGISTER_HOST and request.url.path == "/api/v1/documents.json":
+            return httpx.Response(200, json=FEDERAL_REGISTER_DOCUMENTS)
+        if request.url.host == GOVINFO_HOST and request.url.path == "/search" and request.method == "POST":
+            return httpx.Response(200, json=GOVINFO_RESULTS)
         if str(request.url) == FEED_URL or (self.any_feed_url and request.url.host != OPENALEX_HOST):
             if self.feed_status != 200:
                 return httpx.Response(self.feed_status)
@@ -590,7 +624,6 @@ def test_each_familys_own_need_expands_before_any_provider_is_asked(
         (["--since", "2026-10-01", "--until", "2026-09-01"], "after --until"),
         (["--need", "link"], "--argument"),
         (["--argument", "politics-da"], "--need"),
-        (["--topic", "policy-2026-27-nhi"], "--argument"),
         (["--expand-llm"], "--argument"),
         (["--argument", "politics-da", "--need", "link", "--var", "bill"], "NAME=VALUE"),
         (["--argument", "politics-da", "--need", "link", "--var", "query=x"], "query"),
@@ -704,6 +737,98 @@ def test_the_container_builds_crossref_when_providers_enabled_names_it(
     assert request.url.params["query.bibliographic"] == "carbon capture subsidies"
     assert "mailto" not in request.url.params
     assert seams.providers.transport.closed == 1
+
+
+def test_the_federal_register_is_asked_only_by_a_search_on_a_topic_that_lists_it(
+    seams: Seams, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Enabled in settings AND on the topic (v1-e07-t07): `config/feeds/health-insurance.yaml` lists it
+    for NHI."""
+    seams.registry_override = False
+    monkeypatch.setenv("DEBATE_PROVIDERS__ENABLED", '["openalex", "federal_register"]')
+
+    without = search("health insurance", "--format", "json")
+    hosts_without = {request.url.host for request in seams.providers.requests}
+    with_topic = search("health insurance", "--topic", "policy-2026-27-nhi", "--format", "json")
+
+    assert without.exit_code == ExitCode.OK, without.output
+    assert [entry["provider"] for entry in envelope(without)["data"]["providers"]] == ["openalex"]
+    assert FEDERAL_REGISTER_HOST not in hosts_without
+    assert with_topic.exit_code == ExitCode.OK, with_topic.output
+    data = envelope(with_topic)["data"]
+    assert [(entry["provider"], entry["outcome"]) for entry in data["providers"]] == [
+        ("openalex", "ok"),
+        ("federal_register", "ok"),
+    ]
+    [rule] = [item for item in data["results"] if item["providers"] == ["federal_register"]]
+    assert (rule["title"], rule["publication"], rule["source_type"]) == (
+        "Invented Coverage Standards for Marketplace Plans",
+        "Centers for Medicare & Medicaid Services",
+        "government",
+    )
+    [request] = [request for request in seams.providers.requests if request.url.host == FEDERAL_REGISTER_HOST]
+    assert request.url.params["conditions[term]"] == "health insurance"
+
+
+def test_govinfo_without_an_api_data_gov_key_is_reported_not_configured_on_its_topic(
+    seams: Seams, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seams.registry_override = False
+    monkeypatch.setenv("DEBATE_PROVIDERS__ENABLED", '["openalex", "govinfo"]')
+
+    without_topic = search("health insurance")
+    on_topic = search("health insurance", "--topic", "policy-2026-27-nhi")
+
+    assert without_topic.exit_code == ExitCode.OK, without_topic.output
+    assert footer(without_topic) == ["Providers: COMPLETE", "  openalex: ok, 3 results"]
+    assert on_topic.exit_code == ExitCode.SEARCH_PARTIAL, on_topic.output
+    assert footer(on_topic) == [
+        "Providers: PARTIAL, results may be missing",
+        "  openalex: ok, 3 results",
+        "  govinfo: not configured: no api.data.gov key (DEBATE_PROVIDERS__API_DATA_GOV_KEY)",
+    ]
+    assert GOVINFO_HOST not in {request.url.host for request in seams.providers.requests}
+
+
+def test_govinfo_with_its_key_is_asked_on_its_topic_with_the_key_in_a_header_only(
+    seams: Seams, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seams.registry_override = False
+    monkeypatch.setenv("DEBATE_PROVIDERS__ENABLED", '["govinfo"]')
+    monkeypatch.setenv("DEBATE_PROVIDERS__API_DATA_GOV_KEY", DATA_GOV_KEY)
+
+    result = search("health insurance", "--topic", "policy-2026-27-nhi", "--format", "json")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    data = envelope(result)["data"]
+    assert [(entry["provider"], entry["outcome"]) for entry in data["providers"]] == [("govinfo", "ok")]
+    [item] = data["results"]
+    assert (item["title"], item["publication"], item["published_at"]) == (
+        "Invented Hearing on Coverage for Rural Families",
+        "Congress. Senate. Committee on Finance",
+        "2026-03-01T00:00:00+00:00",
+    )
+    [request] = [request for request in seams.providers.requests if request.url.host == GOVINFO_HOST]
+    assert request.headers["x-api-key"] == DATA_GOV_KEY
+    assert DATA_GOV_KEY not in str(request.url)
+    assert DATA_GOV_KEY not in result.stdout + result.stderr
+
+
+def test_a_topic_alone_searches_the_query_as_typed(seams: Seams) -> None:
+    result = search("midterm elections", "--since", "2026-09-14", "--topic", "policy-2026-27-nhi")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert seams.providers.openalex_queries() == ["midterm elections"]
+
+
+def test_an_unknown_topic_alone_exits_2_listing_the_topics_and_searches_nothing(seams: Seams) -> None:
+    result = search("health insurance", "--topic", "policy-2025-26-nhi")
+
+    assert result.exit_code == ExitCode.USAGE_ERROR, result.output
+    assert "unknown topic 'policy-2025-26-nhi'; the topics are: policy-2026-27-nhi" in " ".join(
+        result.stderr.split()
+    )
+    assert seams.providers.requests == []
 
 
 def test_the_test_profile_refuses_an_enabled_provider_without_a_transport(

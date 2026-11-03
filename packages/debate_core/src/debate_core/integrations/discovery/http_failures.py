@@ -13,6 +13,10 @@ read, and raises what comes back:
 | 408, 5xx | :class:`~debate_core.application.errors.ProviderUnavailable` |
 | any other 4xx | :class:`~debate_core.application.errors.ProviderUnavailable`, "refused the request" |
 
+An adapter that sends no conditional request and follows no redirect, as the government ones do
+(v1-e07-t07), has nothing to read in a `3xx` either: it raises :func:`redirect_failure`, which names
+only the host the answer points to, never its path, query or user.
+
 Plain values in, so this module has no HTTP library of its own: `response.status_code` and
 `response.headers` from httpx are what an adapter passes. The messages carry the status and
 nothing from the request, because a request URL can carry a key or a contact email.
@@ -26,11 +30,12 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import datetime
+from urllib.parse import urlsplit
 
 from debate_core.application.errors import ProviderError, ProviderRateLimited, ProviderUnavailable
 from debate_core.integrations.retry_after import retry_after_seconds
 
-__all__ = ["provider_error_for_status", "retry_after_seconds"]
+__all__ = ["provider_error_for_status", "redirect_failure", "retry_after_seconds"]
 
 
 def provider_error_for_status(
@@ -49,6 +54,13 @@ def provider_error_for_status(
     if status == 408 or status >= 500:
         return ProviderUnavailable(provider, f"HTTP {status}")
     return ProviderUnavailable(provider, f"HTTP {status}: the provider refused the request")
+
+
+def redirect_failure(provider: str, status: int, headers: Mapping[str, str]) -> ProviderUnavailable:
+    """A `3xx` as a refusal: :class:`ProviderUnavailable` naming only the host `Location` points to."""
+    host = urlsplit(_header(headers, "location") or "").hostname
+    where = f" to {host}" if host else ""
+    return ProviderUnavailable(provider, f"HTTP {status}: redirected{where}")
 
 
 def _header(headers: Mapping[str, str], name: str) -> str | None:

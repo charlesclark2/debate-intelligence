@@ -1,0 +1,10 @@
+{
+  "query": {"query": "health insurance marketplace", "filters": {"since": "2025-01-01T00:00:00Z", "until": "2026-06-30T00:00:00Z", "max_results": 5}},
+  "exchanges": [
+    {
+      "request": {"method": "GET", "url": "https://www.federalregister.gov/api/v1/documents.json?conditions%5Bterm%5D=health+insurance+marketplace&conditions%5Bpublication_date%5D%5Bgte%5D=2025-01-01&conditions%5Bpublication_date%5D%5Blte%5D=2026-06-30&conditions%5Btype%5D%5B%5D=RULE&conditions%5Btype%5D%5B%5D=PRORULE&conditions%5Btype%5D%5B%5D=NOTICE&fields%5B%5D=document_number&fields%5B%5D=title&fields%5B%5D=publication_date&fields%5B%5D=agency_names&fields%5B%5D=abstract&fields%5B%5D=html_url&fields%5B%5D=pdf_url&order=relevance&per_page=5"},
+      "response": {"status": 200, "headers": {"content-type": "text/html"}, "body": "<html><body>Request Access</body></html>"}
+    }
+  ],
+  "expected_results_file": "documents_errors.expected.json"
+}

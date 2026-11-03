@@ -512,14 +512,27 @@ at once and ranks what they find. `FederatedSearchService` in `debate_core` does
 `providers.search_deadline_seconds`, merges what comes back into distinct sources (`v1-e08-t02`), ranks
 them by seven explainable features (`config/federated_ranking.yaml`, `v1-e08-t03`), matches each to an
 Article without fetching it, and stores the search. The providers are the ones `providers.enabled`
-names that this build has adapters for: `openalex`, `rss` (the publisher feeds in `config/feeds/`) and
-`google_news`. The words are `debate_cli.presenters.search_presenter`'s.
+names that this build has adapters for: `openalex`, `crossref`, `rss` (the publisher feeds in
+`config/feeds/`), `google_news`, and the government sources `federal_register` and `govinfo`. The words
+are `debate_cli.presenters.search_presenter`'s.
+
+**Government sources** (`v1-e07-t07`) are asked only by a search on a topic that lists them:
+`--topic policy-2026-27-nhi` asks the Federal Register's rules, proposed rules and notices and GovInfo's
+bills, committee reports, hearings and committee prints, because `config/feeds/health-insurance.yaml`
+lists both for that topic. A search with no `--topic` never asks them, and neither does one where
+`providers.enabled` does not list them. The Federal Register takes no key. GovInfo needs a free
+api.data.gov key in `DEBATE_PROVIDERS__API_DATA_GOV_KEY`, from https://api.data.gov/signup/. Without one,
+a search on the topic reports `govinfo: not configured: govinfo: no api.data.gov key
+(DEBATE_PROVIDERS__API_DATA_GOV_KEY)` and exits `6`. api.data.gov allows a key 1,000 requests an hour,
+which is about 90 searches an hour expanded to eleven queries, and then answers `429` for the rest of
+the hour; the footer says so.
 
 ```console
 $ uv run debate-research search "midterm elections" --since 2026-09-14 --max-results 20
 $ uv run debate-research search "national health insurance" --argument politics-da --need link --topic policy-2026-27-nhi
 $ uv run debate-research search "de-extinction" --format json | jq '.data // .error.details | .results[] | [.rank, .title, .explanation]'
 $ uv run debate-research search "health insurance" --argument ptx --need uq --var bill=reconciliation --expand-llm
+$ uv run debate-research search "marketplace enrollment" --topic policy-2026-27-nhi --since 2025-01-01
 ```
 
 A person sees a table of rank, title, publisher or venue, date, source type, access and the ranking's

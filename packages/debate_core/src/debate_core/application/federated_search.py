@@ -51,7 +51,8 @@ because cancelling a call that is still running is the event loop's job.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Final
 
@@ -71,6 +72,8 @@ from debate_core.application.federated_search_types import (
 )
 from debate_core.application.ports.persistence import SearchRepository
 from debate_core.application.ports.providers import Clock, DiscoveryProviders, IdGenerator, SearchProvider
+from debate_core.application.query_expansion import UnknownExpansionChoice
+from debate_core.application.settings import TOPIC_ENABLED_PROVIDERS
 from debate_core.domain import Search, SearchStatus
 from debate_core.domain.discovery import ProviderOutcome, ProviderQuery, ProviderStatus
 
@@ -78,6 +81,8 @@ __all__ = [
     "DEFAULT_DEADLINE_SECONDS",
     "FanOutStage",
     "FederatedSearchService",
+    "NO_TOPICS",
+    "SearchTopics",
     "search_status",
     "selected_providers",
 ]
@@ -102,26 +107,96 @@ def search_status(statuses: Sequence[ProviderStatus]) -> SearchStatus:
     return SearchStatus.PARTIAL
 
 
-def selected_providers(request: SearchRequest, enabled: Iterable[str]) -> tuple[str, ...]:
+@dataclass(frozen=True)
+class SearchTopics:
+    """The debate topics a search may name, and the government providers each one enables (v1-e07-t07).
+
+    Built by the composition root from the taxonomy's topic presets and the feed files' `search_topics`
+    and `government_providers` (`config/feeds/`). A provider in
+    :data:`~debate_core.application.settings.TOPIC_ENABLED_PROVIDERS` is asked only by a search on a
+    topic whose entry here lists it; every other provider is untouched by topics.
+    """
+
+    known: tuple[str, ...] = ()
+    """Every topic id `--topic` accepts, in the order a refusal lists them."""
+
+    providers: Mapping[str, frozenset[str]] = field(default_factory=dict[str, frozenset[str]])
+    """For each topic that enables any, the government providers a search on it asks, by name."""
+
+    def check(self, topic_id: str | None) -> None:
+        """Refuse a topic nobody configured, listing the ones there are; a search with none passes."""
+        if topic_id is not None and topic_id not in self.known:
+            raise UnknownExpansionChoice("topic", topic_id, self.known)
+
+    def allows(self, name: str, topic_id: str | None) -> bool:
+        """Whether a search on `topic_id` may ask `name`: always, unless `name` is enabled per topic."""
+        if name not in _TOPIC_ENABLED:
+            return True
+        return topic_id is not None and name in self.providers.get(topic_id, frozenset())
+
+    def refusal(self, name: str, topic_id: str | None) -> str:
+        """Why a search on `topic_id` does not ask `name`, which :meth:`allows` refused."""
+        if topic_id is None:
+            return f"{name}: asked only for a search on a topic that lists it, and this search names no topic"
+        return f"{name}: asked only for a search on a topic that lists it, and {topic_id} does not"
+
+
+_TOPIC_ENABLED: Final = frozenset(name.value for name in TOPIC_ENABLED_PROVIDERS)
+
+NO_TOPICS: Final = SearchTopics()
+"""No topic is known and no government provider is enabled by one: what a search has unless given topics."""
+
+
+def selected_providers(
+    request: SearchRequest,
+    enabled: Iterable[str],
+    *,
+    not_configured: Iterable[str] = (),
+    topics: SearchTopics = NO_TOPICS,
+) -> tuple[str, ...]:
     """The providers a search asks, by name: the ones the request names, or every enabled one.
 
     In the request's order, each once. A requested name that is not enabled stays in the
-    selection, so the search reports it as not configured instead of silently asking fewer.
+    selection, so the search reports it as not configured instead of silently asking fewer; so does
+    a requested government provider its topic does not list.
+
+    Unrequested, the selection is the enabled providers, then those enabled but not configured (a
+    key is missing), each reported so; and of the government providers, only those the search's
+    topic lists (:class:`SearchTopics`). A search with no topic asks none of them and reports none.
     """
-    if request.providers is None:
-        return tuple(dict.fromkeys(enabled))
-    return tuple(dict.fromkeys(request.providers))
+    if request.providers is not None:
+        return tuple(dict.fromkeys(request.providers))
+    return tuple(
+        name for name in dict.fromkeys((*enabled, *not_configured)) if topics.allows(name, request.topic_id)
+    )
 
 
 class FanOutStage:
     """Asks every selected provider every query, concurrently, under one overall deadline."""
 
-    def __init__(self, providers: DiscoveryProviders, *, clock: Clock, deadline_seconds: float) -> None:
+    def __init__(
+        self,
+        providers: DiscoveryProviders,
+        *,
+        clock: Clock,
+        deadline_seconds: float,
+        topics: SearchTopics = NO_TOPICS,
+    ) -> None:
         if deadline_seconds <= 0:
             raise ValueError(f"deadline_seconds must be positive, got {deadline_seconds}")
         self._providers = providers
         self._clock = clock
         self._deadline_seconds = deadline_seconds
+        self._topics = topics
+
+    def selection(self, request: SearchRequest) -> tuple[str, ...]:
+        """The providers `request` asks, by name (:func:`selected_providers` over these providers)."""
+        return selected_providers(
+            request,
+            (provider.name for provider in self._providers.providers),
+            not_configured=self._providers.not_configured,
+            topics=self._topics,
+        )
 
     @property
     def deadline_seconds(self) -> float:
@@ -134,7 +209,9 @@ class FanOutStage:
     async def run(self, state: SearchState) -> SearchState:
         """Record one :class:`ProviderStatus` per (query, provider), and collect what was returned."""
         enabled = {provider.name: provider for provider in self._providers.providers}
-        names = selected_providers(state.request, enabled)
+        unbuilt = self._providers.not_configured
+        topic_id = state.request.topic_id
+        names = self.selection(state.request)
         calls = [(query, name) for query in state.queries for name in names]
         finished: dict[int, ProviderStatus] = {}
         started = self._clock.now()
@@ -143,8 +220,12 @@ class FanOutStage:
             async with deadline, asyncio.TaskGroup() as group:
                 for index, (query, name) in enumerate(calls):
                     provider = enabled.get(name)
-                    if provider is None:
-                        finished[index] = self._not_configured(name, query)
+                    if not self._topics.allows(name, topic_id):
+                        finished[index] = self._not_configured(
+                            name, query, self._topics.refusal(name, topic_id)
+                        )
+                    elif provider is None:
+                        finished[index] = self._not_configured(name, query, unbuilt.get(name))
                     else:
                         group.create_task(self._record(finished, index, provider, query))
         except TimeoutError:
@@ -212,13 +293,13 @@ class FanOutStage:
         return self._failed(name, query, ProviderOutcome.TIMEOUT, reason, started)
 
     @staticmethod
-    def _not_configured(name: str, query: ProviderQuery) -> ProviderStatus:
+    def _not_configured(name: str, query: ProviderQuery, reason: str | None = None) -> ProviderStatus:
         return ProviderStatus(
             provider=name,
             query=query,
             outcome=ProviderOutcome.NOT_CONFIGURED,
             elapsed_ms=0.0,
-            error=f"{name}: not enabled in settings (providers.enabled)",
+            error=reason or f"{name}: not enabled in settings (providers.enabled)",
         )
 
     def _elapsed_ms(self, started: datetime) -> float:
@@ -244,14 +325,17 @@ class FederatedSearchService:
         expand: SearchStage | None = None,
         normalize: SearchStage | None = None,
         rank: SearchStage | None = None,
+        topics: SearchTopics = NO_TOPICS,
     ) -> None:
         self._providers = providers
         self._searches = searches
         self._clock = clock
         self._ids = ids
+        self._topics = topics
+        self._fan_out = FanOutStage(providers, clock=clock, deadline_seconds=deadline_seconds, topics=topics)
         self._pipeline = SearchPipeline(
             expand=PassThroughStage() if expand is None else expand,
-            fan_out=FanOutStage(providers, clock=clock, deadline_seconds=deadline_seconds),
+            fan_out=self._fan_out,
             normalize=PassThroughStage() if normalize is None else normalize,
             rank=PassThroughStage() if rank is None else rank,
         )
@@ -267,18 +351,18 @@ class FederatedSearchService:
         Never raises because a provider failed: the outcome says which providers answered, and the
         stored status is PARTIAL or FAILED accordingly.
         """
+        self._topics.check(request.topic_id)
         created_at = self._clock.now()
         state = SearchState.start(self._ids.new_id(), request)
         for _, stage in self._pipeline.stages:
             state = await stage.run(state)
-        enabled = (provider.name for provider in self._providers.providers)
         search = Search(
             search_id=state.search_id,
             owner_id=request.owner_id,
             organization_id=request.organization_id,
             query=request.query,
             filters=request.filters,
-            provider_set=selected_providers(request, enabled),
+            provider_set=self._fan_out.selection(request),
             status=search_status(state.provider_statuses),
             expansion=state.expansion,
             created_at=created_at,

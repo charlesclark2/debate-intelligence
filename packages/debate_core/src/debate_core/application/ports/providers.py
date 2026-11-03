@@ -35,6 +35,7 @@ would force every caller to await.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime
 from typing import Protocol, runtime_checkable
 
@@ -104,6 +105,15 @@ class DiscoveryProviders(Protocol):
     @property
     def providers(self) -> tuple[SearchProvider, ...]:
         """The enabled providers, in settings order, each under its settings name."""
+        ...
+
+    @property
+    def not_configured(self) -> Mapping[str, str]:
+        """Enabled providers that could not be built, by name, with why: a credential is not set.
+
+        In settings order. None of them is in :attr:`providers` or :meth:`health`; a search reports
+        each call to one as `not_configured`, with its reason (v1-e07-t07).
+        """
         ...
 
     def health(self) -> tuple[ProviderHealth, ...]:

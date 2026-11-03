@@ -192,6 +192,10 @@ class _Providers:
     def providers(self) -> tuple[FakeSearchProvider, ...]:
         return self._providers
 
+    @property
+    def not_configured(self) -> dict[str, str]:
+        return {}
+
     def health(self) -> tuple[ProviderHealth, ...]:
         return ()
 

@@ -1,0 +1,10 @@
+{
+  "query": {"query": "veterinary telehealth licensure", "filters": {"max_results": 5}},
+  "exchanges": [
+    {
+      "request": {"method": "POST", "url": "https://api.govinfo.gov/search"},
+      "response": {"status": 200, "headers": {"content-type": "application/json"}, "body": "{\"count\": 0, \"offsetMark\": null, \"results\": []}"}
+    }
+  ],
+  "expected_results_file": "search_errors.expected.json"
+}

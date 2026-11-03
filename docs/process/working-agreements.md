@@ -30,8 +30,8 @@ The goal is a short wait between opening a PR and being able to merge it into `d
   runners and the queue for them; most task pull requests reach a third of the suite or more and
   still get seven or eight parts, so sizing does not shorten their wait
   ([`docs/process/ci-test-part-costs.md`](ci-test-part-costs.md) has the figures). A dispatch of
-  `ci.yml` can ask for pytest-xdist's `--dist worksteal` instead of `load` (the `xdist_dist`
-  input); every other run uses `load` until the PM decides from a comparison on one commit.
+  `ci.yml` can ask for pytest-xdist's `--dist load` (the `xdist_dist` input); every other run uses
+  `--dist worksteal`, the default since the PM's comparison on one commit (2026-11-02).
 * **The parts are proved to be the selection.**
   `tests/scripts/test_ci_workflow_test_job.py` collects every part and proves it, for an affected
   set and for the whole selection, in a job of its own, `partition-proof`: on every push to `dev` and `main`, and on a pull request that

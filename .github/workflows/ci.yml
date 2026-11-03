@@ -32,8 +32,8 @@
 #     most eight, and eight for the whole selection; `test-selection` hands the matrix its list.
 #     Every part pays its setup and a collection, so an affected set of a few dozen files no longer
 #     takes eight runners. Most task pull requests reach a third of the suite or more and still get
-#     seven or eight (docs/process/ci-test-part-costs.md). A dispatch can ask for xdist's
-#     `--dist worksteal` instead of `load`, for the PM's comparison of the two on one commit.
+#     seven or eight (docs/process/ci-test-part-costs.md). Every part runs xdist's `--dist worksteal`
+#     (the PM's decision of 2026-11-02, from a comparison on one commit); a dispatch can ask for `load`.
 #   * A pull request into dev runs the tests its changes reach (v1-e01-t38): scripts/ci_test_selection.py
 #     reads scripts/affected_tests.py's selection against the pull request's base commit, always-run
 #     list included, and the parts deal that list. Every other run is the whole default selection: a
@@ -80,15 +80,15 @@ on:
   workflow_dispatch:
     inputs:
       # How pytest-xdist hands a part's tests to its workers (v1-e41-t16). `load` sends fixed batches;
-      # `worksteal` moves queued tests from a busy worker to an idle one, which may shorten a part's
-      # tail of heavy tests. Every push, pull request and the bot's dispatch run `load`. The PM
-      # compares the two on dispatches of one dev commit and decides the default from the eight
-      # parts' pytest step times (docs/process/ci-test-part-costs.md).
+      # `worksteal` moves queued tests from a busy worker to an idle one, which shortens a part's tail
+      # of heavy tests. Every push, pull request and the bot's dispatch run `worksteal`: on one dev
+      # commit it was faster on 7 of 8 parts (docs/process/ci-test-part-costs.md, the PM's decision of
+      # 2026-11-02). A dispatch can still ask for `load`, to compare again.
       xdist_dist:
-        description: "pytest-xdist's --dist for every test part: load (the default) or worksteal"
+        description: "pytest-xdist's --dist for every test part: worksteal (the default) or load"
         type: choice
         options: [load, worksteal]
-        default: load
+        default: worksteal
 
 permissions:
   contents: read
@@ -351,8 +351,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
-      # `load` on every run but a dispatch that asks for `worksteal` (the input at the top).
-      XDIST_DIST: ${{ inputs.xdist_dist || 'load' }}
+      # `worksteal` on every run but a dispatch that asks for `load` (the input at the top).
+      XDIST_DIST: ${{ inputs.xdist_dist || 'worksteal' }}
     strategy:
       # Every part reports its own failures: one failing part does not cancel the others.
       fail-fast: false

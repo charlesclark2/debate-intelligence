@@ -1,0 +1,84 @@
+# TASK v1-e37-t16-announcement-guard-follow-ups - Announcement guard follow-ups: a name's published form in free text, an image that exists, and names after the season rolls over
+# Epic: E37 — Calendar & Announcements (Coach-Editable) | Release: v1.6 (Public team website) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e37-t16-announcement-guard-follow-ups
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e37-calendar-and-announcements
+  annotations:
+    debate/title: "Announcement guard follow-ups: a name's published form in free text, an image that exists, and names after the season rolls over"
+spec:
+  # Filed by the PM, 2026-11-02, from v1-e37-t03's follow-ups (the PM's review, 2026-11-02).
+  description: >-
+    Three gaps v1-e37-t03 found. (1) The guard accepts a consented student's name in free text
+    without the published form's class year that the policy adds; results enforce it, free text
+    doesn't. (2) An announcement's image path isn't checked to exist, so a mistyped path in both
+    the file and the manifest ships a broken image. (3) The policy says an announcement naming a
+    graduated student stays as published and expires on its own schedule, but the build refuses
+    a name whose consent isn't current, so from 1 August a file naming last season's student
+    fails the build. Ask the coach for his ruling on (3) first, with v1-e37-t06's matching
+    question for results, and build (1) and (2) meanwhile.
+  priority: 3
+  constraints:
+    packages: [site/src, site/tests, site/content, docs/guides]
+    forbidden:
+      - Publishing a student name without consent
+      - Network calls at build time or in tests
+  context:
+    - kind: TaskRef
+      name: v1-e37-t11-content-guards-follow-the-policy
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e36-t08-prelaunch-visual-qa
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A consented name in free text without its published form, and an image path that
+        doesn't exist, each fail the build naming the file and the rule, by tests shown
+        failing first.
+    - id: ac2
+      description: >-
+        The coach's ruling on names after the season rolls over is recorded and built
+        (operator, recorded by the PM).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e37-t16-announcement-guard-follow-ups-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e37-calendar-and-announcements
+spec:
+  description: >-
+    Announcement guard follow-ups: a name's published form in free text, an image that exists,
+    and names after the season rolls over.
+  goalRef:
+    name: v1-e37-t16-announcement-guard-follow-ups
+  graph:
+    nodes:
+      - id: announcement-guard-follow-ups
+        kind: Task
+        name: Guard follow-ups
+        description: >-
+          Announcement guard follow-ups: a name's published form in free text, an image
+          that exists, and names after the season rolls over.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Guard follow-ups tests pass
+            command: pnpm
+            args: [--dir, site, test]
+status:
+  phase: Pending

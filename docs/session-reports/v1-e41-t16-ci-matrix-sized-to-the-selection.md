@@ -223,3 +223,13 @@ selections but not an ordinary task pull request's wait. That is now its own p1 
    lint-imports, thin handlers, the links and the specs are clean.
 8. **Merge:** `scripts/task pr --partial` once `ci` is green. The Goal stays `InProgress` until the PM
    records ac2.
+
+## Operator records (recorded by the PM, 2026-11-02)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac2: worksteal measured and kept or dropped; three task pull requests' `ci` wall times | NOT RUN | PASS | worksteal: dispatches 41429522869 (load) and 41429525966 (worksteal) on dev at cc41db60, both green; pytest step per part, load 259, 257, 279, 240, 228, 266, 261, 286 s (slowest 286, total 2,076), worksteal 234, 182, 270, 200, 232, 240, 245, 231 s (slowest 270, total 1,834): faster on 7 of 8 parts, kept as the default in this batch. Task pull requests after the merge (load): v1-e06-t12 321 s (8 parts, slowest pytest 255 s), v1-e37-t03 265 s (2 parts, 189 s), v1-e07-t03 362 s (8 parts, 280 s); also v1-e09-t06 171 s (3 parts, 99 s) |
+
+Both criteria pass, so the Goal is `Succeeded` in this batch. Sizing saved runners on small sets (2 and 3 parts), but the ordinary task pull requests are still over the 2-minute line; `v1-e41-t17` (p1, filed in this batch) deals whole files to parts by recorded durations.

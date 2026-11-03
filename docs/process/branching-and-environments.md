@@ -285,11 +285,26 @@ in `plan_specs/releases/<version>.yaml` is approved on the promotion PR.
 
 | | dev channel | stable channel |
 |---|---|---|
-| Tag | `vX.Y.Z-dev.N`, where `X.Y.Z` is the **next** stable release | `vX.Y.Z` (v1-e09-t06) |
+| Tag | `vX.Y.Z-dev.N`, where `X.Y.Z` is the **next** stable release | `vX.Y.Z` |
 | Wheel version | PEP 440 `X.Y.Z.devN`, which sorts **before** `X.Y.Z` | `X.Y.Z` |
-| Published by | [`dev-prerelease.yml`](../../.github/workflows/dev-prerelease.yml), after `ci` is green on a push to `dev`; or a manual dispatch on a `hotfix/*` branch | the release workflow (v1-e09-t06) |
+| Published by | [`dev-prerelease.yml`](../../.github/workflows/dev-prerelease.yml), after `ci` is green on a push to `dev`; or a manual dispatch on a `hotfix/*` branch | [`release.yml`](../../.github/workflows/release.yml), on a stable tag pushed by the operator at a promotion's merge commit |
 | GitHub release | always a **pre-release**; never PyPI | a full release |
 | Default `DEBATE_ENV` | `dev` | `prod` |
+
+**Cutting a stable release** (`v1-e09-t06`). When a release's epics are Succeeded and the
+promotion that completes them has merged into `main`, the PM writes the release's CHANGELOG section
+(replacing "Not yet released") in a batch that is promoted with it. The operator then runs the
+release check as a dry run from a scratch worktree of `main`
+(`uv run scripts/check_stable_release.py check --tag vX.Y.Z --sha <merge commit> --repository
+charlesclark2/debate-intelligence --wait-minutes 0`): every line must say `pass`. Then the operator
+pushes an annotated tag `vX.Y.Z` at that commit. `release.yml` checks again before building: the
+commit is on main's first-parent line and is a dev-to-main promotion merge whose dev parent has a
+green `validate-dev`; the tag equals the version source; the release's epics are Succeeded; the
+CHANGELOG section is written; and `ci`'s push run on `main` for that commit passed (it waits for
+it). It builds the wheels with channel `stable`, checks their contents, rehearses
+`install_channel.sh`, and publishes a full GitHub release with the wheels, `SHA256SUMS`,
+`build-info.json` and the section as notes. A patch after a hotfix waits for the back-merge and the
+next promotion. The commands are in `v1-e09-t06`'s session report, "Operator follow-ups".
 
 **Where `X.Y.Z` comes from.** For a merge to `dev`, the `version` in
 `packages/debate_cli/pyproject.toml`, the single version source. Once `vX.Y.Z` is released, that

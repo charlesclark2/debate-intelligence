@@ -265,3 +265,42 @@ Taxonomy `policy-2026-27-nhi` 1.5.0 and `generic` 1.1.2 carry both; the re-recor
 * **The relabel** is the coach's, in the coach's own CSV (the session report's operator follow-ups): rows 11,
   30, 31 and 59 to the new positions, rows 32, 38 and 47 to the model's answers, rows 34 and 58 with
   the model's answer as a second label. Its counts by label kind are recorded here when the PM has them.
+
+## The relabelled sample and the re-record under 1.1.0 (2026-11-02)
+
+Recorded by the PM from the operator's JSON. Counts, ids and row numbers only.
+
+* **The relabel** (`landscape evaluate --check-sample`, taxonomy 1.5.0): labelled 47; by the coach's
+  label kind advantage 16, cp 6, da 5, k 10, none 3, t 7; two rows with a second label, both
+  advantages. The coach kept `multipayer-t` on rows 32 and 38.
+* **The re-record** (prompt 1.1.0, taxonomy 1.5.0, dev's `high_volume` route): asked 47 in 3 calls,
+  38,881 input and 3,882 output tokens.
+
+| | 1.0.0 (2026-11-01) | 1.1.0 (2026-11-02) |
+|---|---|---|
+| Counted | 38 | 32 |
+| Correct | 14 | 19 |
+| Accuracy (bar 0.85) | 0.368 | 0.594 |
+| Refused `NO_POSITION` | 8 | 12 (10 labelled with a position, 2 labelled none) |
+| Below the threshold | | 3 |
+| Placed though labelled none | | 1 |
+| Prompt-input scan | hits | clean (3 texts, 0 hits) |
+
+* **Outcomes:** correct 19, wrong position of the same kind 6, wrong kind 6, placed though labelled
+  none 1, refused 12, below threshold 3 (47).
+* **By the label's kind:** advantage 7 correct, 3 same-kind wrong, 2 wrong kind, 4 refused; cp 1, 0, 2,
+  2, and 1 below threshold; da 2 correct, 2 refused, 1 below threshold; k 4, 2, 1, 2, and 1 below
+  threshold; t 5, 1, 1; none: 1 placed, 2 refused.
+* **The refusals of labelled cards:** midterms-da 2, generic-k 2, and one each of inequality-advantage,
+  data-advantage, pharma-advantage, coverage-advantage, states-cp and advantage-cp.
+* **Second labels:** 2 cards, 0 correct on the second label (row 34 was correct on its first).
+* **The model's set** (the 43 cards the deterministic stage sent): counted 29, correct 17, 0.586.
+  The deterministic stage placed 4 (rows 11, 30, 31, 59), each naming the coach's label; the model
+  answered two of them otherwise. The PM's estimate of the pipeline's score (deterministic first, the
+  model for the rest): 21 of 33, about 0.64. Weighted by stratum: 0.491.
+* **The cassette scan:** 27 hits across the 3 cassettes, all marked: 22 a JSON key's name and 5
+  taxonomy words; none named a team and none was copied from a card. The operator read them in the
+  terminal and judged all 27 ordinary words, so the 1.1.0 cassettes are kept.
+* **What follows:** the hold on live model runs stands. `v1-e32-t43` reports the pipeline's score,
+  explains the refusals and measures a second route; `v1-e32-t44` keeps a marked hit from making a
+  text unclean.

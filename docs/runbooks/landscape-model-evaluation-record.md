@@ -30,12 +30,25 @@ version 1.21).
 
 ## 1. Go to the checkout
 
-Run it from a source checkout holding prompt 1.1.0 (the model stage reads `prompts/`), on the Mac that
-holds the parsed store: `v1-e32-t40`'s worktree until it merges, and afterwards a worktree of `dev`.
+Run it from a source checkout of `dev` (the model stage reads `prompts/`), on the Mac that holds the
+parsed store. `dev` is checked out in the main clone, so use it there:
 
 ```bash
-cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t40-model-stage-reads-the-argument-not-the-subject
+cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence
+git fetch origin && git merge --ff-only origin/dev
 ```
+
+Then read the coach's sample against the taxonomy (`v1-e32-t41`). It takes a few seconds, reads no
+card, asks no model and writes nothing. It must exit 0 with `labelled` 47 before anything else here:
+
+```bash
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; else uv run debate-research --json landscape evaluate --caselist hspolicy26 --snapshot 2026-10-20 --sample ~/Documents/debate/landscape-review/policy-2026-27-nhi-coach-sample-labelled.csv --sample-rows ~/.debate-research/dev/landscape/local-classifier/hspolicy26/policy-2026-27-nhi-coach-sample.jsonl --check-sample; fi
+```
+
+A refusal names the row and the rule; fix the sample before recording. If step 3 below fails with
+`ModelAccessDenied` before any call, check the Bedrock profile's login with
+`aws sts get-caller-identity --profile debate-dev-bedrock`, which also refreshes the role's
+credentials, then run step 3 again (2026-11-02).
 
 ## 2. Check what the recording will read, with no model call
 

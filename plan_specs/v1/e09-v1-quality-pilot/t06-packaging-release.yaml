@@ -28,8 +28,11 @@ spec:
     Succeeded (validate_specs.py --require-succeeded), runs the full test suite, builds wheels/sdists with
     `uv build` (reusing t09's build-info stamping with channel "stable"), and publishes a GitHub Release
     (not a pre-release) with artifacts and changelog notes. Install path: scripts/install_channel.sh
-    v1.5.0 (from t09) or `uv tool install` from the stable tag's wheels, with the bedrock extra optional.
+    v1.5.0 (from t09) or `uv tool install` from the stable tag's wheels, with no extra optional at install time (PM amendment below).
     Boundaries: no PyPI publishing, no Docker images (V2), dev pre-releases are v1-e01-t09.
+    (PM amendment 2026-11-02, from the PM review.) No `bedrock` extra exists: debate-cli requires
+    every extra its commands wire, and Bedrock's boto3 comes with `aws`. The cutting of a stable release
+    is described in docs/process/branching-and-environments.md's Releases section, written by the PM.
   priority: 2
   constraints:
     # PM ruling 2026-11-02 (1): scripts/ and tests/scripts/, where the release checks and their tests

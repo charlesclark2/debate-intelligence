@@ -263,5 +263,83 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e07-t09-google-news-title-match
+    - id: t10
+      kind: Task
+      name: 'The resilience wrapper does not count time a provider spends waiting on its own pace as a failure'
+      description: >-
+        The resilience wrapper does not count time a provider spends waiting on its own pace
+        as a failure.
+      inputs:
+        specRef: plan_specs/v1/e07-discovery-adapters/t10-time-waiting-on-a-pace-is-not-a-failure.yaml
+        goalRef: v1-e07-t10-time-waiting-on-a-pace-is-not-a-failure
+      dependsOn:
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e07-t10-time-waiting-on-a-pace-is-not-a-failure reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e07-t10-time-waiting-on-a-pace-is-not-a-failure
+    - id: t11
+      kind: Task
+      name: 'A bill found by search shows its latest action and committees from Congress.gov'
+      description: >-
+        A bill found by search shows its latest action and committees from Congress.gov.
+      inputs:
+        specRef: plan_specs/v1/e07-discovery-adapters/t11-congress-gov-bill-details.yaml
+        goalRef: v1-e07-t11-congress-gov-bill-details
+      dependsOn:
+      - t07
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e07-t11-congress-gov-bill-details reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e07-t11-congress-gov-bill-details
+    - id: t12
+      kind: Task
+      name: 'GAO reports and CRS reports can be found by search'
+      description: >-
+        GAO reports and CRS reports can be found by search.
+      inputs:
+        specRef: plan_specs/v1/e07-discovery-adapters/t12-gao-and-crs-reports.yaml
+        goalRef: v1-e07-t12-gao-and-crs-reports
+      dependsOn:
+      - t07
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e07-t12-gao-and-crs-reports reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e07-t12-gao-and-crs-reports
+    - id: t13
+      kind: Task
+      name: 'The dev and prod profiles enable the discovery providers whose live smoke passed'
+      description: >-
+        The dev and prod profiles enable the discovery providers whose live smoke passed.
+      inputs:
+        specRef: plan_specs/v1/e07-discovery-adapters/t13-profiles-enable-the-providers-that-passed-their-smoke.yaml
+        goalRef: v1-e07-t13-profiles-enable-the-providers-that-passed-their-smoke
+      dependsOn:
+      - t07
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e07-t13-profiles-enable-the-providers-that-passed-their-smoke reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e07-t13-profiles-enable-the-providers-that-passed-their-smoke
 status:
   phase: Pending

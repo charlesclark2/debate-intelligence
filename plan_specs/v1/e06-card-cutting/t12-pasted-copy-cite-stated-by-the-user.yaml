@@ -32,6 +32,9 @@ spec:
     the packages. No migration. The date is a full ISO date (YYYY-MM-DD) only. Identical text
     stored again with no cite options, or with the newest copy's own, reuses that copy;
     with other options it is a new copy holding exactly the fields stated, and its fields win.
+    (PM amendment 2026-11-02, from the PM review.) Packages also take
+    `packages/debate_core/schemas/fetch_result.v1.json`: fetch's report gains the optional `stated_cite`
+    key, absent when nothing is stated (the session's Deviation 2, accepted).
   priority: 2
   constraints:
     packages: [debate_core.application, debate_core.retrieval, debate_core.evidence, debate_core.domain, packages/debate_core/schemas/source_snapshot.schema.json, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke]

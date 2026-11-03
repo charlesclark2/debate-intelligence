@@ -339,3 +339,13 @@ The day's download budget is spent until 24 hours after the start, 2026-11-01 21
 import is started again only after `v1-e40-t30` (the run task at 32 GB) is applied, outside the
 Tuesday 06:00 to Thursday 00:00 window and never on a Wednesday. `v1-e40-t31` (a worker memory
 ceiling) and `v1-e40-t32` (a log line per step) follow from it. ac3 stays open.
+
+## Operator records (recorded by the PM, 2026-11-02)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac3: the first of the four imports | NOT RUN (operator) | PASS for hspolicy25; three imports and the weekly run after remain | 2026-11-02, task 13db05e9…, revision 13 (`v1.1.0-dev.323`, 8 vCPU, 32 GB), started 03:20 Chicago, STOPPED exit 0: status ok, applied true, downloaded_bytes 3,958,272,657, members 16,059, stored 14,340, suppressed 0, held none, sources uploaded 14,340, skipped 0, parsed 14,163, unsupported 176, failed 1, cards 408,460, parsed objects uploaded 14,343, archive left in the inbox; steps restore 4.0 s, download 65.8, import 207.3, parse 4,882.3 (every source parsed by 2,125 s, then the aggregate rebuild), publish 196.4, publish parsed 366.6, about 95 minutes; memory at the end: main process 2.5 GB (VmHWM), container 24.4 GB on cgroup v1 (page cache counted) |
+
+The Goal stays `InProgress`: hsld25, hspolicy24 and hsld24 remain, at most one a day and never in the window before a Wednesday run, and ac3's weekly run after the first import is read on Thursday 2026-11-05. The main process held 3.2 times hspolicy26's cards in 2.4 times its memory, so the largest archive fits the 32 GB task.

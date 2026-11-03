@@ -349,5 +349,62 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e08-t11-expand-prompt-sends-the-familys-needs
+    - id: ext-v1-e07-t03-crossref-adapter
+      kind: External
+      name: 'Prerequisite from E07: Crossref adapter'
+      description: >-
+        Cross-epic prerequisite owned by v1-e07-discovery-adapters (release v1.4).
+      inputs:
+        goalRef: v1-e07-t03-crossref-adapter
+        specRef: plan_specs/v1/e07-discovery-adapters/t03-crossref-adapter.yaml
+    - id: t12
+      kind: Task
+      name: '`search --json` says whether a result''s date is a day, a month or a year'
+      description: >-
+        `search --json` says whether a result's date is a day, a month or a year.
+      inputs:
+        specRef: plan_specs/v1/e08-research-workflows/t12-search-json-names-a-dates-precision.yaml
+        goalRef: v1-e08-t12-search-json-names-a-dates-precision
+      dependsOn:
+      - ext-v1-e07-t03-crossref-adapter
+      - t04
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e08-t12-search-json-names-a-dates-precision reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e08-t12-search-json-names-a-dates-precision
+    - id: ext-v1-e07-t07-government-adapters
+      kind: External
+      name: 'Prerequisite from E07: Government and policy source adapters'
+      description: >-
+        Cross-epic prerequisite owned by v1-e07-discovery-adapters (release v1.4).
+      inputs:
+        goalRef: v1-e07-t07-government-adapters
+        specRef: plan_specs/v1/e07-discovery-adapters/t07-government-adapters.yaml
+    - id: t13
+      kind: Task
+      name: 'An expansion on a topic only a feed file names falls back cleanly, and a pair''s templates are capped'
+      description: >-
+        An expansion on a topic only a feed file names falls back cleanly, and a pair's
+        templates are capped.
+      inputs:
+        specRef: plan_specs/v1/e08-research-workflows/t13-topic-expansion-fallback-and-templates-per-pair.yaml
+        goalRef: v1-e08-t13-topic-expansion-fallback-and-templates-per-pair
+      dependsOn:
+      - ext-v1-e07-t07-government-adapters
+      - t04
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e08-t13-topic-expansion-fallback-and-templates-per-pair reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e08-t13-topic-expansion-fallback-and-templates-per-pair
 status:
   phase: Pending

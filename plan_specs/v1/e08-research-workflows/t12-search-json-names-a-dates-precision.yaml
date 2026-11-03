@@ -1,0 +1,74 @@
+# TASK v1-e08-t12-search-json-names-a-dates-precision - `search --json` says whether a result's date is a day, a month or a year
+# Epic: E08 Federated Research Workflows | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e08-t12-search-json-names-a-dates-precision
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+  annotations:
+    debate/title: "`search --json` says whether a result's date is a day, a month or a year"
+spec:
+  # Filed by the PM, 2026-11-02, from v1-e07-t03's follow-up 2 (the PM's review, 2026-11-02).
+  description: >-
+    A year-only date reaches `search --json` as the period's first instant,
+    `2021-01-01T00:00:00+00:00`, which a JSON reader can't tell from a first of January. Add a
+    `date_precision` key beside `published_at` in each result, from
+    MergedCandidate.date_precision. The smoke checks pin the JSON key sets whole, so they change
+    with it.
+  priority: 3
+  constraints:
+    packages: [debate_cli, debate_core.application, packages/debate_cli/tests, tests/smoke]
+    forbidden:
+      - Inventing a day
+      - A key removed or renamed
+  context:
+    - kind: TaskRef
+      name: v1-e07-t03-crossref-adapter
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e08-t04-argument-need-expansion
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Each result in `search --json` carries `date_precision` (day, month or year, or null
+        when undated), and the smoke checks pin it, by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e08-t12-search-json-names-a-dates-precision-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+spec:
+  description: >-
+    `search --json` says whether a result's date is a day, a month or a year.
+  goalRef:
+    name: v1-e08-t12-search-json-names-a-dates-precision
+  graph:
+    nodes:
+      - id: search-json-names-a-dates-precision
+        kind: Task
+        name: Date precision in JSON
+        description: >-
+          `search --json` says whether a result's date is a day, a month or a year.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Date precision in JSON tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests, tests/smoke, -k, search]
+status:
+  phase: Pending

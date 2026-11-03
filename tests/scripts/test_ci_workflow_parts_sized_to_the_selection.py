@@ -49,7 +49,7 @@ THE_PARTS_CHOSEN = f"${{{{ fromJSON(needs.{SELECTION_JOB}.outputs.parts) }}}}"
 PART_OF_THE_MATRIX = "${{ matrix.part }}/${{ strategy.job-total }}"
 # What a part's pytest reads for xdist's distribution, and where the job sets it.
 DIST_VARIABLE = "XDIST_DIST"
-DIST_OF_THE_RUN = "${{ inputs.xdist_dist || 'load' }}"
+DIST_OF_THE_RUN = "${{ inputs.xdist_dist || 'worksteal' }}"
 A_SMALL_TEST_FILE = "packages/debate_workers/tests/test_smoke.py"
 
 
@@ -154,17 +154,17 @@ def test_the_gate_of_the_parts_is_unchanged_by_their_number() -> None:
 
 
 # --------------------------------------------------------------------------------------------
-# --dist: load, unless a dispatch asks for worksteal
+# --dist: worksteal, unless a dispatch asks for load (the PM's decision, 2026-11-02)
 # --------------------------------------------------------------------------------------------
 
 
-def test_a_dispatch_can_ask_for_worksteal_and_load_is_the_default() -> None:
+def test_a_dispatch_can_ask_for_load_and_worksteal_is_the_default() -> None:
     inputs = triggers()["workflow_dispatch"]["inputs"]
     assert set(inputs) == {"xdist_dist"}
     xdist_dist = inputs["xdist_dist"]
     assert xdist_dist["type"] == "choice"
     assert xdist_dist["options"] == ["load", "worksteal"]
-    assert xdist_dist["default"] == "load"
+    assert xdist_dist["default"] == "worksteal"
     assert xdist_dist.get("required", False) is False
     assert xdist_dist["description"]
 
@@ -196,14 +196,14 @@ def value_of(expression: str, context: Mapping[str, str]) -> str:
     ("inputs", "dist"),
     [
         # A push, a pull request and the bot's dispatch carry no inputs.
-        ({}, "load"),
+        ({}, "worksteal"),
         # A dispatch from the Actions page or `gh workflow run` without -f gets the default.
-        ({"inputs.xdist_dist": "load"}, "load"),
         ({"inputs.xdist_dist": "worksteal"}, "worksteal"),
+        ({"inputs.xdist_dist": "load"}, "load"),
     ],
-    ids=["no-inputs", "default", "asked-for-worksteal"],
+    ids=["no-inputs", "default", "asked-for-load"],
 )
-def test_only_a_dispatch_that_asks_for_worksteal_gets_it(inputs: dict[str, str], dist: str) -> None:
+def test_only_a_dispatch_that_asks_for_load_gets_it(inputs: dict[str, str], dist: str) -> None:
     assert value_of(jobs()["test"]["env"][DIST_VARIABLE], inputs) == dist
 
 

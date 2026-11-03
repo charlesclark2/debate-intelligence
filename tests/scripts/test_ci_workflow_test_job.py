@@ -62,10 +62,10 @@ CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 PARTS_SELECTION = "not slow and not live and not partition_proof"
 PART_OF_THE_MATRIX = "${{ matrix.part }}/${{ strategy.job-total }}"
 UV_RUN_PYTEST = ["uv", "run", "--frozen", "pytest"]
-# xdist's distribution, set by the job: `load` but on a dispatch that asks for worksteal (v1-e41-t16).
+# xdist's distribution, set by the job: `worksteal` but on a dispatch that asks for load (v1-e41-t16).
 # It moves no test between parts, so the commands here run with the default.
 XDIST_DIST = "$XDIST_DIST"
-THE_DEFAULT_DIST = "load"
+THE_DEFAULT_DIST = "worksteal"
 # Where the selection step writes the test files and the pytest step reads them, as `@FILE`.
 SELECTION_FILE = "$RUNNER_TEMP/test-selection.txt"
 # One small file, so that running the commands for real costs a second each. It imports a workspace

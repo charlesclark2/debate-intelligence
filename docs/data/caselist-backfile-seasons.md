@@ -48,7 +48,7 @@ The PM's ruling of 2026-10-25 (Q3): the four complete archives only, under polic
 
 | Caselist | Season | Imported | Why |
 |---|---|---|---|
-| `hspolicy25` | 2025-26 | To import, first | Complete archive of 2026-06-30 |
+| `hspolicy25` | 2025-26 | **Imported** 2026-11-02 | Complete archive of 2026-06-30 |
 | `hsld25` | 2025-26 | To import, second | Complete archive of 2026-06-30 |
 | `hspolicy24` | 2024-25 | To import, third | Complete archive of 2025-05-06 |
 | `hsld24` | 2024-25 | To import, fourth | Complete archive of 2025-07-01 |
@@ -97,7 +97,7 @@ the task's volume **105,463,214,080**, beside the 29,687,044,928 it needs.
 
 | Caselist | Date (Chicago) | Revision | Downloaded bytes | Members | Stored | Suppressed | Held | Sources uploaded | Parsed | Cards | Parsed objects uploaded | Steps (s) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `hspolicy25` | 2026-10-31, killed for memory (below); not yet imported | 10 | | | | | | | | | | |
+| `hspolicy25` | 2026-11-02, after the 2026-10-31 attempt killed for memory (below) | 13 | 3,958,272,657 | 16,059 | 14,340 | 0 | none | 14,340 | 14,163 (176 unsupported, 1 failed) | 408,460 | 14,343 | restore 4.0, download 65.8, import 207.3, parse 4,882.3, publish 196.4, publish parsed 366.6 |
 | `hsld25` | not yet run | | | | | | | | | | | |
 | `hspolicy24` | not yet run | | | | | | | | | | | |
 | `hsld24` | not yet run | | | | | | | | | | | |
@@ -105,6 +105,13 @@ the task's volume **105,463,214,080**, beside the 29,687,044,928 it needs.
 **The first attempt, 2026-10-31.** `hspolicy25` on revision 10 (8 vCPU, 16 GB, 8 parse workers) was
 killed at 71 minutes: ECS recorded `OutOfMemoryError`, exit 137. It logged nothing first and published
 nothing. It is started again after `v1-e40-t30` gives the run task 32 GB.
+
+**The import, 2026-11-02.** Revision 13 (`v1.1.0-dev.323`, 8 vCPU, 32 GB, 8 parse workers), started
+03:20 Chicago, exit 0 in about 95 minutes. Every source was parsed by 2,125 s; the aggregate rebuild
+then held the main process for about 46 minutes without a progress line, as the parse stage writes
+none during the rebuild. The main process's peak was 2.5 GB, for 408,460 cards (hspolicy26's whole
+store, 126,681 cards, peaked at 1.03 GB under `v1-e40-t39`'s compact index): 3.2 times the cards in
+2.4 times the memory. The container's figure, 24.4 GB, counts the page cache on cgroup v1.
 
 **The weekly run after the first import** (ac3): not yet run. Its run id, outcome and minutes, and
 the three weeks before it, go here.

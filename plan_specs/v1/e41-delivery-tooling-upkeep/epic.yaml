@@ -453,5 +453,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e41-t16-ci-matrix-sized-to-the-selection
+    - id: t17
+      kind: Task
+      name: 'CI deals whole test files to its parts by their recorded durations, so an ordinary task pull request''s parts finish together'
+      description: >-
+        CI deals whole test files to its parts by their recorded durations, so an ordinary
+        task pull request's parts finish together.
+      inputs:
+        specRef: plan_specs/v1/e41-delivery-tooling-upkeep/t17-ci-parts-dealt-by-recorded-durations.yaml
+        goalRef: v1-e41-t17-ci-parts-dealt-by-recorded-durations
+      dependsOn:
+      - t16
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e41-t17-ci-parts-dealt-by-recorded-durations reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e41-t17-ci-parts-dealt-by-recorded-durations
 status:
   phase: Pending

@@ -478,9 +478,40 @@ the model alone and the pipeline, refusals and cost, `high_volume` (Haiku 4.5) b
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-03
 
 **Notes:**
+
+The evaluation now measures what students meet, the refusals are understood, and a second model was
+measured without risking the first recording: the stop over the cassette key saved the 1.1.0 cassettes.
+
+1. **ac1 passes.** The pipeline's score beside the model alone's, in the JSON and the display, the bar
+   reading the pipeline (the PM's ruling); red first (14 failing); the replay confirms 21 of 33, 0.636.
+   Ten mutants, the PM's four among them, all caught after the overrides survivor was closed.
+2. **ac2 passes.** The 10 refusals explained from counts: 6 sent with no heading, 7 with no position's
+   word, and the prompt's own null clause inviting them. The proposal (prompt 1.2.0) is filed by the PM
+   as its own task, with the coach's labelling decision below.
+3. **Ruling 3 built as ruled.** `--route` stands in the named route for the router and the budget guard
+   alike, records only to `model-cassettes-<route>/` (a test finds the default directory untouched), and
+   `landscape cassettes --route` reaches it; ten route mutants caught.
+4. **ac3's recording is done** (dev `deep_audit`, Claude Sonnet 4.6, $0.18, 3 calls): pipeline and model
+   alone 27 of 36, **0.750** against Haiku's 0.636; no refusals; 11 below the threshold, of which only 1
+   names the label, so the threshold is holding back wrong answers. Still below the 0.85 bar. The PM
+   records the side-by-side table in docs/data in the next batch, with the operator's judgement of the
+   cassette scan's 42 hits (all marked: 38 a JSON key's name, 4 taxonomy words; none copied from a card,
+   none naming a team), which decides whether these cassettes are kept. That record sets the Goal
+   `Succeeded`.
+5. **The coach's decision for prompt 1.2.0 (2026-11-03):** a card in an opposite-side file answering a
+   position is labelled with that position today; the coach proposes an explicit stance, `at:politics-da`,
+   to tell a card that answers a position from one that reads it. The PM files it with (a) and (b).
+6. **Deviations accepted:** the smoke file outside the packages (agreement 5); the session's own offline
+   replays (agreement 2); the packages amendment, the PM's; paragraphs rather than blocks in the purge and
+   removal runbooks, with the blocks filed as an E32 follow-up.
+7. **The local failure** of `test_container_factories.py` reproduces at the task's start commit on this
+   Mac and not on dev's CI (dev's push runs and validate-dev are green), so it is this machine's state.
+   This pull request's `ci` decides.
+8. **Merge:** `scripts/task pr --partial` once `ci` is green. The Goal stays `InProgress` until the PM's
+   record of ac3.

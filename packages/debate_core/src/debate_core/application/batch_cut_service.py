@@ -370,7 +370,9 @@ class BatchCutService:
         report: FetchReport | None = None
         try:
             report = await self._fetching.retrieve(candidate.url)
-            if report.snapshot is None or report.access_status is not AccessStatus.ACCESSIBLE:
+            # ArticleFetch gives a snapshot only for an ACCESSIBLE retrieval, and CardService refuses any
+            # other snapshot, so the status itself needs no second check here.
+            if report.snapshot is None:
                 return _entry(
                     candidate,
                     BatchEntryStatus.SKIPPED,

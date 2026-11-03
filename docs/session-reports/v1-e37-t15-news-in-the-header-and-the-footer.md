@@ -142,9 +142,28 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-03
 
 **Notes:**
+
+The coach's decision, built with the smallest rule that moves nothing else, and checked on every
+exported page rather than one.
+
+1. **ac1 passes.** News sits after Results and before Join in the header and stays in the footer of
+   all 14 exported pages (a new export check); the navigation order tests stay relations; lint,
+   typecheck, 1,070 tests, the build and 130 export checks pass offline. The 7 new source tests failed
+   first, and the seven planted breaks were each caught.
+2. **The footer rule accepted:** `alwaysInFooter` in site.yaml, validated like `primaryNavigation`, only
+   adding pages back in the footer's own order, so no other page moves and none can become unreachable.
+3. **Deviation 1 accepted.** Tightening the gap between header links is a consequence of the ninth link,
+   measured at twelve widths with no label broken and no sideways scroll. Recorded for later: a tenth
+   header link will not fit at either breakpoint without a shorter label or dropping a link.
+4. **Visual QA and the smoke check** walk the sitemap and need no change; the visual QA at the next deploy
+   sees the new header.
+5. **Live:** with the next promotion to main, together with v1-e37-t03's ac5.
+6. **Closing checks:** the Python affected set (always-run and workflow tests only) reached 84% with no
+   failure and is left to `ci`; lint-imports and the specs are clean; no Python changed.
+7. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`.

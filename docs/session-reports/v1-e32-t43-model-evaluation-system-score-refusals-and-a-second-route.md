@@ -40,7 +40,7 @@ fails on this Mac at the task's start commit too is noted under [Checks](#checks
 |---|---|---|
 | ac1: the pipeline's score beside the model's own, in the JSON and the breakdown, by tests shown failing first, with the PM's ruling on which the bar reads | PASS | Red run against a skeleton: 14 failed at their assertions, 1 passed ([below](#ruling-1-the-pipelines-score)). Green: `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest -n 4 <the 5 evaluation test files>` → 200 passed in 19.03s. Replay `landscape evaluate --breakdown --json` → pipeline 21 of 33 (0.636), model alone 19 of 32 (0.594), `bar_reads` `pipeline`, exit 1 `EVALUATION_BELOW_BAR`. The ruling (the bar reads the pipeline) is the PM's of 2026-11-02, in `TARGET_ACCURACY`'s docstring, `BAR_READS`, the CLI help and both runbooks |
 | ac2: the 10 refusals of labelled cards explained from ids and counts, with a proposed change and its evidence | PASS | [Ruling 2](#ruling-2-the-10-refusals-of-labelled-cards) below and `docs/data/landscape-model-evaluation.md`; the proposal is the PM's to rule on and is not built |
-| ac3: the operator's recording on the second route the PM approved, and the side-by-side counts and cost, in docs/data | NOT RUN | The PM approved dev `deep_audit` and mechanism (A) on 2026-11-03; the `--route` option is built and tested; the recording is the operator's ([the block](#operator-follow-ups)), and the side-by-side table is the PM's to record in docs/data. No session can close it |
+| ac3: the operator's recording on the second route the PM approved, and the side-by-side counts and cost, in docs/data | NOT RUN | The operator recorded the 47 cards on dev `deep_audit` on 2026-11-03 (3 calls, the default cassette directory untouched); the [side-by-side figures](#the-second-routes-recording-2026-11-03) are computed below. Open: the PM's record of them in docs/data, and the operator's judgement of the cassette scan's 42 hits ([follow-up 2](#2-only-if-a-scan-count-in-the-recording-is-above-zero-the-hits-in-the-terminal)). No session can close it |
 | Node: `uv run pytest packages/debate_core/tests packages/debate_cli/tests -k evaluat` | PASS | Run as `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest packages/debate_core/tests packages/debate_cli/tests -k evaluat -q --tb=short -n 4` → 97 passed in 46.58s after rulings 1 and 2; 103 passed in 12.20s after ruling 3 (the route tests are named `test_evaluate_…`) |
 
 ### Checks run before this report
@@ -309,6 +309,45 @@ HEAD; all ten caught:
 directory; 3, not built here: the PM files prompt 1.2.0 as its own task after ac3's result, carrying (a),
 (b) and the labelling convention (the first item under Follow-up work), if the coach confirms it.
 
+## The second route's recording (2026-11-03)
+
+The operator's block, from this worktree: the sample check (labelled 47, by kind advantage 16, cp 6, da 5,
+k 10, none 3, t 7; 2 second labels), then the recording and the breakdown on `--route deep_audit`. The
+recording and its replay agree on every count. Figures from the pasted JSON; costs from
+`config/model_pricing.yaml` at each run's own tokens. For the PM to record in docs/data.
+
+| | `high_volume`, Claude Haiku 4.5 (2026-11-02) | `deep_audit`, Claude Sonnet 4.6 (2026-11-03) |
+|---|---|---|
+| Calls; input / output tokens | 3; 38,881 / 3,882 | 3; 38,884 / 4,347 |
+| Cost | $0.058291 | $0.181857 (3.12 times) |
+| Model alone: correct of counted | 19 of 32, **0.594** | 27 of 36, **0.750** |
+| Pipeline: correct of counted (bar 0.85) | 21 of 33, **0.636** | 27 of 36, **0.750** |
+| Refused `NO_POSITION` | 12 | 0 |
+| Below the threshold (model / pipeline) | 3 / 2 | 11 / 11 |
+| Coverage (pipeline) | 33 of 47, 0.702 | 36 of 47, 0.766 |
+| Wrong: same kind / other kind / placed though none | 6 / 6 / 1 | 3 / 4 / 2 |
+| The model's set (the 43 sent) | 17 of 29, 0.586 | 23 of 32, 0.719 |
+| Weighted to the strata | 0.491 | 0.718 |
+| Batches | 3 answered | 3 answered, none repaired |
+
+* **Neither meets the bar.** Sonnet 4.6 raises the pipeline from 0.636 to 0.750, 11 points short.
+* **The pipeline equals the model alone on Sonnet.** The headings place rows 11, 30, 31 and 59, each
+  naming the label, and Sonnet answered all four rightly, so stage one changes no count.
+* **The refusals become low confidences.** Sonnet answered every card. Of Haiku's 10 refusals of labelled
+  cards, 3 are now counted and right (rows 14, 17 and 39) and 7 fall below the 0.6 threshold. Of all 11
+  below-threshold answers, 1 names the label (row 46, `generic-k`), so the threshold is holding back the
+  wrong ones.
+* **What is still wrong** (9 of the 36 counted): advantages 5 (3 same kind, 2 other kind), a kritik
+  answered `kritikal-aff`, a CP answered `should-t`, and 2 cards labelled none placed. Both cards
+  labelled `pharma-advantage` were answered `pharma-da`, one counted and one below the threshold.
+* **Second labels**: 2 cards, 0 correct on the second label (row 34 correct on its first, as under Haiku).
+* **The scan of the prompt inputs is clean** (3 texts, 0 hits). The cassette scan is not: 3 texts naming
+  a school, 2 a team code and 1 a tournament, so the command exits 1 for the scan before the bar. Its 42
+  hits are all marked: 38 a JSON key's name in a model rationale, 3 taxonomy words in a rationale, 1 a
+  taxonomy word in the cassette metadata; none copied from a card and none naming a team. The same kind
+  as the 1.1.0 cassettes' 27, `v1-e32-t44`'s subject. The operator reads them in the terminal
+  (follow-up 2) and judges them before the PM decides whether these cassettes are kept.
+
 ## Files changed
 
 * `packages/debate_core/src/debate_core/arguments/landscape/evaluation_breakdown.py`: `LabelledScore`,
@@ -377,7 +416,9 @@ directory; 3, not built here: the PM files prompt 1.2.0 as its own task after ac
 
 ## Operator follow-ups
 
-### 1. The second route's recording (ac3)
+### 1. The second route's recording (ac3): done 2026-11-03
+
+The operator ran this block; the JSON is summed up [above](#the-second-routes-recording-2026-11-03).
 
 **Operator command** (expected runtime 3 to 5 minutes; about $0.17 on Bedrock)
 Where: your Mac, in this task's worktree, which has `--route` before it reaches `dev`. In order: the
@@ -402,6 +443,9 @@ PM has read it. Nothing under `~/.debate-research/dev/landscape/model-cassettes/
 lands in `model-cassettes-deep_audit/`.
 
 ### 2. Only if a scan count in the recording is above zero: the hits, in the terminal
+
+**Needed**: the recording's cassette scan counted 3 schools, 2 team codes and 1 tournament (42 marked
+hits).
 
 **Do not paste or copy this output anywhere**, a Claude session included. Give each hit's number and
 whether its words name a team, a school or a tournament, or are an ordinary word that shares them.

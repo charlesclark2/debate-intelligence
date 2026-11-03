@@ -2195,3 +2195,130 @@ Not run yet. The cloud run's first run on an image carrying `2026.11.03-docx-8` 
 in full (`v1-e40-t08`). Its counts, from a copy of the dev bucket restored before that run and one
 restored after it (`scripts/count_tags_by_rule.py`), are recorded here by whoever closes the task;
 the steps are in `docs/session-reports/v1-e31-t32-bold-in-part-tags.md`, Operator follow-ups.
+
+## In-round markers and the short lines between body paragraphs (`v1-e31-t23`)
+
+A debater who stops reading a card in a round marks the place (`Marked 10:42`), and later copies
+carry the mark. `v1-e31-t19`'s item (5) left a second population for the same ruling: short plain
+lines read as nothing between two body paragraphs of one card. Both are counted here by **form**, a
+pattern id from
+[`in_round_markers.py`](../../packages/debate_core/src/debate_core/evidence/in_round_markers.py),
+never by their text.
+
+**Status: counted (operator-run, 2026-11-02); waiting on the PM's ruling. No rule has changed.**
+
+`scripts/count_in_round_markers.py`, run by the operator on 2026-11-02 in 661 seconds over the dev
+data directory on the operator's Mac. That store holds hspolicy26 at `2026.10.27-docx-7` and hsld26,
+hspf26 and openev at `2026.10.20-docx-6`. Every one of its 13,518 parsed sources was parsed again by
+`2026.10.27-docx-7`, and every line below is counted on that parse: 0 without a blob, 0 not parsed,
+287,545 cards. 331 sources of the three `docx-6` caselists give cards other than the stored ones
+(`v1-e31-t31`'s rules). The cluster join uses each caselist's stored occurrence table
+(`card-fingerprint-v4`), which held every exact fingerprint the counts asked about.
+
+### The forms
+
+| Form id | What it takes |
+|---|---|
+| `marker-word-and-clock-time` | A line of 60 characters or fewer that opens with a marker word (`mark`, `marked`, `marking`, `stop`, `stopped`) or a time, and holds both |
+| `clock-time-alone` | A time and punctuation |
+| `marker-word-alone` | A marker word, with `here`, `card` or `reading` at most |
+| `marker-word-opens-a-short-line` | Any other line of 60 characters or fewer that opens with a marker word |
+| `marker-word-and-clock-time-inside-a-line` | A marker word followed by a time inside a line none of the above takes |
+| `number-alone`, `no-letter-or-digit`, `omission-note` | A page or footnote number; punctuation alone; `[Table omitted]` and the like |
+| `no-marker-form` | Anything else |
+
+The first four are the **marker forms**: whole lines a ruling could record as markers. The forms are
+shapes, not judgements. A verse reference such as `Mark 10:45` has the first form's shape, and
+`Marked increases` the fourth's. Nobody has checked any of these lines by eye.
+
+### How a marker is read today
+
+The synthetic fixtures found three readings, and the counts find all three:
+
+* **as body** when it is typed into the small print or marked-up text and takes its formatting;
+* **as nothing** when it is plain at reading size;
+* **as a cite** when it opens with a capital and its hour is two digits: `heuristic-cite-line-author-year`
+  takes `Marked 10` for a name and a two-digit year. The card ends at the marker, and the rest of its
+  body is a card with no tag whose cite is the marker.
+
+Whole lines of a marker form:
+
+| Caselist | Read as body | Read as nothing | Read as a cite |
+|---|---|---|---|
+| hsld26 | 23 | 44 | 3 |
+| hspf26 | 15 | 9 | 0 |
+| hspolicy26 | 68 | 7 | 3 |
+| openev | 1 | 0 | 0 |
+| **Total** | **107** | **60** | **6** |
+
+By form and place, all caselists:
+
+| Form | Read as body | Read as nothing | Read as a cite |
+|---|---|---|---|
+| `marker-word-and-clock-time` | 10: inside the body 8, the end 2 | 3: after a body 2, elsewhere 1 | 4: below a body opening a card with no tag 1, below a body as a card on its own (`CITE_ONLY`) 1, elsewhere 2 |
+| `clock-time-alone` | 21: inside 17, first line 2, the end 2 | 43: between two body paragraphs 7, after a body 9, elsewhere 27 | 0 |
+| `marker-word-alone` | 3: inside 3 | 12: between two body paragraphs 11, after a body 1 | 0 |
+| `marker-word-opens-a-short-line` | 73: inside 67, first line 5, the end 1 | 2: between two body paragraphs 1, after a body 1 | 2: elsewhere 2 |
+
+By the rule that read them: of the 107 read as body, 87 were small print (`heuristic-shrunk-body-text`),
+17 marked up, 2 in a body style by its name and 1 a cite guess an open body took. All 60 read as nothing are `heuristic-unclassified-paragraph`. 4 of the 6 read as a
+cite are `heuristic-cite-line-author-year`, and 2 carry the cite character style.
+
+`marker-word-and-clock-time-inside-a-line`, a marker word and a time inside a longer line: 846 lines
+read as body in 564 files (hsld26 490, hspf26 25, hspolicy26 330, openev 1), 807 of them in
+marked-up text. Debaters mark up a source's words, not their own notes, so this shape is probably
+mostly the source's prose. It is counted, but no ruling could record it as a whole line.
+
+### The clusters the markers split today
+
+Each set of marker forms is left out of matching (the lines left out, and the halves a marker read
+as a cite divides joined again), and the bodies that changes are set against today's clusters:
+
+| Forms left out | Bodies changed | Of them joined across a marker read as a cite | Marker-free fingerprints | Another card already has it | Spanning two clusters or more |
+|---|---|---|---|---|---|
+| `marker-word-and-clock-time` | 11 | 1 | 7 | 3 | 1 |
+| `clock-time-alone` | 11 | 0 | 10 | 3 | 0 |
+| `marker-word-alone` | 3 | 0 | 3 | 2 | 0 |
+| `marker-word-opens-a-short-line` | 65 | 0 | 22 | 0 | 0 |
+| The first three | 25 | 1 | 20 | 8 | 1 |
+| All four | 90 | 1 | 42 | 8 | 1 |
+
+**One cluster split, in hspolicy26:** a marker read as a cite divides a card, and its two halves sit in
+two clusters. Every other marker-free body that another card already has sits in that card's cluster
+today, because the near-duplicate rules (`card-fingerprint-v4`) already join copies that differ by a
+short line. The body counts are per parsed source, so one file's copies under two digests count
+twice.
+
+### The lines read as nothing between two body paragraphs
+
+`v1-e31-t19` counted 43,488 lines in 15,796 cards over 11,148 sources under `2026.10.18-docx-5`. On
+this store under `docx-7` there are **53,207 lines in 19,121 cards** (6.6% of 287,545):
+
+| Caselist | Lines | Cards | A marker form | `omission-note` | `number-alone` | `no-letter-or-digit` | `no-marker-form` |
+|---|---|---|---|---|---|---|---|
+| hsld26 | 16,177 | 5,773 | 14 | 331 | 152 | 26 | 15,654 |
+| hspf26 | 9,095 | 3,408 | 1 | 407 | 2 | 44 | 8,641 |
+| hspolicy26 | 25,528 | 9,148 | 4 | 1,169 | 19 | 116 | 24,219 |
+| openev | 2,407 | 792 | 0 | 65 | 2 | 1 | 2,339 |
+| **Total** | **53,207** | **19,121** | **19** | **1,972** | **175** | **187** | **50,853** |
+
+hspolicy26's line also holds 1 `marker-word-and-clock-time-inside-a-line`. By `v1-e31-t19`'s bands:
+
+| Length | Lines | No sentence end | Ends a sentence | In capitals |
+|---|---|---|---|---|
+| 40 characters or fewer | 30,706 | 29,250 | 1,456 | 13,841 |
+| 41 to 100 | 10,242 | 6,116 | 4,126 | 142 |
+| 101 to 200 | 8,425 | 1,688 | 6,737 | 4 |
+| 201 to 400 | 1,459 | 1,459 | 0 | 0 |
+| 401 to 1,000 | 1,904 | 1,904 | 0 | 0 |
+| 1,001 to 4,000 | 461 | 461 | 0 | 0 |
+| Over 4,000 | 10 | 10 | 0 | 0 |
+| **All** | **53,207** | **40,888** | **12,319** | **13,987** |
+
+The other places, for comparison: before a body, under a tag or a cite, 17,333 lines; after a body,
+before something else, 5,080; elsewhere, 17,357.
+
+Of the lines between two body paragraphs, **19 are a marker form**. Reading every such line as body
+would bring 19 markers into the evidence, and with them 1,972 omission notes, 175 page or footnote
+numbers and 187 lines of punctuation. It would change the evidence text, and so the exact
+fingerprint, of up to 19,121 cards.

@@ -46,6 +46,7 @@
   .differs { color: var(--warn); font-weight: 600; }
   .checked { color: var(--good); font-weight: 600; }
   .notes { margin: 6px 0 0; padding-left: 18px; color: var(--warn); }
+  .warnings { margin: 0; padding-left: 18px; font-size: 13px; }
   .flag { background: var(--flag); border: 1px solid var(--flag-line); border-radius: 6px; padding: 6px 10px; margin-bottom: 8px; }
   .marks { white-space: pre-wrap; overflow-wrap: anywhere; padding: 4px 0; }
   .mark-u { text-decoration: underline; text-decoration-thickness: 2px; }
@@ -118,6 +119,11 @@
       <tr><td><kbd>Backspace</kbd> or <kbd>&larr;</kbd></td><td>Back one row</td></tr>
     </table>
     <p>Holding a key down does nothing more than pressing it once. Progress is saved after every key: close the tab and stop the labeller with Ctrl+C whenever you like, and it starts where you stopped.</p>
+  </section>
+  <section>
+    <h2>Warnings</h2>
+    <p>What the page may say under a row's label, or after a key. A warning says what happened and how to undo it; it refuses nothing.</p>
+    <ul class="warnings">__WARNINGS__</ul>
   </section>
 </main>
 <script nonce="__NONCE__">

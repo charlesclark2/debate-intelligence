@@ -61,14 +61,14 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 55 | 252 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 115 | 97 | 505 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 80 | 70 | 320 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 116 | 98 | 508 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 82 | 71 | 326 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 23 | 15 | 124 |
-| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 26 | 11 | 112 |
+| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 29 | 12 | 120 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 31 | 22 | 169 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 29 | 25 | 94 |
-| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 57 | 36 | 106 |
+| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 60 | 37 | 112 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -175,7 +175,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [`debate-research store` sync commands](plan_specs/v1/e29-cloud-evidence-store/t05-evidence-sync-cli.yaml) `v1-e29-t05-evidence-sync-cli` | Succeeded | 3 | 11.5 |
 | [Removal grants: the scope is tested, and a plan can count versions](plan_specs/v1/e29-cloud-evidence-store/t06-removal-grant-scope-test.yaml) `v1-e29-t06-removal-grant-scope-test` | Succeeded | 1 | 8.0 |
 | [A profile missing from the AWS config is a configuration error, not an expired session](plan_specs/v1/e29-cloud-evidence-store/t07-missing-profile-not-retryable.yaml) `v1-e29-t07-missing-profile-not-retryable` | Succeeded | 1 | 1.0 |
-| [The takedown preflight refuses the everyday profile before it writes anything](plan_specs/v1/e29-cloud-evidence-store/t08-takedown-preflight-identity.yaml) `v1-e29-t08-takedown-preflight-identity` | InProgress | 1 | 2.0 |
+| [The takedown preflight refuses the everyday profile before it writes anything](plan_specs/v1/e29-cloud-evidence-store/t08-takedown-preflight-identity.yaml) `v1-e29-t08-takedown-preflight-identity` | Succeeded | 1 | 2.0 |
 | [Loose ends in how store errors are classified, worded and wrapped](plan_specs/v1/e29-cloud-evidence-store/t09-store-error-loose-ends.yaml) `v1-e29-t09-store-error-loose-ends` | Succeeded | 1 | 2.0 |
 | [The retirement rule reaches empty objects, the tagging grant names its one tag, and the module's failures print](plan_specs/v1/e29-cloud-evidence-store/t10-retention-rule-and-grant-loose-ends.yaml) `v1-e29-t10-retention-rule-and-grant-loose-ends` | Pending | 1 | 3.0 |
 | [store sync says why it skipped what it skipped](plan_specs/v1/e29-cloud-evidence-store/t11-store-sync-skip-reasons.yaml) `v1-e29-t11-store-sync-skip-reasons` | Succeeded | 1 | 2.0 |
@@ -254,8 +254,9 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Card matching recovers two kinds of pair it now keeps apart](plan_specs/v1/e31-debate-file-parsing/t29-card-matching-recall.yaml) `v1-e31-t29-card-matching-recall` | Pending | 1 | 4.0 |
 | [Publish the parsed store without rebuilding it](plan_specs/v1/e31-debate-file-parsing/t30-parsed-store-publish-only.yaml) `v1-e31-t30-parsed-store-publish-only` | Succeeded | 1 | 2.0 |
 | [Where the labelled evaluation's missed cites, tags and highlights go, counted before any rule](plan_specs/v1/e31-debate-file-parsing/t31-labelled-evaluation-gaps.yaml) `v1-e31-t31-labelled-evaluation-gaps` | InProgress | 1 | 5.0 |
-| [A tag with a word left unbolded, above a cite, counted before any rule](plan_specs/v1/e31-debate-file-parsing/t32-bold-in-part-tags.yaml) `v1-e31-t32-bold-in-part-tags` | Pending | 1 | 3.0 |
+| [A tag with a word left unbolded, above a cite, counted before any rule](plan_specs/v1/e31-debate-file-parsing/t32-bold-in-part-tags.yaml) `v1-e31-t32-bold-in-part-tags` | InProgress | 1 | 3.0 |
 | [A pointer to another card (`<<AUTHOR 'YY FOR REFERENCE>>`) is never promoted to a cite](plan_specs/v1/e31-debate-file-parsing/t33-reference-pointers-are-not-cites.yaml) `v1-e31-t33-reference-pointers-are-not-cites` | Pending | 1 | 1.0 |
+| [What the bold tag rules leave above a cite: the lines not bold, sampled, and the inline card, counted](plan_specs/v1/e31-debate-file-parsing/t34-what-the-bold-tag-rules-leave-above-a-cite.yaml) `v1-e31-t34-what-the-bold-tag-rules-leave-above-a-cite` | Pending | 1 | 3.0 |
 
 #### [E34 — Scheduled Caselist Sync](plan_specs/v1/e34-caselist-sync/epic.yaml)
 
@@ -374,9 +375,11 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [The model stage names the argument a card is read as, with each position's side and description, and the scrub and scan fixed](plan_specs/v1/e32-argument-landscape/t40-model-stage-reads-the-argument-not-the-subject.yaml) `v1-e32-t40-model-stage-reads-the-argument-not-the-subject` | Succeeded | 1 | 5.0 |
 | [The coach's review applied: three new NHI positions, corrected descriptions, and a second accepted label in the coach sample](plan_specs/v1/e32-argument-landscape/t41-coach-sample-second-label-and-three-new-positions.yaml) `v1-e32-t41-coach-sample-second-label-and-three-new-positions` | Succeeded | 2 | 3.0 |
 | [`landscape cassettes --delete` can delete only one prompt version's cassettes](plan_specs/v1/e32-argument-landscape/t42-landscape-cassettes-delete-by-prompt-version.yaml) `v1-e32-t42-landscape-cassettes-delete-by-prompt-version` | Pending | 1 | 1.0 |
-| [The model stage is scored as students meet it, its refusals are explained, and a second model route is measured on the same cards](plan_specs/v1/e32-argument-landscape/t43-model-evaluation-system-score-refusals-and-a-second-route.yaml) `v1-e32-t43-model-evaluation-system-score-refusals-and-a-second-route` | InProgress | 2 | 3.0 |
+| [The model stage is scored as students meet it, its refusals are explained, and a second model route is measured on the same cards](plan_specs/v1/e32-argument-landscape/t43-model-evaluation-system-score-refusals-and-a-second-route.yaml) `v1-e32-t43-model-evaluation-system-score-refusals-and-a-second-route` | Succeeded | 2 | 3.0 |
 | [A scan hit already marked as a JSON key's name or a taxonomy word does not make a text unclean](plan_specs/v1/e32-argument-landscape/t44-scan-marked-hits-leave-a-text-clean.yaml) `v1-e32-t44-scan-marked-hits-leave-a-text-clean` | Pending | 1 | 1.0 |
 | [The review queue's order model is trained again at taxonomy 1.5.0](plan_specs/v1/e32-argument-landscape/t45-review-order-model-retrained-at-the-current-taxonomy.yaml) `v1-e32-t45-review-order-model-retrained-at-the-current-taxonomy` | Pending | 2 | 1.0 |
+| [Prompt 1.2.0: the refusal fixes and the coach's answering stance](plan_specs/v1/e32-argument-landscape/t46-prompt-1-2-0-refusal-fixes-and-answering-stances.yaml) `v1-e32-t46-prompt-1-2-0-refusal-fixes-and-answering-stances` | Pending | 1 | 4.0 |
+| [The purge and removal runbooks' cassette blocks reach a route's cassettes](plan_specs/v1/e32-argument-landscape/t47-route-cassettes-in-the-purge-and-removal-blocks.yaml) `v1-e32-t47-route-cassettes-in-the-purge-and-removal-blocks` | Pending | 1 | 1.0 |
 
 #### [E33 — Evidence File Builder](plan_specs/v1/e33-file-builder/epic.yaml)
 
@@ -459,6 +462,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [A bill found by search shows its latest action and committees from Congress.gov](plan_specs/v1/e07-discovery-adapters/t11-congress-gov-bill-details.yaml) `v1-e07-t11-congress-gov-bill-details` | Pending | 1 | 2.0 |
 | [GAO reports and CRS reports can be found by search](plan_specs/v1/e07-discovery-adapters/t12-gao-and-crs-reports.yaml) `v1-e07-t12-gao-and-crs-reports` | Pending | 1 | 3.0 |
 | [The dev and prod profiles enable the discovery providers whose live smoke passed](plan_specs/v1/e07-discovery-adapters/t13-profiles-enable-the-providers-that-passed-their-smoke.yaml) `v1-e07-t13-profiles-enable-the-providers-that-passed-their-smoke` | Pending | 2 | 1.0 |
+| [Roll Call's unreadable feed is fixed or dropped, and one feed that keeps failing no longer marks every search partial](plan_specs/v1/e07-discovery-adapters/t14-an-unreadable-feed-found-and-fixed-or-dropped.yaml) `v1-e07-t14-an-unreadable-feed-found-and-fixed-or-dropped` | Pending | 1 | 2.0 |
 
 #### [E08 — Federated Research Workflows](plan_specs/v1/e08-research-workflows/epic.yaml)
 
@@ -468,7 +472,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [Normalization and deduplication](plan_specs/v1/e08-research-workflows/t02-normalize-dedupe.yaml) `v1-e08-t02-normalize-dedupe` | Succeeded | 2 | 8.0 |
 | [Explainable feature ranking](plan_specs/v1/e08-research-workflows/t03-feature-ranking.yaml) `v1-e08-t03-feature-ranking` | Succeeded | 1 | 8.0 |
 | [Argument/need query expansion](plan_specs/v1/e08-research-workflows/t04-argument-need-expansion.yaml) `v1-e08-t04-argument-need-expansion` | Succeeded | 3 | 7.5 |
-| [`debate-research search` command](plan_specs/v1/e08-research-workflows/t05-search-command.yaml) `v1-e08-t05-search-command` | InProgress | 4 | 6.0 |
+| [`debate-research search` command](plan_specs/v1/e08-research-workflows/t05-search-command.yaml) `v1-e08-t05-search-command` | Succeeded | 4 | 6.0 |
 | [`--auto-cut N` batch cutting](plan_specs/v1/e08-research-workflows/t06-auto-cut.yaml) `v1-e08-t06-auto-cut` | Pending | 3 | 9.0 |
 | [`debate-research daily` digests](plan_specs/v1/e08-research-workflows/t07-daily-command.yaml) `v1-e08-t07-daily-command` | Pending | 2 | 7.0 |
 | [Counterplans and kritiks get the research needs their arguments have](plan_specs/v1/e08-research-workflows/t08-counterplan-and-kritik-needs.yaml) `v1-e08-t08-counterplan-and-kritik-needs` | InProgress | 1 | 2.0 |
@@ -477,6 +481,8 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [The search.expand prompt names the argument family's needs, not the DA family's](plan_specs/v1/e08-research-workflows/t11-expand-prompt-sends-the-familys-needs.yaml) `v1-e08-t11-expand-prompt-sends-the-familys-needs` | Pending | 1 | 1.0 |
 | [`search --json` says whether a result's date is a day, a month or a year](plan_specs/v1/e08-research-workflows/t12-search-json-names-a-dates-precision.yaml) `v1-e08-t12-search-json-names-a-dates-precision` | Pending | 2 | 1.0 |
 | [An expansion on a topic only a feed file names falls back cleanly, and a pair's templates are capped](plan_specs/v1/e08-research-workflows/t13-topic-expansion-fallback-and-templates-per-pair.yaml) `v1-e08-t13-topic-expansion-fallback-and-templates-per-pair` | Pending | 2 | 1.0 |
+| [A disadvantage's link queries name the plan's mechanism and the United States](plan_specs/v1/e08-research-workflows/t14-da-links-name-the-plans-mechanism-in-the-united-states.yaml) `v1-e08-t14-da-links-name-the-plans-mechanism-in-the-united-states` | Pending | 2 | 3.0 |
+| [LD research starts broad and narrows from what the first page turns up](plan_specs/v1/e08-research-workflows/t15-ld-research-starts-broad-and-narrows-from-the-first-page.yaml) `v1-e08-t15-ld-research-starts-broad-and-narrows-from-the-first-page` | Pending | 1 | 3.0 |
 
 
 ### v1.5 — V1 quality gate & team pilot
@@ -634,6 +640,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [A lock refusal is not reported as a run that stopped before its stages](plan_specs/v1/e40-cloud-caselist-run/t38-landscape-staleness-ignores-lock-refusals.yaml) `v1-e40-t38-landscape-staleness-ignores-lock-refusals` | Pending | 1 | 0.8 |
 | [The near-duplicate index and the linker's word lists are held compactly, so a season's rebuild fits with room](plan_specs/v1/e40-cloud-caselist-run/t39-cut-index-and-linker-words-held-compactly.yaml) `v1-e40-t39-cut-index-and-linker-words-held-compactly` | Succeeded | 1 | 4.0 |
 | [In bucket mode a missing or unreadable token, and a download refused for an expired login, give the cloud's cure, not a login by hand](plan_specs/v1/e40-cloud-caselist-run/t40-token-errors-name-the-cloud-cure.yaml) `v1-e40-t40-token-errors-name-the-cloud-cure` | Pending | 1 | 1.0 |
+| [A cloud run's decision about each listed file is kept past the log's 90 days](plan_specs/v1/e40-cloud-caselist-run/t41-cloud-run-keeps-its-per-file-decisions.yaml) `v1-e40-t41-cloud-run-keeps-its-per-file-decisions` | Pending | 1 | 2.0 |
 
 #### [E41 — Delivery Tooling Upkeep](plan_specs/v1/e41-delivery-tooling-upkeep/epic.yaml)
 
@@ -655,7 +662,9 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [A bounded run that starts a Docker container stops that container too](plan_specs/v1/e41-delivery-tooling-upkeep/t14-hard-stop-stops-a-named-container.yaml) `v1-e41-t14-hard-stop-stops-a-named-container` | Pending | 1 | 0.8 |
 | [CI chooses the tests once, skips the test parts when none are chosen, cancels superseded pull-request runs, and runs the partition proof only when it can change](plan_specs/v1/e41-delivery-tooling-upkeep/t15-ci-selection-once-and-no-queue.yaml) `v1-e41-t15-ci-selection-once-and-no-queue` | Succeeded | 1 | 4.0 |
 | [CI runs as many test parts as the selection needs, measures work stealing, and the bot's dispatched run runs no Python job](plan_specs/v1/e41-delivery-tooling-upkeep/t16-ci-matrix-sized-to-the-selection.yaml) `v1-e41-t16-ci-matrix-sized-to-the-selection` | Succeeded | 1 | 3.0 |
-| [CI deals whole test files to its parts by their recorded durations, so an ordinary task pull request's parts finish together](plan_specs/v1/e41-delivery-tooling-upkeep/t17-ci-parts-dealt-by-recorded-durations.yaml) `v1-e41-t17-ci-parts-dealt-by-recorded-durations` | InProgress | 1 | 3.0 |
+| [CI deals whole test files to its parts by their recorded durations, so an ordinary task pull request's parts finish together](plan_specs/v1/e41-delivery-tooling-upkeep/t17-ci-parts-dealt-by-recorded-durations.yaml) `v1-e41-t17-ci-parts-dealt-by-recorded-durations` | Succeeded | 1 | 3.0 |
+| [Each CI part collects only its own test files, after measuring what module fixtures cost](plan_specs/v1/e41-delivery-tooling-upkeep/t18-each-part-collects-only-its-own-files.yaml) `v1-e41-t18-each-part-collects-only-its-own-files` | Pending | 1 | 3.0 |
+| [Test selection does not follow an edge through a fixture that only names a guide's path](plan_specs/v1/e41-delivery-tooling-upkeep/t19-affected-tests-ignores-a-path-named-only-as-data.yaml) `v1-e41-t19-affected-tests-ignores-a-path-named-only-as-data` | Pending | 1 | 1.0 |
 
 
 ## V2

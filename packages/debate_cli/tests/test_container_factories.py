@@ -63,7 +63,7 @@ from debate_core.application.settings import (
     Settings,
     load_settings,
 )
-from debate_core.domain.model_contracts import ModelProvider
+from debate_core.domain.model_contracts import ModelProvider, TaskClass
 from debate_core.integrations.models.model_mode import ModelMode
 
 REPOSITORY_ROOT: Final = Path(__file__).resolve().parents[3]
@@ -198,6 +198,7 @@ def arguments(tmp_path: Path) -> dict[str, tuple[object, ...]]:
         "user_pool_id: str": ("us-east-1_planted",),
         "profile: str | None": (None,),
         "model_expansion: bool": (False, True),
+        "route: TaskClass | None": (None, TaskClass.DEEP_AUDIT),
     }
 
 

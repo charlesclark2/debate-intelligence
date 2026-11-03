@@ -1921,7 +1921,13 @@ def _stub_evaluation(monkeypatch: pytest.MonkeyPatch, result: FormatEvaluation) 
         ) -> FormatEvaluation:
             return result
 
-    def build(self: container_module.ServiceContainer, *, config_dir: Path, record: bool) -> Stub:
+    def build(
+        self: container_module.ServiceContainer,
+        *,
+        config_dir: Path,
+        record: bool,
+        route: TaskClass | None = None,
+    ) -> Stub:
         asked.append(record)
         return Stub()
 
@@ -2021,7 +2027,7 @@ def test_evaluate_json_reports_the_pipelines_score_beside_the_models_own(
 
     data = _data(evaluate(world, sample_files))
 
-    assert data["bar_reads"] == "pipeline"
+    assert (data["bar_reads"], data["route"]) == ("pipeline", "high_volume")
     assert data["model_alone"] == {
         "labelled": 30,
         "counted": 20,
@@ -2268,6 +2274,7 @@ EVALUATION_KEYS = {
     "bar_reads",
     "model_alone",
     "pipeline",
+    "route",
 }
 
 
@@ -2462,7 +2469,13 @@ def _stub_breakdown(monkeypatch: pytest.MonkeyPatch, result: EvaluationBreakdown
             logging.getLogger("debate_core").info("broken down", extra={"cards": len(result.cards)})
             return result
 
-    def build(self: container_module.ServiceContainer, *, config_dir: Path, record: bool) -> Stub:
+    def build(
+        self: container_module.ServiceContainer,
+        *,
+        config_dir: Path,
+        record: bool,
+        route: TaskClass | None = None,
+    ) -> Stub:
         asked.append(record)
         return Stub()
 

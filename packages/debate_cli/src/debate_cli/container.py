@@ -241,6 +241,7 @@ from debate_core.application.file_quality_service import FileQualityService
 from debate_core.application.file_suggest_service import FileSuggestService
 from debate_core.application.landscape_model_evaluation import LandscapeModelEvaluationService
 from debate_core.application.landscape_model_stage import (
+    CLASSIFICATION_TASK_CLASS,
     CLASSIFY_POSITION_PROMPT_ID,
     ModelClassificationStage,
     ParsedStoreCardTexts,
@@ -289,7 +290,7 @@ from debate_core.application.tub.accounts import AccountAdministration
 from debate_core.application.verify_manifest import VerifyManifest
 from debate_core.domain import new_id
 from debate_core.domain.caselist import Event
-from debate_core.domain.model_contracts import ModelProvider
+from debate_core.domain.model_contracts import ModelProvider, TaskClass
 from debate_core.evidence.format_profile import (
     FORMAT_PROFILES_DIRECTORY,
     FormatProfileError,
@@ -328,6 +329,7 @@ __all__ = [
     "ServiceContainer",
     "Settings",
     "SettingsNotConfigured",
+    "cassette_directory_name",
     "validating_routing",
 ]
 
@@ -611,7 +613,15 @@ SCAN_ACCEPTANCES_DIRECTORY: Final = "scan-acceptances"
 MODEL_CASSETTES_DIRECTORY: Final = "model-cassettes"
 """Beside the classification cache: cassettes of the landscape model stage's calls on real cards
 (`v1-e32-t07`). They hold scrubbed excerpts of real evidence, so they are derived corpus data: kept under
-the data directory, never committed, and under its retention and removal."""
+the data directory, never committed, and under its retention and removal. An evaluation on another route
+(`v1-e32-t43`) records to `model-cassettes-<route>` beside it, never here."""
+
+
+def cassette_directory_name(route: TaskClass | None) -> str:
+    """The landscape model cassettes' directory under `<data dir>/landscape/`: :data:`MODEL_CASSETTES_DIRECTORY`,
+    or `model-cassettes-<route>` for an evaluation on another route (`v1-e32-t43`)."""
+    return MODEL_CASSETTES_DIRECTORY if route is None else f"{MODEL_CASSETTES_DIRECTORY}-{route.value}"
+
 
 _PACKAGE_DIRECTORY: Final = Path(__file__).resolve().parent
 """This package's directory: inside the source checkout it was installed from, when it was."""
@@ -892,13 +902,16 @@ class ServiceContainer:
             ),
         )
 
-    def landscape_evaluation(self, *, config_dir: Path, record: bool) -> LandscapeModelEvaluationService:
+    def landscape_evaluation(
+        self, *, config_dir: Path, record: bool, route: TaskClass | None = None
+    ) -> LandscapeModelEvaluationService:
         """The model stage measured against a coach's labels (`v1-e32-t07` ac4), over this machine's stores.
 
         It replays, or with `record` records, the same cassettes a landscape run replays, under the data
         directory, and scans every cassette of the prompt there after it has run. A breakdown
         (`v1-e32-t39`) also lists the scan's hits in the repair cassettes there, which hold the cards of
-        each batch that was repaired.
+        each batch that was repaired. With `route` (`v1-e32-t43`) that route of the routing file answers
+        the stage's calls, and the cassettes are its own directory's (:meth:`landscape_cassettes`).
         """
         from debate_core.integrations.landscape.yaml_taxonomy_repository import YamlTaxonomyRepository
         from debate_core.integrations.local import FsEvidenceObjectStore
@@ -907,14 +920,16 @@ class ServiceContainer:
 
         mode = ModelMode.RECORD if record else ModelMode.REPLAY
         data_dir = self.settings.storage.data_dir
-        cassettes = self._landscape_cassette_dir()
+        cassettes = self._landscape_cassette_dir(route)
         return LandscapeModelEvaluationService(
             taxonomies=YamlTaxonomyRepository.load(config_dir),
             parsed_store=LocalParsedStore(data_dir),
             local=self._local_evidence(),
             suppression=self.local_suppression_list(),
             objects=FsEvidenceObjectStore(data_dir),
-            stage=lambda max_items: self.landscape_model_stage(mode, max_items, cassette_dir=cassettes),
+            stage=lambda max_items: self.landscape_model_stage(
+                mode, max_items, cassette_dir=cassettes, route=route
+            ),
             cassette_texts=lambda: _texts_under(cassettes / CLASSIFY_POSITION_PROMPT_ID),
             repair_cassette_texts=lambda: _texts_under(cassettes / REPAIR_PROMPT_ID),
         )
@@ -926,6 +941,7 @@ class ServiceContainer:
         *,
         cassette_dir: Path | None = None,
         parsed_dir: Path | None = None,
+        route: TaskClass | None = None,
     ) -> ModelClassificationStage:
         """The landscape's model stage (`v1-e32-t07`): the prompt registry, a router for `mode`, the guard.
 
@@ -933,7 +949,8 @@ class ServiceContainer:
         fake when `models.provider` is `fake`, and otherwise the record-and-replay router, over cassettes
         kept under `<data dir>/landscape/model-cassettes/` unless `cassette_dir` names others, with card
         texts from the parsed store under the data directory unless `parsed_dir` names a restored copy's
-        (`v1-e40-t17`). Real cards'
+        (`v1-e40-t17`). With `route` (`v1-e32-t43`) that route of the routing file answers the prompt's
+        `high_volume` calls, for the router and the budget guard alike. Real cards'
         prompts are never committed (the data-use policy's model condition 6), so a replay of them reads
         what this machine recorded. Record and live wrap the Bedrock router, imported only then. The
         prompts are read from this checkout's `prompts/`; an installed build has none, and is refused.
@@ -965,7 +982,8 @@ class ServiceContainer:
             repository_root=root,
             clock=_PortClock(self.clock()),
             usage_log=self.usage_log(),
-            cassette_dir=cassette_dir or self._landscape_cassette_dir(),
+            cassette_dir=cassette_dir or self._landscape_cassette_dir(route),
+            stand_ins={CLASSIFICATION_TASK_CLASS: route} if route is not None else None,
         )
         return ModelClassificationStage(
             StructuredOutputGuard(router, registry),
@@ -973,22 +991,24 @@ class ServiceContainer:
             max_items=max_items,
         )
 
-    def landscape_cassettes(self) -> CassetteDirectory:
+    def landscape_cassettes(self, route: TaskClass | None = None) -> CassetteDirectory:
         """The landscape model cassettes on this machine, for `landscape cassettes` (`v1-e32-t34`).
 
         The directory :meth:`landscape_model_stage` records to and replays from by default, and
         :meth:`landscape_evaluation` scans: `<data dir>/landscape/model-cassettes/`, from `DEBATE_ENV`'s
         `storage.data_dir`. Unlike the model stage it needs no `prompts/`, so the checkout that ran the
-        stage and an installed build read the same directory for the same environment.
+        stage and an installed build read the same directory for the same environment. With `route`
+        (`v1-e32-t43`), the directory an evaluation on that route records to:
+        `<data dir>/landscape/model-cassettes-<route>/`.
         """
         from debate_core.integrations.models.record_replay import CassetteDirectory
 
-        return CassetteDirectory(self._landscape_cassette_dir())
+        return CassetteDirectory(self._landscape_cassette_dir(route))
 
-    def _landscape_cassette_dir(self) -> Path:
+    def _landscape_cassette_dir(self, route: TaskClass | None = None) -> Path:
         from debate_core.integrations.landscape.classification_store import LANDSCAPE_DIRECTORY
 
-        return self.settings.storage.data_dir / LANDSCAPE_DIRECTORY / MODEL_CASSETTES_DIRECTORY
+        return self.settings.storage.data_dir / LANDSCAPE_DIRECTORY / cassette_directory_name(route)
 
     def usage_log(self) -> UsageLog:
         """This machine's model usage log, `<data dir>/usage/` (`v1-e05-t07`): what `usage` reads, and

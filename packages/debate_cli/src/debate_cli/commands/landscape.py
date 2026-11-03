@@ -162,7 +162,16 @@ naming either label is correct, and `data.breakdown.second_label` counts the car
 right on it; the confusion table and the label kinds stay on the first label. `--check-sample` reads the
 sample against the caselist's taxonomy as the evaluation would, refusing it as the evaluation would, and
 prints its rows by label kind and its second labels by kind. It reads no card, asks no model and records
-nothing, so it takes no `--breakdown` and no `--model-mode record` (`CHECK_SAMPLE_ASKS_NO_MODEL`).
+nothing, so it takes no `--breakdown`, no `--route` and no `--model-mode record`
+(`CHECK_SAMPLE_ASKS_NO_MODEL`).
+
+`--route <task class>` (`v1-e32-t43`) measures the same cards on another generative route of the routing
+file: that route's model and settings answer the prompt's `high_volume` calls, for the router and the
+budget guard alike, and the cassettes are recorded to and replayed and scanned from
+`<data dir>/landscape/model-cassettes-<route>/`, never the default directory, so a recording on one route
+never replaces or is served as another's. `data.route` names the route that answered. `landscape
+cassettes --route` lists and deletes that directory's cassettes. A route that answers no prompt
+(`embeddings`, `rerank`) is refused, exit `2` (`ROUTE_NOT_GENERATIVE`).
 """
 
 from __future__ import annotations
@@ -196,6 +205,7 @@ from debate_core.application.landscape_model_evaluation import (
     FormatEvaluation,
 )
 from debate_core.application.landscape_model_stage import (
+    CLASSIFICATION_TASK_CLASS,
     DEFAULT_MAX_MODEL_ITEMS,
     POLICY_QUESTION,
     model_use_gate,
@@ -230,6 +240,7 @@ from debate_core.arguments.landscape.evaluation_breakdown import (
 )
 from debate_core.arguments.landscape.model_stage import NameScan
 from debate_core.arguments.landscape.scan_hits import ScanHit, hit_counts, mark_counts
+from debate_core.domain.model_contracts import TaskClass
 from debate_core.domain.landscape_trends import LandscapeTrends, TrendLabel
 
 __all__ = [
@@ -433,6 +444,14 @@ def evaluate(
             "scan's hits, listed in this terminal only.",
         ),
     ] = False,
+    route: Annotated[
+        TaskClass | None,
+        typer.Option(
+            "--route",
+            help="Another generative route of the routing file answers the stage's calls, recorded to and "
+            "replayed from <data dir>/landscape/model-cassettes-<route>/, never the default directory.",
+        ),
+    ] = None,
     check_sample: Annotated[
         bool,
         typer.Option(
@@ -457,15 +476,15 @@ def evaluate(
             (sample, sample_rows),
             snapshot,
             config_dir,
-            alone=not breakdown and model_mode is EvaluationMode.REPLAY,
+            alone=not breakdown and route is None and model_mode is EvaluationMode.REPLAY,
         )
     if breakdown and model_mode is EvaluationMode.RECORD:
         _end(cli, ctx, _BREAKDOWN_RECORDS_NOTHING)
-    refusal = _policy_refusal() if model_mode is EvaluationMode.RECORD else None
+    refusal = _route_refusal(route) or (_policy_refusal() if model_mode is EvaluationMode.RECORD else None)
     if refusal is not None:
         _end(cli, ctx, refusal)
     service = cli.services.landscape_evaluation(
-        config_dir=landscape_config_dir(config_dir), record=model_mode is EvaluationMode.RECORD
+        config_dir=landscape_config_dir(config_dir), record=model_mode is EvaluationMode.RECORD, route=route
     )
     through = parse_snapshot_date(snapshot) if snapshot else None
     with sample.open(encoding="utf-8", newline="") as labels, sample_rows.open(encoding="utf-8") as rows:
@@ -477,7 +496,7 @@ def evaluate(
             if broken_down is not None
             else asyncio.run(service.evaluate(caselist, labels, rows, snapshot=through))
         )
-    payload = evaluation_summary(result)
+    payload = evaluation_summary(result, route=route)
     display = _evaluation_display(result)
     if broken_down is not None:
         payload["breakdown"] = breakdown_summary(broken_down)
@@ -498,10 +517,23 @@ _BREAKDOWN_RECORDS_NOTHING: Final = CommandFailure(
 )
 
 
+def _route_refusal(route: TaskClass | None) -> CommandFailure | None:
+    """`--route` names a route that answers a prompt: a generative task class (`v1-e32-t43`)."""
+    if route is None or route.is_generative:
+        return None
+    return CommandFailure(
+        code="ROUTE_NOT_GENERATIVE",
+        message=f"--route {route.value} names a route that answers no prompt; the classify prompt needs a "
+        "generative route",
+        exit_code=ExitCode.USAGE_ERROR,
+        hint="Name complex_reasoning, high_volume or deep_audit.",
+    )
+
+
 _CHECK_SAMPLE_ALONE: Final = CommandFailure(
     code="CHECK_SAMPLE_ASKS_NO_MODEL",
-    message="--check-sample reads the coach's sample and asks no model; it takes no --breakdown and no "
-    "--model-mode record",
+    message="--check-sample reads the coach's sample and asks no model; it takes no --breakdown, no --route "
+    "and no --model-mode record",
     exit_code=ExitCode.USAGE_ERROR,
     hint="Run --check-sample alone, then the evaluation without it.",
 )
@@ -756,10 +788,14 @@ def _hit_lines(result: EvaluationBreakdown) -> list[str]:
     return lines
 
 
-def evaluation_summary(result: FormatEvaluation) -> dict[str, JsonValue]:
-    """`landscape evaluate`'s `data`: counts, the accuracy against the bar, and the two scans' counts."""
+def evaluation_summary(result: FormatEvaluation, *, route: TaskClass | None = None) -> dict[str, JsonValue]:
+    """`landscape evaluate`'s `data`: counts, the accuracy against the bar, and the two scans' counts.
+
+    `route` is the task class whose route answered (`v1-e32-t43`): the prompt's own unless `--route`
+    named another."""
     return {
         "caselist": result.caselist,
+        "route": (route or CLASSIFICATION_TASK_CLASS).value,
         "event": result.event,
         "topic_id": result.topic_id,
         "taxonomy_version": result.taxonomy_version,

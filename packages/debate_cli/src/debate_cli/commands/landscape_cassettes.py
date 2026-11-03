@@ -22,6 +22,13 @@ annual purge runs it) or from an installed build it reads the same directory for
 Until the stage has recorded something there is no directory: the command says so, counts zero, and
 creates nothing.
 
+## Another route's cassettes
+
+`--route <task class>` (`v1-e32-t43`) reads `<data dir>/landscape/model-cassettes-<route>/` instead: where
+`landscape evaluate --route` records an evaluation on another route of the routing file, kept apart so it
+never replaces the default directory's. Everything below holds for it as for the default directory, and
+the purge and the removal run once more for each such directory on the machine.
+
 ## A dry run, then a confirmation
 
 Without `--delete` nothing changes. The command counts the caselist's cassettes by what a delete would
@@ -85,11 +92,19 @@ from debate_core.application.cassette_filing import (
 )
 from debate_core.application.errors import DomainError, error_code_of
 from debate_core.application.settings import Environment
+from debate_core.domain.model_contracts import TaskClass
 
-__all__ = ["DIRECTORY_SHOWN", "FOR_REMOVAL_FLAG", "cassettes", "cassettes_summary"]
+__all__ = ["DIRECTORY_SHOWN", "FOR_REMOVAL_FLAG", "cassettes", "cassettes_summary", "directory_shown"]
 
 DIRECTORY_SHOWN: Final = "<data dir>/landscape/model-cassettes/"
 """The directory as the output names it: where it is in every data directory, never this machine's path."""
+
+
+def directory_shown(route: TaskClass | None) -> str:
+    """The directory as the output names it, for `--route`'s value: :data:`DIRECTORY_SHOWN` without one."""
+    return DIRECTORY_SHOWN if route is None else f"<data dir>/landscape/model-cassettes-{route.value}/"
+
+
 FOR_REMOVAL_FLAG: Final = "--for-removal"
 
 
@@ -119,6 +134,14 @@ def cassettes(
     confirm_prod: Annotated[
         bool, typer.Option(CONFIRM_PROD_FLAG, help="Required to delete with DEBATE_ENV=prod.")
     ] = False,
+    route: Annotated[
+        TaskClass | None,
+        typer.Option(
+            "--route",
+            help="The cassettes an evaluation on this route recorded, in model-cassettes-<route>/ "
+            "(landscape evaluate --route).",
+        ),
+    ] = None,
     json_output: Annotated[
         bool, typer.Option("--json", help="Write one machine-readable JSON object to stdout.")
     ] = False,
@@ -132,8 +155,8 @@ def cassettes(
         _end(cli, ctx, _not_a_slug())
     if delete and environment is Environment.PROD and not confirm_prod:
         _end(cli, ctx, _prod_unconfirmed())
-    files = cli.services.landscape_cassettes()
-    found = files.root.is_dir()
+    files = cli.services.landscape_cassettes(route)
+    found, shown = files.root.is_dir(), directory_shown(route)
     try:
         if not delete:
             listed = caselist_cassettes(files, caselist)
@@ -144,26 +167,34 @@ def cassettes(
     except CassetteDeleteRefused as refused:
         _end(cli, ctx, _mismatch(refused, environment))
     except DomainError as error:
-        _end(cli, ctx, _unreadable(caselist, error))
+        _end(cli, ctx, _unreadable(caselist, error, shown))
     cli.output.success(
         command_name(ctx),
-        cassettes_summary(listed, environment, found=found, deleted=delete, for_removal=for_removal),
+        cassettes_summary(
+            listed, environment, found=found, deleted=delete, for_removal=for_removal, directory=shown
+        ),
         display=(
-            _removal_display(listed, environment, found=found, deleted=delete)
+            _removal_display(listed, environment, found=found, deleted=delete, directory=shown)
             if for_removal
-            else _display(listed, environment, found=found, deleted=delete)
+            else _display(listed, environment, found=found, deleted=delete, directory=shown)
         ),
     )
 
 
 def cassettes_summary(
-    listed: CaselistCassettes, environment: Environment, *, found: bool, deleted: bool, for_removal: bool
+    listed: CaselistCassettes,
+    environment: Environment,
+    *,
+    found: bool,
+    deleted: bool,
+    for_removal: bool,
+    directory: str = DIRECTORY_SHOWN,
 ) -> dict[str, JsonValue]:
     """The `--json` envelope's `data`: counts, never a cassette's name."""
     return {
         "caselist": listed.caselist,
         "environment": environment.value,
-        "directory": DIRECTORY_SHOWN,
+        "directory": directory,
         "directory_found": found,
         "for_removal": for_removal,
         "deleted": deleted,
@@ -228,12 +259,12 @@ def _mismatch(refused: CassetteDeleteRefused, environment: Environment) -> Comma
     )
 
 
-def _unreadable(caselist: str, error: DomainError) -> CommandFailure:
+def _unreadable(caselist: str, error: DomainError, directory: str) -> CommandFailure:
     """A cassette file that does not read, told by its error's code: the error's text names the file."""
     return CommandFailure(
         code="CASSETTE_UNREADABLE",
         message=(
-            f"a file in {DIRECTORY_SHOWN} does not read as a model cassette, so the cassettes of {caselist} "
+            f"a file in {directory} does not read as a model cassette, so the cassettes of {caselist} "
             "cannot be counted; nothing was changed"
         ),
         exit_code=ExitCode.DOMAIN_FAILURE,
@@ -247,16 +278,18 @@ def _unreadable(caselist: str, error: DomainError) -> CommandFailure:
 # ------------------------------------------------------------------------------------------------
 
 
-def _display(listed: CaselistCassettes, environment: Environment, *, found: bool, deleted: bool) -> str:
+def _display(
+    listed: CaselistCassettes, environment: Environment, *, found: bool, deleted: bool, directory: str
+) -> str:
     env = environment.value
     if not found:
         return (
             f"No model cassettes in {env}: the landscape model stage has recorded none on this machine "
-            f"(no {DIRECTORY_SHOWN} directory).\n" + ("Deleted nothing." if deleted else "Nothing to delete.")
+            f"(no {directory} directory).\n" + ("Deleted nothing." if deleted else "Nothing to delete.")
         )
     lines = [
         f"Model cassettes of {listed.caselist} in {env}, in the landscape model stage's directory, "
-        f"{DIRECTORY_SHOWN}:"
+        f"{directory}:"
     ]
     if deleted:
         lines += [
@@ -285,13 +318,13 @@ def _display(listed: CaselistCassettes, environment: Environment, *, found: bool
 
 
 def _removal_display(
-    listed: CaselistCassettes, environment: Environment, *, found: bool, deleted: bool
+    listed: CaselistCassettes, environment: Environment, *, found: bool, deleted: bool, directory: str
 ) -> str:
     if not found:
-        return _display(listed, environment, found=found, deleted=deleted)
+        return _display(listed, environment, found=found, deleted=deleted, directory=directory)
     lines = [
         f"Model cassettes of {listed.caselist} in {environment.value}, for a removal, in the landscape model "
-        f"stage's directory, {DIRECTORY_SHOWN}:"
+        f"stage's directory, {directory}:"
     ]
     if deleted:
         lines += [

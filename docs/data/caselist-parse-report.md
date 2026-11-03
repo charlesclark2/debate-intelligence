@@ -2207,9 +2207,10 @@ never by their text.
 
 **Status: counted (operator-run, 2026-11-02) and ruled (the PM, 2026-11-03).** Markers are left as
 they are (M1). An in-round marker is never read as a cite (M3), and N1 reads two strata of the lines
-between body paragraphs as body, from parser `2026.11.03-docx-9`. **N1's labelled evaluation shows
-EVIDENCE precision falling by one reading on the full tier, so the task stopped for the PM's
-ruling.** The store has not been re-parsed with `docx-9`.
+between body paragraphs as body, from parser `2026.11.03-docx-9`. N1's labelled evaluation first
+showed EVIDENCE precision falling by one reading. The coach, asked blind, called that paragraph the
+source's own text, and its label was corrected (#814). On `docx-9` precision then rises, 0.9708 →
+0.9715. The store has not been re-parsed with `docx-9`.
 
 **Versions.** The measurements below were taken on this task's branch while it carried
 `2026.11.03-docx-8`: M3 and N1 on `v1-e31-t31`'s `docx-7`. `v1-e31-t32` then merged first with its
@@ -2460,3 +2461,16 @@ That is 10,692 sentences and 3,213 long lines made body, 595 and 197 held back, 
 evidence text changed, in 2,554 files, and 0 other cards changed. The cards number 287,538, 5 fewer
 than on `docx-8`: t32's rule's cards above that vanish, 2 in hsld26 and 3 in hspolicy26, as its own
 table above records.
+
+**The gate after #814, on `docx-9`** (the operator, 2026-11-03: `uv run pytest tests/evals/parser -m
+"eval and slow"`, `1 passed in 4.19s`, and `run_parser_eval.py --tier both`, both gates PASSED):
+
+| Tier | EVIDENCE precision: `docx-8`, N1 off | `docx-9`, label before #814 | `docx-9`, after #814 | Right / wrong EVIDENCE readings after | Recall after |
+|---|---|---|---|---|---|
+| Full, 30 files | 0.9708 | 0.9705 | **0.9715** | 956 / 28 | 0.9062 |
+| PR subset, 6 files | 0.9433 | 0.9442 | 0.9442 | 186 / 11 | 0.9841 |
+
+No group's EVIDENCE precision is below its N1-off figure on either tier, and no file's card figures
+moved (123 of 135 boundaries on the full tier, 36 of 38 on the subset). With the coach's answer on
+paragraph 16 (s, by id) taken into its label, **N1 does not lower EVIDENCE precision**, and the PM's
+Option B, accepting a fall, was not needed.

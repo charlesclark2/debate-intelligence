@@ -112,7 +112,7 @@ from debate_core.domain.style_profile import (
     StyleProfile,
 )
 from debate_core.evidence.card_boundaries import is_cite_shaped
-from debate_core.evidence.in_round_markers import LinePlace, lines_read_as_nothing
+from debate_core.evidence.in_round_markers import DescribedLine, LinePlace, lines_read_as_nothing
 from debate_core.evidence.line_above_a_cite import BoldInPartShape, unbolded_part
 from debate_core.evidence.marker_lines import IN_ROUND_MARKER_FORMS, LineForm, is_an_in_round_marker
 from debate_core.evidence.style_classifier import (
@@ -149,7 +149,18 @@ from debate_core.integrations.docx_parser.runs import (
     read_paragraph,
 )
 
-__all__ = ["DOCX_PARSER_VERSION", "BodyParagraph", "DebateDocxParser", "body_paragraphs"]
+__all__ = [
+    "CITE_MARK_GUARD",
+    "CITE_SHAPE_GUARD",
+    "DOCX_PARSER_VERSION",
+    "LONG_LINE_BETWEEN_BODY_PARAGRAPHS",
+    "SENTENCE_BETWEEN_BODY_PARAGRAPHS",
+    "BetweenBodyParagraphs",
+    "BodyParagraph",
+    "DebateDocxParser",
+    "body_paragraphs",
+    "read_between_body_paragraphs",
+]
 
 #: Version recorded on every card this parser produces. Bumped whenever the output changes, so a
 #: stored card always names the reading that produced it. Bumped too when the only change is that
@@ -282,8 +293,8 @@ _CITE_IN_THE_TAG_STYLE: Final = "assembly-cite-in-the-tag-style-below-a-tag"
 
 #: The assembly's rules for a line read as nothing between two body paragraphs of one card (`v1-e31-t23`,
 #: the PM's ruling N1 of 2026-11-03), one for each stratum the coach's sample found the source's own text.
-_SENTENCE_BETWEEN_BODY_PARAGRAPHS: Final = "assembly-sentence-between-body-paragraphs"
-_LONG_LINE_BETWEEN_BODY_PARAGRAPHS: Final = "assembly-long-line-between-body-paragraphs"
+SENTENCE_BETWEEN_BODY_PARAGRAPHS: Final = "assembly-sentence-between-body-paragraphs"
+LONG_LINE_BETWEEN_BODY_PARAGRAPHS: Final = "assembly-long-line-between-body-paragraphs"
 
 #: The shortest and longest sentence N1 reads between body paragraphs, and the length past which any
 #: line is read: `v1-e31-t19`'s length bands, as the sample was drawn by them.
@@ -1125,18 +1136,9 @@ class DebateDocxParser:
         sections = assembled.sections
         lines: dict[int, str] = {}
         for position, line in lines_read_as_nothing(sections, assembled.cards):
-            if (
-                line.place is not LinePlace.BETWEEN_BODY_PARAGRAPHS
-                or line.form in _NEVER_BODY_BETWEEN_BODY_PARAGRAPHS
-            ):
-                continue
-            text = " ".join(sections[position].text.split())
-            if _A_CITE_MARK.search(text) or is_cite_shaped(text, self._profile):
-                continue
-            if len(text) > _LONGEST_SENTENCE_BETWEEN_BODY_PARAGRAPHS:
-                lines[position] = _LONG_LINE_BETWEEN_BODY_PARAGRAPHS
-            elif len(text) >= _SHORTEST_SENTENCE_BETWEEN_BODY_PARAGRAPHS and line.ends_a_sentence:
-                lines[position] = _SENTENCE_BETWEEN_BODY_PARAGRAPHS
+            reading = read_between_body_paragraphs(sections[position].text, line, self._profile)
+            if reading.is_body and reading.stratum is not None:
+                lines[position] = reading.stratum
         return lines
 
     def _left_by_the_long_cite_rule(self, text: str) -> bool:
@@ -1325,6 +1327,53 @@ class DebateDocxParser:
         # Taken from the cite as written: `Okonkwo ‘26` keeps its left quote (`v1-e31-t19`).
         short = full_cite[: match.end()].strip().rstrip(",")
         return short or None
+
+
+#: The two guards that hold a line of N1's strata as nothing, as the before-and-after counts name them.
+CITE_MARK_GUARD: Final = "a link, a web address, a DOI or accessed"
+CITE_SHAPE_GUARD: Final = "names its source at its head"
+
+
+@dataclass(frozen=True, slots=True)
+class BetweenBodyParagraphs:
+    """How N1 reads one line read as nothing (`v1-e31-t23`, the PM's ruling N1)."""
+
+    stratum: str | None
+    """The rule of the stratum the line is in, or None when it is in neither of N1's strata."""
+    held_by: str | None = None
+    """The guard that holds a line of a stratum as nothing, or None when nothing does."""
+
+    @property
+    def is_body(self) -> bool:
+        return self.stratum is not None and self.held_by is None
+
+
+def read_between_body_paragraphs(
+    text: str, line: DescribedLine, profile: StyleProfile
+) -> BetweenBodyParagraphs:
+    """N1's reading of a line read as nothing: its stratum, and the cite guard that holds it, if any.
+
+    `line` is the paragraph as :func:`~debate_core.evidence.in_round_markers.lines_read_as_nothing`
+    describes it, and `text` the paragraph's text. The parser reads the line as body when it is in a
+    stratum and no guard holds it (:meth:`DebateDocxParser._lines_between_body_paragraphs`).
+    """
+    if (
+        line.place is not LinePlace.BETWEEN_BODY_PARAGRAPHS
+        or line.form in _NEVER_BODY_BETWEEN_BODY_PARAGRAPHS
+    ):
+        return BetweenBodyParagraphs(stratum=None)
+    text = " ".join(text.split())
+    if len(text) > _LONGEST_SENTENCE_BETWEEN_BODY_PARAGRAPHS:
+        stratum = LONG_LINE_BETWEEN_BODY_PARAGRAPHS
+    elif len(text) >= _SHORTEST_SENTENCE_BETWEEN_BODY_PARAGRAPHS and line.ends_a_sentence:
+        stratum = SENTENCE_BETWEEN_BODY_PARAGRAPHS
+    else:
+        return BetweenBodyParagraphs(stratum=None)
+    if _A_CITE_MARK.search(text):
+        return BetweenBodyParagraphs(stratum=stratum, held_by=CITE_MARK_GUARD)
+    if is_cite_shaped(text, profile):
+        return BetweenBodyParagraphs(stratum=stratum, held_by=CITE_SHAPE_GUARD)
+    return BetweenBodyParagraphs(stratum=stratum)
 
 
 def _reread_as_body(section: _ReadSection, reason: str) -> _ReadSection:

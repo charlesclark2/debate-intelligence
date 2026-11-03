@@ -2437,3 +2437,15 @@ labelled something other than EVIDENCE:
 | File (keyed digest) | Paragraph | Label | N1's rule |
 |---|---|---|---|
 | `a8afd234413032f4723e0dc5b38ea90f332f738e3c8e21fcd84189664fd382dc` | 16 | OTHER | `assembly-sentence-between-body-paragraphs` |
+
+On the shipped `2026.11.03-docx-9` (t32's rule, M3 and N1 together), the operator's
+`uv run pytest tests/evals/parser -m "eval and slow"` and `run_parser_eval.py --tier both`, 2026-11-03,
+both gates PASSED. **The two reports equal the `docx-8` N1-on reports in every group, file and target
+on both tiers**: EVIDENCE 955 right and 29 wrong on the full tier (precision 0.9705, recall 0.9061),
+186 and 11 on the PR subset (0.9442, 0.9841), card boundaries 123 of 135 and 36 of 38, as before. t32's
+rule changes no labelled reading.
+
+**The coach's blind answer on paragraph 16** of `a8afd234…fd382dc` (Option A, the PM, 2026-11-03),
+shown in the terminal with the paragraph above and below and nothing else: **s**, the source's own
+text. Its label goes from OTHER to EVIDENCE in card 1 through the guide's label change, as its own
+pull request from `dev`, counted against the file's pre-label restored from git (`7a9c4ff`).

@@ -42,6 +42,7 @@ file is parsed as that version read it: the rule switched off. The last test rea
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date
 from typing import Any
 
@@ -53,15 +54,19 @@ from debate_core.domain.debate_files import ParsedDocument
 from debate_core.domain.style_profile import StructuralUnit
 from debate_core.evidence.line_above_a_cite import (
     Boldness,
+    FailingCondition,
     LineAboveACite,
     LineSize,
+    Place,
+    UnboldedPart,
     bold_lines_read_as_body_or_nothing,
     line_above,
     lines_above_cites,
     tally_bold_lines,
     tally_lines_above_cites,
+    unbolded_part,
 )
-from debate_core.evidence.style_classifier import ParagraphDescription
+from debate_core.evidence.style_classifier import ParagraphDescription, RunDescription
 from debate_core.integrations.docx_parser import DebateDocxParser
 from debate_core.integrations.docx_parser.runs import as_word_shows_it
 from debate_core.testing.docx_builder import W_NAMESPACE, build_docx, paragraph_xml, run_xml
@@ -339,3 +344,192 @@ def test_at_docx_6_the_lines_the_rule_takes_are_tags() -> None:
     assert {at for at, line in found.items() if line.line_unit is StructuralUnit.TAG} == {1, 4, 7, 19, 24}
     assert not any(line.the_proposed_rule_takes for line in found.values())
     assert {at for at, line in found.items() if line.is_the_shape} == {13, 16}
+
+
+# ------------------------------------------------------------------------------------------------
+# What keeps the rule from a line, and the unbolded part of a line bold in part (`v1-e31-t32`)
+# ------------------------------------------------------------------------------------------------
+
+#: A line the rule takes: every condition holds.
+TAKEN = LineAboveACite(
+    cite_rule="heuristic-cite-line-author-year",
+    cite_opens_a_card_with_no_tag=True,
+    line_unit=StructuralUnit.EVIDENCE,
+    line_rule="heuristic-marked-up-body-text",
+    line_read_by_a_heuristic=True,
+    boldness_as_word_shows_it=Boldness.ALL,
+    size_as_word_shows_it=LineSize.READING_SIZE_OR_LARGER,
+    no_longer_than_a_heading=True,
+)
+
+
+class TestFailingConditions:
+    def test_a_line_the_rule_takes_fails_none(self) -> None:
+        assert TAKEN.the_proposed_rule_takes
+        assert TAKEN.failing_conditions == ()
+
+    @pytest.mark.parametrize(
+        ("changed", "condition"),
+        [
+            ({"line_read_by_a_heuristic": False}, FailingCondition.READ_BY_AN_ASSEMBLY_RULE_OR_A_STYLE),
+            ({"line_behind_an_unmapped_style": True}, FailingCondition.BEHIND_AN_UNMAPPED_STYLE),
+            ({"boldness_as_word_shows_it": Boldness.NONE}, FailingCondition.NOT_BOLD),
+            ({"boldness_as_word_shows_it": Boldness.SOME}, FailingCondition.BOLD_IN_PART),
+            ({"no_longer_than_a_heading": False}, FailingCondition.LONGER_THAN_A_HEADING),
+            ({"size_as_word_shows_it": LineSize.NOT_STATED}, FailingCondition.NOT_AT_READING_SIZE),
+            ({"size_as_word_shows_it": LineSize.BELOW_READING_SIZE}, FailingCondition.NOT_AT_READING_SIZE),
+            ({"names_a_source_at_its_head": True}, FailingCondition.NAMES_A_SOURCE_AT_ITS_HEAD),
+            ({"highlighted": True}, FailingCondition.HIGHLIGHTED),
+            ({"in_an_evidence_style": True}, FailingCondition.IN_AN_EVIDENCE_STYLE),
+        ],
+    )
+    def test_each_condition_alone(self, changed: dict[str, Any], condition: FailingCondition) -> None:
+        assert replace(TAKEN, **changed).failing_conditions == (condition,)
+
+    def test_bold_as_the_reader_sees_it_is_not_asked(self) -> None:
+        assert replace(TAKEN, boldness=Boldness.NONE, size=LineSize.NOT_STATED).failing_conditions == ()
+
+    def test_every_condition_at_once_in_t24s_order(self) -> None:
+        line = replace(
+            TAKEN,
+            line_read_by_a_heuristic=False,
+            line_behind_an_unmapped_style=True,
+            boldness_as_word_shows_it=Boldness.SOME,
+            no_longer_than_a_heading=False,
+            size_as_word_shows_it=LineSize.BELOW_READING_SIZE,
+            names_a_source_at_its_head=True,
+            highlighted=True,
+            in_an_evidence_style=True,
+        )
+        assert line.failing_conditions == (
+            FailingCondition.READ_BY_AN_ASSEMBLY_RULE_OR_A_STYLE,
+            FailingCondition.BEHIND_AN_UNMAPPED_STYLE,
+            FailingCondition.BOLD_IN_PART,
+            FailingCondition.LONGER_THAN_A_HEADING,
+            FailingCondition.NOT_AT_READING_SIZE,
+            FailingCondition.NAMES_A_SOURCE_AT_ITS_HEAD,
+            FailingCondition.HIGHLIGHTED,
+            FailingCondition.IN_AN_EVIDENCE_STYLE,
+        )
+
+    def test_bold_in_part_comes_before_length(self) -> None:
+        line = replace(TAKEN, boldness_as_word_shows_it=Boldness.SOME, no_longer_than_a_heading=False)
+        assert line.failing_conditions[0] is FailingCondition.BOLD_IN_PART
+
+    def test_the_files_lines_fail_what_they_were_written_to(
+        self, parsed: tuple[_ReadingParser, ParsedDocument]
+    ) -> None:
+        found = lines(parsed, cite_rules=None)
+        assert {at: found[at].failing_conditions for at in (4, 7, 10, 13, 16, 19)} == {
+            4: (),
+            7: (),
+            10: (FailingCondition.NOT_BOLD,),
+            13: (FailingCondition.NAMES_A_SOURCE_AT_ITS_HEAD,),
+            16: (FailingCondition.LONGER_THAN_A_HEADING,),
+            19: (),
+        }
+
+    def test_a_run_in_the_underline_style_is_counted(self) -> None:
+        text = "Demand outruns new generation"
+        file = build_docx(
+            paragraph_xml(run_xml("First tag"), style="Heading4")
+            + bracketed_cite("Okonkwo 26")
+            + body("Alpha")
+            + paragraph_xml(run_xml(text, character_style="StyleUnderline"))
+            + bracketed_cite("Ferreira 25")
+            + body("Bravo"),
+            styles_xml=BOLD_DEFAULTS,
+        )
+        parser = _ReadingParser()
+        snapshot = date(2026, 11, 3)
+        source = SourceDocument(
+            sha256="b" * 64,
+            byte_size=len(file),
+            source_format=SourceFormat.DOCX,
+            origin=SourceOrigin.CASELIST_ARCHIVE,
+            caselist="hspf26",
+            first_seen_snapshot=snapshot,
+            last_seen_snapshot=snapshot,
+        )
+        document = parser.parse(file, source, source_path="invented.docx")
+        assert isinstance(document, ParsedDocument)
+        found = dict(
+            lines_above_cites(
+                parser.descriptions, document.sections, document.cards, parser.profile, shown=parser.shown
+            )
+        )
+        assert found[4].in_an_evidence_style
+        assert FailingCondition.IN_AN_EVIDENCE_STYLE in found[4].failing_conditions
+        assert not found[1].in_an_evidence_style
+
+
+def described(*runs: tuple[str, bool | None], paragraph_bold: bool | None = None) -> ParagraphDescription:
+    return ParagraphDescription(
+        runs=tuple(RunDescription(text=text, bold=bold) for text, bold in runs),
+        paragraph_bold=paragraph_bold,
+    )
+
+
+class TestTheUnboldedPart:
+    def test_a_trailing_date(self) -> None:
+        part = unbolded_part(described(("Reserve margins thin ", True), ("10/2/26", False)))
+        assert part == UnboldedPart(
+            characters=7, of=25, stretches=1, places=(Place.TAIL,), holds_letters=False, holds_digits=True
+        )
+        assert part is not None
+        assert part.described() == "7 of 25 characters, 1 stretch, at the tail; digits and punctuation only"
+
+    def test_a_leading_word_and_a_word_inside(self) -> None:
+        part = unbolded_part(
+            described(("AT: ", False), ("Reserve ", True), ("margins", False), (" thin", True))
+        )
+        assert part == UnboldedPart(
+            characters=10,
+            of=21,
+            stretches=2,
+            places=(Place.HEAD, Place.MIDDLE),
+            holds_letters=True,
+            holds_digits=False,
+        )
+        assert part is not None
+        assert part.described() == "10 of 21 characters, 2 stretches, at the head and the middle; letters"
+
+    def test_both_ends(self) -> None:
+        part = unbolded_part(described(("1. ", False), ("Margins thin", True), (" (26)", False)))
+        assert part is not None
+        assert (part.characters, part.of, part.stretches, part.places) == (
+            6,
+            17,
+            2,
+            (Place.HEAD, Place.TAIL),
+        )
+        assert part.described().endswith("at the head and the tail; digits and punctuation only")
+
+    def test_punctuation_only(self) -> None:
+        part = unbolded_part(described(("Margins thin", True), (" —", False)))
+        assert part is not None
+        assert part.described() == "1 of 12 characters, 1 stretch, at the tail; punctuation only"
+
+    def test_letters_and_digits(self) -> None:
+        part = unbolded_part(described(("Margins thin ", True), ("in 2026", False)))
+        assert part is not None
+        assert part.described().endswith("; letters and digits")
+
+    def test_spaces_decide_nothing(self) -> None:
+        assert unbolded_part(described(("Margins", True), ("   ", False), ("thin", True))) is None
+
+    def test_a_run_that_says_nothing_takes_the_paragraph_marks_bold(self) -> None:
+        assert unbolded_part(described(("Margins ", None), ("thin", True), paragraph_bold=True)) is None
+        part = unbolded_part(described(("Margins ", None), ("thin", True)))
+        assert part is not None
+        assert part.places == (Place.HEAD,)
+
+    def test_a_line_bold_throughout_or_not_at_all_has_none(self) -> None:
+        assert unbolded_part(described(("Margins thin", True))) is None
+        assert unbolded_part(described(("Margins thin", False))) is None
+        assert unbolded_part(described()) is None
+
+    def test_a_word_inside_is_the_middle(self) -> None:
+        part = unbolded_part(described(("Margins ", True), ("do not", False), (" thin", True)))
+        assert part is not None
+        assert (part.characters, part.stretches, part.places) == (5, 1, (Place.MIDDLE,))

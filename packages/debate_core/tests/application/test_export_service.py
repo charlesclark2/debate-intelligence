@@ -17,6 +17,7 @@ import hashlib
 import json
 from collections.abc import Iterator, Sequence
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, cast
 
 import pytest
@@ -31,6 +32,7 @@ from tests.fixtures.card.card_world import (
 )
 from tests.fixtures.verification.verification_world import run
 
+from debate_core.application.citation_service import format_cite
 from debate_core.application.errors import NotFound
 from debate_core.application.export_service import ExportRefused, ExportService
 from debate_core.application.ports.model_router import ModelRouter
@@ -45,9 +47,14 @@ from debate_core.domain.model_contracts import (
     ResolvedRoute,
     TaskClass,
 )
+from debate_core.evidence.card_rendering import CardToRender, CiteText, DocumentHeadings
+from debate_core.evidence.docx_renderer import render_cards_docx
+from debate_core.evidence.format_profile import FORMAT_PROFILES_DIRECTORY, load_format_profile
+from debate_core.evidence.manifest import CardManifest
 from debate_core.integrations.models.fake_router import FakeModelRouter
 from debate_core.testing.fakes.clock_and_ids import FixedClock
 
+REPOSITORY = Path(__file__).resolve().parents[4]
 GENERATED_AT = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
 NEWS_TEXT = "\n\n".join(paragraphs_of("news-article"))
 FIRST_SNAPSHOT = "0SNAP000000000000000000001"
@@ -335,3 +342,61 @@ def test_export_json_lets_a_missing_snapshot_record_propagate(world: ExportWorld
         world.export_json([elsewhere])
 
     assert (missing.value.entity, missing.value.key) == ("SourceSnapshot", "0AWAYSNAP00000000000000001")
+
+
+# --------------------------------------------------------------------------------------------
+# The auto-cut bundle (v1-e08-t06)
+# --------------------------------------------------------------------------------------------
+
+BUNDLE_BLOCK = "Politics DA — Link: health insurance"
+TODAYS_RENDER_SHA256 = {
+    "team-default": "52027feb308eb14c34af3a3e39d179cc8223deb426013be80762e281f2741d49",
+    "flow": "b258942ed96a675286aa6340c47a2d57c5368abb6e4d788022d7da7f31dab190",
+    "plain": "5ed859c69dc3de59346fa2a6b443726918b061e6dde9b70a33265aaba291b5df",
+}
+"""SHA-256 of `render_cards_docx`'s bytes for :func:`todays_render_inputs`, measured on the renderer as it
+was before v1-e08-t06 added the UNVERIFIED section (commit 07039c0), and committed before it changed."""
+
+
+def fixed_span_ids(card: Card, first: int) -> Card:
+    """`card` with span ids that are the same every run: a span's id is otherwise a fresh ULID."""
+    spans = tuple(
+        span.model_copy(update={"span_id": f"0SPAN{first + index:021d}"})
+        for index, span in enumerate(card.spans)
+    )
+    return card.evolve(spans=spans)
+
+
+def todays_render_inputs(world: ExportWorld) -> tuple[CardManifest, list[CardToRender]]:
+    """The committed news-article card, VERIFIED, then a second cut of it filed UNVERIFIED with its codes."""
+    verified = fixed_span_ids(world.cut(world.add_news_page()), 1)
+    unverified = fixed_span_ids(world.cut(world.add_news_page()), 10).evolve(
+        verification_status=VerificationStatus.UNVERIFIED
+    )
+    manifest = run(world.export.manifest([verified, unverified]))
+    return manifest, [
+        CardToRender(verified, CiteText(*_short_and_full(verified))),
+        CardToRender(
+            unverified, CiteText(*_short_and_full(unverified)), ("CITATION_UNVERIFIED", "TEXT_MISMATCH")
+        ),
+    ]
+
+
+def _short_and_full(card: Card) -> tuple[str, str]:
+    formatted = format_cite(card.citation, provenance_mode=card.provenance_mode)
+    return formatted.short_cite, formatted.full_cite
+
+
+@pytest.mark.parametrize("profile_name", sorted(TODAYS_RENDER_SHA256))
+def test_bundle_renderer_called_as_before_writes_todays_bytes(world: ExportWorld, profile_name: str) -> None:
+    manifest, items = todays_render_inputs(world)
+    profile = load_format_profile(profile_name, REPOSITORY / FORMAT_PROFILES_DIRECTORY)
+
+    data = render_cards_docx(
+        manifest,
+        items,
+        profile,
+        headings=DocumentHeadings(pocket="Politics", hat="Health", block=BUNDLE_BLOCK),
+    )
+
+    assert hashlib.sha256(data).hexdigest() == TODAYS_RENDER_SHA256[profile_name]

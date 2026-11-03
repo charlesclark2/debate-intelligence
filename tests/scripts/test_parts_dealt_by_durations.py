@@ -114,9 +114,9 @@ def test_a_file_with_no_record_counts_as_the_median_of_the_record(tmp_path: Path
 
 
 def test_files_the_record_names_and_the_selection_does_not_are_left_out(tmp_path: Path) -> None:
-    deal = dealt(tmp_path, ["a.py", "b.py"], 2, {"a.py": 3, "b.py": 2, "gone.py": 500})
+    deal = dealt(tmp_path, ["a.py", "b.py", "c.py"], 2, {"a.py": 3, "b.py": 2, "c.py": 2, "gone.py": 500})
 
-    assert deal.part_of_file == {"a.py": 1, "b.py": 2}
+    assert deal.part_of_file == {"a.py": 1, "b.py": 2, "c.py": 2}
 
 
 @pytest.mark.parametrize("parts", range(1, 9))
@@ -155,15 +155,28 @@ THREE_FILES = {"a.py": 3.0, "b.py": 2.0, "c.py": 1.0}
         ({"files": {"a.py": -1}}, "gives 'a.py' -1 seconds"),
         ({"files": {"a.py": True}}, "gives 'a.py' True seconds"),
         ({"files": {"a.py": "3"}}, "gives 'a.py' '3' seconds"),
-        ('{"format": 1, "recorded_at": "2026-11-02T10:00:00+00:00", "commit": "x", "files": {"a.py": NaN}}',
-         "gives 'a.py' nan seconds"),
+        (
+            '{"format": 1, "recorded_at": "2026-11-02T10:00:00+00:00", "commit": "x", '
+            '"files": {"a.py": NaN}}',
+            "gives 'a.py' nan seconds",
+        ),
         ({"files": THREE_FILES, "recorded_at": "yesterday"}, "says no time it was recorded"),
         ({"files": THREE_FILES, "recorded_at": "2026-11-02T10:00:00"}, "says no time it was recorded"),
         ({"files": THREE_FILES, "commit": 7}, "names no commit"),
     ],  # fmt: skip
     ids=[
-        "missing", "not-json", "another-format", "not-an-object", "no-files", "negative", "a-bool",
-        "a-string", "not-a-number", "no-time", "no-timezone", "no-commit",
+        "missing",
+        "not-json",
+        "another-format",
+        "not-an-object",
+        "no-files",
+        "negative",
+        "a-bool",
+        "a-string",
+        "not-a-number",
+        "no-time",
+        "no-timezone",
+        "no-commit",
     ],  # fmt: skip
 )
 def test_a_missing_or_unreadable_record_deals_test_by_test_and_says_why(
@@ -291,13 +304,17 @@ def test_combine_adds_every_parts_seconds_per_file_into_a_record_the_deal_reads(
 @pytest.mark.parametrize(
     ("parts", "named"),
     [
-        ({"test-durations-part-1-of-3.json": {"x.py": 1}, "test-durations-part-3-of-3.json": {"y.py": 1}},
-         "missing: 2"),
-        ({"test-durations-part-1-of-2.json": {"x.py": 1}, "test-durations-part-2-of-3.json": {"y.py": 1}},
-         "missing: 2"),
+        (
+            {"test-durations-part-1-of-3.json": {"x.py": 1}, "test-durations-part-3-of-3.json": {"y.py": 1}},
+            "missing: 2",
+        ),
+        (
+            {"test-durations-part-1-of-2.json": {"x.py": 1}, "test-durations-part-2-of-3.json": {"y.py": 1}},
+            "of different matrices",
+        ),
         ({"test-durations-part-1-of-1.json": "{not json"}, "test-durations-part-1-of-1.json"),
         ({"test-durations-part-1-of-1.json": {"x.py": -2}}, "test-durations-part-1-of-1.json"),
-        ({"test-durations-part-1-of-1.json": {}}, "no test"),
+        ({"test-durations-part-1-of-1.json": {}}, "no part timed a test"),
         ({"durations.json": {"x.py": 1}}, "durations.json"),
     ],  # fmt: skip
     ids=["a-part-missing", "another-matrix", "not-json", "negative", "nothing-timed", "no-part-in-the-name"],
@@ -319,7 +336,9 @@ def test_combine_writes_no_record_unless_every_part_timed_its_tests(
 
 MANY = {f"tests/many/test_file_{number}.py": "def test_it():\n    pass\n" for number in range(64)}
 A_REPOSITORY_OF_MANY_FILES = {**BASE, **MANY}
-EVERY_FILE_OF_IT = sorted(path for path in A_REPOSITORY_OF_MANY_FILES if path.rpartition("/")[2].startswith("test_"))
+EVERY_FILE_OF_IT = sorted(
+    path for path in A_REPOSITORY_OF_MANY_FILES if path.rpartition("/")[2].startswith("test_")
+)
 
 
 def a_push(tmp_path: Path) -> Path:
@@ -348,12 +367,16 @@ def test_the_whole_selection_is_dealt_by_durations_every_test_file_once(tmp_path
 
 
 @pytest.mark.parametrize("record", ["missing", "stale"])
-def test_a_missing_or_stale_record_still_runs_every_part_dealt_test_by_test(tmp_path: Path, record: str) -> None:
+def test_a_missing_or_stale_record_still_runs_every_part_dealt_test_by_test(
+    tmp_path: Path, record: str
+) -> None:
     """The PM's mutant: a pull request's run failing because the durations are missing."""
     root = a_push(tmp_path)
     path = tmp_path / "record.json"
     if record == "stale":
-        write_record(path, dict.fromkeys(EVERY_FILE_OF_IT, 1.0), recorded_at=datetime.now(UTC) - timedelta(days=30))
+        write_record(
+            path, dict.fromkeys(EVERY_FILE_OF_IT, 1.0), recorded_at=datetime.now(UTC) - timedelta(days=30)
+        )
 
     ran = run(root, tmp_path, event="push", ref_name="dev", durations=path)
 
@@ -404,8 +427,21 @@ def run_pytest_in(root: Path, *arguments: str) -> subprocess.CompletedProcess[st
     }
     environment["PYTHONPATH"] = str(PLUGINS)
     return subprocess.run(
-        [sys.executable, "-m", "pytest", "-c", str(root / "pytest.ini"), "--rootdir", str(root),
-         "-p", "run_in_parts", "-p", "no:cacheprovider", "--color=no", *arguments],  # fmt: skip
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-c",
+            str(root / "pytest.ini"),
+            "--rootdir",
+            str(root),
+            "-p",
+            "run_in_parts",
+            "-p",
+            "no:cacheprovider",
+            "--color=no",
+            *arguments,
+        ],  # fmt: skip
         cwd=root,
         env=environment,
         capture_output=True,
@@ -416,7 +452,9 @@ def run_pytest_in(root: Path, *arguments: str) -> subprocess.CompletedProcess[st
 
 
 def collected_in_part(root: Path, part: int, parts: int, deal: Path) -> list[str]:
-    completed = run_pytest_in(root, "--collect-only", "-q", "--part", f"{part}/{parts}", "--files-to-parts", str(deal))
+    completed = run_pytest_in(
+        root, "--collect-only", "-q", "--part", f"{part}/{parts}", "--files-to-parts", str(deal)
+    )
     assert completed.returncode in (0, 5), completed.stdout + completed.stderr
     return [line for line in completed.stdout.splitlines() if "::" in line]
 

@@ -319,7 +319,9 @@ def test_ci_reads_each_jobs_gates_from_the_jobs_own_condition() -> None:
     gated = {
         name: gates
         for name, job in every_job.items()
-        if name not in ("ci", "coverage") and (gates := gates_in_the_if(job)) is not None
+        # The jobs a pull request never runs, which `ci` does not need: the push run's coverage report
+        # and its test durations record (v1-e41-t17).
+        if name not in ("ci", "coverage", "test-durations") and (gates := gates_in_the_if(job)) is not None
     }
     assert gated["test"] == ["changes.python", f"{SELECTION_JOB}.run_parts"]
     assert gates_ci_reads() == gated

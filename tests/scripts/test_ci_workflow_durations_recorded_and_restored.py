@@ -52,7 +52,9 @@ SAVED_KEY = "test-durations-${{ github.run_id }}-${{ github.run_attempt }}"
 DEAL_FILE = "$RUNNER_TEMP/files-to-parts.json"
 DEAL_OUTPUT = f"${{{{ needs.{SELECTION_JOB}.outputs.files_to_parts }}}}"
 # What a push part times its tests into, and the artifact that carries it to `test-durations`.
-DURATIONS_OF_A_PART = "${{ runner.temp }}/test-durations-part-${{ matrix.part }}-of-${{ strategy.job-total }}.json"
+DURATIONS_OF_A_PART = (
+    "${{ runner.temp }}/test-durations-part-${{ matrix.part }}-of-${{ strategy.job-total }}.json"
+)
 ARTIFACT_OF_A_PART = "test-durations-part-${{ matrix.part }}-of-${{ strategy.job-total }}"
 ON_A_PUSH = "github.event_name == 'push'"
 ON_DEVS_PUSH = "github.event_name == 'push' && github.ref == 'refs/heads/dev'"
@@ -129,11 +131,11 @@ def test_only_the_selection_job_restores_the_record_and_no_part_reads_the_cache(
     # No step anywhere uses the cache action's combined form, which restores as well as saves.
     assert steps_using("actions/cache@") == []
     test = json.dumps(jobs()["test"])
-    for read in ("actions/cache", "test-durations/", "test-durations.json", "--durations"):
+    for read in ("actions/cache", "test-durations/", "test-durations.json"):
         assert read not in test, read
-    # What a part reads from test-selection: the files, the matrix and the deal, nothing else.
+    # What a part reads from test-selection: its gate, the matrix, the files and the deal, nothing else.
     assert sorted(set(re.findall(rf"needs\.{SELECTION_JOB}\.outputs\.(\w+)", test))) == [
-        "files_to_parts", "parts", "test_files",
+        "files_to_parts", "parts", "run_parts", "test_files",
     ]  # fmt: skip
 
 
@@ -194,13 +196,17 @@ def test_a_selection_script_that_fails_deals_test_by_test_and_says_so(tmp_path: 
 
 
 def write_down_the_deal_step() -> dict[str, Any]:
-    [step] = [step for step in jobs()["test"]["steps"] if DEAL_FILE in step.get("run", "") and " pytest " not in step["run"]]
+    [step] = [
+        step
+        for step in jobs()["test"]["steps"]
+        if DEAL_FILE in step.get("run", "") and " pytest " not in step["run"]
+    ]
     return step
 
 
 def run_the_write_down_step(tmp_path: Path, deal: str) -> str:
     runner_temp = tmp_path / "part-runner-temp"
-    runner_temp.mkdir()
+    runner_temp.mkdir(parents=True)
     completed = subprocess.run(
         ["bash", "--noprofile", "--norc", "-e", "-c", write_down_the_deal_step()["run"]],
         env={"PATH": os.environ["PATH"], "RUNNER_TEMP": str(runner_temp), "FILES_TO_PARTS": deal},
@@ -220,9 +226,10 @@ def test_every_part_writes_down_the_deal_and_hands_it_to_pytest() -> None:
     assert len(pytest_steps()) == 2
     for step in pytest_steps():
         assert steps.index(write_down) < steps.index(step)
-        words = shlex.split(step["run"])
-        assert words.count("--files-to-parts") == 1, step["run"]
-        assert words[words.index("--files-to-parts") + 1] == DEAL_FILE
+        # One word, `--files-to-parts=PATH`: pytest takes a separate word that names a file for a test
+        # path when it looks for its rootdir, and the runner's temp directory is outside the checkout,
+        # so a whole-selection part would find no pyproject.toml and no plugin to read the option.
+        assert shlex.split(step["run"]).count(f"--files-to-parts={DEAL_FILE}") == 1, step["run"]
 
 
 def test_the_deal_reaches_the_part_as_written_and_no_deal_as_an_empty_file(tmp_path: Path) -> None:
@@ -238,8 +245,8 @@ def test_the_deal_reaches_the_part_as_written_and_no_deal_as_an_empty_file(tmp_p
 
 def test_every_push_part_times_its_tests_and_no_pull_request_part_does() -> None:
     on_a_push = pytest_step(ON_A_PUSH)
-    words = shlex.split(on_a_push["run"])
-    assert words[words.index("--record-durations") + 1] == "$DURATIONS_FILE"
+    # One word, as `--files-to-parts=` is (test_every_part_writes_down_the_deal_and_hands_it_to_pytest).
+    assert shlex.split(on_a_push["run"]).count("--record-durations=$DURATIONS_FILE") == 1, on_a_push["run"]
     assert on_a_push["env"]["DURATIONS_FILE"] == DURATIONS_OF_A_PART
     assert "--record-durations" not in pytest_step("github.event_name != 'push'")["run"]
 
@@ -308,9 +315,14 @@ def test_the_parts_files_added_up_land_where_the_save_takes_the_record_from(tmp_
     """The combining step itself, over the files two push parts leave under the names their step
     gives them, downloaded where the download step puts them."""
     runner_temp = tmp_path / "runner-temp"
-    downloaded = Path(in_a_part(durations_job_step("actions/download-artifact@")["with"]["path"], 1, 1, runner_temp))
+    downloaded = Path(
+        in_a_part(durations_job_step("actions/download-artifact@")["with"]["path"], 1, 1, runner_temp)
+    )
     downloaded.mkdir(parents=True)
-    for part, seconds in ((1, {"tests/a/test_x.py": 2.5}), (2, {"tests/a/test_x.py": 1, "tests/test_y.py": 4})):
+    for part, seconds in (
+        (1, {"tests/a/test_x.py": 2.5}),
+        (2, {"tests/a/test_x.py": 1, "tests/test_y.py": 4}),
+    ):
         name = Path(in_a_part(DURATIONS_OF_A_PART, part, 2, runner_temp)).name
         (downloaded / name).write_text(json.dumps(seconds), encoding="utf-8")
     stand_ins = tmp_path / "bin"

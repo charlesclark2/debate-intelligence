@@ -2345,8 +2345,9 @@ this time. The store and its occurrence tables are unchanged.
 | Sources whose cards differ from the stored ones | 331 | 333 |
 
 The four lines read as a cite are read as nothing now: 2 before a body, under a tag or a cite; 1
-between two body paragraphs; 1 after a body. Two cards are gone: the card a marker divided is whole
-again (hsld26 or hspolicy26, one each way), and the `CITE_ONLY` card a marker made on its own is
-gone. The one marker-free body that spanned two clusters was that divided card: under `docx-8` none
+between two body paragraphs; 1 after a body. Two cards are gone, one in each of two caselists: in
+hspolicy26 the card a marker divided is whole again, and in hsld26 the `CITE_ONLY` card a marker
+made on its own is gone. hsld26's other two were cite lines under a tag, so its cards keep their
+number there. The one marker-free body that spanned two clusters was that divided card: under `docx-8` none
 does. The two lines read as a cite that remain are `marker-word-opens-a-short-line`, in the cite
 character style, which M3 leaves to the file's author.

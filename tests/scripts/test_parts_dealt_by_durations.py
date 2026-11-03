@@ -358,6 +358,7 @@ def test_the_whole_selection_is_dealt_by_durations_every_test_file_once(tmp_path
     ran = run(root, tmp_path, event="push", ref_name="dev", durations=record)
 
     assert ran.parts == list(range(1, 9))
+    assert ran.files_to_parts, ran.summary
     handed = json.loads(ran.files_to_parts)
     assert handed["parts"] == 8
     assert sorted(handed["part_of_file"]) == EVERY_FILE_OF_IT

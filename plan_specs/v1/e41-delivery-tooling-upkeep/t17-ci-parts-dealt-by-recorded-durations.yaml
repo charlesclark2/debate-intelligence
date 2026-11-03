@@ -54,7 +54,7 @@ spec:
         The slowest part's pytest step on three task pull requests after the merge is
         recorded by the PM against the three before it.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

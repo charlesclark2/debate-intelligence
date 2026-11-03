@@ -798,6 +798,13 @@ def test_the_bold_tag_plan_shows_each_line_as_word_shows_it_and_saves_counts_alo
     script._IN_ROUND_MARKER,  # pyright: ignore[reportPrivateUsage]
 )
 
+
+@pytest.fixture
+def before_n1(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The parser as the sample was drawn with, before the PM's ruling N1 read two strata as body."""
+    monkeypatch.setattr(DebateDocxParser, "_lines_between_body_paragraphs", lambda *_: {})
+
+
 #: One line for each of the plan's strata, written by hand. Every line from 4 to 12 stands between
 #: body paragraphs 3 and 13; 2 stands before the body, so it is drawn in no stratum.
 SHORT_LINES = (
@@ -844,6 +851,7 @@ def _short_lines_document() -> ParsedDocument:
     return document
 
 
+@pytest.mark.usefixtures("before_n1")
 def test_the_short_lines_file_reads_as_the_strata_assume() -> None:
     document = _short_lines_document()
     assert [section.text for section in document.sections][2:13:10] == [
@@ -856,6 +864,7 @@ def test_the_short_lines_file_reads_as_the_strata_assume() -> None:
     ]  # fmt: skip
 
 
+@pytest.mark.usefixtures("before_n1")
 def test_each_short_line_is_in_its_stratum_and_a_marker_only_in_the_markers() -> None:
     expected = [(stratum, position) for position, _, stratum in SHORT_LINES if stratum is not None]
     # The body paragraph holding a marker after its line break, the plain marker between two body
@@ -902,6 +911,7 @@ def short_lines_dir(tmp_path: Path) -> Path:
     return tmp_path
 
 
+@pytest.mark.usefixtures("before_n1")
 def test_the_short_lines_plan_prints_populations_and_the_seed_and_saves_counts_alone(
     short_lines_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -919,9 +929,9 @@ def test_the_short_lines_plan_prints_populations_and_the_seed_and_saves_counts_a
     assert re.fullmatch(r"  Asked 12; answered 12 in \d+ seconds\.", lines[1])
     assert len(asked) == 13, "y is no answer here, so it is asked again"
     assert asked[0] == script.WHOSE_LINE_PROMPT
-    populations = [
-        re.search(r"in the corpus (\d+); drew (\d+) of (\d+)", line).groups() for line in lines[2:]
-    ]  # type: ignore[union-attr]
+    found = [re.search(r"in the corpus (\d+); drew (\d+) of (\d+)", line) for line in lines[2:]]
+    populations = [match.groups() for match in found if match is not None]
+    assert len(populations) == len(lines[2:])
     assert populations == [
         ("1", "1", "8"), ("1", "1", "8"), ("1", "1", "8"), ("1", "1", "8"), ("1", "1", "8"), ("1", "1", "8"),
         ("2", "2", "8"), ("4", "4", "10"),
@@ -937,3 +947,19 @@ def test_the_short_lines_plan_prints_populations_and_the_seed_and_saves_counts_a
     for word in ("REGIONAL", "Grid", "Okonkwo", "Table omitted", "Marked", "10:42", CASELIST):
         assert word not in written, word
     assert not re.search(r"[0-9a-f]{12}", written)
+
+
+def test_after_n1_its_two_strata_are_body_and_out_of_the_sample() -> None:
+    """N1 reads a sentence of 41 to 200 characters (6) and a line over 200 (8) between two body
+    paragraphs as body, so neither is read as nothing any more."""
+    document = _short_lines_document()
+    assert [document.sections[position].unit.value for position in (6, 8)] == ["EVIDENCE", "EVIDENCE"]
+    found = script.short_line_strata(document)
+    assert {stratum for stratum, _ in found} == {
+        SHORT_IN_CAPITALS,
+        SHORT_NOT_IN_CAPITALS,
+        MIDDLING_NOT_ENDING,
+        OMISSION,
+        NUMBER_OR_PUNCTUATION,
+        MARKER,
+    }

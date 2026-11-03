@@ -63,6 +63,11 @@ classifier does not make, because each needs something the classifier cannot see
   reference in brackets inside a source's own text has the same shape, so the classifier cannot
   call it; under a tag or under the card's cite, before any body, it is the card's cite
   (`v1-e31-t12`).
+* **A line read as nothing between two body paragraphs of one card is body when the source wrote
+  it.** The classifier reads a plain line under 200 characters as nothing, and a card lost the
+  author's sentences that stood alone between two of its paragraphs. A sentence of 41 to 200
+  characters, or a line over 200, is body there; a short line, an omission note, a number, a
+  marker or a line carrying a link, a DOI or "accessed" is not (`v1-e31-t23`).
 
 ## Where a section path comes from
 
@@ -106,8 +111,10 @@ from debate_core.domain.style_profile import (
     StyleMatchSource,
     StyleProfile,
 )
+from debate_core.evidence.card_boundaries import is_cite_shaped
+from debate_core.evidence.in_round_markers import LinePlace, lines_read_as_nothing
 from debate_core.evidence.line_above_a_cite import BoldInPartShape, unbolded_part
-from debate_core.evidence.marker_lines import is_an_in_round_marker
+from debate_core.evidence.marker_lines import IN_ROUND_MARKER_FORMS, LineForm, is_an_in_round_marker
 from debate_core.evidence.style_classifier import (
     MAXIMUM_CITE_LINE_CHARACTERS,
     MAXIMUM_HEADING_CHARACTERS,
@@ -177,7 +184,8 @@ __all__ = ["DOCX_PARSER_VERSION", "BodyParagraph", "DebateDocxParser", "body_par
 #: shows it bold from its start with one unbolded stretch at its tail holding no digit.
 #: `2026.11.03-docx-8` (`v1-e31-t23`) reads no in-round marker as a cite: `Marked 10:42` is read as it
 #: would be had the cite-line pattern not taken `Marked 10` for a name and a year, so a card no longer
-#: ends at its marker.
+#: ends at its marker; and reads as body a line read as nothing between two body paragraphs of one card
+#: when it is over 200 characters, or 41 to 200 and ends a sentence, and carries no mark of a cite.
 DOCX_PARSER_VERSION: Final = "2026.11.03-docx-8"
 
 W_PARAGRAPH: Final = qualified_name("p")
@@ -271,6 +279,26 @@ _YEAR: Final = re.compile(r"\b(?:19|20)\d{2}\b|['’‘]\d{2}\b")
 _CITE_LINE_BELOW_A_CITE: Final = "assembly-cite-line-below-a-cite"
 _CITE_LINE_BELOW_A_TAG: Final = "assembly-cite-line-below-a-tag"
 _CITE_IN_THE_TAG_STYLE: Final = "assembly-cite-in-the-tag-style-below-a-tag"
+
+#: The assembly's rules for a line read as nothing between two body paragraphs of one card (`v1-e31-t23`,
+#: the PM's ruling N1 of 2026-11-03), one for each stratum the coach's sample found the source's own text.
+_SENTENCE_BETWEEN_BODY_PARAGRAPHS: Final = "assembly-sentence-between-body-paragraphs"
+_LONG_LINE_BETWEEN_BODY_PARAGRAPHS: Final = "assembly-long-line-between-body-paragraphs"
+
+#: The shortest and longest sentence N1 reads between body paragraphs, and the length past which any
+#: line is read: `v1-e31-t19`'s length bands, as the sample was drawn by them.
+_SHORTEST_SENTENCE_BETWEEN_BODY_PARAGRAPHS: Final = 41
+_LONGEST_SENTENCE_BETWEEN_BODY_PARAGRAPHS: Final = 200
+
+#: What marks a line between body paragraphs as part of a citation, not the source's text: a link, a
+#: web address, a DOI or the word "accessed". N1's cite guard (the PM, 2026-11-03).
+_A_CITE_MARK: Final = re.compile(r"https?://|www\.|\bdoi\b|\b10\.\d{4,9}/\S|\baccessed\b", re.IGNORECASE)
+
+#: The forms N1 never reads as body, at any length: a note by whoever cut the card in the sample, 8 of 8
+#: omission notes and 10 of 10 markers, and a number or punctuation alone, 3 of 8 the source's.
+_NEVER_BODY_BETWEEN_BODY_PARAGRAPHS: Final = frozenset(
+    {LineForm.OMISSION_NOTE, LineForm.NUMBER_ALONE, LineForm.NO_LETTER_OR_DIGIT, *IN_ROUND_MARKER_FORMS}
+)
 
 #: The assembly's demotion of a tag that has nothing under it.
 _DEMOTED_TAG_RULE: Final = "assembly-tag-without-cite-or-evidence"
@@ -842,6 +870,13 @@ class DebateDocxParser:
                 for position, section in enumerate(classified)
             ]
             assembled = self._assemble(self._demote_tags_with_no_card(classified), provenance)
+        between = self._lines_between_body_paragraphs(assembled)
+        if between:
+            classified = [
+                _reread_as_body(section, between[position]) if position in between else section
+                for position, section in enumerate(classified)
+            ]
+            assembled = self._assemble(self._demote_tags_with_no_card(classified), provenance)
 
         warnings = list(package.warnings)
         if package.forbidden_characters_replaced:
@@ -1061,6 +1096,48 @@ class DebateDocxParser:
                 if source is not None and source.start() <= NAME_AND_YEAR_AT_THE_HEAD_CHARACTERS:
                     cites[position] = _CITE_IN_THE_TAG_STYLE
         return cites
+
+    def _lines_between_body_paragraphs(self, assembled: _Assembled) -> dict[int, str]:
+        """The lines read as nothing between two body paragraphs of one card that are body, by position,
+        each with its rule (`v1-e31-t23`, the PM's ruling N1).
+
+        Between two body paragraphs means that the nearest paragraphs above and below that are not
+        blank, page furniture or read as nothing are both body of one card
+        (:func:`~debate_core.evidence.in_round_markers.lines_read_as_nothing`), the population
+        `v1-e31-t19` counted and the coach sampled. Two of its strata are body, each 15 of 16 the
+        source's own text in the sample, with no note by whoever cut the card:
+
+        * **a sentence** (`assembly-sentence-between-body-paragraphs`): 41 to 200 characters, ending
+          a sentence as the classifier's prose rule reads a sentence end. Past 200 such a line is
+          prose to the classifier already;
+        * **a long line** (`assembly-long-line-between-body-paragraphs`): over 200 characters, a
+          passage the cutter broke off mid-sentence.
+
+        Neither is an omission note, a number or punctuation alone, or an in-round marker
+        (:data:`_NEVER_BODY_BETWEEN_BODY_PARAGRAPHS`), and neither carries a link, a web address, a
+        DOI or the word "accessed" (:data:`_A_CITE_MARK`), or names its source at its head as a cite
+        does (:func:`~debate_core.evidence.card_boundaries.is_cite_shaped`): a citation's line, which
+        belongs to no body. The second guard is the session's, beyond the PM's three marks: `v1-e31-t12`
+        and `v1-e31-t21` pin such a line between two bodies as nothing, and the PM confirms or strikes
+        it. Lines of 40 characters or fewer and lines of 41 to 200 that end no sentence stay
+        nothing; the sample found them mixed (6 of 8 and 5 of 8), and left them for a larger one.
+        """
+        sections = assembled.sections
+        lines: dict[int, str] = {}
+        for position, line in lines_read_as_nothing(sections, assembled.cards):
+            if (
+                line.place is not LinePlace.BETWEEN_BODY_PARAGRAPHS
+                or line.form in _NEVER_BODY_BETWEEN_BODY_PARAGRAPHS
+            ):
+                continue
+            text = " ".join(sections[position].text.split())
+            if _A_CITE_MARK.search(text) or is_cite_shaped(text, self._profile):
+                continue
+            if len(text) > _LONGEST_SENTENCE_BETWEEN_BODY_PARAGRAPHS:
+                lines[position] = _LONG_LINE_BETWEEN_BODY_PARAGRAPHS
+            elif len(text) >= _SHORTEST_SENTENCE_BETWEEN_BODY_PARAGRAPHS and line.ends_a_sentence:
+                lines[position] = _SENTENCE_BETWEEN_BODY_PARAGRAPHS
+        return lines
 
     def _left_by_the_long_cite_rule(self, text: str) -> bool:
         """Whether a line is one the classifier's long-cite rule judged and left as it was.

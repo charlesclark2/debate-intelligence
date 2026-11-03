@@ -151,6 +151,26 @@ class TestWhatN1LeavesAlone:
         assert [card.evidence_text for card in document.cards] == [f"{A1}\n{A2}"]
         assert section_with(document, line).unit is StructuralUnit.OTHER
 
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "Professor Adaeze Okonkwo 26 reviewed the reserve margins of four regional markets.",
+            "[Okonkwo 26, "
+            + "invented professor of grid planning at an invented university, " * 4
+            + "on margins]",
+        ],
+        ids=["a sentence behind a title", "a long bracketed reference"],
+    )
+    def test_the_cite_guard_holds_a_line_that_names_its_source_at_its_head(
+        self, parser: DebateDocxParser, line: str
+    ) -> None:
+        """Not in the PM's ruling, which names a link, a DOI and "accessed": the session's addition,
+        a Deviation for the PM. A line naming its source at its head is `v1-e31-t21`'s cite shape, and
+        `v1-e31-t12` and `v1-e31-t21` pin such a line between bodies as nothing."""
+        document = between_two_bodies(parser, line)
+        assert [card.evidence_text for card in document.cards] == [f"{A1}\n{A2}"]
+        assert section_with(document, line).unit is StructuralUnit.OTHER
+
     def test_the_cite_guard_holds_a_long_line_too(self, parser: DebateDocxParser) -> None:
         line = LONG_LINE + " https://example.invalid/grid-review"
         document = between_two_bodies(parser, line)

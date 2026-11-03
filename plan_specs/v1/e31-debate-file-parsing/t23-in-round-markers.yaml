@@ -50,6 +50,26 @@ spec:
     with it. From the tallies the session proposes L-A, L-B, L-C or a narrower rule by
     stratum, with each one's evidence-integrity risk, and the PM rules before anything is
     built. ac4's evaluation is handed to the operator whenever anything changes.
+    (PM ruling 2026-11-03, on the coach's sample: seed 20261103, 66 items, by stratum in the
+    store / the source's own text / a note by whoever cut the card / something else: 40
+    characters or fewer in capitals 12,744 / 1 / 7 / 0; 40 or fewer not in capitals 15,611 / 6 /
+    2 / 0; 41 to 200 ending a sentence 10,863 / 7 / 0 / 1; 41 to 200 not ending one 7,803 / 5 / 1
+    / 2; over 200 3,834 / 8 / 0 / 0; omission notes 1,972 / 0 / 8 / 0; a number or punctuation
+    alone 362 / 3 / 1 / 4; in-round markers 156 / 0 / 10 / 0.) N1, folded into
+    2026.11.03-docx-8, one parser version for M3 and N1: a line read as nothing between two body
+    paragraphs of one card is body when it is over 200 characters, or 41 to 200 characters and
+    ends a sentence, and is not an omission note, a number or punctuation alone, or one of the
+    three marker forms. A cite guard holds such a line as nothing when it contains a URL, a DOI
+    or the word "accessed" in any case. Fixtures are shown failing first: one line of each
+    stratum, the five left-alone strata pinned as nothing, a real cite between bodies untouched,
+    and a 41 to 200 character line ending a sentence that carries a URL, between two bodies,
+    staying nothing. Before and after over the same 13,518 sources: the lines N1 makes body by
+    its two strata, the lines the cite guard holds back, and the cards whose evidence text
+    changed. ac4's gate: run_parser_eval.py --tier both with N1 on and off; if EVIDENCE
+    precision falls at all on either tier the session stops and reports, listing the lines N1
+    added that the labels call something other than EVIDENCE by file and paragraph id only.
+    Not in this task: the 40-or-fewer uncapitalised stratum and the 41 to 200 not-ending-a-
+    sentence stratum, follow-ups needing a larger sample before any rule.
   priority: 3
   constraints:
     packages: [debate_core.evidence, debate_core.integrations.docx_parser, packages/debate_core/tests, scripts, tests/fixtures/debate_files, docs/data]

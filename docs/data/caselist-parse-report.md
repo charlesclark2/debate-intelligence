@@ -2378,3 +2378,14 @@ they are the 53,208 of the `docx-8` count. The marker stratum counts every parag
 of the three forms, whatever it was read as, headings included, so it holds more than the 96 lines
 the count reads as body, nothing or a cite. Eight items a stratum tell "mostly" from "often wrong" and
 no finer: 8 of 8 is a share of at least 0.68 at 95% (Wilson), and 7 of 8 at least 0.53.
+
+### The PM's ruling on the lines between body paragraphs (2026-11-03)
+
+**N1**, folded into `2026.11.03-docx-8`, one parser version for M3 and N1. A line read as nothing
+between two body paragraphs of one card is body when it is over 200 characters, or 41 to 200
+characters and ends a sentence: the two strata the sample found 15 of 16 the source's own text, and
+none a cutter's note. It stays nothing when it is an omission note, a number or punctuation alone,
+or one of the three marker forms. A **cite guard** holds such a line as nothing when it contains a
+URL, a DOI or the word "accessed" in any case. The 40-or-fewer uncapitalised stratum (6 of 8) and the
+41-to-200 stratum that ends no sentence (5 of 8) are left as nothing, for a larger sample before any
+rule. The sample's table is above.

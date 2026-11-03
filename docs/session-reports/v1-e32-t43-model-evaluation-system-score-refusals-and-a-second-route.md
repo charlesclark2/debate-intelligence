@@ -325,7 +325,7 @@ recording and its replay agree on every count. Figures from the pasted JSON; cos
 | Refused `NO_POSITION` | 12 | 0 |
 | Below the threshold (model / pipeline) | 3 / 2 | 11 / 11 |
 | Coverage (pipeline) | 33 of 47, 0.702 | 36 of 47, 0.766 |
-| Wrong: same kind / other kind / placed though none | 6 / 6 / 1 | 3 / 4 / 2 |
+| Wrong: same kind / other kind / placed though none (model alone; pipeline) | 6 / 6 / 1; 6 / 5 / 1 | 3 / 4 / 2; the same |
 | The model's set (the 43 sent) | 17 of 29, 0.586 | 23 of 32, 0.719 |
 | Weighted to the strata | 0.491 | 0.718 |
 | Batches | 3 answered | 3 answered, none repaired |

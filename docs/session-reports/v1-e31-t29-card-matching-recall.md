@@ -6,30 +6,79 @@
 | Spec | [`plan_specs/v1/e31-debate-file-parsing/t29-card-matching-recall.yaml`](../../plan_specs/v1/e31-debate-file-parsing/t29-card-matching-recall.yaml) |
 | Epic / release | `v1-e31-debate-file-parsing` / `v1.1` |
 | Branch | `task/v1-e31-t29-card-matching-recall` |
-| Session status | IN PROGRESS: the counting and sampling tools are built and tested; the operator's counts and sample are next, then the PM's ruling, and only then any rule <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | WAITING FOR THE PM'S RULING: counts and sample done (ac1, ac3); no rule has changed; ac2 waits on the ruling <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
-The PM's order is count, sample, ruling, rule. This first part builds the counting and the
-sampling and hands both to the operator; no matching rule has changed.
+The PM's order is count, sample, ruling, rule. The counts and the sample are done and recorded in
+[the parse report](../data/caselist-parse-report.md#pairs-card-matching-keeps-apart-counted-and-sampled-v1-e31-t29).
+**No matching rule has changed**, and the relay below asks the PM to rule.
 
-* `debate_core.evidence.recall_shapes` finds the three shapes in a finished placement, in digests
-  and counts: (1) a body nine-tenths inside a body that holds neither of its ends; (2) two passages
-  of one holder sharing no text, with what their cards carry beside them (the same tag and cite or
-  not) and how many of the holder's words are in neither; (3) the holders `v1-e31-t20`'s witness
-  refusal sets aside, by length.
-* `scripts/count_matching_recall.py` counts them over each caselist's own `v4` table and saves
-  positions. `scripts/sample_matching_recall.py` draws 60 items, shows them only through `less -R`,
-  and writes a tally sheet with no text.
-* **t22's candidates mostly resolve, but the store has moved on** ([The old candidates](#the-old-candidates)):
-  so the operator regenerates them with t22's own tool, which also recounts the 216.
+* **(1) Nine-tenths inside a body holding neither end:** 67 bodies on the store. The operator
+  judged **8 of 20 different cards**, at least 3 of them from different articles or sources (two
+  articles quoting a third, one author's two articles). A rule on the bodies alone would join cards
+  a coach checked as different.
+* **(2) Trims sharing no text:** 17,758 pairs. Only **2** have a card of each with the same tag and
+  cite; the operator judged 1 one card, 1 two cards. 950 share the cite under other tags, not yet
+  sampled.
+* **The amendment, holders under 300 words:** 280 by t22's tool (was 216). The operator judged **4
+  of 20 two cards**, where t22's sample of all lengths found 0 of 20.
+* **Found in the code:** for (2) and the amendment, lifting the witness refusal alone recovers
+  nothing. Two trims sharing no text that both propose joining their holder in one round are both
+  refused, because they do not overlap each other (`_accepted_joins`, `v1-e31-t20`'s Decision 3).
+  Recovering either means relaxing "every two bodies in a cluster overlap", the card ruling itself.
 
-**For the PM, found in the code:** for shape (2) and the amendment, lifting the witness refusal on
-its own recovers nothing. Two trims sharing no text that both propose joining their holder in one
-round are both refused, because they do not overlap each other (`_accepted_joins`, `v1-e31-t20`'s
-Decision 3, which the PM agreed). Recovering either shape means relaxing "every two bodies in a
-cluster overlap" for the case the evidence picks out. That is a change to the card ruling itself,
-not to a limit.
+My recommendation is no rule for any of the three (relay, Q1 to Q3). If the PM agrees, ac2 has no
+recovered shape to build, and the task closes with tests pinning that each shape stays apart.
+
+### For the PM (paste-ready)
+
+```text
+v1-e31-t29: counts and sample are in; no rule has changed. Ruling needed before any rule (ac2).
+Record: docs/data/caselist-parse-report.md, "Pairs card matching keeps apart, counted and sampled".
+Store: the Mac's dev store as it stands (hsld26/hspf26/openev docx-6, hspolicy26 docx-7, all
+card-fingerprint-v4), without the cloud's weeks since the cutover.
+
+Found in the code first: for (2) and the amendment, lifting the witness refusal alone recovers
+nothing. Both trims would propose joining their holder in one round, and two joiners that do not
+overlap each other are both refused (t20's Decision 3). Recovering either needs "every two bodies
+in a cluster overlap" relaxed for that case: the card ruling itself, not a limit.
+
+Q1. Shape (1), nine-tenths inside a body holding neither of its ends: 67 bodies (20/27/18/2).
+    Sample 20: 12 same card, 8 different (22%-61%); at least 3 of the 8 are different articles or
+    sources quoting one passage, 2 are the same article making a different claim, 3 have no note.
+    Options: (a) no rule; the shape stays apart. (b) a rule on the bodies plus a further
+    condition, counted and sampled again.
+    Recommend (a): any body-only join would join pairs the operator checked as different
+    (forbidden), and 36 of the 67 holders also hold a passage the body does not overlap, so they
+    would be refused as witnesses anyway.
+
+Q2. Shape (2), two passages of one holder sharing no text: 17,758 pairs (1,996 holders).
+    Same tag and cite: 2 pairs in the whole store, judged 1 one card and 1 two cards. Same cite
+    under other tags: 950 (not sampled). End to end in the holder (Brannock's shape): 679.
+    Options: (a) no rule. (b) first sample 20 of the 950 same-cite pairs (about 10 minutes of the
+    operator's time), then rule. (c) relax the overlap rule for same tag and cite.
+    Recommend (a). Same tag and cite would recover at most 2 pairs, one judged two cards.
+    Brannock's rows carry the same tag and cite, so a cite rule must also tell them apart by
+    shape. (b) only helps if you are ready to relax the overlap rule at all.
+
+Q3. The amendment, holders under 300 words: 280 by t22's tool (was 216; 61/72/140/7).
+    Sample 20: 16 one card cut twice, 4 two cards (8%-42%); t22's 20 of all lengths were 0 two
+    cards. The refusal keeps 4,240 bodies out of every cluster holding them, 264 of them with a
+    smallest container under 300 words.
+    Options: (a) keep the refusal unchanged. (b) lift it for holders of 300 words or more.
+    Recommend (a): short holders are two cards about one time in five, t11's false join is that
+    shape, and (b) recovers nothing until the overlap rule changes.
+
+Q4. If Q1-Q3 are all (a): amend ac2 to "no shape is recovered; precision and Brannock's rows as
+    t20 left them", add tests pinning that each sampled shape stays apart (two articles quoting
+    one passage, a short holder of two cards, Brannock, t11's false join), no fingerprint-version
+    bump since no placement changes, and set the Goal Succeeded. Agree?
+
+Caveats: the sample ran before two display fixes, so the items showed short cites for a pair and a
+holder's cite cut at the screen edge (the operator's notes show the cites were read). A few
+"same card?" items were answered with the other question's keys and are read by their meaning.
+```
 
 ## Plan nodes
 
@@ -37,7 +86,7 @@ not to a limit.
 
 | Node | Status | Notes |
 |---|---|---|
-| | | |
+| `matching-recall`: Card matching recall | Counted and sampled; the rule waits on the PM | Tools built and tested (`41bf65f`, `bcac62f`, `b05fe2a`); the operator's counts and sample recorded (`8866d53`) |
 
 ## Acceptance criteria
 
@@ -45,11 +94,19 @@ not to a limit.
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| | | |
+| ac1: counts for (1) and (2) per caselist, and a sample through t21's sampler, before any rule changes | PASS | The operator's `scripts/count_matching_recall.py` (527 s, `exit 0`) and `scripts/sample_matching_recall.py --seed 20261103` (42 items) on 2026-11-03, recorded in `caselist-parse-report.md`. The sample shows items with t21's `render_pair` and t22's `_between`. (2)'s same-tag-and-cite stratum is the whole population, 2 pairs; the 950 same-cite pairs are not sampled (relay Q2). No rule has changed |
+| ac2: precision 1.000 on every labelled set, Brannock's rows apart, each recovered shape with fixtures shown failing first | NOT RUN | Waits on the PM's ruling. No matching rule has changed, so the labelled sets are as `v1-e31-t20` left them |
+| ac3 (PM amendment 2026-10-20): the holders under 300 words sampled and tallied before the refusal changes; any change keeps t11's false join apart | PASS (the tally); the change waits on the ruling | 20 of 280 holders drawn: 16 one card cut twice, 4 two cards. The refusal is unchanged |
+| Node: `uv run pytest packages/debate_core/tests/evidence -k "cluster or fingerprint"` | PASS | `182 passed` (with the new `test_recall_shapes.py`), 2026-11-03 |
 
 ## Files changed
 
-<!-- Group by package or directory; one line on why each group changed. -->
+- `packages/debate_core/src/debate_core/evidence/recall_shapes.py` (new): the three shapes in a
+  finished placement, in counts. `cluster_diagnosis.py`: `diagnose_cuts` takes an index already
+  built. Tests: `packages/debate_core/tests/evidence/test_recall_shapes.py`.
+- `scripts/count_matching_recall.py`, `scripts/sample_matching_recall.py` (new), with
+  `tests/scripts/test_count_matching_recall.py` and `tests/scripts/test_sample_matching_recall.py`.
+- `docs/data/caselist-parse-report.md`: the counts and the sample.
 
 ## Deviations from the spec
 
@@ -63,7 +120,21 @@ not to a limit.
 
 ## Decisions and assumptions
 
-<!-- Choices the spec left open, with the reasoning. -->
+1. **The store's own tables are counted, not a new placement.** Every table on the Mac is
+   `card-fingerprint-v4`, the rules the shapes are about, so no placement is made in memory.
+2. **Shape (1) is counted as the shape, not as divided pairs.** `v1-e31-t20`'s 13 were the pairs
+   `v3` joined and `v4` divided; no store holds a `v3` table of these cards, and re-placing them
+   under `v3` would take a rebuild's time for a figure that only says how many were once joined.
+3. **Shape (2) is two passages of one holder** (each at least a tenth of it): the bodies the
+   witness refusal works on. A pair two holders hold is counted once.
+4. **"The same tag and cite" compares the fingerprint normalization of the tag and the full cite**,
+   over every card of each body; an absent tag or cite matches nothing.
+5. **The answers are read by their meaning.** On a few "same card?" items the operator used the
+   other question's keys (`o`, `t`); one card cut twice is read as the same card and two cards as
+   different. On "cut twice?" items, `s` and `d` are read the same way.
+6. **The sample was answered under the first display** (short cites for a pair; a holder's cite cut
+   at the screen's edge). The operator's notes show the cites were read. A re-run under the
+   whole-cite display would draw the same 20 items of (1) again by the seed, but other holders.
 
 ## The old candidates
 
@@ -87,6 +158,10 @@ t22's own tool to a new file (Operator follow-ups, step 2); the old one stays.
 ## Operator follow-ups
 
 ### Before the PM's ruling: the counts and the sample
+
+*Run on 2026-11-03:* steps 2 to 4 ran, both counts `exit 0` (558 s and 527 s). The sample was
+answered on the sheet of the first run of step 4, before the display changes, so the blank-sheet
+step below was not needed. The figures are in the parse report.
 
 Every step reads the Mac's dev store in place and writes only to your home folder. The count
 files hold counts, the candidates files hold digests and paragraph indices, and the tally sheet

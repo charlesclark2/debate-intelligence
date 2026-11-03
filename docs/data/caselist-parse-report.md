@@ -2544,5 +2544,4 @@ What the operator's notes give as the reason for "different" (formatting and sou
   making a different claim, 2; no note, 3.
 * **(2):** the same evidence used to argue the author reaches another conclusion, 1.
 * **(3):** the same article making different claims, 2; different authors perhaps quoting each
-  other, 1; no note, 1. By the card ruling of 2026-10-16, two passages of one article are two cards
-  however they are argued.
+  other, 1; no note, 1.

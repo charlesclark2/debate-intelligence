@@ -1,4 +1,4 @@
-"""`landscape evaluate --route` and `landscape cassettes --route`, through the composition root (`v1-e32-t43`).
+"""`landscape evaluate --route` and `landscape cassettes --route`, through the container (`v1-e32-t43`).
 
 An evaluation on another route of the routing file records to `<data dir>/landscape/model-cassettes-<route>/`,
 never to the default directory, so it cannot replace the default route's cassettes or be served as theirs.

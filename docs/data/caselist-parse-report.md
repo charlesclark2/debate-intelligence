@@ -2205,7 +2205,10 @@ pattern id from
 [`in_round_markers.py`](../../packages/debate_core/src/debate_core/evidence/in_round_markers.py),
 never by their text.
 
-**Status: counted (operator-run, 2026-11-02); waiting on the PM's ruling. No rule has changed.**
+**Status: counted (operator-run, 2026-11-02) and ruled (the PM, 2026-11-03).** Markers are left as
+they are (M1). An in-round marker is never read as a cite (M3), from parser `2026.11.03-docx-8`.
+The lines between body paragraphs are waiting on the coach's sample (L-D). The store has not been
+re-parsed with `docx-8`; that re-parse rides `v1-e31-t32`'s.
 
 `scripts/count_in_round_markers.py`, run by the operator on 2026-11-02 in 661 seconds over the dev
 data directory on the operator's Mac. That store holds hspolicy26 at `2026.10.27-docx-7` and hsld26,
@@ -2323,3 +2326,27 @@ Of the lines between two body paragraphs, **19 are a marker form**. Reading ever
 would bring 19 markers into the evidence, and with them 1,972 omission notes, 175 page or footnote
 numbers and 187 lines of punctuation. It would change the evidence text, and so the exact
 fingerprint, of up to 19,121 cards.
+
+### Before and after M3, over the same sources (operator-run, 2026-11-03)
+
+`scripts/count_in_round_markers.py` again, from the task branch after M3 was built, over the same
+13,518 sources of the same store (902 seconds). Every line is counted on `2026.11.03-docx-8`'s parse
+this time. The store and its occurrence tables are unchanged.
+
+| | `docx-7` (2026-11-02) | `docx-8` (2026-11-03) |
+|---|---|---|
+| Cards | 287,545 | 287,543 |
+| Lines of the three marker forms read as a cite | 4 | 0 |
+| ... read as nothing | 58 | 62 |
+| ... read as body | 34 | 34 |
+| Lines read as nothing between two body paragraphs, in cards | 53,207 in 19,121 | 53,208 in 19,122 |
+| Bodies joined across a marker read as a cite (the three forms left out of matching) | 1 | 0 |
+| Marker-free bodies spanning two of today's clusters | 1 | 0 |
+| Sources whose cards differ from the stored ones | 331 | 333 |
+
+The four lines read as a cite are read as nothing now: 2 before a body, under a tag or a cite; 1
+between two body paragraphs; 1 after a body. Two cards are gone: the card a marker divided is whole
+again (hsld26 or hspolicy26, one each way), and the `CITE_ONLY` card a marker made on its own is
+gone. The one marker-free body that spanned two clusters was that divided card: under `docx-8` none
+does. The two lines read as a cite that remain are `marker-word-opens-a-short-line`, in the cite
+character style, which M3 leaves to the file's author.

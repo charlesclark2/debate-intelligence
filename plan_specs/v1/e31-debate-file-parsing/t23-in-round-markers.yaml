@@ -32,6 +32,24 @@ spec:
     marker question by default, so the two are ruled together: which lines are markers, which
     are body, and whether fingerprints ignore markers. It starts after v1-e31-t20 merges,
     because both change fingerprints.
+    (PM rulings 2026-11-03, on the counts of 2026-11-02 in docs/data/caselist-parse-report.md.)
+    Which forms are markers: the three clear forms only, marker-word-and-clock-time,
+    clock-time-alone and marker-word-alone. A short line opening with a marker word, and a
+    marker word and a time inside a longer line, are not. Markers (M1): left as they are, with
+    no recording beside the evidence and no fingerprint change; a new ParsedCard field,
+    card-fingerprint-v5 and a full re-parse would gain at most one cluster, and the
+    near-duplicate rules already join copies that differ by a short marker. M3, built in this
+    task: a marker word is never a cite's author name, so "Marked 10:42" reads as it would
+    otherwise, with a parser bump that rides v1-e31-t32's re-parse (whichever of the two merges
+    second takes the next parser version). The short plain lines between body paragraphs (L-D):
+    a blind sample first, by item number in the coach's terminal, with the question "the
+    source's own text, a note by whoever cut the card, or something else?", 8 items in each of
+    seven strata (40 characters or fewer in capitals; 40 or fewer not in capitals; 41 to 200
+    ending a sentence; 41 to 200 not ending one; over 200; omission notes; numbers and
+    punctuation) and 10 of the clear markers, the per-stratum populations and the seed printed
+    with it. From the tallies the session proposes L-A, L-B, L-C or a narrower rule by
+    stratum, with each one's evidence-integrity risk, and the PM rules before anything is
+    built. ac4's evaluation is handed to the operator whenever anything changes.
   priority: 3
   constraints:
     packages: [debate_core.evidence, debate_core.integrations.docx_parser, packages/debate_core/tests, scripts, tests/fixtures/debate_files, docs/data]

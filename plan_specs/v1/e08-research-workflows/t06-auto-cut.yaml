@@ -66,7 +66,7 @@ spec:
         The per-result report prints as a Rich table and is written as report.json beside the bundle;
         exit code is 0 only if N verified cards were produced.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

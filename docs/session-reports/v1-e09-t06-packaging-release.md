@@ -307,9 +307,39 @@ still says "Not yet released", so you write it before tagging.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-02
 
 **Notes:**
+
+A stable release can now only come from a validated promotion, checked from GitHub's own records
+rather than from anything a person can edit, and refused with a named reason at each step.
+
+1. **ac1, ac3's refusals and ac4 pass.** Real stable wheels are built offline and inspected (14);
+   the release checks refuse every case with a hand-written message (56); the trigger is pinned
+   against GitHub's documented filter examples, with eight non-stable shapes that never start it
+   (31). Red first (13 and 39 failing), and 22 of 23 mutants caught by assertions, the empty-epic
+   survivor closed with a test.
+2. **The PM read release.yml's triggers and permissions.** Stable tags only, `-dev.N` excluded by
+   name; `contents: read` at the top; the check job adds only `pull-requests`, `statuses` and
+   `actions` read; only the publish job holds `contents: write`, and it checks out nothing.
+3. **Questions answered:** (1) (a), the required CI push run on main, at no extra runner cost.
+   (2) (a), static versions with the consistency test. (3) (a), the PM amends the description to
+   drop the bedrock extra. (4) (b), the PM writes the Releases paragraph in
+   `docs/process/branching-and-environments.md` in the next batch, so this task isn't reopened.
+   **Confirmed:** wheels only, as the dev channel; a patch after a hotfix waits for the next
+   promotion; the CHANGELOG section is written at the release close-out, before the tag.
+4. **Deviations 1 to 7 accepted.** The extra refusals (an unwritten CHANGELOG section, a moved or
+   already-released tag) follow the forbidden list.
+5. **Watch on this pull request's `ci`:** the offline build needs uv inside `uv_build>=0.11.7,<0.12`,
+   and setup-uv installs the newest uv. If `test_wheel_contents.py` fails with that message, the PM
+   pins uv in ci.yml in the batch before this merges.
+6. **Operator follow-ups wait for v1.1's close-out:** the dry run on main, the tag, and ac2 on a clean
+   machine with scratch `UV_TOOL_*` directories. The tag ruleset (item 4) is the coach's choice.
+7. **Closing checks:** the affected set (69 files) reached 97% and its files then passed in three bounded
+   runs (2,027, 1,028 and 33); ruff, pyright, lint-imports, thin handlers, the links, the command
+   blocks and the specs are clean. actionlint runs in this pull request's `workflow-lint` job.
+8. **Merge:** `scripts/task pr --partial` once `ci` is green. The Goal stays `InProgress` until the
+   first stable release and ac2.

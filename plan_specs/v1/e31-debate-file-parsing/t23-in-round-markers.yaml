@@ -66,7 +66,7 @@ spec:
         built with synthetic fixtures shown failing first; the labelled evaluation's
         evidence precision does not fall.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -253,9 +253,39 @@ should then say "dealt whole test files … by the durations dev's push run reco
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-03
 
 **Notes:**
+
+Built carefully, and honest about what it will buy: the invented model says today's test-by-test
+dealing is already level, so the gain is module fixtures built once per file, which ac2 will measure.
+That matches the PM's own reading of the worksteal dispatches (parts within 1.10 of the mean).
+
+1. **ac1 passes.** Red first (68 failing against a skeleton with the real interfaces); 247 green with
+   the partition proof, which now proves every size from one to eight under a deal and under none; 20
+   mutants, the PM's seven among them, all caught at an assertion after two weak ones were redone.
+2. **The PM read the workflow.** Only `test-selection` restores the record, once, with
+   `continue-on-error`; the parts get the deal as an output and never read the cache; the record is
+   saved only on dev's push run, in a job that cannot fail it; pull requests into dev can restore
+   dev's cache and cannot write it. The one-word option forms, which the proof caught, are pinned by a
+   test.
+3. **Questions:** (1) (a), keep spreading a file heavier than a part's share; the numbers justify it
+   and it costs nothing in the plugin. (2) (a), dev only. (3) No; the costs page holds the method and
+   ac2 replaces the model.
+4. **Deviation accepted** (the spread rule, with its numbers). **Decisions accepted**, including both
+   stale measures, the complete-or-not-saved record, and the deal checked once at configuration.
+5. **Follow-ups the PM files:** parts collecting only their own files (the costs page's option 1, now
+   possible with a deal covering every collected file), with the module-fixture share measured
+   first from the push parts' `--durations=25` (E41, p2).
+6. **ac2 is the PM's:** dev's first push run after the merge saves the first record (from a test-by-test
+   run, the least level deal); the PM reads its `test-durations` job, then the slowest part of three
+   task pull requests against e06-t12's 255 s, e37-t03's 189 s and e07-t03's 280 s.
+7. **Closing checks:** the affected set is the whole selection (ci.yml), left to `ci` (agreement 10);
+   `tests/scripts` (2,542), the always-run list with the docs tests (556), ruff, pyright over the
+   configured tree and the changed files, lint-imports, thin handlers, the links and the specs are
+   clean. actionlint runs in this pull request's `workflow-lint` job.
+8. **Merge:** `scripts/task pr --partial` once `ci` is green. The Goal stays `InProgress` until the PM
+   records ac2.

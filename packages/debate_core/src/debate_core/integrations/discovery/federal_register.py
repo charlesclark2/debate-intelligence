@@ -58,7 +58,7 @@ from debate_core.application.ports.providers import Clock
 from debate_core.application.settings import HttpSettings, ProviderSettings, SearchProviderName
 from debate_core.domain.discovery import CandidateResult, DatePrecision, ProviderQuery, ProviderResponse
 from debate_core.domain.enums import SourceType
-from debate_core.integrations.discovery.http_failures import provider_error_for_status
+from debate_core.integrations.discovery.http_failures import provider_error_for_status, redirect_failure
 
 __all__ = [
     "DOCUMENT_TYPES",
@@ -180,14 +180,6 @@ def documents_parameters(query: ProviderQuery) -> list[tuple[str, str]]:
     return parameters
 
 
-def redirect_failure(provider: str, response: httpx.Response) -> ProviderUnavailable:
-    """A `3xx` as a refusal, naming only the host it points to, never its path, query or user."""
-    location: str = response.headers.get("location") or ""
-    host = urlsplit(location).hostname
-    where = f" to {host}" if host else ""
-    return ProviderUnavailable(provider, f"HTTP {response.status_code}: redirected{where}")
-
-
 class FederalRegisterProvider:
     """Searches the Federal Register's documents; a :class:`~debate_core.application.ports.SearchProvider`.
 
@@ -221,7 +213,7 @@ class FederalRegisterProvider:
         except httpx.HTTPError as error:
             raise ProviderUnavailable(self.name, f"transport failure: {type(error).__name__}") from error
         if 300 <= response.status_code < 400:
-            raise redirect_failure(self.name, response)
+            raise redirect_failure(self.name, response.status_code, response.headers)
         failure = provider_error_for_status(
             self.name, response.status_code, response.headers, now=self._clock.now()
         )

@@ -1454,8 +1454,9 @@ class ServiceContainer:
         build's adapters: OpenAlex (`openalex_factory`, `v1-e07-t02`), Crossref
         (`crossref_factory`, `v1-e07-t03`, not enabled by default), the publisher feeds
         (`feed_factory`), Google News's RSS search (`google_news_factory`, `v1-e07-t05`) and the
-        Federal Register (`federal_register_factory`, `v1-e07-t07`, not enabled by default, and asked
-        only by a search on a topic whose feed file lists it). The feed
+        Federal Register and GovInfo (`federal_register_factory` and `govinfo_factory`, `v1-e07-t07`,
+        neither enabled by default, each asked only by a search on a topic whose feed file lists it;
+        GovInfo without an api.data.gov key is reported not configured). The feed
         providers read the committed `config/feeds/` topics and keep a
         :class:`~debate_core.integrations.discovery.feed_cache.FileFeedCache` in `<data dir>/feeds/`.
         A name enabled with no adapter in this build is the registry's configuration error.
@@ -1475,6 +1476,7 @@ class ServiceContainer:
         from debate_core.integrations.discovery.feed_cache import FEED_CACHE_DIRECTORY, FileFeedCache
         from debate_core.integrations.discovery.feeds import feed_factory
         from debate_core.integrations.discovery.google_news_rss import google_news_factory
+        from debate_core.integrations.discovery.govinfo import govinfo_factory
         from debate_core.integrations.discovery.openalex import openalex_factory
         from debate_core.integrations.discovery.registry import ProviderRegistry
 
@@ -1508,6 +1510,9 @@ class ServiceContainer:
                 settings.http, version=version, clock=clock, topics=topics, cache=cache, transport=transport
             ),
             SearchProviderName.FEDERAL_REGISTER: federal_register_factory(
+                settings.http, version=version, clock=clock, transport=transport
+            ),
+            SearchProviderName.GOVINFO: govinfo_factory(
                 settings.http, version=version, clock=clock, transport=transport
             ),
         }

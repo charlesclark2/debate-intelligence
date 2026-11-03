@@ -88,6 +88,22 @@ FEDERAL_REGISTER_DOCUMENTS: Final = {
     ],
 }
 """One Federal Register document, written by hand with an invented number (v1-e07-t07)."""
+GOVINFO_HOST: Final = "api.govinfo.gov"
+GOVINFO_RESULTS: Final = {
+    "count": 1,
+    "offsetMark": None,
+    "results": [
+        {
+            "title": "Invented Hearing on Coverage for Rural Families",
+            "packageId": "CHRG-119shrg58999",
+            "governmentAuthor": ["Congress. Senate. Committee on Finance"],
+            "dateIssued": "2026-03",
+            "collectionCode": "CHRG",
+        }
+    ],
+}
+"""One GovInfo hearing, written by hand with an invented package id (v1-e07-t07)."""
+DATA_GOV_KEY: Final = "datagov-cli-K1"
 FEED_URL: Final = "https://news.example.org/rss/politics.xml"
 TOPICS: Final = (
     FeedConfig(
@@ -202,6 +218,8 @@ class RecordedProviders:
             return httpx.Response(200, json=CROSSREF_WORKS)
         if request.url.host == FEDERAL_REGISTER_HOST and request.url.path == "/api/v1/documents.json":
             return httpx.Response(200, json=FEDERAL_REGISTER_DOCUMENTS)
+        if request.url.host == GOVINFO_HOST and request.url.path == "/search" and request.method == "POST":
+            return httpx.Response(200, json=GOVINFO_RESULTS)
         if str(request.url) == FEED_URL or (self.any_feed_url and request.url.host != OPENALEX_HOST):
             if self.feed_status != 200:
                 return httpx.Response(self.feed_status)
@@ -750,6 +768,50 @@ def test_the_federal_register_is_asked_only_by_a_search_on_a_topic_that_lists_it
     )
     [request] = [request for request in seams.providers.requests if request.url.host == FEDERAL_REGISTER_HOST]
     assert request.url.params["conditions[term]"] == "health insurance"
+
+
+def test_govinfo_without_an_api_data_gov_key_is_reported_not_configured_on_its_topic(
+    seams: Seams, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seams.registry_override = False
+    monkeypatch.setenv("DEBATE_PROVIDERS__ENABLED", '["openalex", "govinfo"]')
+
+    without_topic = search("health insurance")
+    on_topic = search("health insurance", "--topic", "policy-2026-27-nhi")
+
+    assert without_topic.exit_code == ExitCode.OK, without_topic.output
+    assert footer(without_topic) == ["Providers: COMPLETE", "  openalex: ok, 3 results"]
+    assert on_topic.exit_code == ExitCode.SEARCH_PARTIAL, on_topic.output
+    assert footer(on_topic) == [
+        "Providers: PARTIAL, results may be missing",
+        "  openalex: ok, 3 results",
+        "  govinfo: not configured: no api.data.gov key (DEBATE_PROVIDERS__API_DATA_GOV_KEY)",
+    ]
+    assert GOVINFO_HOST not in {request.url.host for request in seams.providers.requests}
+
+
+def test_govinfo_with_its_key_is_asked_on_its_topic_with_the_key_in_a_header_only(
+    seams: Seams, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seams.registry_override = False
+    monkeypatch.setenv("DEBATE_PROVIDERS__ENABLED", '["govinfo"]')
+    monkeypatch.setenv("DEBATE_PROVIDERS__API_DATA_GOV_KEY", DATA_GOV_KEY)
+
+    result = search("health insurance", "--topic", "policy-2026-27-nhi", "--format", "json")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    data = envelope(result)["data"]
+    assert [(entry["provider"], entry["outcome"]) for entry in data["providers"]] == [("govinfo", "ok")]
+    [item] = data["results"]
+    assert (item["title"], item["publication"], item["published_at"]) == (
+        "Invented Hearing on Coverage for Rural Families",
+        "Congress. Senate. Committee on Finance",
+        "2026-03-01T00:00:00+00:00",
+    )
+    [request] = [request for request in seams.providers.requests if request.url.host == GOVINFO_HOST]
+    assert request.headers["x-api-key"] == DATA_GOV_KEY
+    assert DATA_GOV_KEY not in str(request.url)
+    assert DATA_GOV_KEY not in result.stdout + result.stderr
 
 
 def test_a_topic_alone_searches_the_query_as_typed(seams: Seams) -> None:

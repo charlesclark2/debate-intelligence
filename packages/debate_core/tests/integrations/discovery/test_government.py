@@ -67,6 +67,14 @@ from debate_core.integrations.discovery.feed_config import (
     search_topic_ids,
     topic_providers,
 )
+from debate_core.integrations.discovery.govinfo import (
+    BillNumber,
+    GovInfoProvider,
+    bill_number,
+    candidate_from_result,
+    govinfo_factory,
+    search_body,
+)
 from debate_core.integrations.discovery.redaction import PROTECTED_LOGGERS, logger
 from debate_core.integrations.discovery.registry import ProviderNotConfigured, ProviderRegistry
 from debate_core.testing.contracts.search_provider import (
@@ -980,3 +988,457 @@ def test_topic_providers_of_two_files_naming_one_topic_are_joined() -> None:
         "ld-test-topic": frozenset(),
     }
     assert search_topic_ids((first, second, plain)) == (NHI, "pf-test-topic", "ld-test-topic")
+
+
+# ============================================================================================
+# GovInfo
+# ============================================================================================
+
+GOVINFO_FIXTURES: Final = DISCOVERY_FIXTURES / "govinfo"
+
+
+def govinfo_recording(name: str) -> Recording:
+    return load_recording(GOVINFO_FIXTURES / f"{name}.json")
+
+
+def govinfo_over(
+    transport: httpx.AsyncBaseTransport, *, api_data_gov_key: str | None = API_DATA_GOV_KEY
+) -> GovInfoProvider:
+    """The adapter exactly as the registry builds it, over `transport`, with every credential set."""
+    factory = govinfo_factory(HttpSettings(), version=VERSION, clock=FixedClock(), transport=transport)
+    return factory(provider_settings(SearchProviderName.GOVINFO, api_data_gov_key=api_data_gov_key))
+
+
+def a_result(**fields: Any) -> dict[str, Any]:
+    """A minimal mappable GovInfo search result, with `fields` laid over it."""
+    return {"title": "A title", "packageId": "CRPT-119hrpt900", "collectionCode": "CRPT", **fields}
+
+
+SINGLE_PAYER: Final = ProviderQuery(
+    query="single payer health insurance",
+    filters=SearchFilters(
+        since=datetime(2025, 1, 1, tzinfo=UTC), until=datetime(2026, 6, 30, tzinfo=UTC), max_results=6
+    ),
+)
+GOVINFO_EMPTY: Final = httpx.Response(200, json={"count": 0, "offsetMark": None, "results": []})
+
+
+# --------------------------------------------------------------------------------------------
+# GovInfo: package ids and bills
+# --------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("package_id", "expected"),
+    [
+        ("BILLS-119hr4821ih", BillNumber(congress=119, bill_type="hr", number=4821, version="ih")),
+        ("BILLS-118hres55eh", BillNumber(congress=118, bill_type="hres", number=55, version="eh")),
+        ("BILLS-119sjres3enr", BillNumber(congress=119, bill_type="sjres", number=3, version="enr")),
+        ("BILLS-119hconres12rds", BillNumber(congress=119, bill_type="hconres", number=12, version="rds")),
+        ("BILLS-119s77is", BillNumber(congress=119, bill_type="s", number=77, version="is")),
+        ("BILLS-119sres1ats", BillNumber(congress=119, bill_type="sres", number=1, version="ats")),
+    ],
+)
+def test_govinfo_bill_congress_type_and_number_are_read_from_its_package_id(
+    package_id: str, expected: BillNumber
+) -> None:
+    assert bill_number(package_id) == expected
+
+
+@pytest.mark.parametrize(
+    "package_id",
+    [
+        "BILLS-s77is",
+        "BILLS-119xx12ih",
+        "BILLS-119hr",
+        "BILLS-119hr12",
+        "BILLS-119hr012ih",
+        "CRPT-119hrpt212",
+        "bills-119hr4821ih",
+        "",
+    ],
+    ids=[
+        "no-congress",
+        "unknown-type",
+        "no-number",
+        "no-version",
+        "zero-padded",
+        "not-a-bill",
+        "lower-case",
+        "empty",
+    ],
+)
+def test_govinfo_package_id_that_is_not_a_bills_one_gives_no_bill(package_id: str) -> None:
+    assert bill_number(package_id) is None
+
+
+def test_govinfo_bill_whose_package_id_names_no_bill_is_not_a_candidate() -> None:
+    assert candidate_from_result(a_result(packageId="BILLS-s77is", collectionCode="BILLS")) is None
+    kept = candidate_from_result(a_result(packageId="BILLS-119s77is", collectionCode="BILLS"))
+    assert kept is not None and kept.provider_record_id == "BILLS-119s77is"
+
+
+# --------------------------------------------------------------------------------------------
+# GovInfo: result to CandidateResult
+# --------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "result",
+    [
+        a_result(title=None),
+        a_result(title="  "),
+        a_result(packageId=None),
+        a_result(packageId=" "),
+        a_result(packageId="CRPT 119 hrpt 212"),
+        a_result(packageId="CRPT-119hrpt212/../x"),
+    ],
+    ids=["no-title", "blank-title", "no-package", "blank-package", "spaces-in-package", "path-in-package"],
+)
+def test_govinfo_result_without_a_title_or_a_package_id_is_not_a_candidate(result: dict[str, Any]) -> None:
+    assert candidate_from_result(result) is None
+
+
+def test_govinfo_url_is_the_package_details_page_and_no_api_link_is_offered() -> None:
+    result = a_result(download={"pdfLink": "https://api.govinfo.gov/packages/CRPT-119hrpt900/pdf"})
+    candidate = candidate_from_result(result)
+    assert candidate is not None
+    assert candidate.url == "https://www.govinfo.gov/app/details/CRPT-119hrpt900"
+    assert candidate.open_access_url is None
+    assert candidate.open_access is True
+    assert candidate.source_type is SourceType.GOVERNMENT
+    assert (candidate.provider, candidate.authors, candidate.snippet) == ("govinfo", (), None)
+
+
+@pytest.mark.parametrize(
+    ("date_issued", "published_at", "precision"),
+    [
+        ("2025-07-22", datetime(2025, 7, 22, tzinfo=UTC), DatePrecision.DAY),
+        ("2025-07-22T00:00:00Z", datetime(2025, 7, 22, tzinfo=UTC), DatePrecision.DAY),
+        ("2025-09", datetime(2025, 9, 1, tzinfo=UTC), DatePrecision.MONTH),
+        ("2026", datetime(2026, 1, 1, tzinfo=UTC), DatePrecision.YEAR),
+        ("2025-02-30", None, None),
+        ("2025-13", None, None),
+        ("0000", None, None),
+        ("July 2025", None, None),
+        ("2025-7-2", None, None),
+        (None, None, None),
+        (2025, None, None),
+    ],
+    ids=[
+        "day",
+        "timestamp",
+        "month",
+        "year",
+        "impossible-day",
+        "impossible-month",
+        "year-zero",
+        "prose",
+        "unpadded",
+        "missing",
+        "number",
+    ],
+)
+def test_govinfo_date_issued_keeps_its_precision_and_never_gains_a_day(
+    date_issued: object, published_at: datetime | None, precision: DatePrecision | None
+) -> None:
+    candidate = candidate_from_result(a_result(dateIssued=date_issued))
+    assert candidate is not None
+    assert (candidate.published_at, candidate.date_precision) == (published_at, precision)
+
+
+@pytest.mark.parametrize(
+    ("government_author", "expected"),
+    [
+        (["Congress. Senate. Committee on Finance"], "Congress. Senate. Committee on Finance"),
+        (
+            ["Congress. House. Committee on Ways and Means", " Congress. House "],
+            "Congress. House. Committee on Ways and Means; Congress. House",
+        ),
+        (["Congress. House", None, 3, "", "Congress. House"], "Congress. House"),
+        ([], None),
+        (None, None),
+        ("Congress. House", None),
+    ],
+    ids=["one", "two-in-order", "non-text-and-repeat", "empty", "missing", "not-a-list"],
+)
+def test_govinfo_issuing_committee_is_the_publication(
+    government_author: object, expected: str | None
+) -> None:
+    candidate = candidate_from_result(a_result(governmentAuthor=government_author))
+    assert candidate is not None
+    assert candidate.publication == expected
+
+
+# --------------------------------------------------------------------------------------------
+# GovInfo: the request
+# --------------------------------------------------------------------------------------------
+
+
+async def test_govinfo_request_is_one_post_with_the_key_in_its_header_and_nowhere_else() -> None:
+    seen: list[httpx.Request] = []
+    await govinfo_over(answering(GOVINFO_EMPTY, seen)).search(SINGLE_PAYER)
+
+    (request,) = seen
+    assert (request.method, str(request.url)) == ("POST", "https://api.govinfo.gov/search")
+    assert request.headers["x-api-key"] == API_DATA_GOV_KEY
+    assert request.headers["content-type"] == "application/json"
+    assert request.headers["user-agent"] == HttpSettings().user_agent(VERSION)
+    assert "cookie" not in request.headers
+    assert API_DATA_GOV_KEY not in str(request.url) + request.content.decode("utf-8")
+    assert CONTACT_EMAIL not in str(request.url) + request.content.decode("utf-8") + str(request.headers)
+
+
+async def test_govinfo_request_body_searches_the_four_collections_in_the_window_by_relevance() -> None:
+    seen: list[httpx.Request] = []
+    await govinfo_over(answering(GOVINFO_EMPTY, seen)).search(SINGLE_PAYER)
+
+    assert json.loads(seen[0].content) == {
+        "query": (
+            "(single payer health insurance) AND collection:(BILLS OR CRPT OR CHRG OR CPRT)"
+            " AND publishdate:range(2025-01-01,2026-06-30)"
+        ),
+        "pageSize": 6,
+        "offsetMark": "*",
+        "sorts": [{"field": "score", "sortOrder": "DESC"}],
+    }
+
+
+@pytest.mark.parametrize(
+    ("filters", "query"),
+    [
+        (SearchFilters(), "(medicaid) AND collection:(BILLS OR CRPT OR CHRG OR CPRT)"),
+        (
+            SearchFilters(since=datetime(2025, 1, 1, tzinfo=UTC)),
+            "(medicaid) AND collection:(BILLS OR CRPT OR CHRG OR CPRT) AND publishdate:range(2025-01-01,)",
+        ),
+        (
+            SearchFilters(until=datetime(2026, 6, 30, 23, 59, tzinfo=UTC)),
+            "(medicaid) AND collection:(BILLS OR CRPT OR CHRG OR CPRT) AND publishdate:range(,2026-06-30)",
+        ),
+        (
+            SearchFilters(since=datetime(2025, 1, 1, 22, tzinfo=timezone(timedelta(hours=-5)))),
+            "(medicaid) AND collection:(BILLS OR CRPT OR CHRG OR CPRT) AND publishdate:range(2025-01-02,)",
+        ),
+    ],
+    ids=["no-window", "since-only", "until-only", "utc-date"],
+)
+def test_govinfo_request_query_carries_the_window_it_was_given(filters: SearchFilters, query: str) -> None:
+    assert search_body(ProviderQuery(query="medicaid", filters=filters))["query"] == query
+
+
+@pytest.mark.parametrize(
+    ("typed", "searched"),
+    [
+        ("insurance (single:payer)", "insurance single payer"),
+        ('"single payer" mandate', '"single payer" mandate'),
+        ('"single payer mandate', "single payer mandate"),
+        ("collection:(USCOURTS) medicaid", "collection USCOURTS medicaid"),
+        ("  medicaid   expansion ", "medicaid expansion"),
+    ],
+    ids=["brackets-and-colon", "balanced-quotes-kept", "odd-quote-dropped", "field-syntax", "spaces"],
+)
+def test_govinfo_query_words_that_would_read_as_search_syntax_are_cleared(typed: str, searched: str) -> None:
+    query = str(search_body(ProviderQuery(query=typed))["query"])
+    assert query == f"({searched}) AND collection:(BILLS OR CRPT OR CHRG OR CPRT)"
+
+
+async def test_govinfo_query_of_nothing_but_search_syntax_asks_nothing_and_answers_empty() -> None:
+    seen: list[httpx.Request] = []
+    answer = await govinfo_over(answering(GOVINFO_EMPTY, seen)).search(ProviderQuery(query='():"'))
+    assert seen == []
+    assert answer.results == () and not answer.partial
+
+
+async def test_govinfo_answer_keeps_one_candidate_per_package_and_to_max_results() -> None:
+    results = [
+        a_result(packageId="CRPT-119hrpt901", granuleId="CRPT-119hrpt901-1"),
+        a_result(packageId="CRPT-119hrpt901", granuleId="CRPT-119hrpt901-2", title="Part two"),
+        a_result(packageId="CRPT-119hrpt902"),
+        a_result(packageId="CRPT-119hrpt903"),
+    ]
+    provider = govinfo_over(answering(httpx.Response(200, json={"count": 4, "results": results})))
+
+    answer = await provider.search(ProviderQuery(query="q", filters=SearchFilters(max_results=2)))
+
+    assert [(result.provider_record_id, result.title) for result in answer.results] == [
+        ("CRPT-119hrpt901", "A title"),
+        ("CRPT-119hrpt902", "A title"),
+    ]
+
+
+# --------------------------------------------------------------------------------------------
+# GovInfo: failures
+# --------------------------------------------------------------------------------------------
+
+
+async def test_govinfo_429_without_retry_after_is_rate_limited_for_no_stated_time() -> None:
+    replayed = replay_with_respx(govinfo_over)(govinfo_recording("search_rate_limited"))
+    with pytest.raises(ProviderRateLimited) as raised:
+        await replayed.provider.search(SINGLE_PAYER)
+    assert raised.value.retry_after_seconds is None
+
+
+async def test_govinfo_refused_key_is_unavailable_and_never_names_the_key() -> None:
+    replayed = replay_with_respx(govinfo_over)(govinfo_recording("search_key_refused"))
+    with pytest.raises(ProviderUnavailable) as raised:
+        await replayed.provider.search(SINGLE_PAYER)
+    assert str(raised.value) == "govinfo: HTTP 403: the provider refused the request"
+
+
+async def test_govinfo_redirect_is_unavailable_and_names_only_the_host() -> None:
+    redirect = httpx.Response(302, headers={"location": "https://api.data.gov/blocked?api_key=x"})
+    with pytest.raises(ProviderUnavailable) as raised:
+        await govinfo_over(answering(redirect)).search(SINGLE_PAYER)
+    assert str(raised.value) == "govinfo: HTTP 302: redirected to api.data.gov"
+
+
+async def test_govinfo_html_page_instead_of_json_is_unavailable() -> None:
+    replayed = replay_with_respx(govinfo_over)(govinfo_recording("search_malformed"))
+    with pytest.raises(ProviderUnavailable, match="unreadable response"):
+        await replayed.provider.search(SINGLE_PAYER)
+
+
+@pytest.mark.parametrize(
+    "document",
+    [[], "text", {"count": 3}, {"count": 1, "results": "x"}, {"count": 1, "results": [1]}, {"results": None}],
+    ids=[
+        "list",
+        "string",
+        "count-without-results",
+        "results-not-list",
+        "results-not-objects",
+        "results-null",
+    ],
+)
+async def test_govinfo_body_without_a_list_of_results_is_unavailable(document: object) -> None:
+    with pytest.raises(ProviderUnavailable, match="unreadable response"):
+        await govinfo_over(answering(httpx.Response(200, json=document))).search(SINGLE_PAYER)
+
+
+@pytest.mark.parametrize(
+    "error", [httpx.ReadTimeout("timed out"), httpx.ConnectError("refused")], ids=["timeout", "connection"]
+)
+async def test_govinfo_transport_failure_is_unavailable_and_keeps_its_cause(error: httpx.HTTPError) -> None:
+    def fail(request: httpx.Request) -> httpx.Response:
+        raise error
+
+    with pytest.raises(ProviderUnavailable) as raised:
+        await govinfo_over(httpx.MockTransport(fail)).search(SINGLE_PAYER)
+    assert raised.value.__cause__ is error
+
+
+# --------------------------------------------------------------------------------------------
+# GovInfo: wrapped by the registry, with and without the key
+# --------------------------------------------------------------------------------------------
+
+
+def govinfo_registry_over(
+    name: str, clock: FixedClock, **settings: Any
+) -> tuple[ProviderRegistry, ReplayedProvider]:
+    """The registry's govinfo provider, over the named recording, and the registry itself."""
+    registries: list[ProviderRegistry] = []
+
+    def build(transport: httpx.AsyncBaseTransport) -> SearchProvider:
+        factory = govinfo_factory(HttpSettings(), version=VERSION, clock=clock, transport=transport)
+        registry = ProviderRegistry.from_settings(
+            provider_settings(SearchProviderName.GOVINFO, **settings),
+            {SearchProviderName.GOVINFO: factory},
+            clock=clock,
+        )
+        registries.append(registry)
+        return registry.get("govinfo")
+
+    replayed = replay_with_respx(build)(govinfo_recording(name))
+    return registries[0], replayed
+
+
+@pytest.mark.parametrize("key", [None, "", "  "], ids=["unset", "empty", "spaces"])
+def test_govinfo_key_missing_builds_no_adapter_and_records_it_not_configured(key: str | None) -> None:
+    factory = govinfo_factory(
+        HttpSettings(), version=VERSION, clock=FixedClock(), transport=answering(GOVINFO_EMPTY)
+    )
+    registry = ProviderRegistry.from_settings(
+        provider_settings(SearchProviderName.GOVINFO, api_data_gov_key=key),
+        {SearchProviderName.GOVINFO: factory},
+        clock=FixedClock(),
+    )
+    assert (registry.names, dict(registry.not_configured)) == ((), {"govinfo": MISSING_KEY})
+
+
+async def test_govinfo_429_holds_it_for_the_cooldown_without_sending_again() -> None:
+    clock = FixedClock()
+    registry, replayed = govinfo_registry_over("search_rate_limited", clock, breaker_cooldown_seconds=600)
+    for _ in range(2):
+        with pytest.raises(ProviderRateLimited):
+            await replayed.provider.search(SINGLE_PAYER)
+    assert len(replayed.sent()) == 1
+    (health,) = registry.health()
+    assert health.rate_limited_until == clock.now() + timedelta(seconds=600)
+
+
+@pytest.mark.usefixtures("bare_protected_loggers")
+async def test_govinfo_key_reaches_no_log_line_error_repr_or_snapshot(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.DEBUG)
+    clock = FixedClock()
+    surfaces: list[str] = []
+    for name in (
+        "search_results",
+        "search_rate_limited",
+        "search_key_refused",
+        "search_unavailable",
+        "search_malformed",
+    ):
+        registry, replayed = govinfo_registry_over(name, clock)
+        surfaces += [repr(registry), repr(replayed.provider), repr(registry.providers[0])]
+        try:
+            await replayed.provider.search(SINGLE_PAYER)
+        except (ProviderRateLimited, ProviderUnavailable) as error:
+            surfaces += [str(error), repr(error), str(error.__cause__), repr(error.__cause__)]
+        surfaces += [snapshot.model_dump_json() for snapshot in registry.health()]
+    logger.warning("adapter state: key=%s", API_DATA_GOV_KEY)
+    surfaces += [record.getMessage() for record in caplog.records]
+
+    assert any("HTTP Request: POST https://api.govinfo.gov/search" in text for text in surfaces)
+    assert any("adapter state: key=***" in text for text in surfaces)
+    assert not [text for text in surfaces if API_DATA_GOV_KEY in text or CONTACT_EMAIL in text]
+
+
+def test_govinfo_repr_says_a_key_is_configured_and_nothing_more() -> None:
+    assert repr(govinfo_over(answering(GOVINFO_EMPTY))) == "GovInfoProvider(api_key=configured)"
+
+
+# --------------------------------------------------------------------------------------------
+# GovInfo: the shared contract kit
+# --------------------------------------------------------------------------------------------
+
+
+class TestGovInfoProvider(SearchProviderContract):
+    """GovInfo on the recorded single-payer search, with the api.data.gov key and a contact email."""
+
+    @pytest.fixture
+    def recording(self) -> Recording:
+        return govinfo_recording("search_results")
+
+    @pytest.fixture
+    def replay(self) -> ReplayFactory:
+        return replay_with_respx(govinfo_over)
+
+    @pytest.fixture
+    def secrets(self) -> tuple[str, ...]:
+        return (API_DATA_GOV_KEY, CONTACT_EMAIL)
+
+    @pytest.fixture
+    def max_attempts(self) -> int:
+        """The adapter never retries; a POST is sent once whatever this says."""
+        return 1
+
+
+class TestGovInfoProviderOnAnEmptyResult(TestGovInfoProvider):
+    """A search GovInfo has nothing for."""
+
+    @pytest.fixture
+    def recording(self) -> Recording:
+        return govinfo_recording("search_empty")

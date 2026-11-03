@@ -145,7 +145,7 @@ def test_the_restore_comes_before_the_choice_and_never_fails_the_job() -> None:
     steps = jobs()[SELECTION_JOB]["steps"]
     restore = restore_step()
     assert restore["uses"] == RESTORE_ACTION
-    assert restore["continue-on-error"] is True
+    assert restore.get("continue-on-error") is True
     assert restore["with"]["path"] == RECORD_DIRECTORY
     assert restore["with"]["restore-keys"] == SAVED_PREFIX
     assert "fail-on-cache-miss" not in restore["with"]
@@ -262,7 +262,7 @@ def test_every_push_part_keeps_its_durations_without_failing_for_them() -> None:
     ]
     assert upload["uses"] == UPLOAD_ARTIFACT
     assert upload["if"] == ON_A_PUSH
-    assert upload["continue-on-error"] is True
+    assert upload.get("continue-on-error") is True
     assert upload["with"] == {
         "name": ARTIFACT_OF_A_PART,
         "path": DURATIONS_OF_A_PART,
@@ -276,7 +276,7 @@ def test_the_record_is_made_on_devs_push_run_alone_and_never_fails_it() -> None:
     job = jobs()[DURATIONS_JOB]
     assert job.get("needs") in ("test", ["test"])
     assert job["if"] == ON_DEVS_PUSH
-    assert job["continue-on-error"] is True
+    assert job.get("continue-on-error") is True
     assert job["timeout-minutes"] <= 10
     # Not one of `ci`'s needs: a pull request never runs it.
     assert DURATIONS_JOB not in jobs()["ci"]["needs"]

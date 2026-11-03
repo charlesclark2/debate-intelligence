@@ -75,7 +75,10 @@ if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset i
 What to read:
 
 * `prompt_version` is `1.1.0`, and `labelled`, `found` and `asked` are 47.
-* `calls` is above zero, and `accuracy` against `target` 0.85 says whether it meets the bar. Exit 0
+* `calls` is above zero, and `pipeline.accuracy` against `target` 0.85 says whether it meets the bar
+  (`bar_reads` is `pipeline`, since `v1-e32-t43`): the cards as students meet them, the headings' sure
+  placements first and the model's answers for the rest. `model_alone` is the model's score on every
+  card, and the top-level `accuracy` is its. Exit 0
   means it meets the bar and every scan is clean; exit 1 `EVALUATION_BELOW_BAR` puts the same counts in
   `error.details`.
 * `scan`: `prompt_inputs`, `cassettes` and `repair_cassettes`, each with its `texts` and its counts of

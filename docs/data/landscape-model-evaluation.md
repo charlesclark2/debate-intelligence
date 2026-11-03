@@ -304,3 +304,68 @@ Recorded by the PM from the operator's JSON. Counts, ids and row numbers only.
 * **What follows:** the hold on live model runs stands. `v1-e32-t43` reports the pipeline's score,
   explains the refusals and measures a second route; `v1-e32-t44` keeps a marked hit from making a
   text unclean.
+
+## Scored as students meet it, and the refusals (`v1-e32-t43`, 2026-11-02)
+
+The evaluation now scores the labelled cards two ways. **The pipeline**, as students meet them: a card
+the headings place surely (a run never sends it) is scored on that placement, a card a coach's override
+decides argues no position is not counted, and every other card on the model's answer. **The model
+alone**: the model's answer for every card, the evaluation's score until now. The PM ruled that the bar
+reads the pipeline's accuracy over its counted cards; the model-alone score and the weighted accuracy
+stay reported. Coverage is the counted over the labelled.
+
+The session's replay of the 1.1.0 cassettes (`landscape evaluate --breakdown --json`, snapshot
+2026-10-20, taxonomy 1.5.0, 113 seconds, no model called):
+
+| | Model alone | Pipeline |
+|---|---|---|
+| Labelled | 47 | 47 |
+| Counted | 32 | 33 (4 by the headings, 29 by the model) |
+| Correct | 19 | 21 |
+| Accuracy (bar 0.85) | 0.594 | **0.636** |
+| Refused `NO_POSITION` | 12 | 12 |
+| Below the threshold | 3 | 2 |
+| Coverage | 32 of 47, 0.681 | 33 of 47, 0.702 |
+
+* The PM's estimate, 21 of 33, is the replay's figure. The headings place rows 11, 30, 31 and 59, each
+  naming the coach's label; the model answered row 31 with a position of another kind and row 11 below
+  the threshold, so the pipeline counts both rows right, and row 11 leaves the below-threshold count. No override decides a labelled card. The weighted accuracy stays 0.491 and the model's set 17
+  of 29.
+* Every refusal is of a card the headings leave unplaced, so the pipeline refuses the same 12.
+
+### What the 10 refused cards labelled with a position had in front of the model
+
+Counted through the evaluation's own scrubbed path; no tag, heading or label text is written here.
+
+| | Refused, labelled a position (10) | Answered, labelled a position (34) |
+|---|---|---|
+| No heading sent | 6 (5 under no heading in their file; 1 whose only heading the scrub emptied) | 8 |
+| A heading with a word of the label's position | 3 | 10 |
+| A word of the label's position in the headings or the tag | 3 | 22 |
+| A speech or structure heading (1NC, links, impacts) | 0 | 6 |
+| Under an answer heading | 1 | 1 |
+| Tag words, mean | 10.5 (all 10 have a tag) | 14.3 |
+| A cite sent | 6 | 22 |
+| Evidence under 300 words / 300 or more | 4 / 6 | 6 / 28 |
+| In a file read by the label's side | 8 | 25 |
+| Stage one: unplaced, sent | 10 | 30 |
+
+* **Headings decide most of it.** Of the 14 cards labelled a position that reached the model with no
+  heading, 6 were refused; of the 30 with one, 4.
+* **By batch and stratum**: batches 1 and 2 hold 5 each and batch 3 (7 cards) none; 6 are from the
+  at-or-above-threshold stratum, 2 just below, 2 far below. By the label's kind: advantage 4, da 2, cp 2,
+  k 2.
+* **The recorded answers**: each is `position_id` null, which the stage records as `NO_POSITION`. The
+  model's own confidence on them is 0.15 to 0.3 in batch 1 and 0.5 to 0.7 in batch 2 (one model, one
+  prompt). 6 of the 10 rationales call the card general or generic, and both cards labelled `generic-k`
+  have a rationale naming a kritik or philosophy, though the prompt sends a card of a kind no named
+  position fits to that kind's generic position.
+* **What the cards are**, read by kind of claim: 3 state an impact or framing claim and name no
+  position, 2 a link or internal link of an election story that names a party and no position, 2 a
+  kritik's claim, 2 a counterplan's solvency, and 1 is a numbered answer in a frontline. Prompt 1.1.0 asks for null for a general card, "framing, an impact with no story,
+  a claim about the round", when the model cannot tell which position it serves.
+* **What would answer them**, and the proposal, are in the session report. Answering all 10 rightly would
+  make the pipeline 31 of 43 (0.721): the refusals cost coverage, and the 12 wrong answers among the
+  pipeline's counted cards are what keep it under the bar (6 a neighbour of the same kind, 5 another kind,
+  1 placed though labelled none; 4 of the 5 other-kind answers are of cards in a file read by the side
+  opposite the label's).

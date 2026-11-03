@@ -58,6 +58,8 @@ What to read:
 * An evaluation under the bar exits `1` with `error.code` `EVALUATION_BELOW_BAR`, and the counts are in
   `error.details`; one that meets it exits `0`, with them in `data`. `labelled`, `found` and `asked` are
   above zero, and `breakdown.outcomes` sums to `labelled`.
+* The bar reads `pipeline.accuracy` (`v1-e32-t43`): the headings' sure placements first, the model's
+  answers for the rest. `model_alone` beside it, and the top-level `accuracy`, are the model's alone.
 * `MISSING_FIXTURE_ERROR` means a request differs from every recorded one: the labels, the snapshot, the
   parsed store or the taxonomy changed since the recording. No model was called. Stop; the evaluation
   has to be recorded again, which waits on the PM.

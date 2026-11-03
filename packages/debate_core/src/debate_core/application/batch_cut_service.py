@@ -24,7 +24,10 @@ the snapshot (`v1-e06-t02`). What is here is the walk:
    budget guard refuses (:class:`~debate_core.application.budget.BudgetExceededError`, the guard of
    `v1-e05-t07`, which `--max-cost` sets) ends the run: no candidate is started after it, the cuts
    already running finish, and their cards are kept. The candidate whose call was refused is a
-   BUDGET_EXCEEDED entry.
+   BUDGET_EXCEEDED entry. A call the guard cannot price while a limit is set
+   (:class:`~debate_core.application.budget.UnpricedModelError`) ends the run the same way, with that
+   code: an unpriced call is never let past `--max-cost` as though it were free, and the next cut's
+   would be refused too.
 
 ## What counts
 
@@ -61,7 +64,7 @@ from enum import StrEnum
 from typing import Final, Protocol
 
 from debate_core.application.article_fetch import SOURCE_NOT_ACCESSIBLE_CODE, FetchReport
-from debate_core.application.budget import BudgetExceededError
+from debate_core.application.budget import BudgetExceededError, UnpricedModelError
 from debate_core.application.card_types import CutRequest, CutResult
 from debate_core.application.errors import DomainError, error_code_of, reported_error_message
 from debate_core.application.federated_search_types import SearchOutcome
@@ -116,7 +119,8 @@ class BatchEntryStatus(StrEnum):
     FAILED = "FAILED"
     """The cut could not run (a provider that did not answer, a damaged snapshot): no card was saved."""
     BUDGET_EXCEEDED = "BUDGET_EXCEEDED"
-    """The budget guard refused one of its model calls, which ended the run: no card was saved."""
+    """The budget guard refused one of its model calls, over the limit or unpriced, which ended the run:
+    no card was saved."""
 
 
 class BatchStopReason(StrEnum):
@@ -390,13 +394,16 @@ class BatchCutService:
                     format_profile=request.format_profile,
                 )
             )
-        except BudgetExceededError as refused:
+        except (BudgetExceededError, UnpricedModelError) as refused:
+            code = (
+                BUDGET_EXCEEDED_CODE if isinstance(refused, BudgetExceededError) else error_code_of(refused)
+            )
             return _entry(
                 candidate,
                 BatchEntryStatus.BUDGET_EXCEEDED,
                 report,
                 reading,
-                reasons=(BUDGET_EXCEEDED_CODE,),
+                reasons=(code,),
                 details=(str(refused),),
             )
         except DomainError as failed:

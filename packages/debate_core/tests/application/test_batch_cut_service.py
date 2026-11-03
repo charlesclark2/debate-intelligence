@@ -38,7 +38,7 @@ from debate_core.application.batch_cut_service import (
     SpendTally,
     batch_need,
 )
-from debate_core.application.budget import BudgetExceededError
+from debate_core.application.budget import BudgetExceededError, UnpricedModelError
 from debate_core.application.card_types import CutRequest, CutResult
 from debate_core.application.errors import ProviderUnavailable
 from debate_core.application.query_expansion import ARGUMENT_TAXONOMY_PATH, load_argument_taxonomy
@@ -464,6 +464,19 @@ async def test_a_run_the_budget_stops_short_of_n_is_not_complete() -> None:
     ]
     assert report.stop_reason is BatchStopReason.BUDGET_EXCEEDED
     assert not report.complete
+
+
+async def test_a_call_the_guard_cannot_price_under_a_limit_ends_the_run_before_any_card() -> None:
+    unpriced = UnpricedModelError("model-without-a-price", "input and output price per 1K tokens")
+    run = batch(PAGES, EveryPageRouter(refuse={1: unpriced}))
+
+    report = await run.cut(["news", "think-tank", "journal"], wanted=2)
+
+    assert statuses(report) == [(1, BatchEntryStatus.BUDGET_EXCEEDED)]
+    assert report.entries[0].reasons == ("UNPRICED_MODEL_ERROR",)
+    assert report.stop_reason is BatchStopReason.BUDGET_EXCEEDED
+    assert run.fetching.asked == [url("news")]
+    assert report.verified == ()
 
 
 # ------------------------------------------------------------------------------------------------

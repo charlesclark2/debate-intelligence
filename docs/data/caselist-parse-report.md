@@ -2168,6 +2168,27 @@ as before. The rule is `assembly-bold-tag-with-an-unbolded-tail-above-a-cite`, u
 that its cards are counted apart from t24's; the parser is `2026.11.03-docx-8`. Spaces decide
 nothing, so a tail of two unbolded runs with a space between them is one stretch.
 
+### Before and after, over the Mac's store
+
+`scripts/diff_tag_above_a_cite.py --rule unbolded-tail`, by the operator, 2026-11-03, 218 seconds: the
+2,680 sources whose stored cards hold a card with no tag, each parsed as `docx-7` read it and as
+`docx-8` does.
+
+| | hsld26 | hspf26 | hspolicy26 | openev | Total |
+|---|---|---|---|---|---|
+| Lines the parser takes (all of the sampled shape, none beyond it) | 23 | 8 | 10 | 3 | **44** |
+| **Cards that gain a tag** | 23 | 8 | 10 | 3 | **44** |
+| **Cards above that lose their last body paragraph** | 8 | 4 | 3 | 0 | **15** |
+| Cards above that vanish: a tag whose only body was the taken line, now an analytic | 2 | 0 | 3 | 0 | 5 |
+| **Any other card that changed** | 0 | 0 | 0 | 0 | **0** |
+| Cards unchanged | 16,120 | 16,428 | 33,527 | 5,111 | 71,186 |
+
+### The labelled evaluation
+
+`scripts/run_parser_eval.py --tier both`, by the operator, 2026-11-03: every score the same as on
+`docx-7`, the gate passed on both tiers. Pr-subset TAG precision 0.974 and recall 0.884, CITE 0.973 and
+0.818; full tier TAG 0.976 and 0.942, CITE 0.989 and 0.837.
+
 ### The re-parse to `docx-8` (operator-run, after the merge)
 
 Not run yet. The cloud run's first run on an image carrying `2026.11.03-docx-8` parses every caselist

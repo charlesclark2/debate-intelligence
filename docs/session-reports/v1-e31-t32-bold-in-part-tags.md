@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e31-debate-file-parsing/t32-bold-in-part-tags.yaml`](../../plan_specs/v1/e31-debate-file-parsing/t32-bold-in-part-tags.yaml) |
 | Epic / release | `v1-e31-debate-file-parsing` / `v1.1` |
 | Branch | `task/v1-e31-t32-bold-in-part-tags` |
-| Session status | PARTIAL: sample, counts, ruling, rule, version bump, tests and checks are done. Still the operator's: the labelled evaluation, and the before-and-after over the Mac's store (both before the merge); the re-parse's counts (after the merge, ac2's second half). The Goal stays `InProgress` <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | PARTIAL: sample, counts, ruling, rule, version bump, tests, checks, the labelled evaluation and the before-and-after over the Mac's store are done. The re-parse's counts are the operator's after the merge (ac2's last part), so the Goal stays `InProgress` <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -23,13 +23,16 @@ when Word shows it bold throughout. This task looked at the lines it leaves that
 4. **The rule**: `assembly-bold-tag-with-an-unbolded-tail-above-a-cite`. The parser is
    `2026.11.03-docx-8`.
 
-**Not shown in the session, and why:**
+**What the operator measured before the merge** (2026-11-03):
 
-- **The labelled evaluation** (ac2's "tag precision does not fall") is the operator's block, as the
-  PM's note asks: [Operator follow-ups](#operator-follow-ups), step 1.
-- **The before-and-after over the store** (t24's check: only the cards next to a taken line change)
-  is built and tested, and is the operator's: step 2.
-- **The re-parse** is the cloud run's, after the merge (the PM's Q3): steps 3 to 6.
+- **The labelled evaluation is unchanged**, score for score against `docx-7`, and both gates passed.
+- **The before-and-after over the Mac's store:** the rule takes exactly the 44 lines of the sampled
+  shape. 44 cards gain a tag, 15 cards above lose their last body paragraph, and 5 cards above
+  vanish (a tag whose only body was the taken line, now an analytic, as t24's five were). **0 other
+  cards change.** [Before and after](#before-and-after)
+
+**Still to come:** the re-parse is the cloud run's, after the merge (the PM's Q3):
+[Operator follow-ups](#operator-follow-ups), steps 3 to 6.
 
 **For the PM first:**
 
@@ -43,7 +46,7 @@ when Word shows it bold throughout. This task looked at the lines it leaves that
 
 | Node | Status | Notes |
 |---|---|---|
-| `bold-in-part`: Bold-in-part tags | Done in the session; the evaluation, the store diff and the re-parse are the operator's | `uv run pytest packages/debate_core/tests/integrations/docx_parser` → `1018 passed, 2 xfailed in 5.77s` (the two xfails are t12's labelled leftovers) |
+| `bold-in-part`: Bold-in-part tags | Done; the re-parse is the operator's after the merge | `uv run pytest packages/debate_core/tests/integrations/docx_parser` → `1018 passed, 2 xfailed in 5.77s` (the two xfails are t12's labelled leftovers) |
 
 ## Acceptance criteria
 
@@ -51,7 +54,7 @@ when Word shows it bold throughout. This task looked at the lines it leaves that
 |---|---|---|
 | ac1: a sample of the bold-in-part stratum, with the operator's tallies and formatting descriptions (no card text), and a count of the narrower shape per caselist, sent to the PM before any rule | PASS | The operator ran `scripts/sample_cite_shapes.py --plan bold-in-part --seed 20261103` and filled the tally sheet, which holds no text. Then `scripts/count_bold_in_part_tags.py` (640 s, exit 0). Both are recorded in [`caselist-parse-report.md`](../data/caselist-parse-report.md#a-tag-bold-in-part-above-a-cite-v1-e31-t32), counts only. The relay went to the PM, and the PM ruled on 2026-11-03. Every rule commit (`d7b20ca` on) comes after the record (`91f5a57`). [The sample and the counts](#the-sample-and-the-counts) |
 | ac2, first part: a ruled rule is a synthetic fixture shown failing first | PASS | Red at `d7b20ca`: **5 failed, 35 passed**, the 5 taken cases failing by assertion. Green at `183a4ba`: 40 passed, then 41 with the version test. [Red then green](#red-then-green) |
-| ac2, second part: tag precision does not fall on the pr-subset | **NOT RUN** | The operator's block ([step 1](#operator-follow-ups)). Before, on `docx-7` (t31's report): pr-subset TAG precision 0.974, recall 0.884; full tier 0.976 and 0.942 |
+| ac2, second part: tag precision does not fall on the pr-subset | PASS | The operator, 2026-11-03, step 1: `run_parser_eval.py --tier both` → pr-subset 6 files and full 30 files, gate PASSED both. `pytest tests/evals/parser -m "eval and slow"` → `1 passed in 3.89s`. `docx-7` (t31's report) → `docx-8`: pr-subset TAG precision 0.974 → 0.9744, recall 0.884 → 0.8837; CITE 0.973 / 0.818 → 0.973 / 0.8182. Full tier: TAG 0.976 / 0.942 → 0.976 / 0.9422; CITE 0.989 / 0.837 → 0.989 / 0.8372. Unchanged. The gate notes the baseline is `docx-5`'s, as before. `--write-baseline` not passed |
 | ac2, third part: `parser_version` is bumped | PASS | `DOCX_PARSER_VERSION = "2026.11.03-docx-8"` (`183a4ba`). Pinned by `test_the_unbolded_tail_rule_came_with_docx_8_or_a_later_one`, the writer's pins, and the golden and provenance fixtures |
 | ac2, fourth part: the operator's re-parse written out | **NOT RUN** | After the merge, by the cloud run (the PM's Q3). The steps are [steps 3 to 6](#operator-follow-ups). The parse report's subsection is in place, marked not run |
 | Node: `uv run pytest packages/debate_core/tests/integrations/docx_parser` | PASS | `1018 passed, 2 xfailed in 5.77s` |
@@ -173,6 +176,31 @@ file was restored from `HEAD`, checked byte for byte, and `git status` was clean
 
 That is 35 runs (28 mutants and 7 re-runs), over the ~20 cap: three new modules each got their own.
 
+## Before and after
+
+`scripts/diff_tag_above_a_cite.py --rule unbolded-tail`, by the operator, 2026-11-03, 218 seconds, exit
+0. It read the 2,680 sources whose stored cards hold a card with no tag, each parsed as `docx-7` read
+it and as `docx-8` does.
+
+| | hsld26 | hspf26 | hspolicy26 | openev | Total |
+|---|---|---|---|---|---|
+| Lines of the sampled shape | 23 | 8 | 10 | 3 | 44 |
+| Lines the parser takes | 23 | 8 | 10 | 3 | **44** |
+| Taken beyond the sampled shape / left by a guard | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 |
+| Files with a line taken | 19 | 7 | 9 | 1 | 36 |
+| **Cards that gain a tag** | 23 | 8 | 10 | 3 | **44** |
+| **Cards above that lose their last body paragraph** | 8 | 4 | 3 | 0 | **15** |
+| Cards above that vanish: a tag whose only body was the taken line, now an analytic | 2 | 0 | 3 | 0 | 5 |
+| Cards whose heading path alone changes | 0 | 0 | 0 | 0 | 0 |
+| **Any other card that changed** | 0 | 0 | 0 | 0 | **0** |
+| Cards unchanged | 16,120 | 16,428 | 33,527 | 5,111 | 71,186 |
+
+- **The 5 that vanish** are t24's case, which the PM ruled a fix (t24's Deviation 6): the line
+  was the only "body" of the tag above.
+- **78 sources differ from their stored cards on the first reading** (21, 55, 0 and 2). This is
+  not this rule: it is `docx-7`'s cite rules against the three caselists stored under `docx-6`.
+  hspolicy26, stored under `docx-7`, has none.
+
 ## The checks run before this report
 
 | Command | Result |
@@ -258,6 +286,9 @@ everything on dev's push run.
 
 ### Before the merge
 
+Steps 1 and 2 were run by the operator on 2026-11-03; their results are above (ac2, and
+[Before and after](#before-and-after)). They are kept here as they were run.
+
 **1. The labelled evaluation** (expected runtime under a minute; reads the labelled files; writes
 only `build/eval-reports/`, which is gitignored; no `--write-baseline`). Where: your Mac, in this
 task's worktree:
@@ -341,7 +372,7 @@ only the installed build's version. Then run step 3's two blocks again, with `t3
 
 Expected in `~/t32-after-counts.json`, against `~/t32-before-counts.json`:
 
-- `tagged_by_unbolded_tail` 0 before. After, near step 2's `taken` in each caselist, a little higher
+- `tagged_by_unbolded_tail` 0 before. After, near step 2's `taken` (23, 8, 10, 3), a little higher
   by the cloud's weeks.
 - `no_tag` after equal to `no_tag` before less `tagged_by_unbolded_tail`, give or take the weeks
   imported between the two copies.

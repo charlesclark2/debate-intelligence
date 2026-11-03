@@ -89,10 +89,20 @@ class TestTheDividedCard:
         assert marker_line.unit is StructuralUnit.OTHER
         assert marker_line.match.rule_id == "heuristic-unclassified-paragraph"
 
-    def test_a_marker_in_bold_is_no_cite_either(self, parser: DebateDocxParser) -> None:
+    def test_a_marker_in_bold_is_no_cite_but_reads_as_any_bold_line_does(
+        self, parser: DebateDocxParser
+    ) -> None:
+        """M3 takes the cite reading away and nothing else: a short bold line at reading size is the
+        classifier's bold-heading tag, a marker or not, so the card below it still has the marker
+        for its tag. Not ruled on; left for the PM as a follow-up."""
         document = parse(parser, tag(TAG), plain(CITE), body(A1), plain("Marked 10:42", bold=True), body(A2))
-        assert [card.evidence_text for card in document.cards] == [f"{A1}\n{A2}"]
-        assert section_with(document, "Marked 10:42").unit is not StructuralUnit.CITE
+        marker_line = section_with(document, "Marked 10:42")
+        assert marker_line.unit is StructuralUnit.TAG
+        assert marker_line.match.rule_id == "heuristic-direct-formatted-heading-tag"
+        assert [(card.tag, card.evidence_text) for card in document.cards] == [
+            (TAG, A1),
+            ("Marked 10:42", A2),
+        ]
 
 
 class TestTheStrayCiteOnlyCard:

@@ -2,7 +2,9 @@
 
 The store holds four sources, each built as a `.docx` from invented text, and an occurrence table
 whose cluster ids are written by hand. Every expected count is written by hand from what the files
-and the table hold (working agreement 6):
+and the table hold (working agreement 6). The counts were taken on `2026.10.27-docx-7`, before
+`2026.11.03-docx-8` stopped reading an in-round marker as a cite (the PM's ruling M3), so the store is
+written and parsed again with that rule switched off; two tests read it as `docx-8` does.
 
 * **the marked file**: a tag and a cite (0, 1); body A1 (2); `marked 3:05`, plain, read as nothing
   between two body paragraphs (3); body A2 (4); `Marked 10:42`, plain, read as a cite that opens a
@@ -41,7 +43,9 @@ from debate_core.application.ports.parsed_store import (
 )
 from debate_core.domain.caselist import SourceDocument, SourceFormat, SourceOrigin
 from debate_core.domain.debate_files import ParsedDocument
+from debate_core.evidence import style_classifier
 from debate_core.evidence.fingerprints import fingerprint_text
+from debate_core.integrations.docx_parser import parser as parser_module
 from debate_core.integrations.docx_parser.parser import DOCX_PARSER_VERSION, DebateDocxParser
 from debate_core.integrations.local.parsed_store import LocalParsedStore
 from debate_core.testing.docx_builder import build_docx, paragraph_xml, run_xml
@@ -168,8 +172,26 @@ def write_blob(data_dir: Path, sha256: str, content: bytes) -> None:
     blob.write_bytes(content)
 
 
+def switch_off_the_marker_rule(patch: pytest.MonkeyPatch) -> None:
+    """Read as `docx-7` did: an in-round marker may be read as a cite. In this process only."""
+    for module in (style_classifier, parser_module):
+        patch.setattr(module, "is_an_in_round_marker", lambda _line: False)
+
+
 @pytest.fixture
-def data_dir(tmp_path: Path) -> Path:
+def data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """The store as `docx-7` wrote it, read again as `docx-7` reads it."""
+    switch_off_the_marker_rule(monkeypatch)
+    return write_the_store(tmp_path)
+
+
+@pytest.fixture
+def data_dir_at_docx_8(tmp_path: Path) -> Path:
+    """The store as `docx-8` writes it. Worker processes read it the same way."""
+    return write_the_store(tmp_path)
+
+
+def write_the_store(tmp_path: Path) -> Path:
     store = LocalParsedStore(tmp_path)
     common = {
         "caselist": CASELIST,
@@ -248,7 +270,8 @@ def run(data_dir: Path, capsys: pytest.CaptureFixture[str], *options: str) -> tu
     return json.loads(captured.out), captured.out + captured.err
 
 
-def test_the_files_read_as_the_counts_below_assume() -> None:
+def test_the_files_read_as_the_counts_below_assume(monkeypatch: pytest.MonkeyPatch) -> None:
+    switch_off_the_marker_rule(monkeypatch)
     marked = parsed(MARKED_FILE, MARKED)
     assert [card.tag for card in marked.cards] == ["Grid tag one", None, "Grid tag two"]
     assert [card.evidence_text for card in marked.cards] == [f"{A1}\n{A2}", A3, f"{B1}\nMARKED"]
@@ -402,9 +425,22 @@ def test_a_store_another_parser_wrote_is_counted_on_this_checkouts_parse(
     assert counts["cards"] == 7
 
 
-def test_worker_processes_give_the_counts_one_process_gives(
-    data_dir: Path, capsys: pytest.CaptureFixture[str]
+def test_at_docx_8_no_marker_is_read_as_a_cite(
+    data_dir_at_docx_8: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    output, _ = run(data_dir_at_docx_8, capsys)
+    counts = output["caselists"][CASELIST]
+    assert counts["lines"][CITE] == {NO_FORM: {ELSEWHERE: 6}}
+    assert counts["lines"][NOTHING][WORD_AND_TIME] == {BETWEEN: 2}
+    assert counts["cards"] == 6
+    # The marked file's first card is A1+A2+A3 now: the plain file's whole body, in its cluster.
+    assert counts["clusters"][WORD_AND_TIME] == clusters(0, 0, 0, 0)
+
+
+def test_worker_processes_give_the_counts_one_process_gives(
+    data_dir_at_docx_8: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_dir = data_dir_at_docx_8
     one, _ = run(data_dir, capsys)
     assert script.main(["--data-dir", str(data_dir), "--caselist", CASELIST, "--workers", "2"]) == 0
     two = json.loads(capsys.readouterr().out)

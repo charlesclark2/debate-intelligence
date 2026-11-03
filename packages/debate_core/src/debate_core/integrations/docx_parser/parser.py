@@ -107,6 +107,7 @@ from debate_core.domain.style_profile import (
     StyleProfile,
 )
 from debate_core.evidence.line_above_a_cite import BoldInPartShape, unbolded_part
+from debate_core.evidence.marker_lines import is_an_in_round_marker
 from debate_core.evidence.style_classifier import (
     MAXIMUM_CITE_LINE_CHARACTERS,
     MAXIMUM_HEADING_CHARACTERS,
@@ -174,6 +175,9 @@ __all__ = ["DOCX_PARSER_VERSION", "BodyParagraph", "DebateDocxParser", "body_par
 #: and a cite set in the tag style under a tag, each over a body; and reads no white highlight.
 #: `2026.11.03-docx-8` (`v1-e31-t32`) reads the same line above a cite as its card's tag when Word
 #: shows it bold from its start with one unbolded stretch at its tail holding no digit.
+#: `2026.11.03-docx-8` (`v1-e31-t23`) reads no in-round marker as a cite: `Marked 10:42` is read as it
+#: would be had the cite-line pattern not taken `Marked 10` for a name and a year, so a card no longer
+#: ends at its marker.
 DOCX_PARSER_VERSION: Final = "2026.11.03-docx-8"
 
 W_PARAGRAPH: Final = qualified_name("p")
@@ -603,7 +607,13 @@ class DebateDocxParser:
     def _why_it_is_a_cite_where_a_cite_stands(
         self, read: ReadParagraph, *, a_body_follows: bool
     ) -> str | None:
-        """The assembly rule that reads a paragraph standing where a cite stands as a cite, or None."""
+        """The assembly rule that reads a paragraph standing where a cite stands as a cite, or None.
+
+        Never an in-round marker: `[Marked 10:42]` under a tag is a bracket holding a name and a year
+        to the bracketed rule (`v1-e31-t23`, the PM's ruling M3).
+        """
+        if is_an_in_round_marker(read.text):
+            return None
         description = read.description
         if is_a_cite_wholly_in_brackets(description, self._profile):
             return "assembly-bracketed-cite-before-the-body"
@@ -1035,8 +1045,10 @@ class DebateDocxParser:
                 continue
             upper = sections[above]
             text = section.text.strip()
-            if len(text) > self._profile.cite.maximum_cite_characters or self._left_by_the_long_cite_rule(
-                text
+            if (
+                len(text) > self._profile.cite.maximum_cite_characters
+                or self._left_by_the_long_cite_rule(text)
+                or is_an_in_round_marker(text)
             ):
                 continue
             if _is_read_as_nothing(section) and (_LINK.search(text) or _YEAR.search(text)):

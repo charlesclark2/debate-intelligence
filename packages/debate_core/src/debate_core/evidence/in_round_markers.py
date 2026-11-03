@@ -8,7 +8,8 @@ lines read as nothing between two body paragraphs of one card (43,488 in 15,796 
 every such line as body would bring the markers among them into the evidence, so the two are ruled
 together, on one table.
 
-A marker is read three ways today, by its formatting and its spelling, never by what it is:
+`2026.10.27-docx-7`, which the counts were taken under, read a marker three ways, by its formatting
+and its spelling, never by what it is:
 
 * **as body**, when it is typed into the small print or the marked-up text of a card and takes
   that formatting: it is evidence text;
@@ -17,6 +18,10 @@ A marker is read three ways today, by its formatting and its spelling, never by 
 * **as a cite**, when it opens with a capital and its hour is a two-digit number:
   `heuristic-cite-line-author-year` takes `Marked 10` for a name and a year. The card ends at the
   marker, and the rest of its body is a card with no tag whose cite is the marker.
+
+`2026.11.03-docx-8` reads no marker as a cite (the PM's ruling M3, 2026-11-03,
+:func:`~debate_core.evidence.marker_lines.is_an_in_round_marker`); the other two readings are left as
+they are (M1).
 
 :func:`line_form` names a line's form by a pattern id (:class:`LineForm`), never by its text.
 :func:`describe_lines` says, for one parsed file, how each line of a body, each paragraph read as
@@ -41,8 +46,16 @@ from debate_core.domain.debate_files import CardCompleteness, FileSection, Parse
 from debate_core.domain.style_profile import StructuralUnit
 from debate_core.evidence.fingerprints import card_fingerprint, fingerprint_text
 from debate_core.evidence.line_above_a_cite import rule_family
+from debate_core.evidence.marker_lines import (
+    IN_ROUND_MARKER_FORMS,
+    MARKER_FORMS,
+    MARKER_LINE_MAXIMUM_CHARACTERS,
+    LineForm,
+    line_form,
+)
 
 __all__ = [
+    "IN_ROUND_MARKER_FORMS",
     "LENGTH_BANDS",
     "MARKER_FORMS",
     "MARKER_LINE_MAXIMUM_CHARACTERS",
@@ -57,11 +70,6 @@ __all__ = [
     "marker_free_bodies",
 ]
 
-#: The longest line a marker form is read from. `Marked 10:42` is twelve characters; a marker
-#: with a speech or a note after it (`marked 10:42 in the 1AR`) is still short. A longer line that
-#: holds a marker word and a time is counted apart (:attr:`LineForm.MARKER_INSIDE_A_LINE`).
-MARKER_LINE_MAXIMUM_CHARACTERS: Final = 60
-
 #: `v1-e31-t19`'s length bands, so the lines read as nothing are counted as that task counted them.
 LENGTH_BANDS: Final = (
     (40, "40 characters or fewer"),
@@ -73,98 +81,12 @@ LENGTH_BANDS: Final = (
 )
 _LONGEST_BAND: Final = "over 4,000"
 
-_MARKER_WORD: Final = r"(?:mark(?:ed|ing)?|stop(?:ped)?)"
-_CLOCK_TIME: Final = r"(?<!\d)(?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?(?:\s*[ap]\.?\s?m\b\.?)?(?![\d:])"
-#: Anything that is neither a letter nor a digit: brackets, asterisks, dashes, slashes, spaces.
-_NO_WORD: Final = r"[\W_]*"
-
-_OPENS_WITH_A_MARKER_WORD: Final = re.compile(rf"^{_NO_WORD}(?:card\s+)?{_MARKER_WORD}\b", re.IGNORECASE)
-_OPENS_WITH_A_CLOCK_TIME: Final = re.compile(rf"^{_NO_WORD}{_CLOCK_TIME}", re.IGNORECASE)
-_HOLDS_A_MARKER_WORD: Final = re.compile(rf"\b{_MARKER_WORD}\b", re.IGNORECASE)
-_HOLDS_A_CLOCK_TIME: Final = re.compile(_CLOCK_TIME, re.IGNORECASE)
-_A_MARKER_WORD_AND_A_TIME: Final = re.compile(
-    rf"\b{_MARKER_WORD}\b{_NO_WORD}(?:at\b{_NO_WORD})?{_CLOCK_TIME}", re.IGNORECASE
-)
-_CLOCK_TIME_ALONE: Final = re.compile(rf"^{_NO_WORD}{_CLOCK_TIME}{_NO_WORD}$", re.IGNORECASE)
-_MARKER_WORD_ALONE: Final = re.compile(
-    rf"^{_NO_WORD}(?:card\s+)?{_MARKER_WORD}(?:\s+(?:here|card|reading)){{0,2}}{_NO_WORD}$", re.IGNORECASE
-)
-_NUMBER_ALONE: Final = re.compile(rf"^{_NO_WORD}(?:(?:page|pg|p)\.?\s*)?\d+{_NO_WORD}$", re.IGNORECASE)
-_OMISSION_NOTE: Final = re.compile(
-    rf"^{_NO_WORD}(?:(?:text|table|figure|chart|graph|graphic|image|footnotes?)\s+)?omitted{_NO_WORD}$",
-    re.IGNORECASE,
-)
-_LETTER_OR_DIGIT: Final = re.compile(r"[^\W_]")
 #: The classifier's own sentence end (`style_classifier._SENTENCE_END`), so "ends a sentence" means
 #: what it meant in `v1-e31-t19`'s table.
 _SENTENCE_END: Final = re.compile(r"[.!?][\"'’”)\]]*\s*$")
 
 #: Paragraphs the parser calls page furniture, wherever they sit.
 _FURNITURE: Final = ("assembly-table-cell", "assembly-text-box")
-
-
-class LineForm(StrEnum):
-    """A line's form, by pattern. The id is what leaves a count; the line's text never does."""
-
-    MARKER_WORD_AND_CLOCK_TIME = "marker-word-and-clock-time"
-    """A short line opening with a marker word or a time that holds both: `Marked 10:42`,
-    `[marked at 3:05 pm]`, `10:42 marked`."""
-    CLOCK_TIME_ALONE = "clock-time-alone"
-    """A time and nothing else but punctuation: `10:42`, `(3:05 PM)`."""
-    MARKER_WORD_ALONE = "marker-word-alone"
-    """A marker word and nothing else but punctuation, `here`, `card` or `reading`: `MARKED`,
-    `*mark here*`, `card marked`, `stopped reading here`."""
-    MARKER_WORD_OPENS_A_SHORT_LINE = "marker-word-opens-a-short-line"
-    """A short line that opens with a marker word and is none of the above: a marker with a note, or a
-    line of a source that opens `Marked increases`."""
-    MARKER_INSIDE_A_LINE = "marker-word-and-clock-time-inside-a-line"
-    """A marker word followed by a time inside a line no marker form takes: a marker typed after
-    words of the evidence on the same line. Not a whole line, so never one a ruling could record
-    whole."""
-    NUMBER_ALONE = "number-alone"
-    """A number, or a page number, alone: `12`, `p. 12`, `[4]`."""
-    NO_LETTER_OR_DIGIT = "no-letter-or-digit"
-    """Punctuation alone: an ellipsis, `***`, `[…]`, a rule of dashes."""
-    OMISSION_NOTE = "omission-note"
-    """A note that something was left out: `[Table omitted]`, `Text omitted`."""
-    NO_MARKER_FORM = "no-marker-form"
-    """Anything else."""
-
-
-#: The forms a marker is read from: the lines a ruling could record as markers, whole.
-MARKER_FORMS: Final = (
-    LineForm.MARKER_WORD_AND_CLOCK_TIME,
-    LineForm.CLOCK_TIME_ALONE,
-    LineForm.MARKER_WORD_ALONE,
-    LineForm.MARKER_WORD_OPENS_A_SHORT_LINE,
-)
-
-
-def line_form(line: str) -> LineForm:
-    """The form of one line, from the first pattern that fits it, in :class:`LineForm`'s order."""
-    text = " ".join(line.split())
-    if not text:
-        return LineForm.NO_LETTER_OR_DIGIT
-    short = len(text) <= MARKER_LINE_MAXIMUM_CHARACTERS
-    if short:
-        opens = _OPENS_WITH_A_MARKER_WORD.search(text) or _OPENS_WITH_A_CLOCK_TIME.search(text)
-        if opens and _HOLDS_A_MARKER_WORD.search(text) and _HOLDS_A_CLOCK_TIME.search(text):
-            return LineForm.MARKER_WORD_AND_CLOCK_TIME
-        if _CLOCK_TIME_ALONE.match(text):
-            return LineForm.CLOCK_TIME_ALONE
-        if _MARKER_WORD_ALONE.match(text):
-            return LineForm.MARKER_WORD_ALONE
-        if _OPENS_WITH_A_MARKER_WORD.search(text):
-            return LineForm.MARKER_WORD_OPENS_A_SHORT_LINE
-    if _A_MARKER_WORD_AND_A_TIME.search(text):
-        return LineForm.MARKER_INSIDE_A_LINE
-    if _NUMBER_ALONE.match(text):
-        return LineForm.NUMBER_ALONE
-    if not _LETTER_OR_DIGIT.search(text):
-        return LineForm.NO_LETTER_OR_DIGIT
-    if _OMISSION_NOTE.match(text):
-        return LineForm.OMISSION_NOTE
-    return LineForm.NO_MARKER_FORM
 
 
 def length_band(line: str) -> str:

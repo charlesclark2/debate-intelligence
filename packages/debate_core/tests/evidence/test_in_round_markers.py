@@ -2,7 +2,9 @@
 
 Every line here is invented, and every expectation is written by hand from what the line or the
 file was built to hold (working agreement 6). The file holds a marker read each of the three ways
-the parser reads one today:
+`2026.10.27-docx-7` read one, when the counts were taken. `2026.11.03-docx-8` reads no marker as a
+cite (the PM's ruling M3), so the file is parsed as `docx-7` read it, that rule switched off
+(:func:`parse_as_docx_7`); the last test reads it as `docx-8` does.
 
 ====  ===========================================================  =========================================
  at    paragraph                                                    read by the parser as
@@ -32,6 +34,7 @@ the parser reads one today:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import date
 
@@ -40,6 +43,7 @@ from tests.evals.parser.cite_shapes import prose
 
 from debate_core.domain.caselist import SourceDocument, SourceFormat, SourceOrigin
 from debate_core.domain.debate_files import CardCompleteness, ParsedDocument
+from debate_core.evidence import style_classifier
 from debate_core.evidence.fingerprints import card_fingerprint, fingerprint_text
 from debate_core.evidence.in_round_markers import (
     MARKER_FORMS,
@@ -53,6 +57,7 @@ from debate_core.evidence.in_round_markers import (
     line_form,
     marker_free_bodies,
 )
+from debate_core.integrations.docx_parser import parser as parser_module
 from debate_core.integrations.docx_parser.parser import DebateDocxParser
 from debate_core.testing.docx_builder import build_docx, paragraph_xml, run_xml
 
@@ -160,8 +165,15 @@ FILE = build_docx(
 )
 
 
-@pytest.fixture(scope="module")
-def document() -> ParsedDocument:
+def parse_as_docx_7(parse: Callable[[], ParsedDocument]) -> ParsedDocument:
+    """`parse()` with `docx-8`'s marker rule switched off: an in-round marker may be read as a cite."""
+    with pytest.MonkeyPatch.context() as patch:
+        for module in (style_classifier, parser_module):
+            patch.setattr(module, "is_an_in_round_marker", lambda _line: False)
+        return parse()
+
+
+def parsed_file() -> ParsedDocument:
     snapshot = date(2026, 11, 2)
     source = SourceDocument(
         sha256="a" * 64,
@@ -175,6 +187,11 @@ def document() -> ParsedDocument:
     parsed = DebateDocxParser().parse(FILE, source, source_path="invented.docx")
     assert isinstance(parsed, ParsedDocument)
     return parsed
+
+
+@pytest.fixture(scope="module")
+def document() -> ParsedDocument:
+    return parse_as_docx_7(parsed_file)
 
 
 def test_the_file_reads_as_the_table_above_says(document: ParsedDocument) -> None:
@@ -283,4 +300,22 @@ def test_marker_free_bodies_leave_out_only_the_forms_asked_for(document: ParsedD
 def test_an_exact_fingerprint_is_the_cards_own(document: ParsedDocument) -> None:
     assert [card_fingerprint(card).exact_fingerprint for card in document.cards[:4]] == list(
         fingerprints(f"{A1}\n{A2}", f"{A3}\nMARKED", f"{B1}\nmarked 3:05 pm\n{B2}", C)
+    )
+
+
+def test_at_docx_8_no_marker_is_a_cite_and_the_divided_card_is_whole() -> None:
+    document = parsed_file()
+    assert [card.tag for card in document.cards] == ["Grid tag one", "Grid tag two", "Grid tag three"]
+    assert document.cards[0].evidence_text == f"{A1}\n{A2}\n{A3}\nMARKED"
+    lines = describe_lines(document.sections, document.cards)
+    assert not [
+        line for line in lines if line.reading is Reading.CITE and line.form is not LineForm.NO_MARKER_FORM
+    ]
+    assert [(line.form, line.place) for line in lines if line.reading is Reading.NOTHING][:2] == [
+        (LineForm.MARKER_WORD_AND_CLOCK_TIME, LinePlace.BETWEEN_BODY_PARAGRAPHS),
+        (LineForm.MARKER_WORD_AND_CLOCK_TIME, LinePlace.BETWEEN_BODY_PARAGRAPHS),
+    ]
+    card_0 = fingerprint_text(f"{A1}\n{A2}\n{A3}\nMARKED")
+    assert marker_free_bodies(document.sections, document.cards, MARKER_FORMS)[0] == MarkerFreeBody(
+        exact_fingerprints=(card_0,), fingerprint=fingerprint_text(f"{A1}\n{A2}\n{A3}")
     )

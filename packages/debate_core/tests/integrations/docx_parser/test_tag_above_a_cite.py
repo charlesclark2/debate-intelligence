@@ -380,7 +380,8 @@ class TestWhatTheRuleLeaves:
 
 class TestTheParserVersion:
     def test_it_is_the_version_this_task_bumped_to_or_a_later_one(self) -> None:
-        """`2026.10.20-docx-6`, or one a later task bumped to (`v1-e31-t31`: `2026.10.27-docx-7`)."""
+        """`2026.10.20-docx-6`, or one a later task bumped to (`v1-e31-t31`: `2026.10.27-docx-7`;
+        `v1-e31-t32`: `2026.11.03-docx-8`)."""
         assert parse_version_directory(DOCX_PARSER_VERSION) >= parse_version_directory("2026.10.20-docx-6")
 
     def test_its_directory_sorts_after_the_store_it_replaces(self) -> None:
@@ -415,6 +416,10 @@ def taken_as_the_tag(document: ParsedDocument, line: str) -> None:
 def left_as_it_was(document: ParsedDocument, line: str) -> None:
     assert [card.tag for card in document.cards] == [TAG, None]
     assert not section_with(document, line).match.rule_id.startswith(("assembly-bold-tag", TAKEN))
+
+
+def test_the_unbolded_tail_rule_came_with_docx_8_or_a_later_one() -> None:
+    assert parse_version_directory(DOCX_PARSER_VERSION) >= parse_version_directory("2026.11.03-docx-8")
 
 
 class TestALineBoldButForAnUnboldedTail:

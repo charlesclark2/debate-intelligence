@@ -106,6 +106,7 @@ from debate_core.domain.style_profile import (
     StyleMatchSource,
     StyleProfile,
 )
+from debate_core.evidence.line_above_a_cite import BoldInPartShape, unbolded_part
 from debate_core.evidence.style_classifier import (
     MAXIMUM_CITE_LINE_CHARACTERS,
     MAXIMUM_HEADING_CHARACTERS,
@@ -171,7 +172,9 @@ __all__ = ["DOCX_PARSER_VERSION", "BodyParagraph", "DebateDocxParser", "body_par
 #: when it looks for the body below a highlighted cite. `2026.10.27-docx-7` (`v1-e31-t31`) reads a
 #: cite line by its place: a later line of a cite or a line under a tag that holds a link or a year,
 #: and a cite set in the tag style under a tag, each over a body; and reads no white highlight.
-DOCX_PARSER_VERSION: Final = "2026.10.27-docx-7"
+#: `2026.11.03-docx-8` (`v1-e31-t32`) reads the same line above a cite as its card's tag when Word
+#: shows it bold from its start with one unbolded stretch at its tail holding no digit.
+DOCX_PARSER_VERSION: Final = "2026.11.03-docx-8"
 
 W_PARAGRAPH: Final = qualified_name("p")
 W_TABLE: Final = qualified_name("tbl")
@@ -237,6 +240,18 @@ _BRACKETED_CITE_CONFIDENCE: Final = 0.6
 #: A tag read from its bold and its place above a cite is a guess of the same weight as the
 #: classifier's own bold line at reading size (`heuristic-direct-formatted-heading-tag`).
 _BOLD_TAG_CONFIDENCE: Final = 0.5
+
+#: The two readings of a line above a cite as the tag of the card the cite opens: bold throughout
+#: (`v1-e31-t24`), and bold but for a tail holding no digit (`v1-e31-t32`).
+BOLD_TAG_RULE: Final = "assembly-bold-tag-above-a-cite"
+BOLD_TAG_WITH_AN_UNBOLDED_TAIL_RULE: Final = "assembly-bold-tag-with-an-unbolded-tail-above-a-cite"
+
+#: The unbolded part a tag may have at its tail: the PM's ruling of 2026-11-03, option (a). Of the
+#: lines `v1-e31-t32`'s sample drew that fail t24's rule only by being bold in part, every one with
+#: such a tail was a tag, 17 of 17; a tail holding digits, a date or a page number, was 1 of 4.
+_A_TAIL_WITH_NO_DIGIT: Final = frozenset(
+    {BoldInPartShape.TAIL_PUNCTUATION_ONLY, BoldInPartShape.TAIL_WITHOUT_DIGITS}
+)
 
 #: A cite line read from its place, under a cite or a tag, is a guess of the same weight as a cite line.
 _CITE_BY_ITS_PLACE_CONFIDENCE: Final = 0.6
@@ -806,7 +821,7 @@ class DebateDocxParser:
         tags = self._bold_tags_above_cites(assembled, package)
         if tags:
             classified = [
-                _read_as_a_bold_tag(section) if position in tags else section
+                _read_as_a_bold_tag(section, tags[position]) if position in tags else section
                 for position, section in enumerate(classified)
             ]
             assembled = self._assemble(self._demote_tags_with_no_card(classified), provenance)
@@ -902,8 +917,8 @@ class DebateDocxParser:
             sections=sections, decided=decided, cards=cards, deletions_dropped=deletions_dropped
         )
 
-    def _bold_tags_above_cites(self, assembled: _Assembled, package: DocxPackage) -> frozenset[int]:
-        """The positions of the lines that are the tags of the cards their cites open (`v1-e31-t24`).
+    def _bold_tags_above_cites(self, assembled: _Assembled, package: DocxPackage) -> dict[int, str]:
+        """The lines that are the tags of the cards their cites open, by position, each with its rule.
 
         A cite that opens a card with no tag, and the paragraph directly above it, blank lines and
         page furniture stepped over and never a second paragraph that says something. The line is
@@ -914,19 +929,20 @@ class DebateDocxParser:
         tagless = {
             card.provenance.first_element_index for card in assembled.cards if not (card.tag or "").strip()
         }
-        tags: set[int] = set()
+        tags: dict[int, str] = {}
         for position, section in enumerate(assembled.sections):
             if section.unit is not StructuralUnit.CITE or section.element_index not in tagless:
                 continue
             if self._is_a_guess_a_body_may_take(assembled.decided[position]):
                 continue
             above = _line_above(assembled.sections, position)
-            if above is not None and self._is_a_bold_tag(assembled.decided[above], package):
-                tags.add(above)
-        return frozenset(tags)
+            rule = None if above is None else self._is_a_bold_tag(assembled.decided[above], package)
+            if above is not None and rule is not None:
+                tags[above] = rule
+        return tags
 
-    def _is_a_bold_tag(self, section: _ReadSection, package: DocxPackage) -> bool:
-        """Whether a line read as body or nothing is a tag in bold that the reader could not see.
+    def _is_a_bold_tag(self, section: _ReadSection, package: DocxPackage) -> str | None:
+        """The rule by which a line read as body or nothing is a tag in bold the reader could not see.
 
         `v1-e31-t19`'s item (7): a tag typed with nothing set, in a file whose document defaults make
         every run bold at 13 pt, gave the reader an unbolded line of no size, and a bold tag with no
@@ -934,6 +950,12 @@ class DebateDocxParser:
         only here, the line's bold and size are read as Word shows them
         (:func:`~debate_core.integrations.docx_parser.runs.as_word_shows_it`): bold throughout, at
         reading size or larger. The classifier and every other rule read what a run says.
+
+        As Word shows it, the line is bold throughout (:data:`BOLD_TAG_RULE`), or bold from its start
+        with one unbolded stretch at its tail that holds no digit, the rest of a tag or a full stop
+        left unbolded (:data:`BOLD_TAG_WITH_AN_UNBOLDED_TAIL_RULE`, `v1-e31-t32`); spaces decide
+        nothing. A tail holding a digit, an unbolded head or an unbolded stretch in the middle is
+        not a tag by either rule.
 
         It must also be no longer than a heading and name no source at its head; read as body or
         nothing by a heuristic, not through a paragraph style and not by an assembly rule's re-reading;
@@ -947,23 +969,30 @@ class DebateDocxParser:
         if match.unit not in (StructuralUnit.EVIDENCE, StructuralUnit.OTHER) or match.rule_id.startswith(
             "assembly-"
         ):
-            return False
+            return None
         description = section.read.description
         if self._profile.resolve_paragraph_style(
             description.style_id, description.style_name, description.style_based_on
         ):
-            return False
+            return None
         text = section.read.text.strip()
         if not text or len(text) > MAXIMUM_HEADING_CHARACTERS or description.has_highlighted_run:
-            return False
+            return None
         if any(self._marks_read_evidence(run) for run in description.visible_runs):
-            return False
+            return None
         source = first_name_and_year(text, self._profile)
         if source is not None and source.start() <= NAME_AND_YEAR_AT_THE_HEAD_CHARACTERS:
-            return False
+            return None
         shown = as_word_shows_it(description, package)
         size = shown.effective_half_points
-        return shown.effective_bold and size is not None and size >= self._profile.shrink.body_half_points
+        if size is None or size < self._profile.shrink.body_half_points:
+            return None
+        if shown.effective_bold:
+            return BOLD_TAG_RULE
+        part = unbolded_part(shown)
+        if part is not None and part.shape in _A_TAIL_WITH_NO_DIGIT:
+            return BOLD_TAG_WITH_AN_UNBOLDED_TAIL_RULE
+        return None
 
     def _marks_read_evidence(self, run: RunDescription) -> bool:
         """Whether a run carries the underline or emphasis character style: evidence a debater cut."""
@@ -1231,14 +1260,14 @@ def _reread_as_body(section: _ReadSection, reason: str) -> _ReadSection:
 _UNITS_A_BODY_IS_LOOKED_FOR_PAST: Final = (StructuralUnit.OTHER, StructuralUnit.UNDERTAG)
 
 
-def _read_as_a_bold_tag(section: _ReadSection) -> _ReadSection:
-    """The same paragraph as the tag of the card below it, with the rule it overrode on record."""
+def _read_as_a_bold_tag(section: _ReadSection, rule: str) -> _ReadSection:
+    """The same paragraph as the tag of the card below it, with the rule and the one it overrode."""
     match = section.match
     return _ReadSection(
         read=section.read,
         match=ParagraphStyleMatch(
             unit=StructuralUnit.TAG,
-            rule_id=f"assembly-bold-tag-above-a-cite:{match.rule_id}",
+            rule_id=f"{rule}:{match.rule_id}",
             match_source=StyleMatchSource.HEURISTIC,
             confidence=_BOLD_TAG_CONFIDENCE,
         ),

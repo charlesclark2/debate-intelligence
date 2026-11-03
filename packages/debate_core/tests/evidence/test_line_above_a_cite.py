@@ -149,9 +149,9 @@ class _ReadingParser(DebateDocxParser):
         self.descriptions: list[ParagraphDescription] = []
         self.shown: list[ParagraphDescription] = []
 
-    def _bold_tags_above_cites(self, assembled: Any, package: Any) -> frozenset[int]:  # pyright: ignore[reportIncompatibleMethodOverride]
+    def _bold_tags_above_cites(self, assembled: Any, package: Any) -> dict[int, str]:  # pyright: ignore[reportIncompatibleMethodOverride]
         if not self.with_the_bold_tag_rule:
-            return frozenset()
+            return {}
         return super()._bold_tags_above_cites(assembled, package)  # pyright: ignore[reportPrivateUsage]
 
     def _read_sections(self, package: Any) -> Any:  # pyright: ignore[reportIncompatibleMethodOverride]

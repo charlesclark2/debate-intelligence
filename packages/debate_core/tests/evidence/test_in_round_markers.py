@@ -2,9 +2,9 @@
 
 Every line here is invented, and every expectation is written by hand from what the line or the
 file was built to hold (working agreement 6). The file holds a marker read each of the three ways
-`2026.10.27-docx-7` read one, when the counts were taken. `2026.11.03-docx-8` reads no marker as a
+`2026.10.27-docx-7` read one, when the counts were taken. `2026.11.03-docx-9` reads no marker as a
 cite (the PM's ruling M3), so the file is parsed as `docx-7` read it, that rule switched off
-(:func:`parse_as_docx_7`); the last test reads it as `docx-8` does.
+(:func:`parse_as_docx_7`); the last test reads it as `docx-9` does.
 
 ====  ===========================================================  =========================================
  at    paragraph                                                    read by the parser as
@@ -170,7 +170,7 @@ def no_line_is_a_marker(_line: str) -> bool:
 
 
 def parse_as_docx_7(parse: Callable[[], ParsedDocument]) -> ParsedDocument:
-    """`parse()` with `docx-8`'s marker rule switched off: an in-round marker may be read as a cite."""
+    """`parse()` with `docx-9`'s marker rule switched off: an in-round marker may be read as a cite."""
     with pytest.MonkeyPatch.context() as patch:
         for module in (style_classifier, parser_module):
             patch.setattr(module, "is_an_in_round_marker", no_line_is_a_marker)
@@ -307,7 +307,7 @@ def test_an_exact_fingerprint_is_the_cards_own(document: ParsedDocument) -> None
     )
 
 
-def test_at_docx_8_no_marker_is_a_cite_and_the_divided_card_is_whole() -> None:
+def test_at_docx_9_no_marker_is_a_cite_and_the_divided_card_is_whole() -> None:
     document = parsed_file()
     assert [card.tag for card in document.cards] == ["Grid tag one", "Grid tag two", "Grid tag three"]
     assert document.cards[0].evidence_text == f"{A1}\n{A2}\n{A3}\nMARKED"

@@ -3,8 +3,8 @@
 The store holds four sources, each built as a `.docx` from invented text, and an occurrence table
 whose cluster ids are written by hand. Every expected count is written by hand from what the files
 and the table hold (working agreement 6). The counts were taken on `2026.10.27-docx-7`, before
-`2026.11.03-docx-8` stopped reading an in-round marker as a cite (the PM's ruling M3), so the store is
-written and parsed again with that rule switched off; two tests read it as `docx-8` does.
+`2026.11.03-docx-9` stopped reading an in-round marker as a cite (the PM's ruling M3), so the store is
+written and parsed again with that rule switched off; two tests read it as `docx-9` does.
 
 * **the marked file**: a tag and a cite (0, 1); body A1 (2); `marked 3:05`, plain, read as nothing
   between two body paragraphs (3); body A2 (4); `Marked 10:42`, plain, read as a cite that opens a
@@ -190,8 +190,8 @@ def data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 @pytest.fixture
-def data_dir_at_docx_8(tmp_path: Path) -> Path:
-    """The store as `docx-8` writes it. Worker processes read it the same way."""
+def data_dir_at_docx_9(tmp_path: Path) -> Path:
+    """The store as `docx-9` writes it. Worker processes read it the same way."""
     return write_the_store(tmp_path)
 
 
@@ -429,10 +429,10 @@ def test_a_store_another_parser_wrote_is_counted_on_this_checkouts_parse(
     assert counts["cards"] == 7
 
 
-def test_at_docx_8_no_marker_is_read_as_a_cite(
-    data_dir_at_docx_8: Path, capsys: pytest.CaptureFixture[str]
+def test_at_docx_9_no_marker_is_read_as_a_cite(
+    data_dir_at_docx_9: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    output, _ = run(data_dir_at_docx_8, capsys)
+    output, _ = run(data_dir_at_docx_9, capsys)
     counts = output["caselists"][CASELIST]
     assert counts["lines"][CITE] == {NO_FORM: {ELSEWHERE: 6}}
     assert counts["lines"][NOTHING][WORD_AND_TIME] == {BETWEEN: 2}
@@ -442,9 +442,9 @@ def test_at_docx_8_no_marker_is_read_as_a_cite(
 
 
 def test_worker_processes_give_the_counts_one_process_gives(
-    data_dir_at_docx_8: Path, capsys: pytest.CaptureFixture[str]
+    data_dir_at_docx_9: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    data_dir = data_dir_at_docx_8
+    data_dir = data_dir_at_docx_9
     one, _ = run(data_dir, capsys)
     assert script.main(["--data-dir", str(data_dir), "--caselist", CASELIST, "--workers", "2"]) == 0
     two = json.loads(capsys.readouterr().out)

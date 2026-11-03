@@ -2206,9 +2206,16 @@ pattern id from
 never by their text.
 
 **Status: counted (operator-run, 2026-11-02) and ruled (the PM, 2026-11-03).** Markers are left as
-they are (M1). An in-round marker is never read as a cite (M3), from parser `2026.11.03-docx-8`.
-The lines between body paragraphs are waiting on the coach's sample (L-D). The store has not been
-re-parsed with `docx-8`; that re-parse rides `v1-e31-t32`'s.
+they are (M1). An in-round marker is never read as a cite (M3), and N1 reads two strata of the lines
+between body paragraphs as body, from parser `2026.11.03-docx-9`. **N1's labelled evaluation shows
+EVIDENCE precision falling by one reading on the full tier, so the task stopped for the PM's
+ruling.** The store has not been re-parsed with `docx-9`.
+
+**Versions.** The measurements below were taken on this task's branch while it carried
+`2026.11.03-docx-8`: M3 and N1 on `v1-e31-t31`'s `docx-7`. `v1-e31-t32` then merged first with its
+own `2026.11.03-docx-8`, so this task's rules ship as `2026.11.03-docx-9`, which is t32's rule, M3 and
+N1 together (the PM, 2026-11-03). Where a table below says `docx-8`, it means the branch's reading
+before t32 merged.
 
 `scripts/count_in_round_markers.py`, run by the operator on 2026-11-02 in 661 seconds over the dev
 data directory on the operator's Mac. That store holds hspolicy26 at `2026.10.27-docx-7` and hsld26,

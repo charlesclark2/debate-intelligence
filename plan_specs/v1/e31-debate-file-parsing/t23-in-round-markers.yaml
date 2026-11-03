@@ -70,6 +70,9 @@ spec:
     added that the labels call something other than EVIDENCE by file and paragraph id only.
     Not in this task: the 40-or-fewer uncapitalised stratum and the 41 to 200 not-ending-a-
     sentence stratum, follow-ups needing a larger sample before any rule.
+    (PM note 2026-11-03.) v1-e31-t32 merged first with 2026.11.03-docx-8, so this task takes
+    2026.11.03-docx-9 at its sync, updates every pin t32 updated, and names both bumps in the
+    parser version's docstring. The N1 ruling is unchanged.
   priority: 3
   constraints:
     packages: [debate_core.evidence, debate_core.integrations.docx_parser, packages/debate_core/tests, scripts, tests/fixtures/debate_files, docs/data]

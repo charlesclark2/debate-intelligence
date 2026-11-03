@@ -29,7 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 import diff_lines_between_body_paragraphs as script  # noqa: E402
 
 CASELIST = "testcl26"
-VERSION = "2026.11.03-docx-8"
+VERSION = "2026.11.03-docx-9"
 SENTENCE_RULE = "assembly-sentence-between-body-paragraphs"
 LONG_LINE_RULE = "assembly-long-line-between-body-paragraphs"
 

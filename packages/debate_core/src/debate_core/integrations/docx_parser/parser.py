@@ -193,11 +193,11 @@ __all__ = [
 #: and a cite set in the tag style under a tag, each over a body; and reads no white highlight.
 #: `2026.11.03-docx-8` (`v1-e31-t32`) reads the same line above a cite as its card's tag when Word
 #: shows it bold from its start with one unbolded stretch at its tail holding no digit.
-#: `2026.11.03-docx-8` (`v1-e31-t23`) reads no in-round marker as a cite: `Marked 10:42` is read as it
+#: `2026.11.03-docx-9` (`v1-e31-t23`) reads no in-round marker as a cite: `Marked 10:42` is read as it
 #: would be had the cite-line pattern not taken `Marked 10` for a name and a year, so a card no longer
 #: ends at its marker; and reads as body a line read as nothing between two body paragraphs of one card
 #: when it is over 200 characters, or 41 to 200 and ends a sentence, and carries no mark of a cite.
-DOCX_PARSER_VERSION: Final = "2026.11.03-docx-8"
+DOCX_PARSER_VERSION: Final = "2026.11.03-docx-9"
 
 W_PARAGRAPH: Final = qualified_name("p")
 W_TABLE: Final = qualified_name("tbl")

@@ -166,7 +166,7 @@ class TestRealCitesUnchanged:
 
 class TestTheParserVersion:
     def test_it_is_the_version_this_task_bumped_to_or_a_later_one(self) -> None:
-        assert parse_version_directory(DOCX_PARSER_VERSION) >= parse_version_directory("2026.11.03-docx-8")
+        assert parse_version_directory(DOCX_PARSER_VERSION) >= parse_version_directory("2026.11.03-docx-9")
 
     def test_every_card_names_it(self, parser: DebateDocxParser) -> None:
         document = parse(parser, tag(TAG), plain(CITE), body(A1), plain("Marked 10:42"), body(A2))

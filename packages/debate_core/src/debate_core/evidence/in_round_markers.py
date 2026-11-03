@@ -19,7 +19,7 @@ and its spelling, never by what it is:
   `heuristic-cite-line-author-year` takes `Marked 10` for a name and a year. The card ends at the
   marker, and the rest of its body is a card with no tag whose cite is the marker.
 
-`2026.11.03-docx-8` reads no marker as a cite (the PM's ruling M3, 2026-11-03,
+`2026.11.03-docx-9` reads no marker as a cite (the PM's ruling M3, 2026-11-03,
 :func:`~debate_core.evidence.marker_lines.is_an_in_round_marker`); the other two readings are left as
 they are (M1).
 

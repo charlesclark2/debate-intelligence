@@ -348,6 +348,8 @@ jobs:
         # The script writes its outputs to a file, and the file reaches $GITHUB_OUTPUT only when the
         # script succeeded. If it cannot run, every part runs the whole default selection: a broken
         # choice runs more tests, never fewer and never none. The job summary says how many and why.
+        # It writes no `files_to_parts`: an output never written reads as empty, which deals every
+        # part test by test (v1-e41-t17).
         env:
           EVENT_NAME: ${{ github.event_name }}
           BASE_BRANCH: ${{ github.base_ref }}
@@ -362,7 +364,6 @@ jobs:
           else
             echo "run_parts=true" >> "$GITHUB_OUTPUT"
             echo "parts=[1, 2, 3, 4, 5, 6, 7, 8]" >> "$GITHUB_OUTPUT"
-            echo "files_to_parts=" >> "$GITHUB_OUTPUT"
             echo "::warning title=Test selection::scripts/ci_test_selection.py failed, so every part runs the whole default selection."
             printf '### Tests: the whole default selection\n\nscripts/ci_test_selection.py failed, so every part runs its share of every test file, dealt test by test.\n' >> "$GITHUB_STEP_SUMMARY"
           fi

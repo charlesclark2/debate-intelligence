@@ -1,4 +1,4 @@
-<!-- docs-index: What one ci.yml test part costs besides its tests (measured 2026-11-01), how many parts a selection gets (2026-11-02), and the options for making parts cheaper -->
+<!-- docs-index: What one ci.yml test part costs besides its tests (measured 2026-11-01), how many parts a selection gets, how whole files are dealt to parts by recorded durations (2026-11-02), and the options for making parts cheaper -->
 # What a CI test part costs besides its tests
 
 `ci.yml`'s `test` job runs the selection in parts (working agreement 1): eight until `v1-e41-t16`,
@@ -173,3 +173,91 @@ The PM reads the eight parts' pytest step times of each run from the public API.
 Each part held the same tests in both runs. worksteal was faster on 7 of 8 parts, 12% less in total
 and 16 s on the slowest part, so it is the default. One run each, so runner noise is in these
 figures; the direction held on all but one part.
+
+## What v1-e41-t17 changed
+
+Option 1 above, as the PM ruled it on 2026-11-02: whole test files are dealt to the parts by the
+seconds each took on dev's last push run, so a file's module- and class-scoped fixtures are built in
+one part. `scripts/ci_test_durations.py` holds the rules; `tests/pytest_plugins/run_in_parts.py`
+follows the deal.
+
+### The record
+
+* Every part of a push run times its tests, setup, call and teardown summed per test file
+  (`--record-durations`), from pytest's own reports; under xdist the controller writes the file.
+* On dev's push run only, `ci.yml`'s `test-durations` job adds the parts' files up and saves the sum
+  in GitHub's Actions cache under a key of its own (`test-durations-<run id>-<attempt>`). It writes no
+  record unless every part of the matrix timed its tests, and it never fails the push run, so a
+  broken record cannot hold the dev pre-release. It needs no permission beyond the workflow's
+  `contents: read` and no secret.
+* The seconds are a push part's, which measures coverage: about half again a pull request's. Only
+  their proportions are read.
+
+The Actions cache rather than an artifact: a pull request into dev can restore what dev's runs
+saved, with no token and no API call, and a restore that misses is an ordinary empty result. An
+artifact of another run would need the API, `actions: read` and the run's id.
+
+### The deal
+
+`test-selection` restores the newest record once and hands every part the same deal as its
+`files_to_parts` output, beside the test files it chose. A part never reads the cache, so a record
+saved while a run goes on cannot give two parts different deals.
+
+* A chosen file the record does not name counts as the record's **median**.
+* A file **heavier than a part's share** (the chosen files' seconds over N) is left out of the deal,
+  and its tests are dealt round every part as before: no deal of whole files can make a part
+  lighter than its heaviest file. This is the one change from the PM's floor, greedy longest-first,
+  and the figures below are why.
+* The rest go **heaviest first onto the lightest part**.
+
+**The parts are dealt test by test, as before, and the job summary says why** when the record is
+missing (nothing restored, or the cache could not be reached), unreadable, **stale** (recorded more
+than 14 days ago, or with no duration for more than a quarter of the chosen files), when every chosen
+file is heavier than a part's share, or when a part would hold no file with a recorded time. For the
+whole selection the files dealt are every test file under `testpaths`, as `scripts/affected_tests.py`
+lists them: 669 on 2026-11-02, against 662 the parts collect; the 7 others hold only slow or live
+tests. The partition proof collects the parts under a deal by invented durations and under none, and
+deals the real collection both ways at every size from one part to eight.
+
+### The expected slowest part, on invented durations
+
+On 2026-11-02, before any record exists, with the repository's own `parts_dealt` and
+`by_durations`: an invented suite shaped like the figures above, 654 files and about 20,000 tests
+with lognormal test counts and per-test costs, 2,600 s of worker time at the operator's Mac's pace
+when every fixture is built once, five heavy files of 300, 190, 160, 160 and 140 s, and a long tail.
+How much of the suite's time is module-scoped fixtures, which today's dealing builds again in every
+part holding one of the file's tests, was not measured, so two shares are given. Worker seconds of the
+slowest part over 8 parts (2 for the small set), and the slowest over the mean, for the deals that
+follow a record made dealt whole (seed 17):
+
+| Selection | Fixtures | Test by test (before) | Whole files, longest first | Whole files, a file over a share spread (built) |
+|---|---|---|---|---|
+| Whole selection, 654 files | none | 344 s (1.06) | 325 s (1.00) | 325 s (1.00) |
+| Affected set of 301 files holding the heaviest | none | 145 s (1.08) | 289 s (2.15) | 143 s (1.07) |
+| Affected set of 300 files, no heavy file | none | 105 s (1.06) | 99 s (1.00) | 99 s (1.00) |
+| Small affected set, 46 files, 2 parts | none | 83 s (1.02) | 82 s (1.00) | 82 s (1.00) |
+| Whole selection, 654 files | 10% | 567 s (1.05) | 325 s (1.00) | 325 s (1.00) |
+| Affected set of 301 files holding the heaviest | 10% | 240 s (1.04) | 289 s (2.18) | 142 s (1.07) |
+| Affected set of 300 files, no heavy file | 10% | 182 s (1.04) | 95 s (1.00) | 95 s (1.00) |
+| Small affected set, 46 files, 2 parts | 10% | 100 s (1.01) | 84 s (1.00) | 84 s (1.00) |
+
+What to read in it:
+
+* **Dealt test by test, the parts are already level** (1.01 to 1.09 of the mean on three seeds), as
+  the plugin's docstring measured. Dealing whole files gains only what it saves: each file's module
+  fixtures built once instead of in every part. With none, the slowest part moves by a few percent;
+  with a tenth of the suite in such fixtures, the whole selection's slowest part falls from 567 s to
+  325 s and all eight parts' work from 4,341 s to 2,600 s.
+* **Longest-first alone doubles the slowest part when a heavy file is in a smaller selection**: the
+  300 s file in an affected set whose parts' mean is 127 to 141 s sets its part at 289 to 328 s, 2.15 to 2.52
+  times the mean on the three seeds. Spreading a file heavier than a part's share keeps it at 1.06 to
+  1.09. When the heaviest file is only just over its share (seed 3's whole selection, 328 s against
+  325 s) spreading it costs a little: 337 s, where longest-first gave 328 s.
+* **The first deal is the least level.** Its record was made dealt test by test, so a file's
+  fixtures are counted once for each part that built them: at a 10% share (seed 17) its slowest part was 1.21
+  to 1.45 of the mean (444 s for the whole selection, still under 567 s). Dev's first push run after
+  the merge records them dealt whole, and the deals after it are the table's.
+
+Whether the runners' 189-289 s slowest parts are fixtures built again, the per-test tail, or the
+runner itself, these invented figures cannot say. The PM reads the slowest part's pytest step on three
+task pull requests after the merge against three before it (the task's ac2).

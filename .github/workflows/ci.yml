@@ -21,11 +21,16 @@
 # What keeps it there is the `test` job (v1-e01-t27). It was one runner taking 4 to 6 minutes over
 # the whole suite, and it grew with every task. Now:
 #   * It is a matrix of parts that run side by side, each `pytest --part K/N` on its own runner. A
-#     part is not a list of directories: tests/pytest_plugins/run_in_parts.py deals every test file's
-#     tests round the parts, so the parts are level without anyone balancing them and no part can
-#     be forgotten. tests/scripts/test_ci_workflow_test_job.py collects every part and proves that
-#     together they are exactly the unsplit selection, and deals the real collection at every size
-#     the matrix can take. That proof collects the whole suite nine times, so it runs in the
+#     part is not a list of directories: tests/pytest_plugins/run_in_parts.py deals the selection to
+#     the parts, so no part can be forgotten. Since v1-e41-t17 it deals whole test files, by the
+#     seconds each took on dev's last push run, so a file's module fixtures are built in one part:
+#     every push part times its files, the `test-durations` job adds them up on dev's push run and
+#     saves them in the Actions cache, and `test-selection` restores them once and hands every part
+#     the same deal (scripts/ci_test_durations.py). A record missing, unreadable or stale deals each
+#     file's tests round the parts as before, and the job summary says why; it never fails a run.
+#     tests/scripts/test_ci_workflow_test_job.py collects every part and proves that together they
+#     are exactly the unsplit selection, under a deal and under none, and deals the real collection
+#     both ways at every size the matrix can take. That proof collects the whole suite nine times, so it runs in the
 #     `partition-proof` job, on every push and on a pull request that changes what it proves, and
 #     the parts leave its `partition_proof` marker out (v1-e41-t15).
 #   * N follows the selection (v1-e41-t16): one part per 30 test files chosen, at least one and at
@@ -59,7 +64,8 @@
 #     pytest step passes 2 minutes on a whole-selection run, raise MOST_PARTS in
 #     scripts/ci_test_selection.py; if it does on an affected set, lower TEST_FILES_PER_PART there.
 #     That is the whole change. If one part is steadily slower than the rest, its durations name the
-#     few slow tests that landed together; make them cheaper, as working agreement 1 describes.
+#     few slow tests that landed together; make them cheaper, as working agreement 1 describes. The
+#     test-selection job's summary gives each deal's expected seconds a part and the record's date.
 #
 # Every job in every workflow names its runner image, ubuntu-24.04, never ubuntu-latest: GitHub moves
 # ubuntu-latest to Ubuntu 26 from 2026-10-19, and a new image (its python3, shellcheck, gh) must not

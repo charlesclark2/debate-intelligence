@@ -47,7 +47,7 @@ spec:
         (6): the guide's Ambiguous conventions section holds the case, and the labeller's
         help names the warnings.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

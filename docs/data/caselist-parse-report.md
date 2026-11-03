@@ -2453,3 +2453,10 @@ branch `labels/a8afd234413032f4`, commit `e13b7e0`, two files (the label file, a
 under `labels/prelabels/`). Its import recorded **75 of 255 labelled rows changed from the
 pre-label**, the coach's 74 and paragraph 16, and only paragraph 16 moved; the label tests passed (125).
 The evaluation baseline is unchanged. The `docx-9` gate pytest run: `1 passed in 4.71s`.
+
+**N1's before and after on the shipped `docx-9`** (`scripts/diff_lines_between_body_paragraphs.py`, the
+operator, 2026-11-03, 841 seconds): every N1 figure equals the `docx-8` table above in every caselist.
+That is 10,692 sentences and 3,213 long lines made body, 595 and 197 held back, 5,831 cards whose
+evidence text changed, in 2,554 files, and 0 other cards changed. The cards number 287,538, 5 fewer
+than on `docx-8`: t32's rule's cards above that vanish, 2 in hsld26 and 3 in hspolicy26, as its own
+table above records.

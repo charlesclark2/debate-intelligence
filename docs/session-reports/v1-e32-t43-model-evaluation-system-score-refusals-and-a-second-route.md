@@ -40,6 +40,22 @@ this evaluation's tokens) and a small router change to keep its cassettes apart.
 | ac3: the operator's recording on the second route the PM approved, and the side-by-side counts and cost, in docs/data | NOT RUN | Waits on the PM's choice of route and mechanism ([relay](#the-pm-relay-route-mechanism-and-the-refusal-proposal)), then the operator's recording, then the PM's record |
 | Node: `uv run pytest packages/debate_core/tests packages/debate_cli/tests -k evaluat` | PASS | Run as `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest packages/debate_core/tests packages/debate_cli/tests -k evaluat -q --tb=short -n 4` → 97 passed in 46.58s |
 
+### Checks run before this report
+
+* `.venv/bin/ruff format --check .` → 1884 files already formatted; `.venv/bin/ruff check .` → all checks
+  passed; `.venv/bin/pyright packages/debate_core packages/debate_cli` → 0 errors; `.venv/bin/lint-imports`
+  → 20 contracts kept; `scripts/check_thin_handlers.py` → OK; `scripts/check_command_blocks.py --base
+  origin/dev` → OK; `uv run scripts/validate_specs.py` → OK: 599 files, 41 epics, 536 tasks, 22 releases.
+* **The affected set is over two minutes**, so it is left to the pull request's `ci` (agreement 10):
+  `scripts/affected_tests.py` chose 125 of 671 test files (4,440 tests); `--run` under `hard_stop.py 115`
+  stopped at 58% (exit 124). **It showed one failure** (an `F` at 11%) and was stopped before pytest named
+  it. Two reruns of the same span did not reproduce it: the same selection with `--maxfail=1` reached 30%
+  with none, and the first 45 files (1,126 tests, the span xdist's first batches hand out) passed, 680 in
+  105.04s and 446 in 19.35s, under a load of 10 to 12. So a test in this selection failed once and
+  passed twice since; CI's run will name it if it fails again.
+* The test files changed, and the always-run CLI wiring tests among the first 45 files, passed in those
+  runs; the evaluation tests passed as recorded above.
+
 ## Ruling 1: the pipeline's score
 
 **What is scored.** `evaluation_breakdown.pipeline_score` partitions the labelled cards by stage one's

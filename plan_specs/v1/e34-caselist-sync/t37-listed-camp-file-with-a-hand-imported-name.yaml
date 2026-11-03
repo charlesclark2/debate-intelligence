@@ -25,6 +25,10 @@ spec:
     than the row they matched. If any do, match by name only within the same camp folder (or by
     digest where one is known), so a hand-imported file is still not fetched again; if none do,
     report and stop.
+    (PM amendment 2026-11-03, Charlie's decision.) Camp files are imported by hand, once, with
+    `caselist import-openev`; the weekly sync leaves `caselist.openev_event` unset and fetches none. The
+    guarded case this task counted (zero) stays unreachable while that holds; a task that ever configures
+    an event starts with this count again.
   priority: 3
   constraints:
     packages: [debate_core.application, packages/debate_core/tests]

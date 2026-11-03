@@ -286,3 +286,10 @@ the way that matters: in the order that broke it.
 6. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`. This is the last
    merge before dev is frozen for the promotion.
 
+## PM note after the promotion (2026-11-03)
+
+Added by the PM. Nothing above is changed, and this is not a review.
+
+Live with promotion #810: the dev preview at `e83c607b` (41 of 41 smoke checks, `/news/` among them,
+and read on a phone), then prod from `main` at `3f827613` (41 of 41). News is in the header and the
+footer on wfbdebate.com.

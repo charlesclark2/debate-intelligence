@@ -598,16 +598,18 @@ versions and the delete markers left under one caselist's `sha256/`, which shoul
 |---|---|---|---|---|---|
 | `2026.09.20-docx-1` | this machine | 2026-10-11, by hand, before the command existed | not counted | about 5.8 GB | |
 | `2026.09.20-docx-1` | dev bucket | 2026-10-17, tagged | 11,138 | about 6.2 GB | |
-| `2026.09.20-docx-1` | prod bucket | not yet | | | |
+| `2026.09.20-docx-1` | prod bucket | not yet: `not yet superseded` (dry run 2026-11-03), until prod holds `docx-7` | 11,138 listed | about 6.2 GB | |
 | `2026.10.10-docx-2` | this machine | 2026-10-17, deleted | 11,138 | about 6.3 GB | |
 | `2026.10.10-docx-2` | dev bucket | 2026-10-17, tagged | 11,138 | about 6.3 GB | |
-| `2026.10.10-docx-2` | prod bucket | not yet | | | |
+| `2026.10.10-docx-2` | prod bucket | not yet: `not yet superseded` (dry run 2026-11-03), until prod holds `docx-7` | 11,138 listed | about 6.3 GB | |
 | `2026.10.12-docx-3` | dev bucket | 2026-10-20, tagged | 12,713 | about 7.5 GB (hsld26 4,973 objects, 2.5 GB; hspf26 4,440, 1.3 GB; hspolicy26 3,193, 3.5 GB; openev 107, 198.9 MB) | |
 | `2026.10.12-docx-3` | this machine | 2026-10-20, deleted | 12,713 | about 7.5 GB | |
-| `2026.10.12-docx-3` | prod bucket | not yet: refused (`STORE_ACCESS_DENIED` on `GetObjectTagging`) until prod has v1-e31-t16's Terraform, at the promotion | | | |
+| `2026.10.12-docx-3` | prod bucket | not yet: the Terraform applied 2026-11-03; `not yet superseded` (dry run 2026-11-03), until prod holds `docx-7` | 12,713 listed | about 7.5 GB | |
 | `2026.10.18-docx-5` | dev bucket | 2026-10-22, tagged | 12,713 | about 7.5 GB (hsld26 4,973 objects, 2.5 GB; hspf26 4,440, 1.3 GB; hspolicy26 3,193, 3.5 GB; openev 107, 200.7 MB) | |
 | `2026.10.18-docx-5` | this machine | 2026-10-22, deleted | 12,713 | about 7.5 GB | |
-| `2026.10.18-docx-5` | prod bucket | not yet: at the promotion, with the three before it ([evidence-search runbook](../runbooks/evidence-search.md#promoting-the-pilot-to-prod), item 9) | | | |
+| `2026.10.18-docx-5` | prod bucket | not yet: `not yet superseded` (dry run 2026-11-03), until prod holds `docx-7` ([evidence-search runbook](../runbooks/evidence-search.md#promoting-the-pilot-to-prod), item 9) | 12,713 listed | about 7.5 GB | |
+| `2026.10.20-docx-6` | dev bucket, this machine | not yet: after the cloud run's full re-parse of 2026-11-04 under `docx-7` | | | |
+| `2026.10.20-docx-6` | prod bucket | not yet: as `docx-5`, after prod holds `docx-7` | 12,713 listed | about 7.5 GB | |
 
 ## Reading it from a shell
 

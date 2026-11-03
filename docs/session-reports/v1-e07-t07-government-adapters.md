@@ -407,3 +407,13 @@ shows it from the API's own openapi file. What was built follows the rulings exa
    with the always-run list (1,969), ruff, pyright over the whole configuration, lint-imports, thin
    handlers, the docs index, the links, the command blocks and the specs are clean.
 8. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`.
+
+## Operator records (recorded by the PM, 2026-11-03)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| Operator follow-up: the key and the live smoke | after the merge | PASS | 2026-11-02, `v1.1.0-dev.342`, `federal_register` and `govinfo` the only providers, the api.data.gov key in the folder's `.env` (never on a command line), topic `policy-2026-27-nhi`. No date: `federal_register` ok, 20 results; `govinfo` ok, 20 results, the open-ended date range accepted. `--since 2025-01-01`: both ok, 20 results each, the closed range accepted. The Federal Register's block on automated readers of its pages does not reach its API |
+
+Both providers have passed their smoke, so `v1-e07-t13` may enable them. GovInfo without a key reports `not_configured`, as designed. A first attempt at the dated run was refused by the shell, not the product: zsh does not split an unquoted variable into words, so the option was written out.

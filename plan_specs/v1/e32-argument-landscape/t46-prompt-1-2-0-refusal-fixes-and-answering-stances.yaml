@@ -1,0 +1,94 @@
+# TASK v1-e32-t46-prompt-1-2-0-refusal-fixes-and-answering-stances - Prompt 1.2.0: the refusal fixes and the coach's answering stance
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t46-prompt-1-2-0-refusal-fixes-and-answering-stances
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "Prompt 1.2.0: the refusal fixes and the coach's answering stance"
+spec:
+  # Filed by the PM, 2026-11-03, from v1-e32-t43's ruling 2 and ac3, and the coach's labelling decision (2026-11-03).
+  description: >-
+    Neither route meets the 0.85 bar (Claude Haiku 4.5, pipeline 0.636; Claude Sonnet 4.6,
+    0.750; docs/data/landscape-model-evaluation.md). Prompt 1.2.0, same variables, carries three
+    changes. (a) A kritik or counterplan card goes to its named or generic position even when it
+    reads as general (4 of the 10 refusals of labelled cards). (b) A general card under a
+    heading naming a word of a position serves that position (3 of the 10); null stays for a
+    general card under no such heading. (c) The coach's stance label: today a card in a file
+    read by the side opposite a position's, answering it, is labelled with that position, which
+    the prompt's "the argument the card is read as" does not say; most of the wrong-kind answers
+    are such cards (4 of 5 on Haiku; the pharmaceutical advantage read as the DA twice on
+    Sonnet). The coach proposes an explicit stance, `at:<position>` (`at:politics-da`), for a
+    card that answers a position. The coach's label and the model's answer both gain a stance
+    (reads the position, or answers it), the label file's schema and the evaluation read it, and
+    a wrong stance is scored as its own outcome. Propose the label format and how the coach
+    relabels the 47 (the operator's sitting), then build on the PM's ruling. The re-record on
+    the PM's choice of route is the operator's, a few cents. The bar, the threshold and the
+    taxonomy do not change.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.arguments, debate_cli, prompts, scripts, packages/debate_core/tests, packages/debate_cli/tests, docs/data, docs/guides, docs/runbooks]
+    forbidden:
+      - Card text, a tag, heading or label text in the report, docs, logs or a test
+      - A school, team code or debater name anywhere
+      - A change to the 85% bar, the review threshold or the taxonomy
+      - A live model call by the session
+      - A price written from memory
+  context:
+    - kind: TaskRef
+      name: v1-e32-t43-model-evaluation-system-score-refusals-and-a-second-route
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The stance label's format and the relabelling are ruled on by the PM, and the
+        coach's relabelled sample reads with `--check-sample` (operator).
+    - id: ac2
+      description: >-
+        Prompt 1.2.0 carries (a), (b) and the stance, the evaluation scores a wrong stance
+        as its own outcome, by tests on invented cards shown failing first, and the prompt's
+        version is bumped with its cassettes keyed by it.
+    - id: ac3
+      description: >-
+        The operator's re-record of the 47 under 1.2.0 on the PM's route, its breakdown and
+        scans, is recorded in docs/data beside 1.1.0's (operator, recorded by the PM).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t46-prompt-1-2-0-refusal-fixes-and-answering-stances-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    Prompt 1.2.0: the refusal fixes and the coach's answering stance.
+  goalRef:
+    name: v1-e32-t46-prompt-1-2-0-refusal-fixes-and-answering-stances
+  graph:
+    nodes:
+      - id: prompt-1-2-0-refusal-fixes-and-answering
+        kind: Task
+        name: Prompt 1.2.0
+        description: >-
+          Prompt 1.2.0: the refusal fixes and the coach's answering stance.
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Prompt 1.2.0 tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, packages/debate_cli/tests, -k, evaluat or prompt or stance]
+status:
+  phase: Pending

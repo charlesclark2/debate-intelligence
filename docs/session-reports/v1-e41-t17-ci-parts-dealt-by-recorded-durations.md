@@ -289,3 +289,13 @@ That matches the PM's own reading of the worksteal dispatches (parts within 1.10
    clean. actionlint runs in this pull request's `workflow-lint` job.
 8. **Merge:** `scripts/task pr --partial` once `ci` is green. The Goal stays `InProgress` until the PM
    records ac2.
+
+## Operator records (recorded by the PM, 2026-11-03)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac2: the slowest part's pytest step on three task pull requests after the merge, against the three before | NOT RUN (PM) | PASS | read by the PM from GitHub's API, 2026-11-03: v1-e32-t43, 8 parts, slowest pytest step **230 s** (parts 155-230 s), against v1-e06-t12's 255 s (8 parts); v1-e37-t15, 3 parts, **88 s** (79-88 s), against v1-e37-t03's 189 s (2 parts); v1-e31-t32 (run 41587104561), 8 parts, **203 s** (136-203 s), against v1-e07-t03's 280 s (8 parts). The three before ran under `load`; these ran under worksteal and the deal by duration together |
+
+Every criterion passes, so the Goal is `Succeeded` in this batch. Each slowest part is faster than any of the three before. The 8-part runs still spread over 67-75 s, because the durations are recorded on dev's whole-selection push run and a pull request runs a subset; no task is filed for that unless the spread grows. Parts collecting only their own files is `v1-e41-t18`.

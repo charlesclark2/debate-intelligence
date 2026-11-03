@@ -1027,5 +1027,43 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e32-t45-review-order-model-retrained-at-the-current-taxonomy
+    - id: t46
+      kind: Task
+      name: 'Prompt 1.2.0: the refusal fixes and the coach''s answering stance'
+      description: >-
+        Prompt 1.2.0: the refusal fixes and the coach's answering stance.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t46-prompt-1-2-0-refusal-fixes-and-answering-stances.yaml
+        goalRef: v1-e32-t46-prompt-1-2-0-refusal-fixes-and-answering-stances
+      dependsOn:
+      - t43
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t46-prompt-1-2-0-refusal-fixes-and-answering-stances reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t46-prompt-1-2-0-refusal-fixes-and-answering-stances
+    - id: t47
+      kind: Task
+      name: 'The purge and removal runbooks'' cassette blocks reach a route''s cassettes'
+      description: >-
+        The purge and removal runbooks' cassette blocks reach a route's cassettes.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t47-route-cassettes-in-the-purge-and-removal-blocks.yaml
+        goalRef: v1-e32-t47-route-cassettes-in-the-purge-and-removal-blocks
+      dependsOn:
+      - t43
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t47-route-cassettes-in-the-purge-and-removal-blocks reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t47-route-cassettes-in-the-purge-and-removal-blocks
 status:
   phase: Pending

@@ -24,10 +24,13 @@ spec:
     (3) a CITE row marked as a start directly under a TAG splits the card and leaves the tag
     outside it (two files): the page warns; (4) in sighted mode `n` on a row that starts a
     pre-label card removes the card without a word (two files): the page says so; (5) `check`
-    and the page warn, not refuse, on a TAG or CITE in no card that is not cut off at a block
+    and the page warn on a TAG or CITE in no card that is not cut off at a block
     edge (a file whose card runs body first, cite after, is the legitimate case); (6) the guide
     writes that case down: a card written body first is labelled EVIDENCE and CITE with a blank
     card.
+    (PM amendment 2026-11-03, the session's deviation, accepted.) (5) is a new warning in `check` and on
+    the page: at the start commit neither refused a TAG or CITE in no card, so there was no refusal to turn
+    into a warning.
   priority: 3
   constraints:
     packages: [tests/evals/parser, scripts, tests/fixtures/debate_files/eval/labels/README.md]

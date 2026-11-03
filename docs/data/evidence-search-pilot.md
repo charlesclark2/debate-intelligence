@@ -45,18 +45,18 @@ ticked yes or no with its date, before the coach's beta (`v1-e39-t10` ac7).
 
 | Item | Done | Date | Notes |
 |---|---|---|---|
-| 1. `dev` promoted to `main` | | | |
-| 2. Prod's `owner.auto.tfvars` checked | | | |
-| 3. Step 11 in full, nothing destroyed | | | |
-| 4. `v1-e29-t08`'s prod plan | | | |
-| 5. Prod's suppression list exists | | | |
-| 6. Prod's parsed store current | | | |
-| 7. Prod's first index published | | | |
+| 1. `dev` promoted to `main` | yes | 2026-11-03 | Promotion #810, `main` at `3f827613`; no commit on `main` that `dev` lacks |
+| 2. Prod's `owner.auto.tfvars` checked | yes | 2026-11-03 | The deployer and accounts lines added, the check counting 2 |
+| 3. Step 11 in full, nothing destroyed | yes | 2026-11-03 | 105 added, 6 changed, 0 destroyed over two passes, then `No changes`; settings, keys, the deploy and its checks ([the record](../runbooks/evidence-search.md#step-11--prod)) |
+| 4. `v1-e29-t08`'s prod plan | yes | 2026-11-03 | Covered by step 11: the plan after it says `No changes` |
+| 5. Prod's suppression list exists | yes | 2026-11-03 | It did not; created empty by the takedown role, 0 bytes, `aws:kms` |
+| 6. Prod's parsed store current | no | | After the cloud run's full re-parse of 2026-11-04 under `docx-7` |
+| 7. Prod's first index published | no | | After item 6, from the same restored copy |
 | 8. `v1-e39-t07`'s prod removal exercise | | | |
-| 9. Superseded parsed directories retired in prod | | | |
+| 9. Superseded parsed directories retired in prod | no | 2026-11-03 | Dry run only: all 20 directories (`docx-1` to `docx-6`, four caselists) `not yet superseded` until item 6; then five directories |
 | 10. The request to school IT | | | |
 | 11. The beta's prod accounts created | | | |
-| 12. The Lambda bandwidth-quota request sent | | | |
+| 12. The Lambda bandwidth-quota request sent | yes | 2026-10-31 | Case 179348693100944, `CASE_OPENED` on 2026-11-03 |
 
 ## Dev's checks before the promotion
 

@@ -581,3 +581,12 @@ Added by the PM. Nothing above is changed, and this section is not a review.
 
 The Goal stays `InProgress` until the prod plan is recorded.
 
+## Operator records (recorded by the PM, 2026-11-03)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac4, plan: prod | open | PASS | 2026-11-03, from `prod-deploy` on `main` (`3f827613`, promotion #810): the comment change went in with step 11's prod apply (105 added, 6 changed, 0 destroyed over two passes, every plan read by the PM), and the plan after it says `No changes. Your infrastructure matches the configuration.` |
+
+Every criterion passes, so the Goal is `Succeeded` in this batch.

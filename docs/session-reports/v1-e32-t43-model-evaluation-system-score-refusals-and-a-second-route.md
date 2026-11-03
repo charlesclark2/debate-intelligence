@@ -515,3 +515,13 @@ measured without risking the first recording: the stop over the cassette key sav
    This pull request's `ci` decides.
 8. **Merge:** `scripts/task pr --partial` once `ci` is green. The Goal stays `InProgress` until the PM's
    record of ac3.
+
+## Operator records (recorded by the PM, 2026-11-03)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac3: the operator's recording of the 47 cards on the second route, side by side in docs/data | NOT RUN (operator) | PASS | 2026-11-03, dev `deep_audit` (Claude Sonnet 4.6), 3 calls, $0.182 against Haiku's $0.058: pipeline and model alone 27 of 36, **0.750** against the 1.1.0 recording's 21 of 33, 0.636; refused 0 against 12; below the threshold 11 (1 of them naming the coach's label) against 2; coverage 0.766 against 0.702. Prompt-input scan clean. Cassette scan 42 hits, all marked (38 a JSON key's name, 4 taxonomy words; 0 copied from a card, 0 naming a team), judged ordinary words by the operator in the terminal, so the `model-cassettes-deep_audit` cassettes are kept. Recorded in `docs/data/landscape-model-evaluation.md` |
+
+Every criterion passes, so the Goal is `Succeeded` in this batch. Still below the 0.85 bar, so the hold on live runs stands. Prompt 1.2.0, carrying the refusal fixes (a) and (b) and the coach's `at:` stance labels, is filed as `v1-e32-t46`; the purge and removal blocks for a route's cassettes as `v1-e32-t47`.

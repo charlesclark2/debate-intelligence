@@ -1,0 +1,94 @@
+# TASK v1-e08-t14-da-links-name-the-plans-mechanism-in-the-united-states - A disadvantage's link queries name the plan's mechanism and the United States
+# Epic: E08 Federated Research Workflows | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e08-t14-da-links-name-the-plans-mechanism-in-the-united-states
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+  annotations:
+    debate/title: "A disadvantage's link queries name the plan's mechanism and the United States"
+spec:
+  # Filed by the PM, 2026-11-03, from v1-e08-t05's ac6 and the coach's feedback (2026-11-02).
+  description: >-
+    The coach's labels on v1-e08-t05's Policy search found 3 relevant results in 20: the
+    politics DA's link templates fill {query} with the resolution's words, so OpenAlex returned
+    other countries' national health insurance (South Africa's, Indonesia's). The coach's rule,
+    as written: generic resolution links are fine, but links are usually to the mechanism of the
+    plan text. So a DA's link need fans its queries out over the topic's plan mechanisms (for
+    NHI, single payer, Medicare for All, a public option, ACA reform, and the mechanisms under
+    them) and anchors them to the United States, for every DA's link need, not only politics.
+    Propose first where the mechanisms come from (the topic's aff positions in
+    config/landscape/taxonomies, with their labels and aliases; or a topic preset in
+    config/argument_taxonomy.yaml the coach edits), and how many queries a fan-out may add
+    (v1-e08-t10 asks each provider once per search, and v1-e08-t13 caps a pair's templates), and
+    stop for the PM's ruling before building. The resolution's own words stay one of the
+    queries. The coach reviews the new templates (operator). Then the operator repeats the ac6
+    search and the coach labels it blind, as before, to show the change.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.domain, config, packages/debate_core/tests, packages/debate_cli/tests, docs/guides, docs/data]
+    forbidden:
+      - A live provider call in a test
+      - A school, team code or debater name anywhere
+      - Card text from the caselist store in a query or a template
+      - Dropping the resolution's own words from the queries
+  context:
+    - kind: TaskRef
+      name: v1-e08-t05-search-command
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e08-t04-argument-need-expansion
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The proposal (where the mechanisms come from, the fan-out's size) is ruled on by the
+        PM before any code, and the coach reviews the new templates (operator).
+    - id: ac2
+      description: >-
+        A DA's link need expands over the topic's plan mechanisms and names the United
+        States, with the resolution's words kept as one query, by expansion tests on the
+        recorded fixtures shown failing first.
+    - id: ac3
+      description: >-
+        The operator repeats v1-e08-t05's Policy search and the coach labels it blind; the
+        PM records nDCG@10 and the relevant count against ac6's (3 of 20, 0.746).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e08-t14-da-links-name-the-plans-mechanism-in-the-united-states-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+spec:
+  description: >-
+    A disadvantage's link queries name the plan's mechanism and the United States.
+  goalRef:
+    name: v1-e08-t14-da-links-name-the-plans-mechanism-in-the-united-states
+  graph:
+    nodes:
+      - id: da-links-name-the-plans-mechanism-in-the
+        kind: Task
+        name: Mechanism links
+        description: >-
+          A disadvantage's link queries name the plan's mechanism and the United States.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Mechanism links tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_query_expansion.py]
+status:
+  phase: Pending

@@ -853,6 +853,30 @@ URL is refused exactly as in step 8. Repeat step 9 with prod's names.
 No account is made in the prod pool here. Students' accounts are the coach's, with `tub users add`
 ([the accounts guide](../guides/evidence-search-accounts.md)).
 
+**Applied in prod, 2026-11-03**, after promotion #810 (`main` at `3f827613`), each plan read by the PM:
+
+* Prod's `owner.auto.tfvars` gained the deployer and accounts lines first (the `grep -c -E` check: 2).
+  The read-only plan: `106 to add, 6 to change, 0 to destroy`, nothing replaced, and two account
+  assignments, both new (the pilot's deployers and accounts). Besides the pilot it carried an idle
+  copy of the cloud run's shell (no task definition and no schedule, as no prod image is set) and
+  Bedrock's invoker set with nobody assigned.
+* **11a:** the repository alone, `1 added`. **11b:** the image for `3f827613` pushed as `debate-admin`
+  (`sha256:29dda1fe…`), the function not yet there, as expected.
+* **11c:** a fresh plan matched the read one less the repository (`105 to add, 6 to change, 0 to
+  destroy`) and was applied as a saved plan. It stopped at `aws_cognito_user_pool.pilot` with SES's
+  identity not yet verified, after creating 85 resources, as dev's first apply did. Once
+  `VerifiedForSendingStatus` read `True`, a fresh plan of the remaining `20 to add` was read and
+  applied, and the plan after it said `No changes`.
+* **11d:** the audit log group's deletion protection (`400 True`), managed-login branding (`True`),
+  the login domain `ACTIVE`, version 2, `TLS_V1_2_2021`; prod's cookie keys generated fresh, version
+  2, two 32-byte keys.
+* **11e:** deployed as TubDeployer (image `sha256:e26ab269…`): `302 private, no-store` to
+  `auth.tub.wfbdebate.com`, the five security headers and no `x-robots-tag`, and the function URL
+  `403` twice.
+
+When a saved plan's apply stops partway, the saved plan is stale: plan again, read it, and apply
+the new one; never rerun the old file.
+
 ## Step 12 — The web-filter request to school IT
 
 School IT allows the prod hostnames and nothing else (ADR-0019 (a) 7): the pilot host, the login
@@ -1378,7 +1402,11 @@ real run, in a window with no leftover `DEBATE_*` override.
    working copy restored from the dev bucket, published to prod as
    [the cutover runbook's "Until the promotion"](caselist-cutover.md#until-the-promotion-prod-is-published-by-hand)
    publishes by hand. It refuses if prod's suppression list stops anything the aggregates name, and
-   then the store is rebuilt with `--publish` instead.
+   then the store is rebuilt with `--publish` instead. **Only after the bucket holds the installed
+   build's parser version** for every weekly caselist: a restore brings back that version alone. On
+   2026-11-03 a restore under `2026.10.27-docx-7` held 0 parsed objects, because the cloud run's first
+   full re-parse under it was the next day's (Wednesday 2026-11-04, revision 11). Read
+   `caselist runs --remote --last 1` first: no `Full parse owed` caption.
 7. **Prod's first index**, built by `tub index build` from that same restored copy, checked against
    dev's current manifest as [the journey's J5](#the-signed-in-journey-on-dev) checks it (each
    store's `occurrences_sha256`, the suppression list's sha256), then published against prod, and its
@@ -1386,8 +1414,11 @@ real run, in a window with no leftover `DEBATE_*` override.
 8. **`v1-e39-t07`'s prod removal exercise**, with a synthetic source, then the aggregate rebuild its
    runbook section gives, judged by `Sources` equal to `Skipped` and above zero.
 9. **Retire the superseded parsed directories in prod** (`2026.09.20-docx-1`, `2026.10.10-docx-2`,
-   `2026.10.12-docx-3`, `2026.10.18-docx-5`) by [the retention runbook](parsed-store-retention.md)'s
-   step 3, and record the counts in `docs/data/parsed-card-store.md`.
+   `2026.10.12-docx-3`, `2026.10.18-docx-5` and `2026.10.20-docx-6`) by
+   [the retention runbook](parsed-store-retention.md)'s step 3, and record the counts in
+   `docs/data/parsed-card-store.md`. **After item 6**: a directory is superseded only when the bucket
+   holds the installed build's version for that caselist, so before item 6 every directory reads
+   `not yet superseded` (prod's dry run of 2026-11-03, on `docx-7`, with `docx-6` the newest there).
 10. **Step 12**, the request to school IT, with prod's hostnames only.
 11. **The coach creates the beta's prod accounts.** The two debaters who used dev on 2026-10-22 get
     new prod accounts; dev accounts are never carried over.
@@ -1551,11 +1582,16 @@ ENV=prod
 BUCKET=$(AWS_PROFILE=debate-admin terraform -chdir="infrastructure/envs/$ENV" output -raw evidence_bucket_name)
 KEY_ARN=$(AWS_PROFILE=debate-admin terraform -chdir="infrastructure/envs/$ENV" output -raw evidence_kms_key_arn)
 aws sso login --profile "debate-$ENV-evidence-removal"
+EMPTY=$(mktemp)
 aws s3api put-object --profile "debate-$ENV-evidence-removal" --bucket "$BUCKET" \
-  --key manifests/_suppression/suppression-list.jsonl --body /dev/null \
+  --key manifests/_suppression/suppression-list.jsonl --body "$EMPTY" \
   --server-side-encryption aws:kms --ssekms-key-id "$KEY_ARN" --if-none-match '*'
+rm "$EMPTY"
 ```
-Success looks like an `ETag` and `"ServerSideEncryption": "aws:kms"`. `--if-none-match '*'` makes
+Success looks like an `ETag` and `"ServerSideEncryption": "aws:kms"`. The body is an empty temporary
+file because the AWS CLI takes only a regular file there: `/dev/null` is refused with `Blob values
+must be a path to a file` before anything is sent (prod, 2026-11-03). Prod's list was created this way
+on 2026-11-03: 0 bytes, `aws:kms` with prod's key, written by the takedown role. `--if-none-match '*'` makes
 S3 refuse the write with `PreconditionFailed` if a list appeared in the meantime, so an existing
 list is never replaced.
 

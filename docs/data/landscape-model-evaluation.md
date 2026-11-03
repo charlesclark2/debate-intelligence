@@ -369,3 +369,30 @@ Counted through the evaluation's own scrubbed path; no tag, heading or label tex
   pipeline's counted cards are what keep it under the bar (6 a neighbour of the same kind, 5 another kind,
   1 placed though labelled none; 4 of the 5 other-kind answers are of cards in a file read by the side
   opposite the label's).
+
+## A second route: Claude Sonnet 4.6 on `deep_audit` (`v1-e32-t43` ac3, 2026-11-03)
+
+The operator's recording of the same 47 cards on dev's `deep_audit` route, with `landscape evaluate
+--route deep_audit` (snapshot 2026-10-20, taxonomy 1.5.0, prompt 1.1.0), beside the 1.1.0 recording
+on `high_volume`. Its cassettes are under `model-cassettes-deep_audit/`; the default directory was not
+touched.
+
+| | Claude Haiku 4.5 (`high_volume`) | Claude Sonnet 4.6 (`deep_audit`) |
+|---|---|---|
+| Pipeline, correct of counted (bar 0.85) | 21 of 33, 0.636 | **27 of 36, 0.750** |
+| Model alone, correct of counted | 19 of 32, 0.594 | 27 of 36, 0.750 |
+| Refused `NO_POSITION` | 12 | 0 |
+| Below the threshold | 2 | 11 (1 of them names the coach's label) |
+| Coverage, counted of labelled | 0.702 | 0.766 |
+| Calls / cost of the 47 cards | 3 / $0.058 | 3 / $0.182 |
+
+* **Sonnet answers every card.** The threshold then does its work: of the 11 answers below it, 10 are
+  wrong and 1 names the label.
+* **The 9 wrong answers among the 36 counted** are mostly a neighbouring advantage, and twice the
+  pharmaceutical advantage read as the pharmaceutical DA: a card that answers a position read as the
+  position, the case the coach's `at:` stance label is meant to separate (`v1-e32-t46`).
+* **The scans.** The prompt-input scan was clean. The cassette scan found 42 hits, all marked by the
+  breakdown (38 a JSON key's name in a rationale, 4 taxonomy words); none was copied from a card and none
+  names a team. The operator read them in the terminal on 2026-11-03 and judged all 42 ordinary words, so
+  the cassettes are kept.
+* The bar still reads the pipeline, and neither route meets it. The hold on live runs stands.

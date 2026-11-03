@@ -1,0 +1,75 @@
+# TASK v1-e32-t47-route-cassettes-in-the-purge-and-removal-blocks - The purge and removal runbooks' cassette blocks reach a route's cassettes
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t47-route-cassettes-in-the-purge-and-removal-blocks
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "The purge and removal runbooks' cassette blocks reach a route's cassettes"
+spec:
+  # Filed by the PM, 2026-11-03, from v1-e32-t43's follow-up (accepted deviation, 2026-11-03).
+  description: >-
+    `landscape evaluate --route` records a route's cassettes under `model-cassettes-<route>/`
+    (`model-cassettes-deep_audit/` exists on the operator's Mac since 2026-11-03), and
+    `landscape cassettes --route` lists and deletes them. The annual purge and the removal
+    runbooks' cassette steps run the default directory only, and say in a paragraph to tell the
+    PM when a route directory exists. Give each a block that finds every `model-cassettes-*`
+    directory and runs the same delete for each, with its own confirmation code, so the data-use
+    policy's deletion reaches every route's cassettes, and add the runbook tests that pin the
+    blocks.
+  priority: 3
+  constraints:
+    packages: [docs/runbooks, tests/docs, debate_cli, packages/debate_cli/tests]
+    forbidden:
+      - A block that deletes without a dry run and a confirmation code
+      - Card text or a team name in a runbook or test
+  context:
+    - kind: TaskRef
+      name: v1-e32-t43-model-evaluation-system-score-refusals-and-a-second-route
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The purge and removal runbooks' cassette steps reach every route's cassette
+        directory, each with a dry run and its own confirmation code, pinned by runbook
+        tests.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t47-route-cassettes-in-the-purge-and-removal-blocks-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    The purge and removal runbooks' cassette blocks reach a route's cassettes.
+  goalRef:
+    name: v1-e32-t47-route-cassettes-in-the-purge-and-removal-blocks
+  graph:
+    nodes:
+      - id: route-cassettes-in-the-purge-and-removal
+        kind: Task
+        name: Route cassette blocks
+        description: >-
+          The purge and removal runbooks' cassette blocks reach a route's cassettes.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Route cassette blocks tests pass
+            command: uv
+            args: [run, pytest, tests/docs, packages/debate_cli/tests, -k, cassette or purge or removal]
+status:
+  phase: Pending

@@ -36,7 +36,7 @@
 #
 # Schema 2 (v1-e08-t08): `families`, each with its kinds and needs, replaces the one `needs` list.
 schema_version: 2
-taxonomy_version: 1.2.0
+taxonomy_version: 1.2.1
 
 variables:
   query: What the debater typed as the search query.
@@ -533,7 +533,7 @@ arguments:
     kind: framework
     formats: [POLICY, LD, PF]
     aliases: [cba, cost-benefit-analysis]
-    review: awaiting_coach_review
+    review: coach_reviewed
     note: >-
       A framing argument for Policy and LD (the coach, 2026-11-02), kept for PF too. The same shape
       as util until the coach gives his own wording at review.
@@ -885,7 +885,7 @@ arguments:
     formats: [POLICY]
     aliases: [antiblackness, k-antiblackness]
     landscape_id: antiblackness-k
-    review: awaiting_coach_review
+    review: coach_reviewed
     templates:
       link:
         - {text: "{topic} antiblackness"}
@@ -911,7 +911,7 @@ arguments:
     formats: [POLICY]
     aliases: [psychoanalysis, psycho-k, k-psychoanalysis]
     landscape_id: psychoanalysis-k
-    review: awaiting_coach_review
+    review: coach_reviewed
     templates:
       link:
         - {text: "{query} desire fantasy"}

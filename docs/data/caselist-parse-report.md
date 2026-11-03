@@ -2351,3 +2351,28 @@ made on its own is gone. hsld26's other two were cite lines under a tag, so its 
 number there. The one marker-free body that spanned two clusters was that divided card: under `docx-8` none
 does. The two lines read as a cite that remain are `marker-word-opens-a-short-line`, in the cite
 character style, which M3 leaves to the file's author.
+
+### The coach's sample of the lines between body paragraphs (L-D, operator-run, 2026-11-03)
+
+`scripts/sample_cite_shapes.py --plan short-lines --seed 20261103`, answered by the coach in his
+terminal by item number: 66 items from 13,518 parsed sources (`docx-8`), 480 seconds answering. The
+question was "the source's own text, a note by whoever cut the card, or something else?" The coach
+was told before answering that a citation line, page furniture or anything he could not tell is
+"something else", and an in-round marker or an omission note is a note by whoever cut the card.
+
+| Stratum | In the store | Asked | The source's own text | A note by whoever cut the card | Something else |
+|---|---|---|---|---|---|
+| 40 characters or fewer, in capitals | 12,744 | 8 | 1 | 7 | 0 |
+| 40 characters or fewer, not in capitals | 15,611 | 8 | 6 | 2 | 0 |
+| 41 to 200 characters, ending a sentence | 10,863 | 8 | 7 | 0 | 1 |
+| 41 to 200 characters, not ending a sentence | 7,803 | 8 | 5 | 1 | 2 |
+| Over 200 characters | 3,834 | 8 | 8 | 0 | 0 |
+| An omission note | 1,972 | 8 | 0 | 8 | 0 |
+| A number or punctuation alone | 362 | 8 | 3 | 1 | 4 |
+| An in-round marker, a line of the three forms, however read | 156 | 10 | 0 | 10 | 0 |
+
+The seven strata of lines between body paragraphs hold 53,189 lines; with the 19 of a marker form,
+they are the 53,208 of the `docx-8` count. The marker stratum counts every paragraph holding a line
+of the three forms, whatever it was read as, headings included, so it holds more than the 96 lines
+the count reads as body, nothing or a cite. Eight items a stratum tell "mostly" from "often wrong" and
+no finer: 8 of 8 is a share of at least 0.68 at 95% (Wilson), and 7 of 8 at least 0.53.

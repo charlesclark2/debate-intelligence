@@ -13,8 +13,10 @@ import sys
 from pathlib import Path
 
 import pytest
-from tests.scripts.test_compare_card_clusters import CASELIST
+from tests.scripts.test_compare_card_clusters import CASELIST, _document
 from tests.scripts.test_count_matching_recall import TELLTALE, write_recall_store
+
+from debate_core.domain.debate_files import CardCompleteness
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 
@@ -149,3 +151,30 @@ def test_the_sample_refuses_output_that_is_not_a_terminal(
     assert script.main(_arguments(counted, sheet)) == 2
     assert "only in a terminal" in capsys.readouterr().err
     assert not sheet.exists()
+
+
+#: A cite longer than any screen line, of words the store's bodies do not use.
+LONG_CITE = " ".join(f"citeword{number}" for number in range(60))
+
+
+@pytest.mark.parametrize("stratum", [script.NEITHER_END, script.TRIMS_END_TO_END, script.HOLDERS_UNDER_300])
+def test_every_item_shows_each_cards_tag_and_its_whole_cite_on_a_narrow_screen(stratum: int) -> None:
+    (template,) = _document("cite", (("Invented 26", CardCompleteness.FULL, "x"),)).cards
+    bodies = (" ".join(f"h{n}" for n in range(40)), " ".join(f"h{n}" for n in range(12)))
+    bodies += (" ".join(f"h{n}" for n in range(20, 40)),)
+    cards = {
+        ("s", index): template.model_copy(
+            update={"evidence_text": body, "full_cite": f"{LONG_CITE} end{index}"}
+        )
+        for index, body in enumerate(bodies)
+    }
+    positions = tuple(cards)[1:] if stratum == script.NEITHER_END else tuple(cards)
+    shown = script.render_item(script.Drawn(stratum, CASELIST, positions), cards, 50)
+    tokens = shown.split()
+
+    def shown_whole(words: list[str]) -> bool:
+        return any(tokens[start : start + len(words)] == words for start in range(len(tokens)))
+
+    for _, index in positions:
+        assert shown_whole([*LONG_CITE.split(), f"end{index}"])
+    assert max(len(line) for line in shown.splitlines() if "citeword" in line) <= 50

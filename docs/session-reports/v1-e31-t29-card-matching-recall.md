@@ -134,8 +134,10 @@ cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-
 uv run python scripts/sample_matching_recall.py --seed 20261103 --tally-sheet ~/t29-matching-recall-tally-sheet.txt
 ```
 
-The items open in `less`: space pages, `b` goes back, `q` closes it. Each item says which keys
-answer it. Fill in the Answer column of `~/t29-matching-recall-tally-sheet.txt` in any editor, and
+The items open in `less`: space pages, `b` goes back, `q` closes it. Each item gives every card's
+tag and its whole cite, wrapped and never cut short (the operator asked for the whole cite, which
+is what tells one article from another), and says which keys answer it. The sheet opens with
+made-up examples of each answer. Fill in the Answer column of `~/t29-matching-recall-tally-sheet.txt` in any editor, and
 the Notes column only where something is worth saying, in formatting or editing terms. Then say
 "done" in the session: it reads the two counts files and the sheet from your home folder, so
 nothing needs pasting.

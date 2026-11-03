@@ -18,7 +18,7 @@ bold) or `v1-e31-t22`'s (`sample_card_boundaries._between`, where A ends and B b
 stratum each is from, go to `less -R` and nowhere else: the script refuses to run unless its output
 is a terminal, and the text leaves the screen when `less` closes. The answers go on a tally sheet,
 a new file outside the repository and the data directory, which holds counts and a row per item to
-fill in: no card text, tag, cite, path or digest. The operator fills it in and pastes it back.
+fill in: no card text, tag, cite, path or digest. The operator fills it in, and the session reads it.
 
     uv run python scripts/sample_matching_recall.py --seed 20261103 \\
         --tally-sheet ~/t29-matching-recall-tally-sheet.txt
@@ -32,6 +32,7 @@ import random
 import shutil
 import subprocess
 import sys
+import textwrap
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -173,9 +174,23 @@ def draw(population: Mapping[int, Sequence[Drawn]], seed: int) -> list[Drawn]:
     return drawn
 
 
-def _shortened(text: str | None, width: int) -> str:
-    text = " ".join((text or "(none)").split())
-    return text if len(text) <= width else text[: max(1, width - 1)] + "…"
+def _tag_and_cite(named: Sequence[tuple[str, ParsedCard]], columns: int) -> list[str]:
+    """Each card's tag and its whole cite, wrapped to `columns`, never cut short: the cite is what
+    tells one article from another."""
+    lines: list[str] = []
+    width = max(40, columns)
+    for name, card in named:
+        for field, text in (("tag", card.tag), ("cite", card.full_cite)):
+            opening = f"{name} {field}: " if field == "tag" else f"{' ' * len(name)} {field}: "
+            lines += textwrap.wrap(
+                " ".join((text or "(none)").split()),
+                width=width,
+                initial_indent=opening,
+                subsequent_indent=" " * len(opening),
+                break_long_words=False,
+                break_on_hyphens=False,
+            )
+    return lines
 
 
 def _marked_holder(text: str, pieces: tuple[frozenset[str], frozenset[str]], columns: int) -> list[str]:
@@ -204,6 +219,8 @@ def render_item(item: Drawn, cards: Mapping[CardKey, ParsedCard], columns: int) 
         lines = [
             f"{item.caselist}. A is nine-tenths inside B, but B holds neither A's first five words nor its "
             "last five, so the matching never compares them.",
+            *_tag_and_cite((("A", cut), ("B", container)), columns),
+            "",
             render_pair(cut, container, shape, columns),
         ]
     else:
@@ -213,9 +230,7 @@ def render_item(item: Drawn, cards: Mapping[CardKey, ParsedCard], columns: int) 
             f"{item.caselist}. A body of {words[0]:,} words holding A, {words[1]:,} words, and B, "
             f"{words[2]:,} words, which share no text.",
         ]
-        for name, card in (("The body", holder), ("A", first), ("B", second)):
-            lines.append(f"{name}: tag {_shortened(card.tag, columns - 16)}")
-            lines.append(f"{' ' * len(name)}  cite {_shortened(card.full_cite, columns - 16)}")
+        lines += _tag_and_cite((("The body", holder), ("A", first), ("B", second)), columns)
         pieces = (shingles(first.evidence_text), shingles(second.evidence_text))
         lines += ["", *_marked_holder(holder.evidence_text, pieces, columns)]
     keys = ", ".join(f"{key} {answer}" for key, answer in stratum.answers.items())
@@ -245,10 +260,24 @@ def tally_sheet(
     lines += [
         "",
         "For each item, under Answer, write the key it asks for: s same card, d different card, u unsure;",
-        "or o one card cut twice, t two cards, u unsure. Under Notes, if anything, say what differs in",
-        'formatting or editing terms only: for example "a word changed at each end", "B adds a',
-        'sentence the body has", "two tags in one". No card text, no names, no tags or cites.',
-        "Then paste this sheet back, and nothing else.",
+        "or o one card cut twice, t two cards, u unsure. Under Notes, if anything, say what you went by,",
+        "in formatting or editing terms only. No card text, no names, no tags or cites, no titles.",
+        "",
+        "Examples (made up):",
+        "  An item asking 'same card?': A is B's middle paragraph, with a bracketed insertion where B's",
+        "    first word was and a footnote number after its last; the cites name one author, year and",
+        "    article.                    -> s | bracket at the start, footnote mark at the end",
+        "  The same, but the cites name two different articles that quote one passage.",
+        "                                -> d | one quotation in two articles; cites differ",
+        "  An item asking 'one card cut twice?': A is the body's opening paragraphs, B its last two;",
+        "    the words between are one argument, and nothing between looks like a cite or a tag.",
+        "                                -> o | A the opening, B the close; one argument between",
+        "  The same, but between A and B is a line with an author and a year, and B argues something",
+        "    else.                       -> t | a second cite line between A and B",
+        "  Two parts that could be either, or a cite too thin to tell articles apart.",
+        "                                -> u | cite gives an author and year only",
+        "",
+        "Then say done in the session; nothing needs pasting.",
         "",
         "Item | Answer | Notes",
     ]
@@ -304,7 +333,7 @@ def run(arguments: argparse.Namespace, page: Callable[[str], None]) -> int:
         cards = read_cards(store, item.caselist, versions[item.caselist], item.positions)
         shown.append(f"{'-' * 72}\nItem {number} of {len(items)}.\n\n{render_item(item, cards, columns)}")
     page("\n".join(shown) + f"{'-' * 72}\nThe end: fill in the tally sheet.\n")
-    print(f"The tally sheet is {sheet.name}: fill in its Answer and Notes columns and paste the sheet back.")
+    print(f"The tally sheet is {sheet.name}: fill in its Answer and Notes columns, then say done.")
     return 0
 
 

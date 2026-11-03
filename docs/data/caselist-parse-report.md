@@ -2283,11 +2283,12 @@ as a cite divides joined again), and the bodies that changes are set against tod
 | The first three | 25 | 1 | 20 | 8 | 1 |
 | All four | 90 | 1 | 42 | 8 | 1 |
 
-**One cluster split, in hspolicy26:** a marker read as a cite divides a card, and its two halves sit in
-two clusters. Every other marker-free body that another card already has sits in that card's cluster
-today, because the near-duplicate rules (`card-fingerprint-v4`) already join copies that differ by a
-short line. The body counts are per parsed source, so one file's copies under two digests count
-twice.
+**One marker-free body spans two of today's clusters, in hspolicy26.** It comes from
+`marker-word-and-clock-time`, the form whose set also holds the one body a marker read as a cite
+divides. The counts don't say whether it is that body. Every other marker-free body that another
+card already has sits in that card's cluster today: the near-duplicate rules
+(`card-fingerprint-v4`) already join copies that differ by a short line. The body counts are per
+parsed source, so one file stored under two digests counts twice.
 
 ### The lines read as nothing between two body paragraphs
 

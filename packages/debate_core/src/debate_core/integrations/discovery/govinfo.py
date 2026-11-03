@@ -214,7 +214,7 @@ def _text(value: object) -> str | None:
 
 
 def search_words(typed: str) -> str:
-    """The words to search: brackets and colons cleared, an unpaired double quote dropped, spaces closed up."""
+    """The words to search: brackets and colons cleared, an unpaired double quote dropped, spaces single."""
     words = _SYNTAX.sub(" ", typed)
     if words.count('"') % 2:
         words = words.replace('"', " ")

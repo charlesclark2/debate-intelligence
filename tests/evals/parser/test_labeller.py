@@ -1067,6 +1067,9 @@ def test_a_cite_in_no_card_is_a_warning_on_the_page_and_in_check_and_import_take
         ("TAG* CITE EVIDENCE ANALYTIC TAG CITE EVIDENCE", (0, 6), []),
         # The tag of the card at the top of the block is above it: cut off, so no warning.
         ("UNDERTAG CITE EVIDENCE ANALYTIC TAG* CITE EVIDENCE", (0, 6), []),
+        # Two cards nobody started at the end of a block: a card never runs on through a TAG, so
+        # only the last is cut off.
+        ("TAG* CITE EVIDENCE ANALYTIC TAG CITE EVIDENCE TAG CITE EVIDENCE", (0, 9), [4, 5]),
         # A TAG at the top of the block starts a card the block holds whole: warned.
         ("TAG CITE EVIDENCE ANALYTIC TAG* CITE EVIDENCE", (0, 6), [0, 1]),
     ],

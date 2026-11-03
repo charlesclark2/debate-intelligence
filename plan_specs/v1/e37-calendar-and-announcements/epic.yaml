@@ -379,5 +379,54 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e37-t14-season-end-warning-and-one-definition
+    - id: t15
+      kind: Task
+      name: 'News is in the header navigation and stays in the footer'
+      description: >-
+        News is in the header navigation and stays in the footer.
+      inputs:
+        specRef: plan_specs/v1/e37-calendar-and-announcements/t15-news-in-the-header-and-the-footer.yaml
+        goalRef: v1-e37-t15-news-in-the-header-and-the-footer
+      dependsOn:
+      - ext-v1-e36-t04-core-pages
+      - t11
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e37-t15-news-in-the-header-and-the-footer reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e37-t15-news-in-the-header-and-the-footer
+    - id: ext-v1-e36-t08-prelaunch-visual-qa
+      kind: External
+      name: 'Prerequisite from E36: Pre-launch visual QA and launch readiness'
+      description: >-
+        Cross-epic prerequisite owned by v1-e36-team-website (release v1.6).
+      inputs:
+        goalRef: v1-e36-t08-prelaunch-visual-qa
+        specRef: plan_specs/v1/e36-team-website/t08-prelaunch-visual-qa.yaml
+    - id: t16
+      kind: Task
+      name: 'Announcement guard follow-ups: a name''s published form in free text, an image that exists, and names after the season rolls over'
+      description: >-
+        Announcement guard follow-ups: a name's published form in free text, an image that
+        exists, and names after the season rolls over.
+      inputs:
+        specRef: plan_specs/v1/e37-calendar-and-announcements/t16-announcement-guard-follow-ups.yaml
+        goalRef: v1-e37-t16-announcement-guard-follow-ups
+      dependsOn:
+      - t11
+      - ext-v1-e36-t08-prelaunch-visual-qa
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e37-t16-announcement-guard-follow-ups reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e37-t16-announcement-guard-follow-ups
 status:
   phase: Pending

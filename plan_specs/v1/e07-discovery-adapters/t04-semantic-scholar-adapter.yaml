@@ -39,6 +39,10 @@ spec:
     adapter's tests run once in one process after the OpenCaselist client and discovery suites
     (`-n 0 -p no:randomly`), since logger filters are shared by the whole process (working
     agreement 10).
+    (PM amendment 2026-11-02, from v1-e07-t03's review.) Read Semantic Scholar's current rate
+    limits first (public docs only). If an 11-query search would exceed them, pace on the shared
+    mechanism of v1-e07-t10 rather than a second module-private pacer: stop and ask if that task has not
+    merged.
   priority: 3
   constraints:
     packages: [debate_core.integrations]

@@ -1,0 +1,80 @@
+# TASK v1-e08-t13-topic-expansion-fallback-and-templates-per-pair - An expansion on a topic only a feed file names falls back cleanly, and a pair's templates are capped
+# Epic: E08 Federated Research Workflows | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e08-t13-topic-expansion-fallback-and-templates-per-pair
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+  annotations:
+    debate/title: "An expansion on a topic only a feed file names falls back cleanly, and a pair's templates are capped"
+spec:
+  # Filed by the PM, 2026-11-02, from v1-e07-t07's and v1-e07-t03's follow-ups (the PM's reviews, 2026-11-02).
+  description: >-
+    (1) `search --topic` accepts every id a feed file's search_topics names (v1-e07-t07), but
+    with `--argument` the expansion refuses an id that is not a taxonomy preset. None exists
+    today; the next debate topic's file could add one. Let the expansion fall back to the query
+    for `{topic}` on such an id, saying so. (2) The taxonomy sets no limit on templates per
+    argument and need. Crossref's public pool answers what fits in about 8 to 9 seconds of an
+    11-query search (v1-e07-t03), so a pair with more templates gets more 'not asked' answers.
+    Cap the templates per pair in the taxonomy's validation at the largest pair today (8) unless
+    the PM rules otherwise, with a message naming the pair.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, config/argument_taxonomy.yaml, packages/debate_core/tests, packages/debate_cli/tests]
+    forbidden:
+      - A change to any template's text
+      - Live calls in tests
+  context:
+    - kind: TaskRef
+      name: v1-e07-t07-government-adapters
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e08-t04-argument-need-expansion
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A topic only a feed file names expands with the query in place of `{topic}` and says
+        so, and a taxonomy with more than the cap of templates on one pair fails validation
+        naming it, by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e08-t13-topic-expansion-fallback-and-templates-per-pair-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e08-research-workflows
+spec:
+  description: >-
+    An expansion on a topic only a feed file names falls back cleanly, and a pair's templates
+    are capped.
+  goalRef:
+    name: v1-e08-t13-topic-expansion-fallback-and-templates-per-pair
+  graph:
+    nodes:
+      - id: topic-expansion-fallback-and-templates-p
+        kind: Task
+        name: Expansion fallback and cap
+        description: >-
+          An expansion on a topic only a feed file names falls back cleanly, and a pair's
+          templates are capped.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Expansion fallback and cap tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, expansion or taxonomy]
+status:
+  phase: Pending

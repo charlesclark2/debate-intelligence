@@ -308,3 +308,13 @@ named with its count.
    clean.
 8. **Merge:** `scripts/task pr --partial` once `ci` is green. The Goal stays `InProgress` until the PM
    records ac3.
+
+## Operator records (recorded by the PM, 2026-11-02)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac3: the coach's relabelled sample reads without refusal | NOT RUN (operator) | PASS | 2026-11-02, `landscape evaluate --check-sample` from dev at taxonomy 1.5.0: labelled 47, by_label_kind advantage 16, cp 6, da 5, k 10, none 3, t 7; second_labels 2, both advantages. The coach kept multipayer-t on rows 32 and 38 (his label stands), relabelled 11, 30, 31, 59 and 47, and gave rows 34 and 58 a second label |
+
+Every criterion passes, so the Goal is `Succeeded` in this batch. For the coach's next review-queue pass: the bare profiteering heading and the profiteering overview this task left out of the advantage's aliases.

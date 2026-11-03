@@ -144,9 +144,9 @@ the plugin's own function (`parts_dealt`). On the operator's Mac it took 18.7 s 
 
 ### worksteal, switchable for a dispatch
 
-`ci.yml`'s `workflow_dispatch` has an input, `xdist_dist`, `load` (the default) or `worksteal`,
-which every test part passes to pytest as `--dist`. A push, a pull request and the bot's dispatch
-run `load`. To compare the two on one commit, dispatch `ci` on `dev` twice, once with each value,
+`ci.yml`'s `workflow_dispatch` has an input, `xdist_dist`, `worksteal` (the default since the PM's
+decision of 2026-11-02) or `load`, which every test part passes to pytest as `--dist`. A push, a pull
+request and the bot's dispatch run `worksteal`. To compare the two on one commit, dispatch `ci` on `dev` twice, once with each value,
 without a merge into `dev` in between (a dispatch runs the whole selection in eight parts, without
 coverage):
 
@@ -162,6 +162,14 @@ them, and both are dispatched again:
 gh run list --repo charlesclark2/debate-intelligence --workflow ci.yml --event workflow_dispatch --branch dev --limit 2 --json databaseId,headSha,createdAt,status
 ```
 
-The PM reads the eight parts' pytest step times of each run from the public API, and decides the
-default in a later one-line change: the input's `default` and the `'load'` in the `test` job's
-`XDIST_DIST`.
+The PM reads the eight parts' pytest step times of each run from the public API. **The comparison of
+2026-11-02** (dev at `cc41db60`, both green), pytest step per part in seconds:
+
+| `--dist` | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | Slowest | Total |
+|---|---|---|---|---|---|---|---|---|---|---|
+| load | 259 | 257 | 279 | 240 | 228 | 266 | 261 | 286 | 286 | 2,076 |
+| worksteal | 234 | 182 | 270 | 200 | 232 | 240 | 245 | 231 | 270 | 1,834 |
+
+Each part held the same tests in both runs. worksteal was faster on 7 of 8 parts, 12% less in total
+and 16 s on the slowest part, so it is the default. One run each, so runner noise is in these
+figures; the direction held on all but one part.

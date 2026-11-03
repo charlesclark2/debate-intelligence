@@ -966,5 +966,66 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e32-t42-landscape-cassettes-delete-by-prompt-version
+    - id: t43
+      kind: Task
+      name: 'The model stage is scored as students meet it, its refusals are explained, and a second model route is measured on the same cards'
+      description: >-
+        The model stage is scored as students meet it, its refusals are explained, and a
+        second model route is measured on the same cards.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t43-model-evaluation-system-score-refusals-and-a-second-route.yaml
+        goalRef: v1-e32-t43-model-evaluation-system-score-refusals-and-a-second-route
+      dependsOn:
+      - t40
+      - t41
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t43-model-evaluation-system-score-refusals-and-a-second-route reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t43-model-evaluation-system-score-refusals-and-a-second-route
+    - id: t44
+      kind: Task
+      name: 'A scan hit already marked as a JSON key''s name or a taxonomy word does not make a text unclean'
+      description: >-
+        A scan hit already marked as a JSON key's name or a taxonomy word does not make a
+        text unclean.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t44-scan-marked-hits-leave-a-text-clean.yaml
+        goalRef: v1-e32-t44-scan-marked-hits-leave-a-text-clean
+      dependsOn:
+      - t40
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t44-scan-marked-hits-leave-a-text-clean reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t44-scan-marked-hits-leave-a-text-clean
+    - id: t45
+      kind: Task
+      name: 'The review queue''s order model is trained again at taxonomy 1.5.0'
+      description: >-
+        The review queue's order model is trained again at taxonomy 1.5.0.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t45-review-order-model-retrained-at-the-current-taxonomy.yaml
+        goalRef: v1-e32-t45-review-order-model-retrained-at-the-current-taxonomy
+      dependsOn:
+      - t41
+      - t21
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t45-review-order-model-retrained-at-the-current-taxonomy reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t45-review-order-model-retrained-at-the-current-taxonomy
 status:
   phase: Pending

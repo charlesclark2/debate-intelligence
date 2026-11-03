@@ -1,0 +1,71 @@
+# TASK v1-e06-t14-refused-stated-cite-is-a-refusal - A stated cite the domain refuses is reported as a refusal, not an internal error
+# Epic: E06 Card Cutting, Citation & Export | Release: v1.3 (URL → verified card) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e06-t14-refused-stated-cite-is-a-refusal
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e06-card-cutting
+  annotations:
+    debate/title: "A stated cite the domain refuses is reported as a refusal, not an internal error"
+spec:
+  # Filed by the PM, 2026-11-02, from v1-e06-t12's follow-up 2 (the PM's review, 2026-11-02).
+  description: >-
+    If a stated cite reaches the snapshot's validator with a field it refuses, `fetch` exits
+    INTERNAL_ERROR. The CLI's builder can't produce one, but another caller could. Map the
+    snapshot's ValidationError on a stated cite to a named refusal with the field and the
+    reason, and a usage exit code.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests]
+    forbidden:
+      - A refused stated cite stored
+      - A stated field reported as verified
+  context:
+    - kind: TaskRef
+      name: v1-e06-t12-pasted-copy-cite-stated-by-the-user
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A stated cite the domain refuses gives a named refusal naming the field, not
+        INTERNAL_ERROR, and nothing is stored, by a test shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e06-t14-refused-stated-cite-is-a-refusal-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.3
+    debate/epic: v1-e06-card-cutting
+spec:
+  description: >-
+    A stated cite the domain refuses is reported as a refusal, not an internal error.
+  goalRef:
+    name: v1-e06-t14-refused-stated-cite-is-a-refusal
+  graph:
+    nodes:
+      - id: refused-stated-cite-is-a-refusal
+        kind: Task
+        name: Refusal named
+        description: >-
+          A stated cite the domain refuses is reported as a refusal, not an internal
+          error.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Refusal named tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, packages/debate_cli/tests, -k, stated]
+status:
+  phase: Pending

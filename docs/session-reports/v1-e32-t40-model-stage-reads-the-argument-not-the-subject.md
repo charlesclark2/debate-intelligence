@@ -507,3 +507,14 @@ Added by the PM. Nothing above is changed, and this is not a review.
   --delete` (dry run first: 4 this caselist's alone, 0 shared, 0 unattributed), and a second listing
   showed none. No 1.1.0 cassette existed, so nothing else was lost. The scratch checkout was removed.
 * **ac3** follows `v1-e32-t41` and the coach's relabelling.
+
+## Operator records (recorded by the PM, 2026-11-02)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+| Criterion | Was | Now | Record |
+|---|---|---|---|
+| ac2: descriptions approved and the 13 rows answered | NOT RUN (operator) | PASS | the coach's review of 2026-11-02 (the PM note above), applied by `v1-e32-t41`, merged |
+| ac3: the re-record of the 47 under 1.1.0 and its breakdown, counts in docs/data, a clean prompt-input scan | NOT RUN (operator) | PASS | 2026-11-02, from dev at taxonomy 1.5.0: asked 47 in 3 calls, 38,881 input and 3,882 output tokens; counted 32, correct 19, accuracy 0.594 against 0.85; refused NO_POSITION 12 (10 of them labelled with a position); below threshold 3; placed though labelled none 1; prompt-input scan clean (3 texts, 0 hits); cassette scan 27 hits, all marked (22 a JSON key's name, 5 taxonomy words; 0 naming a team, 0 copied from a card) and judged ordinary words by the operator in the terminal, so the 1.1.0 cassettes are kept. The first attempt stopped on ModelAccessDenied before any call; the next, after the operator's identity check refreshed the role credentials, recorded |
+
+Every criterion passes, so the Goal is `Succeeded` in this batch. The model stage is still below the bar, so the hold on live runs stands; `v1-e32-t43` (p1, filed in this batch) scores the pipeline as students meet it, explains the refusals and measures a second route, and `v1-e32-t44` keeps marked scan hits from making a text unclean.

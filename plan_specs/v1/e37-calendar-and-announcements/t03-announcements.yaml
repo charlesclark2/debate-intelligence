@@ -34,6 +34,10 @@ spec:
     deploy, not on its date; the guide says so. The coach guide's announcements section is rewritten
     for these files. Out of scope: the schedule (t02), the parent email list (t05), and reading
     Buttondown's archive feed, which ADR-0015 names as a later option.
+    (PM amendment 2026-11-02, from the PM review.) Closing ac6 found three more holes in the same
+    name rules, on every page: a name with an apostrophe in rendered HTML (`O&#39;Neill`), a name split by
+    inline formatting (`**Rowan** Ellery`), and O'Neill read as `O'` in plain text. The session closed
+    them with the two the description names (its Deviation 1, accepted).
   priority: 2
   constraints:
     packages: [site/content, site/src, site/scripts, site/tests, docs/guides]

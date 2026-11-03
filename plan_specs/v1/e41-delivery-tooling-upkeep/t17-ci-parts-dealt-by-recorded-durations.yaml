@@ -1,0 +1,90 @@
+# TASK v1-e41-t17-ci-parts-dealt-by-recorded-durations - CI deals whole test files to its parts by their recorded durations, so an ordinary task pull request's parts finish together
+# Epic: E41 — Delivery Tooling Upkeep | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e41-t17-ci-parts-dealt-by-recorded-durations
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+  annotations:
+    debate/title: "CI deals whole test files to its parts by their recorded durations, so an ordinary task pull request's parts finish together"
+spec:
+  # Filed by the PM, 2026-11-02, from v1-e41-t16's measurement and its follow-up (the PM's review, 2026-11-02).
+  description: >-
+    v1-e41-t16 sized the matrix to the selection, and measured that ten of the last twelve task
+    pull requests reach 29-96% of the suite and still get eight parts. Their wait is set by the
+    slowest part: the PM's read of 2026-11-02 found three task pull requests at 265-362 s of
+    `ci` wall time, with the slowest part's pytest step at 189-289 s, against agreement 1's
+    2-minute line (docs/process/ci-test-part-costs.md). Today the plugin deals tests to parts
+    without knowing their cost, so heavy files pile up in one part. Deal whole test files to
+    parts by their recorded durations instead (greedy longest first, or better if measured), so
+    the parts finish together. The durations are recorded on dev's push run (the whole
+    selection, pytest's own timing, per file), stored where the pull-request runs read them
+    without a network call to anything but GitHub's own artifact or cache, and refreshed on
+    every push run. A file with no recorded duration gets a stated default. The parts still
+    partition the selection at every size, and the partition proof still holds. Measure the
+    slowest part on three task pull requests after the merge against the three before it (the PM
+    reads them from the public API).
+  priority: 1
+  constraints:
+    packages: [.github/workflows, scripts, tests/scripts, tests/pytest_plugins, docs/process]
+    forbidden:
+      - Paid or larger runners
+      - A selected test in no part, or in two
+      - A pull-request run that fails because the durations are missing or stale
+      - Network access in a test
+  context:
+    - kind: TaskRef
+      name: v1-e41-t16-ci-matrix-sized-to-the-selection
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Whole files are dealt to parts by recorded durations refreshed on dev's push run,
+        with a stated default for a new file, every selected test in exactly one part at
+        every size, and a missing or stale record falling back to today's dealing, by
+        workflow and plugin tests shown failing first.
+    - id: ac2
+      description: >-
+        The slowest part's pytest step on three task pull requests after the merge is
+        recorded by the PM against the three before it.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e41-t17-ci-parts-dealt-by-recorded-durations-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e41-delivery-tooling-upkeep
+spec:
+  description: >-
+    CI deals whole test files to its parts by their recorded durations, so an ordinary task pull
+    request's parts finish together.
+  goalRef:
+    name: v1-e41-t17-ci-parts-dealt-by-recorded-durations
+  graph:
+    nodes:
+      - id: ci-parts-dealt-by-recorded-durations
+        kind: Task
+        name: Dealt by duration
+        description: >-
+          CI deals whole test files to its parts by their recorded durations, so an
+          ordinary task pull request's parts finish together.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Dealt by duration tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, -k, ci_workflow or test_selection or parts]
+status:
+  phase: Pending

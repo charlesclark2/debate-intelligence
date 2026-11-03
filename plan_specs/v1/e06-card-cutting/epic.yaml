@@ -363,5 +363,43 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e06-t12-pasted-copy-cite-stated-by-the-user
+    - id: t13
+      kind: Task
+      name: 'A cite can carry a year-only or year-and-month date without inventing a day'
+      description: >-
+        A cite can carry a year-only or year-and-month date without inventing a day.
+      inputs:
+        specRef: plan_specs/v1/e06-card-cutting/t13-year-and-month-dates-in-a-cite.yaml
+        goalRef: v1-e06-t13-year-and-month-dates-in-a-cite
+      dependsOn:
+      - t12
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e06-t13-year-and-month-dates-in-a-cite reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e06-t13-year-and-month-dates-in-a-cite
+    - id: t14
+      kind: Task
+      name: 'A stated cite the domain refuses is reported as a refusal, not an internal error'
+      description: >-
+        A stated cite the domain refuses is reported as a refusal, not an internal error.
+      inputs:
+        specRef: plan_specs/v1/e06-card-cutting/t14-refused-stated-cite-is-a-refusal.yaml
+        goalRef: v1-e06-t14-refused-stated-cite-is-a-refusal
+      dependsOn:
+      - t12
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e06-t14-refused-stated-cite-is-a-refusal reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e06-t14-refused-stated-cite-is-a-refusal
 status:
   phase: Pending

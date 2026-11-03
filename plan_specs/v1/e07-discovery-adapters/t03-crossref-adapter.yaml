@@ -39,6 +39,9 @@ spec:
     adapter's tests run once in one process after the OpenCaselist client and discovery suites
     (`-n 0 -p no:randomly`), since logger filters are shared by the whole process (working
     agreement 10).
+    (PM amendment 2026-11-02, from the PM review.) Packages also take
+    `packages/debate_cli/tests/commands/test_doctor.py` and `packages/debate_cli/tests/test_installation.py`,
+    which pin the integrations the container imports by hand; wiring the factory adds Crossref to both.
   priority: 2
   constraints:
     packages:

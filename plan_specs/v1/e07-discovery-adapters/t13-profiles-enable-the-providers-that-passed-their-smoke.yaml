@@ -1,0 +1,79 @@
+# TASK v1-e07-t13-profiles-enable-the-providers-that-passed-their-smoke - The dev and prod profiles enable the discovery providers whose live smoke passed
+# Epic: E07 Discovery Provider Adapters | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e07-t13-profiles-enable-the-providers-that-passed-their-smoke
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+  annotations:
+    debate/title: "The dev and prod profiles enable the discovery providers whose live smoke passed"
+spec:
+  # Filed by the PM, 2026-11-02, from v1-e07-t03's and v1-e07-t07's operator follow-ups (the PM's reviews, 2026-11-02).
+  description: >-
+    Both profiles enable only openalex and rss. Crossref and the two government providers are
+    built and wired but enabled nowhere. Once each provider's live smoke has passed on the
+    operator's machine (recorded by the PM), enable it in config/profiles/dev.toml and
+    prod.toml: crossref (which needs a contact email for the polite pool, set per machine, never
+    in a profile), federal_register, and govinfo (which needs the api.data.gov key per machine,
+    and stays not_configured without one). Update the profiles' comments and the search guide,
+    and say what a student without a key or an email sees.
+  priority: 3
+  constraints:
+    packages: [config/profiles, debate_cli, packages/debate_cli/tests, docs/guides]
+    forbidden:
+      - A key, an email or any secret in a profile
+      - Enabling a provider whose smoke hasn't passed
+      - Live calls in tests
+  context:
+    - kind: TaskRef
+      name: v1-e07-t07-government-adapters
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e07-t03-crossref-adapter
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The providers whose smoke passed are enabled in both profiles, the profiles' tests
+        and the guide say so, and a run without a key or an email reports not_configured or
+        the public pool as designed.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e07-t13-profiles-enable-the-providers-that-passed-their-smoke-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+spec:
+  description: >-
+    The dev and prod profiles enable the discovery providers whose live smoke passed.
+  goalRef:
+    name: v1-e07-t13-profiles-enable-the-providers-that-passed-their-smoke
+  graph:
+    nodes:
+      - id: profiles-enable-the-providers-that-passe
+        kind: Task
+        name: Providers enabled
+        description: >-
+          The dev and prod profiles enable the discovery providers whose live smoke
+          passed.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Providers enabled tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests, -k, profile or settings]
+status:
+  phase: Pending

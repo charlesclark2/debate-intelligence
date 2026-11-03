@@ -2422,3 +2422,11 @@ changed but the body, its spans and the rules and confidence it records.
 **EVIDENCE precision falls on the full tier**, by one reading: in one verbatim PF team file, a
 paragraph labelled OTHER is read as body. The same file gains 18 right body readings. Every card's
 boundaries are unchanged in all 30 files. Under the PM's gate the task stops here and reports.
+
+Every paragraph N1 reads as body in the 30 labelled files, against its label (a scratch run by the
+operator, ids only): 25 labelled EVIDENCE, 1 labelled OTHER, 58 outside the labelled blocks. The one
+labelled something other than EVIDENCE:
+
+| File (keyed digest) | Paragraph | Label | N1's rule |
+|---|---|---|---|
+| `a8afd234413032f4723e0dc5b38ea90f332f738e3c8e21fcd84189664fd382dc` | 16 | OTHER | `assembly-sentence-between-body-paragraphs` |

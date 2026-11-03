@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e31-debate-file-parsing/t23-in-round-markers.yaml`](../../plan_specs/v1/e31-debate-file-parsing/t23-in-round-markers.yaml) |
 | Epic / release | `v1-e31-debate-file-parsing` / `v1.1` |
 | Branch | `task/v1-e31-t23-in-round-markers` |
-| Session status | PARTIAL: stopped at ac4's gate. N1's labelled evaluation lowers EVIDENCE precision on the full tier by one reading; the PM rules before the task goes on <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE: every criterion a session can close has passed. ac3's re-parse of the store can only follow the merge, so the Goal stays `InProgress` <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -24,36 +24,39 @@ sampled the short lines first, and the coach's sample of 66 items led to the rul
 red first, with the ruled cite guard and one guard more, a Deviation below.
 
 Over the store, N1 makes 13,905 lines body, in 5,831 cards, and changes no other card. On the
-labelled evaluation it reads 25 more body lines right (recall 0.882 → 0.906). It also reads one
-paragraph labelled OTHER as body (paragraph 16 of file `a8afd234…`), so **EVIDENCE precision falls
-0.9708 → 0.9705 on the full tier**, while it rises on the PR subset. Under the PM's gate the session
-stopped there: the Goal stays `InProgress`.
+labelled evaluation it reads 25 more body lines right (recall 0.882 → 0.906). It also read one
+paragraph labelled OTHER as body (paragraph 16 of file `a8afd234…`), so EVIDENCE precision first
+fell 0.9708 → 0.9705 and the session stopped at the PM's gate.
 
-`v1-e31-t32` merged first with `2026.11.03-docx-8`. This branch was synced onto it and takes
-`2026.11.03-docx-9`, with every pin t32 updated, as the PM's note asked.
+The PM ruled Option A. The coach, shown the paragraph blind, answered **s**, the source's own text.
+Its label went from OTHER to EVIDENCE in the guide's own label pull request, **#814**, counted against
+the file's pre-label restored from git: 75 of 255 rows. On the shipped `2026.11.03-docx-9`
+(`v1-e31-t32` merged first with `docx-8`), **EVIDENCE precision is 0.9715 against N1-off's 0.9708**, and
+no card boundary moved. Everything else a session can close has passed. ac3's re-parse of the store
+follows the merge, so the Goal stays `InProgress`.
 
 ## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
-| `markers`: In-round markers | IN PROGRESS | Counts, both rulings built, measurements taken; stopped at ac4's gate on N1 |
+| `markers`: In-round markers | DONE (Goal `InProgress` for ac3's re-parse after the merge) | Counts; M3 and N1 built red first; every measurement on the shipped `docx-9`; ac4's gate passed after #814 |
 
 ## Acceptance criteria
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
 | ac1: operator-run counts of marker lines by form and position per caselist, and the clusters they split | PASS | `uv run python scripts/count_in_round_markers.py` (operator, 2026-11-02, 661 s, 13,518 sources) → 96 lines of the three clear marker forms (34 body, 58 nothing, 4 a cite), 1 cluster split; recorded per caselist in [the parse report](../data/caselist-parse-report.md#in-round-markers-and-the-short-lines-between-body-paragraphs-v1-e31-t23) |
-| ac2: the PM's ruling written into this spec, built with synthetic fixtures shown failing first | PASS | Rulings in the spec (2026-11-03: M1, M3, L-D, N1, the version note). M3: `3cc9f4c` red, **9 failed, 7 passed**, every failure by assertion; green at `42f2ccc`, 16 passed. One expectation was corrected after the red run, the bold marker (Decisions). |
-| ac3: if the parser or fingerprint changes, the version is bumped and the operator's re-parse records the counts before and after | NOT RUN | Parser bumped to `2026.11.03-docx-9`; fingerprints unchanged. Before and after over the same sources, from the branch: M3 (`count_in_round_markers.py` again, 902 s) and N1 (`diff_lines_between_body_paragraphs.py`, 768 s), both in the parse report. The store's re-parse can only follow the merge, and the merge waits on the PM's ruling (Operator follow-ups) |
-| ac4: the short-lines ruling written into the spec beside the marker ruling, built with fixtures shown failing first; the labelled evaluation's evidence precision does not fall | **FAIL** | Ruling and fixtures: `24a61d2` red, **4 failed, 20 passed**, the 4 by assertion; green at `3935f2f`. The evaluation (operator, `run_parser_eval.py --tier both`, N1 off by a scratch runner, then on; both gates PASSED): EVIDENCE precision **0.9708 → 0.9705** on the full tier (930 right / 28 wrong → 955 / 29) and 0.9433 → 0.9442 on the PR subset. The one paragraph N1 adds that the labels call something other than EVIDENCE: file `a8afd234413032f4723e0dc5b38ea90f332f738e3c8e21fcd84189664fd382dc`, paragraph 16, labelled OTHER, `assembly-sentence-between-body-paragraphs`. M3 alone changed nothing in either report |
+| ac2: the PM's ruling written into this spec, built with synthetic fixtures shown failing first | PASS | Rulings in the spec (2026-11-03: M1, M3, L-D, N1, the version note). M3: `c782278` red, **9 failed, 7 passed**, every failure by assertion; green at `5720a62`, 16 passed. One expectation was corrected after the red run, the bold marker (Decisions). |
+| ac3: if the parser or fingerprint changes, the version is bumped and the operator's re-parse records the counts before and after | NOT RUN | Parser bumped to `2026.11.03-docx-9` (`68cd671`); fingerprints unchanged. Before and after over the same 13,518 sources, read-only, from the branch: M3 (`count_in_round_markers.py` again, 902 s) and N1 on `docx-9` (`diff_lines_between_body_paragraphs.py`, 841 s), both in the parse report. The store's re-parse can only follow the merge (Operator follow-ups), so this stays open and the Goal `InProgress` |
+| ac4: the short-lines ruling written into the spec beside the marker ruling, built with fixtures shown failing first; the labelled evaluation's evidence precision does not fall | PASS | Ruling and fixtures: `0a2a945` red, **4 failed, 20 passed**, the 4 by assertion; green at `b461889`. The evaluation, by the operator, both gates PASSED every time: N1 off and on (`docx-8`), then `docx-9` with the old label, then `docx-9` after #814 (`uv run pytest tests/evals/parser -m "eval and slow"` → `1 passed in 4.19s`; `run_parser_eval.py --tier both`). Full-tier EVIDENCE precision: **0.9708 (N1 off) → 0.9705 (N1 on) → 0.9715 (`docx-9`, after #814)**, 956 right / 28 wrong, recall 0.8824 → 0.9062. PR subset 0.9433 → 0.9442. No group below its N1-off figure; card boundaries unchanged. The one paragraph first counted against it: file `a8afd234413032f4723e0dc5b38ea90f332f738e3c8e21fcd84189664fd382dc`, paragraph 16, labelled OTHER until #814, the coach's blind answer s. M3 alone changed nothing in either report |
 | Node `markers`: `uv run pytest packages/debate_core/tests -k "docx or parser or fingerprint"` | PASS (as part of a wider run) | Run inside the changed directories below: `packages/debate_core/tests/integrations/docx_parser`, `docx_file_writer` and `evidence` among 3,827 passed, 2 xfailed |
 
 ### Red then green
 
 | Fixtures | Red commit, result | Green commit, result |
 |---|---|---|
-| M3, `test_in_round_marker_cites.py` | `3cc9f4c`: 9 failed, 7 passed. Every failure by assertion; the passes are five real cites, a marker in the tag style and every card's version | `42f2ccc`: 16 passed |
-| N1, `test_lines_between_body_paragraphs.py` | `24a61d2`: 4 failed, 20 passed. The two strata fail by assertion; the left-alone strata, the ruled cite guard, a real cite and the places N1 does not reach pass before and after | `3935f2f`: 26 passed. The cite-shape guard's two cases were written and shown failing with N1 in place before the guard |
+| M3, `test_in_round_marker_cites.py` | `c782278`: 9 failed, 7 passed. Every failure by assertion; the passes are five real cites, a marker in the tag style and every card's version | `5720a62`: 16 passed |
+| N1, `test_lines_between_body_paragraphs.py` | `0a2a945`: 4 failed, 20 passed. The two strata fail by assertion; the left-alone strata, the ruled cite guard, a real cite and the places N1 does not reach pass before and after | `b461889`: 26 passed. The cite-shape guard's two cases were written and shown failing with N1 in place before the guard |
 
 ### Planted breaks
 
@@ -69,22 +72,22 @@ assertion. A break that crashed was not counted and was replaced (agreement 8).
 
 ## Checks before the report
 
-The affected set (`uv run scripts/affected_tests.py`) is **290 test files**: the parser is a hub
+The affected set (`uv run scripts/affected_tests.py`) is **293 test files**: the parser is a hub
 module. That is well over two minutes, so it was not run and is left to the pull request's `ci`
 (working agreement 10). Run instead, on the final tree:
 
 | Command | Result |
 |---|---|
-| `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest` over the changed test dirs (`docx_parser`, `docx_file_writer`, `evidence`, `tests/evals/parser`), this task's three script tests, t32's and t24's script tests, `test_landscape_restored_copy.py` and the always-run list, `-n auto -m "not slow and not live"` | 3,827 passed, 2 xfailed, 30.9 s |
+| `.venv/bin/python scripts/hard_stop.py 115 .venv/bin/python -m pytest` over the changed test dirs (`docx_parser`, `docx_file_writer`, `evidence`, `tests/evals/parser`), this task's three script tests, t32's and t24's script tests, `test_landscape_restored_copy.py` and the always-run list, `-n auto -m "not slow and not live"` | 3,827 passed, 2 xfailed, 26.6 s |
 | `uv run ruff format --check .` | 1,911 files already formatted |
 | `uv run ruff check .` | All checks passed |
 | `uv run pyright packages/debate_core` and the changed scripts and their tests | 0 errors |
 | `uv run lint-imports` | 20 kept, 0 broken |
-| `uv run scripts/validate_specs.py` | OK |
+| `uv run scripts/validate_specs.py` | OK: 608 files, 41 epics, 545 tasks, 22 releases |
 | `scripts/check_command_blocks.py`, `scripts/check_thin_handlers.py` | OK |
 
-Relative to `origin/dev` at `63bd8d8`, after `scripts/task sync` (twice: once before t32 merged, once
-after).
+Relative to `origin/dev` at `9343ad0` (#814), after `scripts/task sync` three times: before t32
+merged, after it, and after #814.
 
 ## Files changed
 
@@ -105,28 +108,42 @@ after).
 - Version pins t32 updated, now `docx-9`: the ten structural expectations, the four provenance
   fixtures, `test_fidelity.py`, `test_writer.py`, and the later-bump notes in t31's and t24's version
   tests.
-- `docs/data/caselist-parse-report.md`: the counts, the sample, the rulings, both before-and-afters
-  and both evaluations. The spec holds the rulings.
+- `docs/data/caselist-parse-report.md`: the counts, the sample, the rulings, the before-and-afters on
+  `docx-8` and `docx-9`, every evaluation, the coach's answer on paragraph 16 and #814. The spec holds
+  the rulings.
+- Not on this branch: the label change itself, in its own pull request **#814** (`labels/a8afd234413032f4`,
+  merged into `dev`): the label file and its pre-label, restored from `7a9c4ff` under `labels/prelabels/`.
 
 ## Deviations from the spec
 
-1. **N1's cite guard holds one shape more than the ruling names.** The ruling holds a line carrying a
-   URL, a DOI or "accessed". As first built, N1 also read as body two lines that earlier tests pin as
-   nothing:
+1. **N1's cite guard holds one shape more than the ruling names**, as the PM confirmed on 2026-11-03.
+   The ruling holds a line carrying a URL, a DOI or "accessed". As first built, N1 also read as body
+   two lines that earlier tests pin as nothing:
    - `v1-e31-t12`'s bracketed reference inside a body;
    - `v1-e31-t21`'s cite-shaped line.
 
-   Both are a long line naming its source at its head, which is a citation's line. The session added
+   Both are a long line naming its source at its head, which is a citation's line. The guard adds
    `v1-e31-t21`'s own test, `is_cite_shaped`: a name and a year within 40 characters of the start. It
-   is the conservative direction, today's reading kept. It holds back 197 lines over the store (133
-   sentences, 64 long lines), counted apart from the ruled guard's 595. To strike it: delete
-   `or is_cite_shaped(...)` in `read_between_body_paragraphs`, its two fixtures, and the two earlier
-   tests' expectations.
-2. **ac4 fails as worded**, by one reading. The task stopped there, as the PM's gate says; nothing
-   past the gate was done.
-3. **The measurements were taken on the branch's `docx-8`, before t32's rule merged.** `docx-9` is
-   t32's rule, M3 and N1 together. The rules read different lines (above a cite; between body
-   paragraphs). The combined `docx-9` has not been evaluated; its re-run is under Operator follow-ups.
+   holds back 197 lines over the store (133 sentences, 64 long lines), counted apart from the ruled
+   guard's 595.
+2. **ac4 failed as first measured, by one reading, and passed after a label change.** N1 read
+   paragraph 16 of `a8afd234…fd382dc`, then labelled OTHER, as body: full-tier EVIDENCE precision
+   0.9708 → 0.9705. The session stopped at the gate, and the PM ruled Option A, then B. The coach,
+   shown the paragraph blind with the one above and below and no label, reading or rule, answered
+   **s**. So the label changed OTHER → EVIDENCE in card 1, through the guide's coach-reviewed route,
+   as its own pull request (#814).
+   - The file had been corrected before 2026-11-02 and had no kept pre-label. As the PM ruled, the
+     pre-label was restored from git (`7a9c4ff`, `PRELABELED`, the plan and rows the coach corrected,
+     byte for byte), and `import --replace` counted against it: **75 of 255 rows**, the coach's 74 and
+     this one.
+   - The worksheet was written from the corrected labels. A scratch helper set row 16 and marked every
+     row checked, without printing a cell: every other row carries the coach's correction unchanged.
+   - The evaluation baseline did not change.
+   - Option B, the PM's acceptance of the fall, was not needed: on `docx-9` precision is 0.9715.
+3. **Every figure the report records is the shipped `2026.11.03-docx-9`'s**, as the PM ruled. Earlier
+   measurements were taken on the branch's `docx-8`, before t32 merged. On `docx-9` the evaluation
+   reports and N1's store counts equal `docx-8`'s exactly, but for 5 fewer cards, which are t32's
+   rule's own.
 
 ## Decisions and assumptions
 
@@ -149,20 +166,6 @@ after).
   idiom).
 
 ## Operator follow-ups
-
-None to run until the PM rules on ac4. After the ruling, if N1 stays in any form:
-
-**The labelled evaluation on `docx-9`, N1 off and on** (under a minute). It runs in the task
-worktree. The first command is a scratch runner from this session; it keeps its reports in the
-session's scratchpad:
-
-```bash
-cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e31-t23-in-round-markers
-uv run python /private/tmp/claude-501/-Users-charlesclark-Documents-debate-debate-intelligence-tool-debate-intelligence-worktrees-v1-e31-t23-in-round-markers/938f8daa-f11a-4984-b276-8552d912138c/scratchpad/eval_without_n1.py
-uv run python scripts/run_parser_eval.py --tier both
-```
-
-Success looks like both gates PASSED for each command; the session compares the two reports.
 
 **After the merge, the re-parse to `docx-9`** (ac3). It rides the first cloud run on an image
 carrying `docx-9`, which parses every caselist in full (`v1-e40-t08`), as t32's re-parse does. Restore

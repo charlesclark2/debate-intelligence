@@ -2389,3 +2389,36 @@ or one of the three marker forms. A **cite guard** holds such a line as nothing 
 URL, a DOI or the word "accessed" in any case. The 40-or-fewer uncapitalised stratum (6 of 8) and the
 41-to-200 stratum that ends no sentence (5 of 8) are left as nothing, for a larger sample before any
 rule. The sample's table is above.
+
+### N1, before and after over the same sources (operator-run, 2026-11-03)
+
+`scripts/diff_lines_between_body_paragraphs.py`: every one of the 13,518 sources read twice by the
+branch's `docx-8`, N1 off and on, 768 seconds. 0 without a blob, 0 not parsed; 287,543 cards either
+way.
+
+| Caselist | Made body: a sentence of 41 to 200 | Made body: a line over 200 | Held back: a link, a web address, a DOI or "accessed" | Held back: names its source at its head | Cards whose evidence text changed | In files | Other cards changed |
+|---|---|---|---|---|---|---|---|
+| hsld26 | 2,846 | 1,208 | 104 (8 + 96) | 31 (22 + 9) | 1,423 | 832 | 0 |
+| hspf26 | 1,840 | 423 | 449 (26 + 423) | 40 (24 + 16) | 1,126 | 574 | 0 |
+| hspolicy26 | 5,377 | 1,385 | 37 (4 + 33) | 111 (77 + 34) | 2,929 | 1,089 | 0 |
+| openev | 629 | 197 | 5 (0 + 5) | 15 (10 + 5) | 353 | 59 | 0 |
+| **Total** | **10,692** | **3,213** | **595 (38 + 557)** | **197 (133 + 64)** | **5,831** | **2,554** | **0** |
+
+In the held-back columns, the first figure in brackets is the sentence stratum and the second the
+long-line stratum. Made body and held back add up to the sample's two populations exactly:
+10,692 + 38 + 133 = 10,863 sentences, and 3,213 + 557 + 64 = 3,834 long lines. The second guard is
+the session's addition, beyond the ruling. No card gained or lost a paragraph range, and no field
+changed but the body, its spans and the rules and confidence it records.
+
+### N1, the labelled evaluation (operator-run, 2026-11-03)
+
+`scripts/run_parser_eval.py --tier both` with N1 off (a scratch runner) and on, both gates passed.
+
+| Tier | EVIDENCE precision, N1 off → on | EVIDENCE recall | Right / wrong EVIDENCE readings | OTHER precision |
+|---|---|---|---|---|
+| Full, 30 files | 0.9708 → **0.9705** | 0.8824 → 0.9061 | 930 / 28 → 955 / 29 | 0.5413 → 0.5815 |
+| PR subset, 6 files | 0.9433 → 0.9442 | 0.9683 → 0.9841 | 183 / 11 → 186 / 11 | 0.7701 → 0.7976 |
+
+**EVIDENCE precision falls on the full tier**, by one reading: in one verbatim PF team file, a
+paragraph labelled OTHER is read as body. The same file gains 18 right body readings. Every card's
+boundaries are unchanged in all 30 files. Under the PM's gate the task stops here and reports.

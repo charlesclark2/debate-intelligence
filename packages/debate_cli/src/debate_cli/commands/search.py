@@ -53,12 +53,6 @@ from typing import Annotated, Any, NoReturn
 import typer
 from pydantic import ValidationError
 
-from debate_cli.commands.search_auto_cut import (
-    DEFAULT_CONCURRENCY,
-    MAX_CONCURRENCY,
-    auto_cut,
-    auto_cut_options,
-)
 from debate_cli.container import FederatedSearching
 from debate_cli.context import CliContext, cli_context, command_name
 from debate_cli.exit_codes import ExitCode, exit_code_for_search
@@ -70,6 +64,12 @@ from debate_cli.presenters.search_presenter import (
     outcome_failure,
     results_table,
     search_payload,
+)
+from debate_cli.search_auto_cut import (
+    DEFAULT_CONCURRENCY,
+    MAX_CONCURRENCY,
+    auto_cut,
+    auto_cut_options,
 )
 from debate_core.application.federated_search_types import ExpansionRequest, SearchOutcome, SearchRequest
 from debate_core.application.settings import SearchProviderName

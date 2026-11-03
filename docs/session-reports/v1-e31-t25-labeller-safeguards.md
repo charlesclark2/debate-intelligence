@@ -195,9 +195,35 @@ was only read.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-02
 
 **Notes:**
+
+The six problems the coach's sittings found are each closed at their cause, and nothing he already
+types changes.
+
+1. **ac1 passes.** One test per item, 14 failing against the unchanged labeller with a named reason
+   each; the TAG case added after the mutation run shown red against the start commit. 14 mutants,
+   the PM's four among them, all caught after the one survivor was closed with a test (`a63e7f4`).
+2. **ac2 passes.** The body-first card is in the guide's Ambiguous conventions, and the page, `label
+   --help` and the guide all name the ten warnings, pinned by a test.
+3. **The reset counts:** the PM's "three files" was wrong; git shows two reset events, both already
+   repaired, and every one of the 30 files records the same count as a recount against its last
+   pre-label. Thank you for checking every ref rather than taking the number.
+4. **Decisions accepted.** `--replace` for the flag; the pre-label kept under `labels/prelabels/`
+   (outside what the label checks read) and written before the correction replaces the file;
+   `--replace` with no stored pre-label records no count rather than a wrong one, and the guide asks
+   the coach to tell the PM first; the block-edge rule shared by the page and `check`.
+5. **Deviations accepted:** (5) was a new warning rather than a refusal turned into one; the PM amends
+   the spec's wording in the next batch.
+6. **Follow-ups:** restoring pre-labels for the 30 corrected files is not needed now, since none has a
+   wrong count and a replace of one goes through the PM; the `affected_tests.py` false edge through the
+   guide's path is filed for E41.
+7. **Closing checks:** the affected set reached 89% with no failure and is left to `ci` (agreement 10);
+   the parser evals, architecture, specs and docs tests (880), ruff, lint-imports, the links, the
+   command blocks and the specs are clean. The one pyright error predates this task and is outside
+   CI's pyright.
+8. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`.

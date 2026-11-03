@@ -149,6 +149,8 @@ rather than writing an integer.
 | 4 | `CARD_UNVERIFIED` | `cut` made a card and the evidence verifier did not pass it: the card was saved and written `UNVERIFIED`, with its banner, and each reason was printed. Never `0`, and not `1`, so a script can tell a card that needs a person's look from a cut that could not run (`v1-e06-t06`). |
 | 6 | `SEARCH_PARTIAL` | `search` returned what it found while at least one provider it asked did not answer in full: it failed, timed out, was rate-limited, had its breaker open, was not configured or answered only partly. The footer names each one. A partial search with no rows is a `6` too (`v1-e08-t05`). |
 | 7 | `NO_RESULTS` | `search` asked every provider, every one answered in full, and nothing matched. |
+| 8 | `AUTO_CUT_SHORT` | `search --auto-cut N` made fewer than N VERIFIED cards: every result was tried, and the rest were inaccessible, not verified or could not be cut. What was cut is written (`v1-e08-t06`). |
+| 9 | `BUDGET_EXCEEDED` | `search --auto-cut N` stopped short of N VERIFIED cards because the budget guard refused a model call (`--max-cost`, a daily or monthly limit, or a model with no price while a limit is set). The cards already cut are written. |
 | 70 | `INTERNAL_ERROR` | A bug: an exception the CLI does not model. It is reported by its class, never its message (below). 70 is `EX_SOFTWARE` from `sysexits.h`. |
 
 Exceptions are mapped by `exit_code_for`: `ProviderError` → 3; `StoreUnavailable`,

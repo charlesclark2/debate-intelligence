@@ -53,9 +53,16 @@ from typing import Annotated, Any, NoReturn
 import typer
 from pydantic import ValidationError
 
+from debate_cli.commands.search_auto_cut import (
+    DEFAULT_CONCURRENCY,
+    MAX_CONCURRENCY,
+    auto_cut,
+    auto_cut_options,
+)
 from debate_cli.container import FederatedSearching
 from debate_cli.context import CliContext, cli_context, command_name
 from debate_cli.exit_codes import ExitCode, exit_code_for_search
+from debate_cli.options.budget import MaxCost
 from debate_cli.output import CliOutput, CommandFailure, JsonValue, OutputMode
 from debate_cli.presenters.search_presenter import (
     SearchProgress,
@@ -155,6 +162,45 @@ def search(
     json_output: Annotated[
         bool, typer.Option("--json", help="The same as --format json: one JSON object on stdout.")
     ] = False,
+    auto_cut_count: Annotated[
+        int | None,
+        typer.Option(
+            "--auto-cut",
+            metavar="N",
+            min=1,
+            max=50,
+            help="Then cut the results in rank order until N cards are VERIFIED, into --output "
+            "(needs --argument and --need).",
+        ),
+    ] = None,
+    output: Annotated[
+        Path | None,
+        typer.Option(
+            "--output",
+            dir_okay=False,
+            writable=True,
+            help="With --auto-cut: the .docx bundle. Its manifest and report.json are written beside it.",
+        ),
+    ] = None,
+    card_format: Annotated[
+        str | None,
+        typer.Option(
+            "--card-format",
+            metavar="PROFILE",
+            help="With --auto-cut: the bundle's team format profile, team-default, flow or plain.",
+        ),
+    ] = None,
+    concurrency: Annotated[
+        int | None,
+        typer.Option(
+            "--concurrency",
+            min=1,
+            max=MAX_CONCURRENCY,
+            help=f"With --auto-cut: how many cuts run at once, 1 to {MAX_CONCURRENCY}. "
+            f"Default: {DEFAULT_CONCURRENCY}.",
+        ),
+    ] = None,
+    max_cost: MaxCost = None,
 ) -> None:
     """Search every enabled discovery provider at once, and rank what they find with the reasons why.
 
@@ -163,17 +209,33 @@ def search(
     is cut: use fetch or cut on a result's URL. With --argument and --need the query is expanded into
     the taxonomy's queries for that argument and need. Every search is stored with its results.
 
+    With --auto-cut N, the results are then cut in rank order, skipping any that are paywalled,
+    blocked or robots-disallowed, until N cards are VERIFIED. Verified cards go under one block
+    heading in --output; UNVERIFIED cards only in its separate "UNVERIFIED — not finished cards"
+    section, and never count toward N. A table and report.json say what became of each result.
+
     Exit codes:
-    0  complete: every provider answered, with results
+    0  complete: every provider answered, with results; with --auto-cut, N cards are VERIFIED
     1  no provider was asked: none of those selected is enabled
     2  usage error, for example an unknown --argument (the valid ones are listed) or --since after --until
     3  no provider answered: each failed, timed out or was skipped
     6  partial: results from the providers that answered; the footer names each one that did not
     7  every provider answered, and nothing matched
+    8  auto-cut short: every result was tried, and fewer than N cards are VERIFIED
+    9  budget exceeded: the budget guard stopped --auto-cut short of N cards
     """
     cli = cli_context(ctx)
     if (json_output or output_format is OutputFormat.JSON) and not cli.output.is_json:
         cli.output = CliOutput(OutputMode.JSON, verbose=cli.output.verbose)
+    cutting = auto_cut_options(
+        cli,
+        wanted=auto_cut_count,
+        output=output,
+        card_format=card_format,
+        concurrency=concurrency,
+        max_cost=max_cost,
+        expanded=argument is not None and need is not None,
+    )
     request = SearchRequest(
         query=query,
         filters=_filters(since, until, max_results),
@@ -183,17 +245,13 @@ def search(
     )
     if save is not None and not save.parent.is_dir():
         raise typer.BadParameter(f"{save.parent} is not a directory", param_hint="--save")
-    progress = SearchProgress(cli.output, command_name(ctx))
-    progress.searching(query, request.providers)
-    outcome = _run(_search(cli.services.federated_search(model_expansion=expand_llm), request))
-    progress.searched(outcome)
-    expansion = outcome.search.expansion
-    if expansion is not None and expansion.warning is not None:
-        cli.output.note(f"Warning: {expansion.warning}")
+    outcome = _searched(cli, ctx, request, expand_llm=expand_llm)
     payload = search_payload(outcome)
     exit_code = exit_code_for_search(outcome)
     if save is not None and exit_code in (ExitCode.OK, ExitCode.SEARCH_PARTIAL):
         _write_json(save, payload)
+    if cutting is not None and exit_code in (ExitCode.OK, ExitCode.SEARCH_PARTIAL):
+        return auto_cut(cli, ctx, outcome, payload, cutting)
     if exit_code is ExitCode.OK:
         cli.output.success(command_name(ctx), payload, display=results_table(outcome))
         return
@@ -280,6 +338,20 @@ def _expansion(
         raise typer.BadParameter(
             invalid.errors()[0]["msg"].removeprefix("Value error, "), param_hint="--var"
         ) from None
+
+
+def _searched(
+    cli: CliContext, ctx: typer.Context, request: SearchRequest, *, expand_llm: bool
+) -> SearchOutcome:
+    """Run the search with its progress on stderr, and say why a model expansion fell back, if it did."""
+    progress = SearchProgress(cli.output, command_name(ctx))
+    progress.searching(request.query, request.providers)
+    outcome = _run(_search(cli.services.federated_search(model_expansion=expand_llm), request))
+    progress.searched(outcome)
+    expansion = outcome.search.expansion
+    if expansion is not None and expansion.warning is not None:
+        cli.output.note(f"Warning: {expansion.warning}")
+    return outcome
 
 
 async def _search(searching: FederatedSearching, request: SearchRequest) -> SearchOutcome:

@@ -45,6 +45,18 @@ are fixed here rather than at each `raise`:
     `search` asked every provider, every one answered in full, and nothing matched: a definite
     answer, unlike a `6` or a `3`.
 
+`8` — `AUTO_CUT_SHORT`
+    `search --auto-cut N` made fewer than N VERIFIED cards because the candidates ran out: every
+    result was tried, and too few were accessible and verified (`v1-e08-t06`). The JSON says whether
+    every other result was inaccessible (`ALL_REMAINING_INACCESSIBLE`) or some were cut and not
+    verified, or could not be cut (`CANDIDATES_EXHAUSTED`). What was cut is written all the same.
+
+`9` — `BUDGET_EXCEEDED`
+    `search --auto-cut N` stopped short of N VERIFIED cards because the budget guard refused a model
+    call: `--max-cost` (or a daily or monthly limit) would have been passed, or a limit is set and the
+    model has no price. The cards already cut are written. Raising the limit, or another day, may
+    finish it; a `1` would say it never could.
+
 A search that no provider answered is a `3`, `RETRIEVAL_FAILURE`, as a failed `fetch` is: the same
 search may succeed later. One that asked no provider at all, because none it named is enabled, is a
 `1`: no retry enables one (:func:`exit_code_for_search`).
@@ -178,6 +190,8 @@ class ExitCode(IntEnum):
     CARD_UNVERIFIED = 4
     SEARCH_PARTIAL = 6
     NO_RESULTS = 7
+    AUTO_CUT_SHORT = 8
+    BUDGET_EXCEEDED = 9
     INTERNAL_ERROR = 70
 
 

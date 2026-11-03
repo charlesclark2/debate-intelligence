@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import gc
+import io
 import json
 import os
 import sqlite3
@@ -28,18 +29,29 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final
 
+import docx
 import httpx
 import pytest
+from tests.fixtures.card.every_page_router import EVERY_PAGE_TAG, EveryPageRouter
+from tests.fixtures.citation.citation_world import JOURNAL_DOI, CrossrefAnswers
+from tests.fixtures.http.cassettes import ReplayTransport, cassette_names, load_cassette
 from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
 from debate_cli.container import ServiceContainer
 from debate_cli.exit_codes import ExitCode, exit_code_for, exit_code_for_search
+from debate_core.application.budget import BudgetExceededError, UnpricedModelError
 from debate_core.application.errors import ProviderUnavailable
 from debate_core.application.federated_search_types import SearchOutcome
+from debate_core.application.ports.model_router import ModelRouter
 from debate_core.application.query_expansion import UnknownExpansionChoice
 from debate_core.application.settings import HttpSettings, ProviderSettings, SearchProviderName
 from debate_core.domain import AccessStatus, Article, Search, SearchStatus
+from debate_core.evidence.docx_manifest_part import read_embedded_manifest_bytes
+
+# Imported here, before pytest-socket is armed: urllib3 (through trafilatura) probes for IPv6 with a
+# socket when it is first imported, which `--auto-cut`'s article fetch would otherwise do inside a test.
+from debate_core.integrations import html_extractor as html_extractor
 from debate_core.integrations.discovery.feed_cache import InMemoryFeedCache
 from debate_core.integrations.discovery.feed_config import FeedConfig, FeedReview, FeedSource
 from debate_core.integrations.discovery.feeds import feed_factory
@@ -266,6 +278,14 @@ class Seams:
     """Register a whole registry (`discovery_providers`); otherwise only the transport."""
     router: ScriptedModelRouter = field(default_factory=ScriptedModelRouter)
     """The `search.expand` router: no scripted answer, so a call it was not given one for fails."""
+    articles: ReplayTransport | None = None
+    """`--auto-cut`'s article fetches, from the HTTP cassettes; otherwise the providers' transport,
+    which refuses them."""
+    card_router: ModelRouter | None = None
+    """`--auto-cut`'s `card.select` and `card.markup` calls; with it, Crossref is answered too."""
+    crossref: CrossrefAnswers = field(default_factory=CrossrefAnswers)
+    containers: list[ServiceContainer] = field(default_factory=list[ServiceContainer])
+    """Every container the app built, for a test that reads the settings a command left in one."""
 
 
 @pytest.fixture
@@ -285,7 +305,11 @@ def seams(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Seams]:
         self.override("search_model_router", seams.router)
         # Nothing a search does fetches an article; if anything tried, its request would land here,
         # be refused and be named by the fixture's last check.
-        self.override("article_fetch_transport", seams.providers.transport)
+        self.override("article_fetch_transport", seams.articles or seams.providers.transport)
+        if seams.card_router is not None:
+            self.override("card_model_router", seams.card_router)
+            self.override("crossref_transport", httpx.MockTransport(seams.crossref.handle))
+        seams.containers.append(self)
         if seams.registry_override:
             self.override("discovery_providers", seams.providers.registry())
         else:
@@ -294,6 +318,8 @@ def seams(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Seams]:
     monkeypatch.setattr(ServiceContainer, "__init__", with_seams)
     yield seams
     assert seams.providers.unrecorded == [], "a request no fixture recorded"
+    if seams.articles is not None:
+        assert seams.articles.unrecorded == [], "an article fetch no cassette recorded"
 
 
 @pytest.fixture
@@ -920,3 +946,355 @@ def test_an_unknown_expansion_choice_is_a_usage_error_wherever_it_is_raised() ->
         exit_code_for(UnknownExpansionChoice("argument", "nonsense-da", ["politics-da"]))
         is ExitCode.USAGE_ERROR
     )
+
+
+# ------------------------------------------------------------------------------------------------
+# --auto-cut N (v1-e08-t06)
+# ------------------------------------------------------------------------------------------------
+
+NEWS_PAGE: Final = (
+    "https://www.dailymeridian.example/science/2026/09/14/mammoth-revival-years-away?utm_source=newsletter"
+)
+THINK_TANK_PAGE: Final = "https://www.harwell-institute.example/research/opportunity-cost-of-de-extinction"
+JOURNAL_PDF: Final = "https://journal.synthetic-conservation.example/doi/pdf/10.5555/jscs.2026.0012"
+PRESS_RELEASE: Final = "https://www.fosw.example.gov/news/2026/06/agency-announces-grants"
+PAYWALLED_PAGE: Final = "https://www.harborreview.example/politics/2026/10/inside-the-tariff-talks"
+ROBOTS_PAGE: Final = "https://www.closed-stacks.example/archive/2026/water-rights-ruling"
+VERIFYING_PAGES: Final = {NEWS_PAGE, THINK_TANK_PAGE, JOURNAL_PDF}
+"""The three of `openalex_auto_cut.body.json`'s pages whose cards verify (fixtures/search/README.md)."""
+BLOCK: Final = "Politics DA — Link: health insurance"
+SECTION: Final = "UNVERIFIED — not finished cards"
+EVIDENCE_WORD: Final = "surrogate"
+"""A word of the news article's second paragraph, the evidence its card is cut from: printed nowhere."""
+
+
+@pytest.fixture
+def cutting(seams: Seams) -> Seams:
+    """`seams` for `--auto-cut`: OpenAlex answers with the cassettes' pages, which the fetch replays."""
+    seams.providers.works_body = "openalex_auto_cut.body.json"
+    seams.articles = ReplayTransport(load_cassette(name) for name in cassette_names())
+    seams.card_router = EveryPageRouter()
+    seams.crossref.serve(JOURNAL_DOI, "works-10.5555-jscs.2026.0012.json")
+    return seams
+
+
+def auto_cut(out: Path, *options: str, wanted: int = 3, json_output: bool = False) -> Result:
+    return search(
+        "health insurance",
+        "--argument",
+        "politics-da",
+        "--need",
+        "link",
+        "--providers",
+        "openalex",
+        "--auto-cut",
+        str(wanted),
+        "--output",
+        str(out),
+        *options,
+        json_output=json_output,
+    )
+
+
+def bundle_paragraphs(path: Path) -> list[str]:
+    return [paragraph.text for paragraph in docx.Document(io.BytesIO(path.read_bytes())).paragraphs]
+
+
+def report_json(directory: Path) -> dict[str, Any]:
+    document: dict[str, Any] = json.loads((directory / "report.json").read_text(encoding="utf-8"))
+    return document
+
+
+def by_url(report: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {entry["url"]: entry for entry in report["entries"]}
+
+
+def test_auto_cut_writes_three_verified_cards_under_one_block_heading_and_a_matching_manifest(
+    cutting: Seams, tmp_path: Path
+) -> None:
+    out = tmp_path / "bundle.docx"
+
+    result = auto_cut(out)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    paragraphs = bundle_paragraphs(out)
+    assert paragraphs[0] == BLOCK
+    end = paragraphs.index(SECTION) if SECTION in paragraphs else len(paragraphs)
+    assert paragraphs[:end].count(EVERY_PAGE_TAG) == 3
+    assert BLOCK not in paragraphs[1:]
+    manifest = (tmp_path / "bundle.manifest.json").read_bytes()
+    assert read_embedded_manifest_bytes(out) == manifest
+    cards = json.loads(manifest)["cards"]
+    report = report_json(tmp_path)
+    verified = [entry for entry in report["entries"] if entry["status"] == "VERIFIED"]
+    assert {entry["url"] for entry in verified} == VERIFYING_PAGES
+    assert [card["card_id"] for card in cards[:3]] == [entry["card_id"] for entry in verified]
+    assert [card["verification_status"] for card in cards[:3]] == ["VERIFIED"] * 3
+    assert all(card["verification_status"] == "UNVERIFIED" for card in cards[3:])
+    assert (report["wanted"], report["verified"], report["complete"], report["stop_reason"]) == (
+        3,
+        3,
+        True,
+        "COMPLETE",
+    )
+    assert report["block"] == BLOCK
+    assert EVIDENCE_WORD not in result.stdout
+    assert EVIDENCE_WORD not in (tmp_path / "report.json").read_text(encoding="utf-8")
+
+
+def test_auto_cut_skips_paywalled_and_robots_disallowed_results_lists_them_and_goes_on(
+    cutting: Seams, tmp_path: Path
+) -> None:
+    out = tmp_path / "bundle.docx"
+
+    result = auto_cut(out, wanted=4)
+
+    assert result.exit_code == ExitCode.AUTO_CUT_SHORT, result.output
+    entries = by_url(report_json(tmp_path))
+    assert set(entries) == {*VERIFYING_PAGES, PRESS_RELEASE, PAYWALLED_PAGE, ROBOTS_PAGE}
+    assert [entries[PAYWALLED_PAGE][key] for key in ("status", "access_status", "reasons", "card_id")] == [
+        "SKIPPED",
+        "PAYWALLED",
+        ["SOURCE_NOT_ACCESSIBLE"],
+        None,
+    ]
+    assert [entries[ROBOTS_PAGE][key] for key in ("status", "access_status", "reasons", "card_id")] == [
+        "SKIPPED",
+        "ROBOTS_DISALLOWED",
+        ["SOURCE_NOT_ACCESSIBLE"],
+        None,
+    ]
+    assert entries[PRESS_RELEASE]["status"] == "UNVERIFIED"
+    assert entries[PRESS_RELEASE]["section"] == "unverified"
+    assert entries[PRESS_RELEASE]["reasons"] == ["CITATION_UNVERIFIED"]
+    assert {entries[url]["status"] for url in VERIFYING_PAGES} == {"VERIFIED"}
+    assert report_json(tmp_path)["stop_reason"] == "CANDIDATES_EXHAUSTED"
+    for shown in ("PAYWALLED", "ROBOTS_DISALLOWED", "SKIPPED", "SOURCE_NOT_ACCESSIBLE", PAYWALLED_PAGE):
+        assert shown in result.stdout
+    assert "AUTO_CUT_SHORT" in result.stderr
+    paragraphs = bundle_paragraphs(out)
+    section = paragraphs.index(SECTION)
+    assert paragraphs[:section].count(EVERY_PAGE_TAG) == 3
+    assert paragraphs[section + 1 :].count(EVERY_PAGE_TAG) == 1
+    assert paragraphs[section + 2] == "UNVERIFIED — not a finished card: CITATION_UNVERIFIED"
+
+
+def test_auto_cut_does_not_fetch_a_result_an_earlier_fetch_found_paywalled(
+    cutting: Seams, tmp_path: Path, data_dir: Path
+) -> None:
+    seed_article(data_dir, NEWS_PAGE, AccessStatus.PAYWALLED)
+
+    result = auto_cut(tmp_path / "bundle.docx", wanted=4)
+
+    assert result.exit_code == ExitCode.AUTO_CUT_SHORT, result.output
+    news = by_url(report_json(tmp_path))[NEWS_PAGE]
+    assert (news["status"], news["access_status"], news["fetched"]) == ("SKIPPED", "PAYWALLED", False)
+    assert cutting.articles is not None
+    assert not [url for url in cutting.articles.requested if "dailymeridian" in url]
+
+
+def test_auto_cut_report_prints_as_a_table_and_is_report_json_beside_the_bundle(
+    cutting: Seams, tmp_path: Path
+) -> None:
+    out = tmp_path / "bundle.docx"
+
+    result = auto_cut(out, "--concurrency", "3", "--card-format", "flow")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    for column in ("Rank", "URL", "Access", "Card", "Reasons", "Cost"):
+        assert column in result.stdout
+    assert f"3 of 3 cards VERIFIED for {BLOCK}" in result.stdout
+    assert f"Report: {tmp_path / 'report.json'}" in result.stdout
+    assert "Providers: COMPLETE" in result.stdout
+    report = report_json(tmp_path)
+    assert (report["concurrency"], report["card_format"], report["max_cost_usd"]) == (3, "flow", None)
+    assert (report["bundle"], report["manifest"]) == (str(out), str(tmp_path / "bundle.manifest.json"))
+    assert report["cost_usd"] == 0.0
+    assert all(entry["cost_usd"] == 0.0 for entry in report["entries"])
+
+
+def test_auto_cut_json_output_carries_the_search_and_the_report(cutting: Seams, tmp_path: Path) -> None:
+    result = auto_cut(tmp_path / "bundle.docx", json_output=True)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    data = envelope(result)["data"]
+    assert data["auto_cut"] == report_json(tmp_path)
+    assert data["search"]["query"] == "health insurance"
+
+
+def test_auto_cut_short_of_n_exits_8_in_json_with_the_report_as_details(
+    cutting: Seams, tmp_path: Path
+) -> None:
+    result = auto_cut(tmp_path / "bundle.docx", wanted=5, json_output=True)
+
+    assert result.exit_code == ExitCode.AUTO_CUT_SHORT, result.output
+    error = envelope(result)["error"]
+    assert (error["code"], error["exit_code"]) == ("AUTO_CUT_SHORT", 8)
+    assert error["details"]["auto_cut"] == report_json(tmp_path)
+    assert error["details"]["auto_cut"]["verified"] == 3
+
+
+def test_auto_cut_exits_0_with_n_verified_when_the_search_was_partial_and_names_the_provider(
+    cutting: Seams, tmp_path: Path
+) -> None:
+    cutting.providers.feed_status = 500
+
+    result = search(
+        "health insurance",
+        "--argument",
+        "politics-da",
+        "--need",
+        "link",
+        "--providers",
+        "openalex,rss",
+        "--auto-cut",
+        "3",
+        "--output",
+        str(tmp_path / "bundle.docx"),
+    )
+
+    assert result.exit_code == ExitCode.OK, result.output
+    report = report_json(tmp_path)
+    assert (report["search_status"], report["partial_providers"]) == ("PARTIAL", ["rss"])
+    assert "Providers: PARTIAL, results may be missing" in result.stdout
+    assert "rss: error" in result.stdout
+
+
+def test_auto_cut_stops_at_the_budget_guard_exits_9_and_keeps_the_verified_card(
+    cutting: Seams, tmp_path: Path
+) -> None:
+    cutting.card_router = EveryPageRouter(
+        refuse={
+            2: BudgetExceededError(
+                limit_name="per-run",
+                limit_usd=0.05,
+                spent_usd=0.04,
+                ceiling_usd=0.02,
+                model_id="model-under-test",
+            )
+        }
+    )
+    out = tmp_path / "bundle.docx"
+
+    result = auto_cut(out, "--concurrency", "1", "--max-cost", "0.05")
+
+    assert result.exit_code == ExitCode.BUDGET_EXCEEDED, result.output
+    report = report_json(tmp_path)
+    statuses = [entry["status"] for entry in report["entries"]]
+    assert statuses[-1] == "BUDGET_EXCEEDED"
+    assert report["entries"][-1]["reasons"] == ["BUDGET_EXCEEDED"]
+    assert report["stop_reason"] == "BUDGET_EXCEEDED"
+    kept = [entry for entry in report["entries"] if entry["status"] == "VERIFIED"]
+    assert len(kept) == 1
+    assert bundle_paragraphs(out).count(EVERY_PAGE_TAG) == 1
+    assert report["max_cost_usd"] == 0.05
+    assert "BUDGET_EXCEEDED" in result.stderr
+
+
+def test_auto_cut_max_cost_is_the_commands_per_run_budget(cutting: Seams, tmp_path: Path) -> None:
+    result = auto_cut(tmp_path / "bundle.docx", "--max-cost", "0.25")
+
+    assert result.exit_code == ExitCode.OK, result.output
+    (container,) = cutting.containers
+    assert container.settings.models.budget_usd_per_run == 0.25
+
+
+def test_auto_cut_under_max_cost_ends_on_a_model_with_no_price(cutting: Seams, tmp_path: Path) -> None:
+    cutting.card_router = EveryPageRouter(refuse={1: UnpricedModelError("model-without-a-price", "no price")})
+
+    result = auto_cut(tmp_path / "bundle.docx", "--concurrency", "1", "--max-cost", "0.05")
+
+    assert result.exit_code == ExitCode.BUDGET_EXCEEDED, result.output
+    report = report_json(tmp_path)
+    *before, last = [(entry["status"], entry["reasons"]) for entry in report["entries"]]
+    assert last == ("BUDGET_EXCEEDED", ["UNPRICED_MODEL_ERROR"])
+    assert {status for status, _ in before} <= {"SKIPPED"}
+    assert report["stop_reason"] == "BUDGET_EXCEEDED"
+    assert not (tmp_path / "bundle.docx").exists()
+    assert report["bundle"] is None
+
+
+@pytest.mark.parametrize(
+    ("options", "message"),
+    [
+        (["--auto-cut", "3", "--output", "OUT"], "--auto-cut needs --argument and --need"),
+        (["--argument", "politics-da", "--need", "link", "--auto-cut", "3"], "--auto-cut needs --output"),
+        (["--output", "OUT"], "--output go with --auto-cut"),
+        (["--max-cost", "1", "--concurrency", "2"], "--concurrency and --max-cost go with --auto-cut"),
+        (
+            [
+                "--argument",
+                "politics-da",
+                "--need",
+                "link",
+                "--auto-cut",
+                "3",
+                "--output",
+                "OUT",
+                "--card-format",
+                "x",
+            ],
+            "no format profile named 'x'",
+        ),
+        (
+            [
+                "--argument",
+                "politics-da",
+                "--need",
+                "link",
+                "--auto-cut",
+                "3",
+                "--output",
+                "OUT",
+                "--concurrency",
+                "9",
+            ],
+            "9",
+        ),
+        (["--argument", "politics-da", "--need", "link", "--auto-cut", "0", "--output", "OUT"], "0"),
+    ],
+)
+def test_auto_cut_options_that_do_not_go_together_exit_2_and_search_nothing(
+    cutting: Seams, tmp_path: Path, options: list[str], message: str
+) -> None:
+    out = str(tmp_path / "bundle.docx")
+
+    result = search(
+        "health insurance", "--providers", "openalex", *[out if o == "OUT" else o for o in options]
+    )
+
+    assert result.exit_code == ExitCode.USAGE_ERROR, result.output
+    assert message in " ".join(result.output.split()).replace("│", "")
+    assert cutting.providers.openalex_queries() == []
+    assert not (tmp_path / "report.json").exists()
+
+
+def test_auto_cut_after_a_search_no_provider_answered_ends_as_search_does_and_cuts_nothing(
+    cutting: Seams, tmp_path: Path
+) -> None:
+    cutting.providers.openalex_status = 500
+
+    result = auto_cut(tmp_path / "bundle.docx")
+
+    assert result.exit_code == ExitCode.RETRIEVAL_FAILURE, result.output
+    assert not (tmp_path / "report.json").exists()
+    assert not (tmp_path / "bundle.docx").exists()
+    assert cutting.articles is not None
+    assert cutting.articles.requested == []
+
+
+def test_auto_cut_help_documents_its_options_and_exit_codes() -> None:
+    result = runner.invoke(create_app(), ["search", "--help"], env={"COLUMNS": "200"})
+
+    assert result.exit_code == ExitCode.OK
+    for text in (
+        "--auto-cut",
+        "--output",
+        "--card-format",
+        "--concurrency",
+        "--max-cost",
+        "8  auto-cut short",
+        "9  budget exceeded",
+        "with --auto-cut, N cards are VERIFIED",
+    ):
+        assert text in result.stdout

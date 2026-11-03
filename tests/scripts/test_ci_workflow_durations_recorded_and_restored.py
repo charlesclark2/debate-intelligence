@@ -184,7 +184,8 @@ def test_a_selection_script_that_fails_deals_test_by_test_and_says_so(tmp_path: 
         tmp_path, status=1, outputs='run_parts=true\nparts=[1]\nfiles_to_parts={"parts": 1}\n'
     )
 
-    assert outputs["files_to_parts"] == ""
+    # An output never written reads as empty too; what the script wrote must not get through.
+    assert outputs.get("files_to_parts", "") == ""
     summary = (tmp_path / "summary.md").read_text(encoding="utf-8")
     assert "dealt test by test" in summary
     assert "::warning title=Test selection::" in completed.stdout

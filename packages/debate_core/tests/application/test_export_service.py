@@ -14,12 +14,14 @@ carry. Every expected value is written by hand from the fixtures:
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 from collections.abc import Iterator, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
+import docx
 import pytest
 from pydantic import BaseModel
 from tests.fixtures.card.card_world import (
@@ -30,8 +32,10 @@ from tests.fixtures.card.card_world import (
     page_bytes,
     paragraphs_of,
 )
+from tests.fixtures.card.every_page_router import EVERY_PAGE_TAG, EveryPageRouter
 from tests.fixtures.verification.verification_world import run
 
+from debate_core.application.card_types import CutRequest, CutResult
 from debate_core.application.citation_service import format_cite
 from debate_core.application.errors import NotFound
 from debate_core.application.export_service import ExportRefused, ExportService
@@ -47,9 +51,15 @@ from debate_core.domain.model_contracts import (
     ResolvedRoute,
     TaskClass,
 )
-from debate_core.evidence.card_rendering import CardToRender, CiteText, DocumentHeadings
+from debate_core.domain.style_profile import StructuralUnit
+from debate_core.evidence.card_rendering import CardToRender, CiteText, DocumentHeadings, RenderRefused
+from debate_core.evidence.docx_manifest_part import read_embedded_manifest_bytes
 from debate_core.evidence.docx_renderer import render_cards_docx
-from debate_core.evidence.format_profile import FORMAT_PROFILES_DIRECTORY, load_format_profile
+from debate_core.evidence.format_profile import (
+    FORMAT_PROFILES_DIRECTORY,
+    ResolvedFormatProfile,
+    load_format_profile,
+)
 from debate_core.evidence.manifest import CardManifest
 from debate_core.integrations.models.fake_router import FakeModelRouter
 from debate_core.testing.fakes.clock_and_ids import FixedClock
@@ -400,3 +410,179 @@ def test_bundle_renderer_called_as_before_writes_todays_bytes(world: ExportWorld
     )
 
     assert hashlib.sha256(data).hexdigest() == TODAYS_RENDER_SHA256[profile_name]
+
+
+class RecordingBundleRenderer:
+    """The real renderer, keeping each call's cards and where its UNVERIFIED section starts."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[tuple[str, ...], int | None]] = []
+
+    def __call__(
+        self,
+        manifest: CardManifest,
+        cards: Sequence[CardToRender],
+        profile: ResolvedFormatProfile,
+        *,
+        headings: DocumentHeadings | None = None,
+        unverified_from: int | None = None,
+    ) -> bytes:
+        self.calls.append((tuple(item.card.card_id for item in cards), unverified_from))
+        return render_cards_docx(manifest, cards, profile, headings=headings, unverified_from=unverified_from)
+
+
+class BundleWorld:
+    """Cards cut by CardService from the card world's pages, and an export service with the renderer."""
+
+    def __init__(self) -> None:
+        self.cards = CardWorld(EveryPageRouter())
+        self.renderer = RecordingBundleRenderer()
+        self.export = ExportService(
+            articles=self.cards.articles, clock=FixedClock(GENERATED_AT), render_docx=self.renderer
+        )
+
+    def cut(self, case: str) -> CutResult:
+        snapshot_id = run(self.cards.add_page(case)).snapshot.snapshot_id
+        return run(
+            self.cards.card_service.cut_card(
+                CutRequest(snapshot_id=snapshot_id, need="Link for health insurance", owner_id=STUDENT)
+            )
+        )
+
+    def verified(self) -> list[CutResult]:
+        results = [self.cut(case) for case in ("news-article", "think-tank-report", "open-access-pdf")]
+        assert all(result.is_verified for result in results)
+        return results
+
+    def unverified(self, count: int = 1) -> list[CutResult]:
+        results = [self.cut("government-press-release") for _ in range(count)]
+        assert not any(result.is_verified for result in results)
+        return results
+
+    def bundle(self, verified: Sequence[CutResult], unverified: Sequence[CutResult]) -> bytes:
+        return run(
+            self.export.export_docx_bundle(verified, unverified, profile=TEAM_DEFAULT, block=BUNDLE_BLOCK)
+        )
+
+
+TEAM_DEFAULT = load_format_profile("team-default", REPOSITORY / FORMAT_PROFILES_DIRECTORY)
+UNVERIFIED_BANNER = "UNVERIFIED — not a finished card: CITATION_UNVERIFIED"
+"""The press release's card names no author, so its banner names the cite failure alone."""
+
+
+@pytest.fixture
+def bundle_world() -> BundleWorld:
+    return BundleWorld()
+
+
+def styled_paragraphs(data: bytes) -> list[tuple[str, str]]:
+    paragraphs = docx.Document(io.BytesIO(data)).paragraphs
+    return [(paragraph.style.style_id if paragraph.style else "", paragraph.text) for paragraph in paragraphs]
+
+
+def test_bundle_files_the_verified_cards_under_the_block_and_then_the_unverified_section(
+    bundle_world: BundleWorld,
+) -> None:
+    verified, unverified = bundle_world.verified(), bundle_world.unverified(2)
+
+    paragraphs = styled_paragraphs(bundle_world.bundle(verified, unverified))
+
+    block_style = TEAM_DEFAULT.paragraph_style_id(StructuralUnit.BLOCK)
+    tag_style = TEAM_DEFAULT.paragraph_style_id(StructuralUnit.TAG)
+    headings = [(index, text) for index, (style, text) in enumerate(paragraphs) if style == block_style]
+    assert [text for _, text in headings] == [BUNDLE_BLOCK, "UNVERIFIED — not finished cards"]
+    section = headings[1][0]
+    tags = [index for index, (style, _) in enumerate(paragraphs) if style == tag_style]
+    assert len(tags) == 5
+    assert all(index < section for index in tags[:3])
+    assert all(index > section for index in tags[3:])
+    banners = [index for index, (_, text) in enumerate(paragraphs) if text.startswith("UNVERIFIED — not a")]
+    assert banners == [tags[3] + 1, tags[4] + 1]
+    assert all(paragraphs[index][1] == UNVERIFIED_BANNER for index in banners)
+    order = [result.card.card_id for result in (*verified, *unverified)]
+    assert bundle_world.renderer.calls == [(tuple(order), 3)]
+
+
+def test_bundle_with_no_unverified_card_has_no_unverified_section(bundle_world: BundleWorld) -> None:
+    paragraphs = styled_paragraphs(bundle_world.bundle(bundle_world.verified(), []))
+
+    assert "UNVERIFIED — not finished cards" not in [text for _, text in paragraphs]
+    assert not any(text.startswith("UNVERIFIED") for _, text in paragraphs)
+    assert bundle_world.renderer.calls[0][1] is None
+
+
+def test_bundle_with_only_unverified_cards_has_the_block_and_then_the_section(
+    bundle_world: BundleWorld,
+) -> None:
+    paragraphs = styled_paragraphs(bundle_world.bundle([], bundle_world.unverified()))
+
+    assert [text for _, text in paragraphs[:3]] == [
+        BUNDLE_BLOCK,
+        "UNVERIFIED — not finished cards",
+        EVERY_PAGE_TAG,
+    ]
+    assert paragraphs[3][1] == UNVERIFIED_BANNER
+
+
+def test_bundle_refuses_an_unverified_card_among_the_verified(bundle_world: BundleWorld) -> None:
+    verified, unverified = bundle_world.verified(), bundle_world.unverified()
+
+    with pytest.raises(ExportRefused, match="cannot be filed among the VERIFIED cards"):
+        bundle_world.bundle([*verified, *unverified], [])
+    with pytest.raises(ExportRefused, match="cannot be filed among the VERIFIED cards"):
+        run(bundle_world.export.export_json_bundle([unverified[0], verified[0]], []))
+    assert bundle_world.renderer.calls == []
+
+
+def test_bundle_refuses_a_verified_card_in_the_unverified_section(bundle_world: BundleWorld) -> None:
+    verified, unverified = bundle_world.verified(), bundle_world.unverified()
+
+    with pytest.raises(ExportRefused, match="cannot be filed in the UNVERIFIED section"):
+        bundle_world.bundle(verified[:2], [verified[2], *unverified])
+    with pytest.raises(ExportRefused, match="cannot be filed in the UNVERIFIED section"):
+        run(bundle_world.export.export_json_bundle([], [*unverified, verified[0]]))
+    assert bundle_world.renderer.calls == []
+
+
+def test_bundle_manifests_list_every_verified_card_before_any_unverified_one(
+    bundle_world: BundleWorld, tmp_path: Path
+) -> None:
+    verified, unverified = bundle_world.verified(), bundle_world.unverified(2)
+    path = tmp_path / "bundle.docx"
+    path.write_bytes(bundle_world.bundle(verified, unverified))
+    manifest_json = run(bundle_world.export.export_json_bundle(verified, unverified))
+
+    assert read_embedded_manifest_bytes(path) == manifest_json
+    statuses = [card["verification_status"] for card in json.loads(manifest_json)["cards"]]
+    assert statuses == ["VERIFIED", "VERIFIED", "VERIFIED", "UNVERIFIED", "UNVERIFIED"]
+    assert [card["card_id"] for card in json.loads(manifest_json)["cards"]] == [
+        result.card.card_id for result in (*verified, *unverified)
+    ]
+
+
+def test_bundle_renderer_refuses_an_empty_unverified_section_or_a_card_in_the_wrong_one(
+    bundle_world: BundleWorld,
+) -> None:
+    verified, unverified = bundle_world.verified(), bundle_world.unverified()
+    cards = [result.card for result in (*verified, *unverified)]
+    manifest = run(bundle_world.export.manifest(cards))
+    items = [
+        CardToRender(
+            result.card,
+            CiteText(*_short_and_full(result.card)),
+            tuple(failure.reason.value for failure in result.reasons),
+        )
+        for result in (*verified, *unverified)
+    ]
+
+    with pytest.raises(RenderRefused, match="written only when it holds at least one card"):
+        render_cards_docx(manifest, items, TEAM_DEFAULT, unverified_from=4)
+    with pytest.raises(RenderRefused, match="cannot be filed in the UNVERIFIED section"):
+        render_cards_docx(manifest, items, TEAM_DEFAULT, unverified_from=2)
+    with pytest.raises(RenderRefused, match="cannot be filed among the VERIFIED cards"):
+        render_cards_docx(
+            run(bundle_world.export.manifest([cards[3], *cards[:3]])),
+            [items[3], *items[:3]],
+            TEAM_DEFAULT,
+            unverified_from=1,
+        )

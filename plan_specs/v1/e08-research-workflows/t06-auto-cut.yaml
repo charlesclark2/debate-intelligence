@@ -29,7 +29,10 @@ spec:
     depends on it.
   priority: 1
   constraints:
-    packages: [debate_core.application, debate_cli]
+    # PM ruling 2026-11-03 (Q1, option A): debate_core.evidence is added for an additive change to
+    # docx_renderer.py (the UNVERIFIED section, `unverified_from`) and ports/card_document.py (the
+    # port's matching keyword). render_cards_docx called without it is pinned byte for byte.
+    packages: [debate_core.application, debate_core.evidence, debate_cli]
     forbidden:
       - Placing UNVERIFIED cards among verified cards in the bundle
       - Unbounded concurrency or retries that ignore per-host rate limits

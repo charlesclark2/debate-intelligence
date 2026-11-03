@@ -57,7 +57,9 @@ class RecordingRenderer:
         profile: ResolvedFormatProfile,
         *,
         headings: DocumentHeadings | None = None,
+        unverified_from: int | None = None,
     ) -> bytes:
+        assert unverified_from is None, "export_docx never writes an UNVERIFIED section"
         self.calls.append((manifest, tuple(cards), headings))
         return render_cards_docx(manifest, cards, profile, headings=headings)
 

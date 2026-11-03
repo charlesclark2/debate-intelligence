@@ -38,6 +38,7 @@ __all__ = [
     "CardToRender",
     "CiteText",
     "DocumentHeadings",
+    "UNVERIFIED_SECTION_HEADING",
     "RenderRefused",
     "banner_text",
     "cite_marks",
@@ -56,6 +57,9 @@ CITE_FIELD_LABELS: Final = {
     "accessed_at": "accessed date",
 }
 """How a mark names each cite field, in cite order."""
+
+UNVERIFIED_SECTION_HEADING: Final = "UNVERIFIED — not finished cards"
+"""The block heading over a bundle's UNVERIFIED cards, after every VERIFIED one (`v1-e08-t06`)."""
 
 
 class RenderRefused(ValueError):

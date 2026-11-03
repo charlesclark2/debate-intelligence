@@ -20,6 +20,13 @@ the cards keep the order they were given in, and the snapshot references are in 
 nothing, and a renderer's document order is the manifest's card order, which is the order `verify`
 reports positions in.
 
+## The auto-cut bundle (`v1-e08-t06`)
+
+:meth:`ExportService.export_docx_bundle` and :meth:`ExportService.export_json_bundle` write
+`search --auto-cut`'s bundle: the VERIFIED cards under one block heading, then, only when there are
+any, the UNVERIFIED cards in a section of their own under "UNVERIFIED — not finished cards", each with
+its banner. A card filed in the wrong section is refused, here and again by the renderer.
+
 ## What it refuses
 
 * **No cards.** A manifest lists at least one: a gate on `verify`'s exit code must not pass having
@@ -43,7 +50,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
-from debate_core.application.card_types import CardFailure
+from debate_core.application.card_types import CardFailure, CutResult
 from debate_core.application.citation_service import format_cite
 from debate_core.application.errors import DomainError
 from debate_core.application.ports.card_document import CardDocumentRenderer
@@ -119,9 +126,54 @@ class ExportService:
         `CardService`'s reasons by card id; each card that is not VERIFIED needs at least one, and its
         banner names each failure's code and the verifier's code beside it, once each.
         """
+        return await self._docx(cards, profile=profile, failures=failures or {}, headings=headings)
+
+    async def export_docx_bundle(
+        self,
+        verified: Sequence[CutResult],
+        unverified: Sequence[CutResult],
+        *,
+        profile: ResolvedFormatProfile,
+        block: str,
+    ) -> bytes:
+        """An auto-cut bundle (`v1-e08-t06`): `verified` under the block heading `block`, then
+        `unverified` alone in the section headed "UNVERIFIED — not finished cards", each with its banner.
+
+        The section is written only when `unverified` holds a card. Raises :class:`ExportRefused` for a
+        card that is not VERIFIED among `verified`, or a VERIFIED card among `unverified`, before
+        anything is read.
+        """
+        cards = _bundle_cards(verified, unverified)
+        return await self._docx(
+            cards,
+            profile=profile,
+            failures={result.card.card_id: result.reasons for result in unverified},
+            headings=DocumentHeadings(block=block),
+            unverified_from=len(verified) if unverified else None,
+        )
+
+    async def export_json_bundle(
+        self, verified: Sequence[CutResult], unverified: Sequence[CutResult]
+    ) -> bytes:
+        """The manifest of the same bundle: the cards of `verified`, then those of `unverified`.
+
+        A card's section is its status: the manifest's format has no other place for it, and every card
+        listed before the first one that is not VERIFIED is VERIFIED. Refuses as
+        :meth:`export_docx_bundle` does.
+        """
+        return await self.export_json(_bundle_cards(verified, unverified))
+
+    async def _docx(
+        self,
+        cards: Sequence[Card],
+        *,
+        profile: ResolvedFormatProfile,
+        failures: Mapping[str, Sequence[CardFailure]],
+        headings: DocumentHeadings | None,
+        unverified_from: int | None = None,
+    ) -> bytes:
         if self._render_docx is None:
             raise ExportRefused("this export service was built with no DOCX renderer")
-        failures = failures or {}
         strays = sorted(set(failures) - {card.card_id for card in cards})
         if strays:
             raise ExportRefused(f"failures were given for cards that are not exported: {', '.join(strays)}")
@@ -131,9 +183,29 @@ class ExportService:
                 CardToRender(card, _cite_text(card), _reason_codes(failures.get(card.card_id, ())))
                 for card in cards
             ]
-            return self._render_docx(manifest, items, profile, headings=headings)
+            if unverified_from is None:
+                return self._render_docx(manifest, items, profile, headings=headings)
+            return self._render_docx(
+                manifest, items, profile, headings=headings, unverified_from=unverified_from
+            )
         except RenderRefused as refused:
             raise ExportRefused(str(refused)) from refused
+
+
+def _bundle_cards(verified: Sequence[CutResult], unverified: Sequence[CutResult]) -> list[Card]:
+    """The bundle's cards in document order, VERIFIED first; refused when one is in the wrong section."""
+    for result in verified:
+        if not result.is_verified:
+            raise ExportRefused(
+                f"card {result.card.card_id} is {result.card.verification_status.value}: it cannot be filed "
+                "among the VERIFIED cards"
+            )
+    for result in unverified:
+        if result.is_verified:
+            raise ExportRefused(
+                f"card {result.card.card_id} is VERIFIED: it cannot be filed in the UNVERIFIED section"
+            )
+    return [result.card for result in (*verified, *unverified)]
 
 
 def _cite_text(card: Card) -> CiteText:

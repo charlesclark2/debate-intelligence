@@ -66,7 +66,7 @@ v2.3's extension work.
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 23 | 15 | 124 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 26 | 11 | 112 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
-| [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 31 | 21 | 169 |
+| [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 31 | 22 | 169 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 29 | 25 | 94 |
 | [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 2 | 57 | 36 | 106 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
@@ -374,7 +374,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [The model stage names the argument a card is read as, with each position's side and description, and the scrub and scan fixed](plan_specs/v1/e32-argument-landscape/t40-model-stage-reads-the-argument-not-the-subject.yaml) `v1-e32-t40-model-stage-reads-the-argument-not-the-subject` | Succeeded | 1 | 5.0 |
 | [The coach's review applied: three new NHI positions, corrected descriptions, and a second accepted label in the coach sample](plan_specs/v1/e32-argument-landscape/t41-coach-sample-second-label-and-three-new-positions.yaml) `v1-e32-t41-coach-sample-second-label-and-three-new-positions` | Succeeded | 2 | 3.0 |
 | [`landscape cassettes --delete` can delete only one prompt version's cassettes](plan_specs/v1/e32-argument-landscape/t42-landscape-cassettes-delete-by-prompt-version.yaml) `v1-e32-t42-landscape-cassettes-delete-by-prompt-version` | Pending | 1 | 1.0 |
-| [The model stage is scored as students meet it, its refusals are explained, and a second model route is measured on the same cards](plan_specs/v1/e32-argument-landscape/t43-model-evaluation-system-score-refusals-and-a-second-route.yaml) `v1-e32-t43-model-evaluation-system-score-refusals-and-a-second-route` | Pending | 2 | 3.0 |
+| [The model stage is scored as students meet it, its refusals are explained, and a second model route is measured on the same cards](plan_specs/v1/e32-argument-landscape/t43-model-evaluation-system-score-refusals-and-a-second-route.yaml) `v1-e32-t43-model-evaluation-system-score-refusals-and-a-second-route` | InProgress | 2 | 3.0 |
 | [A scan hit already marked as a JSON key's name or a taxonomy word does not make a text unclean](plan_specs/v1/e32-argument-landscape/t44-scan-marked-hits-leave-a-text-clean.yaml) `v1-e32-t44-scan-marked-hits-leave-a-text-clean` | Pending | 1 | 1.0 |
 | [The review queue's order model is trained again at taxonomy 1.5.0](plan_specs/v1/e32-argument-landscape/t45-review-order-model-retrained-at-the-current-taxonomy.yaml) `v1-e32-t45-review-order-model-retrained-at-the-current-taxonomy` | Pending | 2 | 1.0 |
 
@@ -535,7 +535,7 @@ Whitefish Bay Debate has a public, mobile-friendly team website: team informatio
 | [The prod build refuses an image whose consent has lapsed, as it refuses a lapsed name](plan_specs/v1/e37-calendar-and-announcements/t12-stale-image-consent-refused.yaml) `v1-e37-t12-stale-image-consent-refused` | Succeeded | 0 | 1.0 |
 | [A consent entry checked after its season ends is stale to the build, for names and images](plan_specs/v1/e37-calendar-and-announcements/t13-consent-checked-after-the-season-is-stale.yaml) `v1-e37-t13-consent-checked-after-the-season-is-stale` | Succeeded | 1 | 1.0 |
 | [A check dated after the season says so, and the schedule and results use one season end](plan_specs/v1/e37-calendar-and-announcements/t14-season-end-warning-and-one-definition.yaml) `v1-e37-t14-season-end-warning-and-one-definition` | Pending | 1 | 1.0 |
-| [News is in the header navigation and stays in the footer](plan_specs/v1/e37-calendar-and-announcements/t15-news-in-the-header-and-the-footer.yaml) `v1-e37-t15-news-in-the-header-and-the-footer` | Pending | 2 | 1.0 |
+| [News is in the header navigation and stays in the footer](plan_specs/v1/e37-calendar-and-announcements/t15-news-in-the-header-and-the-footer.yaml) `v1-e37-t15-news-in-the-header-and-the-footer` | Succeeded | 2 | 1.0 |
 | [Announcement guard follow-ups: a name's published form in free text, an image that exists, and names after the season rolls over](plan_specs/v1/e37-calendar-and-announcements/t16-announcement-guard-follow-ups.yaml) `v1-e37-t16-announcement-guard-follow-ups` | Pending | 2 | 2.0 |
 
 #### [E38 — Team Donations](plan_specs/v1/e38-donations/epic.yaml)

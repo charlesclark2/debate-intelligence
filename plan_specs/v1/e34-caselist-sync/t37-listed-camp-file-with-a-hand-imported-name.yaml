@@ -41,7 +41,7 @@ spec:
         The count is recorded before any rule; if it finds any, a same-named file of another
         camp is fetched and a hand-imported file is not, by tests shown failing first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

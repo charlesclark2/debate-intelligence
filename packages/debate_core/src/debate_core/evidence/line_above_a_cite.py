@@ -18,6 +18,12 @@ bold or size; their file's defaults make every such run bold at 13 pt.
 :func:`bold_lines_read_as_body_or_nothing` counts, in one file, every line Word shows as the
 classifier's bold-heading rule would take it, where the parser read body or nothing.
 
+`v1-e31-t32` asks where the tags t24's rule leaves stand. :attr:`LineAboveACite.failing_conditions`
+lists, in the order t24's report counted them, each :class:`FailingCondition` of the rule a line
+fails, and :func:`unbolded_part` says, in counts, where the unbolded part of a line bold in part
+sits and what it is made of: never its text. :attr:`UnboldedPart.shape` names the
+:class:`BoldInPartShape` the sample's answers were split by.
+
 Nothing here decides whether such a line is a tag; the counts and the PM's ruling do. Counts only
 leave this module. Rule ids are reduced to their family, the part before the first colon, because
 what follows the colon can name a style the file defined.
@@ -42,16 +48,21 @@ from debate_core.evidence.style_classifier import (
 
 __all__ = [
     "BRACKETED_CITE_RULES",
+    "BoldInPartShape",
     "BoldLine",
     "Boldness",
+    "FailingCondition",
     "LineAboveACite",
     "LineSize",
+    "Place",
+    "UnboldedPart",
     "bold_lines_read_as_body_or_nothing",
     "line_above",
     "lines_above_cites",
     "rule_family",
     "tally_bold_lines",
     "tally_lines_above_cites",
+    "unbolded_part",
 ]
 
 BRACKETED_CITE_RULES: Final = frozenset(
@@ -83,6 +94,23 @@ class LineSize(StrEnum):
     READING_SIZE_OR_LARGER = "reading size or larger"
 
 
+class FailingCondition(StrEnum):
+    """One condition of `v1-e31-t24`'s rule that a line above a cite fails, in the order t24's
+    report counted the 3,573 lines the rule left on `2026.10.18-docx-5`: how the line was read,
+    then its bold, then what a bold line must also be. The guards the PM added in the ruling of
+    2026-10-20 come last, so that a line they leave is counted as bold throughout first."""
+
+    READ_BY_AN_ASSEMBLY_RULE_OR_A_STYLE = "read by an assembly rule or through a style"
+    BEHIND_AN_UNMAPPED_STYLE = "behind a style that maps to no unit"
+    NOT_BOLD = "not bold, as Word shows it"
+    BOLD_IN_PART = "bold in part, as Word shows it"
+    LONGER_THAN_A_HEADING = "over 300 characters"
+    NOT_AT_READING_SIZE = "below reading size or no size stated, as Word shows it"
+    NAMES_A_SOURCE_AT_ITS_HEAD = "names a source at its head"
+    HIGHLIGHTED = "a highlighted run"
+    IN_AN_EVIDENCE_STYLE = "a run in the underline or emphasis style"
+
+
 @dataclass(frozen=True, slots=True)
 class LineAboveACite:
     """The paragraph directly above one cite, as the parser read it. Counts and rule names only."""
@@ -111,6 +139,8 @@ class LineAboveACite:
     size_as_word_shows_it: LineSize = LineSize.NOT_STATED
     underlined: bool = False
     highlighted: bool = False
+    in_an_evidence_style: bool = False
+    """A run carries the underline or emphasis character style: evidence a debater cut."""
     no_longer_than_a_heading: bool = False
     """At most :data:`~debate_core.evidence.style_classifier.MAXIMUM_HEADING_CHARACTERS`."""
     names_a_source_at_its_head: bool = False
@@ -151,6 +181,133 @@ class LineAboveACite:
             and self.no_longer_than_a_heading
             and not self.names_a_source_at_its_head
         )
+
+    @property
+    def failing_conditions(self) -> tuple[FailingCondition, ...]:
+        """Each condition of `v1-e31-t24`'s rule the line fails, in :class:`FailingCondition`'s order.
+
+        Empty for a line that fails none, which the parser still leaves when the cite below is a
+        guess a body may yet take. Asked only of a line read as body or as nothing; whether the cite
+        opens a card with no tag is the caller's.
+        """
+        failing: list[FailingCondition] = []
+        if not self.line_read_by_a_heuristic:
+            failing.append(FailingCondition.READ_BY_AN_ASSEMBLY_RULE_OR_A_STYLE)
+        if self.line_behind_an_unmapped_style:
+            failing.append(FailingCondition.BEHIND_AN_UNMAPPED_STYLE)
+        if self.boldness_as_word_shows_it is Boldness.NONE:
+            failing.append(FailingCondition.NOT_BOLD)
+        elif self.boldness_as_word_shows_it is Boldness.SOME:
+            failing.append(FailingCondition.BOLD_IN_PART)
+        if not self.no_longer_than_a_heading:
+            failing.append(FailingCondition.LONGER_THAN_A_HEADING)
+        if self.size_as_word_shows_it is not LineSize.READING_SIZE_OR_LARGER:
+            failing.append(FailingCondition.NOT_AT_READING_SIZE)
+        if self.names_a_source_at_its_head:
+            failing.append(FailingCondition.NAMES_A_SOURCE_AT_ITS_HEAD)
+        if self.highlighted:
+            failing.append(FailingCondition.HIGHLIGHTED)
+        if self.in_an_evidence_style:
+            failing.append(FailingCondition.IN_AN_EVIDENCE_STYLE)
+        return tuple(failing)
+
+
+class Place(StrEnum):
+    """Where in a line a stretch of it stands."""
+
+    HEAD = "the head"
+    MIDDLE = "the middle"
+    TAIL = "the tail"
+
+
+class BoldInPartShape(StrEnum):
+    """Where a line bold in part is left unbolded, as `v1-e31-t32`'s sample split its answers."""
+
+    TAIL_PUNCTUATION_ONLY = "unbolded only at the tail, punctuation only"
+    TAIL_WITHOUT_DIGITS = "unbolded only at the tail, letters and no digits"
+    TAIL_WITH_DIGITS = "unbolded only at the tail, with digits"
+    HEAD_ONLY = "unbolded only at the head"
+    BOTH_ENDS_ONLY = "unbolded at the head and the tail only"
+    IN_THE_MIDDLE = "unbolded in the middle"
+
+
+@dataclass(frozen=True, slots=True)
+class UnboldedPart:
+    """The unbolded part of a line bold in part, in counts. Spaces are not counted."""
+
+    characters: int
+    of: int
+    """Every character of the line."""
+    stretches: int
+    """Runs of unbolded characters with bold between them."""
+    places: tuple[Place, ...]
+    """Where the stretches stand, each place once, head first."""
+    holds_letters: bool
+    holds_digits: bool
+
+    def described(self) -> str:
+        """For example `4 of 52 characters, 1 stretch, at the tail; digits and punctuation only`."""
+        stretches = "1 stretch" if self.stretches == 1 else f"{self.stretches} stretches"
+        places = " and ".join(place.value for place in self.places)
+        if self.holds_letters:
+            kind = "letters" + (" and digits" if self.holds_digits else "")
+        else:
+            kind = "digits and punctuation only" if self.holds_digits else "punctuation only"
+        return f"{self.characters} of {self.of} characters, {stretches}, at {places}; {kind}"
+
+    @property
+    def shape(self) -> BoldInPartShape:
+        if Place.MIDDLE in self.places:
+            return BoldInPartShape.IN_THE_MIDDLE
+        if self.places == (Place.HEAD,):
+            return BoldInPartShape.HEAD_ONLY
+        if self.places == (Place.HEAD, Place.TAIL):
+            return BoldInPartShape.BOTH_ENDS_ONLY
+        if self.holds_digits:
+            return BoldInPartShape.TAIL_WITH_DIGITS
+        if self.holds_letters:
+            return BoldInPartShape.TAIL_WITHOUT_DIGITS
+        return BoldInPartShape.TAIL_PUNCTUATION_ONLY
+
+
+def unbolded_part(description: ParagraphDescription) -> UnboldedPart | None:
+    """Where the line's unbolded characters stand and what they are; None when none is or all are.
+
+    A run's bold is what it says, or its paragraph mark's when it says nothing, as
+    :class:`Boldness` counts it; pass the line as Word shows it to count what Word shows.
+    """
+    bold: list[bool] = []
+    letters = digits = False
+    for run in description.runs:
+        run_bold = run.bold if run.bold is not None else bool(description.paragraph_bold)
+        for character in run.text:
+            if character.isspace():
+                continue
+            bold.append(run_bold)
+            if not run_bold:
+                letters = letters or character.isalpha()
+                digits = digits or character.isdigit()
+    unbolded = bold.count(False)
+    if not unbolded or unbolded == len(bold):
+        return None
+    places: set[Place] = set()
+    stretches = 0
+    for at, is_bold in enumerate(bold):
+        if is_bold or (at > 0 and not bold[at - 1]):
+            continue
+        stretches += 1
+        ends = at
+        while ends + 1 < len(bold) and not bold[ends + 1]:
+            ends += 1
+        places.add(Place.HEAD if at == 0 else Place.TAIL if ends == len(bold) - 1 else Place.MIDDLE)
+    return UnboldedPart(
+        characters=unbolded,
+        of=len(bold),
+        stretches=stretches,
+        places=tuple(place for place in Place if place in places),
+        holds_letters=letters,
+        holds_digits=digits,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -215,6 +372,16 @@ def _in_a_tag_style(description: ParagraphDescription, profile: StyleProfile) ->
     return True
 
 
+def _in_an_evidence_style(description: ParagraphDescription, profile: StyleProfile) -> bool:
+    for run in description.visible_runs:
+        match = profile.resolve_character_style(
+            run.character_style_id, run.character_style_name, run.character_style_based_on
+        )
+        if match is not None and match.emphasis in (RunEmphasis.UNDERLINE, RunEmphasis.EMPHASIS):
+            return True
+    return False
+
+
 def _describe_line(
     read: ParagraphDescription,
     shown: ParagraphDescription,
@@ -243,6 +410,7 @@ def _describe_line(
         size_as_word_shows_it=_size(shown, profile),
         underlined=read.has_underlined_run,
         highlighted=read.has_highlighted_run,
+        in_an_evidence_style=_in_an_evidence_style(read, profile),
         no_longer_than_a_heading=len(text) <= MAXIMUM_HEADING_CHARACTERS,
         names_a_source_at_its_head=source is not None
         and source.start() <= NAME_AND_YEAR_AT_THE_HEAD_CHARACTERS,

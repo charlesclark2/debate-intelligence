@@ -2076,3 +2076,122 @@ search index `767b9c7c056b80cb` (52,059 documents) published
 
 `2026.10.18-docx-5` was retired in the dev bucket and on this machine on 2026-10-22
 ([parsed-card-store.md](parsed-card-store.md#retired-so-far)).
+
+## A tag bold in part above a cite (`v1-e31-t32`)
+
+`v1-e31-t24`'s rule reads the line directly above a cite that opens a card with no tag as the card's
+tag only when Word shows it bold throughout. Its sample found 1 tag in 6 among the lines it left, and
+the likeliest place for the rest was the lines bold in part. This section samples that stratum and
+counts the shape the answers point to. Counts only, read-only, by the operator over the dev data
+directory on this Mac (13,518 parsed sources; hsld26, hspf26 and openev under `2026.10.20-docx-6`,
+hspolicy26 under `2026.10.27-docx-7`), each source parsed again by `2026.10.27-docx-7`. The Mac's store
+lacks the weeks the cloud run has held since the cutover.
+
+### The lines the rule leaves, by the first condition each fails
+
+The same figures from the sample's tally sheet and from `scripts/count_bold_in_part_tags.py`
+(2026-11-03, 640 seconds). Every line directly above a cite that opens a card with no tag, read as
+body or as nothing, in t24's order of conditions:
+
+| First failing condition | hsld26 | hspf26 | hspolicy26 | openev | Total |
+|---|---|---|---|---|---|
+| Read by an assembly rule or through a style | 49 | 92 | 172 | 2 | 315 |
+| Behind a style that maps to no unit | 46 | 69 | 7 | 0 | 122 |
+| Not bold, as Word shows it | 907 | 613 | 788 | 42 | 2,350 |
+| Bold in part, nothing else the rule asks fails | 26 | 29 | 10 | 3 | 68 |
+| Bold in part, something else fails too | 374 | 525 | 177 | 13 | 1,089 |
+| Over 300 characters | 58 | 229 | 7 | 1 | 295 |
+| Below reading size, or no size stated | 5 | 71 | 4 | 0 | 80 |
+| Names a source at its head | 7 | 0 | 0 | 0 | 7 |
+| A highlighted run | 11 | 23 | 12 | 0 | 46 |
+| A run in the underline or emphasis style | 5 | 2 | 0 | 0 | 7 |
+| Fails nothing: the cite is a guess a body may yet take | 0 | 1 | 0 | 0 | 1 |
+| **All** | 1,488 | 1,654 | 1,177 | 61 | **4,380** |
+
+On `2026.10.18-docx-5` over 11,154 sources t24 counted 3,573 such lines, 967 of them bold in part.
+
+### The sample
+
+`scripts/sample_cite_shapes.py --plan bold-in-part --seed 20261103`, by the operator, 2026-11-03: 30
+items, printed numbered in the operator's terminal; the operator answered on a tally sheet that holds
+no text, in formatting terms. "Part" is the operator's answer for a line that holds a tag at its head,
+then a bold short cite, then a claim, all unbolded but the short cite: a tag, but not the line.
+Item 10 was first marked a tag and corrected to part by the operator before the counts.
+
+| Stratum | In the store | Asked | Tag | Not | Part |
+|---|---|---|---|---|---|
+| Bold in part, nothing else the rule asks fails | 68 | 24 | 18 | 4 | 2 |
+| Bold in part, something else fails too | 1,089 | 6 | 1 | 5 | 0 |
+
+The answers count lines, not texts: three texts were drawn more than once from different files. The
+24, by where the unbolded part sits (`BoldInPartShape`):
+
+| Where the unbolded part sits | Asked | Tag | Not | Part |
+|---|---|---|---|---|
+| Only at the tail, punctuation only (a full stop) | 5 | 5 | 0 | 0 |
+| Only at the tail, letters and no digits | 12 | 12 | 0 | 0 |
+| Only at the tail, with digits | 4 | 1 | 3 | 0 |
+| At the head and the tail only (bold in the middle) | 2 | 0 | 0 | 2 |
+| In the middle | 1 | 0 | 1 | 0 |
+
+The tags the operator described were a bold opening with the rest of the tag unbolded (12) and a full
+stop left unbolded (5). The split between a tail with digits and one without was noticed after the
+answers, not planned before them. 0 not-tags of 17 is at most 18% at 95% (Wilson).
+
+### The shapes in every caselist
+
+`scripts/count_bold_in_part_tags.py`: the 68 lines that fail only by being bold in part, by shape,
+as lines (distinct texts):
+
+| Shape | hsld26 | hspf26 | hspolicy26 | openev | Total |
+|---|---|---|---|---|---|
+| Only at the tail, punctuation only | 2 (2) | 4 (4) | 0 | 3 (3) | 9 (9) |
+| Only at the tail, letters and no digits | 21 (7) | 4 (4) | 10 (5) | 0 | 35 (16) |
+| Only at the tail, with digits | 1 (1) | 6 (4) | 0 | 0 | 7 (5) |
+| Only at the head | 0 | 1 (1) | 0 | 0 | 1 (1) |
+| At the head and the tail only | 1 (1) | 4 (3) | 0 | 0 | 5 (4) |
+| In the middle | 1 (1) | 10 (5) | 0 | 0 | 11 (6) |
+| **All** | 26 (12) | 29 (21) | 10 (5) | 3 (3) | **68 (41)** |
+
+The shape the answers point to, unbolded only at the tail with no digit in it, is 44 lines (25
+texts) in 36 files or fewer (6 hold the first kind and 30 the second). The 1,089 that fail something
+else as well are mostly unbolded in the middle (862) and fail on a highlighted run (867), over 300
+characters (850) or the underline or emphasis style (541), which t24's guards keep as body; 28 of them
+are unbolded only at the tail with no digits.
+
+### The PM's ruling (2026-11-03)
+
+Option (a): the line is the card's tag when Word shows it bold from its start, with one unbolded
+stretch at its tail that holds no digit, every other condition and guard of t24's rule unchanged.
+The digit exclusion is conservative: it keeps out the three not-tags, and at worst leaves a few tags
+as before. The rule is `assembly-bold-tag-with-an-unbolded-tail-above-a-cite`, under its own id so
+that its cards are counted apart from t24's; the parser is `2026.11.03-docx-8`. Spaces decide
+nothing, so a tail of two unbolded runs with a space between them is one stretch.
+
+### Before and after, over the Mac's store
+
+`scripts/diff_tag_above_a_cite.py --rule unbolded-tail`, by the operator, 2026-11-03, 218 seconds: the
+2,680 sources whose stored cards hold a card with no tag, each parsed as `docx-7` read it and as
+`docx-8` does.
+
+| | hsld26 | hspf26 | hspolicy26 | openev | Total |
+|---|---|---|---|---|---|
+| Lines the parser takes (all of the sampled shape, none beyond it) | 23 | 8 | 10 | 3 | **44** |
+| **Cards that gain a tag** | 23 | 8 | 10 | 3 | **44** |
+| **Cards above that lose their last body paragraph** | 8 | 4 | 3 | 0 | **15** |
+| Cards above that vanish: a tag whose only body was the taken line, now an analytic | 2 | 0 | 3 | 0 | 5 |
+| **Any other card that changed** | 0 | 0 | 0 | 0 | **0** |
+| Cards unchanged | 16,120 | 16,428 | 33,527 | 5,111 | 71,186 |
+
+### The labelled evaluation
+
+`scripts/run_parser_eval.py --tier both`, by the operator, 2026-11-03: every score the same as on
+`docx-7`, the gate passed on both tiers. Pr-subset TAG precision 0.974 and recall 0.884, CITE 0.973 and
+0.818; full tier TAG 0.976 and 0.942, CITE 0.989 and 0.837.
+
+### The re-parse to `docx-8` (operator-run, after the merge)
+
+Not run yet. The cloud run's first run on an image carrying `2026.11.03-docx-8` parses every caselist
+in full (`v1-e40-t08`). Its counts, from a copy of the dev bucket restored before that run and one
+restored after it (`scripts/count_tags_by_rule.py`), are recorded here by whoever closes the task;
+the steps are in `docs/session-reports/v1-e31-t32-bold-in-part-tags.md`, Operator follow-ups.

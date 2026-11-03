@@ -27,6 +27,14 @@ inherits. 10 lines the rule proposed to the PM would read as the card's tag abov
 files whose defaults make text bold, read as body or as nothing, that Word shows as the classifier's
 bold-heading rule would take them, and that stand above no cite.
 
+For `v1-e31-t32`, a fourth plan, `--plan bold-in-part`, draws from the lines t24's rule leaves above a
+cite that opens a card with no tag, read as body or as nothing, whose first failing condition is that
+Word shows them bold in part (967 of the 3,573 on `2026.10.18-docx-5`): 24 that fail nothing else the
+rule asks, and 6 that fail something else too. It asks no questions. It prints the 30 in the terminal,
+numbered, each with its unbolded stretches marked and counted, and writes a tally sheet: every left
+line counted by its first failing condition, and a row per item for the operator to fill in, which are
+tags and, for a tag, how its unbolded part differs, in formatting terms. The sheet holds no text.
+
 It parses every source in the store with the parser this branch carries. The sample was taken on
 2026-10-18 with the three rules behind a flag that only this script switched on, so it judged the
 code that would ship; the rules were switched on for good once the tallies supported them, and the
@@ -45,8 +53,11 @@ paragraph, tag, cite, file name, path or digest.
       --save-tallies ~/cite-shape-sample-tallies.txt
     uv run python scripts/sample_cite_shapes.py --plan bold-tag --seed 20261020 \\
       --save-tallies ~/cite-shape-sample-tallies.txt
+    uv run python scripts/sample_cite_shapes.py --plan bold-in-part --seed 20261103 \\
+      --save-tallies ~/bold-in-part-tally-sheet.txt
 
-Keys: `y` yes, `n` no, `u` unsure, with no Enter; `q` stops and keeps the tallies so far.
+Keys: `y` yes, `n` no, `u` unsure, with no Enter; `q` stops and keeps the tallies so far. The
+bold-in-part plan reads no keys, and its tally sheet must be a new file.
 """
 
 from __future__ import annotations
@@ -83,9 +94,11 @@ from debate_core.domain.debate_files import (  # noqa: E402
 from debate_core.domain.style_profile import RunEmphasis, StructuralUnit, StyleProfile  # noqa: E402
 from debate_core.evidence.line_above_a_cite import (  # noqa: E402
     BRACKETED_CITE_RULES,
+    FailingCondition,
     bold_lines_read_as_body_or_nothing,
     line_above,
     lines_above_cites,
+    unbolded_part,
 )
 from debate_core.evidence.style_classifier import (  # noqa: E402
     first_name_and_year,
@@ -93,7 +106,7 @@ from debate_core.evidence.style_classifier import (  # noqa: E402
     is_a_highlighted_cite,
     the_cite_style_marks_a_name_and_year_at_the_head,
 )
-from debate_core.integrations.docx_parser import DebateDocxParser  # noqa: E402
+from debate_core.integrations.docx_parser import DOCX_PARSER_VERSION, DebateDocxParser  # noqa: E402
 from debate_core.integrations.docx_parser.package import DocxPackage  # noqa: E402
 from debate_core.integrations.docx_parser.runs import (  # noqa: E402
     ReadParagraph,
@@ -103,7 +116,7 @@ from debate_core.integrations.docx_parser.runs import (  # noqa: E402
 from debate_core.integrations.local.fs_blob_store import BLOB_DIRECTORY  # noqa: E402
 from debate_core.integrations.local.parsed_store import LocalParsedStore  # noqa: E402
 
-__all__ = ["STRATA", "Stratum", "bold_tag_strata", "card_strata", "main", "strata_of"]
+__all__ = ["STRATA", "Stratum", "bold_in_part_strata", "bold_tag_strata", "card_strata", "main", "strata_of"]
 
 CITE_QUESTION = "Is the marked paragraph this card's cite, or a line of it?"
 TEXT_QUESTION = "Is the marked paragraph part of the card's text, the evidence?"
@@ -112,8 +125,13 @@ SHORT_CITE_QUESTION = "Is the short cite shown the right short cite for the mark
 TAG_QUESTION = "Is the marked line the tag of the card whose cite is below it?"
 HEADING_QUESTION = "Is the marked line a heading: a card's tag, or a pocket, hat or block?"
 
-#: The plan the PM approved first, the one after the review of 2026-10-18, and `v1-e31-t24`'s.
-FIRST_PLAN, LEFT_QUOTE_PLAN, BOLD_TAG_PLAN = "first", "left-quote", "bold-tag"
+#: The plan the PM approved first, the one after the review of 2026-10-18, `v1-e31-t24`'s and `v1-e31-t32`'s.
+FIRST_PLAN, LEFT_QUOTE_PLAN, BOLD_TAG_PLAN, BOLD_IN_PART_PLAN = (
+    "first",
+    "left-quote",
+    "bold-tag",
+    "bold-in-part",
+)
 LEFT_QUOTE = "\u2018"
 
 ANSWERS = {"y": "yes", "n": "no", "u": "unsure"}
@@ -132,7 +150,8 @@ _HEADINGS = (StructuralUnit.POCKET, StructuralUnit.HAT, StructuralUnit.BLOCK, St
 
 @dataclass(frozen=True, slots=True)
 class Stratum:
-    """One cell of the plan: a rule, which side of it, and how many to draw."""
+    """One cell of the plan: a rule, which side of it, and how many to draw. One planned at 0 is
+    counted and never drawn."""
 
     rule: str
     side: str
@@ -182,12 +201,67 @@ STRATA: tuple[Stratum, ...] = (
         BOLD_TAG_PLAN,
     ),
 )
+#: `v1-e31-t32`: every line t24's rule leaves above a cite that opens a card with no tag, read as
+#: body or as nothing, by the first condition it fails; bold in part is drawn from, the rest counted.
+LEFT_BY_THE_BOLD_TAG_RULE = "a line the bold-tag rule leaves above a cite"
+_BOLD_IN_PART_SIDE = FailingCondition.BOLD_IN_PART.value
+STRATA += (
+    Stratum(
+        LEFT_BY_THE_BOLD_TAG_RULE,
+        f"{_BOLD_IN_PART_SIDE}, nothing else the rule asks fails",
+        TAG_QUESTION,
+        24,
+        BOLD_IN_PART_PLAN,
+    ),
+    Stratum(
+        LEFT_BY_THE_BOLD_TAG_RULE,
+        f"{_BOLD_IN_PART_SIDE}, something else fails too",
+        TAG_QUESTION,
+        6,
+        BOLD_IN_PART_PLAN,
+    ),
+    *(
+        Stratum(LEFT_BY_THE_BOLD_TAG_RULE, condition.value, TAG_QUESTION, 0, BOLD_IN_PART_PLAN)
+        for condition in FailingCondition
+        if condition is not FailingCondition.BOLD_IN_PART
+    ),
+    Stratum(
+        LEFT_BY_THE_BOLD_TAG_RULE,
+        "fails nothing: the cite is a guess a body may yet take",
+        TAG_QUESTION,
+        0,
+        BOLD_IN_PART_PLAN,
+    ),
+)
 _LEAVES_NO_BODY, _GAINS_A_SHORT_CITE = 11, 12
 _TAKEN_ABOVE_A_BRACKETED_CITE, _TAKEN_ABOVE_ANOTHER_CITE, _LEFT_ABOVE_A_CITE, _BOLD_LINE_ELSEWHERE = (
     13,
     14,
     15,
     16,
+)
+_BOLD_IN_PART_ALONE, _BOLD_IN_PART_AND_MORE = 17, 18
+#: The stratum of each other first failing condition, and of a line that fails none.
+_FIRST_FAILING = {
+    condition: number
+    for number, condition in enumerate(
+        (condition for condition in FailingCondition if condition is not FailingCondition.BOLD_IN_PART),
+        start=19,
+    )
+}
+_FAILS_NOTHING = 19 + len(_FIRST_FAILING)
+#: The bold-in-part plan's strata in the order the conditions are asked.
+_IN_THE_ORDER_ASKED = (
+    *(
+        number
+        for condition in FailingCondition
+        for number in (
+            (_BOLD_IN_PART_ALONE, _BOLD_IN_PART_AND_MORE)
+            if condition is FailingCondition.BOLD_IN_PART
+            else (_FIRST_FAILING[condition],)
+        )
+    ),
+    _FAILS_NOTHING,
 )
 
 
@@ -423,6 +497,41 @@ def bold_tag_strata(
     return found
 
 
+def bold_in_part_strata(
+    reads: Sequence[ReadParagraph],
+    shown: Sequence[ReadParagraph],
+    document: ParsedDocument,
+    profile: StyleProfile,
+) -> list[tuple[int, int]]:
+    """The bold-in-part plan's items in one file, as (stratum, position of the line).
+
+    Every line directly above a cite that opens a card with no tag, read as body or as nothing, by
+    the first condition of `v1-e31-t24`'s rule it fails; a line bold in part as Word shows it is
+    split by whether it fails anything else. `reads` and `shown` are as for :func:`bold_tag_strata`.
+    """
+    found: list[tuple[int, int]] = []
+    lines = lines_above_cites(
+        [read.description for read in reads],
+        document.sections,
+        document.cards,
+        profile,
+        shown=[read.description for read in shown],
+        cite_rules=None,
+    )
+    for cite, line in lines:
+        position = line_above(document.sections, cite)
+        if position is None or not (line.cite_opens_a_card_with_no_tag and line.read_as_body_or_nothing):
+            continue
+        failing = line.failing_conditions
+        if not failing:
+            found.append((_FAILS_NOTHING, position))
+        elif failing[0] is FailingCondition.BOLD_IN_PART:
+            found.append((_BOLD_IN_PART_ALONE if len(failing) == 1 else _BOLD_IN_PART_AND_MORE, position))
+        else:
+            found.append((_FIRST_FAILING[failing[0]], position))
+    return found
+
+
 def _as_word_shows_them(reads: Sequence[ReadParagraph], package: DocxPackage) -> list[ReadParagraph]:
     return [replace(read, description=as_word_shows_it(read.description, package)) for read in reads]
 
@@ -517,6 +626,10 @@ def _strata_in(source: _Source) -> tuple[list[tuple[int, int]], int]:
         return [], 0
     reads, document = parsed
     profile = _PARSER.profile  # type: ignore[union-attr]
+    if source.plan == BOLD_IN_PART_PLAN:
+        package = _PARSER.package  # type: ignore[union-attr]
+        assert package is not None  # noqa: S101 - set by the parse
+        return bold_in_part_strata(reads, _as_word_shows_them(reads, package), document, profile), 0
     if source.plan == BOLD_TAG_PLAN:
         package = _PARSER.package  # type: ignore[union-attr]
         assert package is not None  # noqa: S101 - set by the parse
@@ -587,6 +700,32 @@ def _shown(text: str, segments: Sequence[tuple[int, int, str]], starts: int, end
     return "".join(shown)
 
 
+UNBOLDED_OPENS, UNBOLDED_CLOSES = "[[", "]]"
+
+
+def _unbolded_marked(read: ReadParagraph) -> str:
+    """The line with each unbolded stretch between double brackets, as its bold is counted."""
+    description = read.description
+    marked: list[str] = []
+    for run in description.runs:
+        bold = run.bold if run.bold is not None else bool(description.paragraph_bold)
+        if bold or run.is_blank:
+            marked.append(run.text)
+        else:
+            # The run's own spaces stay outside its brackets.
+            core = run.text.strip()
+            leading, trailing = run.text[: run.text.index(core)], run.text[run.text.index(core) + len(core) :]
+            marked.append(leading + UNBOLDED_OPENS + core + UNBOLDED_CLOSES + trailing)
+    text = " ".join("".join(marked).split())
+    text = text.replace(f"{UNBOLDED_CLOSES} {UNBOLDED_OPENS}", " ").replace(
+        UNBOLDED_CLOSES + UNBOLDED_OPENS, ""
+    )
+    if len(text) <= SHOWN_OPENING + SHOWN_END + 100:
+        return text
+    hidden = len(text) - SHOWN_OPENING - SHOWN_END
+    return f"{text[:SHOWN_OPENING]} [… {hidden:,} characters not shown …] {text[-SHOWN_END:]}"
+
+
 def render_item(reads: Sequence[ReadParagraph], sections: Sequence[FileSection], position: int) -> str:
     """The marked paragraph between the tag over it and the paragraphs either side."""
     lines: list[str] = []
@@ -619,6 +758,8 @@ def render_item(reads: Sequence[ReadParagraph], sections: Sequence[FileSection],
 class _Item:
     stratum: int
     shown: str
+    counted: str = ""
+    """What the tally sheet may say of the item: counts only, never its text."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -686,12 +827,19 @@ def prepare(drawn: Sequence[tuple[int, _Source, int]]) -> list[_Item]:
         if parsed is None:
             continue
         reads, document = parsed
-        if source.plan == BOLD_TAG_PLAN:
+        if source.plan in (BOLD_TAG_PLAN, BOLD_IN_PART_PLAN):
             # The line is shown with the bold and size it inherits, as the person sees it in Word.
             package = _PARSER.package  # type: ignore[union-attr]
             assert package is not None  # noqa: S101 - set by the parse
             reads = _as_word_shows_them(reads, package)
         shown = render_item(reads, document.sections, position)
+        counted = ""
+        if source.plan == BOLD_IN_PART_PLAN:
+            part = unbolded_part(reads[position].description)
+            counted = "none unbolded" if part is None else part.described()
+            marked = _unbolded_marked(reads[position])
+            shown += f"\n\nUnbolded, between {UNBOLDED_OPENS} {UNBOLDED_CLOSES}:  {marked}"
+            shown += f"\nUnbolded, counted:  {counted}"
         if STRATA[stratum].question is SHORT_CITE_QUESTION:
             element = document.sections[position].element_index
             card = next(
@@ -700,7 +848,7 @@ def prepare(drawn: Sequence[tuple[int, _Source, int]]) -> list[_Item]:
                 if card.provenance.first_element_index <= element <= card.provenance.last_element_index
             )
             shown += f"\n\nShort cite read:  {card.short_cite}"
-        items.append(_Item(stratum, shown))
+        items.append(_Item(stratum, shown, counted))
     return items
 
 
@@ -732,6 +880,53 @@ def ask_about(
     return answered, stopped, seconds
 
 
+def show_numbered(items: Sequence[_Item], show: Callable[[str], None]) -> None:
+    """Every item, numbered, one after another: the bold-in-part plan asks nothing in the terminal."""
+    for number, item in enumerate(items, start=1):
+        show(f"\n{'-' * 72}\nItem {number} of {len(items)}.\n\n{item.shown}\n")
+    show(f"\n{'-' * 72}\n")
+
+
+def tally_sheet(
+    items: Sequence[_Item],
+    population: dict[int, int],
+    *,
+    seed: int,
+    sources: int,
+    store_versions: Sequence[str],
+) -> list[str]:
+    """The bold-in-part plan's tally sheet: the counts, and a row per item to fill in. No text."""
+    numbers = _IN_THE_ORDER_ASKED
+    lines = [
+        f"Bold-in-part sample (v1-e31-t32), seed {seed}: {len(items)} items from {sources:,} parsed sources,",
+        f"parser {DOCX_PARSER_VERSION}, store {', '.join(sorted(set(store_versions)))}.",
+        "",
+        "Lines directly above a cite that opens a card with no tag, read as body or as nothing,",
+        "by the first condition of v1-e31-t24's rule each fails:",
+    ]
+    for number in numbers:
+        stratum = STRATA[number]
+        drawn = f" (drew {sum(item.stratum == number for item in items)})" if stratum.planned else ""
+        lines.append(f"  {stratum.side}: {population[number]:,}{drawn}")
+    lines += [
+        f"  All: {sum(population[number] for number in numbers):,}",
+        "",
+        "For each item, under Tag?, write y, n or u: is the marked line the tag of the card whose cite",
+        "is below it? For each tag, under How it differs, say how its unbolded part differs from the",
+        'rest, in formatting terms only: for example "a trailing date unbolded", "a leading AT:',
+        'unbolded". No card text, no names. Then paste this sheet back, and nothing else.',
+        "",
+        "Item | Unbolded, counted | Tag? | How it differs",
+    ]
+    lines += [f"{number:>4} | {item.counted} |  |" for number, item in enumerate(items, start=1)]
+    lines += ["", "Strata, by item (read after answering):"]
+    for number in numbers:
+        drawn = [str(k) for k, item in enumerate(items, start=1) if item.stratum == number]
+        if drawn:
+            lines.append(f"  {STRATA[number].side}: {', '.join(drawn)}")
+    return lines
+
+
 def _refuse_inside_the_repository(path: Path) -> Path:
     resolved = path.expanduser().resolve()
     if resolved.is_relative_to(REPO_ROOT):
@@ -754,15 +949,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "--plan",
-        choices=(FIRST_PLAN, LEFT_QUOTE_PLAN, BOLD_TAG_PLAN),
+        choices=(FIRST_PLAN, LEFT_QUOTE_PLAN, BOLD_TAG_PLAN, BOLD_IN_PART_PLAN),
         default=FIRST_PLAN,
         help=(
             "first: the 70 items approved first. left-quote: the 28 asked for in the PM's review. "
-            "bold-tag: v1-e31-t24's 36, the line above a cite."
+            "bold-tag: v1-e31-t24's 36, the line above a cite. bold-in-part: v1-e31-t32's 30, "
+            "printed numbered with a tally sheet, no keys."
         ),
     )
     parser.add_argument("--seed", type=int, help="Draws the same items again. Default: a new one, recorded.")
-    parser.add_argument("--save-tallies", type=Path, required=True, help="A file outside the repository.")
+    parser.add_argument(
+        "--save-tallies",
+        type=Path,
+        required=True,
+        help="A file outside the repository; for the bold-in-part plan, its tally sheet, a new file.",
+    )
     parser.add_argument(
         "--workers",
         type=int,
@@ -774,10 +975,30 @@ def main(argv: Sequence[str] | None = None) -> int:
     seed = arguments.seed if arguments.seed is not None else random.SystemRandom().randrange(10**9)
     caselists = arguments.caselist or ["hsld26", "hspf26", "hspolicy26", "openev"]
 
+    if arguments.plan == BOLD_IN_PART_PLAN and saved.exists():
+        raise SystemExit(f"{saved.name} exists: the tally sheet is written new, so name another file")
+
     sources = sources_in(arguments.data_dir, caselists, arguments.plan)
     print(f"Reading {len(sources):,} parsed sources; a few minutes …", flush=True)
     found, without = scan(sources, arguments.workers)
     items = prepare(draw(found, seed, arguments.plan))
+    if arguments.plan == BOLD_IN_PART_PLAN:
+        show_numbered(items, lambda text: print(text, end="", flush=True))
+        sheet = tally_sheet(
+            items,
+            {number: len(found[number]) for number in range(len(STRATA))},
+            seed=seed,
+            sources=len(sources),
+            store_versions=[source.version for source in sources],
+        )
+        saved.parent.mkdir(parents=True, exist_ok=True)
+        saved.write_text("\n".join(sheet) + "\n", encoding="utf-8")
+        print(
+            f"The tally sheet is {saved.name}: fill in its Tag? and How it differs columns and paste "
+            "the sheet back. Paste nothing printed above.",
+            flush=True,
+        )
+        return 0
     answered, stopped, seconds = ask_about(
         items, ask=read_key, show=lambda text: print(text, end="", flush=True)
     )

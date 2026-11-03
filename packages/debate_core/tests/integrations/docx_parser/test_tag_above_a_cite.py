@@ -380,7 +380,8 @@ class TestWhatTheRuleLeaves:
 
 class TestTheParserVersion:
     def test_it_is_the_version_this_task_bumped_to_or_a_later_one(self) -> None:
-        """`2026.10.20-docx-6`, or one a later task bumped to (`v1-e31-t31`: `2026.10.27-docx-7`)."""
+        """`2026.10.20-docx-6`, or one a later task bumped to (`v1-e31-t31`: `2026.10.27-docx-7`;
+        `v1-e31-t32`: `2026.11.03-docx-8`)."""
         assert parse_version_directory(DOCX_PARSER_VERSION) >= parse_version_directory("2026.10.20-docx-6")
 
     def test_its_directory_sorts_after_the_store_it_replaces(self) -> None:
@@ -390,3 +391,116 @@ class TestTheParserVersion:
     def test_every_card_names_it(self, parser: DebateDocxParser) -> None:
         document = card_above_then(SEVENS_LINE, parser=parser)
         assert {card.provenance.parser_version for card in document.cards} == {DOCX_PARSER_VERSION}
+
+
+# --------------------------------------------------------------------------------------------
+# A tag bold but for its tail (`v1-e31-t32`, the PM's ruling of 2026-11-03)
+# --------------------------------------------------------------------------------------------
+
+TAKEN_WITH_AN_UNBOLDED_TAIL = "assembly-bold-tag-with-an-unbolded-tail-above-a-cite"
+
+
+def bold_but_for(opening: str, tail: str, **tail_formatting: Any) -> tuple[str, str]:
+    """A line whose opening says nothing (bold at 13 pt by (7)'s defaults) and whose tail is bold off."""
+    return paragraph([(opening, {}), off(tail, **tail_formatting)])
+
+
+def taken_as_the_tag(document: ParsedDocument, line: str) -> None:
+    assert cards_of(document) == [(TAG, CITE_TEXT, BODY_TEXT), (line, SECOND_CITE_TEXT, SECOND_BODY_TEXT)]
+    section = section_with(document, line)
+    assert section.match.rule_id.split(":")[0] == TAKEN_WITH_AN_UNBOLDED_TAIL
+    assert section.match.confidence == 0.5
+    assert document.cards[1].provenance.first_element_index == section.element_index
+
+
+def left_as_it_was(document: ParsedDocument, line: str) -> None:
+    assert [card.tag for card in document.cards] == [TAG, None]
+    assert not section_with(document, line).match.rule_id.startswith(("assembly-bold-tag", TAKEN))
+
+
+def test_the_unbolded_tail_rule_came_with_docx_8_or_a_later_one() -> None:
+    assert parse_version_directory(DOCX_PARSER_VERSION) >= parse_version_directory("2026.11.03-docx-8")
+
+
+class TestALineBoldButForAnUnboldedTail:
+    """Taken: the shape every sampled line of was a tag, 17 of 17."""
+
+    def test_the_rest_of_the_tag_unbolded(self, parser: DebateDocxParser) -> None:
+        markup, text = bold_but_for("Demand outruns ", "new generation")
+        taken_as_the_tag(card_above_then(markup, parser=parser), text)
+
+    def test_a_full_stop_unbolded(self, parser: DebateDocxParser) -> None:
+        markup, text = bold_but_for(LINE, ".")
+        taken_as_the_tag(card_above_then(markup, parser=parser), text)
+
+    def test_words_after_a_dash_unbolded(self, parser: DebateDocxParser) -> None:
+        markup, text = bold_but_for("Demand outruns new generation", " – and prices rise")
+        taken_as_the_tag(card_above_then(markup, parser=parser), text)
+
+    def test_bold_and_bold_off_each_by_its_own_run(self, parser: DebateDocxParser) -> None:
+        markup, text = paragraph([("Demand outruns ", {"bold": True}), ("new generation", {"bold": False})])
+        taken_as_the_tag(card_above_then(markup, styles_xml=SIZE_DEFAULTS, parser=parser), text)
+
+    def test_two_runs_unbolded_with_only_a_space_between(self, parser: DebateDocxParser) -> None:
+        """A space decides nothing, so the tail is one stretch."""
+        markup, text = paragraph([("Demand outruns ", {}), off("new"), (" ", {}), off("generation")])
+        taken_as_the_tag(card_above_then(markup, parser=parser), text)
+
+
+class TestWhatTheUnboldedTailRuleLeaves:
+    """Left as `2026.10.27-docx-7` read them: these pass before the rule and after it."""
+
+    def test_a_tail_with_a_date(self, parser: DebateDocxParser) -> None:
+        markup, text = bold_but_for("Demand outruns new generation ", "10/2/26")
+        left_as_it_was(card_above_then(markup, parser=parser), text)
+
+    def test_a_tail_with_a_page_number(self, parser: DebateDocxParser) -> None:
+        markup, text = bold_but_for("Demand outruns new generation ", "p. 14")
+        left_as_it_was(card_above_then(markup, parser=parser), text)
+
+    def test_bold_only_in_the_middle(self, parser: DebateDocxParser) -> None:
+        """The sample's "part": a tag, a bold short cite and a claim on one line."""
+        markup, text = paragraph(
+            [
+                off("Demand outruns new generation in every region "),
+                ("Okonkwo 26", {}),
+                off(" and prices rise every winter"),
+            ]
+        )
+        left_as_it_was(card_above_then(markup, parser=parser), text)
+
+    def test_an_unbolded_head(self, parser: DebateDocxParser) -> None:
+        markup, text = paragraph([off("AT: "), (LINE, {})])
+        left_as_it_was(card_above_then(markup, parser=parser), text)
+
+    def test_an_unbolded_stretch_in_the_middle(self, parser: DebateDocxParser) -> None:
+        markup, text = paragraph([("Demand ", {}), off("outruns"), (" new generation", {})])
+        left_as_it_was(card_above_then(markup, parser=parser), text)
+
+    def test_a_highlighted_tail(self, parser: DebateDocxParser) -> None:
+        markup, text = bold_but_for("Demand outruns ", "new generation", highlight="yellow")
+        left_as_it_was(card_above_then(markup, parser=parser), text)
+
+    def test_a_tail_in_the_underline_style(self, parser: DebateDocxParser) -> None:
+        markup, text = bold_but_for("Demand outruns ", "new generation", character_style="StyleUnderline")
+        left_as_it_was(card_above_then(markup, parser=parser), text)
+
+    def test_a_line_over_300_characters(self, parser: DebateDocxParser) -> None:
+        opening = "Demand outruns new generation in " + "every region and every season, " * 9
+        markup, text = bold_but_for(opening, "again")
+        assert len(text) > 300
+        left_as_it_was(card_above_then(markup, parser=parser), text)
+
+    def test_below_reading_size(self, parser: DebateDocxParser) -> None:
+        markup, text = paragraph(
+            [("Demand outruns ", {"half_points": SMALL_PRINT}), off("new", half_points=SMALL_PRINT)]
+        )
+        left_as_it_was(card_above_then(markup, parser=parser), text)
+
+    def test_a_card_that_already_has_a_tag(self, parser: DebateDocxParser) -> None:
+        markup, text = bold_but_for("Demand outruns ", "new generation")
+        document = parse(
+            parser, tag_paragraph(), markup, SECOND_CITE_MARKUP, SECOND_BODY, styles_xml=BOLD_DEFAULTS
+        )
+        assert [card.tag for card in document.cards] == [TAG]
+        assert not section_with(document, text).match.rule_id.startswith(TAKEN_WITH_AN_UNBOLDED_TAIL)

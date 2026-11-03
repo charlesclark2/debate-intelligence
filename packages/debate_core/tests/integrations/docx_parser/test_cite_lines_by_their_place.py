@@ -226,8 +226,9 @@ class TestACiteInTheTagStyle:
 class TestTheParserVersion:
     """One bump for the three cite rules and the white highlight together (the PM's ruling Q5)."""
 
-    def test_it_is_the_version_this_task_bumped_to(self) -> None:
-        assert DOCX_PARSER_VERSION == "2026.10.27-docx-7"
+    def test_it_is_the_version_this_task_bumped_to_or_a_later_one(self) -> None:
+        """`2026.10.27-docx-7`, or one a later task bumped to (`v1-e31-t32`: `2026.11.03-docx-8`)."""
+        assert parse_version_directory(DOCX_PARSER_VERSION) >= parse_version_directory("2026.10.27-docx-7")
 
     def test_its_directory_sorts_after_the_store_it_replaces(self) -> None:
         names = sorted([DOCX_PARSER_VERSION, "2026.10.20-docx-6"], key=parse_version_directory)
@@ -236,4 +237,4 @@ class TestTheParserVersion:
     def test_every_card_names_it(self, parser: DebateDocxParser) -> None:
         document = parse(parser, TAG_MARKUP, UNDER_A_TAG_LINE, BODY)
 
-        assert {card.provenance.parser_version for card in document.cards} == {"2026.10.27-docx-7"}
+        assert {card.provenance.parser_version for card in document.cards} == {DOCX_PARSER_VERSION}

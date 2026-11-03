@@ -59,7 +59,7 @@ spec:
         card cut twice, or two cards) before the witness refusal changes; any change keeps
         v1-e31-t11's false join apart, by test.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

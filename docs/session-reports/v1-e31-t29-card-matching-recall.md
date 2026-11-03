@@ -6,32 +6,42 @@
 | Spec | [`plan_specs/v1/e31-debate-file-parsing/t29-card-matching-recall.yaml`](../../plan_specs/v1/e31-debate-file-parsing/t29-card-matching-recall.yaml) |
 | Epic / release | `v1-e31-debate-file-parsing` / `v1.1` |
 | Branch | `task/v1-e31-t29-card-matching-recall` |
-| Session status | WAITING FOR THE PM'S RULING: counts and sample done (ac1, ac3); no rule has changed; ac2 waits on the ruling <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE: counted, sampled and ruled; by the PM's ruling of 2026-11-03 no shape is recovered, and tests pin that each stays apart. Goal `Succeeded` <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
-The PM's order is count, sample, ruling, rule. The counts and the sample are done and recorded in
-[the parse report](../data/caselist-parse-report.md#pairs-card-matching-keeps-apart-counted-and-sampled-v1-e31-t29).
-**No matching rule has changed**, and the relay below asks the PM to rule.
+The PM's order was count, sample, ruling, rule. The operator counted and sampled all three shapes on
+the Mac's dev store on 2026-11-03 ([the parse report](../data/caselist-parse-report.md#pairs-card-matching-keeps-apart-counted-and-sampled-v1-e31-t29)),
+and **the PM ruled the same day that no shape is recovered**: each sample found the shape would join
+different cards. **No matching rule changed, no placement changes, and there is no fingerprint
+version bump**: `card-fingerprint-v4` stays, and no stored cluster needs a rebuild by anyone.
 
-* **(1) Nine-tenths inside a body holding neither end:** 67 bodies on the store. The operator
-  judged **8 of 20 different cards**, at least 3 of them from different articles or sources (two
-  articles quoting a third, one author's two articles). A rule on the bodies alone would join cards
-  a coach checked as different.
-* **(2) Trims sharing no text:** 17,758 pairs. Only **2** have a card of each with the same tag and
-  cite; the operator judged 1 one card, 1 two cards. 950 share the cite under other tags, not yet
-  sampled.
-* **The amendment, holders under 300 words:** 280 by t22's tool (was 216). The operator judged **4
-  of 20 two cards**, where t22's sample of all lengths found 0 of 20.
-* **Found in the code:** for (2) and the amendment, lifting the witness refusal alone recovers
-  nothing. Two trims sharing no text that both propose joining their holder in one round are both
-  refused, because they do not overlap each other (`_accepted_joins`, `v1-e31-t20`'s Decision 3).
-  Recovering either means relaxing "every two bodies in a cluster overlap", the card ruling itself.
+* **(1) Nine-tenths inside a body holding neither end:** 67 bodies. The operator judged **8 of 20
+  different cards**, at least 3 from different articles or sources quoting one passage.
+* **(2) Trims sharing no text:** 17,758 pairs. Only **2** carry the same tag and cite, judged 1 one
+  card and 1 two cards. 950 share the cite under other tags; the PM ruled them not sampled.
+* **The amendment, holders under 300 words:** 280 by t22's tool (was 216). **4 of 20 two cards.**
+  The witness refusal stays unchanged.
+* **Found in the code, and shown by a mutant:** lifting the witness refusal alone recovers nothing,
+  because two trims that do not overlap each other are both refused as joiners. Recovering (2)
+  means relaxing "every two bodies in a cluster overlap", which the PM kept.
 
-My recommendation is no rule for any of the three (relay, Q1 to Q3). If the PM agrees, ac2 has no
-recovered shape to build, and the task closes with tests pinning that each shape stays apart.
+What the task leaves: `debate_core.evidence.recall_shapes` and two operator tools
+(`scripts/count_matching_recall.py`, `scripts/sample_matching_recall.py`), the figures in the parse
+report, ac2 amended by the PM's ruling, and five tests pinning that the sampled shapes stay apart,
+each shown failing under a mutant.
 
-### For the PM (paste-ready)
+### The PM's ruling (2026-11-03)
+
+* **Q1 (a):** shape (1) stays apart.
+* **Q2 (a):** no rule, and no sample of the 950 same-cite pairs; the overlap rule is the card
+  ruling and is not relaxed in this task.
+* **Q3 (a):** the witness refusal stays unchanged, for short holders and long.
+* **Q4:** agreed, with the specifics built here: ac2 amended and dated; five pinning tests on
+  invented text; no version bump, stated; the record keeps every count, tally, the code finding and
+  the caveats; one Follow-up line on where recall could come from.
+
+### The relay that was sent to the PM
 
 ```text
 v1-e31-t29: counts and sample are in; no rule has changed. Ruling needed before any rule (ac2).
@@ -86,7 +96,7 @@ holder's cite cut at the screen edge (the operator's notes show the cites were r
 
 | Node | Status | Notes |
 |---|---|---|
-| `matching-recall`: Card matching recall | Counted and sampled; the rule waits on the PM | Tools built and tested (`41bf65f`, `bcac62f`, `b05fe2a`); the operator's counts and sample recorded (`8866d53`) |
+| `matching-recall`: Card matching recall | Done | Tools built and tested (`41bf65f`, `bcac62f`, `b05fe2a`); the operator's counts and sample recorded (`8866d53`); by the PM's ruling, no rule, and the shapes pinned apart (`d18066b`, `276bbd7`). `uv run pytest packages/debate_core/tests/evidence -k "cluster or fingerprint"` → `182 passed in 6.48s` |
 
 ## Acceptance criteria
 
@@ -95,9 +105,39 @@ holder's cite cut at the screen edge (the operator's notes show the cites were r
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
 | ac1: counts for (1) and (2) per caselist, and a sample through t21's sampler, before any rule changes | PASS | The operator's `scripts/count_matching_recall.py` (527 s, `exit 0`) and `scripts/sample_matching_recall.py --seed 20261103` (42 items) on 2026-11-03, recorded in `caselist-parse-report.md`. The sample shows items with t21's `render_pair` and t22's `_between`. (2)'s same-tag-and-cite stratum is the whole population, 2 pairs; the 950 same-cite pairs are not sampled (relay Q2). No rule has changed |
-| ac2: precision 1.000 on every labelled set, Brannock's rows apart, each recovered shape with fixtures shown failing first | NOT RUN | Waits on the PM's ruling. No matching rule has changed, so the labelled sets are as `v1-e31-t20` left them |
-| ac3 (PM amendment 2026-10-20): the holders under 300 words sampled and tallied before the refusal changes; any change keeps t11's false join apart | PASS (the tally); the change waits on the ruling | 20 of 280 holders drawn: 16 one card cut twice, 4 two cards. The refusal is unchanged |
-| Node: `uv run pytest packages/debate_core/tests/evidence -k "cluster or fingerprint"` | PASS | `182 passed` (with the new `test_recall_shapes.py`), 2026-11-03 |
+| ac2 (PM amendment 2026-11-03): no shape is recovered; precision and Brannock's rows stay as `v1-e31-t20` left them, and the shapes sampled stay apart, by test | PASS | `uv run pytest packages/debate_core/tests/evidence/test_short_card_recall.py -n0` → `64 passed`; its table, row for row as t20's: precision 1.000 on all 13 rows, the same 11 and 30 misses. The five tests of "The shapes the samples kept apart" in `test_near_duplicates.py` pass, and each fails under a mutant ([Pinning tests](#pinning-tests-and-the-mutants-that-break-them)) |
+| ac3 (PM amendment 2026-10-20): the holders under 300 words sampled and tallied before the refusal changes; any change keeps t11's false join apart | PASS | 20 of 280 holders drawn: 16 one card cut twice, 4 two cards, tallied before the ruling. By the ruling the refusal is unchanged; `test_a_short_holder_of_two_cards_stays_refused_as_a_witness_for_either` and `test_t11s_false_join_stays_apart` pin it |
+| Node: `uv run pytest packages/debate_core/tests/evidence -k "cluster or fingerprint"` | PASS | `182 passed in 6.48s` on the final tree |
+| `uv run scripts/validate_specs.py` | PASS | `OK: 599 files, 41 epics, 536 tasks, 22 releases`, with the Goal `Succeeded` |
+
+## Pinning tests and the mutants that break them
+
+`packages/debate_core/tests/evidence/test_near_duplicates.py`, section "The shapes the samples kept
+apart (`v1-e31-t29`)", on invented words. All five pass on the code as it stands, which is what the
+PM asked; each was then run against hand-written mutants of `near_duplicates.py`, one at a time,
+each with a new empty `HYPOTHESIS_STORAGE_DIRECTORY`, the file restored with `git checkout HEAD --`
+and `git status --porcelain` empty after:
+
+| Mutant | Fails |
+|---|---|
+| Containers found from a body's middle run, not its ends (shape (1) recovered) | two articles quoting one passage (the shape is no longer reported, and the pair joins: checked apart, `joined`); Brannock's rows |
+| The witness refusal lifted | the short holder of two cards, and only it: every partition stays apart, which is the code finding |
+| The refusal lifted and joiners that do not overlap accepted | the short holder; Brannock's rows; t11's false join; two trims of one holder |
+
+So each of the five fails under at least one. The second line is the finding the relay reported:
+lifting the refusal alone joins nothing.
+
+## The checks run before this report
+
+| Command | Result |
+|---|---|
+| `uv run scripts/affected_tests.py --run`, under `scripts/hard_stop.py 115` | 61 files; stopped at its 115-second limit at about 96%, under a load near 14, no failure printed. Over two minutes, so by working agreement 10 it is left to the pull request's `ci` |
+| The test directories of what changed: `packages/debate_core/tests/evidence`, and `tests/scripts/test_{compare_card_clusters,count_matching_recall,sample_matching_recall,count_card_boundaries,sample_card_boundaries}.py`, `-m "not slow and not live"` | `1854 passed, 2 warnings in 15.90s` |
+| The always-run list: `tests/architecture tests/specs` and the CLI's wiring tests (`test_app`, `test_container_factories`, `test_help_rendering`, `test_installation`) | `406 passed in 24.63s` |
+| `uv run --frozen ruff format --check .`; `ruff check .` | `1908 files already formatted`; `All checks passed!` |
+| `uv run --frozen pyright packages/debate_core` and the four new script and test files | `0 errors, 0 warnings, 0 informations` |
+| `uv run --frozen lint-imports`; `check_thin_handlers.py` | `Contracts: 20 kept, 0 broken.`; `OK: 72 ... within 25 statements` |
+| `check_command_blocks.py --base origin/dev`; `docs_index.py --check-descriptions`; `check_links.py` | all OK |
 
 ## Files changed
 
@@ -106,7 +146,10 @@ holder's cite cut at the screen edge (the operator's notes show the cites were r
   built. Tests: `packages/debate_core/tests/evidence/test_recall_shapes.py`.
 - `scripts/count_matching_recall.py`, `scripts/sample_matching_recall.py` (new), with
   `tests/scripts/test_count_matching_recall.py` and `tests/scripts/test_sample_matching_recall.py`.
-- `docs/data/caselist-parse-report.md`: the counts and the sample.
+- `packages/debate_core/tests/evidence/test_near_duplicates.py`: the five pinning tests.
+- `docs/data/caselist-parse-report.md`: the counts, the sample, the code finding and the ruling.
+- `plan_specs/v1/e31-debate-file-parsing/t29-card-matching-recall.yaml`: ac2 amended by the PM's
+  ruling, dated, its earlier wording kept; the Goal `Succeeded`.
 
 ## Deviations from the spec
 
@@ -116,7 +159,15 @@ holder's cite cut at the screen edge (the operator's notes show the cites were r
    same cite under other tags. A rule needing both would recover at most 2 pairs, and a sample of 2
    says nothing, so the sample also draws 10 same-cite pairs end to end (Brannock's shape) and 10
    with words between. The spec says "such as", so this stays within it, but it is the PM's call
-   whether the cite alone is evidence a rule may use.
+   whether the cite alone is evidence a rule may use. In the event, the operator answered the first
+   run's sheet, drawn before this change, so no same-cite pair was asked, and the PM then ruled that
+   none be.
+2. **ac2 is amended by the PM's ruling of 2026-11-03,** written into the spec by this session at the
+   PM's direction, dated, with its earlier wording kept after "Was:". `plan_specs/` is outside
+   `constraints.packages`; the edit is the PM's text.
+3. **The counts ran on a mixed store** (three caselists in `docx-6`, hspolicy26 in `docx-7`), as
+   the PM said they would, so t22's count ran without `--expect-version`, and its long-body half,
+   which re-parses with this checkout's `docx-8` parser, is not used.
 
 ## Decisions and assumptions
 
@@ -232,12 +283,20 @@ the Notes column only where something is worth saying, in formatting or editing 
 "done" in the session: it reads the two counts files and the sheet from your home folder, so
 nothing needs pasting.
 
+### After the merge
+
+Nothing. No placement changes, so no rebuild, re-parse or publish follows this task. The files in
+your home folder (`~/t29-card-boundary-*`, `~/t29-matching-recall-*`) hold counts, positions and
+answers only; delete them when the PM has read this report.
+
 ## Follow-up work
 
 <!-- Bugs, gaps or ideas outside this task's scope, each with the task or epic it belongs to.
 The PM decides whether they become spec changes or new tasks. -->
 
-None.
+- If recall here is ever wanted, it could only come from the 950 trims sharing a cite under other
+  tags, and only by relaxing the overlap rule for an exact cite match with a shape check that keeps
+  Brannock's rows apart (E31). The PM files nothing now.
 
 ## PM review
 

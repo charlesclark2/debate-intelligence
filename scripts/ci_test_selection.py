@@ -25,22 +25,31 @@ dozen files. Thirty test files are about 1,000 tests on today's suite, which a r
 about 100 s, under working agreement 1's 2-minute line (docs/process/ci-test-part-costs.md has the
 figures). The count is the selection's own, so it costs nothing on the parts' path.
 
+It also deals the chosen files to the parts (v1-e41-t17): whole files, by the durations dev's last
+push run recorded, which the `test-selection` job restores from GitHub's Actions cache and hands this
+script as `--durations`. scripts/ci_test_durations.py makes the deal and says when it cannot be made:
+a record missing, unreadable or stale deals the parts test by test, as before, with the reason in the
+job summary, and never fails the run. For the whole selection the files dealt are every test file
+under pyproject.toml's `testpaths`, as scripts/affected_tests.py lists them.
+
 It fails toward more tests, never fewer. The choice is written in `$GITHUB_OUTPUT`'s format:
-`run_parts`, whether the parts run at all, `parts`, the matrix's list of part numbers as JSON, and
+`run_parts`, whether the parts run at all, `parts`, the matrix's list of part numbers as JSON,
+`files_to_parts`, the deal as JSON on one line (empty: test by test), and
 `test_files`, one test file per line, for pytest to read as `@FILE`. For the whole selection the
 list is empty: pytest given no paths runs every path in `testpaths`. If this script itself cannot
 run, the workflow step hands the parts the whole selection in the most parts, so a crash here is
 also the whole selection.
 
-ci.yml's `test-selection` job runs this once and hands the choice to every part, which deals the
-same list round the parts (run_in_parts.py), so the parts together are exactly the selection;
+ci.yml's `test-selection` job runs this once and hands the choice and the deal to every part, which
+deals the same list by the same deal (run_in_parts.py), so the parts together are exactly the selection;
 tests/scripts/test_ci_workflow_test_job.py proves it. Until v1-e41-t15 every part ran this for
 itself, 17 to 33 seconds eight times over. Nothing here reads a secret or uses the network: the
 base commit and origin/dev come with the checkout.
 
 Usage, as ci.yml's `test-selection` job runs it:
   python scripts/ci_test_selection.py --event pull_request --base-branch dev --base-sha SHA \\
-      --ref-name 123/merge --outputs outputs.txt --summary "$GITHUB_STEP_SUMMARY"
+      --ref-name 123/merge --durations "$RUNNER_TEMP/test-durations/test-durations.json" \\
+      --outputs outputs.txt --summary "$GITHUB_STEP_SUMMARY"
 """
 
 from __future__ import annotations
@@ -51,9 +60,11 @@ import subprocess
 import sys
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 import affected_tests
+import ci_test_durations
 
 # The one target branch whose pull requests run only the tests their changes reach.
 AFFECTED_SET_BRANCH = "dev"
@@ -172,6 +183,32 @@ def parts_of(choice: Choice) -> list[int]:
     return list(range(1, parts + 1))
 
 
+def test_files_to_deal(root: Path, choice: Choice) -> list[str]:
+    """The files the parts share: the chosen ones, or for the whole selection every test file under
+    `testpaths`. A file pytest collects that is not among them is dealt test by test."""
+    if choice.tests is not None:
+        return list(choice.tests)
+    return sorted(affected_tests.Layout.of(affected_tests.Tree.working(root)).test_files)
+
+
+def dealing(
+    root: Path, choice: Choice, durations: Path | None, now: datetime
+) -> ci_test_durations.Deal | None:
+    """The deal of the chosen files to the parts by the record at `durations`, or test by test and why;
+    None when no part runs."""
+    if not choice.runs_parts:
+        return None
+    parts = len(parts_of(choice))
+    try:
+        test_files = test_files_to_deal(root, choice)
+    except (Exception, SystemExit) as error:
+        return ci_test_durations.test_by_test(parts, f"the test files could not be listed ({error})")
+    deal = ci_test_durations.deal(test_files, parts, durations, now)
+    if len(ci_test_durations.as_output(deal).encode()) > LONGEST_LIST_FOR_THE_PARTS:
+        return ci_test_durations.test_by_test(parts, "the deal is too long to hand to the parts")
+    return deal
+
+
 def in_parts(choice: Choice) -> str:
     parts = len(parts_of(choice))
     return f"in {parts} part{'s' if parts > 1 else ''}"
@@ -184,7 +221,12 @@ def commit_exists(root: Path, revision: str) -> bool:
     return completed.returncode == 0
 
 
-def summary(choice: Choice) -> str:
+def summary(choice: Choice, deal: ci_test_durations.Deal | None = None) -> str:
+    dealt = "" if deal is None else f"\n{ci_test_durations.summary(deal)}"
+    return chosen_summary(choice) + dealt
+
+
+def chosen_summary(choice: Choice) -> str:
     if not choice.runs_parts:
         return (
             "### Tests: none\n\n"
@@ -206,15 +248,20 @@ def summary(choice: Choice) -> str:
     )
 
 
-def github_outputs(choice: Choice) -> str:
+def github_outputs(choice: Choice, deal: ci_test_durations.Deal | None = None) -> str:
     """The choice in `$GITHUB_OUTPUT`'s format: `run_parts`, whether the test parts run at all,
-    `parts`, the matrix's part numbers as JSON, and `test_files`, one test file per line, which is
-    empty for the whole default selection."""
+    `parts`, the matrix's part numbers as JSON, `files_to_parts`, the deal of whole files to parts
+    (empty: test by test), and `test_files`, one test file per line, which is empty for the whole
+    default selection."""
     delimiter = f"test_files_{uuid.uuid4().hex}"
     listing = "".join(f"{test}\n" for test in choice.tests or ())
     run_parts = "true" if choice.runs_parts else "false"
     parts = json.dumps(parts_of(choice))
-    return f"run_parts={run_parts}\nparts={parts}\ntest_files<<{delimiter}\n{listing}{delimiter}\n"
+    return (
+        f"run_parts={run_parts}\nparts={parts}\n"
+        f"files_to_parts={'' if deal is None else ci_test_durations.as_output(deal)}\n"
+        f"test_files<<{delimiter}\n{listing}{delimiter}\n"
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -227,16 +274,22 @@ def main(argv: list[str] | None = None) -> int:
         "--outputs", type=Path, required=True, help="where to write the choice, in $GITHUB_OUTPUT's format"
     )
     parser.add_argument("--summary", type=Path, help="a Markdown file to append the summary to")
+    parser.add_argument(
+        "--durations",
+        type=Path,
+        help="the test durations dev's push run recorded, as test-selection restored them; may be missing",
+    )
     arguments = parser.parse_args(argv)
 
     root = affected_tests.repository_root()
     choice = choose(root, arguments.event, arguments.base_branch, arguments.base_sha, arguments.ref_name)
-    text = summary(choice)
+    deal = dealing(root, choice, arguments.durations, datetime.now(UTC))
+    text = summary(choice, deal)
     print(text)
     if arguments.summary is not None:
         with arguments.summary.open("a", encoding="utf-8") as file:
             file.write(text)
-    arguments.outputs.write_text(github_outputs(choice), encoding="utf-8")
+    arguments.outputs.write_text(github_outputs(choice, deal), encoding="utf-8")
     return 0
 
 

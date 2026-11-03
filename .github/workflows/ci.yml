@@ -21,11 +21,16 @@
 # What keeps it there is the `test` job (v1-e01-t27). It was one runner taking 4 to 6 minutes over
 # the whole suite, and it grew with every task. Now:
 #   * It is a matrix of parts that run side by side, each `pytest --part K/N` on its own runner. A
-#     part is not a list of directories: tests/pytest_plugins/run_in_parts.py deals every test file's
-#     tests round the parts, so the parts are level without anyone balancing them and no part can
-#     be forgotten. tests/scripts/test_ci_workflow_test_job.py collects every part and proves that
-#     together they are exactly the unsplit selection, and deals the real collection at every size
-#     the matrix can take. That proof collects the whole suite nine times, so it runs in the
+#     part is not a list of directories: tests/pytest_plugins/run_in_parts.py deals the selection to
+#     the parts, so no part can be forgotten. Since v1-e41-t17 it deals whole test files, by the
+#     seconds each took on dev's last push run, so a file's module fixtures are built in one part:
+#     every push part times its files, the `test-durations` job adds them up on dev's push run and
+#     saves them in the Actions cache, and `test-selection` restores them once and hands every part
+#     the same deal (scripts/ci_test_durations.py). A record missing, unreadable or stale deals each
+#     file's tests round the parts as before, and the job summary says why; it never fails a run.
+#     tests/scripts/test_ci_workflow_test_job.py collects every part and proves that together they
+#     are exactly the unsplit selection, under a deal and under none, and deals the real collection
+#     both ways at every size the matrix can take. That proof collects the whole suite nine times, so it runs in the
 #     `partition-proof` job, on every push and on a pull request that changes what it proves, and
 #     the parts leave its `partition_proof` marker out (v1-e41-t15).
 #   * N follows the selection (v1-e41-t16): one part per 30 test files chosen, at least one and at
@@ -59,7 +64,8 @@
 #     pytest step passes 2 minutes on a whole-selection run, raise MOST_PARTS in
 #     scripts/ci_test_selection.py; if it does on an affected set, lower TEST_FILES_PER_PART there.
 #     That is the whole change. If one part is steadily slower than the rest, its durations name the
-#     few slow tests that landed together; make them cheaper, as working agreement 1 describes.
+#     few slow tests that landed together; make them cheaper, as working agreement 1 describes. The
+#     test-selection job's summary gives each deal's expected seconds a part and the record's date.
 #
 # Every job in every workflow names its runner image, ubuntu-24.04, never ubuntu-latest: GitHub moves
 # ubuntu-latest to Ubuntu 26 from 2026-10-19, and a new image (its python3, shellcheck, gh) must not
@@ -216,6 +222,7 @@ jobs:
               - *workflow
               - 'tests/pytest_plugins/**'
               - 'scripts/ci_test_selection.py'
+              - 'scripts/ci_test_durations.py'
               - 'scripts/affected_tests.py'
               - 'tests/scripts/test_ci_workflow_test_job.py'
               - 'pyproject.toml'
@@ -298,7 +305,8 @@ jobs:
   # whole default selection. Its outputs are `run_parts`, whether the parts run at all, `parts`, the
   # `test` matrix's part numbers as JSON (one part per 30 test files chosen, at most eight, and eight
   # for the whole selection; v1-e41-t16), and `test_files`, one test file per line, empty for the
-  # whole selection. Until v1-e41-t15 each of the
+  # whole selection, and `files_to_parts`, the deal of whole test files to parts by recorded durations
+  # (v1-e41-t17), empty when the parts are dealt test by test. Until v1-e41-t15 each of the
   # eight parts chose for itself, 17 to 33 seconds each. It runs beside `changes` rather than in it,
   # so the jobs that need only the path filters do not wait for the choice.
   test-selection:
@@ -308,6 +316,7 @@ jobs:
       run_parts: ${{ steps.choose.outputs.run_parts }}
       test_files: ${{ steps.choose.outputs.test_files }}
       parts: ${{ steps.choose.outputs.parts }}
+      files_to_parts: ${{ steps.choose.outputs.files_to_parts }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -320,11 +329,27 @@ jobs:
       - *install-python
       # affected_tests.py reads the packages' imports with grimp, from the installed workspace.
       - *uv-sync
+      # The test durations dev's newest push run recorded (v1-e41-t17; the `test-durations` job
+      # saves them), restored here once for every part. The parts never read the cache, so a record
+      # saved while this run goes on cannot give two parts different deals. Each save has a key of
+      # its own, and a key that matches none restores the newest whose key starts with
+      # `restore-keys`: on a pull request into dev, from dev's runs. A miss restores nothing, and a
+      # cache that cannot be reached is a failed step the job goes on past; either way the script
+      # deals the parts test by test and says why. It reads no secret: the runner reaches the cache.
+      - name: Restore the test durations dev's last push run recorded (nothing restored is dealt test by test)
+        uses: actions/cache/restore@v5
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/test-durations
+          key: test-durations-newest
+          restore-keys: test-durations-
       - name: Choose the tests once, for every part (the affected set on a pull request into dev, none for the generated files alone, otherwise all of them)
         id: choose
         # The script writes its outputs to a file, and the file reaches $GITHUB_OUTPUT only when the
         # script succeeded. If it cannot run, every part runs the whole default selection: a broken
         # choice runs more tests, never fewer and never none. The job summary says how many and why.
+        # It writes no `files_to_parts`: an output never written reads as empty, which deals every
+        # part test by test (v1-e41-t17).
         env:
           EVENT_NAME: ${{ github.event_name }}
           BASE_BRANCH: ${{ github.base_ref }}
@@ -333,13 +358,14 @@ jobs:
         run: |
           if uv run --frozen python scripts/ci_test_selection.py --event "$EVENT_NAME" \
               --base-branch "$BASE_BRANCH" --base-sha "$BASE_SHA" --ref-name "$REF_NAME" \
+              --durations "$RUNNER_TEMP/test-durations/test-durations.json" \
               --outputs "$RUNNER_TEMP/test-selection-outputs.txt" --summary "$GITHUB_STEP_SUMMARY"; then
             cat "$RUNNER_TEMP/test-selection-outputs.txt" >> "$GITHUB_OUTPUT"
           else
             echo "run_parts=true" >> "$GITHUB_OUTPUT"
             echo "parts=[1, 2, 3, 4, 5, 6, 7, 8]" >> "$GITHUB_OUTPUT"
             echo "::warning title=Test selection::scripts/ci_test_selection.py failed, so every part runs the whole default selection."
-            printf '### Tests: the whole default selection\n\nscripts/ci_test_selection.py failed, so every part runs its share of every test file.\n' >> "$GITHUB_STEP_SUMMARY"
+            printf '### Tests: the whole default selection\n\nscripts/ci_test_selection.py failed, so every part runs its share of every test file, dealt test by test.\n' >> "$GITHUB_STEP_SUMMARY"
           fi
 
   # The selection, in parts that run side by side (see the top of this file), as `test-selection`
@@ -373,24 +399,35 @@ jobs:
         env:
           TEST_FILES: ${{ needs.test-selection.outputs.test_files }}
         run: printf '%s' "$TEST_FILES" > "$RUNNER_TEMP/test-selection.txt"
+      - name: Write down the deal of whole test files to parts test-selection made (none written is test by test)
+        # The same deal for every part, made once from the recorded durations (v1-e41-t17): a part
+        # never reads the record or the cache itself. run_in_parts.py reads it as `--files-to-parts`.
+        env:
+          FILES_TO_PARTS: ${{ needs.test-selection.outputs.files_to_parts }}
+        run: printf '%s' "$FILES_TO_PARTS" > "$RUNNER_TEMP/files-to-parts.json"
       - name: pytest (one part of the selection, no slow or live tests, no coverage)
         # pyproject.toml's addopts already say `-n auto` and the markers, and block sockets; they are
         # spelled out here so the PR path cannot quietly start running slow or live tests if addopts
         # change. The partition proof is left to its own job below. The durations are how anyone
         # sees which tests are slow on a runner, where the order is not the one a laptop gives.
         # pytest reads `@FILE` as more arguments, one per line; an empty file adds none, and pytest
-        # runs every path in `testpaths`.
+        # runs every path in `testpaths`. `--files-to-parts` is the deal written down above, as one
+        # `--option=PATH` word: pytest takes a separate word naming a file for a test path when it looks
+        # for its rootdir, and the runner's temp directory is outside the checkout, so a part of the
+        # whole selection would find no pyproject.toml and refuse the option (v1-e41-t17).
         if: github.event_name != 'push'
-        run: uv run --frozen pytest -n auto -m "not slow and not live and not partition_proof" --part "${{ matrix.part }}/${{ strategy.job-total }}" --dist "$XDIST_DIST" --durations=25 "@$RUNNER_TEMP/test-selection.txt"
+        run: uv run --frozen pytest -n auto -m "not slow and not live and not partition_proof" --part "${{ matrix.part }}/${{ strategy.job-total }}" --files-to-parts="$RUNNER_TEMP/files-to-parts.json" --dist "$XDIST_DIST" --durations=25 "@$RUNNER_TEMP/test-selection.txt"
       - name: pytest --cov (one part of the selection, measuring coverage, on a push)
         # The step above with coverage added (v1-e01-t42): [tool.coverage] in pyproject.toml says what
         # is measured, and the part writes no report of its own (`--cov-report=` is none). Its data
         # goes to a file named for this part out of the matrix total, which the `coverage` job
-        # combines with every other part's into the one report.
+        # combines with every other part's into the one report. It also writes the seconds each test
+        # file took (v1-e41-t17), which the `test-durations` job adds up on dev's push run.
         if: github.event_name == 'push'
         env:
           COVERAGE_FILE: ${{ runner.temp }}/coverage-part-${{ matrix.part }}-of-${{ strategy.job-total }}
-        run: uv run --frozen pytest -n auto -m "not slow and not live and not partition_proof" --part "${{ matrix.part }}/${{ strategy.job-total }}" --dist "$XDIST_DIST" --durations=25 --cov --cov-report= "@$RUNNER_TEMP/test-selection.txt"
+          DURATIONS_FILE: ${{ runner.temp }}/test-durations-part-${{ matrix.part }}-of-${{ strategy.job-total }}.json
+        run: uv run --frozen pytest -n auto -m "not slow and not live and not partition_proof" --part "${{ matrix.part }}/${{ strategy.job-total }}" --files-to-parts="$RUNNER_TEMP/files-to-parts.json" --dist "$XDIST_DIST" --durations=25 --cov --cov-report= --record-durations="$DURATIONS_FILE" "@$RUNNER_TEMP/test-selection.txt"
       - name: Keep this part's coverage data for the coverage job
         if: github.event_name == 'push'
         uses: actions/upload-artifact@v6
@@ -399,6 +436,16 @@ jobs:
           path: ${{ runner.temp }}/coverage-part-${{ matrix.part }}-of-${{ strategy.job-total }}
           if-no-files-found: error
           # Read once, by the `coverage` job of the same run.
+          retention-days: 1
+      - name: Keep this part's test durations for the test-durations job (a failure here fails no part)
+        if: github.event_name == 'push'
+        continue-on-error: true
+        uses: actions/upload-artifact@v6
+        with:
+          name: test-durations-part-${{ matrix.part }}-of-${{ strategy.job-total }}
+          path: ${{ runner.temp }}/test-durations-part-${{ matrix.part }}-of-${{ strategy.job-total }}.json
+          if-no-files-found: error
+          # Read once, by the `test-durations` job of the same run.
           retention-days: 1
 
   # The proof that the parts together are exactly the selection and no test is in two of them
@@ -483,6 +530,45 @@ jobs:
           fi
           uv run --frozen coverage combine --data-file="$RUNNER_TEMP/coverage-combined" "${files[@]}"
           uv run --frozen coverage report --data-file="$RUNNER_TEMP/coverage-combined" --show-missing
+
+  # Each test file's seconds on dev's push run, added up from every part and saved in GitHub's Actions
+  # cache for the runs after it to deal whole files to parts by (v1-e41-t17): `test-selection`
+  # restores the newest record, and pull requests into dev can restore dev's. Each save is a key of
+  # its own, since a cache entry is never overwritten; GitHub evicts entries unused for a week and the
+  # oldest past 10 GB, and a record is about 40 KB. scripts/ci_test_durations.py writes no record
+  # unless every part of the matrix timed its tests, so a missing part leaves the record before this
+  # one in use instead of a record that knows a part's files by the median.
+  #
+  # It runs on dev's push run alone (a pull request's runs could save nothing a later pull request
+  # reads), and never fails it: a broken record or a cache that cannot be reached must not hold the
+  # dev pre-release, which waits for the push run. A pull request's summary says when its deal's
+  # record was made, and a record older than two weeks is not dealt by. Not one of `ci`'s needs.
+  test-durations:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - *checkout
+      - *setup-uv
+      - *install-python
+      - *uv-sync
+      - name: Download every part's test durations
+        uses: actions/download-artifact@v7
+        with:
+          pattern: test-durations-part-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/test-durations-parts
+      - name: Add the parts' durations up into one record (every part of the matrix, or nothing)
+        env:
+          COMMIT: ${{ github.sha }}
+        run: uv run --frozen python scripts/ci_test_durations.py combine --commit "$COMMIT" --out "$RUNNER_TEMP/test-durations/test-durations.json" "$RUNNER_TEMP"/test-durations-parts/*
+      - name: Save the record for the runs after this one
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ runner.temp }}/test-durations
+          key: test-durations-${{ github.run_id }}-${{ github.run_attempt }}
 
   # The contracts live in pyproject.toml's [tool.importlinter]; v1-e02-t06-import-boundary-guard
   # owns the full set.
@@ -640,7 +726,7 @@ jobs:
   # filter that found nothing to check, or test-selection choosing no test. A job skipped for any
   # other reason (the `changes` or `test-selection` job failed, a condition was wrong) fails it, and
   # so does a failed or cancelled one: a matrix job's result is `failure` when any part failed. It
-  # needs every job above except `coverage`, which runs on pushes only.
+  # needs every job above except `coverage` and `test-durations`, which run on pushes only.
   ci:
     needs:
       - changes

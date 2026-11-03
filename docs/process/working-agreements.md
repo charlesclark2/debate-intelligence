@@ -16,8 +16,15 @@ The goal is a short wait between opening a PR and being able to merge it into `d
   before it is a problem. Until `v1-e01-t27` the `test` job alone took 4 to 6 minutes.
 * **The test job runs in parts.** `ci.yml`'s `test` job is a matrix, and each part runs
   `pytest --part K/N` on its own runner. A part is not a list of directories:
-  `tests/pytest_plugins/run_in_parts.py` deals each test file's tests round the N parts, so every
-  selected test is in exactly one part and the parts stay level with nothing to maintain. The
+  `tests/pytest_plugins/run_in_parts.py` deals the selection to the N parts, so every selected
+  test is in exactly one part. It deals whole test files by the seconds each took on dev's last
+  push run (`v1-e41-t17`), so a file's module-scoped fixtures are built in one part instead of in
+  all of them: every push part times its files, `ci.yml`'s `test-durations` job adds them up and
+  saves them in GitHub's Actions cache, and `test-selection` restores them once and hands every part
+  the same deal. A file with no record counts as the record's median, and a file heavier than a
+  part's share is dealt test by test. A record that is missing, older than two weeks, or that knows
+  under three quarters of the chosen files deals every file's tests round the parts as before,
+  and the job summary says why; it never fails a run (`scripts/ci_test_durations.py`). The
   parts together are the selection: on a pull request into `dev` the tests its changes reach, and
   otherwise the whole default selection ([agreement 10](#10-a-session-tests-what-it-changed-a-pull-request-what-it-reaches-and-dev-and-main-everything)).
   `ci.yml`'s `test-selection` job chooses it once and every part reads it; when it chooses no test,
@@ -34,12 +41,12 @@ The goal is a short wait between opening a PR and being able to merge it into `d
   `--dist worksteal`, the default since the PM's comparison on one commit (2026-11-02).
 * **The parts are proved to be the selection.**
   `tests/scripts/test_ci_workflow_test_job.py` collects every part and proves it, for an affected
-  set and for the whole selection, in a job of its own, `partition-proof`: on every push to `dev` and `main`, and on a pull request that
+  set and for the whole selection, dealt by durations and test by test, in a job of its own, `partition-proof`: on every push to `dev` and `main`, and on a pull request that
   changes what the proof covers (`ci.yml`, `tests/pytest_plugins/`, the selection scripts, pytest's
   configuration, the proof itself). The proof collects the whole suite nine times, and in a part it
   held that part for about 70 seconds. It also deals the real collection at every size the matrix
-  can take, one part to eight, with the plugin's own dealing function. No other test is moved off
-  the PR path to make room.
+  can take, one part to eight, with the plugin's own dealing function, under a deal and under none.
+  No other test is moved off the PR path to make room.
 * **A pull request's newer push cancels its older run; nothing else is cancelled.** A push to `dev`
   or `main` and a dispatched run each have a concurrency group of their own, so every merge commit
   gets its own verdict and never waits for the run before it (`v1-e41-t15`).
@@ -51,7 +58,9 @@ The goal is a short wait between opening a PR and being able to merge it into `d
     about 15 seconds, and its own collection. `ci` over 3 minutes on ordinary pull requests while
     every part is under 2 is not a part count to change: read the costs page first.
   * One part steadily slower than the others: a few slow tests have landed together. Its durations
-    name them. Make them cheaper; never mark them `slow` to get them out of the way.
+    name them, and `test-selection`'s summary says whether the parts were dealt by durations, from
+    which record, and the seconds it expected of each part. Make them cheaper; never mark them
+    `slow` to get them out of the way.
 * **The same option splits a long local run** for the operator: `uv run pytest --part 1/2` and
   then `--part 2/2` are the whole default selection between them, for any N. A session does not use
   it to run the whole selection in pieces; what a session runs is [agreement 10](#10-a-session-tests-what-it-changed-a-pull-request-what-it-reaches-and-dev-and-main-everything).
@@ -240,7 +249,7 @@ tests its changes reach, and the whole selection runs once per merge instead (`v
 
 * **A pull request into `dev` runs the affected set.** ci.yml's `test-selection` job reads
   `scripts/affected_tests.py`'s selection against the pull request's base commit, always-run list
-  included, once, and the `test` parts deal it round themselves. When the pull request changes
+  included, once, with the deal of its files to the parts, and the `test` parts follow it. When the pull request changes
   shared test ground (ci.yml among it), or its selection fails, comes back empty or has no base
   commit to compare with, the parts run the whole selection instead: it fails toward more tests,
   never fewer. The job summary says how many test files it chose and, for the whole selection, why.

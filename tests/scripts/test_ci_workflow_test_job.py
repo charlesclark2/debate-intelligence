@@ -25,8 +25,11 @@ still looks green:
   rule can give: milliseconds, where collecting every size would collect the suite 45 times.
 * **Each part runs the selection it is given** (v1-e01-t38): on a pull request into dev, the test
   files `scripts/ci_test_selection.py` chose; otherwise an empty file, which is the whole default
-  selection. The parts are compared with the unsplit collection of both. Since v1-e41-t15 the
-  `test-selection` job chooses them once for every part, and
+  selection. Since v1-e41-t17 every part is also given the same deal of whole test files to parts,
+  made from the durations dev's push run recorded, or an empty one that deals test by test as
+  before; the proofs collect the parts under a deal made from invented durations and under none, and
+  deal the real collection both ways at every size. The parts are compared with the unsplit
+  collection of both. Since v1-e41-t15 the `test-selection` job chooses them once for every part, and
   `tests/scripts/test_ci_workflow_selection_once_and_no_queue.py` runs its step and the part's;
   which files the script chooses for which event is `tests/scripts/test_ci_workflow_test_selection.py`.
 
@@ -46,8 +49,10 @@ import shutil
 import subprocess
 import sys
 import tomllib
+import zlib
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -68,6 +73,12 @@ XDIST_DIST = "$XDIST_DIST"
 THE_DEFAULT_DIST = "worksteal"
 # Where the selection step writes the test files and the pytest step reads them, as `@FILE`.
 SELECTION_FILE = "$RUNNER_TEMP/test-selection.txt"
+# Where a part writes down test-selection's deal of whole files to parts (v1-e41-t17), and where a
+# push part times its tests into.
+# Each an `--option=PATH` word, so pytest never takes the path for a test path when it finds its rootdir.
+DEAL_FILE = "$RUNNER_TEMP/files-to-parts.json"
+FOLLOW_THE_DEAL = f"--files-to-parts={DEAL_FILE}"
+RECORD_DURATIONS = "--record-durations=$DURATIONS_FILE"
 # One small file, so that running the commands for real costs a second each. It imports a workspace
 # package, which is what gives coverage something to report on. It holds two tests, so two parts of
 # it each run one.
@@ -83,6 +94,9 @@ MEASURE_COVERAGE_WITHOUT_A_REPORT = ["--cov", "--cov-report="]
 # combines them can tell which part is missing without reading this file.
 DATA_FILE_OF_A_PART = "${{ runner.temp }}/coverage-part-${{ matrix.part }}-of-${{ strategy.job-total }}"
 ARTIFACT_OF_A_PART = "coverage-data-part-${{ matrix.part }}-of-${{ strategy.job-total }}"
+DURATIONS_OF_A_PART = (
+    "${{ runner.temp }}/test-durations-part-${{ matrix.part }}-of-${{ strategy.job-total }}.json"
+)
 DOWNLOADED_DATA = "${{ runner.temp }}/coverage-data"
 # Pinned the way every action in this repository is: a major-version tag.
 UPLOAD_ARTIFACT = "actions/upload-artifact@v6"
@@ -119,12 +133,15 @@ def pytest_arguments(condition: str = ON_ANY_OTHER_EVENT) -> list[str]:
 
 
 def unsplit_arguments() -> list[str]:
-    """A part's own command without `--part`: the whole of what the parts share out, in one run."""
+    """A part's own command without `--part` and its deal: the whole of what the parts share out, in
+    one run."""
     arguments = pytest_arguments()
     at = arguments.index("--part")
     assert arguments[at + 1] == PART_OF_THE_MATRIX, arguments
+    arguments = arguments[:at] + arguments[at + 2 :]
+    assert arguments.count(FOLLOW_THE_DEAL) == 1, arguments
     assert f"@{SELECTION_FILE}" in arguments, arguments
-    return [word for word in arguments[:at] + arguments[at + 2 :] if word != f"@{SELECTION_FILE}"]
+    return [word for word in arguments if word not in (f"@{SELECTION_FILE}", FOLLOW_THE_DEAL)]
 
 
 def in_a_part(text: str, part: int, parts: int, runner_temp: Path) -> str:
@@ -141,12 +158,30 @@ def in_a_part(text: str, part: int, parts: int, runner_temp: Path) -> str:
     return text
 
 
-def part_arguments(part: int, parts: int, selection: Path, condition: str = ON_ANY_OTHER_EVENT) -> list[str]:
-    """A part's pytest arguments, reading its test files from `selection` as CI reads its own."""
+def part_arguments(
+    part: int,
+    parts: int,
+    selection: Path,
+    condition: str = ON_ANY_OTHER_EVENT,
+    deal: Path | None = None,
+    durations: Path | None = None,
+) -> list[str]:
+    """A part's pytest arguments, reading its test files from `selection` and its deal from `deal`
+    as CI reads its own. No deal is an empty file beside the selection: test by test. A push part
+    times its tests into `durations`, or a file beside the selection."""
     arguments = pytest_arguments(condition)
     assert arguments.count(PART_OF_THE_MATRIX) == 1, arguments
     assert arguments.count(f"@{SELECTION_FILE}") == 1, arguments
-    replaced = {PART_OF_THE_MATRIX: f"{part}/{parts}", f"@{SELECTION_FILE}": f"@{selection}"}
+    assert arguments.count(FOLLOW_THE_DEAL) == 1, arguments
+    if deal is None:
+        deal = selection.with_name(f"{selection.stem}-no-deal.json")
+        deal.write_text("", encoding="utf-8")
+    replaced = {
+        PART_OF_THE_MATRIX: f"{part}/{parts}",
+        f"@{SELECTION_FILE}": f"@{selection}",
+        FOLLOW_THE_DEAL: f"--files-to-parts={deal}",
+        RECORD_DURATIONS: f"--record-durations={durations or selection.with_name(f'durations-{part}.json')}",
+    }
     return [replaced.get(word, word) for word in arguments]
 
 
@@ -196,9 +231,12 @@ def parts_given_for(test_files: list[str] | None) -> list[int]:
     return json.loads(parts)
 
 
-def dealt_into(node_ids: list[str], parts: int) -> list[list[str]]:
-    """`node_ids` dealt into `parts` parts by run_in_parts.py's own function, as its hook deals them."""
-    dealt = importlib.import_module("run_in_parts").parts_dealt(node_ids, parts)
+def dealt_into(
+    node_ids: list[str], parts: int, part_of_file: dict[str, int] | None = None
+) -> list[list[str]]:
+    """`node_ids` dealt into `parts` parts by run_in_parts.py's own function, as its hook deals them,
+    by the deal `part_of_file` or, without one, test by test."""
+    dealt = importlib.import_module("run_in_parts").parts_dealt(node_ids, parts, part_of_file)
     return [
         [node_id for node_id, to in zip(node_ids, dealt, strict=True) if to == part] for part in range(parts)
     ]
@@ -295,21 +333,32 @@ def test_on_a_push_a_part_runs_the_same_tests_measuring_coverage_into_a_file_of_
     without, with_coverage = pytest_step(ON_ANY_OTHER_EVENT), pytest_step(ON_A_PUSH)
     # The same command, the same part of the same selection, and coverage added: so the partition
     # proof below, which collects the command without coverage, holds for the one with it.
+    # It also times its tests for the next runs' deals (v1-e41-t17), which moves no test.
     arguments = pytest_arguments(ON_A_PUSH)
+    assert arguments.count(RECORD_DURATIONS) == 1, arguments
+    arguments = [word for word in arguments if word != RECORD_DURATIONS]
     assert [word for word in arguments if word not in MEASURE_COVERAGE_WITHOUT_A_REPORT] == pytest_arguments(
         ON_ANY_OTHER_EVENT
     )
     assert [word for word in arguments if word in MEASURE_COVERAGE_WITHOUT_A_REPORT] == (
         MEASURE_COVERAGE_WITHOUT_A_REPORT
     )
-    assert with_coverage.get("env") == {"COVERAGE_FILE": DATA_FILE_OF_A_PART}
+    assert with_coverage.get("env") == {
+        "COVERAGE_FILE": DATA_FILE_OF_A_PART,
+        "DURATIONS_FILE": DURATIONS_OF_A_PART,
+    }
     assert "env" not in without
     assert steps.index(without) + 1 == steps.index(with_coverage)
 
 
 def test_on_a_push_each_part_keeps_its_data_as_an_artifact_and_fails_without_any() -> None:
     steps = jobs()["test"]["steps"]
-    [upload] = [step for step in steps if str(step.get("uses", "")).startswith("actions/upload-artifact@")]
+    [upload] = [
+        step
+        for step in steps
+        if str(step.get("uses", "")).startswith("actions/upload-artifact@")
+        and step["with"]["name"] == ARTIFACT_OF_A_PART
+    ]
     assert upload["uses"] == UPLOAD_ARTIFACT
     assert upload["if"] == ON_A_PUSH
     assert upload["with"] == {
@@ -439,7 +488,11 @@ def test_a_pull_request_part_keeps_no_coverage_and_the_push_parts_combine_into_t
     # Without it, the parts would write to .coverage in the checkout, and here in this one.
     assert data_file_of_a_part, "the push step names no data file of its own"
     data_files = [Path(in_a_part(data_file_of_a_part, part, 2, push_temps[part - 1])) for part in (1, 2)]
-    [upload] = [step for step in jobs()["test"]["steps"] if step.get("uses") == UPLOAD_ARTIFACT]
+    [upload] = [
+        step
+        for step in jobs()["test"]["steps"]
+        if step.get("uses") == UPLOAD_ARTIFACT and step["with"]["name"] == ARTIFACT_OF_A_PART
+    ]
     uploaded = [Path(in_a_part(upload["with"]["path"], part, 2, push_temps[part - 1])) for part in (1, 2)]
     unsplit_data = tmp_path / "unsplit-coverage"
 
@@ -451,7 +504,9 @@ def test_a_pull_request_part_keeps_no_coverage_and_the_push_parts_combine_into_t
                 (part_arguments(1, 1, selection), {"COVERAGE_FILE": str(pull_request_temp / "leftover")}),
                 *(
                     (
-                        part_arguments(part, 2, selection, ON_A_PUSH),
+                        part_arguments(
+                            part, 2, selection, ON_A_PUSH, durations=tmp_path / f"durations-{part}.json"
+                        ),
                         {"COVERAGE_FILE": str(data_files[part - 1])},
                     )
                     for part in (1, 2)
@@ -570,10 +625,10 @@ def test_the_parts_are_numbered_from_one_and_each_asks_for_its_number_out_of_the
     assert arguments[arguments.index("-m") + 1] == PARTS_SELECTION
 
 
-def test_ci_needs_every_job_but_the_push_only_coverage_report() -> None:
+def test_ci_needs_every_job_but_the_push_only_coverage_report_and_durations_record() -> None:
     every_job = jobs()
     # A matrix job is one entry in `needs`, and its result is a failure if any part failed.
-    assert sorted(every_job["ci"]["needs"]) == sorted(set(every_job) - {"ci", "coverage"})
+    assert sorted(every_job["ci"]["needs"]) == sorted(set(every_job) - {"ci", "coverage", "test-durations"})
 
 
 @pytest.mark.parametrize("nonsense", ["0/4", "5/4", "2", "2/", "/4", "two/four", "-1/4", "1/0"])
@@ -583,8 +638,11 @@ def test_a_part_that_is_not_one_of_the_parts_is_refused(nonsense: str) -> None:
         run_in_parts.part_of_parts(nonsense)
 
 
-def assert_the_parts_are_exactly(unsplit: list[str], each_part: list[list[str]], what: str) -> None:
-    """Every test of `unsplit` in exactly one part, nothing else in any, and the parts level."""
+def assert_the_parts_are_exactly(
+    unsplit: list[str], each_part: list[list[str]], what: str, part_of_file: dict[str, int] | None = None
+) -> None:
+    """Every test of `unsplit` in exactly one part, nothing else in any, and the parts dealt as asked:
+    a file in the deal `part_of_file` whole in its part, and every other file level round them."""
     assert len(set(unsplit)) == len(unsplit)
     in_parts = Counter(node_id for part in each_part for node_id in part)
     in_two_parts = {node_id for node_id, times in in_parts.items() if times > 1}
@@ -595,40 +653,97 @@ def assert_the_parts_are_exactly(unsplit: list[str], each_part: list[list[str]],
     assert not only_in_a_part, f"in a part and not in {what}: {some(only_in_a_part)}"
     assert sum(len(part) for part in each_part) == len(unsplit)
 
-    # Level parts: each file's tests are dealt round the parts, so no part holds more than one
-    # test more of any file than another does.
+    # Whole files where the deal names them (v1-e41-t17), so a module's fixtures are built in one
+    # part. Level parts for the rest: each file's tests are dealt round the parts, so no part holds
+    # more than one test more of any file than another does.
+    part_of_file = part_of_file or {}
     held_by_part = [Counter(node_id.partition("::")[0] for node_id in part) for part in each_part]
     for test_file in {node_id.partition("::")[0] for node_id in unsplit}:
         held = [held_by_this_part[test_file] for held_by_this_part in held_by_part]
-        assert max(held) - min(held) <= 1, f"{test_file} is dealt unevenly: {held}"
+        if test_file in part_of_file:
+            assert [part for part, count in enumerate(held, start=1) if count] == [part_of_file[test_file]], (
+                f"{test_file} is not whole in part {part_of_file[test_file]}: {held}"
+            )
+        else:
+            assert max(held) - min(held) <= 1, f"{test_file} is dealt unevenly: {held}"
 
 
 def collect_unsplit_and_each_part(
-    selection: Path, *matrices: list[int]
+    selection: Path, *matrices: tuple[list[int], Path]
 ) -> tuple[list[str], list[list[list[str]]]]:
     """One unsplit collection of what `selection` names (a part's command without `--part`), and each
-    part's of each matrix, run side by side. Until v1-e01-t42 the unsplit command was the `coverage`
-    job's; a push part's command is this one with coverage added, which collects nothing more or less."""
+    part's of each matrix under its deal, run side by side. Until v1-e01-t42 the unsplit command was
+    the `coverage` job's; a push part's command is this one with coverage added, which collects
+    nothing more or less."""
     commands = [[*unsplit_arguments(), f"@{selection}"]]
-    for parts in matrices:
-        commands += [part_arguments(part, len(parts), selection) for part in parts]
+    for parts, deal in matrices:
+        commands += [part_arguments(part, len(parts), selection, deal=deal) for part in parts]
     with ThreadPoolExecutor(max_workers=len(commands)) as pool:
         unsplit, *every_part = pool.map(lambda arguments: collected(*arguments), commands)
     each_matrix: list[list[list[str]]] = []
-    for parts in matrices:
+    for parts, _ in matrices:
         each_matrix.append(every_part[: len(parts)])
         every_part = every_part[len(parts) :]
     return unsplit, each_matrix
 
 
-def assert_dealt_at_every_size(unsplit: list[str], collected_parts: list[list[str]], what: str) -> None:
-    """The collected parts are the plugin's function's dealing, so that function, dealt at every size
-    the rule can give, is what those parts would collect; and each of those is a partition."""
-    assert [set(part) for part in dealt_into(unsplit, len(collected_parts))] == [
+def invented_record(tmp_path: Path, test_files: list[str]) -> Path:
+    """Durations for `test_files` shaped like the costs page's (a few heavy files and a long tail), from
+    a checksum of each path, and none for one file in twelve, which the deal counts as the median."""
+    record = tmp_path / "test-durations.json"
+    files = {}
+    for test_file in test_files:
+        checksum = zlib.crc32(test_file.encode("utf-8"))
+        if checksum % 12:
+            files[test_file] = 300.0 if checksum % 97 == 0 else 0.1 + checksum % 400 / 20
+    record.write_text(
+        json.dumps(
+            {"format": 1, "recorded_at": datetime.now(UTC).isoformat(), "commit": "proof", "files": files}
+        ),
+        encoding="utf-8",
+    )
+    return record
+
+
+def the_deal(test_files: list[str], parts: int, record: Path, tmp_path: Path) -> tuple[Any, Path]:
+    """The deal `test-selection` makes of `test_files` into `parts` from `record`, and the file a part
+    writes it down in, read from the `files_to_parts` output the script writes."""
+    script = the_selection_script()
+    deal = importlib.import_module("ci_test_durations").deal(test_files, parts, record, datetime.now(UTC))
+    [handed] = [
+        line.removeprefix("files_to_parts=")
+        for line in script.github_outputs(script.Choice(tuple(test_files), "", 0), deal).splitlines()
+        if line.startswith("files_to_parts=")
+    ]
+    path = tmp_path / f"files-to-parts-{parts}.json"
+    path.write_text(handed, encoding="utf-8")
+    return deal, path
+
+
+def assert_dealt_at_every_size(
+    unsplit: list[str],
+    collected_parts: list[list[str]],
+    part_of_file: dict[str, int],
+    test_files: list[str],
+    record: Path,
+    what: str,
+) -> None:
+    """The collected parts are the plugin's function's dealing under the deal they were given, so that
+    function, at every size the rule can give, under the deal the script makes for that size and
+    under none, is what those parts would collect; and each of those is a partition."""
+    assert [set(part) for part in dealt_into(unsplit, len(collected_parts), part_of_file)] == [
         set(part) for part in collected_parts
     ]
+    durations = importlib.import_module("ci_test_durations")
     for size in the_selection_script().SIZES_THE_RULE_GIVES:
         assert_the_parts_are_exactly(unsplit, dealt_into(unsplit, size), f"{what}, in {size} parts")
+        deal = durations.deal(test_files, size, record, datetime.now(UTC))
+        assert_the_parts_are_exactly(
+            unsplit,
+            dealt_into(unsplit, size, deal.part_of_file),
+            f"{what}, in {size} parts by durations",
+            deal.part_of_file,
+        )
 
 
 @pytest.mark.partition_proof
@@ -637,13 +752,28 @@ def test_the_parts_together_are_exactly_the_default_selection_and_no_test_is_in_
 ) -> None:
     """The proof that splitting the job dropped nothing (v1-e01-t27 ac3), for the whole selection:
     what every push, promotion and dispatch runs. The default selection here is the parts' own,
-    which leaves out this proof and the next: the partition-proof job runs them."""
+    which leaves out this proof and the next: the partition-proof job runs them. The parts are
+    collected under a deal of whole files by invented durations (v1-e41-t17), the files being the
+    ones test-selection lists for the whole selection."""
     parts = parts_given_for(None)
-    unsplit, [each_part] = collect_unsplit_and_each_part(the_whole_selection(tmp_path), parts)
+    script = the_selection_script()
+    test_files = script.test_files_to_deal(REPO_ROOT, script.whole("the proof"))
+    record = invented_record(tmp_path, test_files)
+    deal, deal_file = the_deal(test_files, len(parts), record, tmp_path)
+    assert deal.by_durations, deal.why
+
+    unsplit, [each_part] = collect_unsplit_and_each_part(the_whole_selection(tmp_path), (parts, deal_file))
 
     assert len(unsplit) > 5000, "the unsplit collection is not the whole suite"
-    assert_the_parts_are_exactly(unsplit, each_part, "the default selection")
-    assert_dealt_at_every_size(unsplit, each_part, "the default selection")
+    # Every file pytest collects is one the deal counted, so none is a stranger to its durations.
+    collected_files = {node_id.partition("::")[0] for node_id in unsplit}
+    assert collected_files <= set(deal.part_of_file) | set(deal.spread), some(
+        collected_files - set(deal.part_of_file) - set(deal.spread)
+    )
+    assert_the_parts_are_exactly(unsplit, each_part, "the default selection", deal.part_of_file)
+    assert_dealt_at_every_size(
+        unsplit, each_part, deal.part_of_file, test_files, record, "the default selection"
+    )
 
 
 @pytest.mark.partition_proof
@@ -652,25 +782,36 @@ def test_the_parts_together_are_exactly_an_affected_set_and_each_holds_some_of_t
 ) -> None:
     """The same proof for a selection given in the file, as a pull request into dev gives one (v1-e01-t38).
 
-    Every selection holds the always-run list, and each part gets some of it, so no part of a small
-    selection collects nothing (pytest's exit status 5, which would fail the part), even in the most
-    parts there are. The selection's own matrix (v1-e41-t16) is collected too.
+    The selection's own matrix (v1-e41-t16) is collected dealt test by test, as when no record can be
+    used, and the most parts there are under a deal by invented durations (v1-e41-t17). Every
+    selection holds the always-run list, and dealt test by test each part gets some of it, so no part
+    of a small selection collects nothing (pytest's exit status 5, which would fail the part), even
+    in the most parts there are; a deal by durations gives every part a file with a recorded time.
     """
     always_run = always_run_test_files()
     given = sorted({*always_run, A_SMALL_TEST_FILE, "tests/scripts/test_ci_workflow_test_job.py"})
     selection = tmp_path / "selection.txt"
     selection.write_text("".join(f"{test_file}\n" for test_file in given), encoding="utf-8")
+    test_by_test = tmp_path / "no-deal.json"
+    test_by_test.write_text("", encoding="utf-8")
 
     its_own, the_most = parts_given_for(given), parts_given_for(None)
     assert len(its_own) < len(the_most), (its_own, the_most)
-    unsplit, [in_its_own_parts, each_part] = collect_unsplit_and_each_part(selection, its_own, the_most)
+    record = invented_record(tmp_path, given)
+    deal, deal_file = the_deal(given, len(the_most), record, tmp_path)
+    assert deal.by_durations, deal.why
+    unsplit, [in_its_own_parts, each_part] = collect_unsplit_and_each_part(
+        selection, (its_own, test_by_test), (the_most, deal_file)
+    )
 
     collected_files = {node_id.partition("::")[0] for node_id in unsplit}
     assert collected_files <= set(given)
     assert {A_SMALL_TEST_FILE, "tests/scripts/test_ci_workflow_test_job.py"} <= collected_files
     assert len(unsplit) < 5000, "the selection file was not read: this is the whole suite"
     assert_the_parts_are_exactly(unsplit, in_its_own_parts, "the selection given")
-    assert_the_parts_are_exactly(unsplit, each_part, "the selection given")
-    assert_dealt_at_every_size(unsplit, each_part, "the selection given")
-    for number, part in enumerate(each_part, start=1):
+    assert_the_parts_are_exactly(unsplit, each_part, "the selection given", deal.part_of_file)
+    assert_dealt_at_every_size(unsplit, each_part, deal.part_of_file, given, record, "the selection given")
+    for number, part in enumerate(dealt_into(unsplit, len(the_most)), start=1):
         assert any(node_id.partition("::")[0] in always_run for node_id in part), f"part {number}"
+    for number, part in enumerate(each_part, start=1):
+        assert part, f"part {number} of {len(the_most)} by durations collects no test"

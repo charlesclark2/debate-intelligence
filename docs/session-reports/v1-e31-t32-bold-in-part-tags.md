@@ -408,9 +408,46 @@ The prod parsed store follows dev's at the promotion, by the cloud-run runbook's
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-03
 
 **Notes:**
+
+The rule was sampled and counted before it was written, ruled, and then shown to take exactly the shape it
+was ruled for, and nothing more.
+
+1. **ac1 passes.** The operator's sample (seed 20261103, 30 items, no card text) and the count by condition
+   and shape went to the PM before any rule; every rule commit follows the record (`91f5a57`). Tail-only, no
+   digit: 17 tags in 17 (at most 18% not, Wilson 95%); 44 lines, 25 texts, across the four caselists.
+2. **The digits split was found after the answers**, and the report says so (Deviation 1), as the ruling
+   asked. The PM ruled on it knowing that, and fixtures pin both sides (1 tag in the 4 with digits).
+3. **ac2's first three parts pass.** Red first at `d7b20ca` (5 failed, 35 passed, by assertion); the
+   refusals rest on mutation, rightly not claimed as red. The labelled evaluation is unchanged score for
+   score against docx-7 on both tiers (pr-subset TAG precision 0.974 to 0.9744) and the gate passed;
+   `2026.11.03-docx-8` is pinned.
+4. **The before-and-after is the strongest evidence here:** 44 taken, 0 beyond the sampled shape, 0 left by
+   a guard, 0 other cards changed over 71,186 unchanged. The 15 cards that lose their last body paragraph
+   were carrying a tag line as evidence, so this removes words that were never the author's; the 5 that
+   vanish are t24's ruled case. The 78 first-reading differences are docx-7 against docx-6 storage, not
+   this rule.
+5. **Mutation:** 28 mutants, every one caught after the two survivors got fixtures; 35 runs against the
+   ~20 cap is accepted for three new modules (Deviation 5).
+6. **The version (Deviation 6), PM ruling:** this task merges first and keeps `2026.11.03-docx-8`.
+   v1-e31-t23 is still building its N1 rule (ruled 2026-11-03) and takes `docx-9` at its sync. The PM
+   tells that session.
+7. **The re-parse steps are re-timed by the PM:**
+   - **Step 3** (the "before" copy) cannot run before Wednesday 2026-11-04's cloud run records: the dev
+     bucket holds no docx-7 parsed store until revision 11's full re-parse, so tonight's restore would
+     give 0 objects, as the e39-t10 journey's J2 did on 2026-11-03. It runs on Thursday 2026-11-05 on
+     the dev.342 build, and the operator installs no newer dev build until it has.
+   - **Step 4's image** carries this merge and, if v1-e31-t23 has merged by then, docx-9 as well, so one
+     full re-parse covers both bumps. Step 5's `parsed_version` is then the image's version.
+8. **Deviations 2, 3, 4 and 7 accepted.** The golden fixtures' version line (as t19, t24, t31 and t23);
+   two commands for the two tiers; the Mac's mixed store, re-read by docx-7; the affected set left to
+   `ci`.
+9. **Follow-ups filed by the PM in the next batch:** a sample of the 2,350 lines not bold as Word shows
+   them, and the inline "part" card.
+10. **Merge:** `scripts/task pr --partial` once `ci` is green. The Goal stays `InProgress` until the
+    re-parse's counts are recorded (steps 4 to 6).

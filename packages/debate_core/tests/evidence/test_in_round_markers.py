@@ -165,11 +165,15 @@ FILE = build_docx(
 )
 
 
+def no_line_is_a_marker(_line: str) -> bool:
+    return False
+
+
 def parse_as_docx_7(parse: Callable[[], ParsedDocument]) -> ParsedDocument:
     """`parse()` with `docx-8`'s marker rule switched off: an in-round marker may be read as a cite."""
     with pytest.MonkeyPatch.context() as patch:
         for module in (style_classifier, parser_module):
-            patch.setattr(module, "is_an_in_round_marker", lambda _line: False)
+            patch.setattr(module, "is_an_in_round_marker", no_line_is_a_marker)
         return parse()
 
 

@@ -172,10 +172,14 @@ def write_blob(data_dir: Path, sha256: str, content: bytes) -> None:
     blob.write_bytes(content)
 
 
+def no_line_is_a_marker(_line: str) -> bool:
+    return False
+
+
 def switch_off_the_marker_rule(patch: pytest.MonkeyPatch) -> None:
     """Read as `docx-7` did: an in-round marker may be read as a cite. In this process only."""
     for module in (style_classifier, parser_module):
-        patch.setattr(module, "is_an_in_round_marker", lambda _line: False)
+        patch.setattr(module, "is_an_in_round_marker", no_line_is_a_marker)
 
 
 @pytest.fixture

@@ -14,6 +14,7 @@ from typing import Any
 
 import pytest
 
+from debate_core.application.budget import BudgetExceededError
 from debate_core.application.ports.model_router import ModelRouter, RoutingConfigError
 from debate_core.application.settings import ConfigurationError, ModelSettings, Settings, load_settings
 from debate_core.domain.model_contracts import ModelPrompt, ModelProvider, TaskClass
@@ -184,6 +185,72 @@ def test_no_profile_in_the_settings_is_no_profile_for_the_real_router(tmp_path: 
     )
 
     assert spy.profiles == [None]
+
+
+# ---------------------------------------------------------------------------------------------
+# v1-e32-t43: a route of the same file standing in for a task class, for one run. The example file
+# routes high_volume to Haiku 5.5 (2,048 output tokens, $0.0005 per 1K out: a ceiling of about $0.001)
+# and deep_audit to Opus 5.5 (16,384 output tokens, $0.02 per 1K out: about $0.33).
+# ---------------------------------------------------------------------------------------------
+
+
+def test_a_stand_in_route_answers_the_task_class_for_the_real_router(tmp_path: Path) -> None:
+    spy = RealRouterSpy({"paragraph_id": 1, "start_offset": 0, "end_offset": 9})
+    example = RoutingPolicy.load(EXAMPLE_ROUTING_FILE)
+
+    build_model_router(
+        settings_with(tmp_path, provider="bedrock"),
+        environ={"DEBATE_MODEL_MODE": "live"},
+        real_router=spy,
+        stand_ins={TaskClass.HIGH_VOLUME: TaskClass.DEEP_AUDIT},
+    )
+
+    (policy,) = spy.policies
+    assert policy.route_for(TaskClass.HIGH_VOLUME) == example.route_for(TaskClass.DEEP_AUDIT)
+    assert policy.route_for(TaskClass.HIGH_VOLUME).model_id == "anthropic.claude-opus-5-5"
+    assert policy.route_for(TaskClass.DEEP_AUDIT) == example.route_for(TaskClass.DEEP_AUDIT)
+    assert policy.route_for(TaskClass.COMPLEX_REASONING) == example.route_for(TaskClass.COMPLEX_REASONING)
+
+
+def test_the_budget_guard_prices_the_stand_in_routes_ceiling(tmp_path: Path) -> None:
+    """A run limit of $0.01 holds a Haiku 5.5 call's ceiling and not an Opus 5.5 call's: standing in, the
+    high_volume call is refused before it is sent, as the guard prices the model that would answer it."""
+    answer = {"paragraph_id": 1, "start_offset": 0, "end_offset": 9}
+    settings = settings_with(tmp_path, provider="bedrock", budget_usd_per_run=0.01)
+    live = {"DEBATE_MODEL_MODE": "live"}
+    own_route = RealRouterSpy(answer)
+    standing_in = RealRouterSpy(answer)
+
+    router = build_model_router(settings, environ=live, real_router=own_route)
+    run(router.generate_structured(TaskClass.HIGH_VOLUME, EXAMPLE_PROMPT, ContractPassage))
+    router = build_model_router(
+        settings,
+        environ=live,
+        real_router=standing_in,
+        stand_ins={TaskClass.HIGH_VOLUME: TaskClass.DEEP_AUDIT},
+    )
+    with pytest.raises(BudgetExceededError):
+        run(router.generate_structured(TaskClass.HIGH_VOLUME, EXAMPLE_PROMPT, ContractPassage))
+
+    assert len(own_route.router.calls) == 1
+    assert standing_in.router.calls == []
+
+
+@pytest.mark.parametrize(
+    ("route", "for_class"),
+    [(TaskClass.EMBEDDINGS, TaskClass.HIGH_VOLUME), (TaskClass.DEEP_AUDIT, TaskClass.RERANK)],
+    ids=["embeddings-for-high-volume", "deep-audit-for-rerank"],
+)
+def test_only_a_generative_route_stands_in_for_a_generative_class(
+    tmp_path: Path, route: TaskClass, for_class: TaskClass
+) -> None:
+    with pytest.raises(RoutingConfigError, match="generative"):
+        build_model_router(
+            settings_with(tmp_path, provider="bedrock"),
+            environ={"DEBATE_MODEL_MODE": "live"},
+            real_router=RealRouterSpy(),
+            stand_ins={for_class: route},
+        )
 
 
 def test_the_option_wins_over_the_variable(tmp_path: Path) -> None:

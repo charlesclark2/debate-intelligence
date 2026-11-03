@@ -36,6 +36,13 @@ day or the calendar month in America/Chicago past `models.budget_usd_per_run`,
 `models.budget_usd_daily` or `models.budget_usd_monthly` (the month v1-e05-t15). The guard is left
 out when none is set. Replay serves cassettes and the fake answers from fixtures: neither costs anything,
 and neither is wrapped. One call of this function is one run, named by `run_id`.
+
+## A route standing in for another (v1-e32-t43)
+
+`stand_ins` maps a task class to another route of the same file that answers its calls for this run:
+the policy is changed once, before the real router and the budget guard's pricer are given it, so the
+calls go to that route's model and the guard prices that model's ceiling. The prompt keeps the task
+class it declares. Replay and the fake read no route, so they ignore it.
 """
 
 from __future__ import annotations
@@ -50,7 +57,7 @@ from debate_core.application.budget import BudgetGuard, BudgetLimits
 from debate_core.application.ports.model_router import ModelRouter
 from debate_core.application.ports.providers import Clock
 from debate_core.application.settings import ConfigurationError, Settings, find_repository_root
-from debate_core.domain.model_contracts import ModelProvider
+from debate_core.domain.model_contracts import ModelProvider, TaskClass
 from debate_core.integrations.models.fake_router import DEFAULT_FIXTURE_DIRECTORY, FakeModelRouter
 from debate_core.integrations.models.model_mode import ModelMode, resolve_model_mode
 from debate_core.integrations.models.record_replay import (
@@ -91,6 +98,7 @@ def build_model_router(
     run_id: str | None = None,
     pricing_file: Path | None = None,
     usage_log: UsageLog | None = None,
+    stand_ins: Mapping[TaskClass, TaskClass] | None = None,
 ) -> ModelRouter:
     """The router `settings` and the model mode select.
 
@@ -102,7 +110,7 @@ def build_model_router(
 
     In record and live mode, `run_id` names the run in the usage log (a new one by default),
     `pricing_file` is `model_pricing.yaml` beside the routing file by default, and `usage_log` is
-    `<data_dir>/usage` by default.
+    `<data_dir>/usage` by default. `stand_ins` names, by task class, the route that answers its calls.
 
     Raises :class:`~debate_core.application.ports.model_router.RoutingConfigError` for a bad
     routing file, :class:`~debate_core.integrations.models.errors.ModelModeError` for a bad mode,
@@ -114,6 +122,8 @@ def build_model_router(
         return FakeModelRouter(directory, clock=clock)
 
     policy = RoutingPolicy.from_settings(settings)
+    for for_class, route in (stand_ins or {}).items():
+        policy = policy.standing_in(route, for_class=for_class)
     model_mode = resolve_model_mode(mode, environ=environ)
     cassettes = cassette_dir or _committed(DEFAULT_CASSETTE_DIRECTORY, repository_root)
     if model_mode is ModelMode.REPLAY:

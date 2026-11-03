@@ -130,7 +130,15 @@ version's cassettes on this machine and of its repair cassettes filed under the 
 never a name. The scan reads values, not JSON keys, and leaves out the positions text the prompt sends
 (`v1-e32-t40`). `--model-mode replay` (the default) answers from those cassettes; `record`, once, after
 the data-use policy records its open question 4 as answered, makes the calls and writes them. It caches,
-writes and publishes no report. Exit `0` when the stage ran to the end, the format meets the bar and the
+writes and publishes no report.
+
+The cards are scored two ways (`v1-e32-t43`). `pipeline` is as students meet them: a card the headings
+place surely (a run never sends it) is scored on that placement, a card a coach's override decides argues
+no position is not counted, and every other card on the model's answer. `model_alone` is the model's
+answer for every card; the top-level `counted`, `correct` and `accuracy` are its. Each gives its counted,
+correct, refused and below-threshold cards, its accuracy over the counted and its coverage, the counted
+over the labelled. The bar reads the pipeline's accuracy (`bar_reads`, the PM's ruling of 2026-11-02).
+Exit `0` when the stage ran to the end, the pipeline meets the bar and the
 three scans are clean. A stage the model stopped partway is judged
 as `landscape report`'s is (`v1-e32-t33`): `3` when it was throttled or did not answer, `1` when the call
 was refused, with `error.code` `MODEL_STAGE_INTERRUPTED` and the same `cause_code`, `sent`, `unanswered`
@@ -154,7 +162,16 @@ naming either label is correct, and `data.breakdown.second_label` counts the car
 right on it; the confusion table and the label kinds stay on the first label. `--check-sample` reads the
 sample against the caselist's taxonomy as the evaluation would, refusing it as the evaluation would, and
 prints its rows by label kind and its second labels by kind. It reads no card, asks no model and records
-nothing, so it takes no `--breakdown` and no `--model-mode record` (`CHECK_SAMPLE_ASKS_NO_MODEL`).
+nothing, so it takes no `--breakdown`, no `--route` and no `--model-mode record`
+(`CHECK_SAMPLE_ASKS_NO_MODEL`).
+
+`--route <task class>` (`v1-e32-t43`) measures the same cards on another generative route of the routing
+file: that route's model and settings answer the prompt's `high_volume` calls, for the router and the
+budget guard alike, and the cassettes are recorded to and replayed and scanned from
+`<data dir>/landscape/model-cassettes-<route>/`, never the default directory, so a recording on one route
+never replaces or is served as another's. `data.route` names the route that answered. `landscape
+cassettes --route` lists and deletes that directory's cassettes. A route that answers no prompt
+(`embeddings`, `rerank`) is refused, exit `2` (`ROUTE_NOT_GENERATIVE`).
 """
 
 from __future__ import annotations
@@ -181,12 +198,14 @@ from debate_cli.output import CliOutput, CommandFailure, JsonValue, OutputMode
 from debate_core.application.analytic_texts import AnalyticTextCounts
 from debate_core.application.errors import error_code_of
 from debate_core.application.landscape_model_evaluation import (
+    BAR_READS,
     TARGET_ACCURACY,
     CoachSampleCheck,
     EvaluationBreakdown,
     FormatEvaluation,
 )
 from debate_core.application.landscape_model_stage import (
+    CLASSIFICATION_TASK_CLASS,
     DEFAULT_MAX_MODEL_ITEMS,
     POLICY_QUESTION,
     model_use_gate,
@@ -210,6 +229,7 @@ from debate_core.application.plan_texts import PlanTextCounts
 from debate_core.application.settings import Environment, Settings, find_repository_root
 from debate_core.arguments.landscape.evaluation_breakdown import (
     CardBreakdown,
+    LabelledScore,
     Score,
     confusion,
     deterministic_counts,
@@ -221,6 +241,7 @@ from debate_core.arguments.landscape.evaluation_breakdown import (
 from debate_core.arguments.landscape.model_stage import NameScan
 from debate_core.arguments.landscape.scan_hits import ScanHit, hit_counts, mark_counts
 from debate_core.domain.landscape_trends import LandscapeTrends, TrendLabel
+from debate_core.domain.model_contracts import TaskClass
 
 __all__ = [
     "CIRCUIT_WIDE",
@@ -423,6 +444,14 @@ def evaluate(
             "scan's hits, listed in this terminal only.",
         ),
     ] = False,
+    route: Annotated[
+        TaskClass | None,
+        typer.Option(
+            "--route",
+            help="Another generative route of the routing file answers the stage's calls, recorded to and "
+            "replayed from <data dir>/landscape/model-cassettes-<route>/, never the default directory.",
+        ),
+    ] = None,
     check_sample: Annotated[
         bool,
         typer.Option(
@@ -447,15 +476,15 @@ def evaluate(
             (sample, sample_rows),
             snapshot,
             config_dir,
-            alone=not breakdown and model_mode is EvaluationMode.REPLAY,
+            alone=not breakdown and route is None and model_mode is EvaluationMode.REPLAY,
         )
     if breakdown and model_mode is EvaluationMode.RECORD:
         _end(cli, ctx, _BREAKDOWN_RECORDS_NOTHING)
-    refusal = _policy_refusal() if model_mode is EvaluationMode.RECORD else None
+    refusal = _route_refusal(route) or (_policy_refusal() if model_mode is EvaluationMode.RECORD else None)
     if refusal is not None:
         _end(cli, ctx, refusal)
     service = cli.services.landscape_evaluation(
-        config_dir=landscape_config_dir(config_dir), record=model_mode is EvaluationMode.RECORD
+        config_dir=landscape_config_dir(config_dir), record=model_mode is EvaluationMode.RECORD, route=route
     )
     through = parse_snapshot_date(snapshot) if snapshot else None
     with sample.open(encoding="utf-8", newline="") as labels, sample_rows.open(encoding="utf-8") as rows:
@@ -467,7 +496,7 @@ def evaluate(
             if broken_down is not None
             else asyncio.run(service.evaluate(caselist, labels, rows, snapshot=through))
         )
-    payload = evaluation_summary(result)
+    payload = evaluation_summary(result, route=route)
     display = _evaluation_display(result)
     if broken_down is not None:
         payload["breakdown"] = breakdown_summary(broken_down)
@@ -488,10 +517,23 @@ _BREAKDOWN_RECORDS_NOTHING: Final = CommandFailure(
 )
 
 
+def _route_refusal(route: TaskClass | None) -> CommandFailure | None:
+    """`--route` names a route that answers a prompt: a generative task class (`v1-e32-t43`)."""
+    if route is None or route.is_generative:
+        return None
+    return CommandFailure(
+        code="ROUTE_NOT_GENERATIVE",
+        message=f"--route {route.value} names a route that answers no prompt; the classify prompt needs a "
+        "generative route",
+        exit_code=ExitCode.USAGE_ERROR,
+        hint="Name complex_reasoning, high_volume or deep_audit.",
+    )
+
+
 _CHECK_SAMPLE_ALONE: Final = CommandFailure(
     code="CHECK_SAMPLE_ASKS_NO_MODEL",
-    message="--check-sample reads the coach's sample and asks no model; it takes no --breakdown and no "
-    "--model-mode record",
+    message="--check-sample reads the coach's sample and asks no model; it takes no --breakdown, no --route "
+    "and no --model-mode record",
     exit_code=ExitCode.USAGE_ERROR,
     hint="Run --check-sample alone, then the evaluation without it.",
 )
@@ -746,10 +788,14 @@ def _hit_lines(result: EvaluationBreakdown) -> list[str]:
     return lines
 
 
-def evaluation_summary(result: FormatEvaluation) -> dict[str, JsonValue]:
-    """`landscape evaluate`'s `data`: counts, the accuracy against the bar, and the two scans' counts."""
+def evaluation_summary(result: FormatEvaluation, *, route: TaskClass | None = None) -> dict[str, JsonValue]:
+    """`landscape evaluate`'s `data`: counts, the accuracy against the bar, and the two scans' counts.
+
+    `route` is the task class whose route answered (`v1-e32-t43`): the prompt's own unless `--route`
+    named another."""
     return {
         "caselist": result.caselist,
+        "route": (route or CLASSIFICATION_TASK_CLASS).value,
         "event": result.event,
         "topic_id": result.topic_id,
         "taxonomy_version": result.taxonomy_version,
@@ -770,6 +816,13 @@ def evaluation_summary(result: FormatEvaluation) -> dict[str, JsonValue]:
         "input_tokens": result.input_tokens,
         "output_tokens": result.output_tokens,
         "interrupted": result.interrupted,
+        "bar_reads": BAR_READS,
+        "model_alone": _labelled_score_json(result.model_alone),
+        "pipeline": {
+            **_labelled_score_json(result.pipeline),
+            "by_headings": result.pipeline.by_headings,
+            "decided_none": result.pipeline.decided_none,
+        },
         "scan": {
             name: {
                 "texts": scan.texts,
@@ -787,17 +840,40 @@ def evaluation_summary(result: FormatEvaluation) -> dict[str, JsonValue]:
     }
 
 
+def _labelled_score_json(score: LabelledScore) -> dict[str, JsonValue]:
+    return {
+        "labelled": score.labelled,
+        "counted": score.counted,
+        "correct": score.correct,
+        "accuracy": score.accuracy,
+        "refused": score.refused,
+        "below_threshold": score.below_threshold,
+        "coverage": score.coverage,
+    }
+
+
+def _share_of(part: float | None) -> str:
+    return "n/a" if part is None else f"{part:.1%}"
+
+
 def _evaluation_display(result: FormatEvaluation) -> str:
-    accuracy = "n/a" if result.accuracy is None else f"{result.accuracy:.1%}"
+    pipeline, alone = result.pipeline, result.model_alone
     return "\n".join(
         [
             f"{result.caselist} ({result.event}) on {result.topic_id} {result.taxonomy_version}, "
             f"landscape.classify_position {result.prompt_version}.",
             f"Labelled {result.labelled}, found {result.found}; asked about {result.asked} in "
             f"{result.calls} call(s).",
-            f"Counted {result.counted}, correct {result.correct}: {accuracy} (bar {TARGET_ACCURACY:.0%}); "
-            f"{result.placed_below_threshold} placed below the threshold, {result.placed_labelled_none} "
-            "labelled none.",
+            "As students meet it (the headings' sure placements, the model for the rest): "
+            f"counted {pipeline.counted}, correct {pipeline.correct}: {_share_of(pipeline.accuracy)} "
+            f"(bar {TARGET_ACCURACY:.0%}); {pipeline.by_headings} by the headings, {pipeline.decided_none} "
+            f"decided none by an override, {pipeline.refused} refused, {pipeline.below_threshold} below the "
+            f"threshold; coverage {pipeline.counted} of {pipeline.labelled} "
+            f"({_share_of(pipeline.coverage)}).",
+            f"The model alone: counted {alone.counted}, correct {alone.correct}: "
+            f"{_share_of(alone.accuracy)}; {alone.refused} refused, {alone.below_threshold} below the "
+            f"threshold, {result.placed_labelled_none} labelled none; coverage {alone.counted} of "
+            f"{alone.labelled} ({_share_of(alone.coverage)}).",
             f"Scan of the prompt inputs: {_scan_line(result.sent)}. Of the cassettes: "
             f"{_scan_line(result.cassettes)}. Of the repair cassettes: "
             f"{_scan_line(result.repair_cassettes)}.",
@@ -839,7 +915,8 @@ def _evaluation_failure(result: FormatEvaluation, payload: dict[str, JsonValue])
         )
     else:
         message = (
-            f"the model stage's accuracy is under the bar of {TARGET_ACCURACY:.0%}, or nothing was counted"
+            "the pipeline's accuracy (the headings' sure placements, the model for the rest) is under the "
+            f"bar of {TARGET_ACCURACY:.0%}, or nothing was counted"
         )
     return CommandFailure(
         code="EVALUATION_BELOW_BAR", message=message, exit_code=ExitCode.DOMAIN_FAILURE, details=payload

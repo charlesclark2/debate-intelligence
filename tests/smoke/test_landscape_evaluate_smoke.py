@@ -11,7 +11,9 @@ so the structured-output guard repairs it once. The build under test then replay
 behind it: a request it builds differently from the recording fails as `MISSING_FIXTURE`, and a name it
 sends fails the scan. By hand: four labelled, four found, four asked in one batch and two calls, all four
 counted and correct (100%, over the 85% bar), and one prompt input, one cassette and one repair cassette
-scanned, each clean, so the command exits 0.
+scanned, each clean, so the command exits 0. Scored as students meet it (`v1-e32-t43`), the `Costs
+Advantage` and `States CP` cards sit under a heading an alias names, so the pipeline scores those two on the
+headings' placement, which is their label, and the other two on the model's: 4 counted, 4 correct.
 
 The model stage reads its prompt from a source checkout's `prompts/`, so the build runs in a scratch
 directory holding a copy of this checkout's `prompts/` beside a `config/profiles/`, which is what marks
@@ -171,6 +173,7 @@ def record_cassettes(world: SyntheticRun, sample: Path, rows: Path) -> Path:
             service.evaluate(SYNTHETIC_RUN_CASELIST, labels, lines, snapshot=date.fromisoformat(SNAPSHOT))
         )
     assert (recorded.counted, recorded.correct, recorded.calls) == (4, 4, 2)
+    assert (recorded.pipeline.counted, recorded.pipeline.correct, recorded.pipeline.by_headings) == (4, 4, 2)
     return cassettes
 
 
@@ -229,6 +232,10 @@ def test_landscape_evaluate_replays_the_recorded_sample_with_clean_scans(
     assert (data["labelled"], data["found"], data["asked"], data["calls"]) == (4, 4, 4, 2)
     assert (data["counted"], data["correct"], data["accuracy"], data["meets_target"]) == (4, 4, 1.0, True)
     assert (data["placed_below_threshold"], data["placed_labelled_none"], data["refused"]) == (0, 0, {})
+    assert data["bar_reads"] == "pipeline"
+    scored = {"labelled": 4, "counted": 4, "correct": 4, "accuracy": 1.0, "refused": 0, "below_threshold": 0}
+    assert data["model_alone"] == {**scored, "coverage": 1.0}
+    assert data["pipeline"] == {**scored, "coverage": 1.0, "by_headings": 2, "decided_none": 0}
     assert data["scan"] == {
         "prompt_inputs": {"texts": 1, **CLEAN},
         "cassettes": {"texts": 1, **CLEAN},

@@ -869,6 +869,12 @@ every cassette that may hold the removed text, and tell the PM, since the evalua
 again (PM rulings, 2026-10-25 and 2026-10-31). `debate-research landscape cassettes --for-removal`
 (`v1-e32-t36`) does it:
 
+An evaluation recorded on another route (`landscape evaluate --route`, `v1-e32-t43`) keeps its cassettes
+apart, in `<data dir>/landscape/model-cassettes-<route>/`, which the blocks below do not read. The same
+command with `--route <route>` lists and deletes them the same way, behind a code of its own. Until this
+section has blocks for them, check whether `<data dir>/landscape` holds a `model-cassettes-` directory,
+and if it does, tell the PM before the removal is closed.
+
 * **the caselist's alone**: deleted;
 * **shared** with another caselist: deleted too, since it holds the removed text for that caselist as
   well. The other caselist records it again on its next run, and never gets a wrong answer meanwhile;

@@ -276,6 +276,22 @@ class RoutingPolicy(BaseModel):
             )
         return route
 
+    def standing_in(self, route: TaskClass, *, for_class: TaskClass) -> Self:
+        """This policy with `route`'s model and settings answering calls of `for_class` (`v1-e32-t43`).
+
+        How one evaluation measures a prompt on another route the file defines without changing the task
+        class the prompt declares. Both must be generative classes this file routes; a failure names the
+        missing or wrong key.
+        """
+        for one in (route, for_class):
+            if not one.is_generative:
+                raise RoutingConfigError(
+                    f"only a generative route can stand in for another, and {one.value!r} is not one",
+                    field=f"routes.{one.value}",
+                )
+        self.route_for(for_class)
+        return self.model_copy(update={"routes": {**self.routes, for_class: self.route_for(route)}})
+
     def resolve(self, task_class: TaskClass, params: ModelParams | None = None) -> ResolvedRoute:
         """The route a call on `task_class` takes, with `params` merged over the route's defaults.
 

@@ -15,7 +15,9 @@ One evaluation, for one caselist (one format) at its newest weekly snapshot unle
    is answered) makes the calls and writes them;
 3. **scores** the answers (:class:`FormatEvaluation`): of the cards a run would count (a MODEL result at
    or above the review threshold), how many name the coach's position. A card the coach labelled `none`
-   counts against the model when it is placed;
+   counts against the model when it is placed. Scored again as students meet it (`v1-e32-t43`), each
+   card stage one places surely, with the taxonomy and the coach's overrides, on that placement and every
+   other on the model's answer: the pipeline's accuracy is what the bar reads;
 4. **scans** what was sent, every cassette of the prompt version it ran, and every repair cassette of that
    version filed under the caselist, for the caselist's schools, team codes and the disclosing teams'
    tournaments (:func:`~debate_core.arguments.landscape.model_stage.name_scan`): their values, not their
@@ -54,13 +56,16 @@ from debate_core.application.position_classification import model_candidate
 from debate_core.arguments.landscape.evaluation_breakdown import (
     CardBreakdown,
     CardOutcome,
+    LabelledScore,
     Score,
     StratumScore,
     card_outcome,
     deterministic_placement,
     label_kind,
+    model_alone_score,
     model_set_score,
     outcome_counts,
+    pipeline_score,
     related,
     stratum_scores,
 )
@@ -90,6 +95,7 @@ __all__ = [
     "BATCH_ANSWERED",
     "BATCH_REFUSED",
     "BATCH_REPAIRED",
+    "BAR_READS",
     "NO_POSITION_LABEL",
     "SECOND_LABEL_COLUMN",
     "TARGET_ACCURACY",
@@ -107,6 +113,7 @@ __all__ = [
     "coach_sample_counts",
     "committed_positions",
     "evaluate_labelled_cards",
+    "labelled_card_breakdowns",
     "read_coach_sample",
     "read_sample_populations",
     "scanned_cassettes",
@@ -115,7 +122,12 @@ __all__ = [
 ]
 
 TARGET_ACCURACY: Final = 0.85
-"""ac4's bar: the share of counted MODEL placements naming the coach's position, per format."""
+"""ac4's bar: the share of the counted placements naming the coach's position, per format, as students meet
+them: stage one's sure placements and the model's for the rest (the PM's ruling for `v1-e32-t43`; until then
+the model's alone)."""
+
+BAR_READS: Final = "pipeline"
+"""Which score :data:`TARGET_ACCURACY` is read against: :attr:`FormatEvaluation.pipeline`'s."""
 
 NO_POSITION_LABEL: Final = "none"
 """The coach's label for a card that argues no position."""
@@ -125,6 +137,9 @@ UNSURE_LABEL: Final = "unsure"
 
 SECOND_LABEL_COLUMN: Final = "also"
 """The coach sample's optional column naming a second position the coach accepts for a card (`v1-e32-t41`)."""
+
+
+_NOTHING_SCORED: Final = LabelledScore(labelled=0, counted=0, correct=0, refused=0, below_threshold=0)
 
 
 class EvaluationRefused(DomainError):
@@ -182,6 +197,12 @@ class FormatEvaluation:
     """The router error that stopped the stage partway; None when it ran to the end."""
     unanswered: int = 0
     """Cards (fingerprints) a stop left unasked; 0 when the stage ran to the end."""
+    model_alone: LabelledScore = field(default_factory=lambda: _NOTHING_SCORED)
+    """The model's answers for every labelled card (`v1-e32-t43`): the counts above, with its refusals and
+    coverage."""
+    pipeline: LabelledScore = field(default_factory=lambda: _NOTHING_SCORED)
+    """The labelled cards as students meet them, stage one's sure placements first (`v1-e32-t43`): the bar
+    reads its accuracy."""
 
     @property
     def interrupted(self) -> str | None:
@@ -197,6 +218,7 @@ class FormatEvaluation:
 
     @property
     def accuracy(self) -> float | None:
+        """The model's alone, over its counted cards: not what the bar reads since `v1-e32-t43`."""
         return self.correct / self.counted if self.counted else None
 
     @property
@@ -206,7 +228,8 @@ class FormatEvaluation:
 
     @property
     def meets_target(self) -> bool:
-        accuracy = self.accuracy
+        """Whether the pipeline's accuracy, over its counted cards, reaches the bar (:data:`BAR_READS`)."""
+        accuracy = self.pipeline.accuracy
         return accuracy is not None and accuracy >= TARGET_ACCURACY
 
 
@@ -335,6 +358,8 @@ class LabelledAnswers:
     each team's school and code were on it too, and the first two lists hold those)."""
     second_labels: Mapping[str, str] = field(default_factory=dict[str, str])
     """The second label of each labelled card that has one, by item id (`v1-e32-t41`)."""
+    labelled: tuple[LabelledCard, ...] = ()
+    """The labelled cards, one per item id, in the sample's order: what each card's breakdown is of."""
 
 
 async def ask_labelled_cards(
@@ -383,6 +408,7 @@ async def ask_labelled_cards(
         names=names,
         tournaments=frozenset(tournaments),
         second_labels=second_labels,
+        labelled=tuple({one.item_id: one for one in chosen}.values()),
     )
 
 
@@ -392,6 +418,7 @@ def score_labelled_answers(
     asked: LabelledAnswers,
     *,
     prompt_version: str,
+    overrides: OverrideRules | None = None,
     review_threshold: float = DEFAULT_REVIEW_THRESHOLD,
     cassettes: Iterable[str] = (),
     repair_cassettes: Iterable[str] = (),
@@ -400,8 +427,11 @@ def score_labelled_answers(
     """The evaluation's score of `asked`, and the scans of what was sent, of `cassettes` and of
     `repair_cassettes`, each read as :func:`scanned_cassettes` and :func:`scanned_repairs` choose.
 
-    A counted answer is right when it names the card's label or its second label (`v1-e32-t41`)."""
+    A counted answer is right when it names the card's label or its second label (`v1-e32-t41`). The
+    pipeline's score places each card with `taxonomy` and `overrides`, the coach's decisions on its headings
+    (none when None), as a landscape run does (`v1-e32-t43`)."""
     labels, outcome = asked.labels, asked.outcome
+    cards = labelled_card_breakdowns(asked, taxonomy, overrides, threshold=review_threshold)
     committed = committed_positions(taxonomy)
     counted = correct = below = labelled_none = 0
     for item_id, item in asked.items.items():
@@ -448,6 +478,8 @@ def score_labelled_answers(
         ),
         interrupted_by=outcome.interrupted_by,
         unanswered=len(asked.candidates) - outcome.sent,
+        model_alone=model_alone_score(cards),
+        pipeline=pipeline_score(cards),
     )
 
 
@@ -457,6 +489,7 @@ async def evaluate_labelled_cards(
     labelled: Iterable[LabelledCard],
     stage: ModelClassificationStage,
     *,
+    overrides: OverrideRules | None = None,
     review_threshold: float = DEFAULT_REVIEW_THRESHOLD,
     cassette_texts: Callable[[], Iterable[str]] = lambda: (),
     repair_cassette_texts: Callable[[], Iterable[str]] = lambda: (),
@@ -465,7 +498,7 @@ async def evaluate_labelled_cards(
     """Ask `stage` about every labelled card `reading` holds, and score the answers against the labels.
 
     `cassette_texts` and `repair_cassette_texts` are read after the stage has run, so a recording run
-    scans what it recorded.
+    scans what it recorded. `overrides` are the coach's decisions the pipeline's score places cards with.
     """
     asked = await ask_labelled_cards(reading, labelled, stage, taxonomy)
     return score_labelled_answers(
@@ -473,6 +506,7 @@ async def evaluate_labelled_cards(
         taxonomy,
         asked,
         prompt_version=stage.prompt_version,
+        overrides=overrides,
         review_threshold=review_threshold,
         cassettes=cassette_texts(),
         repair_cassettes=repair_cassette_texts(),
@@ -562,37 +596,20 @@ async def break_down_labelled_cards(
         taxonomy,
         asked,
         prompt_version=stage.prompt_version,
+        overrides=overrides,
         review_threshold=review_threshold,
         cassettes=cassettes,
         repair_cassettes=repairs,
         snapshot=snapshot,
     )
     outcome = asked.outcome
-    matcher = PositionMatcher(taxonomy, overrides)
-    batch_of = {
-        fingerprint: number
-        for number, record in enumerate(outcome.batches, start=1)
-        for fingerprint in record.fingerprints
-    }
-    cards: list[CardBreakdown] = []
-    for item_id, one in {card.item_id: card for card in labelled}.items():
-        cards.append(
-            _card_breakdown(
-                one,
-                asked.items.get(item_id),
-                outcome,
-                taxonomy,
-                matcher,
-                batch_of,
-                threshold=review_threshold,
-            )
-        )
+    cards = labelled_card_breakdowns(asked, taxonomy, overrides, threshold=review_threshold)
     names = ScanNames.of(
         reading.caselist_names, asked.tournaments, taxonomy_text=committed_positions(taxonomy)
     )
     return EvaluationBreakdown(
         evaluation=evaluation,
-        cards=tuple(cards),
+        cards=cards,
         batches=tuple(_batch_breakdown(number, one) for number, one in enumerate(outcome.batches, start=1)),
         populations=dict(populations or {}),
         sent_hits=tuple(
@@ -611,6 +628,33 @@ async def break_down_labelled_cards(
             for hit in repair_cassette_hits(f"repair cassette {number}", text, names)
         ),
         repair_cassettes=len(repairs),
+    )
+
+
+def labelled_card_breakdowns(
+    asked: LabelledAnswers, taxonomy: Taxonomy, overrides: OverrideRules | None, *, threshold: float
+) -> tuple[CardBreakdown, ...]:
+    """Each labelled card's outcome, batch and stage-one placement, by `taxonomy` and the coach's
+    `overrides` (none when None), in the sample's order: what the evaluation's scores and the breakdown are
+    counted from."""
+    rules = overrides if overrides is not None else OverrideRules(topic_id=taxonomy.topic_id)
+    matcher = PositionMatcher(taxonomy, rules)
+    batch_of = {
+        fingerprint: number
+        for number, record in enumerate(asked.outcome.batches, start=1)
+        for fingerprint in record.fingerprints
+    }
+    return tuple(
+        _card_breakdown(
+            one,
+            asked.items.get(one.item_id),
+            asked.outcome,
+            taxonomy,
+            matcher,
+            batch_of,
+            threshold=threshold,
+        )
+        for one in asked.labelled
     )
 
 
@@ -769,6 +813,7 @@ class LandscapeModelEvaluationService:
             prepared.taxonomy,
             prepared.labelled,
             self._stage(len(prepared.labelled)),
+            overrides=self._taxonomies.overrides(prepared.reading.topic_id),
             review_threshold=self._threshold,
             cassette_texts=self._cassette_texts,
             repair_cassette_texts=self._repair_cassette_texts,

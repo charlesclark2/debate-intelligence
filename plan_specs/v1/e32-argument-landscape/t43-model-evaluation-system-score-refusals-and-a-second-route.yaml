@@ -36,7 +36,9 @@ spec:
     on live runs stays until a measured result meets the bar.
   priority: 1
   constraints:
-    packages: [debate_core.application, debate_core.arguments, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/data, docs/runbooks]
+    # PM ruling 2026-11-03: the second route stands in for high_volume in build_model_router, for the router and
+    # the budget guard alike, so the packages gain debate_core.integrations.models.
+    packages: [debate_core.application, debate_core.arguments, debate_core.integrations.models, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/data, docs/runbooks]
     forbidden:
       - Card text, a tag, heading or label text in the report, docs, logs or a test
       - A school, team code or debater name anywhere
@@ -66,7 +68,7 @@ spec:
         the side-by-side counts and cost, are recorded in docs/data (operator, recorded by
         the PM).
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

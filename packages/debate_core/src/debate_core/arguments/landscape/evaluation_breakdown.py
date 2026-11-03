@@ -18,6 +18,11 @@ Beside each card is what stage one, the deterministic matcher, makes of it (:cla
 and whether a real run would send it to the model at all: only a card stage one leaves unplaced or places
 below the threshold is sent, so the bar applies to those (:func:`model_set_score`).
 
+A student meets neither stage alone (`v1-e32-t43`): a run places what the headings place surely, and asks
+the model about the rest. :func:`pipeline_score` scores the labelled cards that way, a card stage one
+places surely on that placement and every other on the model's answer, beside :func:`model_alone_score`,
+the model's answers for every card. The bar reads the pipeline's accuracy (the PM's ruling, 2026-11-02).
+
 A card the coach gave a second label (`v1-e32-t41`) is correct when the answer names either label
 (:func:`second_label_counts` counts those right on the second); a wrong answer, its kind and the confusion
 table are judged against the first label.
@@ -46,6 +51,7 @@ __all__ = [
     "CardBreakdown",
     "CardOutcome",
     "DeterministicPlacement",
+    "LabelledScore",
     "Score",
     "StratumScore",
     "card_outcome",
@@ -53,9 +59,12 @@ __all__ = [
     "deterministic_counts",
     "deterministic_placement",
     "label_kind",
+    "model_alone_score",
     "model_set_score",
     "outcome_counts",
     "outcomes_by_label_kind",
+    "pipeline_score",
+    "placed_by_headings",
     "refusals_by_label",
     "related",
     "score",
@@ -332,6 +341,78 @@ def model_set_score(cards: Iterable[CardBreakdown]) -> Score:
     return score(
         card for card in cards if card.deterministic is not None and card.deterministic.sent_to_model
     )
+
+
+@dataclass(frozen=True, slots=True)
+class LabelledScore:
+    """Every labelled card scored one way: by the model alone, or by the pipeline (`v1-e32-t43`).
+
+    `counted` are the cards placed at or above the review threshold, what a report shows; `refused` the
+    model's answers naming no position, and `below_threshold` its placements under the threshold, neither
+    counted. :attr:`coverage` is the counted over the labelled.
+    """
+
+    labelled: int
+    counted: int
+    correct: int
+    refused: int
+    below_threshold: int
+    by_headings: int = 0
+    """Of the counted, the cards stage one placed surely, scored on that placement (the pipeline only)."""
+    decided_none: int = 0
+    """Cards a coach's override decides argue no position: never sent, never counted (the pipeline only)."""
+
+    @property
+    def accuracy(self) -> float | None:
+        return self.correct / self.counted if self.counted else None
+
+    @property
+    def coverage(self) -> float | None:
+        return self.counted / self.labelled if self.labelled else None
+
+
+def placed_by_headings(card: CardBreakdown) -> bool:
+    """Whether stage one places `card` surely: a run never sends it, and the pipeline scores its placement."""
+    placed = card.deterministic
+    return placed is not None and not placed.sent_to_model and placed.position_id is not None
+
+
+def model_alone_score(cards: Iterable[CardBreakdown]) -> LabelledScore:
+    """The model's answers for every labelled card, whatever stage one made of it: the evaluation's own."""
+    chosen = list(cards)
+    return LabelledScore(
+        labelled=len(chosen),
+        counted=sum(card.counted for card in chosen),
+        correct=sum(card.outcome is CardOutcome.CORRECT for card in chosen),
+        refused=sum(card.outcome is CardOutcome.REFUSED for card in chosen),
+        below_threshold=sum(card.outcome is CardOutcome.BELOW_THRESHOLD for card in chosen),
+    )
+
+
+def pipeline_score(cards: Iterable[CardBreakdown]) -> LabelledScore:
+    """The labelled cards as students meet them: a card stage one places surely is scored on that placement,
+    a card a coach's override decides is no position is not counted, and every other on the model's answer."""
+    chosen = list(cards)
+    by_headings = [card for card in chosen if placed_by_headings(card)]
+    decided = [card for card in chosen if card.deterministic is not None and card.deterministic.decided_none]
+    by_model = model_alone_score(
+        card for card in chosen if card.deterministic is None or card.deterministic.sent_to_model
+    )
+    return LabelledScore(
+        labelled=len(chosen),
+        counted=len(by_headings) + by_model.counted,
+        correct=sum(_names_a_label(card) for card in by_headings) + by_model.correct,
+        refused=by_model.refused,
+        below_threshold=by_model.below_threshold,
+        by_headings=len(by_headings),
+        decided_none=len(decided),
+    )
+
+
+def _names_a_label(card: CardBreakdown) -> bool:
+    """Whether stage one's placement of `card` is the coach's label or second label; never for `none`."""
+    placed = card.deterministic
+    return placed is not None and placed.position_id in (card.label, card.also)
 
 
 @dataclass(frozen=True, slots=True)

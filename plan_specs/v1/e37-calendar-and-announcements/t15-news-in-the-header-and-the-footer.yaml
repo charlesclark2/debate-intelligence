@@ -24,7 +24,15 @@ spec:
     to stay there. Update the announcements test that pins /news/ out of the header.
   priority: 2
   constraints:
-    packages: [site/content, site/src, site/tests]
+    # PM ruling, 2026-11-03: the PR's CI met an order-dependent failure in the container factory
+    # test (feed_config "built without it" when the file runs first in a fresh process). It is
+    # fixed here as its own commit, as test tooling and not site work, because the promotion to
+    # main runs the whole selection and would meet it at random.
+    packages:
+      - site/content
+      - site/src
+      - site/tests
+      - packages/debate_cli/tests/test_container_factories.py
     forbidden:
       - A page that becomes unreachable
       - Network calls at build time or in tests

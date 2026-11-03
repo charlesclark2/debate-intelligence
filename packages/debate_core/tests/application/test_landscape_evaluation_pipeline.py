@@ -25,23 +25,30 @@ The pipeline: counted 1, 2, 3, 9 by the headings and 5, 8 by the model (6), corr
 from __future__ import annotations
 
 import dataclasses
+import hashlib
+import io
 import json
 from collections.abc import Sequence
+from datetime import date
 from pathlib import Path
 from typing import Any
 
 import pytest
 from pydantic import BaseModel
 
+from debate_core.application.caselist.evidence_listing import LocalEvidence
+from debate_core.application.caselist.suppression import RecordedSuppressionList
 from debate_core.application.landscape_model_evaluation import (
     TARGET_ACCURACY,
     FormatEvaluation,
     LabelledCard,
+    LandscapeModelEvaluationService,
     break_down_labelled_cards,
     evaluate_labelled_cards,
 )
 from debate_core.application.landscape_model_stage import ModelClassificationStage, ParsedStoreCardTexts
 from debate_core.application.landscape_seeding import SeedReading
+from debate_core.application.ports.parsed_store import OCCURRENCES_NAME, PARSED_PREFIX
 from debate_core.application.structured_output import StructuredOutputGuard
 from debate_core.arguments.landscape.evaluation_breakdown import LabelledScore
 from debate_core.arguments.landscape.seeding import SeedCard, SeedSource, SeedTeam
@@ -49,9 +56,18 @@ from debate_core.domain.caselist import Side
 from debate_core.domain.landscape import Taxonomy
 from debate_core.domain.landscape_classification import OverrideRules, card_item_id
 from debate_core.domain.model_contracts import ModelParams, ModelPrompt, ModelResponse, TaskClass
+from debate_core.integrations.landscape.yaml_taxonomy_repository import (
+    YamlTaxonomyRepository,
+    render_override_file,
+)
+from debate_core.integrations.local import BLOB_DIRECTORY, FsEvidenceObjectStore
+from debate_core.integrations.local.parsed_store import LocalParsedStore
+from debate_core.integrations.local.suppression_list import local_suppression_list_file
 from debate_core.integrations.models.prompt_registry import PromptRegistry
 from debate_core.testing.fakes.model_router import ScriptedModelRouter
 from debate_core.testing.fakes.parsed_store import InMemoryParsedStore
+from debate_core.testing.landscape_run import SYNTHETIC_RUN_CASELIST, SYNTHETIC_RUN_TOPIC, plant_synthetic_run
+from debate_core.testing.landscape_store import PARSER_VERSION
 
 REPOSITORY = Path(__file__).resolve().parents[4]
 SHA = "f" * 64
@@ -279,3 +295,115 @@ async def test_evaluation_breakdown_scores_the_pipeline_as_the_evaluation_does(
 
     assert broken_down.evaluation == alone
     assert broken_down.evaluation.pipeline.counted == 6
+
+
+# ------------------------------------------------------------------------------------------------
+# The service's own path: `synthetic26` (:mod:`debate_core.testing.landscape_run`), its stores and its
+# config, with an overrides file deciding that `framing` names no position. Two cards labelled: the
+# `Costs Advantage` card costs-advantage, which its alias heading places surely, and the `Framing` card
+# none, which the model places under spending-da. By hand: with the coach's overrides the pipeline counts
+# the costs card alone, right, and the framing card is decided none (1 of 1); without them the framing
+# card is sent, and the model's placement of it is counted and wrong (1 of 2).
+# ------------------------------------------------------------------------------------------------
+
+SYNTHETIC_LABELLED = (
+    ("Premiums are rising fast", "Delacroix 25", "costs-advantage"),
+    ("Probability first", "Szabo 24", "none"),
+)
+SYNTHETIC_ANSWERS = {"premiums are rising fast": "costs-advantage", "probability first": "spending-da"}
+
+
+class AnswersSyntheticCards(ScriptedModelRouter):
+    def __init__(self) -> None:
+        super().__init__(model_id="recorded-model")
+
+    async def generate_structured[OutputT: BaseModel](
+        self,
+        task_class: TaskClass,
+        prompt: ModelPrompt,
+        schema: type[OutputT],
+        params: ModelParams | None = None,
+    ) -> ModelResponse[OutputT]:
+        items: list[dict[str, Any]] = json.loads(str(prompt.variables["items"]))
+        answers = [
+            {
+                "item": item["item"],
+                "position_id": SYNTHETIC_ANSWERS[item["tag"]],
+                "confidence": 0.9,
+                "rationale": "the tag states the argument",
+            }
+            for item in items
+        ]
+        self.enqueue({"answers": answers})
+        return await super().generate_structured(task_class, prompt, schema, params)
+
+
+async def synthetic_evaluation(
+    tmp_path: Path, registry: PromptRegistry, *, framing_override: bool
+) -> FormatEvaluation:
+    world = plant_synthetic_run(tmp_path / "world")
+    if framing_override:
+        rules = OverrideRules.model_validate(
+            {"topic_id": SYNTHETIC_RUN_TOPIC, "overrides": [{"heading": "framing", "position_id": None}]}
+        )
+        (world.config_dir / "overrides").mkdir()
+        (world.config_dir / "overrides" / f"{SYNTHETIC_RUN_TOPIC}.yaml").write_text(
+            render_override_file(rules), encoding="utf-8"
+        )
+    table = world.data_dir / PARSED_PREFIX / SYNTHETIC_RUN_CASELIST / PARSER_VERSION / OCCURRENCES_NAME
+    item_ids: dict[str, str] = {}
+    for line in table.read_text(encoding="utf-8").splitlines():
+        record = json.loads(line)
+        item_ids[record["exact_fingerprint"]] = card_item_id(
+            record["source_sha256"], record["first_element_index"]
+        )
+    sample = ["sample_row,position"]
+    rows = [json.dumps({"schema": "local-classifier-sample-1"})]
+    for row, (tag, cite, label) in enumerate(SYNTHETIC_LABELLED, start=1):
+        sample.append(f"{row},{label}")
+        fingerprint = hashlib.sha256(f"{tag}|{cite}".encode()).hexdigest()
+        rows.append(json.dumps({"sample_row": row, "item_id": item_ids[fingerprint]}))
+    data_dir = world.data_dir
+    objects = FsEvidenceObjectStore(data_dir)
+    blobs = FsEvidenceObjectStore(data_dir, subdirectory=BLOB_DIRECTORY.parent)
+    service = LandscapeModelEvaluationService(
+        taxonomies=YamlTaxonomyRepository.load(world.config_dir),
+        parsed_store=LocalParsedStore(data_dir),
+        local=LocalEvidence(
+            objects=objects, blobs=blobs, object_path_for=objects.path_for, blob_path_for=blobs.path_for
+        ),
+        suppression=RecordedSuppressionList(local_suppression_list_file(data_dir)),
+        objects=objects,
+        stage=lambda max_items: ModelClassificationStage(
+            StructuredOutputGuard(AnswersSyntheticCards(), registry),
+            ParsedStoreCardTexts(LocalParsedStore(data_dir)),
+            max_items=max_items,
+        ),
+        cassette_texts=lambda: (),
+    )
+    return await service.evaluate(
+        SYNTHETIC_RUN_CASELIST,
+        io.StringIO("\n".join(sample) + "\n"),
+        rows,
+        snapshot=date(2026, 9, 15),
+    )
+
+
+@pytest.mark.anyio
+async def test_evaluation_service_scores_the_pipeline_with_the_topics_overrides(
+    tmp_path: Path, prompts: PromptRegistry
+) -> None:
+    decided = await synthetic_evaluation(tmp_path / "decided", prompts, framing_override=True)
+    sent = await synthetic_evaluation(tmp_path / "sent", prompts, framing_override=False)
+
+    assert decided.pipeline == LabelledScore(
+        labelled=2, counted=1, correct=1, refused=0, below_threshold=0, by_headings=1, decided_none=1
+    )
+    assert sent.pipeline == LabelledScore(
+        labelled=2, counted=2, correct=1, refused=0, below_threshold=0, by_headings=1, decided_none=0
+    )
+    assert (
+        decided.model_alone
+        == sent.model_alone
+        == LabelledScore(labelled=2, counted=2, correct=1, refused=0, below_threshold=0)
+    )

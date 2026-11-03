@@ -257,3 +257,32 @@ exported page rather than one.
 6. **Closing checks:** the Python affected set (always-run and workflow tests only) reached 84% with no
    failure and is left to `ci`; lint-imports and the specs are clean; no Python changed.
 7. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`.
+
+## PM review (second)
+
+**Verdict:** ACCEPTED
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:** PM (Claude), 2026-11-03
+
+**Notes:**
+
+The container factory test fix, added at the PM's ruling of 2026-11-03 (option 2), is right and proved
+the way that matters: in the order that broke it.
+
+1. **The cause is the one the session named:** the recorder credited a build with imports run inside
+   integrations loading for the first time, so the test passed or failed with the order its file ran
+   in, and v1-e41-t17's whole-file dealing could put it first in a fresh worker.
+2. **The fix keeps the test's purpose:** only `debate_cli.container`'s own import statements are
+   credited, which is what `wired_integrations` reads. The two purpose mutants (a factory reaching its
+   integration only through another module's import, and an integration wired nowhere) are still
+   caught, and the old recorder brings the fresh-process failure back.
+3. **Red first** in a fresh process at the start commit (1 failed, 5 passed, the CI message); **green**
+   alone, after the adapters are imported, and shuffled, three runs each. The session was right to say
+   which runs could tell the two recorders apart.
+4. **Deviation 2 accepted:** one test file, its own commit, the spec's packages amended.
+5. **Closing checks** after the fix: the site's checks (1,070 tests, 130 export checks), the affected set
+   to 85% with no failure, ruff, pyright and lint-imports on debate_cli, and the specs are clean.
+6. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`. This is the last
+   merge before dev is frozen for the promotion.
+

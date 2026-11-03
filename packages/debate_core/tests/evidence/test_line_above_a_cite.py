@@ -53,6 +53,7 @@ from debate_core.domain.caselist import SourceDocument, SourceFormat, SourceOrig
 from debate_core.domain.debate_files import ParsedDocument
 from debate_core.domain.style_profile import StructuralUnit
 from debate_core.evidence.line_above_a_cite import (
+    BoldInPartShape,
     Boldness,
     FailingCondition,
     LineAboveACite,
@@ -533,3 +534,25 @@ class TestTheUnboldedPart:
         part = unbolded_part(described(("Margins ", True), ("do not", False), (" thin", True)))
         assert part is not None
         assert (part.characters, part.stretches, part.places) == (5, 1, (Place.MIDDLE,))
+
+
+@pytest.mark.parametrize(
+    ("runs", "shape"),
+    [
+        ((("Margins thin", True), (".", False)), BoldInPartShape.TAIL_PUNCTUATION_ONLY),
+        ((("Margins ", True), ("thin", False)), BoldInPartShape.TAIL_WITHOUT_DIGITS),
+        ((("Margins ", True), ("in 30 days", False)), BoldInPartShape.TAIL_WITH_DIGITS),
+        ((("Margins ", True), ("10/2", False)), BoldInPartShape.TAIL_WITH_DIGITS),
+        ((("AT: ", False), ("Margins thin", True)), BoldInPartShape.HEAD_ONLY),
+        ((("AT: ", False), ("Okonkwo 26", True), (" margins thin", False)), BoldInPartShape.BOTH_ENDS_ONLY),
+        ((("Margins ", True), ("do not", False), (" thin", True)), BoldInPartShape.IN_THE_MIDDLE),
+        (
+            (("AT ", False), ("Margins ", True), ("do not", False), (" thin", True)),
+            BoldInPartShape.IN_THE_MIDDLE,
+        ),
+    ],
+)
+def test_the_shape_of_the_unbolded_part(runs: tuple[tuple[str, bool], ...], shape: BoldInPartShape) -> None:
+    part = unbolded_part(described(*runs))
+    assert part is not None
+    assert part.shape is shape

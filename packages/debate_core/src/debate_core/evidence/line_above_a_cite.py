@@ -21,7 +21,8 @@ classifier's bold-heading rule would take it, where the parser read body or noth
 `v1-e31-t32` asks where the tags t24's rule leaves stand. :attr:`LineAboveACite.failing_conditions`
 lists, in the order t24's report counted them, each :class:`FailingCondition` of the rule a line
 fails, and :func:`unbolded_part` says, in counts, where the unbolded part of a line bold in part
-sits and what it is made of: never its text.
+sits and what it is made of: never its text. :attr:`UnboldedPart.shape` names the
+:class:`BoldInPartShape` the sample's answers were split by.
 
 Nothing here decides whether such a line is a tag; the counts and the PM's ruling do. Counts only
 leave this module. Rule ids are reduced to their family, the part before the first colon, because
@@ -47,6 +48,7 @@ from debate_core.evidence.style_classifier import (
 
 __all__ = [
     "BRACKETED_CITE_RULES",
+    "BoldInPartShape",
     "BoldLine",
     "Boldness",
     "FailingCondition",
@@ -218,6 +220,17 @@ class Place(StrEnum):
     TAIL = "the tail"
 
 
+class BoldInPartShape(StrEnum):
+    """Where a line bold in part is left unbolded, as `v1-e31-t32`'s sample split its answers."""
+
+    TAIL_PUNCTUATION_ONLY = "unbolded only at the tail, punctuation only"
+    TAIL_WITHOUT_DIGITS = "unbolded only at the tail, letters and no digits"
+    TAIL_WITH_DIGITS = "unbolded only at the tail, with digits"
+    HEAD_ONLY = "unbolded only at the head"
+    BOTH_ENDS_ONLY = "unbolded at the head and the tail only"
+    IN_THE_MIDDLE = "unbolded in the middle"
+
+
 @dataclass(frozen=True, slots=True)
 class UnboldedPart:
     """The unbolded part of a line bold in part, in counts. Spaces are not counted."""
@@ -241,6 +254,20 @@ class UnboldedPart:
         else:
             kind = "digits and punctuation only" if self.holds_digits else "punctuation only"
         return f"{self.characters} of {self.of} characters, {stretches}, at {places}; {kind}"
+
+    @property
+    def shape(self) -> BoldInPartShape:
+        if Place.MIDDLE in self.places:
+            return BoldInPartShape.IN_THE_MIDDLE
+        if self.places == (Place.HEAD,):
+            return BoldInPartShape.HEAD_ONLY
+        if self.places == (Place.HEAD, Place.TAIL):
+            return BoldInPartShape.BOTH_ENDS_ONLY
+        if self.holds_digits:
+            return BoldInPartShape.TAIL_WITH_DIGITS
+        if self.holds_letters:
+            return BoldInPartShape.TAIL_WITHOUT_DIGITS
+        return BoldInPartShape.TAIL_PUNCTUATION_ONLY
 
 
 def unbolded_part(description: ParagraphDescription) -> UnboldedPart | None:

@@ -67,6 +67,7 @@ __all__ = [
     "describe_lines",
     "length_band",
     "line_form",
+    "lines_read_as_nothing",
     "marker_free_bodies",
 ]
 
@@ -214,8 +215,10 @@ def _nearest(sections: Sequence[FileSection], position: int, step: int) -> int |
     return other if 0 <= other < len(sections) else None
 
 
-def _lines_read_as_nothing(sections: Sequence[FileSection], owner: dict[int, int]) -> list[DescribedLine]:
-    described: list[DescribedLine] = []
+def _lines_read_as_nothing(
+    sections: Sequence[FileSection], owner: dict[int, int]
+) -> list[tuple[int, DescribedLine]]:
+    described: list[tuple[int, DescribedLine]] = []
     for position, section in enumerate(sections):
         if not _is_read_as_nothing(section):
             continue
@@ -240,8 +243,21 @@ def _lines_read_as_nothing(sections: Sequence[FileSection], owner: dict[int, int
             place, card = LinePlace.ELSEWHERE, None
         # A paragraph read as nothing is one line to the count, its line breaks read as spaces.
         text = " ".join(section.text.split())
-        described.append(_describe(text, Reading.NOTHING, place, card, rule_family(section.match.rule_id)))
+        described.append(
+            (position, _describe(text, Reading.NOTHING, place, card, rule_family(section.match.rule_id)))
+        )
     return described
+
+
+def lines_read_as_nothing(
+    sections: Sequence[FileSection], cards: Sequence[ParsedCard]
+) -> list[tuple[int, DescribedLine]]:
+    """Every paragraph read as nothing in one parsed file, with its position among `sections`.
+
+    The same lines :func:`describe_lines` describes as read as nothing, for a caller that has to
+    find the paragraph again: the coach's sample (`v1-e31-t23`).
+    """
+    return _lines_read_as_nothing(sections, _cards_by_element(cards))
 
 
 def _opens_a_card_below_a_body(
@@ -289,7 +305,7 @@ def describe_lines(sections: Sequence[FileSection], cards: Sequence[ParsedCard])
     owner = _cards_by_element(cards)
     return [
         *_body_lines(sections, owner),
-        *_lines_read_as_nothing(sections, owner),
+        *(line for _position, line in _lines_read_as_nothing(sections, owner)),
         *_cite_lines(sections, owner, cards),
     ]
 

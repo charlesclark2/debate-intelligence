@@ -35,6 +35,14 @@ numbered, each with its unbolded stretches marked and counted, and writes a tall
 line counted by its first failing condition, and a row per item for the operator to fill in, which are
 tags and, for a tag, how its unbolded part differs, in formatting terms. The sheet holds no text.
 
+For `v1-e31-t23`, a fifth plan, `--plan short-lines`, asks about the lines read as nothing between two
+body paragraphs of one card, 66 items (the PM's ruling L-D of 2026-11-03): 8 in each of seven strata
+(40 characters or fewer in capitals; 40 or fewer not in capitals; 41 to 200 ending a sentence; 41 to
+200 not ending one; over 200; omission notes; a number or punctuation alone), and 10 lines of the
+three in-round marker forms, however the parser reads them. It asks one question with three answers,
+`s` the source's own text, `c` a note by whoever cut the card, `e` something else. A line of a marker
+form is drawn only as a marker, never in a length stratum.
+
 It parses every source in the store with the parser this branch carries. The sample was taken on
 2026-10-18 with the three rules behind a flag that only this script switched on, so it judged the
 code that would ship; the rules were switched on for good once the tallies supported them, and the
@@ -55,9 +63,12 @@ paragraph, tag, cite, file name, path or digest.
       --save-tallies ~/cite-shape-sample-tallies.txt
     uv run python scripts/sample_cite_shapes.py --plan bold-in-part --seed 20261103 \\
       --save-tallies ~/bold-in-part-tally-sheet.txt
+    uv run python scripts/sample_cite_shapes.py --plan short-lines --seed 20261103 \\
+      --save-tallies ~/cite-shape-sample-tallies.txt
 
-Keys: `y` yes, `n` no, `u` unsure, with no Enter; `q` stops and keeps the tallies so far. The
-bold-in-part plan reads no keys, and its tally sheet must be a new file.
+Keys: `y` yes, `n` no, `u` unsure (`s`, `c` and `e` in the short-lines plan), with no Enter; `q` stops
+and keeps the tallies so far. The bold-in-part plan reads no keys, and its tally sheet must be a new
+file.
 """
 
 from __future__ import annotations
@@ -92,6 +103,7 @@ from debate_core.domain.debate_files import (  # noqa: E402
     ParsedDocument,
 )
 from debate_core.domain.style_profile import RunEmphasis, StructuralUnit, StyleProfile  # noqa: E402
+from debate_core.evidence.in_round_markers import LineForm, LinePlace, lines_read_as_nothing  # noqa: E402
 from debate_core.evidence.line_above_a_cite import (  # noqa: E402
     BRACKETED_CITE_RULES,
     FailingCondition,
@@ -100,6 +112,7 @@ from debate_core.evidence.line_above_a_cite import (  # noqa: E402
     lines_above_cites,
     unbolded_part,
 )
+from debate_core.evidence.marker_lines import IN_ROUND_MARKER_FORMS, is_an_in_round_marker  # noqa: E402
 from debate_core.evidence.style_classifier import (  # noqa: E402
     first_name_and_year,
     for_matching,
@@ -116,7 +129,18 @@ from debate_core.integrations.docx_parser.runs import (  # noqa: E402
 from debate_core.integrations.local.fs_blob_store import BLOB_DIRECTORY  # noqa: E402
 from debate_core.integrations.local.parsed_store import LocalParsedStore  # noqa: E402
 
-__all__ = ["STRATA", "Stratum", "bold_in_part_strata", "bold_tag_strata", "card_strata", "main", "strata_of"]
+__all__ = [
+    "STRATA",
+    "Stratum",
+    "answers_for",
+    "bold_in_part_strata",
+    "bold_tag_strata",
+    "card_strata",
+    "main",
+    "prompt_for",
+    "short_line_strata",
+    "strata_of",
+]
 
 CITE_QUESTION = "Is the marked paragraph this card's cite, or a line of it?"
 TEXT_QUESTION = "Is the marked paragraph part of the card's text, the evidence?"
@@ -124,19 +148,44 @@ EITHER_QUESTION = "Is the marked paragraph a cite, or part of a card's text?"
 SHORT_CITE_QUESTION = "Is the short cite shown the right short cite for the marked cite?"
 TAG_QUESTION = "Is the marked line the tag of the card whose cite is below it?"
 HEADING_QUESTION = "Is the marked line a heading: a card's tag, or a pocket, hat or block?"
+WHOSE_LINE_QUESTION = (
+    "The marked line: the source's own text, a note by whoever cut the card, or something else?"
+)
 
-#: The plan the PM approved first, the one after the review of 2026-10-18, `v1-e31-t24`'s and `v1-e31-t32`'s.
-FIRST_PLAN, LEFT_QUOTE_PLAN, BOLD_TAG_PLAN, BOLD_IN_PART_PLAN = (
+#: The plan the PM approved first, the one after the review of 2026-10-18, and `v1-e31-t24`'s,
+#: `v1-e31-t32`'s and `v1-e31-t23`'s.
+FIRST_PLAN, LEFT_QUOTE_PLAN, BOLD_TAG_PLAN, BOLD_IN_PART_PLAN, SHORT_LINES_PLAN = (
     "first",
     "left-quote",
     "bold-tag",
     "bold-in-part",
+    "short-lines",
 )
 LEFT_QUOTE = "\u2018"
 
 ANSWERS = {"y": "yes", "n": "no", "u": "unsure"}
 STOP_KEY = "q"
 PROMPT = "  y yes   n no   u unsure   q stop and keep the tallies > "
+#: The short-lines plan's three answers, the PM's question (2026-11-03): no "unsure" among them.
+WHOSE_LINE_ANSWERS = {
+    "s": "the source's own text",
+    "c": "a note by whoever cut the card",
+    "e": "something else",
+}
+WHOSE_LINE_PROMPT = (
+    "  s the source's own text   c a note by whoever cut the card   e something else   "
+    "q stop and keep the tallies > "
+)
+
+
+def answers_for(plan: str) -> dict[str, str]:
+    """The keys a plan's questions are answered with, and the word each is tallied under."""
+    return WHOSE_LINE_ANSWERS if plan == SHORT_LINES_PLAN else ANSWERS
+
+
+def prompt_for(plan: str) -> str:
+    return WHOSE_LINE_PROMPT if plan == SHORT_LINES_PLAN else PROMPT
+
 
 BEHIND_A_NAME = "assembly-cite-behind-a-name-before-the-body"
 HIGHLIGHTED_CITE = "assembly-highlighted-cite-before-the-body"
@@ -263,6 +312,36 @@ _IN_THE_ORDER_ASKED = (
     ),
     _FAILS_NOTHING,
 )
+
+_BETWEEN = "a line read as nothing between two body paragraphs"
+STRATA += (
+    Stratum(_BETWEEN, "40 characters or fewer, in capitals", WHOSE_LINE_QUESTION, 8, SHORT_LINES_PLAN),
+    Stratum(_BETWEEN, "40 characters or fewer, not in capitals", WHOSE_LINE_QUESTION, 8, SHORT_LINES_PLAN),
+    Stratum(_BETWEEN, "41 to 200 characters, ending a sentence", WHOSE_LINE_QUESTION, 8, SHORT_LINES_PLAN),
+    Stratum(
+        _BETWEEN, "41 to 200 characters, not ending a sentence", WHOSE_LINE_QUESTION, 8, SHORT_LINES_PLAN
+    ),
+    Stratum(_BETWEEN, "over 200 characters", WHOSE_LINE_QUESTION, 8, SHORT_LINES_PLAN),
+    Stratum(_BETWEEN, "an omission note", WHOSE_LINE_QUESTION, 8, SHORT_LINES_PLAN),
+    Stratum(_BETWEEN, "a number or punctuation alone", WHOSE_LINE_QUESTION, 8, SHORT_LINES_PLAN),
+    Stratum(
+        "an in-round marker",
+        "a line of one of the three marker forms, however read",
+        WHOSE_LINE_QUESTION,
+        10,
+        SHORT_LINES_PLAN,
+    ),
+)
+(
+    _SHORT_IN_CAPITALS,
+    _SHORT_NOT_IN_CAPITALS,
+    _MIDDLING_ENDING_A_SENTENCE,
+    _MIDDLING_NOT_ENDING_A_SENTENCE,
+    _LONG,
+    _OMISSION_NOTE,
+    _NUMBER_OR_PUNCTUATION,
+    _IN_ROUND_MARKER,
+) = range(_FAILS_NOTHING + 1, _FAILS_NOTHING + 9)
 
 
 # ------------------------------------------------------------------------------------------------
@@ -532,6 +611,47 @@ def bold_in_part_strata(
     return found
 
 
+def _length_stratum(band: str, *, ends_a_sentence: bool, in_capitals: bool) -> int:
+    if band == "40 characters or fewer":
+        return _SHORT_IN_CAPITALS if in_capitals else _SHORT_NOT_IN_CAPITALS
+    if band in ("41 to 100", "101 to 200"):
+        return _MIDDLING_ENDING_A_SENTENCE if ends_a_sentence else _MIDDLING_NOT_ENDING_A_SENTENCE
+    return _LONG
+
+
+def short_line_strata(document: ParsedDocument) -> list[tuple[int, int]]:
+    """The short-lines plan's items in one file, as (stratum, position of the paragraph).
+
+    A line read as nothing between two body paragraphs of one card falls in one of seven strata, by
+    its form and then by `v1-e31-t19`'s length bands, sentence end and capitals; a paragraph holding
+    a line of one of the three in-round marker forms, read any way, is a marker, and only that.
+    """
+    sections = document.sections
+    found: list[tuple[int, int]] = []
+    markers: set[int] = set()
+    for position, section in enumerate(sections):
+        if not _says_nothing(section) and any(
+            is_an_in_round_marker(line) for line in section.text.split("\n") if line.strip()
+        ):
+            markers.add(position)
+            found.append((_IN_ROUND_MARKER, position))
+    for position, line in lines_read_as_nothing(sections, document.cards):
+        if line.place is not LinePlace.BETWEEN_BODY_PARAGRAPHS or position in markers:
+            continue
+        if line.form in IN_ROUND_MARKER_FORMS:
+            continue
+        if line.form is LineForm.OMISSION_NOTE:
+            stratum = _OMISSION_NOTE
+        elif line.form in (LineForm.NUMBER_ALONE, LineForm.NO_LETTER_OR_DIGIT):
+            stratum = _NUMBER_OR_PUNCTUATION
+        else:
+            stratum = _length_stratum(
+                line.length_band, ends_a_sentence=line.ends_a_sentence, in_capitals=line.in_capitals
+            )
+        found.append((stratum, position))
+    return sorted(found, key=lambda item: item[1])
+
+
 def _as_word_shows_them(reads: Sequence[ReadParagraph], package: DocxPackage) -> list[ReadParagraph]:
     return [replace(read, description=as_word_shows_it(read.description, package)) for read in reads]
 
@@ -630,6 +750,8 @@ def _strata_in(source: _Source) -> tuple[list[tuple[int, int]], int]:
         package = _PARSER.package  # type: ignore[union-attr]
         assert package is not None  # noqa: S101 - set by the parse
         return bold_in_part_strata(reads, _as_word_shows_them(reads, package), document, profile), 0
+    if source.plan == SHORT_LINES_PLAN:
+        return short_line_strata(document), 0
     if source.plan == BOLD_TAG_PLAN:
         package = _PARSER.package  # type: ignore[union-attr]
         assert package is not None  # noqa: S101 - set by the parse
@@ -790,7 +912,9 @@ class Tallies:
         for number, stratum in enumerate(STRATA):
             if stratum.plan != self.plan:
                 continue
-            answers = ", ".join(f"{word} {self.answered[(number, word)]}" for word in ANSWERS.values())
+            answers = ", ".join(
+                f"{word} {self.answered[(number, word)]}" for word in answers_for(self.plan).values()
+            )
             lines.append(
                 f"  {stratum.label}: in the corpus {self.population[number]:,}; drew {self.drawn[number]} "
                 f"of {stratum.planned}; {answers}"
@@ -848,6 +972,13 @@ def prepare(drawn: Sequence[tuple[int, _Source, int]]) -> list[_Item]:
                 if card.provenance.first_element_index <= element <= card.provenance.last_element_index
             )
             shown += f"\n\nShort cite read:  {card.short_cite}"
+        if stratum == _IN_ROUND_MARKER:
+            asked = next(
+                line
+                for line in document.sections[position].text.split("\n")
+                if line.strip() and is_an_in_round_marker(line)
+            )
+            shown += f"\n\nThe line asked about:  {asked.strip()}"
         items.append(_Item(stratum, shown, counted))
     return items
 
@@ -858,6 +989,8 @@ def ask_about(
     ask: Callable[[str], str],
     show: Callable[[str], None],
     clock: Callable[[], float] = time.monotonic,
+    answers: dict[str, str] = ANSWERS,
+    prompt: str = PROMPT,
 ) -> tuple[Counter[tuple[int, str]], bool, float]:
     """Show each item and read one key for it. The answers by stratum, whether stopped, seconds."""
     answered: Counter[tuple[int, str]] = Counter()
@@ -869,12 +1002,12 @@ def ask_about(
         show(item.shown + "\n")
         show(STRATA[item.stratum].question + "\n")
         key = ""
-        while key not in ANSWERS and key != STOP_KEY:
-            key = ask(PROMPT).strip().lower()[:1]
+        while key not in answers and key != STOP_KEY:
+            key = ask(prompt).strip().lower()[:1]
         if key == STOP_KEY:
             stopped = True
             break
-        answered[(item.stratum, ANSWERS[key])] += 1
+        answered[(item.stratum, answers[key])] += 1
     seconds = clock() - started if items else 0.0
     show(CLEAR_TERMINAL)
     return answered, stopped, seconds
@@ -949,12 +1082,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "--plan",
-        choices=(FIRST_PLAN, LEFT_QUOTE_PLAN, BOLD_TAG_PLAN, BOLD_IN_PART_PLAN),
+        choices=(FIRST_PLAN, LEFT_QUOTE_PLAN, BOLD_TAG_PLAN, BOLD_IN_PART_PLAN, SHORT_LINES_PLAN),
         default=FIRST_PLAN,
         help=(
             "first: the 70 items approved first. left-quote: the 28 asked for in the PM's review. "
             "bold-tag: v1-e31-t24's 36, the line above a cite. bold-in-part: v1-e31-t32's 30, "
-            "printed numbered with a tally sheet, no keys."
+            "printed numbered with a tally sheet, no keys. "
+            "short-lines: v1-e31-t23's 66, the lines read as nothing between body paragraphs."
         ),
     )
     parser.add_argument("--seed", type=int, help="Draws the same items again. Default: a new one, recorded.")
@@ -1000,7 +1134,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return 0
     answered, stopped, seconds = ask_about(
-        items, ask=read_key, show=lambda text: print(text, end="", flush=True)
+        items,
+        ask=read_key,
+        show=lambda text: print(text, end="", flush=True),
+        answers=answers_for(arguments.plan),
+        prompt=prompt_for(arguments.plan),
     )
 
     tallies = Tallies(

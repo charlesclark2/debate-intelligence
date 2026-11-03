@@ -771,3 +771,169 @@ def test_the_bold_tag_plan_shows_each_line_as_word_shows_it_and_saves_counts_alo
     for word in ("Demand", "Okonkwo", "First tag", CASELIST):
         assert word not in written, word
     assert not re.search(r"[0-9a-f]{12}", written)
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e31-t23: the short-lines plan, the lines read as nothing between body paragraphs
+# ------------------------------------------------------------------------------------------------
+
+#: The short-lines plan's strata, by name: they follow the bold-in-part plan's, however many it has.
+(
+    SHORT_IN_CAPITALS,
+    SHORT_NOT_IN_CAPITALS,
+    MIDDLING_ENDING,
+    MIDDLING_NOT_ENDING,
+    LONG,
+    OMISSION,
+    NUMBER_OR_PUNCTUATION,
+    MARKER,
+) = (
+    script._SHORT_IN_CAPITALS,  # pyright: ignore[reportPrivateUsage]
+    script._SHORT_NOT_IN_CAPITALS,  # pyright: ignore[reportPrivateUsage]
+    script._MIDDLING_ENDING_A_SENTENCE,  # pyright: ignore[reportPrivateUsage]
+    script._MIDDLING_NOT_ENDING_A_SENTENCE,  # pyright: ignore[reportPrivateUsage]
+    script._LONG,  # pyright: ignore[reportPrivateUsage]
+    script._OMISSION_NOTE,  # pyright: ignore[reportPrivateUsage]
+    script._NUMBER_OR_PUNCTUATION,  # pyright: ignore[reportPrivateUsage]
+    script._IN_ROUND_MARKER,  # pyright: ignore[reportPrivateUsage]
+)
+
+#: One line for each of the plan's strata, written by hand. Every line from 4 to 12 stands between
+#: body paragraphs 3 and 13; 2 stands before the body, so it is drawn in no stratum.
+SHORT_LINES = (
+    (2, "Grid notes for the round", None),
+    (4, "THE REGIONAL PICTURE", SHORT_IN_CAPITALS),
+    (5, "Grid operators disagree", SHORT_NOT_IN_CAPITALS),
+    (6, "The review found reserve margins narrowed in every season.", MIDDLING_ENDING),
+    (7, "Reserve margins in four regional markets and the response of planners", MIDDLING_NOT_ENDING),
+    (8, prose(250) + " and the planners who answer for them", LONG),
+    (9, "[Table omitted]", OMISSION),
+    (10, "12", NUMBER_OR_PUNCTUATION),
+    (11, "…", NUMBER_OR_PUNCTUATION),
+    (12, "marked 3:05", MARKER),
+)
+SHORT_LINES_FILE = build_docx(
+    tag("Grid tag one")
+    + paragraph([("Okonkwo 26, invented report on grid reserves", {"half_points": READING_SIZE})])
+    + "".join(
+        paragraph([(text, {"half_points": READING_SIZE})]) if position == 2 else ""
+        for position, text, _ in SHORT_LINES
+    )
+    + paragraph([(prose(300, "Alpha"), {"underline": "single", "half_points": READING_SIZE})])
+    + "".join(
+        paragraph([(text, {"half_points": READING_SIZE})])
+        for position, text, _ in SHORT_LINES
+        if position != 2
+    )
+    + paragraph_xml(
+        run_xml(prose(300, "Bravo"), underline="single", half_points=READING_SIZE)
+        + "<w:r><w:br/></w:r>"
+        + run_xml("Marked 10:42", half_points=SMALL_PRINT)
+    )
+    + paragraph([("Marked 10:42", {"half_points": READING_SIZE})])
+    + paragraph([(prose(300, "Charlie"), {"underline": "single", "half_points": READING_SIZE})])
+    + paragraph([("10:42", {"half_points": READING_SIZE})])
+)
+SHORT_LINES_DIGEST = hashlib.sha256(SHORT_LINES_FILE).hexdigest()
+
+
+def _short_lines_document() -> ParsedDocument:
+    source = script._Source(CASELIST, SHORT_LINES_DIGEST, Path("unused"), Path("unused"), VERSION)  # pyright: ignore[reportPrivateUsage]
+    document = DebateDocxParser().parse(SHORT_LINES_FILE, script_source(source), source_path="sample.docx")
+    assert isinstance(document, ParsedDocument)
+    return document
+
+
+def test_the_short_lines_file_reads_as_the_strata_assume() -> None:
+    document = _short_lines_document()
+    assert [section.text for section in document.sections][2:13:10] == [
+        "Grid notes for the round",
+        "marked 3:05",
+    ]
+    assert [card.tag for card in document.cards] == ["Grid tag one"]
+    assert [section.unit.value for section in document.sections] == [
+        "TAG", "CITE", "OTHER", "EVIDENCE", *["OTHER"] * 9, "EVIDENCE", "OTHER", "EVIDENCE", "OTHER",
+    ]  # fmt: skip
+
+
+def test_each_short_line_is_in_its_stratum_and_a_marker_only_in_the_markers() -> None:
+    expected = [(stratum, position) for position, _, stratum in SHORT_LINES if stratum is not None]
+    # The body paragraph holding a marker after its line break, the plain marker between two body
+    # paragraphs, and the time alone after the last body: markers, however read.
+    expected += [(MARKER, 13), (MARKER, 14), (MARKER, 16)]
+    assert script.short_line_strata(_short_lines_document()) == sorted(expected, key=lambda item: item[1])
+
+
+def test_the_short_lines_plan_draws_66_and_asks_the_pms_question() -> None:
+    source = script._Source(CASELIST, SHORT_LINES_DIGEST, Path("unused"), Path("unused"), VERSION)  # pyright: ignore[reportPrivateUsage]
+    found = {number: [(source, position) for position in range(30)] for number in range(len(script.STRATA))}
+    drawn = Counter(stratum for stratum, _, _ in script.draw(found, 5, script.SHORT_LINES_PLAN))
+    assert drawn == {
+        SHORT_IN_CAPITALS: 8,
+        SHORT_NOT_IN_CAPITALS: 8,
+        MIDDLING_ENDING: 8,
+        MIDDLING_NOT_ENDING: 8,
+        LONG: 8,
+        OMISSION: 8,
+        NUMBER_OR_PUNCTUATION: 8,
+        MARKER: 10,
+    }
+    assert min(drawn) > script._FAILS_NOTHING, "after the bold-in-part plan's strata"  # pyright: ignore[reportPrivateUsage]
+    assert {script.STRATA[number].question for number in drawn} == {
+        "The marked line: the source's own text, a note by whoever cut the card, or something else?"
+    }
+    assert list(script.answers_for(script.SHORT_LINES_PLAN).values()) == [
+        "the source's own text",
+        "a note by whoever cut the card",
+        "something else",
+    ]
+    assert script.answers_for(script.BOLD_TAG_PLAN) == {"y": "yes", "n": "no", "u": "unsure"}
+
+
+@pytest.fixture
+def short_lines_dir(tmp_path: Path) -> Path:
+    digest = SHORT_LINES_DIGEST
+    blob = tmp_path / "blobs" / "sha256" / digest[:2] / digest[2:4] / digest
+    blob.parent.mkdir(parents=True)
+    blob.write_bytes(SHORT_LINES_FILE)
+    version = tmp_path / "parsed" / CASELIST / VERSION
+    version.mkdir(parents=True)
+    (version / "index.jsonl").write_text(json.dumps({"source_sha256": digest, "outcome": "PARSED"}) + "\n")
+    return tmp_path
+
+
+def test_the_short_lines_plan_prints_populations_and_the_seed_and_saves_counts_alone(
+    short_lines_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    saved = tmp_path / "tallies.txt"
+    asked = _keys(monkeypatch, ["y", *["s", "c", "e"] * 4])
+
+    arguments = ["--data-dir", str(short_lines_dir), "--caselist", CASELIST, "--plan", "short-lines"]
+    assert script.main([*arguments, "--seed", "11", "--save-tallies", str(saved), "--workers", "1"]) == 0
+
+    lines = saved.read_text().splitlines()
+    assert (
+        lines[0]
+        == "Cite-shape sample (v1-e31-t19), short-lines plan, seed 11: drew 12 items from 1 parsed sources."
+    )
+    assert re.fullmatch(r"  Asked 12; answered 12 in \d+ seconds\.", lines[1])
+    assert len(asked) == 13, "y is no answer here, so it is asked again"
+    assert asked[0] == script.WHOSE_LINE_PROMPT
+    populations = [
+        re.search(r"in the corpus (\d+); drew (\d+) of (\d+)", line).groups() for line in lines[2:]
+    ]  # type: ignore[union-attr]
+    assert populations == [
+        ("1", "1", "8"), ("1", "1", "8"), ("1", "1", "8"), ("1", "1", "8"), ("1", "1", "8"), ("1", "1", "8"),
+        ("2", "2", "8"), ("4", "4", "10"),
+    ]  # fmt: skip
+    answers = Counter[str]()
+    for line in lines[2:]:
+        for word in script.WHOSE_LINE_ANSWERS.values():
+            answers[word] += int(re.search(rf"{word} (\d+)", line).group(1))  # type: ignore[union-attr]
+    assert answers == {"the source's own text": 4, "a note by whoever cut the card": 4, "something else": 4}
+    shown = capsys.readouterr().out
+    assert "The line asked about:  Marked 10:42" in shown
+    written = saved.read_text()
+    for word in ("REGIONAL", "Grid", "Okonkwo", "Table omitted", "Marked", "10:42", CASELIST):
+        assert word not in written, word
+    assert not re.search(r"[0-9a-f]{12}", written)

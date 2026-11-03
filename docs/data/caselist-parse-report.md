@@ -2545,3 +2545,20 @@ What the operator's notes give as the reason for "different" (formatting and sou
 * **(2):** the same evidence used to argue the author reaches another conclusion, 1.
 * **(3):** the same article making different claims, 2; different authors perhaps quoting each
   other, 1; no note, 1.
+
+### What recovering (2) and the amendment's shape would need
+
+Lifting the witness refusal alone recovers nothing. Two trims sharing no text that both propose
+joining their holder in one round are both refused, because they do not overlap each other
+(`near_duplicates._accepted_joins`, `v1-e31-t20`'s Decision 3). A mutant that lifts the refusal
+leaves every partition of Brannock's rows, `v1-e31-t11`'s false join and two trims of one holder as
+it was. Only lifting it and accepting joiners that do not overlap joins them. Recovering either
+shape means relaxing "every two bodies in a cluster overlap", the card ruling itself.
+
+### The PM's ruling (2026-11-03)
+
+No shape is recovered: each sample found the shape would join different cards. Shape (1) stays
+apart; no rule on the tag and cite, and no sample of the 950 same-cite pairs, since the overlap rule
+is not relaxed; the witness refusal stays unchanged for short holders and long. No placement changes,
+so `card-fingerprint-v4` stays, and nothing is rebuilt. The labelled sets are as `v1-e31-t20` left
+them, precision 1.000 on every row, and tests pin that each sampled shape stays apart.

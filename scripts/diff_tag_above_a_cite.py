@@ -26,9 +26,19 @@ The first reading is also compared with the cards the store holds, by range: a d
 change made since the store was written that is not this rule (`v1-e31-t24`'s ac4, the Undertag
 step-over).
 
+With `--rule unbolded-tail`, the same check for `v1-e31-t32`'s rule (the PM's ruling of 2026-11-03):
+a line bold but for one unbolded stretch at its tail holding no digit. The first reading is this
+parser with that rule alone switched off, which is how `2026.10.27-docx-7` read the files, and the
+second has it on. The lines the sampled rule takes are the ruled shape: lines that fail t24's rule only
+by being bold in part, as Word shows them, unbolded only at the tail with no digit; the guards are part
+of that shape, so a line is left only when the cite below is a guess a body may yet take. Every source
+whose stored cards hold a card with no tag is read, cite or none, because the store may be older than
+`docx-7`'s cite rules.
+
 **Read-only, and nothing but counts leaves it.** No card text, tag, cite, file name, path or digest.
 
     uv run python scripts/diff_tag_above_a_cite.py --caselist hspf26
+    uv run python scripts/diff_tag_above_a_cite.py --rule unbolded-tail
 """
 
 from __future__ import annotations
@@ -50,26 +60,45 @@ from debate_core.application.ports.parsed_store import parse_version_directory, 
 from debate_core.domain.caselist import SourceDocument, SourceFormat, SourceOrigin
 from debate_core.domain.debate_files import ParsedCard, ParsedDocument
 from debate_core.domain.style_profile import RunEmphasis
-from debate_core.evidence.line_above_a_cite import line_above, lines_above_cites
+from debate_core.evidence.line_above_a_cite import (
+    BoldInPartShape,
+    FailingCondition,
+    LineAboveACite,
+    line_above,
+    lines_above_cites,
+    unbolded_part,
+)
 from debate_core.evidence.style_classifier import ParagraphDescription
 from debate_core.integrations.docx_parser import DebateDocxParser
+from debate_core.integrations.docx_parser.parser import BOLD_TAG_WITH_AN_UNBOLDED_TAIL_RULE
 from debate_core.integrations.docx_parser.runs import as_word_shows_it
 from debate_core.integrations.local.fs_blob_store import BLOB_DIRECTORY
 
-__all__ = ["CASELISTS", "TAKEN", "compare", "diff_caselist", "main"]
+__all__ = ["CASELISTS", "RULES", "TAKEN", "UNBOLDED_TAIL", "compare", "diff_caselist", "main"]
 
 CASELISTS = ("hsld26", "hspf26", "hspolicy26", "openev")
 
-#: The rule id the parser gives a line it took.
+#: The rule id the parser gives a line it took: t24's, and t32's.
 TAKEN = "assembly-bold-tag-above-a-cite"
+UNBOLDED_TAIL = BOLD_TAG_WITH_AN_UNBOLDED_TAIL_RULE
+RULES = {"bold-tag": TAKEN, "unbolded-tail": UNBOLDED_TAIL}
+
+#: The unbolded tails t32's rule takes.
+_A_TAIL_WITH_NO_DIGIT = frozenset(
+    {BoldInPartShape.TAIL_PUNCTUATION_ONLY, BoldInPartShape.TAIL_WITHOUT_DIGITS}
+)
 
 
 class _Reading(DebateDocxParser):
-    """The parser with the bold-tag rule on or off, keeping each paragraph as read and as Word shows it."""
+    """The parser with one bold-tag rule on or off, keeping each paragraph as read and as Word shows it.
 
-    def __init__(self, *, with_the_rule: bool) -> None:
+    Off, t24's rule takes no line at all; t32's leaves only the lines t24's rule takes.
+    """
+
+    def __init__(self, *, with_the_rule: bool, rule: str = TAKEN) -> None:
         super().__init__()
         self.with_the_rule = with_the_rule
+        self.rule = rule
         self.descriptions: list[ParagraphDescription] = []
         self.shown: list[ParagraphDescription] = []
 
@@ -79,10 +108,13 @@ class _Reading(DebateDocxParser):
         self.shown = [as_word_shows_it(description, package) for description in self.descriptions]
         return sections
 
-    def _bold_tags_above_cites(self, assembled: Any, package: Any) -> frozenset[int]:  # pyright: ignore[reportIncompatibleMethodOverride]
-        if not self.with_the_rule:
-            return frozenset()
-        return super()._bold_tags_above_cites(assembled, package)  # pyright: ignore[reportPrivateUsage]
+    def _bold_tags_above_cites(self, assembled: Any, package: Any) -> dict[int, str]:  # pyright: ignore[reportIncompatibleMethodOverride]
+        tags: dict[int, str] = super()._bold_tags_above_cites(assembled, package)  # pyright: ignore[reportPrivateUsage]
+        if self.with_the_rule:
+            return tags
+        if self.rule == TAKEN:
+            return {}
+        return {position: rule for position, rule in tags.items() if rule != self.rule}
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,10 +181,24 @@ def _marks_read_evidence(description: ParagraphDescription, parser: DebateDocxPa
     return False
 
 
+def _sampled(line: LineAboveACite, shown: ParagraphDescription, rule: str) -> bool:
+    """Whether the rule sampled before it was built takes the line: t24's, or the shape t32's sample ruled."""
+    if rule == TAKEN:
+        return line.the_proposed_rule_takes
+    if not (line.cite_opens_a_card_with_no_tag and line.read_as_body_or_nothing):
+        return False
+    part = unbolded_part(shown)
+    return (
+        line.failing_conditions == (FailingCondition.BOLD_IN_PART,)
+        and part is not None
+        and part.shape in _A_TAIL_WITH_NO_DIGIT
+    )
+
+
 def compare(before: ParsedDocument, after: ParsedDocument, reading: _Reading) -> Compared:
     """The counts for one file, read with the rule off (`before`, as `reading` read it) and on."""
     sections = after.sections
-    taken = {section.element_index for section in sections if section.match.rule_id.startswith(TAKEN)}
+    taken = {section.element_index for section in sections if section.match.rule_id.startswith(reading.rule)}
     sampled = {
         before.sections[above].element_index
         for cite, line in lines_above_cites(
@@ -163,7 +209,8 @@ def compare(before: ParsedDocument, after: ParsedDocument, reading: _Reading) ->
             shown=reading.shown,
             cite_rules=None,
         )
-        if line.the_proposed_rule_takes and (above := line_above(before.sections, cite)) is not None
+        if (above := line_above(before.sections, cite)) is not None
+        and _sampled(line, reading.shown[above], reading.rule)
     }
     left = sampled - taken
     highlighted = {index for index in left if reading.descriptions[index].has_highlighted_run}
@@ -275,6 +322,7 @@ class _Source:
     sha256: str
     stored: Path
     blob: Path
+    rule: str = TAKEN
 
 
 @dataclass(frozen=True, slots=True)
@@ -286,23 +334,28 @@ class _Result:
     compared: Compared | None = None
 
 
-_READINGS: tuple[_Reading, _Reading] | None = None
+#: One pair of parsers per rule, per worker process.
+_READINGS: dict[str, tuple[_Reading, _Reading]] = {}
 
 
 def _diff(source: _Source) -> _Result:
-    global _READINGS  # noqa: PLW0603 - one pair of parsers per worker process
     lines = source.stored.read_text(encoding="utf-8").split("\n")
     if len(lines) < 2 or not lines[1].strip():
         return _Result()
     stored = json.loads(lines[1])["document"]["cards"]
     if not any(
-        not (card.get("tag") or "").strip() and (card.get("full_cite") or "").strip() for card in stored
+        not (card.get("tag") or "").strip()
+        and (source.rule != TAKEN or (card.get("full_cite") or "").strip())
+        for card in stored
     ):
         return _Result()
     if not source.blob.is_file():
         return _Result(without_a_blob=True)
-    if _READINGS is None:
-        _READINGS = (_Reading(with_the_rule=False), _Reading(with_the_rule=True))
+    if source.rule not in _READINGS:
+        _READINGS[source.rule] = (
+            _Reading(with_the_rule=False, rule=source.rule),
+            _Reading(with_the_rule=True, rule=source.rule),
+        )
     content = source.blob.read_bytes()
     snapshot = date(2026, 10, 20)
     record = SourceDocument(
@@ -314,7 +367,7 @@ def _diff(source: _Source) -> _Result:
         first_seen_snapshot=snapshot,
         last_seen_snapshot=snapshot,
     )
-    without, with_ = _READINGS
+    without, with_ = _READINGS[source.rule]
     after = with_.parse(content, record, source_path="compared.docx")
     before = without.parse(content, record, source_path="compared.docx")
     if not isinstance(before, ParsedDocument) or not isinstance(after, ParsedDocument):
@@ -336,7 +389,7 @@ def _newest_version(parsed: Path, caselist: str) -> Path:
     return max(versions, key=lambda path: parse_version_directory(path.name))
 
 
-def diff_caselist(data_dir: Path, caselist: str, *, workers: int) -> dict[str, Any]:
+def diff_caselist(data_dir: Path, caselist: str, *, workers: int, rule: str = TAKEN) -> dict[str, Any]:
     """The counts for one caselist, summed over its files."""
     started = time.monotonic()
     version = _newest_version(data_dir / "parsed", caselist)
@@ -352,6 +405,7 @@ def diff_caselist(data_dir: Path, caselist: str, *, workers: int) -> dict[str, A
             digest,
             data_dir / "parsed" / source_object_key(caselist, version.name, digest),
             data_dir / BLOB_DIRECTORY / digest[:2] / digest[2:4] / digest,
+            rule,
         )
         for digest in digests
     ]
@@ -396,9 +450,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=max(1, (os.cpu_count() or 2) - 2),
         help="Processes for parsing. Default: all processors but two.",
     )
+    parser.add_argument(
+        "--rule",
+        choices=sorted(RULES),
+        default="bold-tag",
+        help="bold-tag: v1-e31-t24's rule, off against on. unbolded-tail: v1-e31-t32's, against docx-7.",
+    )
     arguments = parser.parse_args(argv)
     output = {
-        caselist: diff_caselist(arguments.data_dir, caselist, workers=arguments.workers)
+        caselist: diff_caselist(
+            arguments.data_dir, caselist, workers=arguments.workers, rule=RULES[arguments.rule]
+        )
         for caselist in arguments.caselist or CASELISTS
     }
     print(json.dumps(output, indent=1, sort_keys=True))

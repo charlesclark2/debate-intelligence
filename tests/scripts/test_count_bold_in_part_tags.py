@@ -43,6 +43,7 @@ import pytest
 from tests.evals.parser.cite_shapes import READING_SIZE, SOURCE, prose, qualifications
 
 from debate_core.integrations.docx_parser import DOCX_PARSER_VERSION
+from debate_core.integrations.docx_parser import parser as parser_module
 from debate_core.testing.docx_builder import W_NAMESPACE, build_docx, paragraph_xml, run_xml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
@@ -111,6 +112,21 @@ SECOND = build_docx(
     + _card("Ferreira 25", "Lima"),
     styles_xml=STYLES,
 )
+
+A_TAIL_WITH_NO_DIGIT = parser_module._A_TAIL_WITH_NO_DIGIT  # pyright: ignore[reportPrivateUsage]
+
+
+@pytest.fixture(autouse=True)
+def as_docx_7_read_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The sample and the counts were taken on `2026.10.27-docx-7`, before `v1-e31-t32`'s rule read
+    a line bold but for a tail holding no digit as a tag: switch that rule alone off. The tests at
+    `docx-8` below switch it on again."""
+    monkeypatch.setattr(parser_module, "_A_TAIL_WITH_NO_DIGIT", frozenset())
+
+
+def at_docx_8(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(parser_module, "_A_TAIL_WITH_NO_DIGIT", A_TAIL_WITH_NO_DIGIT)
+
 
 SHAPES = [shape.value for shape in script.BoldInPartShape]
 OTHER_CONDITIONS = [
@@ -187,6 +203,24 @@ def test_every_caselist_counted_by_first_failing_condition_and_shape(data_dir: P
             for condition in OTHER_CONDITIONS
         },
     }
+
+
+def test_at_docx_8_no_line_bold_but_for_a_tail_with_no_digit_is_left(
+    data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Lines 3, 6 and 30 of the first file and the second file's line are tags now; the rest stand."""
+    at_docx_8(monkeypatch)
+    every = script.count(data_dir, None, workers=1)["every_caselist"]
+
+    assert every["lines_left"] == 6
+    assert every["by_first_failing_condition"] == _first_failing(BOLD_IN_PART=5, NOT_BOLD=1)
+    assert every["bold_in_part_and_nothing_else"]["by_shape"] == _shapes(
+        TAIL_WITH_DIGITS=(1, 1, 1),
+        HEAD_ONLY=(1, 1, 1),
+        BOTH_ENDS_ONLY=(1, 1, 1),
+        IN_THE_MIDDLE=(1, 1, 1),
+    )
+    assert every["bold_in_part_and_something_else"]["by_shape"] == _shapes(TAIL_WITHOUT_DIGITS=(1, 1, 1))
 
 
 def test_each_caselist_alone_whatever_version_wrote_its_directory(data_dir: Path) -> None:

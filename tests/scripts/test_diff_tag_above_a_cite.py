@@ -221,3 +221,147 @@ def test_a_card_changed_in_any_other_way_is_counted_as_such() -> None:
     )
     compared = script.compare(before, tampered, reading)
     assert (compared.other_cards_changed, compared.cards_changed_only_in_their_heading_path) == (1, 1)
+
+
+# --------------------------------------------------------------------------------------------
+# `--rule unbolded-tail`: v1-e31-t32's rule, against docx-7's reading
+# --------------------------------------------------------------------------------------------
+
+#: 0 tag "First tag", 1 cite, 2 body; 3 a line bold but for its tail, the tail underlined directly as
+#: (7)'s was, read as body, the last paragraph of the card at 0, taken: the tag of the card at 4; 4 cite,
+#: 5 body; 6 a cite after a body, a card with no tag, 7 body; 8 a line bold but for a tail holding a
+#: number, read as nothing, left; 9 cite, 10 body. With the rule,
+#: the card at 0 loses line 3, the card at 3 gains it as its tag, and the cards at 6 and 9 have line 3
+#: in their heading path where "First tag" was.
+TAIL_FILE = build_docx(
+    paragraph_xml(run_xml("First tag"), style="Heading4")
+    + cite("Ferreira 25")
+    + body("Alpha")
+    + paragraph_xml(run_xml("Demand outruns ") + plain("new generation", underline="single"))
+    + cite("Okonkwo 26")
+    + body("Bravo")
+    + cite("Achebe 23")
+    + body("Charlie")
+    + paragraph_xml(run_xml("Prices rise ") + plain("within 30 days"))
+    + cite("Tanaka 22")
+    + body("Delta"),
+    styles_xml=STYLES,
+)
+TAIL_DIGEST = hashlib.sha256(TAIL_FILE).hexdigest()
+
+
+def as_docx_7_read_it(content: bytes, sha256: str) -> ParsedDocument:
+    source = SourceDocument(
+        sha256=sha256,
+        byte_size=len(content),
+        source_format=SourceFormat.DOCX,
+        origin=SourceOrigin.CASELIST_ARCHIVE,
+        caselist=CASELIST,
+        first_seen_snapshot=SNAPSHOT,
+        last_seen_snapshot=SNAPSHOT,
+    )
+    reading = script._Reading(with_the_rule=False, rule=script.UNBOLDED_TAIL)  # pyright: ignore[reportPrivateUsage]
+    document = reading.parse(content, source, source_path="invented.docx")
+    assert isinstance(document, ParsedDocument)
+    return document
+
+
+@pytest.fixture
+def tail_dir(tmp_path: Path) -> Path:
+    store = LocalParsedStore(tmp_path)
+    document = as_docx_7_read_it(TAIL_FILE, TAIL_DIGEST)
+    entry = SourceEntry.model_validate(
+        {
+            "caselist": CASELIST,
+            "snapshot": "2026-10-20",
+            "parser_version": "2026.10.27-docx-7",
+            "profile_version": DebateDocxParser().profile_version,
+            "fingerprint_version": "card-fingerprint-v4",
+            "source_sha256": TAIL_DIGEST,
+            "source_format": SourceFormat.DOCX,
+            "byte_size": len(TAIL_FILE),
+            "outcome": SourceOutcome.PARSED,
+            "cards": len(document.cards),
+        }
+    )
+    record = DocumentRecord.from_parsed_document(
+        document,
+        caselist=CASELIST,
+        snapshot="2026-10-20",
+        fingerprint_version="card-fingerprint-v4",
+        camp=None,
+    )
+    asyncio.run(store.write_source(CASELIST, "2026.10.27-docx-7", entry, record))
+    asyncio.run(
+        store.write_aggregates(CASELIST, "2026.10.27-docx-7", index=[entry], failures=[], occurrences=[])
+    )
+    blob = tmp_path / "blobs" / "sha256" / TAIL_DIGEST[:2] / TAIL_DIGEST[2:4] / TAIL_DIGEST
+    blob.parent.mkdir(parents=True)
+    blob.write_bytes(TAIL_FILE)
+    return tmp_path
+
+
+def test_the_tail_file_reads_as_its_table_says() -> None:
+    before = as_docx_7_read_it(TAIL_FILE, TAIL_DIGEST)
+    assert [
+        (c.provenance.first_element_index, c.provenance.last_element_index, c.tag) for c in before.cards
+    ] == [(0, 3, "First tag"), (4, 5, None), (6, 7, None), (9, 10, None)]
+
+
+def test_the_unbolded_tail_rule_changes_only_what_it_should(
+    tail_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    arguments = [
+        "--data-dir",
+        str(tail_dir),
+        "--caselist",
+        CASELIST,
+        "--workers",
+        "1",
+        "--rule",
+        "unbolded-tail",
+    ]
+    assert script.main(arguments) == 0
+    printed = capsys.readouterr()
+    counts = json.loads(printed.out)[CASELIST]
+    counts.pop("seconds")
+    assert counts == {
+        "version": "2026.10.27-docx-7",
+        "sources": 1,
+        "sources_read": 1,
+        "without_a_blob": 0,
+        "not_parsed": 0,
+        "first_reading_differs_from_the_store": 0,
+        "files_with_a_line_taken": 1,
+        "files_the_sampled_rule_reaches": 1,
+        "sampled_rule_takes": 1,
+        "taken": 1,
+        "taken_beyond_the_sampled_rule": 0,
+        "left_highlighted": 0,
+        "left_underline_or_emphasis_style": 0,
+        "left_otherwise": 0,
+        "cards_gaining_a_tag": 1,
+        "cards_above_losing_their_last_body_paragraph": 1,
+        "cards_above_that_vanish": 0,
+        "cards_whose_heading_path_now_names_a_taken_line": 2,
+        "cards_changed_only_in_their_heading_path": 2,
+        "other_cards_changed": 0,
+        "cards_unchanged": 0,
+    }
+    for telltale in ("First tag", "Demand", "Okonkwo", TAIL_DIGEST):
+        assert telltale not in printed.out + printed.err
+
+
+def test_t24s_rule_is_on_in_both_readings_of_the_unbolded_tail_check() -> None:
+    """A line bold throughout is taken before and after: it is no change of t32's rule."""
+    bold = build_docx(
+        paragraph_xml(run_xml("First tag"), style="Heading4")
+        + cite("Ferreira 25")
+        + body("Alpha")
+        + paragraph_xml(run_xml("Demand outruns new generation"))
+        + cite("Okonkwo 26")
+        + body("Bravo"),
+        styles_xml=STYLES,
+    )
+    before = as_docx_7_read_it(bold, hashlib.sha256(bold).hexdigest())
+    assert [card.tag for card in before.cards] == ["First tag", "Demand outruns new generation"]

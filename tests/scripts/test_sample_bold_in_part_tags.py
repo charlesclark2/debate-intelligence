@@ -57,6 +57,7 @@ from debate_core.domain.debate_files import ParsedDocument
 from debate_core.domain.style_profile import StructuralUnit
 from debate_core.evidence.style_classifier import ParagraphDescription, RunDescription
 from debate_core.integrations.docx_parser import DOCX_PARSER_VERSION
+from debate_core.integrations.docx_parser import parser as parser_module
 from debate_core.integrations.docx_parser.runs import ReadParagraph
 from debate_core.testing.docx_builder import W_NAMESPACE, build_docx, paragraph_xml, run_xml
 
@@ -133,6 +134,19 @@ ALONE, AND_MORE = 17, 18
 STRATUM_OF = {stratum.side: number for number, stratum in enumerate(script.STRATA)}
 NOT_BOLD = STRATUM_OF["not bold, as Word shows it"]
 THROUGH_A_STYLE = STRATUM_OF["read by an assembly rule or through a style"]
+A_TAIL_WITH_NO_DIGIT = parser_module._A_TAIL_WITH_NO_DIGIT  # pyright: ignore[reportPrivateUsage]
+
+
+@pytest.fixture(autouse=True)
+def as_docx_7_read_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The sample and the counts were taken on `2026.10.27-docx-7`, before `v1-e31-t32`'s rule read
+    a line bold but for a tail holding no digit as a tag: switch that rule alone off. The tests at
+    `docx-8` below switch it on again."""
+    monkeypatch.setattr(parser_module, "_A_TAIL_WITH_NO_DIGIT", frozenset())
+
+
+def at_docx_8(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(parser_module, "_A_TAIL_WITH_NO_DIGIT", A_TAIL_WITH_NO_DIGIT)
 
 
 def _parsed() -> tuple[Any, ParsedDocument]:
@@ -184,6 +198,15 @@ def test_the_file_reads_as_the_table_says() -> None:
 def test_each_left_line_is_in_the_stratum_of_its_first_failing_condition() -> None:
     """Line 15 is bold in part, but how it was read comes first: through its style's alias."""
     assert _strata() == [(ALONE, 3), (AND_MORE, 6), (NOT_BOLD, 12), (THROUGH_A_STYLE, 15)]
+
+
+def test_at_docx_8_the_line_bold_but_for_its_tail_is_a_tag_and_not_drawn(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    at_docx_8(monkeypatch)
+    _, document = _parsed()
+    assert document.sections[3].unit is StructuralUnit.TAG
+    assert _strata() == [(AND_MORE, 6), (NOT_BOLD, 12), (THROUGH_A_STYLE, 15)]
 
 
 def test_the_plan_draws_24_and_6_and_counts_the_rest() -> None:

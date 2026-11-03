@@ -123,7 +123,26 @@ LEFT_ALONE = {
 }
 
 
+#: Lines of a form N1 never reads, long enough and ending a sentence as the sentence stratum asks, so
+#: only their form keeps them out.
+NEVER_BODY_AT_SENTENCE_LENGTH = {
+    "an in-round marker with a note": "marked 3:05 in the second half of the round.",
+    "punctuation alone": "." * 60,
+}
+
+
 class TestWhatN1LeavesAlone:
+    @pytest.mark.parametrize(
+        "line", list(NEVER_BODY_AT_SENTENCE_LENGTH.values()), ids=list(NEVER_BODY_AT_SENTENCE_LENGTH)
+    )
+    def test_a_form_n1_never_reads_stays_nothing_at_any_length(
+        self, parser: DebateDocxParser, line: str
+    ) -> None:
+        assert 41 <= len(line) <= 200
+        document = between_two_bodies(parser, line)
+        assert [card.evidence_text for card in document.cards] == [f"{A1}\n{A2}"]
+        assert section_with(document, line).unit is StructuralUnit.OTHER
+
     @pytest.mark.parametrize("line", list(LEFT_ALONE.values()), ids=list(LEFT_ALONE))
     def test_the_line_stays_nothing(self, parser: DebateDocxParser, line: str) -> None:
         document = between_two_bodies(parser, line)

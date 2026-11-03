@@ -2158,3 +2158,19 @@ texts) in 36 files or fewer (6 hold the first kind and 30 the second). The 1,089
 else as well are mostly unbolded in the middle (862) and fail on a highlighted run (867), over 300
 characters (850) or the underline or emphasis style (541), which t24's guards keep as body; 28 of them
 are unbolded only at the tail with no digits.
+
+### The PM's ruling (2026-11-03)
+
+Option (a): the line is the card's tag when Word shows it bold from its start, with one unbolded
+stretch at its tail that holds no digit, every other condition and guard of t24's rule unchanged.
+The digit exclusion is conservative: it keeps out the three not-tags, and at worst leaves a few tags
+as before. The rule is `assembly-bold-tag-with-an-unbolded-tail-above-a-cite`, under its own id so
+that its cards are counted apart from t24's; the parser is `2026.11.03-docx-8`. Spaces decide
+nothing, so a tail of two unbolded runs with a space between them is one stretch.
+
+### The re-parse to `docx-8` (operator-run, after the merge)
+
+Not run yet. The cloud run's first run on an image carrying `2026.11.03-docx-8` parses every caselist
+in full (`v1-e40-t08`). Its counts, from a copy of the dev bucket restored before that run and one
+restored after it (`scripts/count_tags_by_rule.py`), are recorded here by whoever closes the task;
+the steps are in `docs/session-reports/v1-e31-t32-bold-in-part-tags.md`, Operator follow-ups.

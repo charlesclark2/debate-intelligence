@@ -246,9 +246,32 @@ PM rather than counting as zero.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-02
 
 **Notes:**
+
+The count settles it: zero by name in every record, Mac and cloud, so ruling 2 stops the task with no
+rule change, and the report says exactly why the zero holds.
+
+1. **ac1 passes.** 9,475 listed-file decisions over 20 runs (17 on the Mac, 3 in the cloud read by the
+   operator's counts-only block); 7 `already_imported`, all by id; none by name, so none across camp
+   folders. The cloud block was tested offline against a fake `aws` before it was handed over, which
+   is why its first run could be trusted.
+2. **Why it is zero:** `caselist.openev_event` is unset everywhere, so 498 of about 500 listed files
+   stop at `no_event_configured` before the matcher. Follow-up 1 is right that the guarded case
+   becomes reachable the day an event is configured. The PM asks the coach whether the weekly sync
+   should import camp files by event; any task that configures one starts with this count again and
+   a counts-only comparison of the listing's names with the 105 hand-imported rows.
+3. **The dry run of 2026-10-25** deciding `download` for files the Mac held by id: it fetched nothing,
+   and the next real run held them by id, which fits a run-state bundle without the LD release on the
+   cutover day. Noted; no task.
+4. **Deviation 1 (`git fetch origin dev`):** noted, and thank you for saying so. The rule stands:
+   `scripts/task sync` is the only network call a session makes.
+5. **Follow-up 2** (a cloud run's per-file decisions kept beyond the log's 90 days) is filed for E40
+   at p3 in the next batch.
+6. **Closing checks:** the affected set ran in full (40 files, 1,901 passed); ruff, lint-imports, the
+   command blocks and the specs are clean; no Python changed.
+7. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`.

@@ -373,9 +373,37 @@ Success looks like two entries, `federal_register` and `govinfo`, each `"outcome
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-11-02
 
 **Notes:**
+
+The stop before building saved a wrong adapter: Congress.gov has no keyword search, and the report
+shows it from the API's own openapi file. What was built follows the rulings exactly.
+
+1. **ac1 to ac5 pass.** Both adapters pass the kit on hand-written fixtures; identifiers, publishers
+   and government source type are pinned case by case; a missing key leaves GovInfo unbuilt and
+   reported `not_configured`, never `DEMO_KEY`; the topic rule is tested over a real registry and
+   fan-out; the key reaches no log line, and the one-process run (1,116) ends with this file.
+2. **Red first and mutants:** every set run against a skeleton first, with the passes explained; 18 of
+   18 mutants caught, the PM's five among them.
+3. **Deviations 1 to 11 accepted.** 1 to 7 are the rulings. 8 to 11 (the dedupe table's two names, last
+   in every row; the six test fakes; `.env.example`; the feeds README) are what those rulings require.
+4. **Decisions accepted.** The PARTIAL point is acceptable because neither profile enables a
+   government provider (dev and prod enable `openalex` and `rss`), so only a deliberately enabled,
+   keyless GovInfo makes an NHI search PARTIAL, and that is a configuration to fix. The topic isn't
+   stored, so older builds read every stored search as before. GovInfo's API download links are never
+   stored, since they carry the key's need.
+5. **Follow-ups the PM files:** Congress.gov lookups by bill; GAO and CRS reports; the PF topic's file
+   when the coach gives the November-December resolution; `--topic` with `--argument` on an id only a
+   feed file names (E08); and enabling `federal_register` (and later `govinfo`) in the profiles once
+   the live smoke passes. Storing the topic on `Search` is not needed now.
+6. **Operator follow-ups:** the key and the live smoke, after the merge. Run the smoke from a checkout
+   of `dev` once this worktree is finished. The open-start `range(,until)` and the Register's
+   automated-reader block are what it confirms; paste the printed list.
+7. **Closing checks:** the affected set (468 files) is left to `ci` (agreement 10). The changed areas
+   with the always-run list (1,969), ruff, pyright over the whole configuration, lint-imports, thin
+   handlers, the docs index, the links, the command blocks and the specs are clean.
+8. **Merge:** a plain `scripts/task pr` once `ci` is green. The Goal is `Succeeded`.

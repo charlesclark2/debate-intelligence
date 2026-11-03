@@ -61,7 +61,7 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 55 | 55 | 252 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 115 | 96 | 505 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 115 | 97 | 505 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 80 | 70 | 320 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 23 | 15 | 124 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 26 | 11 | 112 |
@@ -297,7 +297,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Earlier seasons' complete archives, from 2021-22 on, imported and parsed as backfiles](plan_specs/v1/e34-caselist-sync/t34-backfile-seasons-import.yaml) `v1-e34-t34-backfile-seasons-import` | Succeeded | 1 | 4.0 |
 | [A Mac run stopped for a missing token says to log in again](plan_specs/v1/e34-caselist-sync/t35-token-missing-hint-on-the-mac.yaml) `v1-e34-t35-token-missing-hint-on-the-mac` | Succeeded | 1 | 0.5 |
 | [A Mac run stopped for an unreadable token says to log out and log in again](plan_specs/v1/e34-caselist-sync/t36-token-unreadable-hint-on-the-mac.yaml) `v1-e34-t36-token-unreadable-hint-on-the-mac` | Succeeded | 1 | 0.5 |
-| [A listed camp file is not taken as already imported because a file of another camp shares its name](plan_specs/v1/e34-caselist-sync/t37-listed-camp-file-with-a-hand-imported-name.yaml) `v1-e34-t37-listed-camp-file-with-a-hand-imported-name` | Pending | 1 | 1.0 |
+| [A listed camp file is not taken as already imported because a file of another camp shares its name](plan_specs/v1/e34-caselist-sync/t37-listed-camp-file-with-a-hand-imported-name.yaml) `v1-e34-t37-listed-camp-file-with-a-hand-imported-name` | Succeeded | 1 | 1.0 |
 
 
 ### v1.2 — Argument landscape & file building

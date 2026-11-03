@@ -171,11 +171,30 @@ you are on. Holding a key down counts once.
 A card starts on its TAG, or on its CITE when it has no tag (press `n` there). It runs to its last
 EVIDENCE row, and a heading, an ANALYTIC, a TAG not marked as a start, the next start and the end of
 the block each end it. A blank row inside it is not part of it. The page says under the label when a
-card has no CITE or no completeness, or a TAG starts nothing. **A card cut off by the end of a
+card has no CITE or no completeness, or a TAG or CITE is in no card. **A card cut off by the end of a
 block is left unnumbered**: on the last rows of a block, look at the paragraphs after it; if the
 card goes on past the block, press `k` until it reads *cut off by the block's edge*. Do the same at
 the start of a block for a card whose tag is above it, or press `n` on its first row to stop it
 starting there.
+
+**Warnings.** What the page says under a row's label, or after a key, is a warning: it says what
+happened and how to undo it, and refuses nothing (`check` decides). The page lists
+them all in its Warnings section. Three come from the first sittings:
+
+* *A CITE start under a TAG*: `n` on a CITE directly under its TAG makes the CITE start a card of
+  its own and leaves the tag outside it. If they are one card, press `n` on the CITE again.
+* *A card start removed*: `n` on a row where a card starts, the pre-label's or yours, takes the card
+  away; its rows go into no card or the card above. Press `n` again to put it back, then `k`.
+* *A TAG or CITE in no card*, unless its card is cut off at a block edge. If a card starts there,
+  press `n`. A card written body first is labeled this way on purpose (see
+  [Ambiguous conventions](#ambiguous-conventions)): leave it. `check` gives the same warning, and
+  import takes it.
+
+The others say what `check` will refuse, or what to look at: *A card with no CITE*, *A card with no
+completeness*, *A completeness that does not fit*, *A start that counts for nothing*, *A row after
+its card's last EVIDENCE*, and on span rows *Formatting that differs* and *Formatting that could not
+be read*. In blind mode, `n` then `k` on a row with no unit yet gives its card a completeness; press
+the unit's key after.
 
 **Spans.** On a span row the page shows the underline and highlight as the document's own formatting
 gives them, read by the labeller and not by the parser, beside the pre-label's marks. What is
@@ -360,11 +379,39 @@ problems `check` does. The chain stops at the first command that fails, so nothi
 committed until the import succeeds. After it succeeds, the worksheet and its `.numbers` file are
 both deleted: they hold other programs' cards. Only the `.jsonl` is committed.
 
+### Importing a file again
+
+`import` replaces only a `PRELABELED` label file. Before it does, it keeps the pre-label at
+`prelabels/<digest>.jsonl` in this folder; it holds no text, like the label file, and the
+`git add tests/fixtures/debate_files/eval/labels` in the blocks above commits it with the label
+file. Run on a file already `CORRECTED` or `COACH_REVIEWED`, import refuses and says so, so a
+second run of the same block changes nothing.
+
+To correct a file again, the labeller will not open it: write its worksheet from the corrected
+labels, correct it on [the fallback route](#the-fallback-a-spreadsheet), and import it with
+`--replace`. The rows changed are then counted against the kept pre-label, not against the labels
+being replaced. Replacing a `COACH_REVIEWED` file drops the review: the coach looks at it again and
+runs `mark-reviewed`.
+
+```bash
+uv run python scripts/prelabel_docx.py worksheet "${f}" --out-dir ~/parser-eval-worksheets
+```
+
+```bash
+uv run python scripts/prelabel_docx.py import "${f}" --worksheet ~/parser-eval-worksheets/${f}.csv --corrected-by coach --replace
+```
+
+The files corrected before 2026-11-02 have no kept pre-label. For one of them `--replace` leaves the
+count of rows changed unrecorded, the import says so, and the blind comparison leaves the file
+out. Tell the PM before replacing one.
+
 This labeling guide says how to label a debate file for the parser evaluation
 (`v1-e31-t05-parser-eval`), and how to settle the cases where two careful people could disagree.
 The coach signs it off before it is used (the `labeling` node's manual criterion).
 
 Each file here is `<digest>.jsonl` and labels one file listed in [`../manifest.json`](../manifest.json).
+`prelabels/<digest>.jsonl` beside them is the pre-label `import` kept when the file was first
+corrected (see [Importing a file again](#importing-a-file-again)).
 It holds **no text**: a unit and a card for each labeled paragraph, keyed by paragraph index and a
 **keyed digest** of the paragraph's text — an HMAC under the operator's key, never a plain
 SHA-256, which over a public corpus in a public repository would join straight back to the file.
@@ -522,6 +569,12 @@ cards out of tables, and the labels say where the text is, not where it should h
 
 **Tracked changes.** Label the file as it reads with insertions accepted and deletions dropped,
 which is what the worksheet's `text` shows.
+
+**A card written body first.** Some files put a card's body above its cite: the `EVIDENCE`
+first, then the `CITE` under it, with no tag. Label the body `EVIDENCE` and the cite `CITE`, both
+with a blank `card`. A card starts at its tag or its cite and ends at its last body paragraph, so a
+body above its cite cannot be numbered as one card. The labeller and `check` warn about the `CITE`
+in no card; leave it, and import takes it.
 
 **When unsure**, pick the reading a debater preparing against the file would take, and write the
 case down here, so the next file is labeled the same way.

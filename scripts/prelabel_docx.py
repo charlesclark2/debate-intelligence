@@ -22,7 +22,11 @@ without being looked at:
 4. **`import`** reads the corrected worksheet back. It fails unless **every row is marked checked**
    and **the text is exactly the document's** — text is never edited to make a label line up — and
    then writes the label file as `CORRECTED`, recording which role corrected it and how many rows
-   changed.
+   changed from the pre-labels. It replaces only a `PRELABELED` file. Before it does, it keeps that
+   pre-label at `labels/prelabels/<digest>.jsonl`, committed beside the label file and, like it,
+   holding no text. A file already corrected is refused unless `--replace` is given; then the count
+   is taken against that kept pre-label, and where none is kept (a file corrected before
+   v1-e31-t25) it is left unrecorded rather than counted against the labels being replaced.
 5. **`mark-reviewed`** records that the coach spot-checked a corrected file end to end.
 
 **`label`** is the quick way through steps 2 to 4: a page served on this machine only that shows
@@ -60,6 +64,8 @@ See `tests/fixtures/debate_files/eval/labels/README.md` for the labeling guide.
         --repair --out ~/parser-eval-worksheets/4f2c91ab....csv
     uv run python scripts/prelabel_docx.py import 4f2c91ab \\
         --worksheet ~/parser-eval-worksheets/4f2c91ab....csv --corrected-by coach
+    uv run python scripts/prelabel_docx.py import 4f2c91ab \\
+        --worksheet ~/parser-eval-worksheets/4f2c91ab....csv --corrected-by coach --replace
     uv run python scripts/prelabel_docx.py mark-reviewed 4f2c91ab --reviewer coach
 
 A file is named by any unambiguous prefix of its keyed digest. Every digest here is an HMAC under
@@ -93,8 +99,10 @@ from tests.evals.parser.corpus import (  # noqa: E402
 from tests.evals.parser.digests import keyed_digest, require_key, text_digest  # noqa: E402
 from tests.evals.parser.docx_render import render_docx  # noqa: E402
 from tests.evals.parser.labeller import (  # noqa: E402
+    WARNINGS,
     LabellerApp,
     ProgressError,
+    cards_missing,
     csv_bytes,
     labelled_worksheet,
     load_or_begin,
@@ -162,18 +170,24 @@ __all__ = [
     "import_worksheet",
     "is_sampled",
     "labeller_for",
+    "load_stored_prelabel",
     "main",
     "parse_markup",
     "prelabel_document",
     "render_markup",
+    "stored_prelabel_path",
     "worksheet_csv_bytes",
     "worksheet_problems",
+    "worksheet_warnings",
     "write_worksheet",
 ]
 
 SPAN_SAMPLE_FRACTION = 0.2
 UNIT_NAMES = tuple(unit.value for unit in StructuralUnit)
 COMPLETENESS_NAMES = tuple(value.value for value in CardCompleteness)
+#: The folder beside the label files where `import` keeps each file's pre-label when a correction
+#: first replaces it, so that importing again can count against it. Committed with the label files.
+STORED_PRELABELS = "prelabels"
 
 
 # --------------------------------------------------------------------------------------------
@@ -252,6 +266,28 @@ def prelabel_document(
 
 def _inside_one_block(blocks: Sequence[Block], first: int, last: int) -> bool:
     return any(start <= first and last <= end for start, end in blocks)
+
+
+def stored_prelabel_path(digest: str, labels_dir: Path = LABELS_DIRECTORY) -> Path:
+    """Where `import` keeps a file's pre-label once a correction has replaced it."""
+    return labels_dir / STORED_PRELABELS / f"{digest}.jsonl"
+
+
+def load_stored_prelabel(labels: LabelFile, labels_dir: Path = LABELS_DIRECTORY) -> LabelFile | None:
+    """The pre-label `import` kept for these labels, or None when none is kept that fits them.
+
+    It fits when it is `PRELABELED`, under the same sampling plan, over the same rows.
+    """
+    path = stored_prelabel_path(labels.digest, labels_dir)
+    if not path.exists():
+        return None
+    stored = load_label_file(path)
+    fits = (
+        stored.header.status is LabelStatus.PRELABELED
+        and stored.header.plan_id == labels.header.plan_id
+        and [p.index for p in stored.paragraphs] == [p.index for p in labels.paragraphs]
+    )
+    return stored if fits else None
 
 
 # --------------------------------------------------------------------------------------------
@@ -652,6 +688,41 @@ def worksheet_problems(
     return problems, notes
 
 
+def worksheet_warnings(worksheet: Worksheet, *, prelabels: LabelFile) -> list[Problem]:
+    """What `check` warns about and `import` takes: a TAG or CITE in no card, not cut off at a block edge.
+
+    A card written body first, its EVIDENCE then its CITE, is labeled with both rows in no card, so
+    this is never a refusal (v1-e31-t25). Rows `worksheet_problems` cannot place are left to it.
+    """
+    units: list[tuple[int, StructuralUnit | None]] = []
+    in_card: set[int] = set()
+    numbers: dict[int, int] = {}
+    for position, row in enumerate(worksheet.rows):
+        index = parse_index(_cell(row, "index"))
+        if index is None:
+            continue
+        unit_cell = _cell(row, "unit").strip().upper()
+        units.append((index, StructuralUnit(unit_cell) if unit_cell in UNIT_NAMES else None))
+        numbers[index] = row_number(position)
+        if _cell(row, "card").strip():
+            in_card.add(index)
+    unit_of = dict(units)
+    warnings: list[Problem] = []
+    for index in cards_missing(sorted(units), in_card, prelabels.header.blocks):
+        unit = unit_of[index]
+        assert unit is not None  # cards_missing names TAG and CITE rows only
+        warnings.append(
+            Problem(
+                f"a {unit.value} in no card, and not cut off at a block edge. If it belongs to a card, "
+                "give it that card's number; a card written body first (its EVIDENCE, then its CITE) "
+                "stays in no card, and import takes it",
+                numbers[index],
+                "card",
+            )
+        )
+    return warnings
+
+
 def format_problems(problems: Sequence[Problem]) -> str:
     return f"{len(problems)} problem(s):\n  " + "\n  ".join(str(problem) for problem in problems)
 
@@ -665,12 +736,19 @@ def import_worksheet(
     key: bytes,
     numbers_beside: str | None = None,
     labeled_blind: bool = False,
+    stored_prelabel: LabelFile | None = None,
 ) -> LabelFile:
     """Turn a corrected worksheet into a `CORRECTED` label file, or list every reason it cannot.
 
     The label file is checked with the same rules `write_label_file` applies, so a worksheet this
     accepts is one `import` can write. `labeled_blind` records that the person never saw the
     pre-labels (`label --blind`); it is recorded as given, like `corrected_by`, and checks nothing.
+
+    `prelabels` is the label file the worksheet replaces. The rows changed are counted against it
+    when it is `PRELABELED`, and otherwise against `stored_prelabel`, the pre-label `import` kept
+    when the file was first corrected; with neither, the count is left unrecorded. Counting against
+    a file already corrected would count only what changed since: a second import of one
+    worksheet recorded 0 (v1-e31-t25).
     """
     if not isinstance(worksheet, Worksheet):
         worksheet = Worksheet.of(worksheet)
@@ -711,8 +789,11 @@ def import_worksheet(
                 )
             )
 
-    before = {p.index: (p.unit, p.card) for p in prelabels.paragraphs}
-    changed = sum(1 for p in paragraphs if before.get(p.index) != (p.unit, p.card))
+    counted = prelabels if prelabels.header.status is LabelStatus.PRELABELED else stored_prelabel
+    changed: int | None = None
+    if counted is not None:
+        before = {p.index: (p.unit, p.card) for p in counted.paragraphs}
+        changed = sum(1 for p in paragraphs if before.get(p.index) != (p.unit, p.card))
     labels = LabelFile(
         header=FileLabelHeader(
             digest=prelabels.digest,
@@ -998,16 +1079,89 @@ def _check(entry: ManifestEntry, labels: LabelFile, args: argparse.Namespace, ke
     )
     for note in notes:
         print(f"  note: {note}")
+    for warning in worksheet_warnings(worksheet, prelabels=labels):
+        print(f"  warning: {warning}")
+    if labels.header.status is not LabelStatus.PRELABELED:
+        print(
+            f"  note: the label file is already {labels.header.status}: import replaces it only "
+            "with --replace"
+        )
     if problems:
         print(f"{prefix}: import would refuse this worksheet. {format_problems(problems)}")
         return 1
     corrected = import_worksheet(
-        worksheet, prelabels=labels, texts=texts, corrected_by=ReviewerRole.OPERATOR, key=key
+        worksheet,
+        prelabels=labels,
+        texts=texts,
+        corrected_by=ReviewerRole.OPERATOR,
+        key=key,
+        stored_prelabel=load_stored_prelabel(labels, args.labels_dir),
     )
+    changed = corrected.header.rows_changed_from_prelabel
     print(
         f"{prefix}: ready to import; {len(corrected.paragraphs)} rows checked, "
-        f"{corrected.header.rows_changed_from_prelabel} labeled differently from the pre-labels"
+        + (
+            "rows changed from the pre-labels not counted (no pre-label is stored for this file)"
+            if changed is None
+            else f"{changed} labeled differently from the pre-labels"
+        )
     )
+    return 0
+
+
+def _import(entry: ManifestEntry, labels: LabelFile, args: argparse.Namespace, key: bytes) -> int:
+    """`import`: a corrected worksheet becomes the label file. Replaces a correction only with `--replace`."""
+    prefix = entry.digest[:16]
+    status = labels.header.status
+    if status is not LabelStatus.PRELABELED and not args.replace:
+        review = (
+            " That drops the coach's review: run mark-reviewed again afterwards."
+            if status is LabelStatus.COACH_REVIEWED
+            else ""
+        )
+        print(
+            f"{prefix}: REFUSED; the label file is already {status}, and import replaces only a "
+            "PRELABELED file. To replace its labels with this worksheet's, run the same command with "
+            f"--replace.{review}",
+            file=sys.stderr,
+        )
+        return 1
+    worksheet_path = args.worksheet.expanduser()
+    worksheet = _load_worksheet(prefix, worksheet_path)
+    if worksheet is None:
+        return 1
+    document = _document(entry, key)
+    stored = None if status is LabelStatus.PRELABELED else load_stored_prelabel(labels, args.labels_dir)
+    try:
+        corrected = import_worksheet(
+            worksheet,
+            prelabels=labels,
+            texts=[s.text for s in document.sections],
+            corrected_by=args.corrected_by,
+            key=key,
+            numbers_beside=_numbers_beside(worksheet_path),
+            labeled_blind=args.labeled_blind,
+            stored_prelabel=stored,
+        )
+    except WorksheetError as error:
+        print(f"{prefix}: worksheet refused — {error}", file=sys.stderr)
+        return 1
+    if status is LabelStatus.PRELABELED:
+        # Kept before the correction replaces it: a crash between the two leaves the file PRELABELED.
+        write_label_file(labels, args.labels_dir / STORED_PRELABELS, check_cards=False)
+    write_label_file(corrected, args.labels_dir)
+    blind = ", blind" if args.labeled_blind else ""
+    replacing = "" if status is LabelStatus.PRELABELED else f", replacing its {status} labels"
+    changed = corrected.header.rows_changed_from_prelabel
+    counted = (
+        "no pre-label is stored for this file, so the rows changed from the pre-labels are not recorded "
+        "(the guide's Importing a file again says how to keep one)"
+        if changed is None
+        else f"{changed} of {len(corrected.paragraphs)} labeled rows changed from the pre-labels"
+    )
+    print(f"{prefix}: CORRECTED by {args.corrected_by}{blind}{replacing}; {counted}")
+    if status is LabelStatus.COACH_REVIEWED:
+        print(f"{prefix}: the coach's review went with the labels it reviewed: run mark-reviewed again")
     return 0
 
 
@@ -1044,7 +1198,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     worksheet.add_argument("--out-dir", type=Path, required=True)
 
     labeller = commands.add_parser(
-        "label", help="Correct a file's pre-labels one key per row, in a page served on this machine only."
+        "label",
+        help="Correct a file's pre-labels one key per row, in a page served on this machine only.",
+        description="Correct a file's pre-labels one key per row, in a page served on this machine only.",
+        epilog="Warnings the page gives, under a row's label or after a key. Each says what happened and "
+        "how to undo it, and none refuses anything:\n\n"
+        + "\n".join(f"  {name}: {text}" for name, text in WARNINGS.items()),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     labeller.add_argument("digest")
     labeller.add_argument(
@@ -1083,6 +1243,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--labeled-blind",
         action="store_true",
         help="The worksheet was made with label --blind: record labeled_blind on the label file.",
+    )
+    importer.add_argument(
+        "--replace",
+        action="store_true",
+        help="Replace a label file that is not PRELABELED (already corrected or reviewed), counting the "
+        "rows changed against the pre-label import kept when it was first corrected.",
     )
 
     review = commands.add_parser("mark-reviewed", help="Record the coach's end-to-end spot-check.")
@@ -1184,32 +1350,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _check(entry, labels, args, key)
 
     if args.command == "import":
-        worksheet_path = args.worksheet.expanduser()
-        worksheet = _load_worksheet(entry.digest[:16], worksheet_path)
-        if worksheet is None:
-            return 1
-        document = _document(entry, key)
-        try:
-            corrected = import_worksheet(
-                worksheet,
-                prelabels=labels,
-                texts=[s.text for s in document.sections],
-                corrected_by=args.corrected_by,
-                key=key,
-                numbers_beside=_numbers_beside(worksheet_path),
-                labeled_blind=args.labeled_blind,
-            )
-        except WorksheetError as error:
-            print(f"{entry.digest[:16]}: worksheet refused — {error}", file=sys.stderr)
-            return 1
-        write_label_file(corrected, args.labels_dir)
-        blind = ", blind" if args.labeled_blind else ""
-        print(
-            f"{entry.digest[:16]}: CORRECTED by {args.corrected_by}{blind}; "
-            f"{corrected.header.rows_changed_from_prelabel} of {len(corrected.paragraphs)} "
-            "labeled rows changed from the pre-labels"
-        )
-        return 0
+        return _import(entry, labels, args, key)
 
     if labels.header.status is LabelStatus.PRELABELED:
         raise SystemExit(

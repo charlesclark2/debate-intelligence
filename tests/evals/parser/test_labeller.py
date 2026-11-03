@@ -413,7 +413,9 @@ def test_cut_is_offered_only_for_the_first_and_last_card_of_a_block() -> None:
 
 
 def test_problems_with_a_card_are_named_on_its_rows() -> None:
-    reading = read_cards(_rows("TAG* EVIDENCE TAG CITE EVIDENCE* CITE"), ((0, 5),), {})
+    # The ANALYTIC keeps row 2's card inside the block: a TAG whose card runs on to the block's end
+    # is cut off there, and gets no warning (v1-e31-t25).
+    reading = read_cards(_rows("TAG* EVIDENCE TAG CITE EVIDENCE* CITE ANALYTIC"), ((0, 6),), {})
 
     assert any("no CITE" in note for note in reading.notes[0])
     assert any("no completeness" in note for note in reading.notes[0])
@@ -1002,7 +1004,9 @@ def test_a_cite_start_directly_under_a_tag_says_the_tag_is_left_outside_its_card
 
     assert state["row"]["index"] == 4 and state["row"]["label"]["starts_card"] is True
     notes = state["row"]["label"]["notes"]
-    assert any("paragraph 3" in note and "outside" in note and "press n here" in note for note in notes), notes
+    assert any("paragraph 3" in note and "outside" in note and "press n here" in note for note in notes), (
+        notes
+    )
 
 
 def test_n_on_a_row_that_starts_a_card_says_the_card_is_gone_and_how_to_put_it_back(
